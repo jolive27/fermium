@@ -444,7 +444,7 @@ def format_number(x: float, sig: int = 6, trim: bool = True) -> str:
         return "∞" if x > 0 else "-∞"
     if x == 0:
         return "0"
-    if trim and x == int(x) and abs(x) < 1e15 and sig >= 6:
+    if trim and x == int(x) and abs(x) < 1e9 and sig >= 6:
         return str(int(x))          # whole numbers print exactly (1048576, not 1.04858×10⁶)
     sig = max(1, min(sig, 17))
     exp = math.floor(math.log10(abs(x)))
