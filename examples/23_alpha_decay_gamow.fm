@@ -15,10 +15,9 @@
 # Because G is in an exponent, a small change in Q changes t½ enormously:
 # the Geiger–Nuttall law, log t½ ≈ a + b / √Q. This crude model reproduces
 # half-lives spanning 24 orders of magnitude to within a factor of ~5–50.
-# (We write `e e` for e²: see notes/bugs-examples.md #9.)
 
 r0 = 1.20 fm
-k_C = e e / (4π ε_0)             # 1.44 MeV fm
+k_C = e² / (4π ε_0)             # 1.44 MeV fm
 
 gamow(Z, A, Q) =
     μ = 4 m_u (A - 4) / A        # reduced mass of alpha + daughter

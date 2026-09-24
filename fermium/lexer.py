@@ -326,7 +326,10 @@ class Lexer:
                 r = q
                 while r < len(s) and s[r] in SUPERS:
                     r += 1
-                exp = int("".join(SUPERS[c] for c in s[q:r]))
+                try:
+                    exp = int("".join(SUPERS[c] for c in s[q:r]))
+                except ValueError:
+                    raise FermiumError("can't read the power of ten in this number", line, col, r - start)
                 p = r
             elif q < len(s) and s[q] == "^":
                 r = q + 1
@@ -334,7 +337,11 @@ class Lexer:
                     r += 1
                 while r < len(s) and (s[r] in DIGITS):
                     r += 1
-                exp = int(s[q + 1:r])
+                try:
+                    exp = int(s[q + 1:r])
+                except ValueError:
+                    raise FermiumError("can't read the power of ten in this number (write e.g. 3×10^8)", line, col,
+                                       r - start)
                 p = r
         self.adv(p - self.pos)
         clean = mantissa.replace("_", "")

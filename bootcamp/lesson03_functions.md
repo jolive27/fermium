@@ -110,7 +110,7 @@ print "wavelength:", h c / E in nm
 wavelength: 656 nm
 ```
 
-656 nm is the famous red H-alpha line of hydrogen! Notice that we wrote `print E in eV`: without `in eV`, Fermium would show the energy in joules, the SI unit.
+656 nm is the famous red H-alpha line of hydrogen! The answer is shown in eV because that's the unit we used inside `energy`. `in eV` makes sure of it.
 
 ## Longer functions
 

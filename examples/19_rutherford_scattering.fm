@@ -11,13 +11,12 @@
 #     dσ/dΩ = (d/4)² / sin⁴(θ/2)                 differential cross section
 #
 # Cross sections are measured in barns (1 b = 10⁻²⁸ m² = 100 fm²).
-# (We write `e e` for e²: see notes/bugs-examples.md #9.)
 
 z = 2                   # alpha particle
 Z = 79                  # gold
 E = 7.69 MeV            # alphas from polonium-214 (RaC'), as Geiger & Marsden used
 
-d = z Z e e / (4π ε_0 E)
+d = z Z e² / (4π ε_0 E)
 print "closest approach d =", d in fm
 
 b(θ) = (d/2) / tan(θ/2)

@@ -222,18 +222,14 @@ while y >= 0 m
 print "flight time:", t to 4 digits
 print "highest point:", y_max to 4 digits
 v0 = 20 m/s
-print "formula says:", 2 v0 / g, "and", v0^2 / (2 g)
+print "formula says:", 2 v0 / g, "and", v0^2 / (2 * g)
 ```
 
 <!-- output -->
 ```
-warning: line 18: 'g' right after a number is the unit g, not your variable g
-    print "formula says:", 2 v0 / g, "and", v0^2 / (2 g)
-                                                      ^
-  hint: that's usually what you want; to multiply by the variable write 2*g, and to make the unit explicit write [g]
 flight time: 4.079 s
 highest point: 20.40 m
-formula says: 4.08 s and 200000 m²/(kg s²)
+formula says: 4.08 s and 20.4 m
 ```
 
 (We wrote `v0 = 20 m/s` before using the formula because `20 m/s / g` would mean 20 m/s *per gram*: the unit rule again! We asked for 4 digits because `0.001 s` has only one significant figure, so Fermium would otherwise show just 2.) The simulation agrees with the textbook formulas to about 0.1%, and making `dt` smaller makes it even closer. So why simulate? Because the formula only works in the simplest case. Add air resistance (try exercise 5!) and there's no neat formula any more, but the simulation needs just one extra line. This idea, **step forward in small time steps**, is how physicists simulate everything from planets to plasmas. You'll use it again in the final project.
@@ -270,7 +266,7 @@ If the check fails, the program stops with your message.
 2. **Sum of squares.** Use a loop to compute 1² + 2² + … + 10². Check against the formula n(n+1)(2n+1)/6.
 3. **Unit table.** Print a table of distances from 0 to 10 km in steps of 1 km, with the time light takes to cross each one, in microseconds (`us`).
 4. **Doubling.** A bacterial colony doubles every 20 minutes. Starting from 1 bacterium, use a `while` loop to find how long it takes to exceed one million.
-5. **Air resistance.** Modify the ball simulation to add air drag: in each step also do `v -= k v abs(v) dt`, with a drag constant `k = 0.01 m^-1` ("per metre"; write `m^-1`, because `1/m` right after a number doesn't work). How much lower is the highest point? And the flight time?
+5. **Air resistance.** Modify the ball simulation to add air drag: in each step also do `v -= k v abs(v) dt`, with a drag constant `k = 0.01 1/m` ("per metre"). How much lower is the highest point? And the flight time?
 
 Solutions: [solutions/lesson04.md](solutions/lesson04.md)
 

@@ -11,8 +11,6 @@
 #     − a_A (A − 2Z)² / A          asymmetry: the Pauli principle prefers N ≈ Z
 #     ± a_P / A^(1/2)              pairing: even-even nuclei are extra bound
 #
-# (Fermium prints energies in SI joules unless told otherwise, so we write
-# `in MeV` when printing function results.)
 # We check it against measured values, then loop over A, pick the most stable
 # Z for each, and plot B/A.
 

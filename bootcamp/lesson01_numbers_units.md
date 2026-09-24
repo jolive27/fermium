@@ -52,7 +52,7 @@ print 3e8
 3×10⁸
 ```
 
-`e-11` means "× 10⁻¹¹". This is how almost every programming language writes it. (`*` also works, `6.674*10^-11`, but not when a unit follows: see the gotchas at the end of this lesson.)
+`e-11` means "× 10⁻¹¹". This is how almost every programming language writes it. (`*` also works: `6.674*10^-11`.)
 
 ## Units: the big idea
 
@@ -260,9 +260,20 @@ warning: line 3: 'g' right after a number is the unit g, not your variable g
 
 **Always read warnings.** They usually mean the program does something other than what you meant.
 
-Two more places this rule bites:
-- `3 * 10^8 m/s` doesn't work: the unit has to follow the *whole* number, and `3 * 10^8` is a calculation, not a number. Write `3e8 m/s` (or `3×10^8 m/s`, which Fermium treats as one number).
-- `1 AU / c` is read as a number with the unit "AU per speed-of-light", and prints as `1 AU / c`. Add `in s` to get seconds: `print 1 AU / c in s`.
+One more place this rule shows up: `c` (the speed of light) is also a unit, so `1 AU / c` is read as "1 AU-per-speed-of-light", a perfectly good unit of time. Fermium prints it with its value in SI units next to it:
+
+```fermium
+print 1 AU / c
+print 1 AU / c in min
+```
+
+<!-- output -->
+```
+1 AU / c (= 499.005 s)
+8.31675 min
+```
+
+And watch out for dividing by a variable whose name is also a unit: `20 m/s / g` means 20 m/s **per gram**, because `/ g` continues the unit. Put parentheses around the number with its unit: `(20 m/s) / g`.
 
 ## Summary
 

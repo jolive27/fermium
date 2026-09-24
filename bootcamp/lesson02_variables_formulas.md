@@ -197,7 +197,7 @@ print p
 6 kg m/s
 ```
 
-Warning: don't use `m` for the mass inside a `where`. Fermium can't warn you there (yet), and `0.5 m v^2 where m = 2 kg` silently means 0.5 *metres*. Use `½ m v^2` or a longer name like `mass`.
+The metre gotcha applies here too: `0.5 m v^2 where m = 2 kg` means 0.5 *metres* (Fermium warns you). Use `½ m v^2` or a longer name like `mass`.
 
 ## Comments
 

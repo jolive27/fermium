@@ -198,3 +198,22 @@ print x                 # prints: 20 m / g
 - This is the most natural way to write t = v₀/g (or `2 v0/g` with numbers plugged in). I hit it by accident in Lesson 4.
 - **Expected:** at minimum the promised warning. Better: when a variable with that name exists and there are spaces around `/` (`20 m / g`), treat it as division by the variable.
 - **Workaround in lessons:** `(20 m/s) / g`, or a variable `v0 = 20 m/s` then `v0 / g`. Taught as part of the gotcha.
+
+## B19. `len` of a list of decimals prints as `5.00`
+
+```
+times = [2.21 s, 2.19 s, 2.24 s, 2.20 s, 2.23 s]
+print len(times)
+```
+- **Actual:** `5.00` (significant figures of the elements leak into the count). `len([1, 2])` prints `2`.
+- **Expected:** `5` — a count is exact.
+
+## B20. (confusing, maybe by design) `ys = xs` makes both names refer to the same list
+
+```
+xs = [1 m, 2 m]
+ys = xs
+ys[1] = 5 m
+print xs        # [5, 2] m
+```
+Same as Python, but a surprise for a beginner who thinks of `=` as "copy the value" (which is what it does for numbers). A `copy(xs)` builtin (or copy-on-assign semantics) would be good; I mention it in Lesson 5.
