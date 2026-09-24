@@ -1,6 +1,6 @@
 # PROGRESS
 
-_Last updated: 2026-09-24 23:20 UTC_
+_Last updated: 2026-09-24 23:40 UTC_
 
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
 
@@ -30,18 +30,22 @@ _Last updated: 2026-09-24 23:20 UTC_
 - 23:15 Fixed about 30 agent-reported bugs (see notes/bugs-*.md). Mutation fuzzer: 6000+ mutated programs, no crashes.
 - 23:20 Coverage 87% (cli/doctor are only covered by subprocess tests).
 
+- 23:25 Vectors (`<3, 4> m/s`, `|v|`, `·`, `×`, `.x`) and vector ODEs (D24).
+- 23:30 All three agents finished:
+  - tests: 718 tests, 18 bugs found, all fixed
+  - examples: 25 programs, 20 gallery plots, rosetta page with 7 programs in 3 languages
+  - bootcamp: lessons 0–10 plus a symbols lesson, cheat sheet, troubleshooting, solutions, 149 tested code blocks
+- 23:35 Fixed the bootcamp's 29 reported issues, except B27 (solve continuation-line indentation) and B29 (per-element units in lists). Most important: `20 m/s / g` now divides by your g (D7).
+- 23:40 README with gallery. 1066 tests passing.
+
 ## In progress
-- Test suites: parser, dimension checker (≥50 reject / ≥50 accept), fmt round-trip, REPL (agent).
-- Examples (25) + gallery + rosetta (agent).
-- Bootcamp (agent).
-- Numeric validation against SciPy/SymPy (me).
-- Fermium benchmark programs + performance work (me).
+- Tier 5 hardening.
 
 ## Next
-- Fix the bugs agents report in `notes/bugs-*.md`.
-- Tier 3: `benchmarks/fermium/*.fm`, run `benchmarks/run.py`, optimize.
-- VS Code extension (`editors/vscode`).
-- README with gallery.
+- Property tests (hypothesis) for unit algebra and conversions.
+- Coverage toward 95% (in-process CLI/doctor tests).
+- Possibly: AOT `fermium build` (native executable via llvmlite object code + a small C runtime).
+- Re-run benchmarks on a quiet machine (~10:00 UTC) and update RESULTS.md.
 - MORNING_REPORT.md at ~10:45 UTC.
 
 ## Blocked
