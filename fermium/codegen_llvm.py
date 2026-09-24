@@ -355,7 +355,7 @@ class ModuleGen:
 
     def _k_sol_push(self):
         # append (t, y[0..n), dy[0..n)) to a solution, growing its arrays
-        fn = self._new_fn("fm_sol_push", VOID, [SOLP, F64, F64P, F64P], inline=False)
+        fn = self._new_fn("fm_sol_push", VOID, [SOLP, F64, F64P, F64P], inline=True)
         sp, t, y, dy = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         n = b.load(b.gep(sp, [I32(0), I32(0)]))
@@ -1131,10 +1131,10 @@ class FuncGen:
     def elem_ptr(self, lst, idx):
         b = self.b
         n = b.extract_value(lst, 1)
-        fl = b.call(self.mg.intrinsic("floor"), [idx])
-        i = b.fptosi(fl, I64)
-        bad = b.or_(b.icmp_signed("<", i, i64(1)), b.icmp_signed(">", i, n))
-        bad = b.or_(bad, b.fcmp_unordered("!=", fl, idx))
+        i = b.fptosi(idx, I64)
+        # one unsigned compare covers i < 1 and i > n; the exactness check rejects 1.5 and NaN
+        bad = b.icmp_unsigned(">=", b.sub(i, i64(1)), n)
+        bad = b.or_(bad, b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
         with b.if_then(bad, likely=False):
             self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
         return b.gep(b.extract_value(lst, 0), [b.sub(i, i64(1))])

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Fermium",
+  "scopeName": "source.fermium",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#keyword" },
+    { "include": "#quantity" },
+    { "include": "#number" },
+    { "include": "#bracketunit" },
+    { "include": "#function-def" },
+    { "include": "#builtin" },
+    { "include": "#constant" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": { "name": "comment.line.number-sign.fermium", "match": "#.*$" },
+    "string": { "name": "string.quoted.double.fermium", "begin": "\"", "end": "\"" },
+    "keyword": {
+      "patterns": [
+        { "name": "keyword.control.fermium", "match": "\\b(if|else|elif|then|for|from|to|step|in|while|return|break|continue|where|and|or|not|assert)\\b" },
+        { "name": "keyword.other.fermium", "match": "\\b(print|plot|vs|solve|with|fit|load|integral|partial|sqrt|cbrt|tolerance|digits)\\b" },
+        { "name": "keyword.operator.calculus.fermium", "match": "[∫∂√∛]|\\bd/d[\\p{L}_]+" },
+        { "name": "constant.language.boolean.fermium", "match": "\\b(true|false)\\b" }
+      ]
+    },
+    "quantity": {
+      "comment": "a number followed by a unit, e.g. 9.81 m/s²",
+      "match": "(\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+|×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)?)\\s*((?:[A-Za-zΩμµÅ°☉%][A-Za-zΩμµÅ°☉%_]*(?:[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\\^-?\\d+)?)(?:\\s*[/·*]\\s*[A-Za-zΩμµÅ°☉%][A-Za-zΩμµÅ°☉%_]*(?:[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\\^-?\\d+)?)*)",
+      "captures": { "1": { "name": "constant.numeric.fermium" }, "2": { "name": "support.type.unit.fermium" } }
+    },
+    "number": { "name": "constant.numeric.fermium", "match": "\\b\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|[½⅓⅔¼¾⅕⅙⅛]" },
+    "bracketunit": { "name": "support.type.unit.fermium", "match": "\\s\\[[^\\],]*\\]" },
+    "function-def": {
+      "match": "^\\s*([\\p{L}_][\\p{L}\\p{N}_]*)(?=\\([^)]*\\)\\s*=(?!=))",
+      "captures": { "1": { "name": "entity.name.function.fermium" } }
+    },
+    "builtin": {
+      "name": "support.function.builtin.fermium",
+      "match": "\\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|exp|ln|log|log10|log2|erf|gamma|abs|floor|ceil|round|sign|min|max|hypot|mod|clamp|len|sum|mean|std|first|last|cumsum|diff|reverse|sort|linspace|range|zeros|ones|push|append|dot|trapz|interp|values|times|factorial|rand|clock)(?=\\()"
+    },
+    "constant": {
+      "name": "constant.language.physics.fermium",
+      "match": "(π|∞|ħ)|\\b(pi|hbar|inf|c|h|e|k_B|N_A|R_gas|G|g_n|m_e|m_p|m_n|m_u|ε_0|epsilon_0|μ_0|mu_0|σ|α|a_0|M_sun|R_sun|L_sun|M_earth|R_earth|AU)\\b"
+    },
+    "operator": { "name": "keyword.operator.fermium", "match": "[+\\-*/^=<>≤≥≠≈·×±²³⁻′']" }
+  }
+}

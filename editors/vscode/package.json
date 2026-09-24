@@ -1,0 +1,25 @@
+{
+  "name": "fermium",
+  "displayName": "Fermium",
+  "description": "Syntax highlighting and \\name symbol completion for the Fermium physics language",
+  "version": "0.1.0",
+  "publisher": "fermium",
+  "license": "MIT",
+  "engines": { "vscode": "^1.60.0" },
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:fermium"],
+  "contributes": {
+    "languages": [{
+      "id": "fermium",
+      "aliases": ["Fermium", "fermium"],
+      "extensions": [".fm"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "fermium",
+      "scopeName": "source.fermium",
+      "path": "./syntaxes/fermium.tmLanguage.json"
+    }]
+  }
+}

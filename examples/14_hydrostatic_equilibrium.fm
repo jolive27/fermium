@@ -1,0 +1,51 @@
+# 14 — Hydrostatic equilibrium: why pressure grows with depth
+#
+# Any layer of a star (or an atmosphere) that isn't moving must be held up:
+# the pressure below it pushes up exactly as hard as gravity pulls it down.
+# For a thin shell at radius r this balance reads
+#
+#     dP/dr = −G M(r) ρ(r) / r²,        dM/dr = 4π r² ρ(r)
+#
+# where M(r) is the mass inside radius r. Part 1 builds a star of constant
+# density, where the exact central pressure is P_c = 3 G M² / (8π R⁴).
+# Part 2 applies the same idea to the Earth's atmosphere at constant
+# temperature, where the pressure falls off exponentially with a
+# "scale height" H = R_gas T / (M_air g).
+
+# Part 1: a Sun of uniform density
+ρ0 = M_sun / ((4/3) π R_sun³)
+r_start = 1 km            # start just off-centre: G M / r² is 0/0 at r = 0
+solve P' = -G M ρ0 / r²,
+      M' = 4π r² ρ0
+  with P(r_start) = 0 Pa, M(r_start) = (4/3) π r_start³ ρ0
+  for r from r_start to R_sun
+
+# We integrated with P = 0 at the centre, so the central pressure is minus
+# the value we reach at the surface.
+P_c = -P(R_sun)
+print "mean density of the Sun:", ρ0 in g/cm³ to 3 digits
+print "central pressure (solve):  ", P_c to 5 digits
+print "central pressure (formula):", 3 G M_sun² / (8π R_sun⁴) to 5 digits
+print "mass reached at the surface / M_sun:", M(R_sun) / M_sun to 6 digits
+print "in atmospheres:", P_c in atm to 3 digits
+
+# Temperature from the ideal gas law P = ρ k_B T / (μ m_p), with μ ≈ 0.6 for
+# ionised solar gas: a first estimate of the Sun's core temperature
+μ = 0.6
+T_c = P_c μ m_p / (ρ0 k_B)
+print "estimated central temperature:", T_c to 2 digits, " (real: 1.6×10⁷ K)"
+
+# Part 2: an isothermal atmosphere, dP/dz = −ρ g with ρ = P M_air / (R_gas T)
+M_air = 28.97 g/mol
+T_air = 288 K
+solve p' = -p M_air g_n / (R_gas T_air)
+  with p(0) = 1 atm
+  for z from 0 km to 30 km
+
+# (called H_atm: in `8849 m / H` the H would be read as the unit henry)
+H_atm = R_gas T_air / (M_air g_n)
+print "scale height H =", H_atm in km
+print "pressure at Everest's summit (8849 m):", p(8849 m) in kPa, "  exact:", 101.325 kPa * exp(-8849 m / H_atm)
+print "pressure at 30 km:", p(30 km) in kPa
+
+plot p in kPa vs z in km to "gallery/atmosphere.png"
