@@ -10,10 +10,11 @@ from ..errors import FermiumRuntimeError
 
 def _sse(f, y, p):
     try:
-        r = f(p) - y
+        with np.errstate(all="ignore"):
+            r = f(p) - y
+            v = float(np.dot(r, r))
     except Exception:
         return math.inf
-    v = float(np.dot(r, r))
     return v if math.isfinite(v) else math.inf
 
 
@@ -53,10 +54,19 @@ def least_squares_fit(f, y, guess):
         r = f(p) - y
         r[~np.isfinite(r)] = 1e300
         return r
-    res = least_squares(resid, p0, x_scale=x_scale, method="lm" if n >= k else "trf", xtol=1e-14, ftol=1e-14,
-                        gtol=1e-14, max_nfev=20000)
+    with np.errstate(all="ignore"):
+        res = _run(least_squares, resid, p0, x_scale, n, k)
     best = res.x
     r = res.fun
+    return _finish(res, best, r, n, k)
+
+
+def _run(least_squares, resid, p0, x_scale, n, k):
+    return least_squares(resid, p0, x_scale=x_scale, method="lm" if n >= k else "trf", xtol=1e-14, ftol=1e-14,
+                        gtol=1e-14, max_nfev=20000)
+
+
+def _finish(res, best, r, n, k):
     rss = float(np.dot(r, r))
     dof = max(1, n - k)
     errs = [None] * k

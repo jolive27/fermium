@@ -110,7 +110,7 @@ The rule (spec §3.4.2), refined:
 - **Alternative:** Python's 0-based indexing, which is less natural for physics notation.
 
 ## D16. `e` is the elementary charge
-- **What:** `e^x` is an error that says to write `exp(x)`.
+- **What:** `e^x`, with a variable or negative exponent, is an error that says to write `exp(x)`. A fixed positive power, such as `e²`, `e^2` or `e⁴`, is the charge raised to that power: `e²/(4π ε₀)` is everywhere in nuclear physics. If someone meant exp(2), the unit checker catches it, because e² has units of C².
 - **Why:** In physics code `e` is the charge far more often, and silently doing either would be dangerous.
 
 ## D17. ODEs: `solve`

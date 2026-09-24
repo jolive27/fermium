@@ -693,18 +693,25 @@ class Checker(C.DiffContext):
             known |= set(s.names)
             s = s.parent
         hint = None
-        # LT -> L T ?
+        from .lexer import canonical_name, KEYWORDS
+        # LT -> L T ?  (also omegat -> ω t)
         for i in range(1, len(name)):
-            a, b = name[:i], name[i:]
+            a, b = canonical_name(name[:i]), canonical_name(name[i:])
             if a in known and b in known:
                 hint = f"did you mean {a} {b} ({a} times {b})? Fermium reads {name} as one name; put a space between"
                 break
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None:
-            close = get_close_matches(name, [k for k in known if not k.startswith("__")], n=1, cutoff=0.7)
+            cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(BUILTINS)
+            close = get_close_matches(name, cands, n=1, cutoff=0.7)
             if close:
                 hint = f"did you mean {close[0]}?"
+        if hint is None and getattr(self, "_after_number", False):
+            return self.err(f"'{name}' isn't a unit Fermium knows (or a variable you've defined)", e,
+                            hint="see the list of units in docs/reference.md §15")
+        if hint is None and getattr(self, "_calling", False):
+            hint = f"define the function first, e.g.  {name}(x) = 2 x"
         if name in BUILTINS:
             return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
         return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
@@ -718,7 +725,11 @@ class Checker(C.DiffContext):
             if e.implicit and e.right.paren:
                 return self.e_Call(A.Call(e.left, [e.right]).at(e), ctx)
             self.need_numlike(a, e.left)
-        b = self.expr(e.right, ctx)
+        self._after_number = e.implicit and isinstance(e.left, (A.Num, A.Quantity)) and isinstance(e.right, A.Name)
+        try:
+            b = self.expr(e.right, ctx)
+        finally:
+            self._after_number = False
         self.need_numlike(a, e.left)
         self.need_numlike(b, e.right)
         return self.arith(e.op, a, b, e)
@@ -793,7 +804,8 @@ class Checker(C.DiffContext):
         return None
 
     def power(self, e, ctx):
-        if isinstance(e.left, A.Name) and e.left.name == "e":
+        pconst = self.const_value(e.right)
+        if isinstance(e.left, A.Name) and e.left.name == "e" and (pconst is None or pconst <= 0):
             b, _ = ctx.scope.lookup("e")
             if isinstance(b, ConstInfo):
                 raise self.err("e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium", e.left,
@@ -1012,7 +1024,11 @@ class Checker(C.DiffContext):
             if b is None:
                 if f.name in BUILTINS:
                     return self.builtin(f.name, e, ctx)
-                raise self.undefined(f.name, f, ctx)
+                self._calling = True
+                try:
+                    raise self.undefined(f.name, f, ctx)
+                finally:
+                    self._calling = False
             if isinstance(b, FuncInfo):
                 args = [self.expr(a, ctx) for a in e.args]
                 return self.call_user(b, args, e)
@@ -1148,6 +1164,7 @@ class Checker(C.DiffContext):
             inst = info.instances[key]
             r = I.ICall(inst, args, inst.ret_ty)
             r.sf = self._minsf(*args, inst) if inst.sf is not None else self._minsf(*args)
+            r.hint = getattr(inst, "ret_hint", None)
             return r
         inst = I.IFunc(self.fresh_name(info.name), [])
         inst.display = info.display_name
@@ -1213,7 +1230,9 @@ class Checker(C.DiffContext):
         inst.sf = self._minsf(*rets)
         self.new_funcs.append(inst)
         self.all_funcs.append(inst)
+        inst.ret_hint = rets[0].hint if len(rets) == 1 else None
         r = I.ICall(inst, args, rt)
+        r.hint = inst.ret_hint
         r.sf = self._minsf(*args, inst)
         if len(rets) == 1 and isinstance(rets[0], I.Expr) and rets[0].hint is not None and \
                 isinstance(rets[0], I.IVar) is False and info.one_liner and False:
@@ -1280,6 +1299,8 @@ class Checker(C.DiffContext):
             num_or_list(0)
             r = self._bi(name, args, args[0].ty, args)
             r.hint = args[0].hint
+            if name != "abs":
+                r.sf = None      # a whole number: print it exactly
             return r
         if name == "sign" or name == "isnan":
             need(1)

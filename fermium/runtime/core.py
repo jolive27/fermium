@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ctypes
 import math
+import re
 import os
 import sys
 import time
@@ -51,6 +52,12 @@ def format_quantity(v, dim, hint, sf, direct):
     name = u.name
     if name in ("", "1"):
         return s
+    if name in ("°", "%", "′", "″"):
+        return f"{s}{name}"
+    if hint is not None and u is hint and name != "c" and any(
+            re.fullmatch(r"c([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\^-?\d+)?", tok) for tok in re.split(r"[\s/()·*]+", name)):
+        si = preferred_unit(dim)
+        return f"{s} {name} (= {format_number(v, 6)} {si.name})"
     return f"{s} {name}"
 
 
@@ -104,8 +111,14 @@ class Runtime:
             rt.line.append(rt.tables.texts[i])
 
         def print_end():
-            rt.out.write(" ".join(rt.line) + "\n")
-            rt.out.flush()
+            try:
+                rt.out.write(" ".join(rt.line) + "\n")
+                rt.out.flush()
+            except BrokenPipeError:        # e.g. `fermium run x.fm | head -1`
+                try:
+                    sys.stderr.close()
+                finally:
+                    os._exit(0)
             rt.line = []
 
         def error(kind, a, b, line):
@@ -260,8 +273,9 @@ class Runtime:
         lines = [f"fit {info['text']}   ({n} data points from {info['path']})"]
         for i, name in enumerate(info["params"]):
             dim = info["rdims"][i]
-            u = display_unit(dim, None)
-            val = format_quantity(best[i], dim, None, 4, False)
+            hint = info.get("col_units", {}).get(dim)   # e.g. show a time constant in the data's minutes
+            u = display_unit(dim, hint)
+            val = format_quantity(best[i], dim, hint, 4, False)
             if errs[i] is not None and math.isfinite(errs[i]):
                 se = format_number(errs[i] / u.factor, 2, trim=False)
                 unit = f" {u.name}" if u.name not in ("", "1") else ""

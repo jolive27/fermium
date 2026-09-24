@@ -71,7 +71,6 @@ def test_scientific_notation_prints():
     assert run("print ½") == "0.5"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B7: 1e400 raises OverflowError in the lexer")
 def test_huge_exponent_is_clean_error():
     # must be a FermiumError (or at least not a Python crash): see bugs-tests B7
     try:
@@ -113,7 +112,6 @@ def test_equivalent_spellings(a, b):
     assert toks(a) == toks(b)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B8: x₁₂ lexes as x_1_2, not x_12")
 def test_multi_digit_subscript():
     assert toks("x₁₂") == toks("x_12")
     assert run("x_12 = 3\nprint x₁₂") == "3"
@@ -278,7 +276,6 @@ def test_unknown_character_error_is_fermium_error_from_lexer():
         tokenize("x = 3 $ 4", Diagnostics())
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B9: a leading BOM is an unexpected character")
 def test_leading_bom_ignored():
     assert run("﻿x = 3\nprint x") == "3"
 

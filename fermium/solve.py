@@ -288,7 +288,8 @@ def check_fit(ck, s: A.Fit, ctx):
     ck.tables.fits.append({"params": params, "dims": [pdims[n] for n in params], "model": lam.name,
                            "text": C.to_source(s.model.lhs) + " = " + C.to_source(s.model.rhs),
                            "ycol": lam.ycol, "cols": [sym.col_index for sym in lam.col_syms],
-                           "ydim": ydim, "yname": lhs.name, "path": data.ty.info["path"]})
+                           "ydim": ydim, "yname": lhs.name, "path": data.ty.info["path"],
+                           "columns": cols})
     return I.SFit(fit_id, data, out_syms, guesses, lam)
 
 

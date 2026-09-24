@@ -93,3 +93,30 @@ print 2 T[2]
 - Expected: an error/hint saying "`2 T` here means 2 tesla (a unit right after a number); write 2*T[2] to use your variable T".
 - Actual: `only lists can be indexed with [...]` + `hint: to call a function use parentheses: f(x)`, which sends the beginner the wrong way. The unit/variable warning (D7 rule 5) is not shown either (see #8: warnings are dropped when there's an error).
 - Workaround in examples: `2*T[i]` (17_heat_equation).
+
+## 12. (minor) `fit ... with` can't continue on the next line (unlike `solve ... with`)
+```
+data = load "data/ba137m_decay.csv"
+fit rate = R0 exp(-ln(2) t / t_half) + B to data
+  with R0 = 80 s⁻¹, t_half = 100 s, B = 1 s⁻¹
+```
+- Expected: same layout as `solve` (reference.md §10 shows `with` on an indented line).
+- Actual: `this line is indented but isn't inside a block`.
+- Workaround: put `with` on the same line (18_fit_decay_data).
+
+## 13. (feature) `plot` can only draw lines: no markers for measured data, no log axis
+- `plot data.rate vs data.t, model(data.t) vs data.t` draws the noisy data as a zig-zag line. Measured points are normally drawn as dots (with the fit as a line), and decay data on a log-y axis. Something like `plot data.rate vs data.t as points` / `log y` would help. (BACKLOG already lists log scale.)
+
+## 14. (cosmetic) Look-alike normalisation also rewrites text inside strings
+```
+print "Pound–Rebka"       # prints Pound-Rebka (en dash replaced by a hyphen)
+```
+- Expected: string literals printed exactly as written. (D10 normalisation should apply to code, not text.)
+
+## 15. (cosmetic) List elements lose their significant figures
+```
+for ρ in [1.0e7 kg/m³, 1.0e8 kg/m³]
+    print ρ, 2 ρ
+```
+- Expected: `1.0×10⁷ kg/m³ 2.0×10⁷ kg/m³` (literal printed as written, D11).
+- Actual: `1×10⁷ kg/m³ 2×10⁷ kg/m³`, and results computed from list elements print 6 significant figures.

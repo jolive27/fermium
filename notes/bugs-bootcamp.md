@@ -161,3 +161,40 @@ print -13.6 eV / 2^2
 - **Expected:** `-13.6 eV -3.4 eV` (DECISIONS D11: the written unit is kept through scaling by plain numbers; it works outside a function but not through a function call).
 - **Workaround in lessons:** `print energy(2) in eV`.
 - Similar: `10°` prints as `10 °` (with a space), and `fmt --pretty` turns `10 deg` into `10 °`.
+
+## B15. Control+C doesn't stop an infinite loop
+
+```
+x = 1
+while x > 0
+    x += 1
+```
+Run with `fermium run`, then press Ctrl+C (SIGINT): **nothing happens**; the process keeps using 100% CPU (tested with `timeout -s INT 3`; it was still running 2 minutes later). Control+\ (SIGQUIT) does kill it. Beginners *will* write infinite `while` loops. Expected: Ctrl+C stops the program with a one-line message ("stopped by Ctrl+C"). (Probably the JIT code never returns to Python so the KeyboardInterrupt is never raised; a signal handler that sets a flag checked on loop back-edges, or restoring SIG_DFL for SIGINT while native code runs, would fix it.)
+- **In lessons:** TROUBLESHOOTING tells people to press Control+\ (or close the Terminal window) if Control+C doesn't work.
+
+## B16. Text can be stored in a variable but not printed
+
+```
+label = "hi"
+print label
+```
+- **Actual:** `line 2: can't print this` (also for `label = if x > 1 m then "long" else "short"`).
+- **Expected:** `hi` — or an error at line 1 saying text can't be stored in variables yet. The message "can't print this" doesn't say why.
+
+## B17. `%` for remainder gives "unexpected character"
+
+`if n % 2 == 0` → `unexpected character '%' (Percent Sign)` / `hint: remove it, or check the cheat sheet`. Python users will try this; a hint "for the remainder use mod(n, 2)" would help (and see B8: `%` is also documented as a unit).
+
+## B18. `20 m/s / g` divides by *grams*, silently (HIGH: wrong physics, no warning)
+
+```
+g = 9.81 m/s^2
+print 20 m/s / g        # prints: 20 m/s / g
+print 2 * 20 m/s / g    # prints: 40 m/s / g
+x = 20 m / g            # even with spaces around /
+print x                 # prints: 20 m / g
+```
+- Wanted: v₀/g = 2.04 s. Got: a speed per gram. DECISIONS D7 rule 4 says "`/` followed by a unit name continues the unit even if a variable has that name. **You get a warning when it does**" — but no warning is printed in any of these cases.
+- This is the most natural way to write t = v₀/g (or `2 v0/g` with numbers plugged in). I hit it by accident in Lesson 4.
+- **Expected:** at minimum the promised warning. Better: when a variable with that name exists and there are spaces around `/` (`20 m / g`), treat it as division by the variable.
+- **Workaround in lessons:** `(20 m/s) / g`, or a variable `v0 = 20 m/s` then `v0 / g`. Taught as part of the gotcha.

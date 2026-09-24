@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ctypes
+import sys as _sys
 import os
 import sys
 import time
@@ -17,6 +18,7 @@ from .runtime.core import Runtime, init_llvm
 from .types import ListTy
 
 _TM = None
+_sys.setrecursionlimit(max(_sys.getrecursionlimit(), 20000))
 
 
 def target_machine():
@@ -41,6 +43,7 @@ def finalize_tables(tables, U, start=0):
     for f in tables.fits:
         f["rdims"] = [U.resolve(d) for d in f["dims"]]
         f["rydim"] = U.resolve(f["ydim"])
+        f["col_units"] = {c["unit"].dim: c["unit"] for c in f.get("columns", []) if c["unit"].name not in ("1",)}
 
 
 def optimize(llmod, tm, level=3):
@@ -62,10 +65,14 @@ class Program:
         self.out = out or sys.stdout
         self.timings = {}
         t0 = time.perf_counter()
-        prog = parse(source, self.diags)
-        t1 = time.perf_counter()
-        self.checker = Checker(self.diags, self.base_dir, repl=False)
-        self.module = self.checker.check_program(prog)
+        try:
+            prog = parse(source, self.diags)
+            t1 = time.perf_counter()
+            self.checker = Checker(self.diags, self.base_dir, repl=False)
+            self.module = self.checker.check_program(prog)
+        except FermiumError as e:
+            e.warnings = list(self.diags.warnings)
+            raise
         t2 = time.perf_counter()
         finalize_tables(self.module.tables, self.checker.U)
         self.runtime = Runtime(self.out, self.base_dir)
@@ -104,7 +111,17 @@ class Program:
 
 def run_source(source, filename="<program>", out=None, base_dir=None, show_warnings=True, err=None):
     err = err or sys.stderr
-    p = Program(source, filename, base_dir=base_dir, out=out)
+    try:
+        p = Program(source, filename, base_dir=base_dir, out=out)
+    except RecursionError:
+        raise FermiumError("this program is nested too deeply for Fermium to compile (very long or deeply "
+                           "nested expressions)", hint="split the expression into several lines with names")
+    except FermiumError as e:
+        # show the warnings collected before the error -- they often explain it
+        if show_warnings and getattr(e, "warnings", None):
+            for w in e.warnings:
+                err.write(w.format(source, None) + "\n")
+        raise
     if show_warnings:
         for w in p.diags.warnings:
             err.write(w.format(source, None) + "\n")

@@ -1,0 +1,35 @@
+# 20 — Gravitational redshift and the GPS clocks
+#
+# General relativity says clocks run slower deeper in a gravity well. Light
+# climbing out of a star therefore arrives with a lower frequency (redder).
+# For a clock at radius R outside a mass M, compared with one far away,
+#
+#     rate = √(1 − 2GM / (R c²))        redshift z = 1/rate − 1 ≈ GM / (R c²)
+#
+# Astronomers often quote z as a velocity, c z. Near the Earth's surface over
+# a height difference h, the shift is simply g h / c²  (Pound & Rebka, 1959).
+# GPS satellites must correct for this, plus the time dilation from their
+# orbital speed (special relativity), or positions would drift by ~10 km/day.
+
+z_grav(M, R) = 1 / √(1 - 2 G M / (R c²)) - 1
+
+print "Sun:            z =", z_grav(M_sun, R_sun), "  c z =", c z_grav(M_sun, R_sun) in m/s to 3 digits
+print "Sirius B:       z =", z_grav(1.018 M_sun, 5840 km), "  c z =", c z_grav(1.018 M_sun, 5840 km) in km/s,
+      " (measured 80.4 ± 4.8 km/s)"
+print "neutron star:   z =", z_grav(1.4 M_sun, 12 km)
+print "weak-field approximation for the Sun:", G M_sun / (R_sun c²)
+
+# Pound–Rebka: gamma rays sent up the 22.5 m Harvard tower
+print "Pound–Rebka shift g h / c²:", g_n (22.5 m) / c²
+
+# GPS: satellites orbit at radius 26 560 km
+r_gps = 26560 km
+v_gps = √(G M_earth / r_gps)
+day = 86400 s
+gravity_gain = (G M_earth / c²) * (1/R_earth - 1/r_gps) * day
+speed_loss = v_gps² / (2 c²) * day
+print "GPS orbital speed:", v_gps in km/s to 3 digits
+print "gravity makes the satellite clock gain", gravity_gain in μs to 3 digits, "per day"
+print "its speed makes it lose              ", speed_loss in μs to 3 digits, "per day"
+print "net:", gravity_gain - speed_loss in μs to 3 digits, "per day ->",
+      (gravity_gain - speed_loss) c in km to 3 digits, "of position error per day"

@@ -1,0 +1,48 @@
+# 23 — Alpha decay by quantum tunnelling (Gamow, 1928)
+#
+# An alpha particle inside a heavy nucleus has a few MeV of energy, but the
+# Coulomb barrier around the nucleus is ~25 MeV high (see example 12).
+# Classically it could never get out. Quantum mechanically it tunnels through,
+# with a probability per attempt of P = exp(−2G), where the Gamow factor is
+#
+#     G = (1/ħ) ∫ from R to b of √(2μ (V(r) − Q)) dr,    V(r) = 2 Z e² / (4π ε₀ r)
+#
+# R is where the alpha touches the daughter nucleus, b is where V(r) = Q (the
+# outer turning point), μ the reduced mass and Z the daughter's charge.
+# The alpha rattles around inside at speed v, hitting the wall f = v / (2R)
+# times per second, so the half-life is t½ = ln 2 / (f P).
+#
+# Because G is in an exponent, a small change in Q changes t½ enormously:
+# the Geiger–Nuttall law, log t½ ≈ a + b / √Q. This crude model reproduces
+# half-lives spanning 24 orders of magnitude to within a factor of ~5–50.
+# (We write `e e` for e²: see notes/bugs-examples.md #9.)
+
+r0 = 1.20 fm
+k_C = e e / (4π ε_0)             # 1.44 MeV fm
+
+gamow(Z, A, Q) =
+    μ = 4 m_u (A - 4) / A        # reduced mass of alpha + daughter
+    R = r0 ((A - 4)^(1/3) + 4^(1/3))
+    b = 2 Z k_C / Q
+    return ∫ √(2 μ (2 Z k_C / r - Q)) / ħ dr from R to b
+
+half_life(Z, A, Q) =
+    R = r0 ((A - 4)^(1/3) + 4^(1/3))
+    v = √(2 Q / (4 m_u))
+    f = v / (2 R)
+    return ln(2) / (f exp(-2 gamow(Z, A, Q)))
+
+# Parent nucleus, daughter charge Z, Q-value, measured half-life
+print "Po-212: G =", gamow(82, 212, 8.954 MeV), "  t½ =", half_life(82, 212, 8.954 MeV), "   measured 2.99×10⁻⁷ s"
+print "Po-210: t½ =", half_life(82, 210, 5.407 MeV) in day, "   measured 138 day"
+print "Ra-226: t½ =", half_life(84, 226, 4.871 MeV) in yr, "   measured 1600 yr"
+print "U-238:  t½ =", half_life(88, 238, 4.270 MeV) in yr, "   measured 4.47×10⁹ yr"
+print "Th-232: t½ =", half_life(86, 232, 4.083 MeV) in yr, "   measured 1.40×10¹⁰ yr"
+
+# Geiger–Nuttall: log10 t½ against 1/√Q for polonium-like decays (Z_daughter = 82)
+inv_sqrtQ = []
+log_t = []
+for Qx from 5.0 MeV to 9.0 MeV step 0.25 MeV
+    push(inv_sqrtQ, 1 / √(Qx / (1 MeV)))
+    push(log_t, log10(half_life(82, 210, Qx) / (1 s)))
+plot log_t vs inv_sqrtQ to "gallery/geiger_nuttall.png"

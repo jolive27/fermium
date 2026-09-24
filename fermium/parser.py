@@ -169,6 +169,10 @@ class Parser:
     # ------------------------------------------------------------ statements
     def statement(self, end_line=True):
         t = self.tok
+        if t.kind == "KW" and self.peek().kind == "OP" and self.peek().value in ({"="} | AUG_OPS) and \
+                t.value not in ("print",):
+            raise self.error(f"'{t.raw}' is a reserved word in Fermium, so it can't be a variable name",
+                             hint=f"pick another name, e.g. {t.raw}_ or my_{t.raw}")
         if t.kind == "KW":
             kw = t.value
             handler = {
@@ -299,7 +303,8 @@ class Parser:
                 items.append(self.print_item())
         if self.at_kw("where"):
             binds = self.where_bindings()
-            items = [A.Where(it, binds).at(it) for it in items]
+            self._warn_where_units(items, binds)
+            items = [it if isinstance(it, A.Str) else A.Where(it, binds).at(it) for it in items]
         return self.span(A.Print(items), t)
 
     def print_item(self):
@@ -527,8 +532,22 @@ class Parser:
         e = self.expr_full()
         if self.at_kw("where"):
             binds = self.where_bindings()
+            self._warn_where_units([e], binds)
             e = self.span(A.Where(e, binds), t)
         return e
+
+    def _warn_where_units(self, exprs, binds):
+        """`0.5 m v² where m = 2 kg`: the m after 0.5 is metres, not the where-variable."""
+        names = {b for b, _ in binds}
+        for ex in exprs:
+            for n in A.walk(ex):
+                if isinstance(n, A.BinOp) and n.implicit and isinstance(n.left, A.Quantity) and \
+                        not n.left.bracket and len(n.left.unit.factors) == 1:
+                    f = n.left.unit.factors[0]
+                    if f.name in names:
+                        self.diags.warn(f"'{f.name}' after the number means the unit {f.name}, not the "
+                                        f"{f.name} from 'where'", line=f.line, col=f.col, length=len(f.name),
+                                        hint=f"write *{f.name} (e.g. 0.5*{f.name}) or ½ {f.name}")
 
     def where_bindings(self):
         self.next()
@@ -651,9 +670,11 @@ class Parser:
             if isinstance(first, A.Quantity) and isinstance(first.value, A.Num) and not first.bracket:
                 first = first.value
             if isinstance(first, A.Num) and isinstance(left, A.Num) and not left.paren:
+                a, b = (f"{v:g}" for v in (left.value, first.value))
                 self.diags.warn(
-                    "this is read as a/(b c): implicit multiplication binds tighter than '/'",
-                    tok=op, hint="write (1/2) m v², or ½ m v², if you meant one half times m v²")
+                    f"this is read as a/(b c), i.e. {a}/({b} ...): implicit multiplication binds tighter than '/'",
+                    tok=op, hint=f"if you meant ({a}/{b}) times the rest, write ({a}/{b}) with parentheses "
+                                 f"(or ½ for one half)")
 
     def unary(self):
         if self.at_op("-"):
@@ -751,7 +772,12 @@ class Parser:
         if self.at_op("^"):
             self.next()
             ex = self.exponent()
-            return self.span(A.BinOp("^", base, ex), t)
+            r = self.span(A.BinOp("^", base, ex), t)
+            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
+                    and self.tok.value not in self.known and not self._is_call_like():
+                u = self.unit_expr(explicit=False)      # 10^8 m/s
+                r = self.span(A.Quantity(r, u), t)
+            return r
         return base
 
     def exponent(self):
@@ -823,6 +849,17 @@ class Parser:
                     return self.span(A.Quantity(n, u, bracket=True), t)
                 if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
                     u = self.unit_expr(explicit=False)
+                    q = self.span(A.Quantity(n, u), t)
+                    nx = self.tok
+                    if nx.kind == "OP" and nx.value in ("[", "(") and not nx.ws_before and len(u.factors) == 1 \
+                            and u.factors[0].name in self.known:
+                        nm = u.factors[0].name
+                        raise self.error(f"'{t.raw} {nm}' means {t.raw} of the unit {nm} (a unit right after a "
+                                         f"number), so it can't be followed by '{nx.value}'", tok=nx,
+                                         hint=f"to use your variable write {t.raw}*{nm}{nx.value}...")
+                    return q
+                if self._unit_reciprocal_follows():
+                    u = self.unit_expr(explicit=True, reciprocal=True)
                     return self.span(A.Quantity(n, u), t)
             return n
         if t.kind == "STR":
@@ -870,7 +907,11 @@ class Parser:
                 e = self.expr_full()
                 self.skip_newlines()
                 self.abs_depth = saved_abs
-                self.expect_op(")", "to close '('")
+                if not self.at_op(")"):
+                    if self.tok.kind in ("NEWLINE", "EOF", "INDENT", "DEDENT"):
+                        raise self.error("this '(' is never closed", tok=t, hint="add the missing ')'")
+                    raise self.error("expected ')' to close '('" + self._found())
+                self.next()
                 e.paren = True
                 return e
             if t.value == "[":
@@ -898,6 +939,17 @@ class Parser:
         if t.kind == "OP" and t.value == "=":
             raise self.error("unexpected '='", hint="use == to compare two values")
         raise self.error(f"didn't expect '{t.raw}' here")
+
+    def _unit_reciprocal_follows(self):
+        """`0.1 1/s` or `0.1 /s` right after a number."""
+        t = self.tok
+        if t.kind == "NUM" and t.value == 1 and t.digit and self.peek().kind == "OP" and self.peek().value == "/":
+            nx = self.peek(2)
+            return nx.kind == "NAME" and is_unit_name(nx.raw)
+        if t.kind == "OP" and t.value == "/" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
+                self.peek().value not in self.known and not self.peek().ws_before:
+            return True
+        return False
 
     def in_index(self):
         # crude: are we inside [...] after a name? look back for an unmatched '['
@@ -1017,7 +1069,7 @@ class Parser:
         self.expect_op("]", "to close the unit brackets")
         return u
 
-    def unit_expr(self, explicit):
+    def unit_expr(self, explicit, reciprocal=False):
         """Parse a unit expression like `kg m/s²`.
 
         explicit=True: inside [...] or after `in` -- every name is a unit.
@@ -1055,7 +1107,13 @@ class Parser:
             return tk.kind == "NAME" and is_unit_name(tk.raw)
 
         # first factor
-        factor(1)
+        if reciprocal:
+            if self.tok.kind == "NUM":
+                self.next()
+            self.next()   # /
+            factor(-1)
+        else:
+            factor(1)
         first = False
         del first
         while True:
@@ -1081,7 +1139,8 @@ class Parser:
                         f"reading '{t.raw}' as your variable {t.raw}, not the unit {t.raw}",
                         tok=t, hint=f"write [{self._unit_text(start)} {t.raw}] if you meant the unit")
                 break
-        u = A.UnitExpr(factors, self._unit_text(start))
+        u = A.UnitExpr(factors, ("1" if reciprocal and self._unit_text(start).startswith("/") else "")
+                       + self._unit_text(start))
         u.line, u.col = start.line, start.col
         u.length = max(1, self.toks[self.i - 1].end - start.start)
         return u
@@ -1119,6 +1178,9 @@ class Parser:
                 if self.at_op("/"):
                     self.next()
                     b = self.next()
+                    if b.kind != "NUM" or b.value == 0 or a.value != int(a.value) or b.value != int(b.value):
+                        raise self.error("a unit's exponent must be a fraction of whole numbers, like m^(1/2)",
+                                         tok=b)
                     p = Fraction(int(a.value), int(b.value))
                 else:
                     p = Fraction(a.value).limit_denominator(1000)

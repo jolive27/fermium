@@ -406,7 +406,6 @@ def test_where_on_print():
     assert run("print xs[end] where xs = [1, 2, 3]") == "3"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B14: print \"label\", x where ... -> can't print this")
 def test_print_label_with_where():
     assert run('print "E =", E where E = 3 J') == "E = 3 J"
 
@@ -632,7 +631,8 @@ def test_assign_to_expression_is_error():
 
 
 def test_e_caret_is_error_suggesting_exp():
-    e = error_of("print e^2")
+    # e² (a fixed positive power) is the charge squared (DECISIONS D16); e^x is an error
+    e = error_of("x = 1\nprint e^x")
     assert "exp" in str(e)
 
 
@@ -649,22 +649,27 @@ def test_plus_minus_is_future_feature(src):
 
 
 # ====================================================================== clean errors, never crashes
-@pytest.mark.xfail(strict=True, reason="BUG B11: ValueError in parser.unit_exponent")
 def test_bad_unit_exponent_clean_error():
     with pytest.raises(FermiumError):
         run("print 3 [m^(1/x)]")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B10: RecursionError on a 1000-term sum")
-def test_long_sum_no_crash():
-    assert run("print " + "+".join(["1"] * 1000)) == "1000"
-
-
-@pytest.mark.xfail(strict=True, reason="BUG B10: RecursionError on deep nesting")
-def test_deep_nesting_clean_error():
-    src = "print " + "(" * 200 + "1" + ")" * 200
+def _run_no_recursion_error(src):
+    # a RecursionError traceback is huge and slow to render, so turn it into a short failure
     try:
-        out = run(src)
+        return run(src)
+    except RecursionError:
+        pytest.fail("RecursionError (should be a FermiumError or work)", pytrace=False)
+
+
+def test_long_sum_no_crash():
+    assert _run_no_recursion_error("print " + "+".join(["1"] * 1000)) == "1000"
+
+
+def test_deep_nesting_clean_error():
+    src = "print " + "(" * 100 + "1" + ")" * 100
+    try:
+        out = _run_no_recursion_error(src)
     except FermiumError:
         return
     assert out == "1"

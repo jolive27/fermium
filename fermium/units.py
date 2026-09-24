@@ -258,7 +258,8 @@ _PREFERRED_SPECS = [
     "m", "kg", "s", "A", "K", "mol", "cd",
     "m/s", "m/s²", "m²", "m³", "kg/m³", "kg m/s", "N", "J", "W", "Pa", "C", "V", "Ω", "F", "T", "Wb", "H",
     "N/m", "J/K", "J s", "N m²/kg²", "W/m²", "W/(m² K⁴)", "J/(kg K)", "J/(mol K)", "1/mol", "F/m", "H/m",
-    "kg m²", "m²/s", "m³/(kg s²)", "V/m", "A/m", "kg/s", "J/kg", "Pa s", "C/kg", "W/m³",
+    "kg m²", "m²/s", "m³/(kg s²)", "V/m", "A/m", "kg/s", "J/kg", "Pa s", "C/kg", "W/m³", "C²", "C m",
+    "J/T", "C/m²", "C/m³", "1/m", "1/m²", "1/m³", "kg/m²", "J/m³", "N/m²",
 ]
 _PREFERRED = None
 

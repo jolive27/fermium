@@ -6,6 +6,7 @@ and scientific notation written the physics way (6.67×10⁻¹¹).
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass, field
 
@@ -140,7 +141,7 @@ def normalize_source(src: str, diags: Diagnostics | None = None) -> str:
 
 
 def _is_ident_start(ch):
-    return ch.isalpha() or ch in "_°" or ch == "ħ"
+    return ch.isalpha() or ch in "_°%" or ch == "ħ"
 
 
 def _is_ident_char(ch):
@@ -150,7 +151,7 @@ def _is_ident_char(ch):
 class Lexer:
     def __init__(self, source: str, diags: Diagnostics | None = None):
         self.diags = diags or Diagnostics()
-        src = source.replace("\r\n", "\n").replace("\r", "\n")
+        src = source.replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff")
         src = src.replace("″", "''")
         self.src = normalize_source(src, self.diags)
         self.pos = 0
@@ -337,9 +338,12 @@ class Lexer:
                 p = r
         self.adv(p - self.pos)
         clean = mantissa.replace("_", "")
-        value = float(clean) * (10.0 ** exp) if exp else float(clean)
-        if exp:
-            value = float(f"{clean}e{exp}")
+        value = float(f"{clean}e{exp}") if exp else float(clean)
+        if value in (float("inf"),):
+            raise FermiumError(f"the number {s[start:p]} is too large (bigger than about 1.8×10³⁰⁸)", line, col,
+                               p - start)
+        if p < len(s) and s[p] == "." and p + 1 < len(s) and s[p + 1] in DIGITS:
+            raise FermiumError(f"this number has two decimal points: {s[start:p + 2]}...", line, col, p - start + 2)
         self.add("NUM", value, start, line, col, ws, sigfigs=_count_sigfigs(mantissa), digit=True)
 
     def _string(self, ws):
@@ -371,6 +375,10 @@ class Lexer:
 
     def _ident(self, ws):
         line, col, start = self.line, self.col, self.pos
+        if self.peek() == "%":
+            self.adv()
+            self.add("NAME", "%", start, line, col, ws)
+            return
         if self.peek() == "°":
             self.adv()
             if self.peek() in ("C", "F") and not _is_ident_char(self.peek(1) or " "):
@@ -389,7 +397,7 @@ class Lexer:
             else:
                 break
         raw = self.src[start:self.pos]
-        text = "".join("_" + SUBS[c] if c in SUBS else c for c in raw)
+        text = re.sub("[₀₁₂₃₄₅₆₇₈₉]+", lambda m: "_" + "".join(SUBS[c] for c in m.group(0)), raw)
         text = text.replace("__", "_")
         if text in KEYWORDS:
             self.add("KW", text, start, line, col, ws)

@@ -70,6 +70,15 @@ def needs_more(text, session):
     return False
 
 
+def opens_block(line):
+    """Does this line start an indented block (if/for/while/else/solve, or `f(x) =` with nothing after)?"""
+    import re
+    st = line.strip()
+    if re.match(r"(if|for|while|else|elif|solve)\b", st):
+        return True
+    return bool(re.match(r"[^\s=]+\([^)]*\)\s*=\s*(#.*)?$", st))
+
+
 def main(stdin=None, stdout=None):
     from . import __version__
     from .driver import ReplSession
@@ -81,13 +90,25 @@ def main(stdin=None, stdout=None):
         out.write(BANNER.format(version=__version__) + "\n")
     session = ReplSession(out=out)
 
+    pending = []
+
     def read(prompt):
+        if pending:
+            return pending.pop()
         if interactive:
             return input(prompt)
         line = stdin.readline()
         if not line:
             raise EOFError
         return line.rstrip("\n")
+
+    def peek():
+        try:
+            line = read("... ")
+        except EOFError:
+            return None
+        pending.append(line)
+        return line
 
     while True:
         try:
@@ -113,14 +134,28 @@ def main(stdin=None, stdout=None):
             out.write(", ".join(names) + "\n")
             continue
         text = line + "\n"
-        while needs_more(text, session):
-            try:
-                more = read("... ")
-            except EOFError:
+        block = opens_block(line) or needs_more(text, session)
+        while block:
+            if interactive:
+                try:
+                    more = read("... ")
+                except EOFError:
+                    break
+                if not more.strip():
+                    break            # an empty line ends the block (like Python)
+                text += expand_all(more) + "\n"
+                continue
+            # reading a file/pipe: continue while lines are indented, or are 'else', or the input is unfinished
+            nxt = peek()
+            if nxt is None:
                 break
-            if not more.strip():
-                break
-            text += expand_all(more) + "\n"
+            st = nxt.strip()
+            if nxt[:1] in (" ", "\t") or st.startswith(("else", "elif")) or needs_more(text, session):
+                pending.pop()
+                if st:
+                    text += expand_all(nxt) + "\n"
+                continue
+            break
         try:
             session.execute(text)
         except FermiumError as e:
