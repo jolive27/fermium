@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fermium"
+version = "0.1.0"
+description = "A programming language for physicists: units checked at compile time, calculus built in, compiled with LLVM."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["llvmlite>=0.40", "numpy"]
+
+[project.optional-dependencies]
+full = ["scipy", "sympy", "matplotlib"]
+dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "scipy", "sympy", "matplotlib"]
+
+[project.scripts]
+fermium = "fermium.cli:main"
+
+[tool.setuptools]
+packages = ["fermium", "fermium.runtime"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "F401", "F811", "F841"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

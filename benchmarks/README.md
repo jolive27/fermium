@@ -1,0 +1,105 @@
+# Fermium benchmarks
+
+Spec §4, Tier 3: the same five physics workloads written idiomatically in
+Fermium, Julia, pure Python and NumPy/SciPy, timed on the same machine.
+Latest numbers: [`RESULTS.md`](RESULTS.md) (raw data in `results.json`).
+
+## Running
+
+```sh
+python benchmarks/run.py                          # all languages, R=5 (R=3 for Python/NumPy)
+python benchmarks/run.py -r 3 --langs julia,python,numpy
+python benchmarks/run.py --langs fermium,julia --benchmarks nbody,unit_loop
+python benchmarks/run.py --quick                  # Python/NumPy nbody use 100k steps
+```
+
+Options: `-r/--repeats`, `--slow-repeats` (pure Python / NumPy), `--warmup`
+(untimed runs first, default 1), `--langs`, `--benchmarks`, `--timeout`.
+The runner exits non-zero if any language's printed results disagree with Julia's.
+
+### Requirements
+
+* **Julia** — official binaries in `.tools/julia` (gitignored), packages in the
+  project-local depot `.tools/julia-depot`. To reinstall:
+  ```sh
+  mkdir -p .tools && cd .tools
+  curl -fLO https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-1.12.7-linux-x86_64.tar.gz
+  tar xzf julia-1.12.7-linux-x86_64.tar.gz && mv julia-1.12.7 julia && cd ..
+  JULIA_DEPOT_PATH=$PWD/.tools/julia-depot .tools/julia/bin/julia --project=benchmarks/julia -e 'using Pkg; Pkg.instantiate()'
+  ```
+  (`benchmarks/julia/Project.toml` + `Manifest.toml` pin QuadGK and Unitful.)
+* **Python** 3 with `numpy` and `scipy`.
+* **Fermium** — `fermium` on `PATH` (`pip install -e .`), or set `FERMIUM_CMD`
+  (e.g. `FERMIUM_CMD="python -m fermium"`). Programs live in
+  `benchmarks/fermium/<name>.fm` and run as `fermium run benchmarks/fermium/<name>.fm`
+  from the repository root. A missing file or failing run is reported as
+  skipped/failed, not fatal.
+
+## What is measured
+
+* **Wall** — median wall-clock time of the whole process: runtime startup,
+  package loading, compilation/JIT and the computation.
+* **Inner** — median of the `TIME_INNER <seconds>` line each program prints,
+  timed inside the program around the computation only. Julia programs first
+  run the kernel on a tiny problem (warm-up) so Inner excludes JIT compilation.
+* nbody Inner times are normalized per step, so languages may use different N.
+
+## Output contract (every language, including Fermium)
+
+Each program prints result lines `<key> <number>` (a bare number is stored as
+`value`), then `TIME_INNER <seconds>` (not needed for `startup`). The runner
+compares result keys across languages with per-key tolerances (`TOLERANCE` in
+`run.py`). Fermium programs should print the same keys:
+
+| Benchmark | Keys printed |
+|---|---|
+| nbody | `N`, `energy_before`, `energy_after` (9 decimals) |
+| spring_rk4 | `steps`, `x_10s` (10 significant digits) |
+| spring_adaptive | `x_100s`, `accepted_steps` |
+| blackbody | `sum_integrals`, `ratio_5778K` |
+| unit_loop | `E_J` (Julia also `E_unitful_J` and `TIME_INNER_UNITFUL`) |
+| startup | the number g (bare) |
+
+## The benchmarks
+
+All use CODATA 2022 exact/recommended constants: h = 6.62607015e-34 J s,
+c = 299792458 m/s, k_B = 1.380649e-23 J/K, σ = 5.670374419e-8 W m⁻² K⁻⁴.
+
+1. **nbody** — Computer Language Benchmarks Game n-body: Sun + 4 gas giants,
+   offset momentum, symplectic-Euler `advance` with dt = 0.01, N = 1,000,000
+   steps. Expected: `-0.169075164` → `-0.169086185`.
+2. **spring_rk4** — damped spring (m = 1 kg, k = 100 N/m, b = 0.5 kg/s,
+   x₀ = 0.1 m, v₀ = 0), classic RK4, dt = 1e-5 s, 0 → 10 s (10⁶ steps).
+   Matches the analytic solution: x(10 s) = 0.006835571546 m.
+   **spring_adaptive** — same ODE, 0 → 100 s, Dormand–Prince RK45,
+   rtol = 1e-8, atol = 1e-10. Julia and pure Python use a hand-written DP45
+   whose step-size controller and initial-step heuristic mirror
+   `scipy.integrate.solve_ivp(method="RK45")`, so all three take exactly the
+   same 3713 accepted steps. (|x(100 s)| is ~1e-12 m analytically; the printed
+   ~-2e-10 m is the expected global error at atol = 1e-10.)
+3. **blackbody** — ∫ B_ν(ν, T) dν over 1e11–1e16 Hz for 1000 temperatures
+   1000–10000 K, adaptive Gauss–Kronrod with rtol = 1e-8: Julia `QuadGK.quadgk`
+   (GK 7/15), SciPy `quad` (QUADPACK QAGS, GK 10/21, `epsabs=0`), pure Python a
+   hand-written globally adaptive GK 7/15 with QuadGK's strategy. Prints the sum
+   over T and ∫B_ν(5778 K) / (σT⁴/π) (≈ 1; the truncated band misses ~3e-11).
+4. **unit_loop** — `E += ½·m·v²` with v = i·1e-6 m/s, m = 2 kg, i = 1…10⁷.
+   Julia has two versions in one process: plain `Float64` and type-stable
+   Unitful.jl quantities (`TIME_INNER_UNITFUL`) — the "units cost nothing" bar
+   Fermium is aiming for. NumPy is vectorized (`arange`, in-place scale, `v @ v`).
+5. **startup** — `g = 4π²·1.20/2.21²`; only whole-process wall time matters.
+
+## Fairness notes
+
+* Julia code is type-stable, lives in functions (no globals in hot loops), uses
+  immutable structs/tuples for small vectors, and is run with default
+  optimization (`-O2`), one thread, `--startup-file=no`. No `@fastmath`/`@simd`,
+  so float reductions stay sequential exactly like the other languages.
+* Pure Python uses the fastest idiomatic style (locals, plain floats/lists,
+  precomputed pairs as in the Benchmarks Game entries), no C extensions.
+* NumPy cannot vectorize a sequential time-stepping loop; nbody (5 bodies) and
+  fixed-step RK4 on a 2-vector are dominated by per-call NumPy overhead and are
+  slower than pure Python. That is the honest idiomatic result, not a crippled
+  version — for spring_adaptive it uses SciPy's own `solve_ivp`.
+* NumPy unit_loop allocates one 80 MB array; first-touch page faults make the
+  first run noticeably slower on this VM (the warm-up run absorbs some of it).
+* Julia's wall time for blackbody/unit_loop includes loading QuadGK/Unitful.

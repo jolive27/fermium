@@ -1,0 +1,569 @@
+{
+  "machine": {
+    "date": "2026-09-24 22:39 UTC",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+    "logical_cores": 4,
+    "os": "Linux 6.18.44-fc-v37",
+    "python": "3.11.15",
+    "julia": "julia version 1.12.7",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "fermium": "not on PATH"
+  },
+  "records": [
+    {
+      "lang": "julia",
+      "bench": "nbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/nbody.jl 1000000",
+      "runs": 3,
+      "walls": [
+        0.9716553079999812,
+        0.9751235589999396,
+        0.9729555200001414
+      ],
+      "wall_median": 0.9729555200001414,
+      "inner": {
+        "TIME_INNER": 0.075301215
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.075301215,
+          0.076567771,
+          0.074636036
+        ]
+      },
+      "results": {
+        "N": 1000000.0,
+        "energy_before": -0.169075164,
+        "energy_after": -0.169086185
+      },
+      "results_printed": {
+        "N": "1000000",
+        "energy_before": "-0.169075164",
+        "energy_after": "-0.169086185"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "nbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/nbody.py 1000000",
+      "runs": 3,
+      "walls": [
+        4.193148184999927,
+        4.11463480999987,
+        4.1949046319998615
+      ],
+      "wall_median": 4.193148184999927,
+      "inner": {
+        "TIME_INNER": 4.178042197999957
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          4.178042197999957,
+          4.100125055999797,
+          4.178880567000078
+        ]
+      },
+      "results": {
+        "N": 1000000.0,
+        "energy_before": -0.169075164,
+        "energy_after": -0.169086185
+      },
+      "results_printed": {
+        "N": "1000000",
+        "energy_before": "-0.169075164",
+        "energy_after": "-0.169086185"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "nbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/nbody.py 1000000",
+      "runs": 3,
+      "walls": [
+        12.063707797999996,
+        11.713921884000001,
+        11.928752240999984
+      ],
+      "wall_median": 11.928752240999984,
+      "inner": {
+        "TIME_INNER": 11.81261895900002
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          11.971121863999997,
+          11.619115270999828,
+          11.81261895900002
+        ]
+      },
+      "results": {
+        "N": 1000000.0,
+        "energy_before": -0.169075164,
+        "energy_after": -0.169086185
+      },
+      "results_printed": {
+        "N": "1000000",
+        "energy_before": "-0.169075164",
+        "energy_after": "-0.169086185"
+      }
+    },
+    {
+      "lang": "julia",
+      "bench": "spring_rk4",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/spring_rk4.jl",
+      "runs": 3,
+      "walls": [
+        0.9579835399999865,
+        0.951296025000147,
+        0.985312894000117
+      ],
+      "wall_median": 0.9579835399999865,
+      "inner": {
+        "TIME_INNER": 0.021853591
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.021132623,
+          0.021853591,
+          0.022137287
+        ]
+      },
+      "results": {
+        "steps": 1000000.0,
+        "x_10s": 0.006835571546
+      },
+      "results_printed": {
+        "steps": "1000000",
+        "x_10s": "0.006835571546"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "spring_rk4",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/spring_rk4.py",
+      "runs": 3,
+      "walls": [
+        0.4852762000000439,
+        0.45488145799981794,
+        0.5015989080000054
+      ],
+      "wall_median": 0.4852762000000439,
+      "inner": {
+        "TIME_INNER": 0.47052425599986236
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.47052425599986236,
+          0.44154380600002696,
+          0.48484933100007765
+        ]
+      },
+      "results": {
+        "steps": 1000000.0,
+        "x_10s": 0.006835571546
+      },
+      "results_printed": {
+        "steps": "1000000",
+        "x_10s": "0.006835571546"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "spring_rk4",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/spring_rk4.py",
+      "runs": 3,
+      "walls": [
+        10.672014940000054,
+        10.316134636000015,
+        10.12638152799991
+      ],
+      "wall_median": 10.316134636000015,
+      "inner": {
+        "TIME_INNER": 10.22481618300003
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          10.5790934810002,
+          10.22481618300003,
+          10.029217091999953
+        ]
+      },
+      "results": {
+        "steps": 1000000.0,
+        "x_10s": 0.006835571546
+      },
+      "results_printed": {
+        "steps": "1000000",
+        "x_10s": "0.006835571546"
+      }
+    },
+    {
+      "lang": "julia",
+      "bench": "spring_adaptive",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/spring_adaptive.jl",
+      "runs": 3,
+      "walls": [
+        1.1625912419999622,
+        1.1531568550001339,
+        1.0560361020000073
+      ],
+      "wall_median": 1.1531568550001339,
+      "inner": {
+        "TIME_INNER": 0.000530212
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.000530212,
+          0.000530886,
+          0.000512592
+        ]
+      },
+      "results": {
+        "x_100s": -1.954775328e-10,
+        "accepted_steps": 3713.0
+      },
+      "results_printed": {
+        "x_100s": "-1.954775328e-10",
+        "accepted_steps": "3713"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "spring_adaptive",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/spring_adaptive.py",
+      "runs": 3,
+      "walls": [
+        0.024674496999978146,
+        0.025951607000024524,
+        0.02444949800019458
+      ],
+      "wall_median": 0.024674496999978146,
+      "inner": {
+        "TIME_INNER": 0.011048259000062899
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.011048259000062899,
+          0.011788656000135234,
+          0.010993584999823725
+        ]
+      },
+      "results": {
+        "x_100s": -1.954775328e-10,
+        "accepted_steps": 3713.0
+      },
+      "results_printed": {
+        "x_100s": "-1.954775328e-10",
+        "accepted_steps": "3713"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "spring_adaptive",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/spring_adaptive.py",
+      "runs": 3,
+      "walls": [
+        0.7023481369999445,
+        0.7085436560000744,
+        0.6890506150000419
+      ],
+      "wall_median": 0.7023481369999445,
+      "inner": {
+        "TIME_INNER": 0.16748710799993205
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.15412876999994296,
+          0.16748710799993205,
+          0.16813678200014692
+        ]
+      },
+      "results": {
+        "x_100s": -1.954775312e-10,
+        "accepted_steps": 3713.0
+      },
+      "results_printed": {
+        "x_100s": "-1.954775312e-10",
+        "accepted_steps": "3713"
+      }
+    },
+    {
+      "lang": "julia",
+      "bench": "blackbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/blackbody.jl",
+      "runs": 3,
+      "walls": [
+        2.8217818910000005,
+        2.8851688230001855,
+        2.8052885560000504
+      ],
+      "wall_median": 2.8217818910000005,
+      "inner": {
+        "TIME_INNER": 0.001798224
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.001798224,
+          0.002123754,
+          0.001787568
+        ]
+      },
+      "results": {
+        "sum_integrals": 40159493727.0,
+        "ratio_5778K": 1.000000000003
+      },
+      "results_printed": {
+        "sum_integrals": "4.0159493727e+10",
+        "ratio_5778K": "1.000000000003"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "blackbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/blackbody.py",
+      "runs": 3,
+      "walls": [
+        0.05802972300011788,
+        0.05295950400000038,
+        0.05727408600000672
+      ],
+      "wall_median": 0.05727408600000672,
+      "inner": {
+        "TIME_INNER": 0.04253316400013318
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.04253316400013318,
+          0.03888048099997832,
+          0.04267281300008108
+        ]
+      },
+      "results": {
+        "sum_integrals": 40159493727.0,
+        "ratio_5778K": 1.000000000003
+      },
+      "results_printed": {
+        "sum_integrals": "4.0159493727e+10",
+        "ratio_5778K": "1.000000000003"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "blackbody",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/blackbody.py",
+      "runs": 3,
+      "walls": [
+        0.5606151070001033,
+        0.534593581000081,
+        0.5463887779999368
+      ],
+      "wall_median": 0.5463887779999368,
+      "inner": {
+        "TIME_INNER": 0.03559552199999416
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.03559552199999416,
+          0.03493255799980943,
+          0.036648977999902854
+        ]
+      },
+      "results": {
+        "sum_integrals": 40159493727.0,
+        "ratio_5778K": 1.000000000003
+      },
+      "results_printed": {
+        "sum_integrals": "4.0159493727e+10",
+        "ratio_5778K": "1.000000000003"
+      }
+    },
+    {
+      "lang": "julia",
+      "bench": "unit_loop",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/unit_loop.jl",
+      "runs": 3,
+      "walls": [
+        2.359082909000108,
+        2.414164991000007,
+        2.349700017000032
+      ],
+      "wall_median": 2.359082909000108,
+      "inner": {
+        "TIME_INNER": 0.007095053,
+        "TIME_INNER_UNITFUL": 0.009386554
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.007095053,
+          0.007064422,
+          0.007164793
+        ],
+        "TIME_INNER_UNITFUL": [
+          0.007177755,
+          0.011358242,
+          0.009386554
+        ]
+      },
+      "results": {
+        "E_J": 333333383.3333,
+        "E_unitful_J": 333333383.3333
+      },
+      "results_printed": {
+        "E_J": "3.333333833333e+08",
+        "E_unitful_J": "3.333333833333e+08"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "unit_loop",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/unit_loop.py",
+      "runs": 3,
+      "walls": [
+        0.5508422469999914,
+        0.552164434000133,
+        0.5846884889999728
+      ],
+      "wall_median": 0.552164434000133,
+      "inner": {
+        "TIME_INNER": 0.5385073659999762
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.5376515079999535,
+          0.5385073659999762,
+          0.5707944060000045
+        ]
+      },
+      "results": {
+        "E_J": 333333383.3333
+      },
+      "results_printed": {
+        "E_J": "3.333333833333e+08"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "unit_loop",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/unit_loop.py",
+      "runs": 3,
+      "walls": [
+        0.18616985199992087,
+        0.18511379000005945,
+        0.33480092899981173
+      ],
+      "wall_median": 0.18616985199992087,
+      "inner": {
+        "TIME_INNER": 0.09395295000012993
+      },
+      "inner_all": {
+        "TIME_INNER": [
+          0.09395295000012993,
+          0.09298388199999863,
+          0.2430458759999965
+        ]
+      },
+      "results": {
+        "E_J": 333333383.3333
+      },
+      "results_printed": {
+        "E_J": "3.333333833333e+08"
+      }
+    },
+    {
+      "lang": "julia",
+      "bench": "startup",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/home/user/fermium/.tools/julia/bin/julia --startup-file=no --project=/home/user/fermium/benchmarks/julia /home/user/fermium/benchmarks/julia/startup.jl",
+      "runs": 3,
+      "walls": [
+        0.2604368079998949,
+        0.25680753300002834,
+        0.2928625859999556
+      ],
+      "wall_median": 0.2604368079998949,
+      "inner": {},
+      "inner_all": {},
+      "results": {
+        "value": 9.69965830454514
+      },
+      "results_printed": {
+        "value": "9.69965830454514"
+      }
+    },
+    {
+      "lang": "python",
+      "bench": "startup",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/python/startup.py",
+      "runs": 3,
+      "walls": [
+        0.013148653000143895,
+        0.013721772000053534,
+        0.012122465999937049
+      ],
+      "wall_median": 0.013148653000143895,
+      "inner": {},
+      "inner_all": {},
+      "results": {
+        "value": 9.69965830454514
+      },
+      "results_printed": {
+        "value": "9.69965830454514"
+      }
+    },
+    {
+      "lang": "numpy",
+      "bench": "startup",
+      "status": "ok",
+      "reason": null,
+      "cmd": "/usr/local/bin/python3 /home/user/fermium/benchmarks/numpy/startup.py",
+      "runs": 3,
+      "walls": [
+        0.11460830100008934,
+        0.09971093200010728,
+        0.09218375999989803
+      ],
+      "wall_median": 0.09971093200010728,
+      "inner": {},
+      "inner_all": {},
+      "results": {
+        "value": 9.69965830454514
+      },
+      "results_printed": {
+        "value": "9.69965830454514"
+      }
+    }
+  ]
+}
