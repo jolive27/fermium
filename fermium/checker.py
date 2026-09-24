@@ -443,10 +443,14 @@ class Checker(C.DiffContext):
             if res.terms:
                 return ""
             parts.append(preferred_unit(res.const).name or "no units")
+            all_plain = res.const.dimensionless
             for p, a in zip(info.fdef.params, args):
                 d = self.U.norm(a.ty.dim)
                 if not d.terms:
+                    all_plain = all_plain and d.const.dimensionless
                     parts.append(f"for {p.name} in {preferred_unit(d.const).name or 'plain numbers'}")
+            if all_plain:
+                return ""
             return ", ".join(parts)
         except FermiumError:
             return ""

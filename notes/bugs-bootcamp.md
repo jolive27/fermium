@@ -258,3 +258,18 @@ Readability of printed derivatives (not wrong, but a beginner can't check them a
 ## B25. (grammar trap) `... from 0 m to 2 m / M` divides the upper limit
 
 `xcm = integral x rho(x) dx from 0 m to 2 m / M` parses as upper limit `2 m / M` and reports "the limits of this integral are length [m] and a quantity with units [m/kg]". The error is good; it might add the hint "put the integral in parentheses: (∫ ... ) / M". Taught in Lesson 8.
+
+## B26. Orbit plots from lists are stretched (no equal aspect)
+
+`plot y vs x` of an ODE solution uses equal axis scales (a circle looks round), but `plot ys in AU vs xs in AU` of two **lists** in the same units does not, so an orbit simulated with a loop (Lesson 10) looks squashed. Suggest: equal aspect whenever both axes have the same dimension, as for solutions. (Also nice: a way to plot single points, e.g. to mark the Sun; and markers for data, see B22.)
+
+## B27. `solve` with equations on their own lines: `with` indented less than the equations gives a confusing error
+
+```
+solve
+    x' = -x / 2 s
+    y' = x / 2 s
+  with x(0) = 1, y(0) = 0
+  for t from 0 s to 10 s
+```
+→ `line 4: this line's indentation doesn't match any block above it`. With `with` at column 0 → `solve needs a range for the independent variable`. Works only when `with`/`for` are at the same indentation as the equations. For one-line equations, `  with` (2 spaces) is fine, so beginners will copy that style. Suggest accepting any indentation > 0 for `with`/`for` continuation lines.

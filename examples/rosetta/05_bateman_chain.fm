@@ -1,0 +1,14 @@
+# Decay chain Mo-99 -> Tc-99m -> Tc-99: a system of three ODEs
+λ_Mo = ln(2) / (65.94 hr)
+λ_Tc = ln(2) / (6.0067 hr)
+
+solve N_Mo' = -λ_Mo N_Mo,
+      N_Tc' = λ_Mo N_Mo - λ_Tc N_Tc,
+      N_99' = λ_Tc N_Tc
+  with N_Mo(0) = 1.0, N_Tc(0) = 0, N_99(0) = 0
+  for t from 0 hr to 240 hr
+
+print "N_Tc(24 h) / N0 =", N_Tc(24 hr) to 5 digits
+print "N_99(240 h) / N0 =", N_99(240 hr) to 5 digits
+print "Tc-99m peaks at", ln(λ_Tc/λ_Mo) / (λ_Tc - λ_Mo) in hr to 5 digits
+print "activity ratio at 200 h:", λ_Tc N_Tc(200 hr) / (λ_Mo N_Mo(200 hr)) to 5 digits

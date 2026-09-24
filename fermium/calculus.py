@@ -275,17 +275,39 @@ def key(e):
 
 
 def _factors(e):
-    """Flatten a product into (coefficient, [factors])."""
+    """Flatten a product/quotient into (coefficient, [factors]); divisors become x^-1 factors."""
     if isinstance(e, A.BinOp) and e.op == "*":
         c1, f1 = _factors(e.left)
         c2, f2 = _factors(e.right)
         return c1 * c2, f1 + f2
+    if isinstance(e, A.BinOp) and e.op == "/":
+        c1, f1 = _factors(e.left)
+        c2, f2 = _factors(e.right)
+        if c2 == 0:
+            return 1.0, [e]
+        return c1 / c2, f1 + [_inverse(f) for f in f2]
     if isinstance(e, A.Neg):
         c, f = _factors(e.operand)
         return -c, f
     if isinstance(e, A.Num):
         return e.value, []
     return 1.0, [e]
+
+
+def _inverse(f):
+    if isinstance(f, A.BinOp) and f.op == "^" and is_num(f.right):
+        return pw(f.left, num(-f.right.value))
+    return pw(f, num(-1))
+
+
+def _rank(x):
+    if isinstance(x, A.Name):
+        return 0
+    if isinstance(x, A.BinOp) and x.op == "^" and isinstance(x.left, A.Name):
+        return 1
+    if isinstance(x, A.Quantity):
+        return 2
+    return 3
 
 
 def _build_product(c, factors):
@@ -300,23 +322,37 @@ def _build_product(c, factors):
         else:
             powers[k] = [base, p]
             merged.append(k)
-    items = []
-    for k in merged:
-        base, p = powers[k]
-        if p == 0:
-            continue
-        items.append(base if p == 1 else pw(base, num(p)))
     if c == 0:
         return num(0)
-    # order: numbers, plain names, then everything else (keeps "-A ω sin(ω t)")
-    items.sort(key=lambda x: 0 if isinstance(x, A.Name) else (1 if isinstance(x, A.BinOp) and x.op == "^" and isinstance(x.left, A.Name) else 2))
+    top, bottom = [], []
+    for k in merged:
+        base, p = powers[k]
+        if p > 0:
+            top.append(base if p == 1 else pw(base, num(p)))
+        elif p < 0:
+            bottom.append(base if p == -1 else pw(base, num(-p)))
+    # order: plain names, powers of names, quantities, then everything else (keeps "-A ω sin(ω t)")
+    top.sort(key=_rank)
+    bottom.sort(key=_rank)
     sign = -1 if c < 0 else 1
     c = abs(c)
+    den_c = 1.0
+    if c < 1 and c > 0:
+        inv = 1 / c
+        if abs(inv - round(inv)) < 1e-12 and round(inv) <= 1e6:
+            den_c, c = float(round(inv)), 1.0
     out = None
-    if c != 1 or not items:
+    if c != 1 or not top:
         out = num(c)
-    for it in items:
+    for it in top:
         out = it if out is None else mul(out, it)
+    den = None
+    if den_c != 1:
+        den = num(den_c)
+    for it in bottom:
+        den = it if den is None else mul(den, it)
+    if den is not None:
+        out = div(out, den)
     return neg(out) if sign < 0 else out
 
 
@@ -374,6 +410,9 @@ def simplify(e):
                 return num(0)
             if key(a) == key(b):
                 return num(1)
+            if not (isinstance(a, A.BinOp) and a.op in "+-") and not (isinstance(b, A.BinOp) and b.op in "+-"):
+                c, fs = _factors(e)
+                return _build_product(c, fs)
             if isinstance(a, A.Neg):
                 return simplify(neg(div(a.operand, b)))
             if isinstance(b, A.Num) and b.value != 0:
@@ -448,7 +487,8 @@ def _src(e, pretty):
         return (f"{v} [{e.unit.text}]" if e.bracket else f"{v} {e.unit.text}"), PREC_JUXT
     if isinstance(e, A.Neg):
         s, p = _src(e.operand, pretty)
-        s, p = _paren(s, p, PREC_JUXT)
+        # -(a/b) and -a/b are the same number, so products and quotients need no parentheses
+        s, p = _paren(s, p, PREC_PROD if isinstance(e.operand, A.BinOp) and e.operand.op in "*/" else PREC_JUXT)
         return "-" + s, PREC_NEG
     if isinstance(e, A.BinOp):
         if e.op in ("+", "-"):

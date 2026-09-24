@@ -282,3 +282,10 @@ def test_leading_bom_ignored():
 
 def test_crlf_line_endings():
     assert run("x = 3\r\nprint x\r\n") == "3"
+
+
+@pytest.mark.parametrize("latin,greek", [("v", "ν"), ("o", "ο"), ("p", "ρ"), ("k", "κ")])
+def test_lookalike_pairs_warn_but_stay_different(latin, greek):
+    src = f"{latin} = 1\n{greek} = 2\nprint {latin}, {greek}"
+    assert any("look almost identical" in m for m in lex_warnings(src))
+    assert run(src) == "1 2"

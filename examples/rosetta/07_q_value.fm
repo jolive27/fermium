@@ -1,0 +1,16 @@
+# Q-values of nuclear reactions from atomic masses (in u), results in MeV
+n   = 1.00866491595 u
+H1  = 1.00782503223 u
+H2  = 2.01410177812 u
+H3  = 3.01604928199 u
+He4 = 4.00260325413 u
+Li7 = 7.0160034366 u
+U238 = 238.0507884 u
+Th234 = 234.0436014 u
+
+Q(before, after) = (sum(before) - sum(after)) c²
+
+print "D + T -> He-4 + n:", Q([H2, H3], [He4, n]) in MeV to 5 digits
+print "p + Li-7 -> 2 He-4:", Q([H1, Li7], [He4, He4]) in MeV to 5 digits
+print "U-238 -> Th-234 + He-4:", Q([U238], [Th234, He4]) in MeV to 5 digits
+print "4 H -> He-4:", Q([H1, H1, H1, H1], [He4]) in MeV to 5 digits

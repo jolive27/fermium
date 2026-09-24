@@ -246,18 +246,10 @@ def _ids(prefix, corpus):
 
 
 # Program output must not change either.  Some corpus programs print a unit spelled in the
-# source (`in ft/s^2`, `in degF`, `N m^2/kg^2`), and Fermium echoes that spelling: bugs-tests B16.
-B16 = pytest.mark.skipif(False, reason="B16 fixed")
-OUTPUT_XFAIL = {"p00", "p08", "p12", "doc03", "a00"}
-
-
+# source (`in ft/s^2`, `in degF`, `N m^2/kg^2`): the printed unit must not depend on the
+# spelling (bugs-tests B16, fixed).
 def _params(prefix, corpus, output=False):
-    out = []
-    for i, src in enumerate(corpus):
-        pid = f"{prefix}{i:02d}"
-        marks = [B16] if output and pid in OUTPUT_XFAIL else []
-        out.append(pytest.param(src, id=pid, marks=marks))
-    return out
+    return [pytest.param(src, id=f"{prefix}{i:02d}") for i, src in enumerate(corpus)]
 
 
 @pytest.mark.parametrize("src", _params("p", PRETTY_CORPUS) + _params("doc", doc_blocks()))
@@ -299,7 +291,6 @@ def test_roundtrip_ascii_pretty_ascii_output(src, tmp_path):
     assert output_of(a, str(tmp_path)) == out
 
 
-@B16
 def test_unit_display_does_not_depend_on_spelling():
     assert run("g = 9.81 m/s²\nprint g in ft/s^2") == run("g = 9.81 m/s²\nprint g in ft/s²")
     assert run("print 20 °C in degF") == run("print 20 °C in °F")

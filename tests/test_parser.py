@@ -683,3 +683,20 @@ def test_deep_nesting_clean_error():
 def test_garbage_gives_fermium_error(src):
     with pytest.raises(FermiumError):
         run(src)
+
+
+# ====================================================================== dx/dt (spec §3.5)
+@pytest.mark.xfail(strict=True, reason="BUG B17: dx/dt derivative notation not supported")
+def test_dx_dt_notation():
+    assert run("x(t) = 3 m/s * t\nv = dx/dt\nprint v(1 s)") == "3 m/s"
+
+
+def test_dx_dt_with_variables_is_division():
+    assert run("dx = 2 m\ndt = 1 s\nprint dx/dt") == "2 m/s"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG B18: ValueError in parser.deriv_op")
+@pytest.mark.parametrize("src", ["x(t) = t\nprint d^2/dt^* x", "x(t) = t\nprint d/dt ^ * x"])
+def test_malformed_derivative_order(src):
+    with pytest.raises(FermiumError):
+        run(src)

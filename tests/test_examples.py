@@ -25,6 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXAMPLES = os.path.join(ROOT, "examples")
 ROSETTA = os.path.join(EXAMPLES, "rosetta")
 JULIA = os.path.join(ROOT, ".tools", "julia", "bin", "julia")
+JULIA_DEPOT = os.path.join(ROOT, ".tools", "julia-depot")
 
 _cache = {}
 
@@ -401,7 +402,10 @@ def test_rosetta_python(name):
 def test_rosetta_julia(name):
     julia = JULIA if os.path.exists(JULIA) else shutil.which("julia")
     fm = rosetta_fermium(name)
-    res = subprocess.run([julia, "--startup-file=no", os.path.join(ROSETTA, name + ".jl")], capture_output=True,
-                         text=True, cwd=ROSETTA, timeout=300)
+    env = dict(os.environ)
+    if os.path.isdir(JULIA_DEPOT):   # QuadGK and Unitful are installed here (see benchmarks/)
+        env["JULIA_DEPOT_PATH"] = JULIA_DEPOT
+    res = subprocess.run([julia, "--startup-file=no", f"--project={ROSETTA}", os.path.join(ROSETTA, name + ".jl")],
+                         capture_output=True, text=True, cwd=ROSETTA, timeout=300, env=env)
     assert res.returncode == 0, res.stderr
     assert_same_numbers(fm, res.stdout, name + ".jl")

@@ -8,7 +8,8 @@ T = 5778.0  # K
 
 
 def B(lam):
-    return 2 * h * c**2 / lam**5 / np.expm1(h * c / (lam * k * T))
+    with np.errstate(over="ignore"):   # exp overflows to inf at tiny λ, giving B = 0: fine
+        return 2 * h * c**2 / lam**5 / np.expm1(h * c / (lam * k * T))
 
 
 peak = minimize_scalar(lambda lam: -B(lam), bounds=(100e-9, 2000e-9), method="bounded",

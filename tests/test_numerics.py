@@ -197,3 +197,14 @@ def test_constants_match_scipy_codata(name, ref):
 
 def test_hbar_c_in_MeV_fm():
     assert nums(run("print ħ c in MeV fm to 7 digits"))[0] == pytest.approx(197.3269804, rel=1e-7)
+
+
+@pytest.mark.parametrize("fm,sy,dom", FUNCS[:12], ids=[f[0] for f in FUNCS[:12]])
+def test_printed_derivative_is_valid_fermium(fm, sy, dom):
+    """The formula Fermium prints for a derivative is itself a valid program with the same value."""
+    out = run(f"f(x) = {fm}\nprint f'")
+    formula = out.split(" = ", 1)[1].split("   [")[0]
+    p = float(RNG.uniform(*dom))
+    a = nums(run(f"f(x) = {fm}\nd = f'\nprint d({p!r}) to 15 digits"))[0]
+    b = nums(run(f"g(x) = {formula}\nprint g({p!r}) to 15 digits"))[0]
+    assert b == pytest.approx(a, rel=1e-12, abs=1e-14)
