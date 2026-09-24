@@ -1,0 +1,44 @@
+# 13 — The Lane–Emden equation: stars as balls of polytropic gas
+#
+# A simple model of a star assumes the pressure depends on density as
+# P = K ρ^(1 + 1/n)  (a "polytrope" with index n). Combining this with
+# hydrostatic equilibrium and Newton's gravity, and writing the density as
+# ρ = ρ_c θⁿ and the radius as r = a ξ, everything collapses into one
+# dimensionless equation:
+#
+#     θ'' + (2/ξ) θ' + θⁿ = 0,      θ(0) = 1,  θ'(0) = 0
+#
+# The surface of the star is where θ first reaches 0, at ξ = ξ₁.
+# Known values: n = 0 → √6 ≈ 2.449,  n = 1 → π,  n = 1.5 → 3.654,  n = 3 → 6.897.
+#
+# The equation has a 2/ξ term, which blows up at the centre ξ = 0, so a
+# solver cannot start exactly there. Instead we start at a tiny ξ₀ and use the
+# series solution near the centre for the starting values:
+#     θ ≈ 1 − ξ²/6 + n ξ⁴/120,     θ' ≈ −ξ/3 + n ξ³/30
+#
+# n = 1.5 describes fully convective stars and white dwarfs (non-relativistic),
+# n = 3 is Eddington's standard model of the Sun (and relativistic white dwarfs).
+
+ξ0 = 1.0e-4
+
+# Solve for one index n and return the first zero ξ₁ (found by bisection).
+# The θⁿ term is written as sign(θ)|θ|ⁿ so that fractional n stays defined if
+# the solver steps a little past the surface.
+first_zero(n) =
+    solve θ'' = -2 θ' / ξ - sign(θ) abs(θ)^n
+      with θ(ξ0) = 1 - ξ0²/6 + n ξ0⁴/120,
+           θ'(ξ0) = -ξ0/3 + n ξ0³/30
+      for ξ from ξ0 to 12
+    lo = 1
+    hi = 12
+    for i from 1 to 50
+        mid = (lo + hi) / 2
+        if θ(mid) > 0
+            lo = mid
+        else
+            hi = mid
+    return (lo + hi) / 2
+
+for n in [0, 1, 1.5, 2, 3, 4]
+    print "n =", n, "  ξ₁ =", first_zero(n) to 5 digits
+print "exact for n = 1:", π

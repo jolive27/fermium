@@ -9,7 +9,8 @@
 # Q < 0: you must supply energy to make it happen (endothermic).
 # Masses are atomic masses in unified atomic mass units u (AME2020); the
 # electrons balance out on both sides as long as the proton number balances.
-# 1 u c² = 931.494 MeV.
+# 1 u c² = 931.494 MeV. The differences are small, so we print them with
+# `to 5 digits` (the masses themselves carry up to 12 significant figures).
 
 m_n  = 1.00866491595 u     # neutron (we reuse the built-in name for the same thing)
 H1   = 1.00782503223 u
@@ -29,27 +30,27 @@ Th234 = 234.0436014 u
 Q(before, after) = (sum(before) - sum(after)) c²
 
 print "1 u c² =", 1 u c² in MeV
-print "D + T  -> He-4 + n     Q =", Q([H2, H3], [He4, m_n]) in MeV
-print "D + D  -> He-3 + n     Q =", Q([H2, H2], [He3, m_n]) in MeV
-print "p + Li-7 -> 2 He-4     Q =", Q([H1, Li7], [He4, He4]) in MeV
-print "n + Li-6 -> T + He-4   Q =", Q([m_n, Li6], [H3, He4]) in MeV
-print "U-238 -> Th-234 + α    Q =", Q([U238], [Th234, He4]) in MeV
-print "n -> p + e + ν         Q =", Q([m_n], [H1]) in MeV
+print "D + T  -> He-4 + n     Q =", Q([H2, H3], [He4, m_n]) in MeV to 5 digits
+print "D + D  -> He-3 + n     Q =", Q([H2, H2], [He3, m_n]) in MeV to 5 digits
+print "p + Li-7 -> 2 He-4     Q =", Q([H1, Li7], [He4, He4]) in MeV to 5 digits
+print "n + Li-6 -> T + He-4   Q =", Q([m_n, Li6], [H3, He4]) in MeV to 5 digits
+print "U-238 -> Th-234 + α    Q =", Q([U238], [Th234, He4]) in MeV to 5 digits
+print "n -> p + e + ν         Q =", Q([m_n], [H1]) in MeV to 5 digits
 
 # The Sun's pp chain turns four protons into one helium-4 nucleus
 # (two positrons annihilate with electrons, which the atomic masses include)
 Q_sun = Q([H1, H1, H1, H1], [He4])
-print "4 H -> He-4            Q =", Q_sun in MeV
-print "fraction of the mass converted:", Q_sun / (4 H1 c²)
+print "4 H -> He-4            Q =", Q_sun in MeV to 5 digits
+print "fraction of the mass converted:", Q_sun / (4 H1 c²) to 3 digits
 
 # An endothermic reaction: Rutherford's first artificial transmutation (1919)
 #   α + N-14 -> O-17 + p
 Q_rf = Q([He4, N14], [O17, H1])
-print "α + N-14 -> O-17 + p   Q =", Q_rf in MeV
+print "α + N-14 -> O-17 + p   Q =", Q_rf in MeV to 5 digits
 # The alpha must bring more than |Q|, because momentum is conserved too:
 #   E_threshold = −Q (1 + m_projectile / m_target)
-print "threshold alpha energy:", -Q_rf (1 + He4 / N14) in MeV
+print "threshold alpha energy:", -Q_rf (1 + He4 / N14) in MeV to 5 digits
 
 # Energy from burning 1 kg of D-T fuel, compared with 1 kg of coal (~24 MJ)
 E_per_kg = Q([H2, H3], [He4, m_n]) / (H2 + H3)
-print "D-T fusion:", E_per_kg in TJ/kg, " =", E_per_kg / (24 MJ/kg), "times coal"
+print "D-T fusion:", E_per_kg in TJ/kg to 3 digits, " =", E_per_kg / (24 MJ/kg) to 2 digits, "times coal"

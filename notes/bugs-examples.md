@@ -71,3 +71,16 @@ print ρ(56) in kg/m³
 - Expected: the D8 warning ("this is read as a/(b c) ...") is printed together with the unit error, since it explains it. Ideally the hint would show the user's own text: "write (4/3) π r³".
 - Actual: only `can't show a quantity with units [kg m³] in kg/m³`; the warning (which does appear when the program is otherwise valid) is dropped. A beginner has no clue why the units are upside down.
 - Workaround in examples: write `4π/3 R³`... careful: that is also 4π/(3 R³)! Use `(4/3) π R³` or `4/3*π*R³`.
+
+## 9. (bug, important for nuclear physics) `e²` is rejected as if it were exp
+```
+print e² / (4π ε_0) in MeV fm
+```
+- Expected: 1.43996 MeV fm. `e²/(4πε₀)` is one of the most common expressions in nuclear/atomic physics. D16 only says `e^x` (a *variable/non-constant* exponent) should be an error. A fixed numeric exponent (`e²`, `e^2`, `(e)^2`) can only mean the charge squared (exp(2) would be dimensionless and nobody writes it as e²... and even if they did, the units check would catch it).
+- Actual: `line 1: e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium ... hint: for the exponential function write exp(x)`.
+- Workaround in examples: `e e` / `e*e` (12_coulomb_barrier, 19_rutherford, 23_alpha_decay).
+
+## 10. (cosmetic) Charge squared prints as `s² A²` instead of `C²`
+```
+print e e       # 2.56697×10⁻³⁸ s² A²
+```

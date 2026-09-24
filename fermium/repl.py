@@ -20,7 +20,8 @@ HELP = """Examples:
 Commands:  :help   :quit   :vars
 Symbols:   type \\name then Tab, e.g. \\omega -> ω, \\^2 -> ², \\int -> ∫"""
 
-CONTINUE_MARKERS = ("expected an indented block", "ended before", "program ended", "the line ended")
+CONTINUE_MARKERS = ("expected an indented block", "ended before", "program ended", "the line ended",
+                    "solve needs a range")
 
 
 def _setup_readline():
@@ -61,6 +62,8 @@ def needs_more(text, session):
     try:
         parse(text, Diagnostics(), known=session.known)
     except FermiumError as e:
+        if "solve needs a range" in e.message:
+            return True
         if any(m in e.message for m in CONTINUE_MARKERS):
             lines = text.rstrip("\n").split("\n")
             return e.line is None or e.line >= len(lines)

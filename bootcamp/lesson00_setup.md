@@ -174,10 +174,11 @@ print 9.81 m/s^2 * 3 s
 fermium run hello.fm
 ```
 
-<!-- output -->
+It prints:
+
 ```
 Hello, physics!
-29.43 m/s
+29.4 m/s
 ```
 
 The first line starting with `#` is a **comment**: a note for humans that Fermium ignores. `print` shows something on the screen. Text in quotes is printed as it is. `9.81 m/s^2 * 3 s` is a calculation: an acceleration times a time is a speed, and Fermium worked out the units for you.
