@@ -745,13 +745,17 @@ class Checker(C.DiffContext):
     def _leibniz(self, e, ctx):
         """dx/dt written as a fraction: a derivative when dx and dt aren't variables but x is a function."""
         from .lexer import canonical_name
-        if e.op == "/" and isinstance(e.left, A.Name) and isinstance(e.right, A.Name) and not e.left.paren:
-            ln, rn = e.left.name, e.right.name
+        right, args = e.right, None
+        if isinstance(right, A.Call) and isinstance(right.func, A.Name):      # dx/dt(2 s)
+            right, args = right.func, right.args
+        if e.op == "/" and isinstance(e.left, A.Name) and isinstance(right, A.Name) and not e.left.paren:
+            ln, rn = e.left.name, right.name
             if len(ln) > 1 and len(rn) > 1 and ln.startswith("d") and rn.startswith("d"):
                 if ctx.scope.lookup(ln)[0] is None and ctx.scope.lookup(rn)[0] is None:
                     x, t = canonical_name(ln[1:]), canonical_name(rn[1:])
                     if isinstance(ctx.scope.lookup(x)[0], (FuncInfo, SolView)):
-                        return A.Deriv(t, 1, A.Name(x).at(e.left)).at(e)
+                        d = A.Deriv(t, 1, A.Name(x).at(e.left)).at(e)
+                        return A.Call(d, args).at(e) if args is not None else d
         return None
 
     def e_BinOp(self, e, ctx):
@@ -759,7 +763,7 @@ class Checker(C.DiffContext):
             return self.power(e, ctx)
         lz = self._leibniz(e, ctx)
         if lz is not None:
-            return self.e_Deriv(lz, ctx)
+            return self.expr(lz, ctx, allow_func=True)
         a = self.expr(e.left, ctx, allow_func=e.implicit)
         if isinstance(a, (FuncRef, SolRef)):
             if e.implicit and e.right.paren:
