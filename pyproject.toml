@@ -15,7 +15,7 @@ full = ["scipy", "sympy", "matplotlib"]
 dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "scipy", "sympy", "matplotlib"]
 
 [project.scripts]
-fermium = "fermium.cli:main"
+fermium = "fermium.cli:entry"
 
 [tool.setuptools]
 packages = ["fermium", "fermium.runtime"]

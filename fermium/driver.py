@@ -20,14 +20,14 @@ _TM = None
 
 
 def target_machine():
+    """A fresh TargetMachine each time: an execution engine takes ownership of its machine."""
     global _TM
+    init_llvm()
     if _TM is None:
-        init_llvm()
-        target = llvm.Target.from_default_triple()
-        _TM = target.create_target_machine(cpu=llvm.get_host_cpu_name(),
-                                           features=llvm.get_host_cpu_features().flatten(), opt=3,
-                                           reloc="default", codemodel="jitdefault")
-    return _TM
+        _TM = (llvm.get_host_cpu_name(), llvm.get_host_cpu_features().flatten())
+    target = llvm.Target.from_default_triple()
+    return target.create_target_machine(cpu=_TM[0], features=_TM[1], opt=3, reloc="default",
+                                        codemodel="jitdefault")
 
 
 def finalize_tables(tables, U, start=0):

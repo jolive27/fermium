@@ -1,0 +1,178 @@
+"""`fermium fmt --pretty / --ascii`: convert between plain-ASCII and symbol spellings.
+
+Works token by token, copying everything between tokens (spaces, comments)
+unchanged, so only spellings change -- never meaning.  Round-trips are tested.
+"""
+from __future__ import annotations
+
+from .errors import Diagnostics
+from .lexer import GREEK, GREEK_TO_ASCII, SUPERS, VULGAR_ASCII
+from .parser import parse_tokens
+from .units import UNIT_PRETTY, UNIT_ASCII, lookup_unit
+
+SUP_OF = {v: k for k, v in SUPERS.items()}
+SUB_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+
+KW_PRETTY = {"sqrt": "√", "cbrt": "∛", "integral": "∫", "partial": "∂"}
+KW_ASCII = {v: k for k, v in KW_PRETTY.items()}
+OP_PRETTY = {"*": "·", "<=": "≤", ">=": "≥", "!=": "≠", "+-": "±", "~=": "≈"}
+OP_ASCII = {"·": "*", "×": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~=", "−": "-", "÷": "/"}
+
+
+def _to_sup(n: int) -> str:
+    return "".join(SUP_OF[c] for c in str(n))
+
+
+def _ident_pretty(value: str) -> str:
+    parts = value.split("_")
+    out = []
+    for i, p in enumerate(parts):
+        p = GREEK.get(p, p)
+        if i > 0 and p.isdigit() and p.isascii():
+            out[-1] = out[-1] + p.translate(SUB_DIGITS)
+            continue
+        out.append(p)
+    return "_".join(out)
+
+
+def _ident_ascii(value: str):
+    parts = value.split("_")
+    out = []
+    ok = True
+    for p in parts:
+        p2 = GREEK_TO_ASCII.get(p, p)
+        if p2 == "∞":
+            p2 = "inf"
+        if not p2.isascii():
+            ok = False
+        out.append(p2)
+    return "_".join(out), ok
+
+
+def _unit_pretty(raw: str) -> str:
+    if raw in UNIT_PRETTY:
+        return UNIT_PRETTY[raw]
+    if raw.startswith("u") and len(raw) > 1 and lookup_unit("μ" + raw[1:]) is not None and raw not in (
+            "u",) and lookup_unit(raw) is not None and lookup_unit(raw).factor == lookup_unit("μ" + raw[1:]).factor:
+        return "μ" + raw[1:]
+    return raw
+
+
+def _unit_ascii(raw: str) -> str:
+    if raw in UNIT_ASCII:
+        return UNIT_ASCII[raw]
+    if raw.startswith(("μ", "µ")):
+        return "u" + raw[1:]
+    return raw
+
+
+def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> str:
+    """mode: 'pretty' (ASCII -> symbols) or 'ascii' (symbols -> ASCII)."""
+    diags = diags or Diagnostics()
+    _, toks = parse_tokens(source, diags)
+    src = toks[0].extra.get("src") if toks and toks[0].extra else None
+    from .lexer import Lexer
+    norm = Lexer(source).src if src is None else src
+    out = []
+    pos = 0
+    closers = {}   # token index -> text to add after it
+    skip = set()
+    i = 0
+    n = len(toks)
+    while i < n:
+        t = toks[i]
+        if t.kind in ("NEWLINE", "INDENT", "DEDENT", "EOF"):
+            i += 1
+            continue
+        out.append(norm[pos:t.start])
+        pos = t.end
+        if i in skip:
+            i += 1
+            continue
+        text = t.raw
+        if mode == "pretty":
+            text = _pretty_token(toks, i, skip)
+        else:
+            text = _ascii_token(toks, i, closers, diags)
+        out.append(text)
+        if i in closers:
+            out.append(closers.pop(i))
+        i += 1
+    out.append(norm[pos:])
+    return "".join(out)
+
+
+def _pretty_token(toks, i, skip):
+    t = toks[i]
+    if t.kind == "NAME":
+        if t.role == "unit":
+            return _unit_pretty(t.raw)
+        if t.value == "∞" and t.raw in ("inf", "infinity"):
+            return "∞"
+        return _ident_pretty(t.value) if t.raw.isascii() else t.raw
+    if t.kind == "KW":
+        return KW_PRETTY.get(t.raw, t.raw)
+    if t.kind == "OP":
+        if t.raw == "^":
+            # x^2 -> x², x^-1 -> x⁻¹ (integer exponents only)
+            j = i + 1
+            sign = ""
+            if toks[j].kind == "OP" and toks[j].raw == "-":
+                sign = "-"
+                j += 1
+            nt = toks[j]
+            after = toks[j + 1] if j + 1 < len(toks) else None
+            if nt.kind == "NUM" and nt.raw.isdigit() and not (after is not None and after.kind == "OP" and
+                                                              after.raw in ("^",)) and \
+                    not (after is not None and after.kind == "NUM" and not after.ws_before):
+                for k in range(i + 1, j + 1):
+                    skip.add(k)
+                return _to_sup(int(sign + nt.raw))
+            return t.raw
+        return OP_PRETTY.get(t.raw, t.raw)
+    return t.raw
+
+
+def _ascii_token(toks, i, closers, diags):
+    t = toks[i]
+    if t.kind == "NAME":
+        if t.role == "unit":
+            return _unit_ascii(t.raw)
+        if t.raw.isascii():
+            return t.raw
+        if t.value == "∞":
+            return "inf"
+        text, ok = _ident_ascii(t.value)
+        if not ok:
+            diags.warn(f"'{t.raw}' has no plain-ASCII spelling, so it was left as is", tok=t,
+                       hint="rename it (e.g. ΔE -> Delta_E) if you need pure ASCII")
+            return t.raw
+        return text
+    if t.kind == "KW":
+        if t.raw in ("√", "∛"):
+            word = KW_ASCII[t.raw]
+            end = t.extra.get("operand_end")
+            nxt = toks[i + 1]
+            if nxt.kind == "OP" and nxt.raw == "(" and t.extra.get("operand_paren"):
+                return word
+            if end is not None:
+                closers[end] = closers.get(end, "") + ")"
+                return word + "("
+            return word
+        return KW_ASCII.get(t.raw, t.raw)
+    if t.kind == "OP":
+        return OP_ASCII.get(t.raw, t.raw)
+    if t.kind == "SUP":
+        v = t.value
+        return f"^{v}" if v >= 0 else f"^{v}"
+    if t.kind == "NUM":
+        raw = t.raw
+        if raw in VULGAR_ASCII:
+            return VULGAR_ASCII[raw]
+        if "×10" in raw:
+            mant, _, ex = raw.partition("×10")
+            ex = ex.lstrip("^")
+            ex = "".join(SUPERS.get(c, c) for c in ex)
+            return f"{mant}e{ex}"
+        return raw
+    return t.raw

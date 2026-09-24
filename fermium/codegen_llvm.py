@@ -437,7 +437,7 @@ class ModuleGen:
 
         def arr():
             return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
-        y, ynew, tmp, ymax, err = arr(), arr(), arr(), arr(), arr()
+        y, ynew, tmp, ymax, _err = arr(), arr(), arr(), arr(), arr()
         k = [arr() for _ in range(7)]
         with lp.range(i64(0), n) as j:
             v = b.load(b.gep(y0, [j]))

@@ -763,12 +763,20 @@ class Parser:
                 return self.span(A.End(), t)
             return self.span(A.Name(t.value), t)
         if t.kind == "KW":
+            if t.value == "to" and self.peek().kind == "OP" and self.peek().value == "(" and not self.peek().ws_before:
+                self.next()
+                return self.span(A.Name("to"), t)
             if t.value in ("true", "false"):
                 self.next()
                 return self.span(A.Bool(t.value == "true"), t)
             if t.value in ("sqrt", "cbrt"):
                 self.next()
+                start_i = self.i
                 operand = self.power()
+                t.extra["operand_end"] = self.i - 1
+                st = self.toks[start_i]
+                t.extra["operand_paren"] = st.kind == "OP" and st.value == "(" and \
+                    self._match(start_i) == self.i - 1
                 return self.span(A.Sqrt(operand, 2 if t.value == "sqrt" else 3), t)
             if t.value == "integral":
                 return self.integral()

@@ -7,8 +7,7 @@ from . import ast as A
 from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
-from .errors import FermiumError
-from .types import DExpr, NumTy, ListTy, SolTy, DataTy, DIMLESS
+from .types import DExpr, NumTy, ListTy, SolTy, DataTy
 from .units import preferred_unit
 
 
@@ -384,4 +383,4 @@ def _plot_side(ck, node, ctx):
     return ck.expr(node, ctx, allow_func=True)
 
 
-preferred_unit  # noqa: re-export
+
