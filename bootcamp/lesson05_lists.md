@@ -37,7 +37,7 @@ print len(times)
 2.21 s
 2.19 s
 2.23 s
-5.00
+5
 ```
 
 - `times[1]` is the first element, `times[2]` the second, and so on.

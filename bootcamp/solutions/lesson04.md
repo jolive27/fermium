@@ -77,7 +77,7 @@ print N, "bacteria after", t, "=", t in hr
 
 <!-- output -->
 ```
-1.04858×10⁶ bacteria after 400 min = 6.66667 hr
+1048576 bacteria after 400 min = 6.66667 hr
 ```
 
 `2 * N`, not `2 N`: `2 N` would be two newtons! (Fermium would stop with an error, because `N` holds a plain number.)

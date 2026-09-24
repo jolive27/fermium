@@ -254,7 +254,7 @@ print 2 g * h
 warning: line 3: 'g' right after a number is the unit g, not your variable g
     print 2 g * h
             ^
-  hint: that's usually what you want; to multiply by the variable write 2*g, and to make the unit explicit write [g]
+  hint: to multiply by the variable write 2*g; to make the unit explicit write [g]
 0.02 kg m
 ```
 
