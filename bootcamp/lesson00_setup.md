@@ -153,7 +153,13 @@ You need a **text editor** made for code. We recommend **Visual Studio Code** ("
 
 1. Download it from **https://code.visualstudio.com** and drag it into your Applications folder.
 2. Open VS Code. Choose **File → Open Folder…** and open your `fermium` folder.
-3. *(Optional but nice)* The folder `editors/vscode/` inside `fermium` contains a Fermium extension for VS Code. It colours your code and lets you type `\theta` then Tab to get `θ`. Its README explains how to install it.
+3. *(Optional but nice)* Install the Fermium extension for VS Code. It colours your code and lets you type `\theta` then Tab to get `θ`. It lives in the folder `editors/vscode/` inside `fermium`. Open VS Code once (so it creates its settings folder), then type this in the Terminal (one line) and restart VS Code:
+
+   ```
+   ln -s ~/fermium/editors/vscode ~/.vscode/extensions/fermium
+   ```
+
+   (`ln -s` makes a *shortcut*, which Mac people call an alias, so VS Code finds the extension inside your `fermium` folder. More details are in `editors/vscode/README.md`.)
 
 > **Don't use TextEdit** (the Mac's built-in editor) for code: it likes to turn `"` into curly quotes `“ ”` and save files as "rich text", which Fermium can't read. If you must use it, choose **Format → Make Plain Text** first.
 

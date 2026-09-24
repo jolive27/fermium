@@ -24,9 +24,14 @@ def _find_derivs(e, out):
 
 
 def _normalize_derivs(e, tvar):
-    """Rewrite d/dt x as x' so the rest of the code sees one form."""
+    """Rewrite d/dt x and dx/dt as x' so the rest of the code sees one form."""
+    from .lexer import canonical_name
     if isinstance(e, A.Deriv) and isinstance(e.operand, A.Name) and e.var == tvar:
         return A.Prime(e.operand, e.order).at(e)
+    if isinstance(e, A.BinOp) and e.op == "/" and isinstance(e.left, A.Name) and isinstance(e.right, A.Name) \
+            and e.right.name == "d" + tvar and e.left.name.startswith("d") and len(e.left.name) > 1 \
+            and not e.left.paren:
+        return A.Prime(A.Name(canonical_name(e.left.name[1:])).at(e.left), 1).at(e)
     return C.map_children(e, lambda c: _normalize_derivs(c, tvar))
 
 
@@ -428,7 +433,8 @@ def _plot_series(ck, sr, ctx, s):
                     raise ck.err(f"can't plot {what} here; plot needs lists of values (or a solution, or a formula "
                                  f"with a range)", node,
                                  hint="e.g.  plot v vs t from 0 s to 5 s   or   plot ys vs xs")
-            entry.update(kind="lists", y=yv, x=xv, ydim=yv.ty.dim, xdim=xv.ty.dim, yhint=yv.hint, xhint=xv.hint)
+            entry.update(kind="lists", y=yv, x=xv, ydim=yv.ty.dim, xdim=xv.ty.dim, yhint=yv.hint, xhint=xv.hint,
+                         points=isinstance(yv, I.IColumn) or isinstance(xv, I.IColumn))
     return entry
 
 
@@ -442,7 +448,7 @@ def _finish_plot(ck, s, series):
     full = out if os.path.isabs(out) else os.path.join(ck.base_dir, out)
     info = {"out": out, "full": full,
             "series": [{k: v for k, v in e.items() if k in ("ylabel", "xlabel", "kind", "ydim", "xdim", "yhint",
-                                                          "xhint")} for e in series]}
+                                                          "xhint", "points")} for e in series]}
     ck.tables.plots.append(info)
     pid = len(ck.tables.plots) - 1
     return I.SPlot(pid, series)

@@ -162,7 +162,7 @@ print fx(1, 2), fy(1, 2)
 <!-- output -->
 ```
 fx(x, y) = 2x y
-fy(x, y) = x² + cos(y)   [no units, for x in plain numbers, for y in plain numbers]
+fy(x, y) = x² + cos(y)
 4 0.583853
 ```
 

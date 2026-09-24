@@ -686,7 +686,6 @@ def test_garbage_gives_fermium_error(src):
 
 
 # ====================================================================== dx/dt (spec §3.5)
-@pytest.mark.xfail(strict=True, reason="BUG B17: dx/dt derivative notation not supported")
 def test_dx_dt_notation():
     assert run("x(t) = 3 m/s * t\nv = dx/dt\nprint v(1 s)") == "3 m/s"
 
@@ -695,8 +694,22 @@ def test_dx_dt_with_variables_is_division():
     assert run("dx = 2 m\ndt = 1 s\nprint dx/dt") == "2 m/s"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG B18: ValueError in parser.deriv_op")
 @pytest.mark.parametrize("src", ["x(t) = t\nprint d^2/dt^* x", "x(t) = t\nprint d/dt ^ * x"])
 def test_malformed_derivative_order(src):
     with pytest.raises(FermiumError):
         run(src)
+
+
+def test_leibniz_notation_in_solve_and_functions():
+    assert run("solve dN/dt = -N / (2 s) with N(0) = 100 for t from 0 s to 1 s\nprint N(1 s)") == "60.6531"
+    assert run("f(t) = 3 m t / (1 s)\nprint df/dt(2 s)") == "3 m/s"
+
+
+def test_fit_with_on_next_line(tmp_path):
+    (tmp_path / "x.csv").write_text("t [s], y [m]\n0,1\n1,0.5\n2,0.26\n3,0.12\n")
+    out = run('d = load "x.csv"\nfit y = A exp(-t/τ) to d\n  with A = 1 m, τ = 1 s\nprint τ', base_dir=str(tmp_path))
+    assert out.split("\n")[-1] == "1.45 s"
+
+
+def test_strings_keep_their_characters():
+    assert run('print "Pound–Rebka µ"') == "Pound–Rebka µ"

@@ -150,6 +150,9 @@ class Parser:
         return s
 
     def end_statement(self):
+        if getattr(self, "_stmt_done", False):
+            self._stmt_done = False
+            return
         if self.tok.kind == "NEWLINE":
             self.next()
         elif self.tok.kind in ("EOF", "DEDENT"):
@@ -437,6 +440,12 @@ class Parser:
         self.expect_kw("to", "(write: fit y = model to data)")
         data = self.expr()
         guesses = []
+        indented = False
+        if self.tok.kind == "NEWLINE" and self.peek().kind == "INDENT" and self.peek(2).kind == "KW" and \
+                self.peek(2).value == "with":
+            self.next()
+            self.next()
+            indented = True
         if self.at_kw("with") or self.at_kw("starting"):
             self.next()
             while True:
@@ -447,7 +456,14 @@ class Parser:
                     self.next()
                     continue
                 break
-        return self.span(A.Fit(model, data, guesses), t)
+        f = self.span(A.Fit(model, data, guesses), t)
+        if indented:
+            self.skip_newlines()
+            if self.tok.kind != "DEDENT":
+                raise self.error("expected the end of the indented 'with' line" + self._found())
+            self.next()
+            self._stmt_done = True     # the NEWLINE/DEDENT were consumed here
+        return f
 
     def equation_until_to(self):
         return self.equation()
@@ -1018,24 +1034,24 @@ class Parser:
         return nxt.kind in ("NAME", "NUM") or (nxt.kind == "OP" and nxt.value in ("(", "|")) or \
             (nxt.kind == "KW" and nxt.value in ("sqrt", "cbrt"))
 
+    def _deriv_order(self):
+        if self.tok.kind == "SUP":
+            return self.next().value
+        if self.at_op("^"):
+            self.next()
+            n = self.next()
+            if n.kind != "NUM" or n.value != int(n.value) or not 1 <= n.value <= 10:
+                raise self.error("the order of a derivative must be a whole number like d²/dt²", tok=n)
+            return int(n.value)
+        return 1
+
     def deriv_op(self):
         t = self.next()  # d
-        order = 1
-        if self.tok.kind == "SUP":
-            order = self.next().value
-        elif self.at_op("^"):
-            self.next()
-            order = int(self.next().value)
+        order = self._deriv_order()
         self.expect_op("/")
         v = self.next()
         var = canonical_name(v.raw[1:])
-        if self.tok.kind == "SUP":
-            o2 = self.next().value
-        elif self.at_op("^"):
-            self.next()
-            o2 = int(self.next().value)
-        else:
-            o2 = 1
+        o2 = self._deriv_order()
         if o2 != order:
             raise self.error(f"the orders don't match: d{order}/d{var}{o2}", tok=v)
         operand = self.power()

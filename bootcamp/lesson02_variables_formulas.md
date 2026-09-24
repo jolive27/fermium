@@ -39,7 +39,7 @@ print g in ft/s^2
 <!-- output -->
 ```
 9.70 m/s²
-31.8 ft/s^2
+31.8 ft/s²
 ```
 
 A few things to notice:
@@ -85,7 +85,7 @@ print "g to 6 digits:", g to 6 digits
 <!-- output -->
 ```
 Pendulum length: 1.20 m
-Measured g = 9.70 m/s² which is 31.8 ft/s^2
+Measured g = 9.70 m/s² which is 31.8 ft/s²
 g to 6 digits: 9.69966 m/s²
 ```
 

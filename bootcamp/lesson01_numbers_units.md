@@ -69,7 +69,7 @@ print 100 km / 2 hr
 <!-- output -->
 ```
 3 m
-9.81 m/s^2
+9.81 m/s²
 2.3 m
 3.2 kg
 13.8889 m/s
@@ -226,7 +226,7 @@ print 2 g h
 
 Nonsense! Fermium read `2 g` as **2 grams**, and then multiplied by `h`, which is **Planck's constant**. The same thing happens with `3 m` (metres, not a mass `m`), `5 s` (seconds), `2 c` (the speed of light is also a unit!), `4 K`, `2 A`, `10 N`.
 
-The fix is easy: **put a `*` after the number**, or put the number last:
+The fix is easy: **put a `*` after the number**:
 
 ```fermium
 g = 9.81 m/s^2
@@ -241,7 +241,7 @@ print sqrt(2 * g * h)
 14.0 m/s
 ```
 
-(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson.) When you do write something like `2 g` after making your own `g`, Fermium notices and prints a **warning**, a yellow-flag message that doesn't stop the program:
+(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.) When you do write something like `2 g` after making your own `g`, Fermium notices and prints a **warning**, a yellow-flag message that doesn't stop the program:
 
 ```fermium
 g = 9.81 m/s^2
@@ -269,7 +269,7 @@ print 1 AU / c in min
 
 <!-- output -->
 ```
-1 AU / c (= 499.005 s)
+1 AU/c (= 499.005 s)
 8.31675 min
 ```
 

@@ -742,9 +742,24 @@ class Checker(C.DiffContext):
         return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
 
     # ------------------------------------------------------------ arithmetic
+    def _leibniz(self, e, ctx):
+        """dx/dt written as a fraction: a derivative when dx and dt aren't variables but x is a function."""
+        from .lexer import canonical_name
+        if e.op == "/" and isinstance(e.left, A.Name) and isinstance(e.right, A.Name) and not e.left.paren:
+            ln, rn = e.left.name, e.right.name
+            if len(ln) > 1 and len(rn) > 1 and ln.startswith("d") and rn.startswith("d"):
+                if ctx.scope.lookup(ln)[0] is None and ctx.scope.lookup(rn)[0] is None:
+                    x, t = canonical_name(ln[1:]), canonical_name(rn[1:])
+                    if isinstance(ctx.scope.lookup(x)[0], (FuncInfo, SolView)):
+                        return A.Deriv(t, 1, A.Name(x).at(e.left)).at(e)
+        return None
+
     def e_BinOp(self, e, ctx):
         if e.op == "^":
             return self.power(e, ctx)
+        lz = self._leibniz(e, ctx)
+        if lz is not None:
+            return self.e_Deriv(lz, ctx)
         a = self.expr(e.left, ctx, allow_func=e.implicit)
         if isinstance(a, (FuncRef, SolRef)):
             if e.implicit and e.right.paren:

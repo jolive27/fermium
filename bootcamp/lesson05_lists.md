@@ -143,7 +143,7 @@ print T^2 / a^3 in yr^2/AU^3
 
 <!-- output -->
 ```
-[1.00, 1.00, 1.00, 1.00, 0.999] yr^2/AU^3
+[1.00, 1.00, 1.00, 1.00, 0.999] yr²/AU³
 ```
 
 All 1.00 (within the precision of the data). Kepler was right!

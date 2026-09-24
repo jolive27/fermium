@@ -319,7 +319,10 @@ class Runtime:
             xu = display_unit(s["rxdim"], s.get("xhint"))
             X = [(x - xu.offset) / xu.factor for x in xs]
             Y = [(y - yu.offset) / yu.factor for y in ys]
-            ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
+            if s.get("points"):
+                ax.plot(X, Y, "o", label=s["ylabel"], markersize=5)     # measured data: markers, not lines
+            else:
+                ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
             ylabels.append(f"{s['ylabel']}" + (f" [{yu.name}]" if yu.name not in ("", "1") else ""))
             xlabels.append(f"{s['xlabel']}" + (f" [{xu.name}]" if xu.name not in ("", "1") else ""))
         ax.set_xlabel(xlabels[0] if xlabels else "")

@@ -120,7 +120,16 @@ def normalize_source(src: str, diags: Diagnostics | None = None) -> str:
     out = []
     line = 1
     col = 1
+    in_str = False
     for ch in src:
+        if ch == '"':
+            in_str = not in_str
+        elif ch == "\n":
+            in_str = False
+        if in_str and ch != '"':      # text inside strings is kept exactly as typed
+            out.append(ch)
+            col += 1
+            continue
         if ch in NORMALIZE_CHARS:
             ch = NORMALIZE_CHARS[ch]
         elif ch in PUNCT_NORMALIZE and len(PUNCT_NORMALIZE[ch]) == 1:

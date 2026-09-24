@@ -64,6 +64,18 @@ How it works:
 
 The indentation (4 spaces) is essential: it's how Fermium knows which lines are "inside" the `if`. (If you know Python: a colon at the end of the `if` line is allowed but not needed.)
 
+> **In the REPL:** you can type blocks too. After a line like `if x > 2`, the prompt changes to `...` and waits for the indented lines. Press Return on an **empty line** to finish the block and run it:
+> ```
+> fm> x = 5
+> fm> if x > 3
+> ...     print "big"
+> ... else
+> ...     print "small"
+> ...
+> big
+> ```
+> For anything longer than a few lines, a `.fm` file is more comfortable.
+
 For a quick choice between two values, there's a one-line form:
 
 ```fermium
