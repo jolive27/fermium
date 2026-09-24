@@ -816,7 +816,7 @@ class Checker(C.DiffContext):
             r.hint = self._keep_hint(a, b)
         elif op == "/":
             r = I.IBin("/", a, b, mk(a.ty.dim / b.ty.dim))
-            r.hint = a.hint if self._dimless(b) and a.hint is not None else None
+            r.hint = a.hint if self._dimless(b) and a.hint is not None and b.hint is None else None
         else:
             raise self.err(f"unknown operator {op}", e)
         r.sf = self._minsf(a, b)
@@ -884,9 +884,10 @@ class Checker(C.DiffContext):
         return d.concrete and d.const.dimensionless
 
     def _keep_hint(self, a, b):
-        if a.hint is not None and self._dimless(b):
+        """Scaling by a plain number keeps the unit the user wrote (2 × 3 eV = 6 eV)."""
+        if a.hint is not None and self._dimless(b) and b.hint is None:
             return a.hint
-        if b.hint is not None and self._dimless(a):
+        if b.hint is not None and self._dimless(a) and a.hint is None:
             return b.hint
         return None
 

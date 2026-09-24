@@ -7,6 +7,9 @@ SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
 def num(text):
     t = text.strip().split()[0]
     t = re.sub(r"×10([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)", lambda m: "e" + m.group(1).translate(SUP), t)
+    m = re.match(r"-?[\d.]+(e-?\d+)?", t)
+    if m and t not in ("∞", "-∞"):
+        t = m.group(0)
     if t == "∞":
         return float("inf")
     if t == "-∞":
