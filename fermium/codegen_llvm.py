@@ -1,0 +1,1408 @@
+"""LLVM code generation: typed IR -> LLVM IR (via llvmlite) -> native code (MCJIT).
+
+The IR contains only SI numbers, so no unit logic appears here (spec §3.3).
+Numerical kernels (adaptive Gauss–Kronrod quadrature, RK4, Dormand–Prince RK45,
+Hermite interpolation of ODE solutions) are generated here as LLVM IR too, so
+the integrand / right-hand side is inlined into them and everything is native.
+"""
+from __future__ import annotations
+
+import math
+
+from llvmlite import ir
+
+from . import ir as I
+from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy
+
+F64 = ir.DoubleType()
+I64 = ir.IntType(64)
+I32 = ir.IntType(32)
+I8 = ir.IntType(8)
+I1 = ir.IntType(1)
+VOID = ir.VoidType()
+F64P = F64.as_pointer()
+F64PP = F64P.as_pointer()
+I8P = I8.as_pointer()
+LIST = ir.LiteralStructType([F64P, I64, I64])     # data, len, capacity
+# solution: n, dim, cap, t*, y*, dy*
+SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P])
+SOLP = SOL.as_pointer()
+
+SCALAR_FN = ir.FunctionType(F64, [F64, F64P])
+ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
+MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
+
+ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+
+# Gauss–Kronrod 7-15 nodes/weights (from QUADPACK qk15)
+XGK = [0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
+       0.864864423359769072789712788640926, 0.741531185599394439863864773280788,
+       0.586087235467691130294144845693013, 0.405845151377397166906606412076961,
+       0.207784955007898467600689403773245, 0.000000000000000000000000000000000]
+WGK = [0.022935322010529224963732008058970, 0.063092092629978553290700663189204,
+       0.104790010322250183839876322541518, 0.140653259715525918745189590510238,
+       0.169004726639267902826583426598550, 0.190350578064785409913256402421014,
+       0.204432940075298892414161999234649, 0.209482141084727828012999174891714]
+WG = [0.129484966168869693270611432679082, 0.279705391489276667901467771423780,
+      0.381830050505118944950369775488975, 0.417959183673469387755102040816327]
+
+
+def lltype(ty):
+    if isinstance(ty, NumTy):
+        return F64
+    if isinstance(ty, BoolTy):
+        return I1
+    if isinstance(ty, ListTy):
+        return LIST
+    if isinstance(ty, SolTy):
+        return SOLP
+    if isinstance(ty, DataTy):
+        return I64
+    if isinstance(ty, StrTy):
+        return I64
+    raise TypeError(f"no LLVM type for {ty}")
+
+
+def f64(v):
+    return ir.Constant(F64, float(v))
+
+
+def i64(v):
+    return ir.Constant(I64, int(v))
+
+
+class ModuleGen:
+    def __init__(self, name="fermium", arena_base=None):
+        self.module = ir.Module(name=name)
+        self.arena_base = arena_base
+        self.globals = {}
+        self.funcs = {}
+        self.pending = []
+        self.externs = {}
+        self.lambda_fns = {}
+        self._declare_runtime()
+        self.jmpbuf = ir.GlobalVariable(self.module, ir.ArrayType(I8, 1024), "fm.jmpbuf")
+        self.jmpbuf.initializer = ir.Constant(ir.ArrayType(I8, 1024), None)
+        self.jmpbuf.align = 16
+        self.jmpbuf.linkage = "internal"
+        self._kernels_built = set()
+
+    # ------------------------------------------------------------ declarations
+    def extern(self, name, ret, args, var_arg=False, attrs=()):
+        if name in self.externs:
+            return self.externs[name]
+        f = ir.Function(self.module, ir.FunctionType(ret, args, var_arg=var_arg), name)
+        for a in attrs:
+            f.attributes.add(a)
+        self.externs[name] = f
+        return f
+
+    def _declare_runtime(self):
+        e = self.extern
+        e("fm_print_num", VOID, [I64, F64])
+        e("fm_print_list", VOID, [I64, F64P, I64])
+        e("fm_print_bool", VOID, [I64])
+        e("fm_print_text", VOID, [I64])
+        e("fm_print_end", VOID, [])
+        e("fm_error", VOID, [I64, F64, F64])
+        e("fm_plot_series", VOID, [I64, I64, F64P, I64, F64P, I64])
+        e("fm_plot_sol", VOID, [I64, I64, I8P, I64, I64, I64, I64])
+        e("fm_plot_done", VOID, [I64])
+        e("fm_load", I64, [I64])
+        e("fm_column", I64, [I64, I64, F64PP])
+        e("fm_fit", VOID, [I64, I64, F64P])
+        e("fm_sort", VOID, [F64P, I64])
+        e("malloc", I8P, [I64])
+        e("realloc", I8P, [I8P, I64])
+        e("drand48", F64, [])
+        sj = e("_setjmp", I32, [I8P])
+        sj.attributes.add("returns_twice")
+        lj = e("longjmp", VOID, [I8P, I32])
+        lj.attributes.add("noreturn")
+
+    TWO_ARG = {"maxnum", "minnum", "pow", "copysign"}
+
+    def intrinsic(self, name, nargs=1):
+        key = "llvm." + name + ".f64"
+        if key not in self.externs:
+            n = 2 if name in self.TWO_ARG else 1
+            self.externs[key] = ir.Function(self.module, ir.FunctionType(F64, [F64] * n), key)
+        return self.externs[key]
+
+    def libm(self, name, nargs=1):
+        return self.extern(name, F64, [F64] * nargs)
+
+    # ------------------------------------------------------------ storage
+    def global_for(self, sym):
+        if sym.id in self.globals:
+            return self.globals[sym.id]
+        t = lltype(sym.ty)
+        if sym.storage == "arena":
+            raise RuntimeError("arena symbols are addressed directly")
+        g = ir.GlobalVariable(self.module, t, f"g.{sym.name}.{sym.id}")
+        g.linkage = "internal"
+        g.initializer = ir.Constant(t, None)
+        self.globals[sym.id] = g
+        return g
+
+    # ------------------------------------------------------------ functions
+    def func_for(self, inst: I.IFunc):
+        if inst.name in self.funcs:
+            return self.funcs[inst.name]
+        ret = lltype(inst.ret_ty)
+        fty = ir.FunctionType(ret, [lltype(p.ty) for p in inst.params])
+        fn = ir.Function(self.module, fty, "fn." + inst.name)
+        fn.linkage = "internal"
+        self.funcs[inst.name] = fn
+        self.pending.append((inst, fn))
+        return fn
+
+    def lambda_for(self, lam: I.ILambda):
+        if lam.name in self.lambda_fns:
+            return self.lambda_fns[lam.name]
+        fty = {"scalar": SCALAR_FN, "ode": ODE_FN, "model": MODEL_FN}[lam.kind]
+        fn = ir.Function(self.module, fty, "lam." + lam.name)
+        fn.linkage = "internal" if lam.kind != "model" else "external"
+        self.lambda_fns[lam.name] = fn
+        self.pending.append((lam, fn))
+        return fn
+
+    def emit_main(self, main: I.IFunc, entry_name):
+        fn = ir.Function(self.module, ir.FunctionType(VOID, []), "fm.body." + entry_name)
+        fn.linkage = "internal"
+        g = FuncGen(self, fn, main)
+        g.emit_body(main.body)
+        if not g.b.block.is_terminated:
+            g.b.ret_void()
+        # trampoline with setjmp so runtime errors can unwind
+        run = ir.Function(self.module, ir.FunctionType(I32, []), entry_name)
+        b = ir.IRBuilder(run.append_basic_block("entry"))
+        buf = b.bitcast(self.jmpbuf, I8P)
+        r = b.call(self.externs["_setjmp"], [buf])
+        ok = b.icmp_signed("==", r, ir.Constant(I32, 0))
+        with b.if_else(ok) as (then, other):
+            with then:
+                b.call(fn, [])
+            with other:
+                pass
+        res = b.select(ok, ir.Constant(I32, 0), ir.Constant(I32, 1))
+        b.ret(res)
+        self.flush()
+
+    def flush(self):
+        while self.pending:
+            item, fn = self.pending.pop()
+            if isinstance(item, I.IFunc):
+                g = FuncGen(self, fn, item)
+                for p, a in zip(item.params, fn.args):
+                    slot = g.slot(p)
+                    g.b.store(a, slot)
+                g.emit_body(item.body)
+                if not g.b.block.is_terminated:
+                    # unreachable in well-formed functions; return a zero value
+                    g.b.ret(ir.Constant(fn.function_type.return_type, None))
+            else:
+                LambdaGen(self, fn, item).emit()
+
+    # ------------------------------------------------------------ kernels
+    def kernel(self, name):
+        if name in self._kernels_built:
+            return self.module.get_global(name)
+        self._kernels_built.add(name)
+        return getattr(self, "_k_" + name.replace("fm_", ""))()
+
+    def raise_error(self, b, kind, a=None, c=None):
+        b.call(self.externs["fm_error"], [i64(kind), a if a is not None else f64(0), c if c is not None else f64(0)])
+        b.call(self.externs["longjmp"], [b.bitcast(self.jmpbuf, I8P), ir.Constant(I32, 1)])
+        b.unreachable()
+
+    def _new_fn(self, name, ret, args, inline=True):
+        fn = ir.Function(self.module, ir.FunctionType(ret, args), name)
+        fn.linkage = "internal"
+        if inline:
+            fn.attributes.add("alwaysinline")
+        return fn
+
+    def _k_qf(self):
+        # u-space evaluation with the infinite-interval transforms
+        fn = self._new_fn("fm_qf", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64])
+        f, env, mode, a, bb, u = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        blk_fin = fn.append_basic_block("fin")
+        blk_up = fn.append_basic_block("up")
+        blk_dn = fn.append_basic_block("dn")
+        blk_both = fn.append_basic_block("both")
+        sw = b.switch(mode, blk_fin)
+        sw.add_case(i64(1), blk_up)
+        sw.add_case(i64(2), blk_dn)
+        sw.add_case(i64(3), blk_both)
+        b.position_at_end(blk_fin)
+        b.ret(b.call(f, [u, env]))
+        b.position_at_end(blk_up)   # x = a + u/(1-u), dx = du/(1-u)^2
+        om = b.fsub(f64(1), u)
+        x = b.fadd(a, b.fdiv(u, om))
+        b.ret(b.fdiv(b.call(f, [x, env]), b.fmul(om, om)))
+        b.position_at_end(blk_dn)   # x = b - u/(1-u)
+        om = b.fsub(f64(1), u)
+        x = b.fsub(bb, b.fdiv(u, om))
+        b.ret(b.fdiv(b.call(f, [x, env]), b.fmul(om, om)))
+        b.position_at_end(blk_both)  # x = u/(1-u^2), dx = (1+u^2)/(1-u^2)^2
+        u2 = b.fmul(u, u)
+        om = b.fsub(f64(1), u2)
+        x = b.fdiv(u, om)
+        w = b.fdiv(b.fadd(f64(1), u2), b.fmul(om, om))
+        b.ret(b.fmul(b.call(f, [x, env]), w))
+        return fn
+
+    def _k_gk15(self):
+        qf = self.kernel("fm_qf")
+        fn = self._new_fn("fm_gk15", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P],
+                          inline=False)
+        f, env, mode, a, bb, lo, hi, errp = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        c = b.fmul(f64(0.5), b.fadd(lo, hi))
+        h = b.fmul(f64(0.5), b.fsub(hi, lo))
+        fc = b.call(qf, [f, env, mode, a, bb, c])
+        resk = b.fmul(fc, f64(WGK[7]))
+        resg = b.fmul(fc, f64(WG[3]))
+        for j in range(7):
+            dx = b.fmul(h, f64(XGK[j]))
+            f1 = b.call(qf, [f, env, mode, a, bb, b.fsub(c, dx)])
+            f2 = b.call(qf, [f, env, mode, a, bb, b.fadd(c, dx)])
+            s = b.fadd(f1, f2)
+            resk = b.fadd(resk, b.fmul(s, f64(WGK[j])))
+            if j % 2 == 1:
+                resg = b.fadd(resg, b.fmul(s, f64(WG[j // 2])))
+        fabs = self.intrinsic("fabs")
+        b.store(b.call(fabs, [b.fmul(b.fsub(resk, resg), h)]), errp)
+        b.ret(b.fmul(resk, h))
+        return fn
+
+    def _k_qrec(self):
+        gk = self.kernel("fm_gk15")
+        fn = self._new_fn("fm_qrec", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64, I64],
+                          inline=False)
+        f, env, mode, a, bb, lo, hi, tol, depth = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        errp = b.alloca(F64)
+        res = b.call(gk, [f, env, mode, a, bb, lo, hi, errp])
+        err = b.load(errp)
+        fabs = self.intrinsic("fabs")
+        done = b.or_(b.fcmp_ordered("<=", err, tol),
+                     b.fcmp_ordered("<=", err, b.fmul(f64(1e-15), b.call(fabs, [res]))))
+        done = b.or_(done, b.icmp_signed(">=", depth, i64(40)))
+        done = b.or_(done, b.fcmp_unordered("uno", err, err))
+        with b.if_then(done):
+            b.ret(res)
+        m = b.fmul(f64(0.5), b.fadd(lo, hi))
+        t2 = b.fmul(tol, f64(0.5))
+        d1 = b.add(depth, i64(1))
+        r1 = b.call(fn, [f, env, mode, a, bb, lo, m, t2, d1])
+        r2 = b.call(fn, [f, env, mode, a, bb, m, hi, t2, d1])
+        b.ret(b.fadd(r1, r2))
+        return fn
+
+    def _k_quad(self):
+        gk = self.kernel("fm_gk15")
+        rec = self.kernel("fm_qrec")
+        fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64])
+        f, env, a, bb, rtol, atol = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        fabs = self.intrinsic("fabs")
+        inf = f64(math.inf)
+        # reversed limits: -∫_b^a
+        with b.if_then(b.fcmp_ordered(">", a, bb)):
+            b.ret(b.fsub(f64(0), b.call(fn, [f, env, bb, a, rtol, atol])))
+        with b.if_then(b.fcmp_ordered("==", a, bb)):
+            b.ret(f64(0))
+        a_inf = b.fcmp_ordered("==", b.call(fabs, [a]), inf)
+        b_inf = b.fcmp_ordered("==", b.call(fabs, [bb]), inf)
+        mode = b.add(b.zext(b_inf, I64), b.mul(b.zext(a_inf, I64), i64(2)))
+        # mode: 0 finite, 1 [a,∞), 2 (-∞,b], 3 (-∞,∞)
+        lo = b.select(b.icmp_signed("==", mode, i64(3)), f64(-1), f64(0))
+        hi = b.select(b.icmp_signed("==", mode, i64(0)), bb, f64(1))
+        lo = b.select(b.icmp_signed("==", mode, i64(0)), a, lo)
+        errp = b.alloca(F64)
+        whole = b.call(gk, [f, env, mode, a, bb, lo, hi, errp])
+        tol = b.call(self.intrinsic("maxnum"), [atol, b.fmul(rtol, b.call(fabs, [whole]))])
+        with b.if_then(b.fcmp_ordered("<=", b.load(errp), tol)):
+            b.ret(whole)
+        mid = b.fmul(f64(0.5), b.fadd(lo, hi))
+        r1 = b.call(rec, [f, env, mode, a, bb, lo, mid, b.fmul(tol, f64(0.5)), i64(1)])
+        r2 = b.call(rec, [f, env, mode, a, bb, mid, hi, b.fmul(tol, f64(0.5)), i64(1)])
+        b.ret(b.fadd(r1, r2))
+        return fn
+
+    def _sol_alloc(self, b, dim, cap):
+        mal = self.externs["malloc"]
+        sp = b.bitcast(b.call(mal, [i64(48)]), SOLP)
+        b.store(i64(0), b.gep(sp, [I32(0), I32(0)]))
+        b.store(dim, b.gep(sp, [I32(0), I32(1)]))
+        b.store(cap, b.gep(sp, [I32(0), I32(2)]))
+        tp = b.bitcast(b.call(mal, [b.mul(cap, i64(8))]), F64P)
+        yp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, dim), i64(8))]), F64P)
+        dp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, dim), i64(8))]), F64P)
+        b.store(tp, b.gep(sp, [I32(0), I32(3)]))
+        b.store(yp, b.gep(sp, [I32(0), I32(4)]))
+        b.store(dp, b.gep(sp, [I32(0), I32(5)]))
+        return sp
+
+    def _k_sol_push(self):
+        # append (t, y[0..n), dy[0..n)) to a solution, growing its arrays
+        fn = self._new_fn("fm_sol_push", VOID, [SOLP, F64, F64P, F64P], inline=False)
+        sp, t, y, dy = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        n = b.load(b.gep(sp, [I32(0), I32(0)]))
+        dim = b.load(b.gep(sp, [I32(0), I32(1)]))
+        cap = b.load(b.gep(sp, [I32(0), I32(2)]))
+        with b.if_then(b.icmp_signed(">=", n, cap)):
+            nc = b.mul(cap, i64(2))
+            b.store(nc, b.gep(sp, [I32(0), I32(2)]))
+            rea = self.externs["realloc"]
+            for idx, per in ((3, None), (4, dim), (5, dim)):
+                pp = b.gep(sp, [I32(0), I32(idx)])
+                old = b.bitcast(b.load(pp), I8P)
+                size = b.mul(nc, i64(8)) if per is None else b.mul(b.mul(nc, per), i64(8))
+                b.store(b.bitcast(b.call(rea, [old, size]), F64P), pp)
+        tp = b.load(b.gep(sp, [I32(0), I32(3)]))
+        b.store(t, b.gep(tp, [n]))
+        yp = b.load(b.gep(sp, [I32(0), I32(4)]))
+        dp = b.load(b.gep(sp, [I32(0), I32(5)]))
+        base = b.mul(n, dim)
+        lp = LoopHelper(b, fn)
+        with lp.range(i64(0), dim) as k:
+            b.store(b.load(b.gep(y, [k])), b.gep(yp, [b.add(base, k)]))
+            b.store(b.load(b.gep(dy, [k])), b.gep(dp, [b.add(base, k)]))
+        b.store(b.add(n, i64(1)), b.gep(sp, [I32(0), I32(0)]))
+        b.ret_void()
+        return fn
+
+    def _k_rk4(self):
+        push = self.kernel("fm_sol_push")
+        fn = self._new_fn("fm_rk4", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64])
+        f, env, n, y0, t0, t1, h0 = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        span = b.fsub(t1, t0)
+        ratio = b.fdiv(span, h0)
+        with b.if_then(b.or_(b.fcmp_unordered("uno", ratio, ratio),
+                             b.fcmp_ordered("<=", ratio, f64(0)))):
+            self.raise_error(b, ERR_STEP, h0, span)
+        steps = b.fptosi(b.call(self.intrinsic("ceil"), [b.fsub(ratio, f64(1e-9))]), I64)
+        steps = b.select(b.icmp_signed("<", steps, i64(1)), i64(1), steps)
+        h = b.fdiv(span, b.sitofp(steps, F64))
+        sp = self._sol_alloc(b, n, b.add(steps, i64(1)))
+        mal = self.externs["malloc"]
+
+        def arr():
+            return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
+        y, k1, k2, k3, k4, tmp = arr(), arr(), arr(), arr(), arr(), arr()
+        with lp.range(i64(0), n) as k:
+            b.store(b.load(b.gep(y0, [k])), b.gep(y, [k]))
+        half = b.fmul(h, f64(0.5))
+        with lp.range(i64(0), steps) as s:
+            t = b.fadd(t0, b.fmul(b.sitofp(s, F64), h))
+            b.call(f, [t, y, k1, env])
+            b.call(push, [sp, t, y, k1])
+            with lp.range(i64(0), n) as k:
+                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(half, b.load(b.gep(k1, [k])))), b.gep(tmp, [k]))
+            th = b.fadd(t, half)
+            b.call(f, [th, tmp, k2, env])
+            with lp.range(i64(0), n) as k:
+                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(half, b.load(b.gep(k2, [k])))), b.gep(tmp, [k]))
+            b.call(f, [th, tmp, k3, env])
+            with lp.range(i64(0), n) as k:
+                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(h, b.load(b.gep(k3, [k])))), b.gep(tmp, [k]))
+            b.call(f, [b.fadd(t, h), tmp, k4, env])
+            h6 = b.fdiv(h, f64(6))
+            with lp.range(i64(0), n) as k:
+                s23 = b.fadd(b.load(b.gep(k2, [k])), b.load(b.gep(k3, [k])))
+                acc = b.fadd(b.fadd(b.load(b.gep(k1, [k])), b.fmul(f64(2), s23)), b.load(b.gep(k4, [k])))
+                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(h6, acc)), b.gep(y, [k]))
+        b.call(f, [t1, y, k1, env])
+        b.call(push, [sp, t1, y, k1])
+        b.ret(sp)
+        return fn
+
+    def _k_dp45(self):
+        push = self.kernel("fm_sol_push")
+        fn = self._new_fn("fm_dp45", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64])
+        f, env, n, y0, t0, t1, rtol = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        mal = self.externs["malloc"]
+        fabs = self.intrinsic("fabs")
+        fmax = self.intrinsic("maxnum")
+        fmin = self.intrinsic("minnum")
+
+        def arr():
+            return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
+        y, ynew, tmp, ymax, err = arr(), arr(), arr(), arr(), arr()
+        k = [arr() for _ in range(7)]
+        with lp.range(i64(0), n) as j:
+            v = b.load(b.gep(y0, [j]))
+            b.store(v, b.gep(y, [j]))
+            b.store(b.call(fabs, [v]), b.gep(ymax, [j]))
+        sp = self._sol_alloc(b, n, i64(256))
+        span = b.fsub(t1, t0)
+        with b.if_then(b.fcmp_ordered("<=", span, f64(0))):
+            self.raise_error(b, ERR_STEP, span, f64(0))
+        tv = b.alloca(F64)
+        hv = b.alloca(F64)
+        nsteps = b.alloca(I64)
+        b.store(t0, tv)
+        b.store(b.fmul(span, f64(1e-4)), hv)
+        b.store(i64(0), nsteps)
+        b.call(f, [t0, y, k[0], env])
+        b.call(push, [sp, t0, y, k[0]])
+        # Dormand–Prince coefficients
+        A = [[], [1 / 5], [3 / 40, 9 / 40], [44 / 45, -56 / 15, 32 / 9],
+             [19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729],
+             [9017 / 3168, -355 / 33, 46732 / 5247, 49 / 176, -5103 / 18656],
+             [35 / 384, 0, 500 / 1113, 125 / 192, -2187 / 6784, 11 / 84]]
+        Cn = [0, 1 / 5, 3 / 10, 4 / 5, 8 / 9, 1, 1]
+        E = [71 / 57600, 0, -71 / 16695, 71 / 1920, -17253 / 339200, 22 / 525, -1 / 40]
+        cond_bb = fn.append_basic_block("dp.cond")
+        body_bb = fn.append_basic_block("dp.body")
+        end_bb = fn.append_basic_block("dp.end")
+        b.branch(cond_bb)
+        b.position_at_end(cond_bb)
+        t = b.load(tv)
+        remaining = b.fsub(t1, t)
+        go = b.fcmp_ordered(">", remaining, b.fmul(f64(1e-14), b.call(fabs, [t1])))
+        go = b.and_(go, b.fcmp_ordered(">", remaining, f64(0)))
+        b.cbranch(go, body_bb, end_bb)
+        b.position_at_end(body_bb)
+        cnt = b.add(b.load(nsteps), i64(1))
+        b.store(cnt, nsteps)
+        with b.if_then(b.icmp_signed(">", cnt, i64(20_000_000))):
+            self.raise_error(b, ERR_ODE_STEPS, t, f64(0))
+        h = b.call(fmin, [b.load(hv), remaining])
+        with b.if_then(b.fcmp_ordered("<", h, b.fmul(f64(1e-15), b.fadd(b.call(fabs, [t]), b.call(fabs, [span]))))):
+            self.raise_error(b, ERR_ODE_H, t, h)
+        for s in range(1, 7):
+            with lp.range(i64(0), n) as j:
+                acc = b.load(b.gep(y, [j]))
+                for m in range(s):
+                    if A[s][m] != 0:
+                        acc = b.fadd(acc, b.fmul(b.fmul(h, f64(A[s][m])), b.load(b.gep(k[m], [j]))))
+                b.store(acc, b.gep(ynew if s == 6 else tmp, [j]))
+            ts = b.fadd(t, b.fmul(h, f64(Cn[s])))
+            b.call(f, [ts, ynew if s == 6 else tmp, k[s], env])
+        # error estimate (scale-free: relative to the size each component has reached)
+        errsum = b.alloca(F64)
+        b.store(f64(0), errsum)
+        with lp.range(i64(0), n) as j:
+            e = f64(0)
+            for m in range(7):
+                if E[m] != 0:
+                    e = b.fadd(e, b.fmul(f64(E[m]), b.load(b.gep(k[m], [j]))))
+            e = b.fmul(e, h)
+            yo = b.call(fabs, [b.load(b.gep(y, [j]))])
+            yn = b.call(fabs, [b.load(b.gep(ynew, [j]))])
+            sc = b.fmul(rtol, b.fadd(b.call(fmax, [yo, yn]), b.fmul(f64(1e-3), b.load(b.gep(ymax, [j])))))
+            sc = b.fadd(sc, f64(1e-300))
+            r = b.fdiv(e, sc)
+            b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
+        errn = b.call(self.intrinsic("sqrt"), [b.fdiv(b.load(errsum), b.sitofp(n, F64))])
+        # step size factor
+        pw = self.intrinsic("pow")
+        fac = b.fmul(f64(0.9), b.call(pw, [b.call(fmax, [errn, f64(1e-10)]), f64(-0.2)]))
+        fac = b.call(fmin, [f64(5.0), b.call(fmax, [f64(0.2), fac])])
+        accept = b.fcmp_ordered("<=", errn, f64(1.0))
+        with b.if_else(accept) as (yes, no):
+            with yes:
+                tn = b.fadd(t, h)
+                b.store(tn, tv)
+                with lp.range(i64(0), n) as j:
+                    v = b.load(b.gep(ynew, [j]))
+                    b.store(v, b.gep(y, [j]))
+                    b.store(b.call(fmax, [b.load(b.gep(ymax, [j])), b.call(fabs, [v])]), b.gep(ymax, [j]))
+                    b.store(b.load(b.gep(k[6], [j])), b.gep(k[0], [j]))   # FSAL
+                b.call(push, [sp, tn, y, k[0]])
+                b.store(b.fmul(h, fac), hv)
+            with no:
+                b.store(b.fmul(h, b.call(fmin, [fac, f64(1.0)])), hv)
+        b.branch(cond_bb)
+        b.position_at_end(end_bb)
+        b.ret(sp)
+        return fn
+
+    def _k_sol_eval(self):
+        # cubic Hermite interpolation of component `comp` at time t (or linear on dy)
+        fn = self._new_fn("fm_sol_eval", F64, [SOLP, I64, F64, I64], inline=False)
+        sp, comp, t, use_dy = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        n = b.load(b.gep(sp, [I32(0), I32(0)]))
+        dim = b.load(b.gep(sp, [I32(0), I32(1)]))
+        tp = b.load(b.gep(sp, [I32(0), I32(3)]))
+        yp = b.load(b.gep(sp, [I32(0), I32(4)]))
+        dp = b.load(b.gep(sp, [I32(0), I32(5)]))
+        tfirst = b.load(tp)
+        tlast = b.load(b.gep(tp, [b.sub(n, i64(1))]))
+        span = b.fsub(tlast, tfirst)
+        slack = b.fmul(f64(1e-9), b.call(self.intrinsic("fabs"), [span]))
+        bad = b.or_(b.fcmp_ordered("<", t, b.fsub(tfirst, slack)), b.fcmp_ordered(">", t, b.fadd(tlast, slack)))
+        bad = b.or_(bad, b.fcmp_unordered("uno", t, t))
+        with b.if_then(bad):
+            self.raise_error(b, ERR_SOLRANGE, t, tlast)
+        # binary search: largest i with t[i] <= t, 0 <= i <= n-2
+        lo = b.alloca(I64)
+        hi = b.alloca(I64)
+        b.store(i64(0), lo)
+        b.store(b.sub(n, i64(1)), hi)
+        c_bb = fn.append_basic_block("bs.c")
+        l_bb = fn.append_basic_block("bs.l")
+        e_bb = fn.append_basic_block("bs.e")
+        b.branch(c_bb)
+        b.position_at_end(c_bb)
+        b.cbranch(b.icmp_signed(">", b.sub(b.load(hi), b.load(lo)), i64(1)), l_bb, e_bb)
+        b.position_at_end(l_bb)
+        mid = b.sdiv(b.add(b.load(lo), b.load(hi)), i64(2))
+        tm = b.load(b.gep(tp, [mid]))
+        with b.if_else(b.fcmp_ordered("<=", tm, t)) as (yes, no):
+            with yes:
+                b.store(mid, lo)
+            with no:
+                b.store(mid, hi)
+        b.branch(c_bb)
+        b.position_at_end(e_bb)
+        i = b.load(lo)
+        with b.if_then(b.icmp_signed("<=", n, i64(1))):
+            b.ret(b.load(b.gep(b.select(b.icmp_signed("!=", use_dy, i64(0)), dp, yp), [comp])))
+        i1 = b.add(i, i64(1))
+        ta = b.load(b.gep(tp, [i]))
+        tb = b.load(b.gep(tp, [i1]))
+        hh = b.fsub(tb, ta)
+        s = b.fdiv(b.fsub(t, ta), hh)
+        ia = b.add(b.mul(i, dim), comp)
+        ib = b.add(b.mul(i1, dim), comp)
+        with b.if_then(b.icmp_signed("!=", use_dy, i64(0))):
+            da = b.load(b.gep(dp, [ia]))
+            db = b.load(b.gep(dp, [ib]))
+            b.ret(b.fadd(da, b.fmul(s, b.fsub(db, da))))
+        ya = b.load(b.gep(yp, [ia]))
+        yb = b.load(b.gep(yp, [ib]))
+        ma = b.fmul(b.load(b.gep(dp, [ia])), hh)
+        mb = b.fmul(b.load(b.gep(dp, [ib])), hh)
+        s2 = b.fmul(s, s)
+        s3 = b.fmul(s2, s)
+        h00 = b.fadd(b.fsub(b.fmul(f64(2), s3), b.fmul(f64(3), s2)), f64(1))
+        h10 = b.fadd(b.fsub(s3, b.fmul(f64(2), s2)), s)
+        h01 = b.fadd(b.fmul(f64(-2), s3), b.fmul(f64(3), s2))
+        h11 = b.fsub(s3, s2)
+        r = b.fadd(b.fadd(b.fmul(h00, ya), b.fmul(h10, ma)), b.fadd(b.fmul(h01, yb), b.fmul(h11, mb)))
+        b.ret(r)
+        return fn
+
+
+class LoopHelper:
+    def __init__(self, b, fn):
+        self.b = b
+        self.fn = fn
+
+    class _Range:
+        def __init__(self, h, start, stop):
+            self.h, self.start, self.stop = h, start, stop
+
+        def __enter__(self):
+            b, fn = self.h.b, self.h.fn
+            self.iv = b.alloca(I64) if False else None
+            entry = fn.entry_basic_block
+            saved = b.block
+            with b.goto_block(entry):
+                b.position_at_start(entry)
+                self.iv = b.alloca(I64)
+            b.position_at_end(saved)
+            b.store(self.start, self.iv)
+            self.cond = fn.append_basic_block("r.c")
+            self.body = fn.append_basic_block("r.b")
+            self.end = fn.append_basic_block("r.e")
+            b.branch(self.cond)
+            b.position_at_end(self.cond)
+            i = b.load(self.iv)
+            b.cbranch(b.icmp_signed("<", i, self.stop), self.body, self.end)
+            b.position_at_end(self.body)
+            return b.load(self.iv)
+
+        def __exit__(self, *exc):
+            b = self.h.b
+            if not b.block.is_terminated:
+                b.store(b.add(b.load(self.iv), i64(1)), self.iv)
+                b.branch(self.cond)
+            b.position_at_end(self.end)
+            return False
+
+    def range(self, start, stop):
+        return LoopHelper._Range(self, start, stop)
+
+
+class FuncGen:
+    """Emits the statements of one function (main or a user function instance)."""
+
+    def __init__(self, mg: ModuleGen, fn, owner):
+        self.mg = mg
+        self.fn = fn
+        self.owner = owner
+        self.entry = fn.append_basic_block("entry")
+        self.body_bb = fn.append_basic_block("body")
+        self.b = ir.IRBuilder(self.body_bb)
+        with self.b.goto_block(self.entry):
+            self.b.branch(self.body_bb)
+        self.slots = {}
+        self.loops = []
+        self.lp = LoopHelper(self.b, fn)
+
+    # ------------------------------------------------------------ storage
+    def alloca(self, ty, name=""):
+        with self.b.goto_block(self.entry):
+            self.b.position_at_start(self.entry)
+            a = self.b.alloca(ty, name=name)
+        return a
+
+    def slot(self, sym):
+        if sym.id in self.slots:
+            return self.slots[sym.id]
+        t = lltype(sym.ty)
+        if sym.storage == "global":
+            p = self.mg.global_for(sym)
+        elif sym.storage == "arena":
+            addr = self.mg.arena_base + 8 * sym.slot
+            p = ir.Constant(I64, addr).inttoptr(t.as_pointer())
+        else:
+            p = self.alloca(t, sym.name)
+            if isinstance(sym.ty, ListTy):
+                self.b.store(ir.Constant(LIST, None), p) if False else None
+        self.slots[sym.id] = p
+        return p
+
+    def load(self, sym):
+        return self.b.load(self.slot(sym))
+
+    def store(self, sym, v):
+        self.b.store(v, self.slot(sym))
+
+    # ------------------------------------------------------------ statements
+    def emit_body(self, stmts):
+        for s in stmts:
+            if self.b.block.is_terminated:
+                break
+            self.stmt(s)
+
+    def stmt(self, s):
+        m = getattr(self, "s_" + type(s).__name__)
+        m(s)
+
+    def s_SAssign(self, s):
+        self.store(s.sym, self.expr(s.value))
+
+    def s_SExpr(self, s):
+        self.expr(s.value)
+
+    def s_SIndexAssign(self, s):
+        lst = self.load(s.sym)
+        idx = self.expr(s.idx)
+        p = self.elem_ptr(lst, idx)
+        self.b.store(self.expr(s.value), p)
+
+    def s_SPush(self, s):
+        b = self.b
+        v = self.expr(s.value)
+        slot = self.slot(s.sym)
+        lst = b.load(slot)
+        data, n, cap = (b.extract_value(lst, i) for i in range(3))
+        grow = b.icmp_signed(">=", n, cap)
+        with b.if_then(grow):
+            nc = b.select(b.icmp_signed("<", cap, i64(4)), i64(8), b.mul(cap, i64(2)))
+            nd = b.bitcast(b.call(self.mg.externs["realloc"], [b.bitcast(data, I8P), b.mul(nc, i64(8))]), F64P)
+            lst2 = b.insert_value(b.insert_value(b.load(slot), nd, 0), nc, 2)
+            b.store(lst2, slot)
+        lst = b.load(slot)
+        data = b.extract_value(lst, 0)
+        b.store(v, b.gep(data, [n]))
+        b.store(b.insert_value(lst, b.add(n, i64(1)), 1), slot)
+
+    def s_SIf(self, s):
+        c = self.expr(s.cond)
+        b = self.b
+        if s.other:
+            with b.if_else(c) as (then, other):
+                with then:
+                    self.emit_body(s.then)
+                with other:
+                    self.emit_body(s.other)
+        else:
+            with b.if_then(c):
+                self.emit_body(s.then)
+        self._fix_after_if()
+
+    def _fix_after_if(self):
+        # if both branches returned, the merge block is unreachable but must be terminated
+        pass
+
+    def s_SWhile(self, s):
+        b, fn = self.b, self.fn
+        cond = fn.append_basic_block("w.c")
+        body = fn.append_basic_block("w.b")
+        end = fn.append_basic_block("w.e")
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(self.expr(s.cond), body, end)
+        b.position_at_end(body)
+        self.loops.append((cond, end))
+        self.emit_body(s.body)
+        self.loops.pop()
+        if not b.block.is_terminated:
+            b.branch(cond)
+        b.position_at_end(end)
+
+    def s_SFor(self, s):
+        b, fn = self.b, self.fn
+        lo = self.expr(s.lo)
+        hi = self.expr(s.hi)
+        st = self.expr(s.step)
+        with b.if_then(b.fcmp_unordered("==", st, f64(0))):
+            self.mg.raise_error(b, ERR_STEP, st, f64(0))
+        span = b.fdiv(b.fsub(hi, lo), st)
+        cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
+        cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+        n = b.fptosi(cnt, I64)
+        iv = self.alloca(I64)
+        b.store(i64(0), iv)
+        cond = fn.append_basic_block("f.c")
+        body = fn.append_basic_block("f.b")
+        inc = fn.append_basic_block("f.i")
+        end = fn.append_basic_block("f.e")
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
+        b.position_at_end(body)
+        self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
+        self.loops.append((inc, end))
+        self.emit_body(s.body)
+        self.loops.pop()
+        if not b.block.is_terminated:
+            b.branch(inc)
+        b.position_at_end(inc)
+        b.store(b.add(b.load(iv), i64(1)), iv)
+        b.branch(cond)
+        b.position_at_end(end)
+
+    def s_SForIn(self, s):
+        b, fn = self.b, self.fn
+        lst = self.expr(s.lst)
+        data = b.extract_value(lst, 0)
+        n = b.extract_value(lst, 1)
+        iv = self.alloca(I64)
+        b.store(i64(0), iv)
+        cond = fn.append_basic_block("fi.c")
+        body = fn.append_basic_block("fi.b")
+        inc = fn.append_basic_block("fi.i")
+        end = fn.append_basic_block("fi.e")
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
+        b.position_at_end(body)
+        self.store(s.sym, b.load(b.gep(data, [b.load(iv)])))
+        self.loops.append((inc, end))
+        self.emit_body(s.body)
+        self.loops.pop()
+        if not b.block.is_terminated:
+            b.branch(inc)
+        b.position_at_end(inc)
+        b.store(b.add(b.load(iv), i64(1)), iv)
+        b.branch(cond)
+        b.position_at_end(end)
+
+    def s_SBreak(self, s):
+        self.b.branch(self.loops[-1][1])
+
+    def s_SContinue(self, s):
+        self.b.branch(self.loops[-1][0])
+
+    def s_SReturn(self, s):
+        self.b.ret(self.expr(s.value))
+
+    def s_SAssert(self, s):
+        c = self.expr(s.cond)
+        with self.b.if_then(self.b.not_(c)):
+            self.mg.raise_error(self.b, ERR_ASSERT, f64(s.msg_id))
+
+    def s_SPrint(self, s):
+        b, ex = self.b, self.mg.externs
+        for kind, payload, fid in s.items:
+            if kind == "num":
+                b.call(ex["fm_print_num"], [i64(fid), self.expr(payload)])
+            elif kind == "list":
+                lst = self.expr(payload)
+                b.call(ex["fm_print_list"], [i64(fid), b.extract_value(lst, 0), b.extract_value(lst, 1)])
+            elif kind == "bool":
+                b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
+            elif kind in ("text", "data"):
+                b.call(ex["fm_print_text"], [i64(fid)])
+        b.call(ex["fm_print_end"], [])
+
+    def s_SSolve(self, s):
+        b = self.b
+        n = len(s.y0)
+        y0 = self.alloca(ir.ArrayType(F64, n))
+        for i, e in enumerate(s.y0):
+            b.store(self.expr(e), b.gep(y0, [I32(0), I32(i)]))
+        y0p = b.gep(y0, [I32(0), I32(0)])
+        fn = self.mg.lambda_for(s.rhs)
+        env = self.make_env(s.rhs)
+        t0 = self.expr(s.t0)
+        t1 = self.expr(s.t1)
+        if s.method == "rk4":
+            k = self.mg.kernel("fm_rk4")
+            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, self.expr(s.step)])
+        else:
+            k = self.mg.kernel("fm_dp45")
+            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)])
+        self.store(s.sol_sym, sol)
+
+    def make_env(self, lam):
+        b = self.b
+        if not lam.captures:
+            return ir.Constant(F64P, None)
+        env = self.alloca(ir.ArrayType(F64, len(lam.captures)))
+        for i, sym in enumerate(lam.captures):
+            v = self.load(sym)
+            if isinstance(sym.ty, BoolTy):
+                v = b.uitofp(v, F64)
+            b.store(v, b.gep(env, [I32(0), I32(i)]))
+        return b.gep(env, [I32(0), I32(0)])
+
+    def s_SFit(self, s):
+        b = self.b
+        self.mg.lambda_for(s.model)
+        n = len(s.param_syms)
+        p = self.alloca(ir.ArrayType(F64, n))
+        for i, g in enumerate(s.guesses):
+            v = self.expr(g) if g is not None else f64(math.nan)
+            b.store(v, b.gep(p, [I32(0), I32(i)]))
+        h = self.expr(s.data)
+        b.call(self.mg.externs["fm_fit"], [i64(s.fit_id), h, b.gep(p, [I32(0), I32(0)])])
+        for i, sym in enumerate(s.param_syms):
+            self.store(sym, b.load(b.gep(p, [I32(0), I32(i)])))
+
+    def s_SPlot(self, s):
+        b, ex = self.b, self.mg.externs
+        for idx, e in enumerate(s.series):
+            kind = e["kind"]
+            if kind == "lists":
+                y = self.expr(e["y"])
+                x = self.expr(e["x"])
+                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), b.extract_value(x, 0), b.extract_value(x, 1),
+                                              b.extract_value(y, 0), b.extract_value(y, 1)])
+            elif kind in ("sol", "solxy"):
+                sol = b.bitcast(self.expr(e["sol"]), I8P)
+                c2 = e.get("comp2", -1)
+                d2 = 1 if e.get("dy2") else 0
+                b.call(ex["fm_plot_sol"], [i64(s.plot_id), i64(idx), sol, i64(e["comp"]), i64(1 if e["dy"] else 0),
+                                           i64(c2), i64(d2)])
+            elif kind == "func":
+                npts = 400
+                lo = self.expr(e["lo"])
+                hi = self.expr(e["hi"])
+                fn = self.mg.lambda_for(e["lam"])
+                env = self.make_env(e["lam"])
+                xs = b.bitcast(b.call(ex["malloc"], [i64(8 * npts)]), F64P)
+                ys = b.bitcast(b.call(ex["malloc"], [i64(8 * npts)]), F64P)
+                dx = b.fdiv(b.fsub(hi, lo), f64(npts - 1))
+                with self.lp.range(i64(0), i64(npts)) as i:
+                    x = b.fadd(lo, b.fmul(b.sitofp(i, F64), dx))
+                    b.store(x, b.gep(xs, [i]))
+                    b.store(b.call(fn, [x, env]), b.gep(ys, [i]))
+                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), xs, i64(npts), ys, i64(npts)])
+        b.call(ex["fm_plot_done"], [i64(s.plot_id)])
+
+    # ------------------------------------------------------------ expressions
+    def expr(self, e):
+        m = getattr(self, "e_" + type(e).__name__)
+        return m(e)
+
+    def e_IConst(self, e):
+        return f64(e.value)
+
+    def e_IBool(self, e):
+        return ir.Constant(I1, 1 if e.value else 0)
+
+    def e_IStr(self, e):
+        return i64(0)
+
+    def e_IVar(self, e):
+        return self.load(e.sym)
+
+    def new_list(self, n):
+        b = self.b
+        data = b.bitcast(b.call(self.mg.externs["malloc"], [b.mul(b.select(b.icmp_signed("<", n, i64(1)), i64(1), n),
+                                                                  i64(8))]), F64P)
+        lst = ir.Constant(LIST, ir.Undefined)
+        lst = b.insert_value(lst, data, 0)
+        lst = b.insert_value(lst, n, 1)
+        lst = b.insert_value(lst, n, 2)
+        return lst, data
+
+    def map_list(self, lst, fn_elem):
+        """New list with fn_elem(x) for each element."""
+        b = self.b
+        src = b.extract_value(lst, 0)
+        n = b.extract_value(lst, 1)
+        out, data = self.new_list(n)
+        with self.lp.range(i64(0), n) as i:
+            b.store(fn_elem(b.load(b.gep(src, [i])), i), b.gep(data, [i]))
+        return out
+
+    def e_IBin(self, e):
+        b = self.b
+        a = self.expr(e.a)
+        c = self.expr(e.b)
+        op = {"+": b.fadd, "-": b.fsub, "*": b.fmul, "/": b.fdiv}[e.op]
+        la = isinstance(e.a.ty, ListTy)
+        lc = isinstance(e.b.ty, ListTy)
+        if not la and not lc:
+            return op(a, c)
+        if la and lc:
+            na = b.extract_value(a, 1)
+            nc = b.extract_value(c, 1)
+            with b.if_then(b.icmp_signed("!=", na, nc)):
+                self.mg.raise_error(b, ERR_LEN, b.sitofp(na, F64), b.sitofp(nc, F64))
+            cd = b.extract_value(c, 0)
+            return self.map_list(a, lambda x, i: op(x, b.load(b.gep(cd, [i]))))
+        if la:
+            return self.map_list(a, lambda x, i: op(x, c))
+        return self.map_list(c, lambda x, i: op(a, x))
+
+    def powc(self, x, p):
+        b = self.b
+        if p == 2:
+            return b.fmul(x, x)
+        if p == 3:
+            return b.fmul(b.fmul(x, x), x)
+        if p == 1:
+            return x
+        if p == 0.5:
+            return b.call(self.mg.intrinsic("sqrt"), [x])
+        if p == -1:
+            return b.fdiv(f64(1), x)
+        if p == -2:
+            return b.fdiv(f64(1), b.fmul(x, x))
+        if p == 4:
+            x2 = b.fmul(x, x)
+            return b.fmul(x2, x2)
+        if p == -0.5:
+            return b.fdiv(f64(1), b.call(self.mg.intrinsic("sqrt"), [x]))
+        if p == 1.5:
+            return b.fmul(x, b.call(self.mg.intrinsic("sqrt"), [x]))
+        if p == -1.5:
+            return b.fdiv(f64(1), b.fmul(x, b.call(self.mg.intrinsic("sqrt"), [x])))
+        if abs(p - 1 / 3) < 1e-15:
+            return b.call(self.mg.libm("cbrt"), [x])
+        if p == int(p) and abs(p) <= 16:
+            return b.call(self.mg.intrinsic("powi") if False else self.mg.intrinsic("pow"), [x, f64(p)])
+        return b.call(self.mg.intrinsic("pow"), [x, f64(p)])
+
+    def e_IPowC(self, e):
+        a = self.expr(e.a)
+        if isinstance(e.a.ty, ListTy):
+            return self.map_list(a, lambda x, i: self.powc(x, e.p))
+        return self.powc(a, e.p)
+
+    def e_IPow(self, e):
+        a = self.expr(e.a)
+        c = self.expr(e.b)
+        pw = self.mg.intrinsic("pow")
+        if isinstance(e.a.ty, ListTy):
+            return self.map_list(a, lambda x, i: self.b.call(pw, [x, c]))
+        return self.b.call(pw, [a, c])
+
+    def e_INeg(self, e):
+        a = self.expr(e.a)
+        if isinstance(e.ty, ListTy):
+            return self.map_list(a, lambda x, i: self.b.fneg(x))
+        return self.b.fneg(a)
+
+    def e_ICmp(self, e):
+        b = self.b
+        a = self.expr(e.a)
+        c = self.expr(e.b)
+        if isinstance(e.a.ty, BoolTy):
+            return b.icmp_unsigned(e.op, a, c)
+        if e.op == "~=":
+            fabs = self.mg.intrinsic("fabs")
+            diff = b.call(fabs, [b.fsub(a, c)])
+            scale = b.call(self.mg.intrinsic("maxnum"), [b.call(fabs, [a]), b.call(fabs, [c])])
+            return b.fcmp_ordered("<=", diff, b.fadd(b.fmul(scale, f64(1e-6)), f64(1e-300)))
+        if e.op == "!=":
+            return b.fcmp_unordered("!=", a, c)
+        return b.fcmp_ordered(e.op, a, c)
+
+    def e_ILogic(self, e):
+        b = self.b
+        a = self.expr(e.a)
+        start = b.block
+        rhs = self.fn.append_basic_block("l.r")
+        end = self.fn.append_basic_block("l.e")
+        if e.op == "and":
+            b.cbranch(a, rhs, end)
+        else:
+            b.cbranch(a, end, rhs)
+        b.position_at_end(rhs)
+        c = self.expr(e.b)
+        rhs_end = b.block
+        b.branch(end)
+        b.position_at_end(end)
+        phi = b.phi(I1)
+        phi.add_incoming(ir.Constant(I1, 0 if e.op == "and" else 1), start)
+        phi.add_incoming(c, rhs_end)
+        return phi
+
+    def e_INot(self, e):
+        return self.b.not_(self.expr(e.a))
+
+    def e_IIf(self, e):
+        b = self.b
+        c = self.expr(e.cond)
+        t_bb = self.fn.append_basic_block("if.t")
+        f_bb = self.fn.append_basic_block("if.f")
+        end = self.fn.append_basic_block("if.e")
+        b.cbranch(c, t_bb, f_bb)
+        b.position_at_end(t_bb)
+        va = self.expr(e.a)
+        ta = b.block
+        b.branch(end)
+        b.position_at_end(f_bb)
+        vb = self.expr(e.b)
+        tb = b.block
+        b.branch(end)
+        b.position_at_end(end)
+        phi = b.phi(lltype(e.ty))
+        phi.add_incoming(va, ta)
+        phi.add_incoming(vb, tb)
+        return phi
+
+    def e_ILet(self, e):
+        for sym, v in e.binds:
+            self.store(sym, self.expr(v))
+        return self.expr(e.value)
+
+    def e_ICall(self, e):
+        fn = self.mg.func_for(e.func)
+        return self.b.call(fn, [self.expr(a) for a in e.args])
+
+    def e_IMap(self, e):
+        b = self.b
+        fn = self.mg.func_for(e.func)
+        args = [self.expr(a) for a in e.args]
+        lst = args[e.list_pos]
+
+        def elem(x, i):
+            a2 = list(args)
+            a2[e.list_pos] = x
+            return b.call(fn, a2)
+        return self.map_list(lst, elem)
+
+    def e_IList(self, e):
+        b = self.b
+        out, data = self.new_list(i64(len(e.items)))
+        for i, it in enumerate(e.items):
+            b.store(self.expr(it), b.gep(data, [i64(i)]))
+        return out
+
+    def elem_ptr(self, lst, idx):
+        b = self.b
+        n = b.extract_value(lst, 1)
+        i = b.fptosi(b.call(self.mg.intrinsic("floor"), [b.fadd(idx, f64(0.5))]), I64)
+        bad = b.or_(b.icmp_signed("<", i, i64(1)), b.icmp_signed(">", i, n))
+        bad = b.or_(bad, b.fcmp_unordered("uno", idx, idx))
+        with b.if_then(bad, likely=False):
+            self.mg.raise_error(b, ERR_INDEX, idx, b.sitofp(n, F64))
+        return b.gep(b.extract_value(lst, 0), [b.sub(i, i64(1))])
+
+    def e_IIndex(self, e):
+        lst = self.expr(e.lst)
+        return self.b.load(self.elem_ptr(lst, self.expr(e.idx)))
+
+    def e_IIntegral(self, e):
+        fn = self.mg.lambda_for(e.lam)
+        env = self.make_env(e.lam)
+        q = self.mg.kernel("fm_quad")
+        return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
+
+    def e_ISolEval(self, e):
+        k = self.mg.kernel("fm_sol_eval")
+        return self.b.call(k, [self.expr(e.sol), i64(e.comp), self.expr(e.t), i64(1 if e.use_dy else 0)])
+
+    def e_ISolList(self, e):
+        b = self.b
+        sp = self.expr(e.sol)
+        n = b.load(b.gep(sp, [I32(0), I32(0)]))
+        dim = b.load(b.gep(sp, [I32(0), I32(1)]))
+        out, data = self.new_list(n)
+        if e.what == "t":
+            src = b.load(b.gep(sp, [I32(0), I32(3)]))
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.load(b.gep(src, [i])), b.gep(data, [i]))
+        else:
+            src = b.load(b.gep(sp, [I32(0), I32(4 if e.what == "y" else 5)]))
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.load(b.gep(src, [b.add(b.mul(i, dim), i64(e.comp))])), b.gep(data, [i]))
+        return out
+
+    def e_ILoad(self, e):
+        return self.b.call(self.mg.externs["fm_load"], [i64(e.load_id)])
+
+    def e_IColumn(self, e):
+        b = self.b
+        h = self.expr(e.data)
+        pp = self.alloca(F64P)
+        n = b.call(self.mg.externs["fm_column"], [h, i64(e.col), pp])
+        lst = ir.Constant(LIST, ir.Undefined)
+        lst = b.insert_value(lst, b.load(pp), 0)
+        lst = b.insert_value(lst, n, 1)
+        return b.insert_value(lst, n, 2)
+
+    # ------------------------------------------------------------ builtins
+    MATH_INTRINSICS = {"sin": "sin", "cos": "cos", "exp": "exp", "ln": "log", "log": "log", "log10": "log10",
+                       "log2": "log2", "abs": "fabs", "floor": "floor", "ceil": "ceil", "round": "round",
+                       "tan": "tan", "asin": "asin", "acos": "acos", "atan": "atan", "sinh": "sinh",
+                       "cosh": "cosh", "tanh": "tanh"}
+    MATH_LIBM = {"asinh": "asinh", "acosh": "acosh", "atanh": "atanh", "erf": "erf", "erfc": "erfc",
+                 "gamma": "tgamma", "lgamma": "lgamma", "expm1": "expm1", "log1p": "log1p"}
+    NEW_INTRINSICS = {"tan", "asin", "acos", "atan", "sinh", "cosh", "tanh"}
+
+    def math1(self, name, x):
+        b = self.b
+        if name in self.MATH_INTRINSICS and name not in self.NEW_INTRINSICS:
+            return b.call(self.mg.intrinsic(self.MATH_INTRINSICS[name]), [x])
+        if name in self.NEW_INTRINSICS:
+            return b.call(self.mg.libm(name), [x])
+        if name in self.MATH_LIBM:
+            return b.call(self.mg.libm(self.MATH_LIBM[name]), [x])
+        if name == "sign":
+            pos = b.uitofp(b.fcmp_ordered(">", x, f64(0)), F64)
+            neg = b.uitofp(b.fcmp_ordered("<", x, f64(0)), F64)
+            return b.fsub(pos, neg)
+        raise KeyError(name)
+
+    def e_IBuiltin(self, e):
+        b = self.b
+        name = e.name
+        args = [self.expr(a) for a in e.args]
+        if name in self.MATH_INTRINSICS or name in self.MATH_LIBM or name == "sign":
+            if isinstance(e.args[0].ty, ListTy):
+                return self.map_list(args[0], lambda x, i: self.math1(name, x))
+            return self.math1(name, args[0])
+        if name == "isnan":
+            return b.fcmp_unordered("uno", args[0], args[0])
+        if name == "atan2":
+            return b.call(self.mg.libm("atan2", 2), args)
+        if name == "hypot":
+            return b.call(self.mg.libm("hypot", 2), args)
+        if name == "mod":
+            a, c = args
+            return b.fsub(a, b.fmul(c, b.call(self.mg.intrinsic("floor"), [b.fdiv(a, c)])))
+        if name in ("min", "max"):
+            fn = self.mg.intrinsic("minnum" if name == "min" else "maxnum")
+            r = args[0]
+            for a in args[1:]:
+                r = b.call(fn, [r, a])
+            return r
+        if name == "clamp":
+            x, lo, hi = args
+            return b.call(self.mg.intrinsic("minnum"), [b.call(self.mg.intrinsic("maxnum"), [x, lo]), hi])
+        if name == "factorial":
+            return b.call(self.mg.libm("tgamma"), [b.fadd(args[0], f64(1))])
+        if name == "rand":
+            return b.call(self.mg.externs["drand48"], [])
+        if name == "len":
+            return b.sitofp(b.extract_value(args[0], 1), F64)
+        if name in ("sum", "mean", "std", "min_list", "max_list", "first", "last"):
+            return self.reduce(name, args[0])
+        if name == "dot":
+            a, c = args
+            na = b.extract_value(a, 1)
+            with b.if_then(b.icmp_signed("!=", na, b.extract_value(c, 1))):
+                self.mg.raise_error(b, ERR_LEN, b.sitofp(na, F64), b.sitofp(b.extract_value(c, 1), F64))
+            acc = self.alloca(F64)
+            b.store(f64(0), acc)
+            pa, pc = b.extract_value(a, 0), b.extract_value(c, 0)
+            with self.lp.range(i64(0), na) as i:
+                b.store(b.fadd(b.load(acc), b.fmul(b.load(b.gep(pa, [i])), b.load(b.gep(pc, [i])))), acc)
+            return b.load(acc)
+        if name == "trapz":
+            ys, xs = args
+            n = b.extract_value(ys, 1)
+            with b.if_then(b.icmp_signed("!=", n, b.extract_value(xs, 1))):
+                self.mg.raise_error(b, ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(xs, 1), F64))
+            acc = self.alloca(F64)
+            b.store(f64(0), acc)
+            py, px = b.extract_value(ys, 0), b.extract_value(xs, 0)
+            with self.lp.range(i64(1), n) as i:
+                im = b.sub(i, i64(1))
+                dx = b.fsub(b.load(b.gep(px, [i])), b.load(b.gep(px, [im])))
+                s = b.fadd(b.load(b.gep(py, [i])), b.load(b.gep(py, [im])))
+                b.store(b.fadd(b.load(acc), b.fmul(f64(0.5), b.fmul(dx, s))), acc)
+            return b.load(acc)
+        if name == "interp":
+            x, xs, ys = args
+            n = b.extract_value(xs, 1)
+            px, py = b.extract_value(xs, 0), b.extract_value(ys, 0)
+            with b.if_then(b.icmp_signed("!=", n, b.extract_value(ys, 1))):
+                self.mg.raise_error(b, ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(ys, 1), F64))
+            with b.if_then(b.icmp_signed("<", n, i64(2))):
+                self.mg.raise_error(b, ERR_EMPTY, f64(0), f64(0))
+            res = self.alloca(F64)
+            # clamp to the ends
+            b.store(b.load(py), res)
+            last = b.sub(n, i64(1))
+            with b.if_then(b.fcmp_ordered(">=", x, b.load(b.gep(px, [last])))):
+                b.store(b.load(b.gep(py, [last])), res)
+            with self.lp.range(i64(1), n) as i:
+                im = b.sub(i, i64(1))
+                xa, xb = b.load(b.gep(px, [im])), b.load(b.gep(px, [i]))
+                inside = b.and_(b.fcmp_ordered(">=", x, xa), b.fcmp_ordered("<", x, xb))
+                with b.if_then(inside):
+                    ya, yb = b.load(b.gep(py, [im])), b.load(b.gep(py, [i]))
+                    s = b.fdiv(b.fsub(x, xa), b.fsub(xb, xa))
+                    b.store(b.fadd(ya, b.fmul(s, b.fsub(yb, ya))), res)
+            return b.load(res)
+        if name in ("zeros", "ones"):
+            n = b.fptosi(args[0], I64)
+            n = b.select(b.icmp_signed("<", n, i64(0)), i64(0), n)
+            out, data = self.new_list(n)
+            with self.lp.range(i64(0), n) as i:
+                b.store(f64(0 if name == "zeros" else 1), b.gep(data, [i]))
+            return out
+        if name == "linspace":
+            a, c, nf = args
+            n = b.fptosi(nf, I64)
+            n = b.select(b.icmp_signed("<", n, i64(0)), i64(0), n)
+            out, data = self.new_list(n)
+            den = b.sitofp(b.select(b.icmp_signed("<", n, i64(2)), i64(1), b.sub(n, i64(1))), F64)
+            step = b.fdiv(b.fsub(c, a), den)
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.fadd(a, b.fmul(b.sitofp(i, F64), step)), b.gep(data, [i]))
+            return out
+        if name == "range":
+            a, c, st = args
+            with b.if_then(b.fcmp_unordered("==", st, f64(0))):
+                self.mg.raise_error(b, ERR_STEP, st, f64(0))
+            cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(b.fdiv(b.fsub(c, a), st), f64(1e-9))]), f64(1))
+            cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+            n = b.fptosi(cnt, I64)
+            out, data = self.new_list(n)
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.fadd(a, b.fmul(b.sitofp(i, F64), st)), b.gep(data, [i]))
+            return out
+        if name == "copy":
+            return self.map_list(args[0], lambda x, i: x)
+        if name == "reverse":
+            src = b.extract_value(args[0], 0)
+            n = b.extract_value(args[0], 1)
+            out, data = self.new_list(n)
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.load(b.gep(src, [b.sub(b.sub(n, i64(1)), i)])), b.gep(data, [i]))
+            return out
+        if name == "sort":
+            out = self.map_list(args[0], lambda x, i: x)
+            b.call(self.mg.externs["fm_sort"], [b.extract_value(out, 0), b.extract_value(out, 1)])
+            return out
+        if name == "cumsum":
+            acc = self.alloca(F64)
+            b.store(f64(0), acc)
+
+            def step(x, i):
+                v = b.fadd(b.load(acc), x)
+                b.store(v, acc)
+                return v
+            return self.map_list(args[0], step)
+        if name == "diff":
+            src = b.extract_value(args[0], 0)
+            n = b.extract_value(args[0], 1)
+            m = b.select(b.icmp_signed("<", n, i64(1)), i64(0), b.sub(n, i64(1)))
+            out, data = self.new_list(m)
+            with self.lp.range(i64(0), m) as i:
+                b.store(b.fsub(b.load(b.gep(src, [b.add(i, i64(1))])), b.load(b.gep(src, [i]))), b.gep(data, [i]))
+            return out
+        raise NotImplementedError(f"builtin {name}")
+
+    def reduce(self, name, lst):
+        b = self.b
+        data = b.extract_value(lst, 0)
+        n = b.extract_value(lst, 1)
+        if name in ("mean", "std", "min_list", "max_list", "first", "last"):
+            with b.if_then(b.icmp_signed("<", n, i64(1))):
+                self.mg.raise_error(b, ERR_EMPTY, f64(0), f64(0))
+        if name == "first":
+            return b.load(data)
+        if name == "last":
+            return b.load(b.gep(data, [b.sub(n, i64(1))]))
+        acc = self.alloca(F64)
+        if name in ("min_list", "max_list"):
+            b.store(b.load(data), acc)
+            fn = self.mg.intrinsic("minnum" if name == "min_list" else "maxnum")
+            with self.lp.range(i64(1), n) as i:
+                b.store(b.call(fn, [b.load(acc), b.load(b.gep(data, [i]))]), acc)
+            return b.load(acc)
+        b.store(f64(0), acc)
+        with self.lp.range(i64(0), n) as i:
+            b.store(b.fadd(b.load(acc), b.load(b.gep(data, [i]))), acc)
+        s = b.load(acc)
+        if name == "sum":
+            return s
+        mean = b.fdiv(s, b.sitofp(n, F64))
+        if name == "mean":
+            return mean
+        # sample standard deviation (n-1)
+        b.store(f64(0), acc)
+        with self.lp.range(i64(0), n) as i:
+            d = b.fsub(b.load(b.gep(data, [i])), mean)
+            b.store(b.fadd(b.load(acc), b.fmul(d, d)), acc)
+        den = b.sitofp(b.select(b.icmp_signed("<", n, i64(2)), i64(1), b.sub(n, i64(1))), F64)
+        return b.call(self.mg.intrinsic("sqrt"), [b.fdiv(b.load(acc), den)])
+
+
+class LambdaGen(FuncGen):
+    def __init__(self, mg, fn, lam: I.ILambda):
+        super().__init__(mg, fn, lam)
+        self.lam = lam
+
+    def load_env(self, env):
+        b = self.b
+        for i, sym in enumerate(self.lam.captures):
+            v = b.load(b.gep(env, [i64(i)]))
+            if isinstance(sym.ty, BoolTy):
+                v = b.fcmp_ordered("!=", v, f64(0))
+            p = self.alloca(lltype(sym.ty), sym.name)
+            b.store(v, p)
+            self.slots[sym.id] = p
+
+    def emit(self):
+        lam, b, fn = self.lam, self.b, self.fn
+        if lam.kind == "scalar":
+            x, env = fn.args
+            self.load_env(env)
+            self.store(lam.params[0], x)
+            b.ret(self.expr(lam.body))
+        elif lam.kind == "ode":
+            t, y, dy, env = fn.args
+            self.load_env(env)
+            self.store(lam.params[0], t)
+            for i, sym in enumerate(lam.state):
+                self.store(sym, b.load(b.gep(y, [i64(i)])))
+            vals = [self.expr(e) for e in lam.body]
+            for i, v in enumerate(vals):
+                b.store(v, b.gep(dy, [i64(i)]))
+            b.ret_void()
+        elif lam.kind == "model":
+            p, cols, n, out = fn.args
+            for i, sym in enumerate(lam.param_syms):
+                self.store(sym, b.load(b.gep(p, [i64(i)])))
+            with self.lp.range(i64(0), n) as i:
+                for k, sym in enumerate(lam.col_syms):
+                    colp = b.load(b.gep(cols, [i64(k)]))
+                    self.store(sym, b.load(b.gep(colp, [i])))
+                b.store(self.expr(lam.body), b.gep(out, [i]))
+            b.ret_void()

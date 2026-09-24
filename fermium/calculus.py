@@ -9,7 +9,7 @@ import math
 
 from . import ast as A
 from .errors import FermiumError
-from .units import format_number
+from .units import format_number, is_unit_name
 from .lexer import GREEK_TO_ASCII
 
 
@@ -465,6 +465,9 @@ def _src(e, pretty):
                 sep = " "
                 if isinstance(e.right, (A.Num, A.Quantity)):
                     sep = "·" if pretty else "*"
+                elif isinstance(e.left, A.Num) and isinstance(e.right, A.Name) and pretty and \
+                        not is_unit_name(e.right.name):
+                    sep = ""
                 return f"{l}{sep}{r}", PREC_JUXT
             l, lp = _paren(l, lp, PREC_PROD)
             r, rp = _paren(r, rp, PREC_NEG + 1)

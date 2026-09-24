@@ -1,0 +1,387 @@
+"""Checking for `solve` (ODEs), `fit` (least squares) and `plot`."""
+from __future__ import annotations
+
+import os
+
+from . import ast as A
+from . import calculus as C
+from . import ir as I
+from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
+from .errors import FermiumError
+from .types import DExpr, NumTy, ListTy, SolTy, DataTy, DIMLESS
+from .units import preferred_unit
+
+
+# ============================================================ solve
+def _find_derivs(e, out):
+    """Collect {name: max order} for x', x'', d/dt x in an equation side."""
+    if isinstance(e, A.Prime) and isinstance(e.target, A.Name):
+        out[e.target.name] = max(out.get(e.target.name, 0), e.order)
+        return
+    if isinstance(e, A.Deriv) and isinstance(e.operand, A.Name):
+        out[e.operand.name] = max(out.get(e.operand.name, 0), e.order)
+        return
+    for c in A.children(e):
+        _find_derivs(c, out)
+
+
+def _normalize_derivs(e, tvar):
+    """Rewrite d/dt x as x' so the rest of the code sees one form."""
+    if isinstance(e, A.Deriv) and isinstance(e.operand, A.Name) and e.var == tvar:
+        return A.Prime(e.operand, e.order).at(e)
+    return C.map_children(e, lambda c: _normalize_derivs(c, tvar))
+
+
+def check_solve(ck, s: A.Solve, ctx):
+    t = s.var
+    eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in s.equations]
+    orders = {}
+    for q in eqs:
+        _find_derivs(q.lhs, orders)
+        _find_derivs(q.rhs, orders)
+    if not orders:
+        raise ck.err("this solve has no derivatives in it, so there's no differential equation to solve", s,
+                     hint="write e.g.  solve x' = -x / τ  with x(0) = 1 for t from 0 s to 5 s")
+    if len(eqs) != len(orders):
+        names = ", ".join(orders)
+        raise ck.err(f"this solve has {len(eqs)} equation{'s' if len(eqs) != 1 else ''} for {len(orders)} "
+                     f"unknown function{'s' if len(orders) != 1 else ''} ({names}); they must match", s)
+    # time range
+    t0 = ck.expr(s.lo, ctx)
+    t1 = ck.expr(s.hi, ctx)
+    ck.need_num(t0, s.lo, "the start time")
+    ck.need_num(t1, s.hi, "the end time")
+    ck.unify_or(t0.ty.dim, t1.ty.dim, lambda: f"the range goes from {ck.desc(t0.ty.dim)} to {ck.desc(t1.ty.dim)}",
+                s.lo)
+    tdim = t0.ty.dim
+    step = None
+    if s.step is not None:
+        step = ck.expr(s.step, ctx)
+        ck.need_num(step, s.step, "the step")
+        ck.unify_or(step.ty.dim, tdim, lambda: f"the step is {ck.desc(step.ty.dim)} but {t} is {ck.desc(tdim)}",
+                    s.step)
+    method = (s.method or ("rk4" if step is not None else "rk45")).lower()
+    if method not in ("rk4", "rk45"):
+        raise ck.err(f"unknown method '{s.method}' (use rk4 or rk45)", s)
+    if method == "rk4" and step is None:
+        raise ck.err("the rk4 method needs a fixed step:  for t from 0 s to 5 s step 0.01 s", s)
+
+    # state layout: for each unknown x of order n: x, x', ..., x^(n-1)
+    names = list(orders)
+    dims = {x: DExpr.fresh(x) for x in names}
+    layout = []
+    for x in names:
+        for k in range(orders[x]):
+            layout.append((x, k))
+
+    # initial conditions
+    y0 = {}
+    for ic in s.initial:
+        lhs = ic.lhs
+        if not isinstance(lhs, A.Call) or len(lhs.args) != 1:
+            raise ck.err("initial conditions look like  x(0) = 1 m  or  x'(0) = 0 m/s", ic)
+        f = lhs.func
+        k = 0
+        if isinstance(f, A.Prime):
+            k = f.order
+            f = f.target
+        if not isinstance(f, A.Name) or f.name not in orders:
+            raise ck.err(f"this initial condition isn't for one of the unknowns ({', '.join(names)})", ic)
+        x = f.name
+        if k >= orders[x]:
+            raise ck.err(f"{x}{chr(39) * k}(…) isn't needed: the equation for {x} is order {orders[x]}", ic)
+        v = ck.expr(ic.rhs, ctx)
+        ck.need_num(v, ic.rhs, "an initial value")
+        want = dims[x] / (DExpr.of(tdim) ** k)
+        if not ck.U.unify(want, v.ty.dim):
+            raise ck.err(f"{x}{chr(39) * k}(…) should be {ck.desc(want)} but this is {ck.desc(v.ty.dim)}", ic.rhs)
+        at = ck.expr(lhs.args[0], ctx)
+        ck.need_num(at, lhs.args[0], "the time of the initial condition")
+        if not ck.U.unify(at.ty.dim, tdim):
+            raise ck.err(f"the initial condition is given at {ck.desc(at.ty.dim)} but {t} is {ck.desc(tdim)}",
+                         lhs.args[0])
+        if isinstance(at, I.IConst) and isinstance(t0, I.IConst) and abs(at.value - t0.value) > 1e-12 * (
+                abs(t0.value) + 1e-300) and not (at.value == 0 and t0.value == 0):
+            raise ck.err(f"initial conditions must be at the start of the range ({t} = start)", lhs.args[0])
+        y0[(x, k)] = v
+    missing = [x + "'" * k + "(start)" for (x, k) in layout if (x, k) not in y0]
+    if missing:
+        raise ck.err(f"missing initial condition{'s' if len(missing) > 1 else ''}: {', '.join(missing)}", s,
+                     hint="add them after 'with', e.g.  with x(0) = 0.1 m, x'(0) = 0 m/s")
+
+    # right-hand side lambda
+    lam = I.ILambda("ode", ck.fresh_name("ode"))
+    lam.locals = []
+    scope = Scope(ctx.scope)
+    lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+    tsym = I.Sym(t, NumTy(tdim), "local", lam)
+    tsym.assigned = True
+    lam.params = [tsym]
+    scope.names[t] = tsym
+    for (x, k) in layout:
+        sym = I.Sym(x + "'" * k, NumTy(dims[x] / (DExpr.of(tdim) ** k)), "local", lam)
+        sym.assigned = True
+        lam.state.append(sym)
+        scope.names[x + "'" * k] = sym
+    # highest derivatives, only for checking the equations as written
+    tops = {}
+    for x in names:
+        n = orders[x]
+        sym = I.Sym(x + "'" * n, NumTy(dims[x] / (DExpr.of(tdim) ** n)), "local", lam)
+        tops[x] = sym
+        scope.names[x + "'" * n] = sym
+    for q in eqs:
+        lv = ck.expr(q.lhs, lctx)
+        rv = ck.expr(q.rhs, lctx)
+        ck.need_num(lv, q.lhs, "the left side")
+        ck.need_num(rv, q.rhs, "the right side")
+        if not ck.U.unify(lv.ty.dim, rv.ty.dim):
+            raise ck.err(f"the two sides of this equation don't match: left is {ck.desc(lv.ty.dim)}, "
+                         f"right is {ck.desc(rv.ty.dim)}", q)
+    # assign equations to unknowns and isolate the highest derivative
+    assigned = {}
+    for q in eqs:
+        present = {}
+        _find_derivs(q.lhs, present)
+        _find_derivs(q.rhs, present)
+        cands = [x for x in names if present.get(x) == orders[x] and x not in assigned]
+        if not cands:
+            raise ck.err("can't tell which unknown this equation is for", q,
+                         hint="each equation should contain the highest derivative of one unknown, like x'' = ...")
+        x = cands[0]
+        target = A.Prime(A.Name(x), orders[x])
+        assigned[x] = C.isolate(q.lhs, q.rhs, target)
+    for x in names:
+        del scope.names[x + "'" * orders[x]]
+    body = []
+    for (x, k) in layout:
+        if k < orders[x] - 1:
+            body.append(ck.var_ref(scope.names[x + "'" * (k + 1)], lctx, s))
+        else:
+            e = assigned[x]
+            v = ck.expr(e, lctx)
+            want = dims[x] / (DExpr.of(tdim) ** orders[x])
+            if not ck.U.unify(v.ty.dim, want):
+                raise ck.err(f"{x}{chr(39) * orders[x]} works out to {ck.desc(v.ty.dim)} but should be "
+                             f"{ck.desc(want)}", s)
+            body.append(v)
+    lam.body = body
+    ck.new_lambdas.append(lam)
+    ck.all_lambdas.append(lam)
+    info = {"names": names, "layout": layout, "t": t}
+    sol_sym = ck.new_sym(ck.fresh_name("__sol"), SolTy(info), ctx)
+    sol_sym.assigned = True
+    base = 0
+    for x in names:
+        n = orders[x]
+        ctx.scope.names[x] = SolView(sol_sym, base, base + n - 1, dims[x], tdim, t, x)
+        base += n
+    rtol = 1e-9
+    return I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
+
+
+# ============================================================ fit
+def check_fit(ck, s: A.Fit, ctx):
+    if not ctx.is_main or ctx.lam is not None:
+        raise ck.err("fit can only be used at the top level of a program", s)
+    data = ck.expr(s.data, ctx)
+    if not isinstance(data, I.Expr) or not isinstance(data.ty, DataTy):
+        raise ck.err("fit ... to <data>: the data must come from load \"file.csv\"", s.data)
+    cols = data.ty.info["columns"]
+    colnames = [c["name"] for c in cols]
+    lhs, rhs = s.model.lhs, s.model.rhs
+    if not isinstance(lhs, A.Name) or lhs.name not in colnames:
+        raise ck.err(f"the left side of a fit must be a column of the data ({', '.join(colnames)})", lhs)
+    used = []
+    for n in A.free_names(rhs):
+        if n not in used:
+            used.append(n)
+    guess_names = [g for g, _ in s.guesses]
+    params, user_vars = [], []
+    for n in used:
+        if n in colnames:
+            continue
+        b, _ = ctx.scope.lookup(n)
+        if isinstance(b, (ConstInfo, FuncInfo)) or (b is None and n in BUILTINS):
+            continue
+        if isinstance(b, I.Sym) and n not in guess_names:
+            user_vars.append(n)
+            continue
+        params.append(n)
+    if not params and user_vars:
+        params, user_vars = user_vars, []
+    if not params:
+        raise ck.err("this fit has no unknown parameters to adjust", s,
+                     hint="parameters are the names in the model that aren't data columns or known values")
+    # model lambda: columns and parameters are its inputs
+    lam = I.ILambda("model", ck.fresh_name("model"))
+    lam.locals = []
+    scope = Scope(ctx.scope)
+    lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+    pdims = {}
+    for n in params:
+        b, _ = ctx.scope.lookup(n)
+        d = b.ty.dim if isinstance(b, I.Sym) and isinstance(b.ty, NumTy) else DExpr.fresh(n)
+        pdims[n] = d
+        sym = I.Sym(n, NumTy(d), "local", lam)
+        sym.assigned = True
+        lam.param_syms.append(sym)
+        scope.names[n] = sym
+    col_used = []
+    for i, c in enumerate(cols):
+        if c["name"] in used or c["name"] == lhs.name:
+            sym = I.Sym(c["name"], NumTy(c["unit"].dim), "local", lam)
+            sym.assigned = True
+            sym.col_index = i
+            lam.col_syms.append(sym)
+            scope.names[c["name"]] = sym
+            col_used.append(i)
+    body = ck.expr(rhs, lctx)
+    ck.need_num(body, rhs, "the model")
+    ydim = [c for c in cols if c["name"] == lhs.name][0]["unit"].dim
+    if not ck.U.unify(body.ty.dim, ydim):
+        raise ck.err(f"the model gives {ck.desc(body.ty.dim)} but {lhs.name} is {ck.desc(ydim)}", s.model,
+                     hint="check the formula: both sides of the fit equation need the same units")
+    lam.body = body
+    lam.ycol = colnames.index(lhs.name)
+    ck.new_lambdas.append(lam)
+    ck.all_lambdas.append(lam)
+    # initial guesses
+    guesses = []
+    for n in params:
+        g = None
+        for gn, gv in s.guesses:
+            if gn == n:
+                v = ck.expr(gv, ctx)
+                ck.need_num(v, gv, "a starting guess")
+                if not ck.U.unify(v.ty.dim, pdims[n]):
+                    raise ck.err(f"the starting guess for {n} is {ck.desc(v.ty.dim)} but {n} must be "
+                                 f"{ck.desc(pdims[n])}", gv)
+                g = v
+        if g is None:
+            b, _ = ctx.scope.lookup(n)
+            if isinstance(b, I.Sym) and isinstance(b.ty, NumTy):
+                g = ck.var_ref(b, ctx, s)
+        guesses.append(g)
+    # result variables
+    out_syms = []
+    for n in params:
+        b, _ = ctx.scope.lookup(n)
+        if isinstance(b, I.Sym) and isinstance(b.ty, NumTy) and (b.func is ctx.func or b.storage == "arena"):
+            sym = b
+        else:
+            sym = ck.new_sym(n, NumTy(pdims[n]), ctx)
+            ctx.scope.names[n] = sym
+        sym.assigned = True
+        sym.sf = 3
+        sym.direct = False
+        out_syms.append(sym)
+    fit_id = len(ck.tables.fits)
+    ck.tables.fits.append({"params": params, "dims": [pdims[n] for n in params], "model": lam.name,
+                           "text": C.to_source(s.model.lhs) + " = " + C.to_source(s.model.rhs),
+                           "ycol": lam.ycol, "cols": [sym.col_index for sym in lam.col_syms],
+                           "ydim": ydim, "yname": lhs.name, "path": data.ty.info["path"]})
+    return I.SFit(fit_id, data, out_syms, guesses, lam)
+
+
+# ============================================================ plot
+def _label(ck, node):
+    return C.to_source(node)
+
+
+def check_plot(ck, s: A.Plot, ctx):
+    series = []
+    labels = []
+    for sr in s.series:
+        yv = _plot_side(ck, sr.y, ctx)
+        xv = None
+        if isinstance(sr.x, A.Name):
+            b, _ = ctx.scope.lookup(sr.x.name)
+            if b is None or isinstance(b, (ConstInfo,)) and sr.x.name not in ("π",):
+                xv = None
+            else:
+                xv = _plot_side(ck, sr.x, ctx)
+        else:
+            xv = _plot_side(ck, sr.x, ctx)
+        entry = {"ylabel": _label(ck, sr.y), "xlabel": _label(ck, sr.x)}
+        if isinstance(yv, SolRef) and xv is None:
+            v = yv.view
+            if sr.x.name != v.tname:
+                raise ck.err(f"{v.name} is a function of {v.tname}; plot it  vs {v.tname}", sr.x)
+            sol = ck.var_ref(v.sol_sym, ctx, s)
+            comp, use_dy = (v.comp, False) if v.comp <= v.top else (v.top, True)
+            entry.update(kind="sol", sol=sol, comp=comp, dy=use_dy, ydim=v.dim, xdim=v.tdim, yhint=None, xhint=None)
+            if sr.lo is not None:
+                raise ck.err("a solution is plotted over the range it was solved for (no 'from ... to' needed)", sr)
+        elif isinstance(yv, SolRef) and isinstance(xv, SolRef):
+            a, b = yv.view, xv.view
+            if a.sol_sym is not b.sol_sym:
+                raise ck.err("can only plot two solutions against each other if they come from the same solve", sr)
+            sol = ck.var_ref(a.sol_sym, ctx, s)
+            entry.update(kind="solxy", sol=sol, comp=a.comp if a.comp <= a.top else a.top, dy=a.comp > a.top,
+                         comp2=b.comp if b.comp <= b.top else b.top, dy2=b.comp > b.top,
+                         ydim=a.dim, xdim=b.dim, yhint=None, xhint=None)
+        elif xv is None or sr.lo is not None:
+            # y is a formula in the (undefined) x variable, sampled over a range
+            if sr.lo is None:
+                raise ck.err(f"{C.to_source(sr.x)} isn't defined; to plot a formula give a range, like "
+                             f"plot y vs {C.to_source(sr.x)} from 0 to 10", sr.x)
+            if not isinstance(sr.x, A.Name):
+                raise ck.err("to plot a formula, the thing after 'vs' must be a variable name", sr.x)
+            lo = ck.expr(sr.lo, ctx)
+            hi = ck.expr(sr.hi, ctx)
+            ck.need_num(lo, sr.lo)
+            ck.need_num(hi, sr.hi)
+            ck.unify_or(lo.ty.dim, hi.ty.dim, lambda: "the two ends of the plot range need the same units", sr)
+            lam = I.ILambda("scalar", ck.fresh_name("plotfn"))
+            lam.locals = []
+            scope = Scope(ctx.scope)
+            lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+            xs = I.Sym(sr.x.name, NumTy(lo.ty.dim), "local", lam)
+            xs.assigned = True
+            lam.params = [xs]
+            scope.names[sr.x.name] = xs
+            yexpr = sr.y
+            if isinstance(yv, FuncRef):
+                yexpr = A.Call(sr.y, [A.Name(sr.x.name)]).at(sr.y)
+            body = ck.expr(yexpr, lctx)
+            ck.need_num(body, sr.y, "the thing to plot")
+            lam.body = body
+            ck.new_lambdas.append(lam)
+            ck.all_lambdas.append(lam)
+            entry.update(kind="func", lam=lam, lo=lo, hi=hi, ydim=body.ty.dim, xdim=lo.ty.dim,
+                         yhint=body.hint, xhint=lo.hint or hi.hint)
+        else:
+            if isinstance(yv, SolRef):
+                yv = ck.sol_values(yv.view)
+            if isinstance(xv, SolRef):
+                xv = ck.sol_values(xv.view)
+            for v, node in ((yv, sr.y), (xv, sr.x)):
+                if isinstance(v, FuncRef) or not isinstance(v.ty, ListTy):
+                    what = "a function" if isinstance(v, FuncRef) else "a single value"
+                    raise ck.err(f"can't plot {what} here; plot needs lists of values (or a solution, or a formula "
+                                 f"with a range)", node,
+                                 hint="e.g.  plot v vs t from 0 s to 5 s   or   plot ys vs xs")
+            entry.update(kind="lists", y=yv, x=xv, ydim=yv.ty.dim, xdim=xv.ty.dim, yhint=yv.hint, xhint=xv.hint)
+        series.append(entry)
+        labels.append(entry)
+    out = s.out
+    if out is None:
+        def clean(t):
+            return "".join(ch if ch.isalnum() else "_" for ch in t).strip("_") or "plot"
+        first = s.series[0]
+        out = f"{clean(_label(ck, first.y))}_vs_{clean(_label(ck, first.x))}.png"
+    full = out if os.path.isabs(out) else os.path.join(ck.base_dir, out)
+    info = {"out": out, "full": full,
+            "series": [{k: v for k, v in e.items() if k in ("ylabel", "xlabel", "kind", "ydim", "xdim", "yhint",
+                                                          "xhint")} for e in series]}
+    ck.tables.plots.append(info)
+    pid = len(ck.tables.plots) - 1
+    return I.SPlot(pid, series)
+
+
+def _plot_side(ck, node, ctx):
+    return ck.expr(node, ctx, allow_func=True)
+
+
+preferred_unit  # noqa: re-export
