@@ -92,6 +92,8 @@ class Runtime:
             u = display_unit(f["rdim"], f["hint"])
             vals = [(p[i] - u.offset) / u.factor for i in range(n)]
             sf = f["sf"]
+            if sf is not None and not f["direct"]:
+                sf = max(sf, 2)            # same rule as single numbers (DECISIONS D11)
             if n > 12:
                 shown = [format_number(x, sf or 4, trim=sf is None) for x in vals[:5]] + ["…"] + \
                         [format_number(x, sf or 4, trim=sf is None) for x in vals[-3:]]
@@ -264,8 +266,8 @@ class Runtime:
         addr = self.engine_ref.get_function_address("lam." + info["model"])
         model = ctypes.CFUNCTYPE(None, DPTR, ctypes.POINTER(DPTR), c_int64, DPTR)(addr)
         cols = [data[c] for c in info["cols"]]
-        y = data[info["ycol"]]
-        n = len(y)
+        n = len(data[0]) if data else 0
+        y = np.zeros(n)          # the model returns (model - left side), fitted to zero
         np_ = len(info["params"])
         colptrs = (DPTR * max(1, len(cols)))(*[c.ctypes.data_as(DPTR) for c in cols])
         out = np.zeros(n)
@@ -330,8 +332,9 @@ class Runtime:
         if len(series) > 1:
             ax.legend()
         ax.grid(True, alpha=0.3)
-        if all(s["kind"] == "solxy" for s in info["series"]):
-            ax.set_aspect("equal", adjustable="datalim")
+        if all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
+               for s in info["series"]):
+            ax.set_aspect("equal", adjustable="datalim")     # orbits look round
         fig.tight_layout()
         full = info["full"]
         d = os.path.dirname(full)

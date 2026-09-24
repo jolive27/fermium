@@ -758,8 +758,8 @@ class Parser:
                 self.warned_units.add(f.name)
                 self.diags.warn(f"'{f.name}' right after a number is the unit {f.name}, not your variable {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
-                                hint=f"that's usually what you want; to multiply by the variable write 2*{f.name}, "
-                                     f"and to make the unit explicit write [{f.name}]")
+                                hint=f"to multiply by the variable write 2*{f.name}; to make the unit explicit write "
+                                     f"[{f.name}]")
 
     def _warn_unit_then_term(self, e):
         """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
@@ -884,6 +884,12 @@ class Parser:
         if t.kind == "NAME":
             if t.value == "d" and self._is_deriv_op():
                 return self.deriv_op()
+            if t.value == "∞" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
+                    self.peek().value not in self.known:
+                self.next()
+                n = self.span(A.Name("∞"), t)
+                u = self.unit_expr(explicit=False)
+                return self.span(A.Quantity(n, u), t)
             self.next()
             if t.value == "end" and self.in_index():
                 return self.span(A.End(), t)
@@ -1157,7 +1163,9 @@ class Parser:
         del first
         while True:
             t = self.tok
-            if t.kind == "OP" and t.value == "/" and (unit_name_here(1) or (
+            spaced_var = (not explicit and t.kind == "OP" and t.value == "/" and t.ws_before and
+                          self.peek().kind == "NAME" and self.peek().value in self.known)
+            if t.kind == "OP" and t.value == "/" and not spaced_var and (unit_name_here(1) or (
                     self.peek().kind == "OP" and self.peek().value == "(" and (
                         explicit or unit_name_here(2)))):
                 self.next()

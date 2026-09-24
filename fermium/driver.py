@@ -53,6 +53,49 @@ def optimize(llmod, tm, level=3):
     mpm.run(llmod, pb)
 
 
+class _CtrlC:
+    """While compiled code runs, Python never gets control back, so its Ctrl+C handling can't work.
+    Install a C-level SIGINT handler (a ctypes callback) that says what happened and exits."""
+
+    def __init__(self, out):
+        self.out = out
+        self.prev = None
+        self.cb = None
+
+    def __enter__(self):
+        import signal
+        if not hasattr(signal, "SIGINT") or os.name == "nt":
+            return self
+        try:
+            import threading
+            if threading.current_thread() is not threading.main_thread():
+                return self
+            libc = ctypes.CDLL(None)
+            HANDLER = ctypes.CFUNCTYPE(None, ctypes.c_int)
+
+            def stop(signum):
+                try:
+                    _sys.stdout.flush()
+                except Exception:
+                    pass
+                os.write(2, b"\nstopped by Ctrl+C\n")
+                os._exit(130)
+            self.cb = HANDLER(stop)
+            self.prev = signal.getsignal(signal.SIGINT)
+            libc.signal.restype = ctypes.c_void_p
+            libc.signal.argtypes = [ctypes.c_int, HANDLER]
+            libc.signal(signal.SIGINT, self.cb)
+        except (OSError, AttributeError, ValueError):
+            self.prev = None
+        return self
+
+    def __exit__(self, *exc):
+        import signal
+        if self.prev is not None:
+            signal.signal(signal.SIGINT, self.prev)
+        return False
+
+
 class Program:
     """A compiled program, ready to run."""
 
@@ -100,7 +143,8 @@ class Program:
         rt.error = None
         rt.error_line = None
         t0 = time.perf_counter()
-        code = self.entry()
+        with _CtrlC(self.out):
+            code = self.entry()
         self.timings["run"] = time.perf_counter() - t0
         if rt.line:
             self.out.write(" ".join(rt.line) + "\n")
@@ -184,7 +228,8 @@ class ReplSession:
         self.runtime.error = None
         for w in self.diags.warnings:
             self.out.write(w.format(text) + "\n")
-        code = fn()
+        with _CtrlC(self.out):
+            code = fn()
         if self.runtime.line:
             self.out.write(" ".join(self.runtime.line) + "\n")
             self.runtime.line = []

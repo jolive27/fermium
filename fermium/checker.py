@@ -404,7 +404,7 @@ class Checker(C.DiffContext):
                 if isinstance(v, I.IStr):
                     items.append(("text", None, self.text(v.value)))
                 else:
-                    raise self.err("can't print this", a)
+                    items.append(("textvar", v, None))
             elif isinstance(v.ty, DataTy):
                 info = v.ty.info
                 cols = ", ".join(f"{c['name']} [{c['unit'].name}]" if c['unit'].name != "1" else c['name']
@@ -604,7 +604,9 @@ class Checker(C.DiffContext):
         return r
 
     def e_Str(self, e, ctx):
-        return I.IStr(e.value, STR)
+        r = I.IStr(e.value, STR)
+        r.text_id = self.text(e.value)
+        return r
 
     def e_Bool(self, e, ctx):
         return I.IBool(e.value, BOOL)
@@ -737,6 +739,9 @@ class Checker(C.DiffContext):
                             hint="see the list of units in docs/reference.md §15")
         if hint is None and getattr(self, "_calling", False):
             hint = f"define the function first, e.g.  {name}(x) = 2 x"
+        if name == "%":
+            return self.err("% is the percent unit in Fermium (5 % = 0.05)", e,
+                            hint="for the remainder of a division use mod(n, 2)")
         if name in BUILTINS:
             return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
         return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
@@ -1041,6 +1046,7 @@ class Checker(C.DiffContext):
         r = I.IList(items, ListTy(dim))
         r.hint = items[0].hint if items else None
         r.sf = self._minsf(*items) if items else None
+        r.direct = bool(items) and all(getattr(it, "direct", False) for it in items)
         return r
 
     def e_Load(self, e, ctx):
@@ -1497,7 +1503,9 @@ class Checker(C.DiffContext):
             if not isinstance(a.ty, ListTy):
                 raise self.err(f"{name} needs a list, but got {type_desc(a.ty, self.U)}", e.args[0])
             if name == "len":
-                return self._bi("len", args, NumTy(DIMLESS), args)
+                r = self._bi("len", args, NumTy(DIMLESS), args)
+                r.sf = None    # a count is exact
+                return r
             if name in ("sum", "mean", "first", "last"):
                 r = self._bi(name, args, NumTy(a.ty.dim), args)
                 r.hint = a.hint
@@ -1710,7 +1718,9 @@ class Checker(C.DiffContext):
         self.need_num(lo, e.lo, "the lower limit")
         self.need_num(hi, e.hi, "the upper limit")
         self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the limits of this integral are {self.desc(lo.ty.dim)} and "
-                      f"{self.desc(hi.ty.dim)}; they need the same units", e)
+                      f"{self.desc(hi.ty.dim)}; they need the same units", e,
+                      hint="if you divide or multiply the integral by something, put the integral in parentheses: "
+                           "(∫ ... dx from a to b) / M")
         lam = I.ILambda("scalar", self.fresh_name("integrand"))
         lam.locals = []
         scope = Scope(ctx.scope)

@@ -156,3 +156,17 @@ def test_unknown_command():
     r = fermium("frobnicate")
     assert r.returncode != 0
     assert "Traceback" not in r.stderr
+
+
+def test_ctrl_c_stops_an_infinite_loop(tmp_path):
+    import signal
+    import time
+    p = tmp_path / "loop.fm"
+    p.write_text("x = 1\nwhile x > 0\n    x += 1\n")
+    proc = subprocess.Popen([sys.executable, "-m", "fermium.cli", "run", str(p)], stderr=subprocess.PIPE,
+                            stdout=subprocess.PIPE, text=True)
+    time.sleep(1.5)
+    proc.send_signal(signal.SIGINT)
+    _, err = proc.communicate(timeout=10)
+    assert "stopped by Ctrl+C" in err
+    assert "Traceback" not in err

@@ -1,5 +1,7 @@
 # Bugs and confusing behaviour found while writing the bootcamp
 
+**Status (bootcamp agent, re-checked at the end):** B1–B14 were reported fixed by the compiler owner; I re-ran the repros and B1, B2, B3, B4, B5, B6, B7, B8, B9 (partly: `pritn` and `furlongs` are fixed, but `print foo(3)` now hints "did you mean floor?" and `omega = 2; print omegat` still gives the generic `omegat = 1.0 m` hint), B10 (line numbers, `(` errors, reserved words), B11, B12, B13 and B14 now behave as expected. **Still open:** B15 (Ctrl+C), B16, B17 (`%` hint), B18 (`20 m/s / g` still silently divides by grams: prints `20 m/(s g)`, no warning), B19, B20, B21, B22, B23, B24, B25, B26, B27, B28, B29.
+
 Written by the bootcamp agent. Each entry: minimal repro, expected, actual. Workarounds used in the lessons are noted.
 
 ## B1. `x^2 L` : a number in an exponent grabs the following name as a unit (ASCII spelling breaks)

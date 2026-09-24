@@ -866,6 +866,8 @@ class FuncGen:
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
                 b.call(ex["fm_print_text"], [i64(fid)])
+            elif kind == "textvar":
+                b.call(ex["fm_print_text"], [self.expr(payload)])
         b.call(ex["fm_print_end"], [])
 
     def s_SSolve(self, s):
@@ -965,7 +967,7 @@ class FuncGen:
         return ir.Constant(I1, 1 if e.value else 0)
 
     def e_IStr(self, e):
-        return i64(0)
+        return i64(getattr(e, "text_id", 0))
 
     def e_IVar(self, e):
         return self.load(e.sym)

@@ -225,10 +225,11 @@ def check_fit(ck, s: A.Fit, ctx):
     cols = data.ty.info["columns"]
     colnames = [c["name"] for c in cols]
     lhs, rhs = s.model.lhs, s.model.rhs
-    if not isinstance(lhs, A.Name) or lhs.name not in colnames:
-        raise ck.err(f"the left side of a fit must be a column of the data ({', '.join(colnames)})", lhs)
+    lhs_names = A.free_names(lhs)
+    if not any(n in colnames for n in lhs_names):
+        raise ck.err(f"the left side of a fit must use a column of the data ({', '.join(colnames)})", lhs)
     used = []
-    for n in A.free_names(rhs):
+    for n in A.free_names(rhs) + [x for x in lhs_names if x not in colnames]:
         if n not in used:
             used.append(n)
     guess_names = [g for g, _ in s.guesses]
@@ -264,7 +265,7 @@ def check_fit(ck, s: A.Fit, ctx):
         scope.names[n] = sym
     col_used = []
     for i, c in enumerate(cols):
-        if c["name"] in used or c["name"] == lhs.name:
+        if c["name"] in used or c["name"] in lhs_names:
             sym = I.Sym(c["name"], NumTy(c["unit"].dim), "local", lam)
             sym.assigned = True
             sym.col_index = i
@@ -273,12 +274,16 @@ def check_fit(ck, s: A.Fit, ctx):
             col_used.append(i)
     body = ck.expr(rhs, lctx)
     ck.need_num(body, rhs, "the model")
-    ydim = [c for c in cols if c["name"] == lhs.name][0]["unit"].dim
+    lv = ck.expr(lhs, lctx)
+    ck.need_num(lv, lhs, "the left side of the fit")
+    ydim = lv.ty.dim
+    lname = C.to_source(lhs)
     if not ck.U.unify(body.ty.dim, ydim):
-        raise ck.err(f"the model gives {ck.desc(body.ty.dim)} but {lhs.name} is {ck.desc(ydim)}", s.model,
+        raise ck.err(f"the model gives {ck.desc(body.ty.dim)} but {lname} is {ck.desc(ydim)}", s.model,
                      hint="check the formula: both sides of the fit equation need the same units")
-    lam.body = body
-    lam.ycol = colnames.index(lhs.name)
+    # residual = model - left side; the fit drives it to zero
+    lam.body = I.IBin("-", body, lv, NumTy(ydim))
+    lam.ycol = -1
     ck.new_lambdas.append(lam)
     ck.all_lambdas.append(lam)
     # initial guesses
@@ -310,12 +315,17 @@ def check_fit(ck, s: A.Fit, ctx):
         sym.assigned = True
         sym.sf = 3
         sym.direct = False
+        d = ck.U.norm(pdims[n])
+        if d.concrete:     # show it in the data's unit if a column has the same dimension (τ in min)
+            for c in cols:
+                if c["unit"].dim == d.const and c["unit"].name not in ("1",) and sym.hint is None:
+                    sym.hint = c["unit"]
         out_syms.append(sym)
     fit_id = len(ck.tables.fits)
     ck.tables.fits.append({"params": params, "dims": [pdims[n] for n in params], "model": lam.name,
                            "text": C.to_source(s.model.lhs) + " = " + C.to_source(s.model.rhs),
                            "ycol": lam.ycol, "cols": [sym.col_index for sym in lam.col_syms],
-                           "ydim": ydim, "yname": lhs.name, "path": data.ty.info["path"],
+                           "ydim": ydim, "yname": lname, "path": data.ty.info["path"],
                            "columns": cols})
     return I.SFit(fit_id, data, out_syms, guesses, lam)
 
