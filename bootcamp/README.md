@@ -45,7 +45,7 @@ Extras:
 
 ## How to read the examples
 
-A grey box marked as Fermium code is a complete program. You can save it in a file and run it. Right after it you will usually see a box labelled *Output*, showing exactly what Fermium printed when we ran it:
+A grey box of Fermium code is a complete program: you can save it in a file and run it. Right after it you'll usually see a second, plain box showing exactly what Fermium printed when we ran it:
 
 ```fermium
 print 2 m + 30 cm
@@ -67,3 +67,5 @@ Every Fermium example in this course is run automatically by Fermium's test suit
 ## A note for teachers and maintainers
 
 Each ```` ```fermium ```` block in `bootcamp/*.md` and `bootcamp/solutions/*.md` is executed by `tests/test_docs.py` (with the markdown file's folder as the working folder, so `load "data/pendulum.csv"` works). Blocks that deliberately fail are written as plain ```` ``` ```` blocks. Run `python3 -m pytest -q tests/test_docs.py` after editing.
+
+The output boxes are real program output. After a change to Fermium or to an example, run `python3 bootcamp/update_outputs.py` to re-run every example and refresh them (an output box is any plain block after a `<!-- output -->` marker; a deliberately failing example is marked `<!-- run as name.fm -->`). Review the diff: a changed output can reveal a regression, or prose that no longer matches.

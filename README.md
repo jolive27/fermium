@@ -1,0 +1,142 @@
+# Fermium
+
+**Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
+
+```
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print g                 # 9.70 m/s²
+print g in ft/s²        # 31.8 ft/s²
+
+y = L + T               # line 6: can't add length [m] to time [s]
+```
+
+Fermium is a small programming language for physicists.
+- **Units are part of the language.** The compiler checks them *before the program runs*, and they cost nothing at run time: they are erased before code generation.
+- **Calculus is built in:** `x'`, `d/dt`, `∫ … dx from a to b`, and `solve m x'' = -k x with …`.
+- **Programs compile to native code** through LLVM (via llvmlite).
+- **Errors are one line in physics terms**, with a caret and a hint.
+- **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
+
+> Status: a first version built in one night. See [MORNING_REPORT.md](MORNING_REPORT.md) for what works, what's partial, and the known issues.
+
+## Install
+
+```
+git clone <this repository>
+cd fermium
+python3 -m pip install -e .      # needs Python 3.10+; installs llvmlite and numpy
+python3 -m pip install scipy sympy matplotlib   # for fit, symbolic integrals and plot
+fermium doctor                   # checks everything and explains fixes
+```
+
+New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac, step by step.
+
+## A 30-second tour
+
+```fermium
+# Mass on a spring
+k = 50 N/m
+m = 0.5 kg
+ω = √(k/m)
+print ω in rad/s                      # 10 rad/s
+
+A = 0.1 m
+x(t) = A cos(ω t)
+v = d/dt x
+print v                               # v(t) = -A ω sin(ω t)   [m/s, for t in s]
+
+F(x) = k x
+W = ∫ F(x) dx from 0 m to 0.2 m
+print W                               # 1.0 J
+
+b = 0.2 kg/s
+solve m x'' = -k x - b x'
+  with x(0) = 0.1 m, x'(0) = 0 m/s
+  for t from 0 s to 5 s
+print x(5 s)                          # 0.035 m
+```
+
+Also:
+- `data = load "pendulum.csv"` reads a CSV whose headers carry units, like `L [m], T [s]`.
+- `fit T = 2π √(L / g) to data` fits the model and reports g in m/s².
+- `plot x vs t` saves a PNG with labelled axes.
+- Vectors: `<3, 4> m/s`, `|v|`, `a · b`, `a × b`. ODEs can have vector unknowns.
+
+## Gallery
+
+Every example program in [`examples/`](examples) is commented and tested. Here are some of their plots.
+
+**Kepler orbits** ([04_kepler_orbit.fm](examples/04_kepler_orbit.fm)):
+```
+solve x'' = -GM x / (x² + y²)^(3/2),
+      y'' = -GM y / (x² + y²)^(3/2)
+  with x(0) = r_peri, y(0) = 0 m,
+       x'(0) = 0 m/s, y'(0) = v_peri
+  for t from 0 s to 1 yr
+plot y in AU vs x in AU, comet_y in AU vs comet_x in AU to "gallery/kepler_orbit.png"
+```
+![Kepler orbits](examples/gallery/kepler_orbit.png)
+
+**Binding energy per nucleon**, from the semi-empirical mass formula ([09_binding_energy.fm](examples/09_binding_energy.fm)):
+```
+B(Z, A) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + pairing(Z, A)
+...
+plot BperA in MeV vs As to "gallery/binding_energy.png"
+```
+![Binding energy per nucleon](examples/gallery/binding_energy.png)
+
+**The Bateman decay chain Mo-99 → Tc-99m → Tc-99** ([08_bateman_chain.fm](examples/08_bateman_chain.fm)):
+```
+solve N_Mo' = -λ_Mo N_Mo,
+      N_Tc' = λ_Mo N_Mo - λ_Tc N_Tc,
+      N_99' = λ_Tc N_Tc
+  with N_Mo(0) = N0, N_Tc(0) = 0, N_99(0) = 0
+  for t from 0 hr to 240 hr
+plot N_Mo vs t, N_Tc vs t, N_99 vs t to "gallery/bateman_chain.png"
+```
+![Bateman chain](examples/gallery/bateman_chain.png)
+
+**Planck's law for the Sun** ([06_blackbody.fm](examples/06_blackbody.fm)):
+```
+flux = π * ∫ B(λ) dλ from 0 nm to ∞        # equals σT⁴ to 10 digits
+plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
+```
+![Blackbody spectrum](examples/gallery/blackbody.png)
+
+## Speed
+
+Measured on the same machine, median of repeated runs. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md).
+
+| Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
+|---|---|---|---|
+| N-body, 1M steps | ~1.3× Julia | 1× | ~55× Julia |
+| Damped spring, RK4, 1M steps | ~1.9× Julia | 1× | ~21× Julia |
+| Blackbody integrals | ~1.3× Julia | 1× | ~23× Julia |
+| Loop with units | ~1.05× Julia | 1× | ~80× Julia |
+
+Counting startup and compilation, Fermium programs finish sooner than Julia's (about 0.1–0.6 s against 1–3 s), because Julia spends that time JIT-compiling.
+
+## Documentation
+- [Language reference](docs/reference.md)
+- [Rosetta page](docs/rosetta.md): the same programs in Fermium, Julia and Python
+- [Design decisions](DECISIONS.md): why the language is the way it is
+- [Bootcamp](bootcamp/README.md): a course for people who have never programmed
+- [Cheat sheet](bootcamp/CHEATSHEET.md)
+- [VS Code extension](editors/vscode/README.md)
+
+## Development
+
+```
+./check.sh           # lint + all tests (including every code block in the docs and bootcamp) + all examples
+python3 benchmarks/run.py
+```
+
+Project layout:
+- `fermium/`: the compiler.
+  - `lexer.py`, `parser.py`, `checker.py` (units and types), `calculus.py`, `solve.py`
+  - `codegen_llvm.py` (the LLVM backend and numeric kernels)
+  - `runtime/` (printing, plots, data, fits)
+  - `repl.py`, `fmt.py`, `cli.py`
+- `tests/`: pytest suites (see MORNING_REPORT.md for the current counts).

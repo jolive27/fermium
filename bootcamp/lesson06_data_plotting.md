@@ -74,7 +74,7 @@ plot data.T vs data.L to "pendulum_data.png"
 plot saved to pendulum_data.png
 ```
 
-`plot Y vs X` puts Y on the vertical axis and X on the horizontal axis. `to "pendulum_data.png"` chooses the file name (without it, Fermium makes up a name like `T_vs_L.png`). The picture is saved in the same folder as your program. Open it by double-clicking it in Finder, or from the Terminal with:
+`plot Y vs X` puts Y on the vertical axis and X on the horizontal axis. `to "pendulum_data.png"` chooses the file name (without it, Fermium makes up a name, here `data_T_vs_data_L.png`). The picture is saved in the same folder as your program. Open it by double-clicking it in Finder, or from the Terminal with:
 
 ```
 open pendulum_data.png
