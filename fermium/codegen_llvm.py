@@ -112,6 +112,7 @@ class ModuleGen:
         e("fm_column", I64, [I64, I64, F64PP])
         e("fm_fit", VOID, [I64, I64, F64P])
         e("fm_sort", VOID, [F64P, I64])
+        e("fm_clock", F64, [])
         e("malloc", I8P, [I64])
         e("realloc", I8P, [I8P, I64])
         e("drand48", F64, [])
@@ -1216,6 +1217,8 @@ class FuncGen:
             return b.call(self.mg.libm("tgamma"), [b.fadd(args[0], f64(1))])
         if name == "rand":
             return b.call(self.mg.externs["drand48"], [])
+        if name == "clock":
+            return b.call(self.mg.externs["fm_clock"], [])
         if name == "len":
             return b.sitofp(b.extract_value(args[0], 1), F64)
         if name in ("sum", "mean", "std", "min_list", "max_list", "first", "last"):

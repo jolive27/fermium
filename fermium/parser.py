@@ -293,14 +293,25 @@ class Parser:
         t = self.next()
         items = []
         if self.tok.kind not in ("NEWLINE", "EOF", "DEDENT"):
-            items.append(self.expr_full())
+            items.append(self.print_item())
             while self.at_op(","):
                 self.next()
-                items.append(self.expr_full())
+                items.append(self.print_item())
         if self.at_kw("where"):
             binds = self.where_bindings()
             items = [A.Where(it, binds).at(it) for it in items]
         return self.span(A.Print(items), t)
+
+    def print_item(self):
+        t = self.tok
+        e = self.expr_full()
+        if self.at_kw("to") and self.peek().kind == "NUM" and self.peek(2).kind == "NAME" and \
+                self.peek(2).value in ("digits", "digit"):
+            self.next()
+            n = self.next()
+            self.next()
+            e = self.span(A.Digits(e, int(n.value)), t)
+        return e
 
     def plot_stmt(self):
         t = self.next()
@@ -344,6 +355,7 @@ class Parser:
         initial = []
         var = lo = hi = step = None
         method = None
+        tol_node = [None]
         if self.tok.kind != "NEWLINE":
             eqs.append(self.equation())
             while self.at_op(",") or self.at_kw("and"):
@@ -364,12 +376,18 @@ class Parser:
                 vt = self.expect_name("the time variable, e.g. 'for t from 0 s to 5 s'")
                 var = vt.value
                 self.expect_kw("from")
+                saved = self.no_juxt_names
+                self.no_juxt_names = saved | {"tolerance", "using", "method"}
                 lo = self.expr()
                 self.expect_kw("to")
                 hi = self.expr()
                 if self.at_kw("step"):
                     self.next()
                     step = self.expr()
+                self.no_juxt_names = saved
+                if self.tok.kind == "NAME" and self.tok.value == "tolerance":
+                    self.next()
+                    tol_node[0] = self.expr()
                 if self.tok.kind == "NAME" and self.tok.value in ("using", "method"):
                     self.next()
                     method = self.expect_name("a method name (rk4 or rk45)").value
@@ -400,7 +418,7 @@ class Parser:
         if var is None:
             raise FermiumError("solve needs a range for the independent variable", t.line, t.col, 5,
                                hint="add e.g.  for t from 0 s to 10 s")
-        s = A.Solve(eqs, initial, var, lo, hi, step, method)
+        s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
             for n in A.walk(eq.lhs):
@@ -644,8 +662,23 @@ class Parser:
             return self.unary()
         return self.juxt()
 
+    def _bracket_is_unit(self):
+        """At '[': is this a unit in brackets ([m/s]) rather than a list ([1, 2])?"""
+        j = self.i + 1
+        t = self.toks[j]
+        if t.kind == "NAME" and is_unit_name(t.raw):
+            k = self._match(self.i)
+            if k is None:
+                return True
+            return not any(self.toks[m].kind == "OP" and self.toks[m].value == "," for m in range(self.i, k))
+        if t.kind == "NUM" and t.value == 1 and self.toks[j + 1].kind == "OP" and self.toks[j + 1].value in ("/", "]"):
+            return True
+        return False
+
     def _starts_term(self):
         t = self.tok
+        if t.kind == "OP" and t.value == "[" and t.ws_before and not self._bracket_is_unit():
+            return True
         if t.kind == "NUM":
             return True
         if t.kind == "NAME":
@@ -662,7 +695,13 @@ class Parser:
     def juxt(self):
         t = self.tok
         e = self.power()
-        while self._starts_term():
+        while True:
+            if self.at_op("[") and self.tok.ws_before and self._bracket_is_unit():
+                u = self.bracket_unit()
+                e = self.span(A.Quantity(e, u, bracket=True), t)
+                continue
+            if not self._starts_term():
+                break
             if self.tok.kind == "NUM" and not self.tok.ws_before:
                 # `x2` is an identifier; `(a)2` is odd -- still multiply
                 pass
@@ -725,7 +764,7 @@ class Parser:
                 idx = self.expr()
                 self.expect_op("]")
                 e = self.span(A.Index(e, idx), t)
-            elif self.at_op("[") and self.tok.ws_before and not isinstance(e, A.Num):
+            elif self.at_op("[") and self.tok.ws_before and not isinstance(e, A.Num) and self._bracket_is_unit():
                 u = self.bracket_unit()
                 e = self.span(A.Quantity(e, u, bracket=True), t)
             elif self.at_op(".") and self.peek().kind == "NAME" and not self.tok.ws_before:
@@ -745,7 +784,7 @@ class Parser:
             n = A.Num(t.value, t.sigfigs, t.digit)
             n.line, n.col, n.length = t.line, t.col, len(t.raw)
             if t.digit:
-                if self.at_op("[") and self.tok.ws_before or self.at_op("[") and not self.tok.ws_before:
+                if self.at_op("[") and self._bracket_is_unit():
                     u = self.bracket_unit()
                     return self.span(A.Quantity(n, u, bracket=True), t)
                 if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():

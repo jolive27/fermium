@@ -1,0 +1,35 @@
+# 05 — Escape velocity
+#
+# How fast must you throw something upward so that it never comes back?
+# Its kinetic energy ½ m v² has to pay for climbing all the way out of the
+# gravity well, which costs G M m / R. The mass m cancels:
+#
+#     v_esc = √(2 G M / R)
+#
+# We compute it for several bodies, check the energy argument with an actual
+# integral of the gravitational force out to infinity, and find the radius at
+# which v_esc would reach the speed of light (the Schwarzschild radius, 2GM/c²).
+
+v_esc(M, R) = √(2 G M / R)
+
+print "Earth:  ", v_esc(M_earth, R_earth) in km/s
+print "Moon:   ", v_esc(7.342e22 kg, 1737.4 km) in km/s
+print "Mars:   ", v_esc(6.417e23 kg, 3389.5 km) in km/s
+print "Jupiter:", v_esc(1.898e27 kg, 69911 km) in km/s
+print "Sun:    ", v_esc(M_sun, R_sun) in km/s
+
+# (We call it W_esc, not W: `2 W` would mean 2 watts.)
+# Work needed to lift 1 kg from the Earth's surface to infinity
+F(r) = G M_earth (1 kg) / r²
+W_esc = ∫ F(r) dr from R_earth to ∞
+print "work to escape, per kg:", W_esc in MJ
+print "speed from ½ v² = W/(1 kg):", √(2 W_esc / (1 kg)) in km/s
+
+# Escape from a neutron star: 1.4 solar masses squeezed into a 12 km ball
+v_ns = v_esc(1.4 M_sun, 12 km)
+print "neutron star:", v_ns in km/s, "=", v_ns / c, "of light speed"
+
+# The Schwarzschild radius: where the escape speed equals c
+r_s(M) = 2 G M / c²
+print "Schwarzschild radius of the Sun:  ", r_s(M_sun) in km
+print "Schwarzschild radius of the Earth:", r_s(M_earth) in mm

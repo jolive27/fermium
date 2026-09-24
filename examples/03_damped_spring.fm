@@ -1,0 +1,40 @@
+# 03 — A damped mass on a spring
+#
+# A mass m hangs on a spring of stiffness k and moves through a fluid that
+# pushes back with a force proportional to the speed (b x'). Newton's second
+# law gives the damped harmonic oscillator:
+#
+#     m x'' = -k x - b x'
+#
+# Without damping it would oscillate at ω₀ = √(k/m) forever. With a little
+# damping the swing dies away like exp(-γ t) with γ = b / (2*m)        # careful: `2m` would mean 2 metres!, while it still
+# oscillates at ω_d = √(ω₀² − γ²). We solve the equation numerically and
+# check it against this exact solution.
+
+k = 50 N/m          # (defined before m, so `N/m` is clearly newtons per metre)
+m = 0.5 kg
+b = 0.2 kg/s
+
+ω0 = √(k/m)
+γ = b / (2*m)        # careful: `2m` would mean 2 metres!
+ω_d = √(ω0² - γ²)
+print "natural frequency ω0 =", ω0 in rad/s
+print "damping rate γ =", γ
+print "quality factor Q =", ω0 / (2γ)
+
+solve m x'' = -k x - b x'
+  with x(0) = 10 cm, x'(0) = 0 cm/s     # cm avoids the unit m / mass m clash
+  for t from 0 s to 10 s
+
+# Exact solution for the same starting conditions
+x_exact(t) = 10.0 cm * exp(-γ t) * (cos(ω_d t) + γ/ω_d * sin(ω_d t))
+
+print "x(5 s) numerical:", x(5 s), "  exact:", x_exact(5 s)
+print "speed at 1 s:", x'(1 s)
+
+# Energy slowly leaks out of the oscillator
+E(t) = ½ k x(t)² + ½ m x'(t)²
+print "energy at start:", E(0 s), "  after 10 s:", E(10 s)
+print "fraction left:", E(10 s)/E(0 s), " (expected about exp(-2γ t) =", exp(-2γ * 10 s), ")"
+
+plot x vs t to "gallery/damped_spring.png"

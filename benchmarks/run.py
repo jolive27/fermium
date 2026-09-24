@@ -128,7 +128,10 @@ def parse_output(text: str, strings=None):
     """Parse result/timing lines; if `strings` is a dict, also keep the printed text."""
     results, timings = {}, {}
     strings = {} if strings is None else strings
+    sup = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
     for line in text.strip().splitlines():
+        # Fermium prints 6.674×10⁻¹¹; normalize to 6.674e-11
+        line = re.sub(r"×10([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)", lambda m: "e" + m.group(1).translate(sup), line)
         parts = line.split()
         if not parts:
             continue

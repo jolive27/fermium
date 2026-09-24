@@ -7,6 +7,7 @@ import ctypes
 import math
 import os
 import sys
+import time
 
 import llvmlite.binding as llvm
 
@@ -165,6 +166,7 @@ class Runtime:
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
             "fm_fit": CB(None, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
+            "fm_clock": CB(c_double)(time.perf_counter),
         }
         for name, cb in self.callbacks.items():
             llvm.add_symbol(name, ctypes.cast(cb, c_void_p).value)

@@ -176,6 +176,11 @@ def check_solve(ck, s: A.Solve, ctx):
         ctx.scope.names[x] = SolView(sol_sym, base, base + n - 1, dims[x], tdim, t, x)
         base += n
     rtol = 1e-9
+    if s.tolerance is not None:
+        tv = ck.expr(s.tolerance, ctx)
+        if not isinstance(tv, I.IConst) or not (0 < tv.value < 1):
+            raise ck.err("the tolerance must be a plain number like 1e-8", s.tolerance)
+        rtol = tv.value
     return I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
 
 

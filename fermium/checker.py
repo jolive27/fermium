@@ -25,7 +25,7 @@ SAME1 = {"abs", "floor", "ceil", "round"}
 LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "reverse", "sort"}
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
-    "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz",
+    "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock",
 }
 
 
@@ -874,6 +874,14 @@ class Checker(C.DiffContext):
         v.direct = False
         return v
 
+    def e_Digits(self, e, ctx):
+        v = self.expr(e.value, ctx)
+        if e.digits < 1 or e.digits > 17:
+            raise self.err("the number of digits must be between 1 and 17", e)
+        v.sf = e.digits
+        v.direct = True
+        return v
+
     def e_Where(self, e, ctx):
         scope = Scope(ctx.scope)
         c2 = ctx.child(scope)
@@ -1363,6 +1371,10 @@ class Checker(C.DiffContext):
             if n == 2:
                 args.append(I.IConst(1, NumTy(args[0].ty.dim)))
             return self._bi(name, args, ListTy(args[0].ty.dim), args)
+        if name == "clock":
+            if n != 0:
+                raise self.err("clock() takes no arguments", e)
+            return self._bi(name, args, NumTy(TIME_DIM), args)
         if name == "rand":
             if n != 0:
                 raise self.err("rand() takes no arguments", e)

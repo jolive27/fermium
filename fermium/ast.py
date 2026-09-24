@@ -178,6 +178,13 @@ class Convert(Node):
 
 
 @dataclass(eq=False)
+class Digits(Node):
+    """`print x to 9 digits`"""
+    value: Node
+    digits: int
+
+
+@dataclass(eq=False)
 class Load(Node):
     path: str
 
@@ -259,6 +266,7 @@ class Solve(Node):
     hi: Node
     step: Node | None = None
     method: str | None = None
+    tolerance: Node | None = None
 
 
 @dataclass(eq=False)
@@ -353,7 +361,7 @@ def children(n):
         return list(n.items)
     if isinstance(n, IfExpr):
         return [n.cond, n.then, n.other]
-    if isinstance(n, Convert):
+    if isinstance(n, (Convert, Digits)):
         return [n.value]
     if isinstance(n, Where):
         return [n.value] + [v for _, v in n.bindings]

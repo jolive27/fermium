@@ -1,0 +1,12 @@
+# Planck's law integrated over frequency for 1000 temperatures (1000 K .. 10000 K).
+B(ν, T) = 2h ν³/c² / (exp(h ν/(k_B T)) - 1)
+t0 = clock()
+total = 0 W/m²
+for T in linspace(1000 K, 10000 K, 1000)
+    total += ∫ B(ν, T) dν from 1e11 Hz to 1e16 Hz
+t1 = clock()
+Tsun = 5778 K
+ratio = (∫ B(ν, Tsun) dν from 1e11 Hz to 1e16 Hz) / (σ Tsun⁴ / π)
+print "sum_integrals", total / (1 W/m²) to 11 digits
+print "ratio_5778K", ratio to 13 digits
+print "TIME_INNER", (t1 - t0) / (1 s)
