@@ -45,15 +45,10 @@ print "aphelion distance:", -x(T/2) in AU
 
 # A comet-like orbit for comparison: same start, but only 60% of the speed.
 # It falls toward the Sun, whips round it and climbs back out: a long ellipse.
-solve u'' = -GM u / (u² + w²)^(3/2),
-      w'' = -GM w / (u² + w²)^(3/2)
-  with u(0) = r_peri, w(0) = 0 m,
-       u'(0) = 0 m/s, w'(0) = 0.6 v_peri
+solve comet_x'' = -GM comet_x / (comet_x² + comet_y²)^(3/2),
+      comet_y'' = -GM comet_y / (comet_x² + comet_y²)^(3/2)
+  with comet_x(0) = r_peri, comet_y(0) = 0 m,
+       comet_x'(0) = 0 m/s, comet_y'(0) = 0.6 v_peri
   for t from 0 s to 1 yr
 
-# `plot` labels axes in SI units (metres); dividing by 1 AU plots numbers in AU.
-earth_x = values(x) / (1 AU)
-earth_y = values(y) / (1 AU)
-comet_x = values(u) / (1 AU)
-comet_y = values(w) / (1 AU)
-plot earth_y vs earth_x, comet_y vs comet_x to "gallery/kepler_orbit.png"
+plot y in AU vs x in AU, comet_y in AU vs comet_x in AU to "gallery/kepler_orbit.png"

@@ -63,4 +63,4 @@ print "the peak of the curve is at A =", best_A, "with B/A =", best
 Q_fission = 2 * B(46, 117) - B(92, 235)
 print "fission of U-235 releases about", Q_fission in MeV
 
-plot BperA vs As to "gallery/binding_energy.png"
+plot BperA in MeV vs As to "gallery/binding_energy.png"

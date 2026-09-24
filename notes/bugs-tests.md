@@ -113,3 +113,33 @@ print ∂/∂x g     # fmt --ascii -> "print partial/partialx g"   (doesn't pars
 π and ∂ are single-character tokens, so `πf` / `∂x` need a space when spelled `pi` / `partial`.
 Expected: `2pi f`/`2 pi f` and `partial/partial x`. Test: `test_fmt.py::test_ascii_pi_before_name_keeps_meaning`,
 `test_ascii_partial_keeps_meaning`.
+
+## B13. REPL: a block ends as soon as it parses, so if/else and multi-line functions can't be typed
+```
+fm> if g > 1 m/s²
+...     print "big"
+fm> else                  <- the REPL already ran the if; 'else' is now an error ("didn't expect 'else'")
+```
+Same for a function with two body lines:
+```
+fm> f(x) =
+...     y = 2 x          <- the REPL runs "f(x) =\n    y = 2 x" here: "the function f never returns a value"
+```
+`repl.needs_more` stops reading once the text parses. Expected (like Python): after a line that
+opens a block, keep reading `...` lines until an empty line. Tests:
+`test_repl.py::test_multiline_function_two_body_lines`, `test_if_else_block`.
+
+## B14. `print "label", x where x = ...` fails with "can't print this"
+```
+print "E =", E where E = 3 J      # actual: line 1: can't print this   expected: E = 3 J
+```
+`print_stmt` wraps every item (including the string) in a `Where`, and the checker can't print a
+`Where(Str)`. Test: `test_parser.py::test_print_label_with_where`.
+
+## B15. The `%` unit (reference §15: "rad sr ° arcmin arcsec rev %") is rejected by the lexer
+```
+print 50 %        # actual: unexpected character '%' (Percent Sign)   expected: 50 % (or 0.5)
+x = 0.5
+print x in %      # expected: 50 %
+```
+Test: `test_dimensions.py::test_percent_unit`.

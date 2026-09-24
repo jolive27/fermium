@@ -45,4 +45,4 @@ print "solar luminosity:", L, " (catalogue value", L_sun, ")"
 for temp in [2.725 K, 300 K, 3000 K, 5778 K, 10000 K, 30000 K]
     print temp, " peaks at", b_W / temp in μm
 
-plot B vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
+plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"

@@ -100,3 +100,52 @@ print round(2.567), floor(2.7)
 ```
 - **Actual:** `3.000 2.0`
 - **Expected:** `3 2` — rounding to a whole number and then printing `3.000` confuses beginners (it looks like it didn't round). Similarly `factorial`-style integer results print as `3.6288×10⁶` instead of `3628800` (`fact(n) = if n <= 1 then 1 else n * fact(n - 1); print fact(10)`).
+
+## B8. `%` is listed as a unit (reference.md §15) but is rejected
+
+```
+x = 5 %
+```
+- **Actual:** `line 1: unexpected character '%' (Percent Sign)`.
+- **Expected:** 0.05 (or remove `%` from the reference).
+
+## B9. "isn't defined" hint is unhelpful for typos, unknown units and functions
+
+- `pritn 5` → `pritn isn't defined` / `hint: give it a value first, e.g.  pritn = 1.0 m`. Expected: "did you mean print?".
+- `print 2 furlongs` → hint suggests `furlongs = 1.0 m`. Expected: "furlongs isn't a unit Fermium knows" (it's right after a number, so it was surely meant as a unit).
+- `print foo(3)` → hint suggests `foo = 1.0 m`; for a call it should suggest defining a function `foo(x) = ...`.
+- `omega = 2` then `print omegat` (or `ωt`) → no "did you mean ω t?" hint, although DECISIONS D9 says the error suggests it (it works for `LT`).
+
+## B10. Small oddities (low priority)
+
+- `print 3 m m` prints `3 m m` (not `3 m²`).
+- `print 3.0.1` prints `0.30` (typo silently read as 3.0 × .1).
+- Runtime errors have no line number: `xs = [1,2,3]` / `print xs[4]` → `index 4 is out of range: ...` (compile errors do have `file, line N:`). Same for `these two lists have different lengths (3 and 2)`.
+- `print (2 + 3` reports the error at `line 2` (a line that doesn't exist in a 1-line file) with an empty source line.
+- `print integral x^2 dx` prints `∫dx(x) = 0.333333333333 x³` (odd name, 12 digits); `print d/dx (x^2)` prints `d/dx(...)(x) = 2x`.
+- `print sqrt(-1)` prints `NaN` and `print 1/0` prints `∞` with no error or warning.
+- The warning for `2 g h` says "the unit g (metres, grams, ...)" — "metres" is wrong for g.
+- `vs`, `step`, `to`, `from`, `in`, `with`, `where`, `fit`, `load`, `plot`, `solve` are reserved words; `vs = [3.0 m/s, 4.0 m/s]` gives just `didn't expect 'vs' here` — a hint "vs is a reserved word, pick another name" would help.
+- REPL `:vars` lists names only, not values.
+
+## B11. `3 * 10^8 m/s` fails (after the B1 fix)
+
+```
+print 3 * 10^8 m/s
+```
+- **Actual:** `line 1: m isn't defined` with hint `m is a unit; units go right after a number, like 1 m` — but it *is* right after a number, so the hint is baffling.
+- `3×10^8 m/s` and `3e8 m/s` work. Physicists will write `3*10^8 m/s` all the time.
+- **Expected:** either accept it (a unit after a `^`-exponent literal belongs to the whole product, as for `3×10^8 m/s`), or a hint "write 3e8 m/s or 3×10^8 m/s".
+
+## B12. `c` right after a number is the speed-of-light *unit*, which surprises
+
+```
+print 1 AU / c          # prints: 1 AU / c
+print 1 kg * c^2        # prints: 1 kg * c^2
+```
+- Correct by the rules (`AU/c` is a unit of time), but a beginner expects a number of seconds / joules. The printout looks like the program was echoed back. Maybe warn when a unit expression is printed unconverted and contains `c`? Or print `1 AU/c (499.005 s)`.
+- **In lessons:** taught as part of the "unit right after a number" gotcha; `print 1 AU / c in s` works.
+
+## B13. `where` still bypasses the new B2 warning
+
+`E = 0.5 m v^2 where m = 2 kg, v = 3 m/s` → prints `4.5 m³/s²`, no warning (B2 fix works for ordinary variables).

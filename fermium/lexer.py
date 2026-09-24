@@ -380,6 +380,9 @@ class Lexer:
         while self.pos < len(self.src):
             c = self.peek()
             if c in SPECIAL_STANDALONE:
+                if c == "∞" and self.src[self.pos - 1] == "_":   # R_∞
+                    self.adv()
+                    continue
                 break
             if _is_ident_char(c):
                 self.adv()

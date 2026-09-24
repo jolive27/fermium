@@ -54,3 +54,20 @@ fermium run examples/09_binding_energy.fm | head -1
 ```
 - Expected: quiet exit (like other CLI tools), no traceback.
 - Actual: several "Exception ignored on calling ctypes callback ... BrokenPipeError" tracebacks, then "internal error in Fermium: BrokenPipeError".
+
+## 7. (feature) No lists of text
+```
+names = ["H-1", "He-4", "C-12"]
+```
+- Actual: `a list element must be a number, but it is text`.
+- Would be nice for labelled tables (isotope names). Workaround in examples: print `A =` numbers instead of names, or write one `print` per isotope.
+
+## 8. (usability) The `4/3 π r³` warning is not shown when the same program then fails the unit check
+```
+m_u2 = 1.0 kg
+ρ(A) = A m_u2 / (4/3 π (1.2 fm)³)
+print ρ(56) in kg/m³
+```
+- Expected: the D8 warning ("this is read as a/(b c) ...") is printed together with the unit error, since it explains it. Ideally the hint would show the user's own text: "write (4/3) π r³".
+- Actual: only `can't show a quantity with units [kg m³] in kg/m³`; the warning (which does appear when the program is otherwise valid) is dropped. A beginner has no clue why the units are upside down.
+- Workaround in examples: write `4π/3 R³`... careful: that is also 4π/(3 R³)! Use `(4/3) π R³` or `4/3*π*R³`.
