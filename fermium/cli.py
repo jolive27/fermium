@@ -94,6 +94,21 @@ def cmd_fmt(args):
     return 0
 
 
+def cmd_build(args):
+    from .aot import build
+    src = _read(args.file)
+    out = args.output or os.path.splitext(os.path.basename(args.file))[0]
+    try:
+        build(src, args.file, out)
+    except FermiumError as e:
+        sys.stderr.write(e.format(src, os.path.basename(args.file)) + "\n")
+        return 1
+    except Exception as e:
+        return _internal(e)
+    print(f"built {out}  (run it with ./{out})" if not os.path.isabs(out) else f"built {out}")
+    return 0
+
+
 def cmd_doctor(args):
     from .doctor import doctor
     return doctor()
@@ -119,13 +134,17 @@ def main(argv=None):
     g.add_argument("--pretty", action="store_true", help="ASCII -> symbols (pi -> π, sqrt -> √, ^2 -> ²)")
     g.add_argument("--ascii", action="store_true", help="symbols -> ASCII")
     f.add_argument("-w", "--write", action="store_true", help="rewrite the file instead of printing")
+    bld = sub.add_parser("build", help="compile a program into a standalone executable (needs a C compiler)")
+    bld.add_argument("file")
+    bld.add_argument("-o", "--output", help="name of the executable (default: the program's name)")
     sub.add_parser("doctor", help="check that Fermium is installed correctly")
     sub.add_parser("repl", help="start the interactive prompt (same as plain 'fermium')")
     args = p.parse_args(argv)
     if args.cmd is None or args.cmd == "repl":
         from .repl import main as repl_main
         return repl_main()
-    return {"run": cmd_run, "check": cmd_check, "fmt": cmd_fmt, "doctor": cmd_doctor}[args.cmd](args)
+    return {"run": cmd_run, "check": cmd_check, "fmt": cmd_fmt, "doctor": cmd_doctor,
+            "build": cmd_build}[args.cmd](args)
 
 
 def entry():

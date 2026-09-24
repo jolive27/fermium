@@ -157,3 +157,9 @@ The rule (spec §3.4.2), refined:
 - **Code generation:** vectors compile to LLVM `<n x double>` values, so they cost nothing at run time.
 - **ODEs:** unknowns can be vectors: `solve r'' = -G M r/|r|³ with r(0) = <1, 0> AU, r'(0) = <0, 30> km/s ...`. Each vector unknown takes n slots of the state. `r.x` and `r.y` are ordinary solution components, so `plot r.y vs r.x` draws the orbit.
 - **Not done:** matrices, and lists of vectors.
+
+## D25. AOT executables: `fermium build`
+- **What:** The same LLVM module the JIT runs is compiled to an object file (`TargetMachine.emit_object`) and linked by the system C compiler with `fermium/runtime/aot_rt.c`. That file is a C version of the printing and error callbacks. A generated `fm_tables.c` holds each print format's display unit and significant figures, and the program's texts.
+- **Limit:** `plot`, `load` and `fit` are refused with a clear message, because they need Python (matplotlib and SciPy).
+- **Testing:** the tests build every example that doesn't use them and check that the executable prints exactly what `fermium run` prints.
+- **Alternative:** embedding Python in the executable. Rejected as too heavy.

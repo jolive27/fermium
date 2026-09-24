@@ -34,6 +34,7 @@ fermium                      # interactive prompt (REPL)
 fermium check pendulum.fm    # check units without running
 fermium fmt pendulum.fm --pretty   # ASCII -> symbols;  --ascii for the reverse; -w rewrites the file
 fermium doctor               # check the installation
+fermium build pendulum.fm    # make a standalone executable ./pendulum (needs a C compiler; no plot/load/fit yet)
 ```
 
 A program is a text file ending in `.fm`. Comments start with `#`.
@@ -359,6 +360,7 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
 - **REPL:** run `fermium`. It keeps history. Type `\theta` then Tab to get θ; `\name` is also replaced when you press Enter. `:help` shows help, `:quit` leaves.
 - **`fermium fmt file.fm --pretty` / `--ascii`:** converts between ASCII and symbols without changing the program's meaning.
 - **`fermium doctor`:** checks the installation and explains fixes.
+- **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which is linked with a small C runtime. This needs a C compiler (on a Mac: `xcode-select --install`). Programs that use `plot`, `load` or `fit` can't be built yet, because those features use Python libraries.
 - **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion.
 
 ## 18. Grammar summary

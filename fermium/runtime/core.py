@@ -54,7 +54,7 @@ def format_quantity(v, dim, hint, sf, direct):
         return s
     if name in ("°", "%", "′", "″"):
         return f"{s}{name}"
-    if hint is not None and u is hint and name != "c" and any(
+    if hint is not None and u is hint and direct and name != "c" and any(
             re.fullmatch(r"c([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\^-?\d+)?", tok) for tok in re.split(r"[\s/()·*]+", name)):
         si = preferred_unit(dim)
         return f"{s} {name} (= {format_number(v, 6)} {si.name})"

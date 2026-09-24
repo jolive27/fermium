@@ -20,6 +20,9 @@ fermium = "fermium.cli:entry"
 [tool.setuptools]
 packages = ["fermium", "fermium.runtime"]
 
+[tool.setuptools.package-data]
+"fermium.runtime" = ["*.c"]
+
 [tool.ruff]
 line-length = 120
 
