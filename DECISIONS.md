@@ -140,3 +140,19 @@ The rule (spec §3.4.2), refined:
 
 ## D23. LLVM optimization level is O2
 - **What:** Measured on the benchmarks, O3 took 300 ms to compile nbody against O2's 100 ms, and the run times were the same. Compile time counts toward "time to first result", so the default is O2.
+
+## D24. Vectors (a Tier 5 feature)
+- **Syntax:**
+  - `<3, 4> m/s` or `<1 m, 2 m, 3 m>` builds a 2- or 3-vector. All components share one dimension.
+  - `vec(a, b, c)` is the same thing written as a function call.
+  - `<` starts a vector only where an expression starts, so `a < b` is still a comparison.
+- **Operations:**
+  - `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector.
+  - `a · b` or `a * b` is the dot product.
+  - `a × b` or `cross(a, b)` is the cross product. In 2-D the cross product is a number (its z-component).
+  - `v.x`, `v.y`, `v.z` or `v[1]` pick a component.
+  - Vectors add and subtract, and scale by numbers.
+- **`×` gets its own token:** it is the cross product for vectors and plain multiplication for numbers. `fmt --ascii` leaves `×` alone with a warning, because there is no ASCII operator for it. Use `cross(a, b)`.
+- **Code generation:** vectors compile to LLVM `<n x double>` values, so they cost nothing at run time.
+- **ODEs:** unknowns can be vectors: `solve r'' = -G M r/|r|³ with r(0) = <1, 0> AU, r'(0) = <0, 30> km/s ...`. Each vector unknown takes n slots of the state. `r.x` and `r.y` are ordinary solution components, so `plot r.y vs r.x` draws the orbit.
+- **Not done:** matrices, and lists of vectors.

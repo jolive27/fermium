@@ -74,7 +74,7 @@ VULGAR_ASCII = {"½": "(1/2)", "⅓": "(1/3)", "⅔": "(2/3)", "¼": "(1/4)", "�
 OPERATORS = ["+-", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "~=",
              "+", "-", "*", "/", "^", "(", ")", "[", "]", "{", "}", ",", "=", "<", ">", ".", ":",
              "·", "×", "≤", "≥", "≠", "±", "≈", "|", ";"]
-OP_CANON = {"·": "*", "×": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~="}
+OP_CANON = {"·": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~="}
 IDENT_EXTRA = set("_°☉∞'")  # ' handled separately; kept out below
 SPECIAL_STANDALONE = {"π", "∞"}
 
@@ -293,7 +293,7 @@ class Lexer:
         if not self.tokens:
             return False
         t = self.tokens[-1]
-        return t.kind == "OP" and t.value in ("+", "-", "*", "/", "^", ",", "+-", "==", "<", ">", "<=", ">=", "!=")
+        return t.kind == "OP" and t.value in ("+", "-", "*", "/", "^", ",", "+-", "==", "<=", ">=", "!=", "×")
 
     def _number(self, ws):
         line, col, start = self.line, self.col, self.pos

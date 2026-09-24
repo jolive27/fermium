@@ -16,7 +16,8 @@ from . import calculus as C
 from . import ir as I
 from .constants import all_constants
 from .errors import FermiumError, Diagnostics
-from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, BOOL, STR, VOID, Ty, type_desc)
+from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, BOOL, STR, VOID, Ty,
+                    type_desc)
 from .units import DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
 
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
@@ -25,7 +26,7 @@ SAME1 = {"abs", "floor", "ceil", "round"}
 LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "reverse", "sort"}
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
-    "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock",
+    "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
 }
 
 
@@ -51,6 +52,9 @@ class FuncInfo:
 
 
 class SolView:
+    n = 1          # vector length (1 = a plain number)
+    stride = 1     # slots between successive derivatives
+
     def __init__(self, sol_sym, comp, top, dim, tdim, tname, name):
         self.sol_sym = sol_sym        # Sym holding the solution handle
         self.comp = comp              # component index of this derivative
@@ -321,7 +325,9 @@ class Checker(C.DiffContext):
             if type(sym.ty) is not type(v.ty):
                 raise self.err(f"{name} holds {type_desc(sym.ty, self.U)}; it can't now hold "
                                f"{type_desc(v.ty, self.U)}", node, hint="use a different name for the new value")
-            if isinstance(sym.ty, (NumTy, ListTy)):
+            if isinstance(sym.ty, VecTy) and sym.ty.n != v.ty.n:
+                raise self.err(f"{name} holds a {sym.ty.n}-vector; it can't now hold a {v.ty.n}-vector", node)
+            if isinstance(sym.ty, (NumTy, ListTy, VecTy)):
                 if not self.U.unify(sym.ty.dim, v.ty.dim):
                     if self.repl and ctx.is_main:
                         sym = self.new_sym(name, v.ty, ctx)
@@ -390,6 +396,8 @@ class Checker(C.DiffContext):
                 items.append(("num", v, self.fmt(v)))
             elif isinstance(v.ty, ListTy):
                 items.append(("list", v, self.fmt(v)))
+            elif isinstance(v.ty, VecTy):
+                items.append(("vec", v, self.fmt(v)))
             elif isinstance(v.ty, BoolTy):
                 items.append(("bool", v, None))
             elif isinstance(v.ty, StrTy):
@@ -555,7 +563,9 @@ class Checker(C.DiffContext):
             got = "a function" if isinstance(v, (FuncRef, SolRef)) else type_desc(v.ty, self.U)
             raise self.err(f"{what} must be a number, but it is {got}", node)
 
-    def need_numlike(self, v, node, what="this value"):
+    def need_numlike(self, v, node, what="this value", allow_vec=False):
+        if allow_vec and isinstance(v, I.Expr) and isinstance(v.ty, VecTy):
+            return
         if isinstance(v, (FuncRef, SolRef)) or not isinstance(v.ty, (NumTy, ListTy)):
             got = "a function" if isinstance(v, FuncRef) else ("an ODE solution" if isinstance(v, SolRef)
                                                               else type_desc(v.ty, self.U))
@@ -602,7 +612,18 @@ class Checker(C.DiffContext):
     def e_Quantity(self, e, ctx):
         u = self.resolve_unit(e.unit)
         v = self.expr(e.value, ctx)
-        self.need_numlike(v, e.value)
+        self.need_numlike(v, e.value, allow_vec=True)
+        if isinstance(v.ty, VecTy):
+            if u.affine:
+                raise self.err("°C/°F can't be used for vectors", e)
+            if not isinstance(e.value, A.VecLit):
+                vd = self.U.norm(v.ty.dim)
+                if vd.concrete and not vd.const.dimensionless:
+                    raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
+            self.U.unify(v.ty.dim, DIMLESS)
+            r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), VecTy(DExpr.of(u.dim), v.ty.n))
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit)
+            return r
         if not isinstance(e.value, A.Num):
             vd = self.U.norm(v.ty.dim)
             if vd.concrete and not vd.const.dimensionless:
@@ -728,17 +749,21 @@ class Checker(C.DiffContext):
         if isinstance(a, (FuncRef, SolRef)):
             if e.implicit and e.right.paren:
                 return self.e_Call(A.Call(e.left, [e.right]).at(e), ctx)
-            self.need_numlike(a, e.left)
+            self.need_numlike(a, e.left, allow_vec=True)
         self._after_number = e.implicit and isinstance(e.left, (A.Num, A.Quantity)) and isinstance(e.right, A.Name)
         try:
             b = self.expr(e.right, ctx)
         finally:
             self._after_number = False
-        self.need_numlike(a, e.left)
-        self.need_numlike(b, e.right)
+        self.need_numlike(a, e.left, allow_vec=True)
+        self.need_numlike(b, e.right, allow_vec=True)
         return self.arith(e.op, a, b, e)
 
     def arith(self, op, a, b, e):
+        if isinstance(a.ty, VecTy) or isinstance(b.ty, VecTy):
+            return self.vec_arith(op, a, b, e)
+        if op == "×":
+            op = "*"
         is_list = isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy)
         mk = ListTy if is_list else NumTy
         if op in ("+", "-"):
@@ -771,6 +796,60 @@ class Checker(C.DiffContext):
         else:
             raise self.err(f"unknown operator {op}", e)
         r.sf = self._minsf(a, b)
+        return r
+
+    def vec_arith(self, op, a, b, e):
+        va, vb = isinstance(a.ty, VecTy), isinstance(b.ty, VecTy)
+        if isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy):
+            raise self.err("can't mix vectors and lists in arithmetic", e)
+        if op in ("+", "-"):
+            if not (va and vb):
+                raise self.err(f"can't {'add' if op == '+' else 'subtract'} a vector and a single number", e,
+                               hint="both sides must be vectors, e.g. <1, 2> m + <3, 4> m")
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't {'add' if op == '+' else 'subtract'} a {a.ty.n}-vector and a "
+                               f"{b.ty.n}-vector", e)
+            if not self.U.unify(a.ty.dim, b.ty.dim):
+                da, db = self.desc(a.ty.dim), self.desc(b.ty.dim)
+                raise self.err(f"can't {'add' if op == '+' else 'subtract'} vectors of {da} and {db}", e,
+                               hint=self.mismatch_hint(a, b))
+            r = I.IBin(op, a, b, VecTy(a.ty.dim, a.ty.n))
+            r.hint = a.hint or b.hint
+        elif op == "*" and va and vb:
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't take the dot product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
+            r = I.IBuiltin("vdot", [a, b], NumTy(a.ty.dim * b.ty.dim))
+        elif op == "×" and va and vb:
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't take the cross product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
+            ty = VecTy(a.ty.dim * b.ty.dim, 3) if a.ty.n == 3 else NumTy(a.ty.dim * b.ty.dim)
+            r = I.IBuiltin("cross", [a, b], ty)
+        elif op in ("*", "×"):
+            if op == "×":
+                raise self.err("× between a vector and a number: use * (or a space) to scale a vector", e)
+            v, k = (a, b) if va else (b, a)
+            r = I.IBin("*", a, b, VecTy(a.ty.dim * b.ty.dim, v.ty.n))
+            r.hint = v.hint if self._dimless(k) else None
+        elif op == "/":
+            if vb:
+                raise self.err("can't divide by a vector", e)
+            r = I.IBin("/", a, b, VecTy(a.ty.dim / b.ty.dim, a.ty.n))
+            r.hint = a.hint if self._dimless(b) else None
+        else:
+            raise self.err(f"unknown operator {op}", e)
+        r.sf = self._minsf(a, b)
+        return r
+
+    def e_VecLit(self, e, ctx):
+        items = [self.expr(x, ctx) for x in e.items]
+        dim = DExpr.fresh("vec")
+        for it, node in zip(items, e.items):
+            self.need_num(it, node, "a vector component")
+            self.unify_or(dim, it.ty.dim, lambda: f"all components of a vector need the same units; this one is "
+                          f"{self.desc(it.ty.dim)} but the others are {self.desc(dim)}", node)
+        r = I.IVec(items, VecTy(dim, len(items)))
+        r.hint = next((it.hint for it in items if it.hint is not None), None)
+        r.sf = self._minsf(*items)
         return r
 
     def mismatch_hint(self, a, b):
@@ -837,7 +916,7 @@ class Checker(C.DiffContext):
 
     def e_Neg(self, e, ctx):
         a = self.expr(e.operand, ctx)
-        self.need_numlike(a, e.operand)
+        self.need_numlike(a, e.operand, allow_vec=True)
         r = I.INeg(a)
         r.hint, r.sf, r.direct = a.hint, a.sf, a.direct
         return r
@@ -871,7 +950,11 @@ class Checker(C.DiffContext):
 
     def e_Abs(self, e, ctx):
         a = self.expr(e.operand, ctx)
-        self.need_numlike(a, e.operand)
+        self.need_numlike(a, e.operand, allow_vec=True)
+        if isinstance(a.ty, VecTy):
+            r = I.IBuiltin("norm", [a], NumTy(a.ty.dim))
+            r.hint, r.sf = a.hint, a.sf
+            return r
         r = I.IBuiltin("abs", [a], a.ty)
         r.hint, r.sf = a.hint, a.sf
         return r
@@ -882,7 +965,9 @@ class Checker(C.DiffContext):
         b = self.expr(e.other, ctx)
         if type(a.ty) is not type(b.ty):
             raise self.err("both branches of an if-expression must give the same kind of value", e)
-        if isinstance(a.ty, (NumTy, ListTy)):
+        if isinstance(a.ty, VecTy) and a.ty.n != b.ty.n:
+            raise self.err("both branches of an if-expression must give vectors of the same length", e)
+        if isinstance(a.ty, (NumTy, ListTy, VecTy)):
             self.unify_or(a.ty.dim, b.ty.dim, lambda: f"the two branches give {self.desc(a.ty.dim)} and "
                           f"{self.desc(b.ty.dim)}; they must match", e)
         r = I.IIf(c, a, b, a.ty)
@@ -892,7 +977,7 @@ class Checker(C.DiffContext):
 
     def e_Convert(self, e, ctx):
         v = self.expr(e.value, ctx)
-        self.need_numlike(v, e.value, "the value to convert")
+        self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
         u = self.resolve_unit(e.unit)
         if not self.U.unify(v.ty.dim, u.dim):
             raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e,
@@ -954,10 +1039,22 @@ class Checker(C.DiffContext):
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, SolRef):
             v = t.view
+            if e.name in ("x", "y", "z") and v.n > 1:
+                k = "xyz".index(e.name)
+                if k >= v.n:
+                    raise self.err(f"{v.name} is a {v.n}-vector, so it has no .{e.name}", e)
+                nv = SolView(v.sol_sym, v.comp + k, v.top + k, v.dim, v.tdim, v.tname, f"{v.name}.{e.name}")
+                nv.n, nv.stride = 1, v.stride
+                nv.hint, nv.thint, nv.sf = getattr(v, "hint", None), getattr(v, "thint", None), getattr(v, "sf", None)
+                return SolRef(nv)
             if e.name in ("t", "time", "times"):
                 return I.ISolList(v.sol_sym and self.var_ref(v.sol_sym, ctx, e), v.comp, "t", ListTy(v.tdim))
             if e.name in ("values", "v"):
                 return self.sol_values(v)
+        if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
+            if e.name not in ("x", "y", "z"):
+                raise self.err(f"a vector's components are .x, .y and .z (not .{e.name})", e)
+            return self.vec_elem(t, "xyz".index(e.name), e)
         if not isinstance(t, I.Expr) or not isinstance(t.ty, DataTy):
             raise self.err(f"'.{e.name}' only works on data loaded from a file (like data.{e.name})", e)
         cols = t.ty.info["columns"]
@@ -970,6 +1067,8 @@ class Checker(C.DiffContext):
         raise self.err(f"the data has no column called {e.name} (columns: {names})", e)
 
     def sol_values(self, v: SolView):
+        if v.n > 1:
+            raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", None)
         s = self._ivar(v.sol_sym)
         if self.cur_ctx is not None:
             s = self.var_ref(v.sol_sym, self.cur_ctx, None)
@@ -1004,8 +1103,21 @@ class Checker(C.DiffContext):
             return I.ILet([(sym, I.IBuiltin("len", [target], NumTy(DIMLESS)))], body)
         return self.expr(idx_ast, ctx)
 
+    def vec_elem(self, t, k, node):
+        if not 0 <= k < t.ty.n:
+            raise self.err(f"this vector has {t.ty.n} components, so there is no component {k + 1}", node)
+        r = I.IVecElem(t, k, NumTy(t.ty.dim))
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
     def e_Index(self, e, ctx):
         t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
+            idx = self.index_expr(e.index, I.IConst(t.ty.n, NumTy(DIMLESS)), ctx) \
+                if not isinstance(e.index, A.End) else I.IConst(t.ty.n, NumTy(DIMLESS))
+            if not isinstance(idx, I.IConst):
+                raise self.err("a vector's component must be picked with a fixed number, like v[1], or v.x", e.index)
+            return self.vec_elem(t, int(idx.value) - 1, e.index)
         if isinstance(t, SolRef):
             t = self.sol_values(t.view)
         if isinstance(t, FuncRef) or not isinstance(t.ty, ListTy):
@@ -1054,7 +1166,7 @@ class Checker(C.DiffContext):
             if isinstance(target, SolRef):
                 return self.sol_eval(target.view, e, ctx)
             raise self.err("only functions can be called", f)
-        if isinstance(f, A.Deriv):
+        if isinstance(f, (A.Deriv, A.Field)):
             target = self.expr(f, ctx, allow_func=True)
             if isinstance(target, FuncRef):
                 args = [self.expr(a, ctx) for a in e.args]
@@ -1080,14 +1192,20 @@ class Checker(C.DiffContext):
         sol = self.var_ref(view.sol_sym, ctx, e)
         r = self._sol_eval_node(view, sol, t, e)
         r.sf = self._minsf(t, view) if getattr(view, "sf", None) is not None else t.sf
-        if view.comp == view.comp and getattr(view, "hint", None) is not None and view.name.count("'") == 0:
+        if getattr(view, "hint", None) is not None:
             r.hint = view.hint
         return r
 
     def _sol_eval_node(self, view, sol, t, e):
+        if view.n > 1:
+            comps = []
+            for k in range(view.n):
+                sub = SolView(view.sol_sym, view.comp + k, view.top + k, view.dim, view.tdim, view.tname, view.name)
+                comps.append(self._sol_eval_node(sub, sol, t, e))
+            return I.IVec(comps, VecTy(view.dim, view.n))
         if view.comp <= view.top:
             r = I.ISolEval(sol, view.comp, t, False, NumTy(view.dim))
-        elif view.comp == view.top + 1:
+        elif view.comp == view.top + view.stride:
             r = I.ISolEval(sol, view.top, t, True, NumTy(view.dim))
         else:
             raise self.err(f"can't take that many derivatives of the solution {view.name}", e)
@@ -1377,6 +1495,26 @@ class Checker(C.DiffContext):
                 if isinstance(a, I.ISolList):
                     return I.ISolList(a.sol, a.comp, "t", ListTy(DExpr.of(TIME_DIM)))
                 raise self.err("times(...) needs an ODE solution", e)
+        if name in ("norm", "unit", "hat"):
+            need(1)
+            if not isinstance(args[0].ty, VecTy):
+                raise self.err(f"{name} needs a vector, like <3, 4> m", e.args[0])
+            if name == "norm":
+                r = self._bi("norm", args, NumTy(args[0].ty.dim), args)
+                r.hint = args[0].hint
+                return r
+            return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
+        if name == "cross":
+            need(2)
+            if not all(isinstance(a.ty, VecTy) for a in args):
+                raise self.err("cross(a, b) needs two vectors", e)
+            return self.vec_arith("×", args[0], args[1], e)
+        if name == "vec":
+            if n not in (2, 3):
+                raise self.err("vec(...) takes 2 or 3 components", e)
+            return self.e_VecLit(A.VecLit(e.args).at(e), ctx)
+        if name == "dot" and n == 2 and all(isinstance(a.ty, VecTy) for a in args):
+            return self.vec_arith("*", args[0], args[1], e)
         if name == "trapz":
             need(2)
             for i in range(2):
@@ -1455,8 +1593,18 @@ class Checker(C.DiffContext):
             return FuncRef(self.derived_info(info, 0, e.order, e))
         if isinstance(t, SolRef):
             v = t.view
-            return SolRef(SolView(v.sol_sym, v.comp + e.order, v.top, v.dim / (DExpr.of(v.tdim) ** e.order),
-                                  v.tdim, v.tname, v.name + "'" * e.order))
+            nv = SolView(v.sol_sym, v.comp + e.order * v.stride, v.top, v.dim / (DExpr.of(v.tdim) ** e.order),
+                         v.tdim, v.tname, v.name + "'" * e.order)
+            nv.n, nv.stride = v.n, v.stride
+            nv.sf = getattr(v, "sf", None)
+            nv.thint = getattr(v, "thint", None)
+            k = (v.comp - v.top) // v.stride + e.order + (v.top // v.stride if False else 0)
+            hints = getattr(v, "hints", {})
+            order = v.name.count("'") + e.order
+            nv.hints = hints
+            nv.hint = hints.get(order)
+            del k
+            return SolRef(nv)
         raise self.err("' (prime) means a derivative; it only works on functions and ODE solutions", e,
                        hint="to differentiate a formula write d/dt (formula)")
 

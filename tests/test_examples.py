@@ -388,24 +388,43 @@ def test_rosetta_page_matches_files():
             assert f"```{lang}\n{code}\n```" in page, f"docs/rosetta.md is out of date for {name}{ext}"
 
 
+def _julia():
+    return JULIA if os.path.exists(JULIA) else shutil.which("julia")
+
+
+def other_outputs(lang):
+    """Run all Python (or Julia) Rosetta programs at once, in parallel; returns {name: CompletedProcess-like}."""
+    key = "rosetta-" + lang
+    if key not in _cache:
+        env = dict(os.environ)
+        if lang == "julia":
+            if os.path.isdir(JULIA_DEPOT):   # QuadGK and Unitful are installed here (see benchmarks/)
+                env["JULIA_DEPOT_PATH"] = JULIA_DEPOT
+            cmd = [_julia(), "--startup-file=no", f"--project={ROSETTA}"]
+            ext = ".jl"
+        else:
+            cmd, ext = [sys.executable], ".py"
+        procs = {n: subprocess.Popen(cmd + [os.path.join(ROSETTA, n + ext)], stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True, cwd=ROSETTA, env=env)
+                 for n in ROSETTA_NAMES}
+        results = {}
+        for n, p in procs.items():
+            out, err = p.communicate(timeout=300)
+            results[n] = (p.returncode, out, err)
+        _cache[key] = results
+    return _cache[key]
+
+
 @pytest.mark.parametrize("name", ROSETTA_NAMES)
 def test_rosetta_python(name):
-    fm = rosetta_fermium(name)
-    res = subprocess.run([sys.executable, os.path.join(ROSETTA, name + ".py")], capture_output=True,
-                         text=True, cwd=ROSETTA, timeout=120)
-    assert res.returncode == 0, res.stderr
-    assert_same_numbers(fm, res.stdout, name + ".py")
+    code, out, err = other_outputs("python")[name]
+    assert code == 0, err
+    assert_same_numbers(rosetta_fermium(name), out, name + ".py")
 
 
 @pytest.mark.skipif(not os.path.exists(JULIA) and not shutil.which("julia"), reason="Julia not installed")
 @pytest.mark.parametrize("name", ROSETTA_NAMES)
 def test_rosetta_julia(name):
-    julia = JULIA if os.path.exists(JULIA) else shutil.which("julia")
-    fm = rosetta_fermium(name)
-    env = dict(os.environ)
-    if os.path.isdir(JULIA_DEPOT):   # QuadGK and Unitful are installed here (see benchmarks/)
-        env["JULIA_DEPOT_PATH"] = JULIA_DEPOT
-    res = subprocess.run([julia, "--startup-file=no", f"--project={ROSETTA}", os.path.join(ROSETTA, name + ".jl")],
-                         capture_output=True, text=True, cwd=ROSETTA, timeout=300, env=env)
-    assert res.returncode == 0, res.stderr
-    assert_same_numbers(fm, res.stdout, name + ".jl")
+    code, out, err = other_outputs("julia")[name]
+    assert code == 0, err
+    assert_same_numbers(rosetta_fermium(name), out, name + ".jl")

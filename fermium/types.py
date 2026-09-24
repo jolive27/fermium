@@ -178,6 +178,21 @@ class ListTy(Ty):
         return f"List[{self.dim}]"
 
 
+class VecTy(Ty):
+    """A small fixed-length vector (2 or 3 components) sharing one dimension: <3, 4> m/s."""
+    kind = "vec"
+
+    def __init__(self, dim, n):
+        self.dim = DExpr.of(dim)
+        self.n = n
+
+    def key(self):
+        return NumTy(self.dim).key() + (self.n,)
+
+    def __repr__(self):
+        return f"Vec{self.n}[{self.dim}]"
+
+
 class SolTy(Ty):
     """Handle to an ODE solution (all components share one handle)."""
     kind = "sol"
@@ -217,5 +232,7 @@ def type_desc(t: Ty, U: Unifier) -> str:
         return U.describe(t.dim)
     if isinstance(t, ListTy):
         return f"a list of {U.describe(t.dim)}"
+    if isinstance(t, VecTy):
+        return f"a {t.n}-vector of {U.describe(t.dim)}"
     return {"bool": "true/false value", "str": "text", "sol": "ODE solution", "data": "data table",
             "void": "nothing"}.get(t.kind, t.kind)

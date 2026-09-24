@@ -164,6 +164,12 @@ class ListLit(Node):
 
 
 @dataclass(eq=False)
+class VecLit(Node):
+    """<3, 4> or <x, y, z>"""
+    items: list
+
+
+@dataclass(eq=False)
 class IfExpr(Node):
     cond: Node
     then: Node
@@ -357,7 +363,7 @@ def children(n):
         return [n.operand]
     if isinstance(n, Integral):
         return [x for x in (n.integrand, n.lo, n.hi) if x is not None]
-    if isinstance(n, ListLit):
+    if isinstance(n, (ListLit, VecLit)):
         return list(n.items)
     if isinstance(n, IfExpr):
         return [n.cond, n.then, n.other]

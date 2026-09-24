@@ -273,7 +273,7 @@ print 1 AU / c in min
 8.31675 min
 ```
 
-And watch out for dividing by a variable whose name is also a unit: `20 m/s / g` means 20 m/s **per gram**, because `/ g` continues the unit. Put parentheses around the number with its unit: `(20 m/s) / g`.
+And watch out for dividing by a variable whose name is also a unit: `20 m/s / g` means 20 m/s **per gram**, because `/ g` continues the unit. Put parentheses around the number with its unit: `(20 m/s) / g`. The same goes for Wien's law with a temperature called `T`: `2.898e-3 m K / T` means kelvin per **tesla**. Write `(2.898e-3 m K) / T`.
 
 ## Summary
 

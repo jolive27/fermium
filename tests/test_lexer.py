@@ -145,7 +145,12 @@ def test_keywords_and_aliases():
     assert toks("∂") == toks("partial")
 
 
-@pytest.mark.parametrize("sym,ascii", [("·", "*"), ("×", "*"), ("≤", "<="), ("≥", ">="),
+def test_times_sign_multiplies_numbers():
+    # × is its own token (it is the cross product for vectors) but multiplies plain numbers like *
+    assert run("print 2 × 3 m") == run("print 2 * 3 m") == "6 m"
+
+
+@pytest.mark.parametrize("sym,ascii", [("·", "*"), ("≤", "<="), ("≥", ">="),
                                        ("≠", "!="), ("≈", "~="), ("±", "+-")])
 def test_operator_spellings(sym, ascii):
     assert toks(f"a {sym} b") == toks(f"a {ascii} b")

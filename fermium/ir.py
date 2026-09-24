@@ -124,6 +124,16 @@ class IList(Expr):
         self.items, self.ty = items, ty
 
 
+class IVec(Expr):
+    def __init__(self, items, ty):
+        self.items, self.ty = items, ty
+
+
+class IVecElem(Expr):
+    def __init__(self, v, k, ty):
+        self.v, self.k, self.ty = v, k, ty
+
+
 class IIndex(Expr):
     def __init__(self, lst, idx, ty, line=0):
         self.lst, self.idx, self.ty, self.line = lst, idx, ty, line

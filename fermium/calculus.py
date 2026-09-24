@@ -101,7 +101,7 @@ def map_children(e, f):
     if isinstance(e, A.Integral):
         return _copy(e, integrand=f(e.integrand), lo=f(e.lo) if e.lo is not None else None,
                      hi=f(e.hi) if e.hi is not None else None)
-    if isinstance(e, A.ListLit):
+    if isinstance(e, (A.ListLit, A.VecLit)):
         return _copy(e, items=[f(x) for x in e.items])
     if isinstance(e, A.IfExpr):
         return _copy(e, cond=f(e.cond), then=f(e.then), other=f(e.other))
@@ -214,6 +214,8 @@ def _d(e, var, ctx):
         return mul(call("sign", e.operand), _d(e.operand, var, ctx))
     if isinstance(e, A.IfExpr):
         return A.IfExpr(e.cond, _d(e.then, var, ctx), _d(e.other, var, ctx))
+    if isinstance(e, A.VecLit):
+        return A.VecLit([_d(x, var, ctx) for x in e.items])
     if isinstance(e, A.Deriv):
         inner = diff(e.operand, e.var, ctx) if not isinstance(e.operand, A.Name) else None
         if inner is None:
@@ -555,6 +557,8 @@ def _src(e, pretty):
                 f"else {_src(e.other, pretty)[0]}"), 0
     if isinstance(e, A.ListLit):
         return "[" + ", ".join(_src(x, pretty)[0] for x in e.items) + "]", PREC_ATOM
+    if isinstance(e, A.VecLit):
+        return "<" + ", ".join(_src(x, pretty)[0] for x in e.items) + ">", PREC_ATOM
     if isinstance(e, A.Deriv):
         d = "∂" if e.partial and pretty else ("partial" if e.partial else "d")
         return f"{d}/{d}{e.var} {_src(e.operand, pretty)[0]}", PREC_JUXT

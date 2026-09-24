@@ -273,3 +273,23 @@ solve
   for t from 0 s to 10 s
 ```
 → `line 4: this line's indentation doesn't match any block above it`. With `with` at column 0 → `solve needs a range for the independent variable`. Works only when `with`/`for` are at the same indentation as the equations. For one-line equations, `  with` (2 spaces) is fine, so beginners will copy that style. Suggest accepting any indentation > 0 for `with`/`for` continuation lines.
+
+(B18 addendum, even more common case: Wien's law with a function parameter named T for temperature:
+```
+peak(T) = 2.898e-3 m K / T
+print peak(5778 K) in nm
+```
+→ `can't show a quantity with units [m s² A K/kg] in nm` — `K / T` became kelvin per **tesla**; no warning. At least the `in nm` caught it; `print peak(5778 K)` alone would print nonsense. Any temperature called `T` after a `... K / T` will do this.)
+
+## B28. `N = 2 N` (N a count) gives a warning whose hint says "that's usually what you want"
+
+```
+N = 1
+N = 2 N
+```
+→ `warning: 'N' right after a number is the unit N, not your variable N` / `hint: that's usually what you want; ...` followed by the error `N is a plain number (no units); it can't now hold force [N]`. The error is good, but the hint text is wrong in this situation (it is clearly *not* what the user wanted, since the next thing reported is a unit clash with the very same variable). Suggest dropping "that's usually what you want" when the statement assigns to that same variable, or when the unit reading causes a dimension error.
+- B7 addendum: `N = 1` doubled 20 times prints `1.04858×10⁶` instead of `1048576` (a whole number built from whole numbers).
+
+## B29. A list literal with mixed units prints every element in the first one's unit
+
+`for dt in [1 day, 6 hr, 1 hr, 10 min]` / `print dt` → `1 day`, `0.25 day`, `0.0416667 day`, `0.00694444 day`. Understandable (a list has one display unit) but a beginner expects `6 hr`, `1 hr`, `10 min`. Maybe keep per-element display units for literal lists, or pick the unit that makes most elements ≥ 1.

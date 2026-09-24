@@ -12,7 +12,7 @@ import math
 from llvmlite import ir
 
 from . import ir as I
-from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy
+from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy
 
 F64 = ir.DoubleType()
 I64 = ir.IntType(64)
@@ -50,6 +50,8 @@ WG = [0.129484966168869693270611432679082, 0.279705391489276667901467771423780,
 def lltype(ty):
     if isinstance(ty, NumTy):
         return F64
+    if isinstance(ty, VecTy):
+        return ir.VectorType(F64, ty.n)
     if isinstance(ty, BoolTy):
         return I1
     if isinstance(ty, ListTy):
@@ -104,6 +106,7 @@ class ModuleGen:
         e = self.extern
         e("fm_print_num", VOID, [I64, F64])
         e("fm_print_list", VOID, [I64, F64P, I64])
+        e("fm_print_vec", VOID, [I64, F64P, I64])
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
@@ -852,6 +855,13 @@ class FuncGen:
             elif kind == "list":
                 lst = self.expr(payload)
                 b.call(ex["fm_print_list"], [i64(fid), b.extract_value(lst, 0), b.extract_value(lst, 1)])
+            elif kind == "vec":
+                v = self.expr(payload)
+                n = payload.ty.n
+                arr = self.alloca(ir.ArrayType(F64, n))
+                for k in range(n):
+                    b.store(b.extract_element(v, I32(k)), b.gep(arr, [I32(0), I32(k)]))
+                b.call(ex["fm_print_vec"], [i64(fid), b.gep(arr, [I32(0), I32(0)]), i64(n)])
             elif kind == "bool":
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
@@ -860,10 +870,18 @@ class FuncGen:
 
     def s_SSolve(self, s):
         b = self.b
-        n = len(s.y0)
+        n = sum(getattr(e.ty, "n", 1) for e in s.y0)
         y0 = self.alloca(ir.ArrayType(F64, n))
-        for i, e in enumerate(s.y0):
-            b.store(self.expr(e), b.gep(y0, [I32(0), I32(i)]))
+        i = 0
+        for e in s.y0:
+            v = self.expr(e)
+            if isinstance(e.ty, VecTy):
+                for k in range(e.ty.n):
+                    b.store(b.extract_element(v, I32(k)), b.gep(y0, [I32(0), I32(i)]))
+                    i += 1
+            else:
+                b.store(v, b.gep(y0, [I32(0), I32(i)]))
+                i += 1
         y0p = b.gep(y0, [I32(0), I32(0)])
         fn = self.mg.lambda_for(s.rhs)
         env = self.make_env(s.rhs)
@@ -972,11 +990,40 @@ class FuncGen:
             b.store(fn_elem(b.load(b.gep(src, [i])), i), b.gep(data, [i]))
         return out
 
+    def splat(self, x, n):
+        v = ir.Constant(ir.VectorType(F64, n), ir.Undefined)
+        for k in range(n):
+            v = self.b.insert_element(v, x, I32(k))
+        return v
+
+    def e_IVec(self, e):
+        v = ir.Constant(lltype(e.ty), ir.Undefined)
+        for k, it in enumerate(e.items):
+            v = self.b.insert_element(v, self.expr(it), I32(k))
+        return v
+
+    def e_IVecElem(self, e):
+        return self.b.extract_element(self.expr(e.v), I32(e.k))
+
+    def hsum(self, v, n):
+        b = self.b
+        acc = b.extract_element(v, I32(0))
+        for k in range(1, n):
+            acc = b.fadd(acc, b.extract_element(v, I32(k)))
+        return acc
+
     def e_IBin(self, e):
         b = self.b
         a = self.expr(e.a)
         c = self.expr(e.b)
         op = {"+": b.fadd, "-": b.fsub, "*": b.fmul, "/": b.fdiv}[e.op]
+        if isinstance(e.ty, VecTy):
+            n = e.ty.n
+            if not isinstance(e.a.ty, VecTy):
+                a = self.splat(a, n)
+            if not isinstance(e.b.ty, VecTy):
+                c = self.splat(c, n)
+            return op(a, c)
         la = isinstance(e.a.ty, ListTy)
         lc = isinstance(e.b.ty, ListTy)
         if not la and not lc:
@@ -1211,6 +1258,27 @@ class FuncGen:
         b = self.b
         name = e.name
         args = [self.expr(a) for a in e.args]
+        if name in ("vdot", "norm", "unit", "cross"):
+            n = e.args[0].ty.n
+            if name == "vdot":
+                return self.hsum(b.fmul(args[0], args[1]), n)
+            if name == "cross":
+                a, c = args
+                x = [b.extract_element(a, I32(k)) for k in range(n)]
+                y = [b.extract_element(c, I32(k)) for k in range(n)]
+                if n == 2:
+                    return b.fsub(b.fmul(x[0], y[1]), b.fmul(x[1], y[0]))
+                comps = [b.fsub(b.fmul(x[1], y[2]), b.fmul(x[2], y[1])),
+                         b.fsub(b.fmul(x[2], y[0]), b.fmul(x[0], y[2])),
+                         b.fsub(b.fmul(x[0], y[1]), b.fmul(x[1], y[0]))]
+                v = ir.Constant(ir.VectorType(F64, 3), ir.Undefined)
+                for k in range(3):
+                    v = b.insert_element(v, comps[k], I32(k))
+                return v
+            nrm = b.call(self.mg.intrinsic("sqrt"), [self.hsum(b.fmul(args[0], args[0]), n)])
+            if name == "norm":
+                return nrm
+            return b.fdiv(args[0], self.splat(nrm, n))
         if name in self.MATH_INTRINSICS or name in self.MATH_LIBM or name == "sign":
             if isinstance(e.args[0].ty, ListTy):
                 return self.map_list(args[0], lambda x, i: self.math1(name, x))
@@ -1413,11 +1481,27 @@ class LambdaGen(FuncGen):
             t, y, dy, env = fn.args
             self.load_env(env)
             self.store(lam.params[0], t)
-            for i, sym in enumerate(lam.state):
-                self.store(sym, b.load(b.gep(y, [i64(i)])))
-            vals = [self.expr(e) for e in lam.body]
-            for i, v in enumerate(vals):
-                b.store(v, b.gep(dy, [i64(i)]))
+            off = 0
+            for sym in lam.state:
+                if isinstance(sym.ty, VecTy):
+                    v = ir.Constant(lltype(sym.ty), ir.Undefined)
+                    for k in range(sym.ty.n):
+                        v = b.insert_element(v, b.load(b.gep(y, [i64(off + k)])), I32(k))
+                    self.store(sym, v)
+                    off += sym.ty.n
+                else:
+                    self.store(sym, b.load(b.gep(y, [i64(off)])))
+                    off += 1
+            vals = [(self.expr(e), e.ty) for e in lam.body]
+            off = 0
+            for v, ty in vals:
+                if isinstance(ty, VecTy):
+                    for k in range(ty.n):
+                        b.store(b.extract_element(v, I32(k)), b.gep(dy, [i64(off + k)]))
+                    off += ty.n
+                else:
+                    b.store(v, b.gep(dy, [i64(off)]))
+                    off += 1
             b.ret_void()
         elif lam.kind == "model":
             p, cols, n, out = fn.args

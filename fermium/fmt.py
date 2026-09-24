@@ -16,7 +16,7 @@ SUB_DIGITS = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
 KW_PRETTY = {"sqrt": "√", "cbrt": "∛", "integral": "∫", "partial": "∂"}
 KW_ASCII = {v: k for k, v in KW_PRETTY.items()}
 OP_PRETTY = {"*": "·", "<=": "≤", ">=": "≥", "!=": "≠", "+-": "±", "~=": "≈"}
-OP_ASCII = {"·": "*", "×": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~=", "−": "-", "÷": "/"}
+OP_ASCII = {"·": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~=", "−": "-", "÷": "/"}
 
 
 def _wordy(ch):
@@ -173,6 +173,9 @@ def _ascii_token(toks, i, closers, diags):
             return word
         return KW_ASCII.get(t.raw, t.raw)
     if t.kind == "OP":
+        if t.raw == "×":
+            diags.warn("× (cross product) has no ASCII operator, so it was left as is", tok=t,
+                       hint="write cross(a, b) if you need pure ASCII")
         return OP_ASCII.get(t.raw, t.raw)
     if t.kind == "SUP":
         v = t.value

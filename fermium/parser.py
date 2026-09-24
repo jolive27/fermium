@@ -653,7 +653,7 @@ class Parser:
     def product(self):
         t = self.tok
         e = self.unary()
-        while self.tok.kind == "OP" and self.tok.value in ("*", "/"):
+        while self.tok.kind == "OP" and self.tok.value in ("*", "/", "×"):
             op = self.next()
             r = self.unary()
             if op.value == "/":
@@ -925,6 +925,8 @@ class Parser:
                         raise self.error("expected ',' or ']' in this list" + self._found())
                 self.next()
                 return self.span(A.ListLit(items), t)
+            if t.value == "<":
+                return self.vector_literal()
             if t.value == "|":
                 self.next()
                 self.abs_depth += 1
@@ -950,6 +952,27 @@ class Parser:
                 self.peek().value not in self.known and not self.peek().ws_before:
             return True
         return False
+
+    def vector_literal(self):
+        """<a, b> or <a, b, c>, optionally followed by a unit: <3, 4> m/s."""
+        t = self.next()
+        items = []
+        while True:
+            items.append(self.sum())
+            if self.at_op(","):
+                self.next()
+                continue
+            break
+        if not self.at_op(">"):
+            raise self.error("expected '>' to close this vector (written <x, y> or <x, y, z>)" + self._found())
+        self.next()
+        if len(items) not in (2, 3):
+            raise self.error(f"a vector needs 2 or 3 components, not {len(items)}", tok=t)
+        v = self.span(A.VecLit(items), t)
+        if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
+            u = self.unit_expr(explicit=False)
+            v = self.span(A.Quantity(v, u), t)
+        return v
 
     def in_index(self):
         # crude: are we inside [...] after a name? look back for an unmatched '['

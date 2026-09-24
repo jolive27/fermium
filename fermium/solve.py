@@ -7,7 +7,7 @@ from . import ast as A
 from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
-from .types import DExpr, NumTy, ListTy, SolTy, DataTy
+from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy
 
 
 # ============================================================ solve
@@ -74,6 +74,7 @@ def check_solve(ck, s: A.Solve, ctx):
 
     # initial conditions
     y0 = {}
+    shape = {}
     for ic in s.initial:
         lhs = ic.lhs
         if not isinstance(lhs, A.Call) or len(lhs.args) != 1:
@@ -89,7 +90,13 @@ def check_solve(ck, s: A.Solve, ctx):
         if k >= orders[x]:
             raise ck.err(f"{x}{chr(39) * k}(…) isn't needed: the equation for {x} is order {orders[x]}", ic)
         v = ck.expr(ic.rhs, ctx)
-        ck.need_num(v, ic.rhs, "an initial value")
+        ck.need_numlike(v, ic.rhs, "an initial value", allow_vec=True)
+        if isinstance(v.ty, ListTy):
+            raise ck.err("an initial value must be a number or a vector like <1, 0> m, not a list", ic.rhs)
+        n_here = v.ty.n if isinstance(v.ty, VecTy) else 1
+        if shape.setdefault(x, n_here) != n_here:
+            raise ck.err(f"the initial values of {x} don't match: one is a {shape[x]}-vector, another a "
+                         f"{'number' if n_here == 1 else f'{n_here}-vector'}", ic.rhs)
         want = dims[x] / (DExpr.of(tdim) ** k)
         if not ck.U.unify(want, v.ty.dim):
             raise ck.err(f"{x}{chr(39) * k}(…) should be {ck.desc(want)} but this is {ck.desc(v.ty.dim)}", ic.rhs)
@@ -116,8 +123,11 @@ def check_solve(ck, s: A.Solve, ctx):
     tsym.assigned = True
     lam.params = [tsym]
     scope.names[t] = tsym
+    def ty_of(x, k):
+        d = dims[x] / (DExpr.of(tdim) ** k)
+        return VecTy(d, shape[x]) if shape[x] > 1 else NumTy(d)
     for (x, k) in layout:
-        sym = I.Sym(x + "'" * k, NumTy(dims[x] / (DExpr.of(tdim) ** k)), "local", lam)
+        sym = I.Sym(x + "'" * k, ty_of(x, k), "local", lam)
         sym.assigned = True
         lam.state.append(sym)
         scope.names[x + "'" * k] = sym
@@ -125,14 +135,18 @@ def check_solve(ck, s: A.Solve, ctx):
     tops = {}
     for x in names:
         n = orders[x]
-        sym = I.Sym(x + "'" * n, NumTy(dims[x] / (DExpr.of(tdim) ** n)), "local", lam)
+        sym = I.Sym(x + "'" * n, ty_of(x, n), "local", lam)
+        lam.locals.append(sym)      # only used to check the equation as written
         tops[x] = sym
         scope.names[x + "'" * n] = sym
     for q in eqs:
         lv = ck.expr(q.lhs, lctx)
         rv = ck.expr(q.rhs, lctx)
-        ck.need_num(lv, q.lhs, "the left side")
-        ck.need_num(rv, q.rhs, "the right side")
+        ck.need_numlike(lv, q.lhs, "the left side", allow_vec=True)
+        ck.need_numlike(rv, q.rhs, "the right side", allow_vec=True)
+        if (lv.ty.n if isinstance(lv.ty, VecTy) else 1) != (rv.ty.n if isinstance(rv.ty, VecTy) else 1):
+            raise ck.err("one side of this equation is a vector and the other isn't (or they have different "
+                         "lengths)", q)
         if not ck.U.unify(lv.ty.dim, rv.ty.dim):
             raise ck.err(f"the two sides of this equation don't match: left is {ck.desc(lv.ty.dim)}, "
                          f"right is {ck.desc(rv.ty.dim)}", q)
@@ -158,6 +172,9 @@ def check_solve(ck, s: A.Solve, ctx):
         else:
             e = assigned[x]
             v = ck.expr(e, lctx)
+            if (v.ty.n if isinstance(v.ty, VecTy) else 1) != shape[x]:
+                raise ck.err(f"{x}{chr(39) * orders[x]} must be {'a number' if shape[x] == 1 else 'a vector'} "
+                             f"like {x}", s)
             want = dims[x] / (DExpr.of(tdim) ** orders[x])
             if not ck.U.unify(v.ty.dim, want):
                 raise ck.err(f"{x}{chr(39) * orders[x]} works out to {ck.desc(v.ty.dim)} but should be "
@@ -173,12 +190,17 @@ def check_solve(ck, s: A.Solve, ctx):
     sfs = [v.sf for v in y0.values() if v.sf is not None] + [v.sf for v in (t0, t1) if v.sf is not None]
     for x in names:
         n = orders[x]
-        view = SolView(sol_sym, base, base + n - 1, dims[x], tdim, t, x)
+        w = shape[x]
+        view = SolView(sol_sym, base, base + (n - 1) * w, dims[x], tdim, t, x)
+        view.n = w
+        view.stride = w
         view.hint = y0[(x, 0)].hint
+        view.hints = {k: y0[(x, k)].hint for k in range(n)}
         view.thint = t0.hint or t1.hint
         view.sf = min(sfs) if sfs else None
         ctx.scope.names[x] = view
-        base += n
+        base += n * w
+    info["slots"] = base
     rtol = 1e-9
     if s.tolerance is not None:
         tv = ck.expr(s.tolerance, ctx)
@@ -343,6 +365,10 @@ def _plot_series(ck, sr, ctx, s):
             xv = _plot_side(ck, sr.x, ctx)
     if True:
         entry = {"ylabel": _label(ck, sr.y), "xlabel": _label(ck, sr.x)}
+        for side, node in ((yv, sr.y), (xv, sr.x)):
+            if isinstance(side, SolRef) and side.view.n > 1:
+                nm = side.view.name
+                raise ck.err(f"{nm} is a vector; plot its components, e.g.  plot {nm}.y vs {nm}.x", node)
         if isinstance(yv, SolRef) and xv is None:
             v = yv.view
             if sr.x.name != v.tname:

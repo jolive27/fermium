@@ -152,7 +152,7 @@ class ReplSession:
         def visit(sym):
             if sym.storage == "arena" and sym.slot is None:
                 sym.slot = self.next_slot
-                self.next_slot += 3 if isinstance(sym.ty, ListTy) else 1
+                self.next_slot += 3 if isinstance(sym.ty, ListTy) else getattr(sym.ty, "n", 1)
         for sym in module.main.locals:
             visit(sym)
 

@@ -104,6 +104,17 @@ class Runtime:
                 s += f"  ({n} values)"
             rt.line.append(s)
 
+        def print_vec(fid, p, n):
+            f = rt.tables.fmts[fid]
+            u = display_unit(f["rdim"], f["hint"])
+            sf = f["sf"]
+            vals = [format_number(p[i] / u.factor, sf if f["direct"] and sf else max(sf or 6, 2) if sf else 6,
+                                  trim=sf is None) for i in range(n)]
+            s = "<" + ", ".join(vals) + ">"
+            if u.name not in ("", "1"):
+                s += " " + u.name
+            rt.line.append(s)
+
         def print_bool(b):
             rt.line.append("true" if b else "false")
 
@@ -171,6 +182,7 @@ class Runtime:
             "fm_print_num": CB(None, c_int64, c_double)(print_num),
             "fm_print_list": CB(None, c_int64, DPTR, c_int64)(print_list),
             "fm_print_bool": CB(None, c_int64)(print_bool),
+            "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
             "fm_error": CB(None, c_int64, c_double, c_double, c_int64)(error),
