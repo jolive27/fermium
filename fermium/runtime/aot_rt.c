@@ -59,7 +59,8 @@ static void fmt_num(double x, int sig, int trim, char *out, size_t cap) {
     char tmp[64];
     snprintf(tmp, sizeof tmp, "%.*e", sig - 1, x);
     double r = strtod(tmp, NULL);
-    int ex = (int)floor(log10(fabs(r)));
+    char *epos = strchr(tmp, 'e');
+    int ex = atoi(epos + 1);
     if (ex >= -4 && ex < 6) {
         int dec = sig - 1 - ex;
         if (dec < 0) dec = 0;
@@ -67,8 +68,7 @@ static void fmt_num(double x, int sig, int trim, char *out, size_t cap) {
         if (trim) trim_zeros(out);
         return;
     }
-    double mant = r / pow(10.0, ex);
-    snprintf(tmp, sizeof tmp, "%.*f", sig - 1, mant);
+    *epos = 0;                      /* mantissa text, already rounded */
     if (trim) trim_zeros(tmp);
     char e[32], sup[96] = "";
     snprintf(e, sizeof e, "%d", ex);

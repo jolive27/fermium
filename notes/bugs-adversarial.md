@@ -140,7 +140,7 @@ print x           # actual: 2.00 m    expected: 2 m
 The REPL shows the same (`x = 1.20 m` then `x = 2 m` prints `2.00 m`). Reassignment silently
 throws away precision the user typed.
 
-## A11. A function that returns on only some paths silently returns 0 on the others
+## A11. [FIXED] A function that returns on only some paths silently returns 0 on the others
 ```
 f(x) =
     if x > 0
@@ -150,3 +150,55 @@ print f(-2)       # actual: 0 m   expected: a compile error ("f doesn't return a
 ```
 Same with `while x < 0` / `return 1 m` and `print f(5)` → `0 m`. (A function with *no*
 return at all is already rejected: "the function f never returns a value".)
+
+## A12. Failed `assert` prints the line number twice
+```
+x = 1
+assert x > 2, "x too small"
+```
+`fermium run` prints `as.fm, line 2: line 2: x too small` (and `line 2: line 2: check failed: x > 2`
+without a message). The same doubled prefix appears in `fermium build` executables. Expected
+`as.fm, line 2: x too small`.
+
+## A13. `fermium build` executables print "runtime error" for a non-converging integral
+The C runtime (`fermium/runtime/aot_rt.c`, `fm_error`) has no case for error kind 9, which
+`runtime/core.py` now describes ("this integral doesn't converge ...").
+```
+print ∫ 1/x dx from 0 to 1
+```
+`fermium run`: `line 1: this integral doesn't converge: ...`;  built executable: `line 1: runtime error`.
+
+## A14. `fmt --pretty` breaks `3 * 10^8 m/s` (a unit after `10⁸` isn't accepted)
+`10^8 m` is 10⁸ metres, but the superscript spelling `10⁸ m` is an error, so `fmt --pretty`
+turns a working program into a broken one:
+```
+print 3 * 10^8 m/s       # works: 3×10⁸ m/s
+# fermium fmt --pretty  ->  print 3 · 10⁸ m/s   ->  "line 1: m isn't defined"
+print 10⁸ m              # error: m isn't defined     expected 1×10⁸ m (same as 10^8 m)
+print 5² m²              # error                       expected 25 m²
+print 2⁻¹ m              # error                       expected 0.5 m
+```
+Either accept a unit after `number superscript` (like after `number ^ number`) or have
+`fmt --pretty` leave `^` alone in that position.
+
+## A15. (HIGH) Adaptive `solve` loses all relative accuracy once a solution decays (absolute error floor)
+After the A5 fix (absolute floor ≈ max|dy/dt| × span × 1e-3 × rtol) — and to a lesser degree
+with the older `1e-3·max|y| so far` floor — a decaying solution is only accurate to an
+*absolute* ~1e-12 of its peak, so exponential decay (radioactivity!) is silently wrong:
+```
+solve x' = -x with x(0) = 1 for t from 0 to 30
+print x(30)            # actual: 8.29301×10⁻¹³   expected: 9.35762×10⁻¹⁴ (e⁻³⁰)
+solve x' = -x with x(0) = 1 for t from 0 to 60
+print x(60)            # actual: 2.27807×10⁻¹¹   expected: 8.75651×10⁻²⁷
+λ = 1 1/s
+solve N' = -λ N with N(0) = 1e20 for t from 0 s to 50 s
+print N(50 s)          # actual: 3.7168×10⁹      expected: 0.0192875 (1e20·e⁻⁵⁰)
+solve x'' = -x - 0.2 x' with x(0) = 1, x'(0) = 0 for t from 0 to 200
+print x(200)           # actual: -6.88365×10⁻¹⁰  expected: -1.15908×10⁻⁹ (scipy, atol=1e-30)
+```
+It also made the stiff Van der Pol case worse: `μ = 1000`, `x'' = μ (1 - x^2) x' - x`,
+x(0)=2, x'(0)=0, to t=3000 now gives -1.51035 (before: -1.51061; scipy Radau/LSODA: -1.5106069).
+A decay printed with 6 significant figures and the wrong value is the worst kind of
+answer. Suggestion: keep a *relative* tolerance on each component and only use an absolute
+floor while the component is still ≈0 at the start (e.g. floor from |h·f| of the current step,
+or floor = rtol·|y| with |y| replaced by |h·y'| when y == 0), or expose `atol`.

@@ -184,7 +184,7 @@ class Sol:
 def rk4(f, y0, t0, t1, h0):
     span = t1 - t0
     ratio = fdiv(span, h0)
-    if ratio != ratio or ratio <= 0:
+    if ratio != ratio or ratio <= 0 or ratio > 1e12:
         raise _Fail(ERR_STEP, h0, span)
     steps = int(math.ceil(ratio - 1e-9))
     steps = max(1, steps)
@@ -232,6 +232,7 @@ def dp45(f, y0, t0, t1, rtol):
     k = [None] * 7
     k[0] = f(t0, y)
     sol.push(t0, y, k[0])
+    fmx = [abs(v) for v in k[0]]
     while True:
         remaining = t1 - t
         if not (remaining > 1e-14 * abs(t1) and remaining > 0):
@@ -261,8 +262,11 @@ def dp45(f, y0, t0, t1, rtol):
                 if E_DP[m] != 0:
                     e = e + E_DP[m] * k[m][j]
             e = e * h
-            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + 1e-3 * ymax[j]) + 1e-300
-            r = e / sc
+            fs = fmx[j]
+            for m in range(1, 7):
+                fs = max(fs, abs(k[m][j]))
+            sc = rtol * ((max(abs(y[j]), abs(ynew[j])) + 1e-3 * ymax[j]) + 1e-3 * (fs * span))
+            r = fdiv(e, sc)
             errsum = errsum + r * r
         errn = math.sqrt(errsum / n)
         fac = 0.9 * fpow(max(errn, 1e-10), -0.2)
@@ -272,6 +276,7 @@ def dp45(f, y0, t0, t1, rtol):
             y = ynew
             ymax = [max(ymax[j], abs(y[j])) for j in range(n)]
             k[0] = k[6]
+            fmx = [max(fmx[j], abs(k[6][j])) for j in range(n)]
             sol.push(t, y, k[0])
             hv = h * fac
         else:

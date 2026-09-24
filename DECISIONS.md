@@ -117,7 +117,7 @@ The rule (spec §3.4.2), refined:
 ## D17. ODEs: `solve`
 - **Unknowns:** the names that appear with primes (`x'`, `x''`) or as `d/dt x`. Each equation is solved for its highest derivative by symbolic linear isolation (`calculus.isolate`), so `m x'' = -k x - b x'` works.
 - **Checks:** Initial conditions give the units of the unknowns, and all of them are required. Both sides of each equation are dimension-checked.
-- **Methods:** `step h` selects fixed-step RK4. The step is adjusted slightly so the range is covered exactly. Without a step, Fermium uses Dormand–Prince 5(4) with rtol = 1e-9 and a **scale-free** error norm: sc = rtol·(max(|y|,|y_new|) + 10⁻³·max|y| so far). This keeps the tolerance meaningful whether the values are 10⁻¹⁵ m or 10³⁰ kg.
+- **Methods:** `step h` selects fixed-step RK4. The step is adjusted slightly so the range is covered exactly. Without a step, Fermium uses Dormand–Prince 5(4) with rtol = 1e-9 and a **scale-free** error norm: sc = rtol·(max(|y|,|y_new|) + 10⁻³·max|y| so far + 10⁻³·max|dy/dt| so far·(t₁−t₀)). This keeps the tolerance meaningful whether the values are 10⁻¹⁵ m or 10³⁰ kg. The last term acts as an automatic absolute tolerance, so an unknown that starts at exactly 0 still works (adversarial test A5).
 - **Results:** The result is a dense solution. `x(2 s)` uses cubic Hermite interpolation with the stored derivatives. `x'(t)` and `x''(t)` also work, and so do `plot x vs t`, `plot y vs x` (phase or orbit plots), `values(x)`, `times(x)`, `x[end]` and `max(x)`.
 
 ## D18. `fit`

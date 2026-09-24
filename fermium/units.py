@@ -447,19 +447,16 @@ def format_number(x: float, sig: int = 6, trim: bool = True) -> str:
     if trim and x == int(x) and abs(x) < 1e7 and sig >= 6:
         return str(int(x))          # whole numbers print exactly (1048576, not 1.04858×10⁶)
     sig = max(1, min(sig, 17))
-    exp = math.floor(math.log10(abs(x)))
-    # rounding may bump the exponent (9.99 -> 10.0)
-    r = float(f"{x:.{sig - 1}e}")
-    if r != 0:
-        exp = math.floor(math.log10(abs(r)))
+    # let Python do the decimal rounding, then read mantissa and exponent from the text
+    # (no 10**exp arithmetic, which underflows for subnormal numbers)
+    m, _, e = f"{x:.{sig - 1}e}".partition("e")
+    exp = int(e)
     if -4 <= exp < 6:
         decimals = max(sig - 1 - exp, 0)
-        s = f"{r:.{decimals}f}"
+        s = f"{float(m + 'e' + e):.{decimals}f}"
         if trim and "." in s:
             s = s.rstrip("0").rstrip(".")
         return s
-    mant = r / 10**exp
-    s = f"{mant:.{sig - 1}f}"
-    if trim and "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return f"{s}×10{str(exp).translate(SUPERSCRIPTS)}"
+    if trim and "." in m:
+        m = m.rstrip("0").rstrip(".")
+    return f"{m}×10{str(exp).translate(SUPERSCRIPTS)}"

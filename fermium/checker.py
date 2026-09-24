@@ -336,11 +336,17 @@ class Checker(C.DiffContext):
                         raise self.err(
                             f"{name} is {self.desc(sym.ty.dim)}; it can't now hold {self.desc(v.ty.dim)}",
                             node, hint="each variable keeps its units; use a new name for a different quantity")
-            if v.sf is not None:
-                sym.sf = v.sf if sym.sf is None else min(sym.sf, v.sf)
-            sym.direct = False
-            if v.hint is not None and sym.hint is None:
-                sym.hint = v.hint
+            if ctx.loop == 0 and not getattr(ctx, "branch", 0):
+                # straight-line code: the variable now shows the new value's precision and unit
+                sym.sf, sym.direct = v.sf, v.direct
+                if v.hint is not None:
+                    sym.hint = v.hint
+            else:
+                if v.sf is not None:
+                    sym.sf = v.sf if sym.sf is None else min(sym.sf, v.sf)
+                sym.direct = False
+                if v.hint is not None and sym.hint is None:
+                    sym.hint = v.hint
         else:
             if isinstance(v.ty, SolTy):
                 raise self.err("can't store an ODE solution in a variable this way", node)
@@ -465,8 +471,12 @@ class Checker(C.DiffContext):
 
     def s_If(self, s, ctx):
         c = self.cond(s.cond, ctx)
-        then = self.block(s.then, ctx.child(Scope(ctx.scope)) if False else ctx)
-        other = self.block(s.other, ctx) if s.other else []
+        ctx.branch = getattr(ctx, "branch", 0) + 1
+        try:
+            then = self.block(s.then, ctx)
+            other = self.block(s.other, ctx) if s.other else []
+        finally:
+            ctx.branch -= 1
         return I.SIf(c, then, other)
 
     def cond(self, e, ctx):
@@ -940,6 +950,13 @@ class Checker(C.DiffContext):
         return r
 
     def e_Neg(self, e, ctx):
+        q = e.operand
+        if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and not q.paren:
+            u = self.resolve_unit(q.unit)
+            if u.affine:        # -40 °C is minus forty degrees, not -(313.15 K)
+                neg = A.Quantity(A.Num(-q.value.value, q.value.sigfigs, q.value.digit).at(q.value), q.unit,
+                                 q.bracket).at(e)
+                return self.e_Quantity(neg, ctx)
         a = self.expr(e.operand, ctx)
         self.need_numlike(a, e.operand, allow_vec=True)
         r = I.INeg(a)
@@ -1353,6 +1370,10 @@ class Checker(C.DiffContext):
                     last = stmts[-1]
                     stmts[-1] = A.Return(last.value).at(last)
                 inst.body = self.block(stmts, fctx)
+                if fctx.ret_types and not _always_returns(inst.body):
+                    raise self.err(f"{info.display_name} doesn't return a value on every path (for example when "
+                                   f"an if is false, or a loop doesn't run)", f,
+                                   hint="make sure the function ends with a value or a return that always runs")
         except FermiumError as e:
             info.instances.pop(key, None)
             if e.line is None and node is not None:
@@ -1408,6 +1429,13 @@ class Checker(C.DiffContext):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
             v.hint = u
             return v
+        if name == "times" and len(e.args) == 1:
+            v = self.expr(e.args[0], ctx, allow_func=True)
+            if isinstance(v, SolRef):
+                sol = self.var_ref(v.view.sol_sym, ctx, e)
+                r = I.ISolList(sol, v.view.comp, "t", ListTy(v.view.tdim))
+                r.hint = getattr(v.view, "thint", None)
+                return r
         args = []
         for a in e.args:
             v = self.expr(a, ctx, allow_func=True)
@@ -1769,6 +1797,15 @@ class Checker(C.DiffContext):
     def s_Plot(self, s, ctx):
         from .solve import check_plot
         return check_plot(self, s, ctx)
+
+
+def _always_returns(stmts) -> bool:
+    for st in stmts:
+        if isinstance(st, I.SReturn):
+            return True
+        if isinstance(st, I.SIf) and st.other and _always_returns(st.then) and _always_returns(st.other):
+            return True
+    return False
 
 
 def canonical_unit_name(uexpr: A.UnitExpr) -> str:

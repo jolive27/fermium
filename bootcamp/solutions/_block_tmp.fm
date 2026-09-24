@@ -1,4 +1,0 @@
-d = load "../data/decay.csv"
-ts = linspace(0 min, 60 min, 61)
-model = 1200 exp(-ts / 20 min)
-plot d.counts vs d.t, model vs ts to "decay_model.png"

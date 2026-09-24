@@ -437,7 +437,7 @@ class ModuleGen:
         lp = LoopHelper(b, fn)
         span = b.fsub(t1, t0)
         ratio = b.fdiv(span, h0)
-        with b.if_then(b.or_(b.fcmp_unordered("uno", ratio, ratio),
+        with b.if_then(b.or_(b.or_(b.fcmp_unordered("uno", ratio, ratio), b.fcmp_ordered(">", ratio, f64(1e12))),
                              b.fcmp_ordered("<=", ratio, f64(0)))):
             self.raise_error(b, ERR_STEP, h0, span)
         steps = b.fptosi(b.call(self.intrinsic("ceil"), [b.fsub(ratio, f64(1e-9))]), I64)
@@ -507,6 +507,9 @@ class ModuleGen:
         b.store(i64(0), nsteps)
         b.call(f, [t0, y, k[0], env])
         b.call(push, [sp, t0, y, k[0]])
+        fmx = _err     # largest |dy/dt| seen so far, per component
+        with lp.range(i64(0), n) as j:
+            b.store(b.call(fabs, [b.load(b.gep(k[0], [j]))]), b.gep(fmx, [j]))
         # Dormand–Prince coefficients
         A = [[], [1 / 5], [3 / 40, 9 / 40], [44 / 45, -56 / 15, 32 / 9],
              [19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729],
@@ -552,7 +555,14 @@ class ModuleGen:
             e = b.fmul(e, h)
             yo = b.call(fabs, [b.load(b.gep(y, [j]))])
             yn = b.call(fabs, [b.load(b.gep(ynew, [j]))])
-            sc = b.fmul(rtol, b.fadd(b.call(fmax, [yo, yn]), b.fmul(f64(1e-3), b.load(b.gep(ymax, [j])))))
+            # scale-free error norm: relative to the size the component has reached, with an absolute floor
+            # of (largest |dy/dt| seen, including this step's stages) × (time span) -- so an unknown that
+            # starts at exactly 0 still gets a sensible tolerance, whatever its units
+            fs = b.load(b.gep(fmx, [j]))
+            for m in range(1, 7):
+                fs = b.call(fmax, [fs, b.call(fabs, [b.load(b.gep(k[m], [j]))])])
+            sc = b.fmul(rtol, b.fadd(b.fadd(b.call(fmax, [yo, yn]), b.fmul(f64(1e-3), b.load(b.gep(ymax, [j])))),
+                                     b.fmul(f64(1e-3), b.fmul(fs, span))))
             sc = b.fadd(sc, f64(1e-300))
             r = b.fdiv(e, sc)
             b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
@@ -571,6 +581,8 @@ class ModuleGen:
                     b.store(v, b.gep(y, [j]))
                     b.store(b.call(fmax, [b.load(b.gep(ymax, [j])), b.call(fabs, [v])]), b.gep(ymax, [j]))
                     b.store(b.load(b.gep(k[6], [j])), b.gep(k[0], [j]))   # FSAL
+                    b.store(b.call(fmax, [b.load(b.gep(fmx, [j])), b.call(fabs, [b.load(b.gep(k[6], [j]))])]),
+                            b.gep(fmx, [j]))
                 b.call(push, [sp, tn, y, k[0]])
                 b.store(b.fmul(h, fac), hv)
             with no:
