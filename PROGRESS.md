@@ -1,6 +1,6 @@
 # PROGRESS
 
-_Last updated: 2026-09-24 23:15 UTC_
+_Last updated: 2026-09-24 23:20 UTC_
 
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
 
@@ -23,6 +23,12 @@ _Last updated: 2026-09-24 23:15 UTC_
   - `where`
 - 23:10 CLI: `run`, `check`, `fmt --pretty/--ascii`, `doctor`. REPL with `\name<TAB>`.
 - 23:10 Wrote DECISIONS.md (D1–D22) and docs/reference.md. `check.sh` and Makefile in place.
+
+- 23:00 Benchmarks: `benchmarks/fermium/*.fm` written. First full run: compute time vs Julia is 1.28× on nbody, 1.88× on RK4, 1.3× on blackbody and 1.06× on the unit loop. Fermium's wall time beats Julia's everywhere. (spring_adaptive uses a different error norm, so its step count differs; see RESULTS.md.)
+- 23:05 Numeric validation tests against SymPy/SciPy. Spec §3.1 snippet tests (file + REPL).
+- 23:10 VS Code extension (grammar + `\name` completion, tested with a mocked vscode module under node).
+- 23:15 Fixed about 30 agent-reported bugs (see notes/bugs-*.md). Mutation fuzzer: 6000+ mutated programs, no crashes.
+- 23:20 Coverage 87% (cli/doctor are only covered by subprocess tests).
 
 ## In progress
 - Test suites: parser, dimension checker (≥50 reject / ≥50 accept), fmt round-trip, REPL (agent).
