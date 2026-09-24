@@ -279,6 +279,52 @@ distance after 0.25 yr: 0.302 AU
 
 The closest approach is on the negative x-axis, so `min(x)` gives it (as a negative number): 0.291 AU, the same as our simulation. Your code agrees with a professional solver.
 
+## Bonus: the same simulation with vectors
+
+So far we kept x and y in separate variables and wrote every line twice. Physicists write the position as one **vector** **r** = (x, y), and Fermium has vectors too:
+
+- `<1, 0> AU` is a vector with components 1 AU and 0 AU (angle brackets `<` `>`, commas between the components).
+- `|r|` is its length, √(x² + y²).
+- `r.x` and `r.y` are its components.
+- Vectors add, subtract and multiply by numbers, just like on paper. (There's also `a · b` for the dot product and `a × b` for the cross product.)
+
+Here is version 1 again. Newton's law becomes a single line, **a** = −GM **r**/|**r**|³:
+
+```fermium
+# Earth around the Sun, with vectors
+GM = G M_sun
+dt = 1 day
+r = <1, 0> AU          # position
+v = <0, 29.78> km/s    # velocity
+
+for day_number from 1 to 365
+    a = -GM r / |r|^3
+    v += a dt
+    r += v dt
+
+print "after 365 days:", r in AU
+print "distance from the Sun:", |r| in AU
+```
+
+<!-- output -->
+```
+after 365 days: <1.000, -0.002767> AU
+distance from the Sun: 1.000 AU
+```
+
+The same numbers as version 1, and the loop is less than half as long. Units are checked on vectors too: `v += a` (forgetting `dt`) is still an error. To plot the orbit, `push(xs, r.x)` and `push(ys, r.y)` inside the loop, as in version 2. (A list can hold numbers but not whole vectors, so push the components.) And `solve` accepts vector equations as well: `solve r'' = -GM r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 29.78> km/s for t from 0 yr to 1 yr`.
+
+## Bonus: a program you can hand to a friend
+
+`fermium build` turns a program into a stand-alone app that runs without Fermium installed. It needs a C compiler; on a Mac, install Apple's free command line tools once with `xcode-select --install`. Save the vector program above as `orbit.fm`, then:
+
+```
+fermium build orbit.fm
+./orbit
+```
+
+`./orbit` (the `./` means "the program in this folder") prints the same result as `fermium run orbit.fm`. Programs that use `plot`, `load` or `fit` can't be built this way yet; Fermium tells you if you try.
+
 ## Congratulations!
 
 You've written a physics simulation from nothing, tested it, found a subtle numerical problem and fixed it, and used it to rediscover two of Kepler's laws. That's genuine computational physics. Everything you learned (variables, functions, loops, lists, units, plots, testing your code) carries over to Python, Julia, C++ or any other language you'll meet.
@@ -291,7 +337,7 @@ Pick one or more. Solutions for the first four are in the solutions file.
 2. **Escape!** Find the smallest starting speed at 1 AU for which the planet never comes back (its energy is ≥ 0). Try launching at 40, 42 and 44 km/s and check the sign of E. Compare with the escape velocity √(2GM/r).
 3. **Time step study.** Run version 3 with dt = 1 day, 6 hr, 1 hr and 10 min. How does the error in the period depend on dt?
 4. **A function for the force.** Rewrite version 3 so the acceleration is computed by functions `ax(x, y)` and `ay(x, y)`. It's a good habit: the physics is in one place and easy to change.
-5. **Challenge: Kepler's second law.** A planet sweeps out equal areas in equal times. In each step, the area swept is ½ |x·v_y − y·vₓ| dt. Record it for every step of the eccentric orbit and show that it's constant.
+5. **Challenge: Kepler's second law.** A planet sweeps out equal areas in equal times. In each step, the area swept is ½ |x·v_y − y·vₓ| dt. Record it for every step of the eccentric orbit and show that it's constant. (With vectors, that's `½ |r × v| dt`.)
 6. **Challenge: Jupiter's pull.** Add Jupiter (at 5.2 AU, 13.1 km/s, mass 1.898e27 kg) as a second body in the loop, and let the Earth feel both the Sun and Jupiter. (You'll need the Earth–Jupiter distance and a force from each.) Does the Earth's orbit change over 12 years?
 
 Solutions: [solutions/lesson10.md](solutions/lesson10.md)

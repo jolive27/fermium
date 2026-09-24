@@ -27,7 +27,7 @@ exact:      135.335
 
 A `solve` has three parts:
 
-1. **The equation**, with primes for derivatives: `N' = -N / tau`. (`d/dt N = -N / tau` also works.)
+1. **The equation**, with primes for derivatives: `N' = -N / tau`. (You can also write it the textbook way, `dN/dt = -N / tau`, or `d/dt N = -N / tau`.)
 2. **`with`**: the **initial conditions**, the values at the start. `N(0) = 1000` means "N is 1000 at t = 0". (You can write `N(0)` even when t is in seconds.)
 3. **`for`**: the independent variable (here `t`) and the range to solve over.
 
@@ -59,7 +59,7 @@ plot saved to spring.png
 
 ![Spring oscillation](spring.png)
 
-A second-order equation (with x″) needs **two** initial conditions: the starting position `x(0)` and the starting velocity `x'(0)`. If you forget one, Fermium tells you which is missing.
+For a second derivative, write `x''` (or `d²/dt² x`; the form `d²x/dt²` isn't understood yet). A second-order equation (with x″) needs **two** initial conditions: the starting position `x(0)` and the starting velocity `x'(0)`. If you forget one, Fermium tells you which is missing.
 
 You don't need to rearrange the equation to "x″ = …" yourself. Fermium does that: `mass x'' = -k x` is fine. (We called the mass `mass` rather than `m`, to avoid the metre gotcha from Lesson 2.)
 
@@ -194,6 +194,8 @@ plot saved to earth_orbit.png
 ![Earth's orbit](earth_orbit.png)
 
 After one year the Earth is (almost exactly) back where it started. `plot y vs x` draws one unknown against the other, which is the path of the orbit. In the final project you'll build this simulation yourself, from scratch, and then explore it.
+
+(Physicists would write this as a single vector equation, **r**″ = −GM **r**/|**r**|³. Fermium can do that too: see the bonus at the end of Lesson 10.)
 
 ## What else you can do with a solution
 

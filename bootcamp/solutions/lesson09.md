@@ -19,7 +19,7 @@ after 5730 years:  0.500015
 after 10000 years: 0.298308
 ```
 
-Half is left after one half-life, as it should be.
+Half is left after one half-life, as it should be. (You can also write the equation exactly as in the exercise: `solve dN/dt = -N / tau`.)
 
 ## 2. Big swings
 

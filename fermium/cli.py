@@ -31,6 +31,10 @@ def cmd_run(args):
     from .driver import run_source, Program
     src = _read(args.file)
     try:
+        if args.interp:
+            from .interp import run_interpreted
+            run_interpreted(src, args.file)
+            return 0
         if args.emit_llvm:
             p = Program(src, args.file)
             print(p.llvm_ir)
@@ -126,6 +130,8 @@ def main(argv=None):
     r.add_argument("file")
     r.add_argument("--time", action="store_true", help="show how long each stage took")
     r.add_argument("--emit-llvm", action="store_true", help="print the generated LLVM IR instead of running")
+    r.add_argument("--interp", action="store_true",
+                   help="run with the slow reference interpreter instead of compiling (for checking)")
     c = sub.add_parser("check", help="check a program's units without running it")
     c.add_argument("file")
     f = sub.add_parser("fmt", help="convert a program between ASCII and symbols")

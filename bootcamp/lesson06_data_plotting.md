@@ -84,6 +84,8 @@ The result, with axes labelled with units automatically:
 
 ![Period against length](pendulum_data.png)
 
+Columns loaded from a file are drawn as dots, because they are separate measurements. Lists you calculate yourself and formulas are drawn as smooth lines.
+
 ## Fitting a model
 
 Theory says T = 2π√(L/g). Rather than computing g row by row, let's find the single value of g that makes the curve go through the data as well as possible. This is called **fitting** (the *least-squares* method), and in Fermium it's one line:
@@ -108,6 +110,28 @@ How does Fermium know what to fit? `T` and `L` are column names in the data; `pi
 - the **rms residual**: how far the data points are from the curve, on average. Here it's under 0.01 s, consistent with timing by hand.
 
 After the fit, `g` is an ordinary variable you can use.
+
+### Fitting a straight line: T² against L
+
+In the lab you may have learned a different trick: square both sides of T = 2π√(L/g) to get T² = (4π²/g) L. Then T² against L is a **straight line** through the origin with slope k = 4π²/g. You can fit exactly that. The left side of a fit can be a formula made from a column, like `T^2`:
+
+```fermium
+data = load "data/pendulum.csv"
+fit T^2 = k L to data
+print "slope k =", k
+print "so g is", 4 pi^2 / k
+```
+
+<!-- output -->
+```
+fit T² = k L   (7 data points from data/pendulum.csv)
+  k = 3.997 s²/m   (standard error 0.012 s²/m)
+  rms residual = 0.0271 s²
+slope k = 4.00 s²/m
+so g is 9.88 m/s²
+```
+
+Fermium worked out that the slope `k` must be in s²/m. The g from this fit (9.88 m/s²) is slightly different from the one above (9.86 m/s²), because squaring T changes how much each point counts in the fit. The two answers agree within the fit's standard error of 0.04 m/s², so both are fine.
 
 ### Showing the fit on the graph
 
@@ -184,7 +208,7 @@ The half-life is τ ln 2 ≈ 14 minutes. (Don't be misled by the name `ln`: it's
 - CSV header: `name [unit], name [unit]`. Load with `data = load "file.csv"`; columns are `data.name`.
 - Columns are lists: `mean(data.T)`, `4 pi^2 data.L / data.T^2`.
 - `plot Y vs X to "file.png"` saves a graph. Several series: `plot A vs X, B vs X`. Formulas: `plot f(x) vs x from a to b`.
-- `fit model to data` finds unknown parameters, with units and standard errors. Add `with a = ..., b = ...` for starting guesses.
+- `fit model to data` finds unknown parameters, with units and standard errors. Add `with a = ..., b = ...` for starting guesses. The left side can be a formula of a column: `fit T^2 = k L to data`.
 
 ## Exercises
 

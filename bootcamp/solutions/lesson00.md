@@ -65,3 +65,5 @@ prints
 ```
 me.fm: no problems found (units check out)
 ```
+
+The other commands in the list: `run` (run a program), `fmt` (switch between plain letters and symbols, Lesson 2b), `doctor` (check the installation), `repl` (the interactive prompt, same as typing just `fermium`) and `build`, which turns a program into an app you can run without Fermium. You'll try `build` at the end of Lesson 10.

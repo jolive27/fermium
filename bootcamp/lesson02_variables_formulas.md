@@ -53,7 +53,7 @@ A few things to notice:
 - **Upper and lower case are different:** `T` (a period) and `t` (a time) are two different variables.
 - **Names can be longer than one letter.** That means `LT` is *one* name ("LT"), not L × T. Put a space between them: `L T`.
 - `_` makes a subscript in physics notation: `v_0` is read as v₀.
-- A few words are reserved by Fermium and can't be variable names: `if else for while from to step in print plot solve with fit load vs where and or not return`. If you try, you get `didn't expect 'step' here`.
+- A few words are part of the language itself (**reserved words**) and can't be variable names, for example `if else for while from to step in print plot solve with fit load vs where and or not return true false`. If you try, Fermium tells you: `'step' is a reserved word in Fermium, so it can't be a variable name`. The full list is in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#more-problems).
 
 Long, descriptive names make programs easier to read:
 
@@ -90,6 +90,22 @@ g to 6 digits: 9.69966 m/s²
 ```
 
 `to 6 digits` overrides the automatic significant figures (Lesson 1) when you want to see more (or fewer) digits.
+
+A variable can hold text, too. That's handy for a label you print several times:
+
+```fermium
+planet = "Mars"
+print "Planet:", planet
+print planet, "is the fourth planet"
+```
+
+<!-- output -->
+```
+Planet: Mars
+Mars is the fourth planet
+```
+
+Text can be stored and printed, but you can't do arithmetic with it: `"Mars" + 1` is an error.
 
 ## Variables keep their units
 
@@ -225,7 +241,7 @@ It takes 2.02 s to fall.
 - `LT` is one name; write `L T` for a product.
 - A variable keeps its units forever.
 - `x += 1 m` updates a variable.
-- `print "text", value` and `print x to 6 digits`.
+- `print "text", value` and `print x to 6 digits`. A variable can also hold text: `planet = "Mars"`.
 - **Gotchas:** `0.5 m v^2` uses *metres*; `1/2 m v^2` means 1/(2mv²). Write `½ m v^2` or `0.5 * m * v^2`.
 
 ## Exercises

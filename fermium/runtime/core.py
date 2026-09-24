@@ -10,7 +10,10 @@ import os
 import sys
 import time
 
-import llvmlite.binding as llvm
+try:
+    import llvmlite.binding as llvm
+except ImportError:            # the reference interpreter works without llvmlite
+    llvm = None
 
 from ..errors import FermiumRuntimeError
 from ..units import preferred_unit, format_number, Unit
@@ -180,6 +183,10 @@ class Runtime:
             for i, v in enumerate(vals):
                 p[i] = v
 
+        # the plain Python versions, used by the reference interpreter (fermium/interp.py)
+        self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
+                   "print_bool": print_bool, "print_text": print_text, "print_end": print_end,
+                   "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
             "fm_print_num": CB(None, c_int64, c_double)(print_num),
             "fm_print_list": CB(None, c_int64, DPTR, c_int64)(print_list),
@@ -197,8 +204,9 @@ class Runtime:
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_clock": CB(c_double)(time.perf_counter),
         }
-        for name, cb in self.callbacks.items():
-            llvm.add_symbol(name, ctypes.cast(cb, c_void_p).value)
+        if llvm is not None:
+            for name, cb in self.callbacks.items():
+                llvm.add_symbol(name, ctypes.cast(cb, c_void_p).value)
 
     def describe_error(self, kind, a, b):
         if kind == 1:
@@ -259,23 +267,28 @@ class Runtime:
         return h
 
     # ------------------------------------------------------------ fit
-    def fit(self, fid, h, p):
+    def fit(self, fid, h, p, model_fn=None):
+        """Fit parameters p (in/out).  model_fn(params) -> residuals (model - left side) for the
+        interpreter; otherwise the compiled model function is called through ctypes."""
         import numpy as np
         info = self.tables.fits[fid]
         data = self.datasets[h]
-        addr = self.engine_ref.get_function_address("lam." + info["model"])
-        model = ctypes.CFUNCTYPE(None, DPTR, ctypes.POINTER(DPTR), c_int64, DPTR)(addr)
         cols = [data[c] for c in info["cols"]]
         n = len(data[0]) if data else 0
         y = np.zeros(n)          # the model returns (model - left side), fitted to zero
         np_ = len(info["params"])
-        colptrs = (DPTR * max(1, len(cols)))(*[c.ctypes.data_as(DPTR) for c in cols])
-        out = np.zeros(n)
+        if model_fn is None:
+            addr = self.engine_ref.get_function_address("lam." + info["model"])
+            model = ctypes.CFUNCTYPE(None, DPTR, ctypes.POINTER(DPTR), c_int64, DPTR)(addr)
+            colptrs = (DPTR * max(1, len(cols)))(*[c.ctypes.data_as(DPTR) for c in cols])
+            out = np.zeros(n)
 
-        def f(params):
-            pa = (ctypes.c_double * np_)(*params)
-            model(pa, colptrs, n, out.ctypes.data_as(DPTR))
-            return out.copy()
+            def f(params):
+                pa = (ctypes.c_double * np_)(*params)
+                model(pa, colptrs, n, out.ctypes.data_as(DPTR))
+                return out.copy()
+        else:
+            f = model_fn
 
         guess = [p[i] for i in range(np_)]
         guess = [g if math.isfinite(g) else math.nan for g in guess]

@@ -194,7 +194,11 @@ print k_B
 1.38065×10⁻²³ J/K
 ```
 
-The underscore `_` is how you write a subscript: `m_e` is mₑ, the electron mass. Others include `m_p` (proton), `m_n` (neutron), `e` (the elementary charge), `N_A`, `epsilon_0`, `g_n` (standard gravity, 9.80665 m/s²), `M_sun`, `M_earth`, `R_earth`, `AU`. The electron's rest energy mₑc²:
+The underscore `_` is how you write a subscript: `m_e` is mₑ, the electron mass. Others include `m_p` (proton), `m_n` (neutron), `e` (the elementary charge), `N_A`, `epsilon_0`, `g_n` (standard gravity, 9.80665 m/s²), `M_sun`, `M_earth`, `R_earth`, `AU`.
+
+> **`e` is the charge, not 2.718…** In Fermium `e` always means the elementary charge, 1.602×10⁻¹⁹ C. So `e^2` is the charge squared (in C²), which is what you want in formulas like e²/(4πε₀r). For the exponential function eˣ, write `exp(x)`: `exp(1)` is 2.71828. (If you write `e^x` with a variable `x`, Fermium stops and reminds you.)
+
+The electron's rest energy mₑc²:
 
 ```fermium
 print m_e * c^2 in MeV
@@ -273,7 +277,21 @@ print 1 AU / c in min
 8.31675 min
 ```
 
-Dividing is friendlier: if you put a space before the `/`, Fermium divides by *your* variable. So `20 m/s / g` is 20 m/s divided by your `g` (a time, 2.04 s), and `2.898e-3 m K / T` divides by your temperature `T`. Without the space (`20 m/s/g`) the `g` would be read as grams. When in doubt, use parentheses: `(20 m/s) / g`.
+Dividing is friendlier. If you put a **space before the `/`**, Fermium divides by *your* variable:
+
+```fermium
+g = 9.81 m/s^2
+print 20 m/s / g
+print 20 m/s/g
+```
+
+<!-- output -->
+```
+2.04 s
+20 m/(s g)
+```
+
+The first line is 20 m/s divided by your `g`: a time, 2.04 s, just as you meant. In the second line there's no space, so `/g` carries on the unit: 20 metres per second per **gram**. The same goes for a temperature called `T`: `2.898e-3 m K / T` divides by your `T`, but `m K/T` (no space) would be kelvin per *tesla*. When in doubt, use parentheses: `(20 m/s) / g`.
 
 ## Summary
 
@@ -284,6 +302,8 @@ Dividing is friendlier: if you put a space before the `/`, Fermium divides by *y
 - `in` converts: `print 100 km/hr in m/s`.
 - Constants like `c`, `h`, `G`, `m_e` are built in.
 - **Gotcha:** `2 g h` is 2 *grams* × Planck's constant. Write `2 * g * h`.
+- Dividing by your own variable: put a space before `/` (`20 m/s / g`), or use parentheses.
+- `e` is the elementary charge; the exponential function is `exp(x)`.
 
 ## Exercises
 

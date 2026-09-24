@@ -23,7 +23,8 @@ VOID = ir.VoidType()
 F64P = F64.as_pointer()
 F64PP = F64P.as_pointer()
 I8P = I8.as_pointer()
-LIST = ir.LiteralStructType([F64P, I64, I64])     # data, len, capacity
+LISTH = ir.LiteralStructType([F64P, I64, I64])    # list header: data, len, capacity
+LIST = LISTH.as_pointer()                          # a list value is a pointer to its (shared) header
 # solution: n, dim, cap, t*, y*, dy*
 SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P])
 SOLP = SOL.as_pointer()
@@ -681,7 +682,7 @@ class FuncGen:
         else:
             p = self.alloca(t, sym.name)
             if isinstance(sym.ty, ListTy):
-                self.b.store(ir.Constant(LIST, None), p) if False else None
+                pass
         self.slots[sym.id] = p
         return p
 
@@ -727,19 +728,22 @@ class FuncGen:
     def s_SPush(self, s):
         b = self.b
         v = self.expr(s.value)
-        slot = self.slot(s.sym)
-        lst = b.load(slot)
-        data, n, cap = (b.extract_value(lst, i) for i in range(3))
-        grow = b.icmp_signed(">=", n, cap)
-        with b.if_then(grow):
+        hdr = b.load(self.slot(s.sym))
+        pdata = b.gep(hdr, [I32(0), I32(0)])
+        plen = b.gep(hdr, [I32(0), I32(1)])
+        pcap = b.gep(hdr, [I32(0), I32(2)])
+        n, cap = b.load(plen), b.load(pcap)
+        with b.if_then(b.icmp_signed(">=", n, cap)):
             nc = b.select(b.icmp_signed("<", cap, i64(4)), i64(8), b.mul(cap, i64(2)))
-            nd = b.bitcast(b.call(self.mg.externs["realloc"], [b.bitcast(data, I8P), b.mul(nc, i64(8))]), F64P)
-            lst2 = b.insert_value(b.insert_value(b.load(slot), nd, 0), nc, 2)
-            b.store(lst2, slot)
-        lst = b.load(slot)
-        data = b.extract_value(lst, 0)
-        b.store(v, b.gep(data, [n]))
-        b.store(b.insert_value(lst, b.add(n, i64(1)), 1), slot)
+            # a fresh block (old one is never freed): other code may still be reading the old one
+            nd = b.bitcast(b.call(self.mg.externs["malloc"], [b.mul(nc, i64(8))]), F64P)
+            old = b.load(pdata)
+            with self.lp.range(i64(0), n) as k:
+                b.store(b.load(b.gep(old, [k])), b.gep(nd, [k]))
+            b.store(nd, pdata)
+            b.store(nc, pcap)
+        b.store(v, b.gep(b.load(pdata), [n]))
+        b.store(b.add(n, i64(1)), plen)
 
     def s_SIf(self, s):
         c = self.expr(s.cond)
@@ -810,8 +814,8 @@ class FuncGen:
     def s_SForIn(self, s):
         b, fn = self.b, self.fn
         lst = self.expr(s.lst)
-        data = b.extract_value(lst, 0)
-        n = b.extract_value(lst, 1)
+        data = self.ldata(lst)
+        n = self.llen(lst)
         iv = self.alloca(I64)
         b.store(i64(0), iv)
         cond = fn.append_basic_block("fi.c")
@@ -854,7 +858,7 @@ class FuncGen:
                 b.call(ex["fm_print_num"], [i64(fid), self.expr(payload)])
             elif kind == "list":
                 lst = self.expr(payload)
-                b.call(ex["fm_print_list"], [i64(fid), b.extract_value(lst, 0), b.extract_value(lst, 1)])
+                b.call(ex["fm_print_list"], [i64(fid), self.ldata(lst), self.llen(lst)])
             elif kind == "vec":
                 v = self.expr(payload)
                 n = payload.ty.n
@@ -931,8 +935,8 @@ class FuncGen:
             if kind == "lists":
                 y = self.expr(e["y"])
                 x = self.expr(e["x"])
-                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), b.extract_value(x, 0), b.extract_value(x, 1),
-                                              b.extract_value(y, 0), b.extract_value(y, 1)])
+                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), self.ldata(x), self.llen(x),
+                                              self.ldata(y), self.llen(y)])
             elif kind in ("sol", "solxy"):
                 sol = b.bitcast(self.expr(e["sol"]), I8P)
                 c2 = e.get("comp2", -1)
@@ -976,17 +980,27 @@ class FuncGen:
         b = self.b
         data = b.bitcast(b.call(self.mg.externs["malloc"], [b.mul(b.select(b.icmp_signed("<", n, i64(1)), i64(1), n),
                                                                   i64(8))]), F64P)
-        lst = ir.Constant(LIST, ir.Undefined)
-        lst = b.insert_value(lst, data, 0)
-        lst = b.insert_value(lst, n, 1)
-        lst = b.insert_value(lst, n, 2)
-        return lst, data
+        return self.make_header(data, n), data
+
+    def make_header(self, data, n):
+        b = self.b
+        hdr = b.bitcast(b.call(self.mg.externs["malloc"], [i64(24)]), LIST)
+        b.store(data, b.gep(hdr, [I32(0), I32(0)]))
+        b.store(n, b.gep(hdr, [I32(0), I32(1)]))
+        b.store(n, b.gep(hdr, [I32(0), I32(2)]))
+        return hdr
+
+    def ldata(self, lst):
+        return self.b.load(self.b.gep(lst, [I32(0), I32(0)]))
+
+    def llen(self, lst):
+        return self.b.load(self.b.gep(lst, [I32(0), I32(1)]))
 
     def map_list(self, lst, fn_elem):
         """New list with fn_elem(x) for each element."""
         b = self.b
-        src = b.extract_value(lst, 0)
-        n = b.extract_value(lst, 1)
+        src = self.ldata(lst)
+        n = self.llen(lst)
         out, data = self.new_list(n)
         with self.lp.range(i64(0), n) as i:
             b.store(fn_elem(b.load(b.gep(src, [i])), i), b.gep(data, [i]))
@@ -1031,11 +1045,11 @@ class FuncGen:
         if not la and not lc:
             return op(a, c)
         if la and lc:
-            na = b.extract_value(a, 1)
-            nc = b.extract_value(c, 1)
+            na = self.llen(a)
+            nc = self.llen(c)
             with b.if_then(b.icmp_signed("!=", na, nc)):
                 self.fail(ERR_LEN, b.sitofp(na, F64), b.sitofp(nc, F64))
-            cd = b.extract_value(c, 0)
+            cd = self.ldata(c)
             return self.map_list(a, lambda x, i: op(x, b.load(b.gep(cd, [i]))))
         if la:
             return self.map_list(a, lambda x, i: op(x, c))
@@ -1179,14 +1193,14 @@ class FuncGen:
 
     def elem_ptr(self, lst, idx):
         b = self.b
-        n = b.extract_value(lst, 1)
+        n = self.llen(lst)
         i = b.fptosi(idx, I64)
         # one unsigned compare covers i < 1 and i > n; the exactness check rejects 1.5 and NaN
         bad = b.icmp_unsigned(">=", b.sub(i, i64(1)), n)
         bad = b.or_(bad, b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
         with b.if_then(bad, likely=False):
             self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
-        return b.gep(b.extract_value(lst, 0), [b.sub(i, i64(1))])
+        return b.gep(self.ldata(lst), [b.sub(i, i64(1))])
 
     def e_IIndex(self, e):
         lst = self.expr(e.lst)
@@ -1228,10 +1242,7 @@ class FuncGen:
         h = self.expr(e.data)
         pp = self.alloca(F64P)
         n = b.call(self.mg.externs["fm_column"], [h, i64(e.col), pp])
-        lst = ir.Constant(LIST, ir.Undefined)
-        lst = b.insert_value(lst, b.load(pp), 0)
-        lst = b.insert_value(lst, n, 1)
-        return b.insert_value(lst, n, 2)
+        return self.make_header(b.load(pp), n)
 
     # ------------------------------------------------------------ builtins
     MATH_INTRINSICS = {"sin": "sin", "cos": "cos", "exp": "exp", "ln": "log", "log": "log", "log10": "log10",
@@ -1310,28 +1321,28 @@ class FuncGen:
         if name == "clock":
             return b.call(self.mg.externs["fm_clock"], [])
         if name == "len":
-            return b.sitofp(b.extract_value(args[0], 1), F64)
+            return b.sitofp(self.llen(args[0]), F64)
         if name in ("sum", "mean", "std", "min_list", "max_list", "first", "last"):
             return self.reduce(name, args[0])
         if name == "dot":
             a, c = args
-            na = b.extract_value(a, 1)
-            with b.if_then(b.icmp_signed("!=", na, b.extract_value(c, 1))):
-                self.fail(ERR_LEN, b.sitofp(na, F64), b.sitofp(b.extract_value(c, 1), F64))
+            na = self.llen(a)
+            with b.if_then(b.icmp_signed("!=", na, self.llen(c))):
+                self.fail(ERR_LEN, b.sitofp(na, F64), b.sitofp(self.llen(c), F64))
             acc = self.alloca(F64)
             b.store(f64(0), acc)
-            pa, pc = b.extract_value(a, 0), b.extract_value(c, 0)
+            pa, pc = self.ldata(a), self.ldata(c)
             with self.lp.range(i64(0), na) as i:
                 b.store(b.fadd(b.load(acc), b.fmul(b.load(b.gep(pa, [i])), b.load(b.gep(pc, [i])))), acc)
             return b.load(acc)
         if name == "trapz":
             ys, xs = args
-            n = b.extract_value(ys, 1)
-            with b.if_then(b.icmp_signed("!=", n, b.extract_value(xs, 1))):
-                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(xs, 1), F64))
+            n = self.llen(ys)
+            with b.if_then(b.icmp_signed("!=", n, self.llen(xs))):
+                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(self.llen(xs), F64))
             acc = self.alloca(F64)
             b.store(f64(0), acc)
-            py, px = b.extract_value(ys, 0), b.extract_value(xs, 0)
+            py, px = self.ldata(ys), self.ldata(xs)
             with self.lp.range(i64(1), n) as i:
                 im = b.sub(i, i64(1))
                 dx = b.fsub(b.load(b.gep(px, [i])), b.load(b.gep(px, [im])))
@@ -1340,10 +1351,10 @@ class FuncGen:
             return b.load(acc)
         if name == "interp":
             x, xs, ys = args
-            n = b.extract_value(xs, 1)
-            px, py = b.extract_value(xs, 0), b.extract_value(ys, 0)
-            with b.if_then(b.icmp_signed("!=", n, b.extract_value(ys, 1))):
-                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(ys, 1), F64))
+            n = self.llen(xs)
+            px, py = self.ldata(xs), self.ldata(ys)
+            with b.if_then(b.icmp_signed("!=", n, self.llen(ys))):
+                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(self.llen(ys), F64))
             with b.if_then(b.icmp_signed("<", n, i64(2))):
                 self.fail(ERR_EMPTY, f64(0), f64(0))
             res = self.alloca(F64)
@@ -1392,15 +1403,15 @@ class FuncGen:
         if name == "copy":
             return self.map_list(args[0], lambda x, i: x)
         if name == "reverse":
-            src = b.extract_value(args[0], 0)
-            n = b.extract_value(args[0], 1)
+            src = self.ldata(args[0])
+            n = self.llen(args[0])
             out, data = self.new_list(n)
             with self.lp.range(i64(0), n) as i:
                 b.store(b.load(b.gep(src, [b.sub(b.sub(n, i64(1)), i)])), b.gep(data, [i]))
             return out
         if name == "sort":
             out = self.map_list(args[0], lambda x, i: x)
-            b.call(self.mg.externs["fm_sort"], [b.extract_value(out, 0), b.extract_value(out, 1)])
+            b.call(self.mg.externs["fm_sort"], [self.ldata(out), self.llen(out)])
             return out
         if name == "cumsum":
             acc = self.alloca(F64)
@@ -1412,8 +1423,8 @@ class FuncGen:
                 return v
             return self.map_list(args[0], step)
         if name == "diff":
-            src = b.extract_value(args[0], 0)
-            n = b.extract_value(args[0], 1)
+            src = self.ldata(args[0])
+            n = self.llen(args[0])
             m = b.select(b.icmp_signed("<", n, i64(1)), i64(0), b.sub(n, i64(1)))
             out, data = self.new_list(m)
             with self.lp.range(i64(0), m) as i:
@@ -1423,8 +1434,8 @@ class FuncGen:
 
     def reduce(self, name, lst):
         b = self.b
-        data = b.extract_value(lst, 0)
-        n = b.extract_value(lst, 1)
+        data = self.ldata(lst)
+        n = self.llen(lst)
         if name in ("mean", "std", "min_list", "max_list", "first", "last"):
             with b.if_then(b.icmp_signed("<", n, i64(1))):
                 self.fail(ERR_EMPTY, f64(0), f64(0))

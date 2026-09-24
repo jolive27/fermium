@@ -47,7 +47,22 @@ You can write `y'(2 s)` directly without giving the derivative a name.
 
 ## Leibniz notation: `d/dt`
 
-If you prefer the dy/dt notation, write `d/dt y` (the variable after `d/d` must be the function's parameter). Second derivatives are `d²/dt² y` (or `d^2/dt^2 y`):
+If you prefer the notation dy/dt, you can write exactly that: `dy/dt`, or `d/dt y` (the variable after `d/d` must be the function's parameter). Both mean the same as `y'`:
+
+```fermium
+y(t) = 20 m/s * t - ½ * 9.81 m/s^2 * t^2
+v = dy/dt
+print v
+print dy/dt(2 s)
+```
+
+<!-- output -->
+```
+v(t) = 20 m/s - t·9.81 m/s^2   [m/s, for t in s]
+0.380 m/s
+```
+
+Second derivatives are written `d²/dt² y` (or `d^2/dt^2 y`), or simply `y''`. (The form `d²y/dt²` isn't understood yet: Fermium says `d isn't defined`. Use one of the others.) Here's an oscillation, x(t) = A cos(ωt), differentiated twice:
 
 ```fermium
 A = 0.1 m
@@ -169,7 +184,7 @@ fy(x, y) = x² + cos(y)
 ## Summary
 
 - `y'` and `y''` are the first and second derivatives of a one-line function `y(t) = ...`.
-- `d/dt y` and `d²/dt² y` mean the same thing.
+- `dy/dt` and `d/dt y` mean the same as `y'`; `d²/dt² y` means `y''`.
 - Derivatives are exact (symbolic), and their units are worked out: m → m/s → m/s².
 - A derivative is a function: `y'(2 s)`, `v = y'`, `v(ts)` on a list.
 - `partial/partial x f` (or `∂/∂x f`) for partial derivatives.

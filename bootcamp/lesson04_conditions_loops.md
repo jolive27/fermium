@@ -170,7 +170,7 @@ print "half-life is between", years - 1, "and", years, "years"
 half-life is between 6 and 7 years
 ```
 
-⚠️ If the condition never becomes false, the loop runs forever (an **infinite loop**). If your program seems stuck, press **Control + C** to stop it; if that doesn't work, **Control + \\** (backslash) or close the Terminal window.
+⚠️ If the condition never becomes false, the loop runs forever (an **infinite loop**). If your program seems stuck, press **Control + C**: Fermium stops it and prints `stopped by Ctrl+C`. Then look at the loop: does something inside it change the condition?
 
 ## `break` and `continue`
 

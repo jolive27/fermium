@@ -155,7 +155,7 @@ brackets.fm, line 3: spring_energy expects x in m (length [m]), but got time [s]
           ^^^^^^^^^^^^^^^^^^
 ```
 
-`x [m]` means "x must be a length" (any length unit works: cm, km, AU, ...). This is optional: without it, Fermium would still have caught the problem, just with a longer message.
+`x [m]` means "x must be a length" (any length unit works: cm, km, AU, ...). This is optional, but it's a good safety net. Without the `[m]`, Fermium would happily work out ½ × 50 N/m × (3 s)², which is 220 kg (a mass!), and you would only find out later, when you used the result somewhere that needs an energy (for example `print spring_energy(3 s) in J` is an error).
 
 ## Built-in functions
 

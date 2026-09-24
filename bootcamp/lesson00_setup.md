@@ -199,6 +199,8 @@ Here is what to do, in order:
 2. **Run `fermium doctor`.** It checks everything and tells you what to fix.
 3. **Look in [TROUBLESHOOTING.md](TROUBLESHOOTING.md).** It lists the most common problems.
 
+If a program seems stuck (nothing happens and the prompt doesn't come back), press **Control + C**. Fermium stops the program and prints `stopped by Ctrl+C`.
+
 The most common setup problems:
 
 | What you see | What it means | What to do |
@@ -207,7 +209,7 @@ The most common setup problems:
 | `zsh: command not found: python3` or a pop-up about "developer tools" | Python isn't installed | Do Step 2. |
 | `ERROR: ... does not appear to be a Python project` | You ran the install from the wrong folder | `cd ~/fermium`, check with `ls` that you see `pyproject.toml`, and try again. |
 | `requires a different Python: 3.9.6 not in '>=3.10'` | `python3` is still the old Apple Python | Quit and reopen the Terminal after installing Python from python.org. `python3 --version` must say 3.10 or more. |
-| `can't open file 'hello.fm'` or `No such file` | The Terminal is in a different folder from your file | `cd` into the folder where you saved the file, and `ls` to check the file is there. |
+| `can't find the file 'hello.fm'` | The Terminal is in a different folder from your file (or the name is spelled differently) | `cd` into the folder where you saved the file, and `ls` to check the file is there. |
 | `fermium doctor` shows `✗ matplotlib is not installed` | The optional extras are missing | `python3 -m pip install matplotlib` (or redo Step 4 with `".[full]"`). |
 
 If pip warns that a script was installed in a folder "which is not on PATH", your Terminal can't find the `fermium` command. The simplest fix is to reinstall Python from python.org (Step 2), quit the Terminal, reopen it, and redo Step 4.

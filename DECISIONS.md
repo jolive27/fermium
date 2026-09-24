@@ -163,3 +163,9 @@ The rule (spec §3.4.2), refined:
 - **Limit:** `plot`, `load` and `fit` are refused with a clear message, because they need Python (matplotlib and SciPy).
 - **Testing:** the tests build every example that doesn't use them and check that the executable prints exactly what `fermium run` prints.
 - **Alternative:** embedding Python in the executable. Rejected as too heavy.
+
+## D26. Lists are shared references, like Python lists
+- **What:** A list value is a pointer to a heap header `{data, length, capacity}`. `ys = xs`, passing a list to a function and `for x in xs` all share the header. So `push` and `xs[i] = …` are seen through every name, exactly like Python, and the reference interpreter behaves the same way.
+- **Growing:** `push` grows a list by allocating a new block and copying. The old block is never freed, so a loop that is still reading it stays valid. (The adversarial tester found that `realloc` caused a use-after-free.)
+- **Memory:** there is no garbage collector yet, so memory is only reclaimed when the program exits. That is fine for scripts, and is noted in the known issues.
+- **Alternative:** value semantics (copy on assignment) would surprise Python learners, and every function call would have to copy the list.

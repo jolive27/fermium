@@ -453,7 +453,7 @@ while x > 0
     x += 1
 ```
 
-**Fix:** press **Control + C** to stop the program. If that doesn't work, press **Control + \\** (backslash), or close the Terminal window. Then check the loop: does something inside it change the condition, in the right direction? For a simulation, does the stopping condition ever become true (e.g. `while y >= 0 m` for a ball that never comes down)? Adding a `print` inside the loop shows what's happening.
+**Fix:** press **Control + C** to stop the program. Fermium prints `stopped by Ctrl+C` and you get the prompt back. (In the unlikely case that doesn't work, close the Terminal window.) Then check the loop: does something inside it change the condition, in the right direction? For a simulation, does the stopping condition ever become true (e.g. `while y >= 0 m` for a ball that never comes down)? Adding a `print` inside the loop shows what's happening.
 
 ---
 
