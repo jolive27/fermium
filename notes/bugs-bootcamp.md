@@ -217,3 +217,44 @@ ys[1] = 5 m
 print xs        # [5, 2] m
 ```
 Same as Python, but a surprise for a beginner who thinks of `=` as "copy the value" (which is what it does for numbers). A `copy(xs)` builtin (or copy-on-assign semantics) would be good; I mention it in Lesson 5.
+
+## B21. Lists print with 1 significant figure when an element has 1 (the "at least 2" floor is missing)
+
+```
+ts = [0 s, 0.5 s, 1 s, 1.5 s, 2 s]
+print 20 m/s * ts - ½ * 9.81 m/s^2 * ts^2     # [0, 9, 20, 20, 20] m
+masses = [1.0 kg, 2.0 kg, 0.5 kg]
+speeds = [3.0 m/s, 4.0 m/s, 10 m/s]
+print ½ masses speeds^2                        # [4, 20, 20] J   (true: 4.5, 16, 25)
+```
+- **Expected:** at least 2 significant figures (D11), e.g. `[0, 8.8, 15, 19, 20] m` and `[4.5, 16, 25] J`. Scalars do get the floor (`print 20 m/s * 0.5 s - ...` prints 2 sf). `[4, 20, 20]` for 4.5/16/25 looks simply wrong to a student.
+- Also: a literal list element prints with fewer digits than written: `planets = [0.387 AU, 0.723 AU, 1.000 AU]; print planets[3]` → `1.00 AU` (written `1.000`).
+- **Workaround in lessons:** `linspace` / more digits in the literals.
+
+## B22. Plot / fit polish (suggestions)
+
+- `plot data.T vs data.L` draws measured data as a connected line. Lab data is normally shown as **points** (markers); a physics student will expect dots, especially when a fitted curve is drawn on top (`plot data.T vs data.L, 2 pi sqrt(Ls / g) vs Ls`). Suggest: columns from `load` plot as markers, computed lists as lines (or `plot ... with points`).
+- Axis label with two series reads `data.T [s], 2π √(Ls/g) [s]`; fine but long.
+- After `fit` reports `τ = 20.10 min`, `print tau` shows `1210 s` (the fitted variable doesn't keep the column's unit for display).
+- `fit T^2 = k L to data` → "the left side of a fit must be a column of the data". Linearising (T² vs L) is the classic undergrad lab analysis; allowing an expression of a column on the left would be nice.
+
+## B23. Derivatives: a constant's derivative loses its units; results could be simpler
+
+```
+r(t) = 1 AU
+print r'           # r'(t) = 0   [no units]      expected [m/s, for t in s]
+```
+Readability of printed derivatives (not wrong, but a beginner can't check them against their notes):
+- `N(t) = 1000 exp(-t / 5 s)` → `N'(t) = 1000 exp(-(t/(5 s)))·(-1/(5 s))`; hoped for `-200 exp(-t/(5 s)) 1/s` or `-(1000/(5 s)) exp(-t/(5 s))`.
+- `f(x) = exp(-x^2)` → `f''(x) = -(2 exp(-x²) - 4 x² exp(-x²))`; hoped for `(4x² - 2) exp(-x²)`.
+- `U(x) = 4 * 1 J * ((1 m / x)^12 - (1 m / x)^6)` → `U'(x) = 4·1 J·(-(12 (1 m/x)¹¹·(1 m/x²)) + 6 (1 m/x)⁵·(1 m/x²))`.
+- `print ∂/∂x f` for `f(x, y) = x^2 y + sin(y)` prints `f_∂x(x, y) = 2x y` with no `[units]` bracket, while `∂/∂y` has one; the name `f_∂x` is odd (maybe `∂f/∂x`).
+- `x(t) = 3 m/s^3 * t^3` → `x'(t) = 3 t²·3 m/s^3` (no `[units]` bracket, and 3·3 not folded to 9).
+
+## B24. `inf s` / `∞ Hz` as an integral limit is an error
+
+`print integral exp(-t / 1 s) dt from 0 s to inf s` → `s isn't defined` (hint: "units go right after a number"). `to inf` (no unit) and `to inf [s]` both work. Physicists will write `∞ s` / `inf Hz`; either accept a unit after `inf`/`∞` or hint "write just `inf`".
+
+## B25. (grammar trap) `... from 0 m to 2 m / M` divides the upper limit
+
+`xcm = integral x rho(x) dx from 0 m to 2 m / M` parses as upper limit `2 m / M` and reports "the limits of this integral are length [m] and a quantity with units [m/kg]". The error is good; it might add the hint "put the integral in parentheses: (∫ ... ) / M". Taught in Lesson 8.

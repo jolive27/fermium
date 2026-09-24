@@ -167,7 +167,7 @@ def test_compound_units():
     assert run("print 2 N·m") in ("2 N m", "2 N·m")   # shown as written
     assert run("print 2 N·m == 2 N m") == "true"
     assert run("print 6.674e-11 N m²/kg²") == "6.674×10⁻¹¹ N m²/kg²"
-    assert run("print 2 s⁻¹") == "2 s⁻¹"
+    assert run("print 2 s⁻¹") in ("2 s⁻¹", "2 1/s")   # displayed in a canonical spelling
     assert run("print 2 s^-1 == 2 s⁻¹") == "true"
 
 

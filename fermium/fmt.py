@@ -19,6 +19,10 @@ OP_PRETTY = {"*": "·", "<=": "≤", ">=": "≥", "!=": "≠", "+-": "±", "~=":
 OP_ASCII = {"·": "*", "×": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~=", "−": "-", "÷": "/"}
 
 
+def _wordy(ch):
+    return ch.isascii() and (ch.isalnum() or ch == "_") or ch.isalpha()
+
+
 def _to_sup(n: int) -> str:
     return "".join(SUP_OF[c] for c in str(n))
 
@@ -76,6 +80,7 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
     out = []
     pos = 0
     closers = {}   # token index -> text to add after it
+    last_changed = False
     skip = set()
     i = 0
     n = len(toks)
@@ -84,7 +89,8 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
         if t.kind in ("NEWLINE", "INDENT", "DEDENT", "EOF"):
             i += 1
             continue
-        out.append(norm[pos:t.start])
+        gap = norm[pos:t.start]
+        out.append(gap)
         pos = t.end
         if i in skip:
             i += 1
@@ -94,6 +100,12 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
             text = _pretty_token(toks, i, skip)
         else:
             text = _ascii_token(toks, i, closers, diags)
+        # never glue two words together that were separate tokens (2πf -> "2 pi f", not "2pif")
+        prev = "".join(out)[-1:] if out else ""
+        if not gap and prev and text and (text != t.raw or last_changed) and _wordy(prev) and _wordy(text[0]) \
+                and not (prev.isdigit() and not text[0].isdigit()):
+            out.append(" ")
+        last_changed = text != t.raw
         out.append(text)
         if i in closers:
             out.append(closers.pop(i))

@@ -187,7 +187,7 @@ class Checker(C.DiffContext):
             total = u if total is None else total * u
         if total is None:
             total = Unit("1", DIMLESS, 1.0)
-        total.name = uexpr.text or total.name
+        total.name = canonical_unit_name(uexpr) or total.name
         return total
 
     # ============================================================ program
@@ -1587,6 +1587,26 @@ class Checker(C.DiffContext):
     def s_Plot(self, s, ctx):
         from .solve import check_plot
         return check_plot(self, s, ctx)
+
+
+def canonical_unit_name(uexpr: A.UnitExpr) -> str:
+    """The display spelling of a written unit, independent of how it was typed:
+    `ft/s^2`, `ft/s²` and `ft s^-2` all display as `ft/s²`; `N·m` as `N m`; `m m` as `m²`."""
+    from .units import UNIT_PRETTY, join_units, _fmt_exp
+    order, exps = [], {}
+    for f in uexpr.factors:
+        name = UNIT_PRETTY.get(f.name, f.name)
+        if name.startswith(("u", "µ")) and len(name) > 1 and lookup_unit("μ" + name[1:]) is not None \
+                and name[1:] not in ("", "n") and lookup_unit(name) is not None and \
+                lookup_unit(name).factor == lookup_unit("μ" + name[1:]).factor:
+            name = "μ" + name[1:]
+        if name not in exps:
+            order.append(name)
+            exps[name] = Fraction(0)
+        exps[name] += f.exp
+    num = [n + _fmt_exp(exps[n]) for n in order if exps[n] > 0]
+    den = [n + _fmt_exp(-exps[n]) for n in order if exps[n] < 0]
+    return join_units(num, den)
 
 
 def read_csv_header(full, node=None):

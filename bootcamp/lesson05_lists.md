@@ -91,21 +91,21 @@ Other list functions: `sort(xs)`, `reverse(xs)`, `cumsum(xs)` (running total), `
 Do arithmetic on a list and it happens to **every element**. This is one of the most useful ideas in scientific programming:
 
 ```fermium
-ts = [0 s, 0.5 s, 1 s, 1.5 s, 2 s]
+ts = [0 s, 1 s, 2 s, 3 s, 4 s]
 ys = 20 m/s * ts - ½ * 9.81 m/s^2 * ts^2
 print ys
 ```
 
 <!-- output -->
 ```
-[0, 9, 20, 20, 20] m
+[0, 15.1, 20.4, 15.9, 1.52] m
 ```
 
 One line computed the height at five times. Two lists of the same length combine element by element:
 
 ```fermium
-masses = [1.0 kg, 2.0 kg, 0.5 kg]
-speeds = [3.0 m/s, 4.0 m/s, 10 m/s]
+masses = [1.0 kg, 2.0 kg, 0.50 kg]
+speeds = [3.0 m/s, 4.0 m/s, 10.0 m/s]
 KE = ½ masses speeds^2
 print KE
 print "total:", sum(KE)
@@ -113,7 +113,7 @@ print "total:", sum(KE)
 
 <!-- output -->
 ```
-[4, 20, 20] J
+[4.5, 16, 25] J
 total: 46 J
 ```
 
@@ -188,14 +188,14 @@ print len(squares)
 ```fermium
 lengths = [0.25 m, 0.5 m, 1 m]
 for L in lengths
-    print "L =", L, " T =", 2 pi sqrt(L / 9.81 m/s^2)
+    print "L =", L, "T =", 2 pi sqrt(L / 9.81 m/s^2)
 ```
 
 <!-- output -->
 ```
-L = 0.25 m  T = 1.00 s
-L = 0.5 m  T = 1.42 s
-L = 1 m  T = 2.01 s
+L = 0.25 m T = 1.00 s
+L = 0.5 m T = 1.42 s
+L = 1 m T = 2.01 s
 ```
 
 If you also need the position, loop over the indexes:

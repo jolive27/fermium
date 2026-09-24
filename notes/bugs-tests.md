@@ -143,3 +143,17 @@ x = 0.5
 print x in %      # expected: 50 %
 ```
 Test: `test_dimensions.py::test_percent_unit`.
+
+## B16. Printed units echo the source spelling, so `fmt` changes a program's output
+```
+g = 9.81 m/s²
+print g in ft/s^2     # prints "32.2 ft/s^2"
+print g in ft/s²      # prints "32.2 ft/s²"
+print 20 °C in degF   # prints "68 degF"  (vs "68 °F")
+G_N = 6.674e-11 N m^2/kg^2 ; print G_N   # "N m^2/kg^2"
+```
+Spec §3.4.3: the ASCII form "means exactly the same thing" and §3.8: round-tripping `fmt` "must
+not change program meaning". Today `fermium fmt --ascii` changes what the program prints.
+Expected: the display unit is canonical (pretty: `ft/s²`, `°F`, `m²`) whichever way it was spelled.
+Tests: `test_fmt.py::test_unit_display_does_not_depend_on_spelling` and the `*_output` round-trip
+tests p00, p08, p12, doc03, a00.
