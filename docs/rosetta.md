@@ -29,6 +29,8 @@ Julia users would normally solve ODEs with DifferentialEquations.jl. That packag
 | Integrals | `∫ f(x) dx from a to ∞`, with units. | `quadgk`; infinite limits don't combine with Unitful quantities. | `scipy.integrate.quad`; it can go wrong if the numbers are far from 1 (e.g. wavelengths in metres). |
 | ODEs | `solve m x'' = -k x - b x' with …`. | DifferentialEquations.jl (here: hand-written RK4). | `solve_ivp`: you rewrite the equation as first-order and handle the state vector yourself. |
 | Printing | Significant figures and units chosen for you, or `to 5 digits`. | `@printf`. | f-strings. |
+| Vectors | `<3, 4> m/s`, `\|v\|`, `a · b`, `a × b`, unit-checked; ODEs can have vector unknowns. | `StaticArrays` or plain arrays of Unitful quantities. | NumPy arrays, no units. |
+| Standalone program | `fermium build prog.fm` (needs a C compiler). | PackageCompiler.jl. | PyInstaller or similar. |
 
 Things we ran into while writing these (they are left in the code, with a comment):
 - **Julia, escape velocity:** `quadgk` refused an infinite upper limit with Unitful units, so the units have to be stripped for that one integral.

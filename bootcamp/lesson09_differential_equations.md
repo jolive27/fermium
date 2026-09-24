@@ -209,7 +209,7 @@ After one year the Earth is (almost exactly) back where it started. `plot y vs x
 | `plot x vs t` | graph against time |
 | `plot y vs x` | graph of one unknown against another |
 
-By default Fermium uses an **adaptive** method (Dormand–Prince): it takes small steps where things change quickly and big steps where they don't, keeping the error around one part in a billion. If you want a fixed step, add `step 1 ms` after the range (this uses the classic RK4 method).
+By default Fermium uses an **adaptive** method (Dormand–Prince): it takes small steps where things change quickly and big steps where they don't, keeping the error around one part in a billion. If you want a fixed step, add `step 1 ms` after the range (this uses the classic fourth-order Runge–Kutta method, "RK4", found in every numerical methods textbook).
 
 Asking for a time outside the range, like `N(30 s)` when you solved to 20 s, is an error. Solve over a longer range instead.
 

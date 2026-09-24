@@ -11,7 +11,7 @@ Every example on this page is tested (`tests/test_docs.py` runs each block marke
 4. [Printing](#4-printing)
 5. [Functions](#5-functions)
 6. [Conditions and loops](#6-conditions-and-loops)
-7. [Lists](#7-lists)
+7. [Lists and vectors](#7-lists-and-vectors)
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
@@ -56,6 +56,7 @@ Rules (see DECISIONS.md D7):
 - Units in brackets are always units: `3 [m/s]`, `x [m]`.
 - Anywhere else, a name is a variable. `m v` is m times v.
 - A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
+- **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
 - If a unit name after a number is also one of your variables (for example `0.2 m` when you have a mass `m`), Fermium warns you once and explains how to write the other meaning (`2*m`).
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
@@ -93,7 +94,7 @@ print E
 ```
 
 - **Exponents:** an exponent must be a fixed number when the base has units. `x^2` and `x^(1/3)` are fine. `x^n` requires x to be a plain number.
-- **`e` is the elementary charge.** For the exponential function, write `exp(x)`.
+- **`e` is the elementary charge.** `e²` (or `e^2`) is the charge squared, in C², as in e²/(4πε₀r). For the exponential function write `exp(x)`; `e^x` with a variable exponent is an error that says so.
 
 ## 4. Printing
 
@@ -106,6 +107,8 @@ print to(g, km/hr^2)
 ```
 
 - `print a, b, c` prints the values separated by spaces.
+- `print x to 6 digits` shows 6 significant figures instead of the automatic choice.
+- Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Text can't be used in arithmetic.
 - `x in unit` shows a value in another unit. The units must measure the same kind of quantity.
 - Numbers are printed with sensible significant figures: the fewest significant figures of the inputs, but at least 2.
 - Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...).
@@ -166,7 +169,7 @@ y = if x > 0 m then x else -x
 - **Conditions:** comparisons are `==`, `!=` (`≠`), `<`, `>`, `<=` (`≤`), `>=` (`≥`) and `~=` (`≈`, "equal to within 10⁻⁶ relative"). Combine them with `and`, `or` and `not`.
 - **`assert condition, "message"`** stops the program if the condition is false.
 
-## 7. Lists
+## 7. Lists and vectors
 
 ```fermium
 xs = [1 m, 2 m, 3 m]
@@ -188,6 +191,24 @@ print ts
 - **Setting an element:** `xs[i] = value`.
 - **Looping:** `for x in xs`.
 
+### Vectors
+
+```fermium
+v = <3, 4> m/s
+print v, |v|, v.x
+a = <1, 0, 0> m
+b = <0, 2, 0> m
+print a · b, a × b, unit(v)
+print 2 v + <1, 1> m/s
+```
+
+- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2 or 3 components, all with the same units). `vec(3, 4)` is the same as `<3, 4>`.
+- **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D).
+- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`.
+- **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
+- **In `solve`:** unknowns can be vectors (see §10).
+- **Not yet:** matrices, and lists of vectors (push the components into separate lists instead).
+
 ## 8. Derivatives
 
 ```fermium
@@ -201,7 +222,7 @@ print a
 print v(0.1 s)
 ```
 
-- **Syntax:** `x'`, `x''`, `d/dt x` and `d²/dt² x` differentiate a one-line function. The result is a new function, whose units are the numerator's units divided by the denominator's.
+- **Syntax:** `x'`, `x''`, `dx/dt`, `d/dt x` and `d²/dt² x` differentiate a one-line function (`d²x/dt²` is not supported yet; write `x''` or `d²/dt² x`). The result is a new function, whose units are the numerator's units divided by the denominator's.
 - **Printing a function** shows its formula and units, for example `v(t) = -A ω sin(ω t)   [m/s, for t in s]`.
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
@@ -233,7 +254,8 @@ print x(5 s)
 print x'(1 s)
 ```
 
-- **Writing the equation:** use primes (`x'`, `x''`) or `d/dt x`. Each equation is solved for its highest derivative automatically, and it must appear linearly.
+- **Writing the equation:** use primes (`x'`, `x''`), `dx/dt`, `d/dt x` or `d²/dt² x`. Each equation is solved for its highest derivative automatically, and it must appear linearly. Initial conditions use primes: `x'(0) = 0 m/s`.
+- **Vector unknowns:** `solve r'' = -G M_sun r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 29.8> km/s for t from 0 yr to 1 yr`. Afterwards `r(t)` is a vector, and `plot r.y vs r.x` draws the path.
 - **Systems:** separate equations with commas or `and`, or put them on the indented lines below `solve`. For example: `solve x' = -a x, y' = a x - b y with ...`
 - **Initial conditions:** every unknown needs one, and so does every derivative below the highest. They determine the unknowns' units, and both sides of every equation are unit-checked.
 - **Methods:**
@@ -254,12 +276,12 @@ plot data.T vs data.L to "pendulum.png"
 ```
 
 - **`load "file.csv"`:** reads a CSV whose header gives names and units, like `T [s]`. The header is read when the program is compiled, so the units are checked. Paths are relative to the program's folder.
-- **`fit y = model to data`:** nonlinear least squares.
+- **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
   - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables.
 - **Plots:** each form saves a PNG with labelled axes (units included) and prints where it was saved.
-  - `plot ys vs xs` (lists)
+  - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines.
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
@@ -302,6 +324,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `linspace(a, b, n) range(a, b, step) zeros(n) ones(n)` | make lists |
 | `push(xs, x)` / `append` | add to a list |
 | `dot(a, b) trapz(ys, xs) interp(x, xs, ys)` | list maths |
+| `norm(v) unit(v) dot(a, b) cross(a, b) vec(x, y[, z])` | vectors (also `\|v\|`, `a · b`, `a × b`) |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |
@@ -353,7 +376,7 @@ line 3: can't add length [m] to time [s]
   hint: both sides of + and - must have the same units
 ```
 
-Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. See `bootcamp/TROUBLESHOOTING.md` for the common ones.
+Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. **Control+C** stops a running program (it prints `stopped by Ctrl+C`). See `bootcamp/TROUBLESHOOTING.md` for the common ones.
 
 ## 17. Tools
 
@@ -377,6 +400,6 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
 expr       := if expr then expr else expr | or-expression
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
 postfix    := atom ( (args) | [index] | .name | ' )*
-atom       := number [unit] | name | "text" | (expr) | [list] | |expr| | √atom | ∫ … d x [from a to b]
-            | d/dt atom | ∂/∂x atom | load "file"
+atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|
+            | √atom | ∫ … d x [from a to b] | d/dt atom | dx/dt | ∂/∂x atom | load "file"
 ```

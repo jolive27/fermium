@@ -34,6 +34,7 @@ ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
 MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+ERR_QUAD = 9
 
 # Gauss–Kronrod 7-15 nodes/weights (from QUADPACK qk15)
 XGK = [0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
@@ -288,39 +289,19 @@ class ModuleGen:
         b.ret(b.fmul(resk, h))
         return fn
 
-    def _k_qrec(self):
-        gk = self.kernel("fm_gk15")
-        fn = self._new_fn("fm_qrec", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64, I64],
-                          inline=False)
-        f, env, mode, a, bb, lo, hi, tol, depth = fn.args
-        b = ir.IRBuilder(fn.append_basic_block("e"))
-        errp = b.alloca(F64)
-        res = b.call(gk, [f, env, mode, a, bb, lo, hi, errp])
-        err = b.load(errp)
-        fabs = self.intrinsic("fabs")
-        done = b.or_(b.fcmp_ordered("<=", err, tol),
-                     b.fcmp_ordered("<=", err, b.fmul(f64(1e-15), b.call(fabs, [res]))))
-        done = b.or_(done, b.icmp_signed(">=", depth, i64(40)))
-        done = b.or_(done, b.fcmp_unordered("uno", err, err))
-        with b.if_then(done):
-            b.ret(res)
-        m = b.fmul(f64(0.5), b.fadd(lo, hi))
-        t2 = b.fmul(tol, f64(0.5))
-        d1 = b.add(depth, i64(1))
-        r1 = b.call(fn, [f, env, mode, a, bb, lo, m, t2, d1])
-        r2 = b.call(fn, [f, env, mode, a, bb, m, hi, t2, d1])
-        b.ret(b.fadd(r1, r2))
-        return fn
+    QUAD_PANELS = 8          # initial uniform panels (helps with narrow peaks)
+    QUAD_MAX = 2000          # subdivision budget; beyond it the integral is reported as not converging
 
     def _k_quad(self):
+        """Globally adaptive Gauss–Kronrod (QUADPACK-style): keep a list of panels, always bisect the
+        one with the largest error estimate, stop when the total error is small enough."""
         gk = self.kernel("fm_gk15")
-        rec = self.kernel("fm_qrec")
         fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64])
         f, env, a, bb, rtol, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
         inf = f64(math.inf)
-        # reversed limits: -∫_b^a
         with b.if_then(b.fcmp_ordered(">", a, bb)):
             b.ret(b.fsub(f64(0), b.call(fn, [f, env, bb, a, rtol, atol])))
         with b.if_then(b.fcmp_ordered("==", a, bb)):
@@ -332,15 +313,76 @@ class ModuleGen:
         lo = b.select(b.icmp_signed("==", mode, i64(3)), f64(-1), f64(0))
         hi = b.select(b.icmp_signed("==", mode, i64(0)), bb, f64(1))
         lo = b.select(b.icmp_signed("==", mode, i64(0)), a, lo)
+        M = self.QUAD_MAX
+        mal = self.externs["malloc"]
+        free = self.extern("free", VOID, [I8P])
+        raw = b.call(mal, [i64(8 * 4 * M)])
+        base = b.bitcast(raw, F64P)
+        plo, phi, pres, perr = (b.gep(base, [i64(k * M)]) for k in range(4))
         errp = b.alloca(F64)
-        whole = b.call(gk, [f, env, mode, a, bb, lo, hi, errp])
-        tol = b.call(self.intrinsic("maxnum"), [atol, b.fmul(rtol, b.call(fabs, [whole]))])
-        with b.if_then(b.fcmp_ordered("<=", b.load(errp), tol)):
-            b.ret(whole)
-        mid = b.fmul(f64(0.5), b.fadd(lo, hi))
-        r1 = b.call(rec, [f, env, mode, a, bb, lo, mid, b.fmul(tol, f64(0.5)), i64(1)])
-        r2 = b.call(rec, [f, env, mode, a, bb, mid, hi, b.fmul(tol, f64(0.5)), i64(1)])
-        b.ret(b.fadd(r1, r2))
+        n = b.alloca(I64)
+        P = self.QUAD_PANELS
+        width = b.fdiv(b.fsub(hi, lo), f64(P))
+        with lp.range(i64(0), i64(P)) as i:
+            x0 = b.fadd(lo, b.fmul(b.sitofp(i, F64), width))
+            x1 = b.select(b.icmp_signed("==", i, i64(P - 1)), hi, b.fadd(x0, width))
+            b.store(x0, b.gep(plo, [i]))
+            b.store(x1, b.gep(phi, [i]))
+            b.store(b.call(gk, [f, env, mode, a, bb, x0, x1, errp]), b.gep(pres, [i]))
+            b.store(b.load(errp), b.gep(perr, [i]))
+        b.store(i64(P), n)
+        tot = b.alloca(F64)
+        terr = b.alloca(F64)
+        worst = b.alloca(I64)
+        cond_bb = fn.append_basic_block("q.cond")
+        body_bb = fn.append_basic_block("q.body")
+        b.branch(cond_bb)
+        b.position_at_end(cond_bb)
+        b.store(f64(0), tot)
+        b.store(f64(0), terr)
+        b.store(i64(0), worst)
+        cnt = b.load(n)
+        with lp.range(i64(0), cnt) as i:
+            e = b.load(b.gep(perr, [i]))
+            b.store(b.fadd(b.load(tot), b.load(b.gep(pres, [i]))), tot)
+            b.store(b.fadd(b.load(terr), e), terr)
+            with b.if_then(b.fcmp_unordered(">", e, b.load(b.gep(perr, [b.load(worst)])))):
+                b.store(i, worst)
+        total, toterr = b.load(tot), b.load(terr)
+        goal = b.call(self.intrinsic("maxnum"), [atol, b.fmul(rtol, b.call(fabs, [total]))])
+        finite = b.fcmp_ordered("<", b.call(fabs, [total]), inf)
+        done = b.and_(finite, b.fcmp_ordered("<=", toterr, goal))
+        done = b.or_(done, b.and_(finite, b.fcmp_ordered("<=", toterr, b.fmul(f64(1e-14), b.call(fabs, [total])))))
+        with b.if_then(done):
+            b.call(free, [raw])
+            b.ret(total)
+        # not converged: give up with an error when out of budget, the result is not finite,
+        # or the worst panel can't be split any more
+        w = b.load(worst)
+        wl, wh = b.load(b.gep(plo, [w])), b.load(b.gep(phi, [w]))
+        mid = b.fmul(f64(0.5), b.fadd(wl, wh))
+        stuck = b.or_(b.fcmp_ordered("<=", mid, wl), b.fcmp_ordered(">=", mid, wh))
+        bad = b.or_(b.icmp_signed(">=", cnt, i64(M - 1)), stuck)
+        bad = b.or_(bad, b.fcmp_unordered("uno", toterr, toterr))
+        bad = b.or_(bad, b.fcmp_ordered("==", b.call(fabs, [total]), inf))
+        with b.if_then(bad):
+            self.raise_error(b, ERR_QUAD, total, toterr)
+        b.branch(body_bb)
+        b.position_at_end(body_bb)
+        # bisect the worst panel: left half stays at index w, right half goes to the end
+        r1 = b.call(gk, [f, env, mode, a, bb, wl, mid, errp])
+        e1 = b.load(errp)
+        r2 = b.call(gk, [f, env, mode, a, bb, mid, wh, errp])
+        e2 = b.load(errp)
+        b.store(mid, b.gep(phi, [w]))
+        b.store(r1, b.gep(pres, [w]))
+        b.store(e1, b.gep(perr, [w]))
+        b.store(mid, b.gep(plo, [cnt]))
+        b.store(wh, b.gep(phi, [cnt]))
+        b.store(r2, b.gep(pres, [cnt]))
+        b.store(e2, b.gep(perr, [cnt]))
+        b.store(b.add(cnt, i64(1)), n)
+        b.branch(cond_bb)
         return fn
 
     def _sol_alloc(self, b, dim, cap):

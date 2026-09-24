@@ -84,7 +84,7 @@ Units are written the way you'd write them on paper:
 - A space between two units multiplies them: `N m` is newton-metres, `kg m/s^2` is a newton.
 - Prefixes work: `km`, `cm`, `mm`, `μm` (type it as `um`), `nm`, `MeV`, `GHz`, `kPa` ...
 
-Common unit names: `m g s kg K A mol` (SI), `N J W Pa C V Hz` (derived), `min hr day year` (time; note it's `hr`, not `h`), `eV MeV fm u` (nuclear), `AU ly pc Msun` (astro), `inch ft mi mph lb` (imperial), `deg rad` (angles). There's a full list in the [reference](../docs/reference.md#15-units).
+Common unit names: `m g s kg K A mol` (SI), `N J W Pa C V Hz` (derived), `min hr day year` (time; `yr` also means year; note it's `hr`, not `h`), `eV MeV fm u` (nuclear), `AU ly pc Msun` (astro), `inch ft mi mph lb` (imperial), `deg rad` (angles). There's a full list in the [reference](../docs/reference.md#15-units).
 
 ## Units catch mistakes
 
@@ -277,7 +277,7 @@ print 1 AU / c in min
 8.31675 min
 ```
 
-Dividing is friendlier. If you put a **space before the `/`**, Fermium divides by *your* variable:
+Dividing by a variable you made yourself is friendlier. If you put a **space before the `/`**, Fermium divides by *your* variable:
 
 ```fermium
 g = 9.81 m/s^2
@@ -292,6 +292,8 @@ print 20 m/s/g
 ```
 
 The first line is 20 m/s divided by your `g`: a time, 2.04 s, just as you meant. In the second line there's no space, so `/g` carries on the unit: 20 metres per second per **gram**. The same goes for a temperature called `T`: `2.898e-3 m K / T` divides by your `T`, but `m K/T` (no space) would be kelvin per *tesla*. When in doubt, use parentheses: `(20 m/s) / g`.
+
+(The space only matters for names you've given a value yourself. `c` above is Fermium's own constant, so in `1 AU / c` it's still read as a unit.)
 
 ## Summary
 

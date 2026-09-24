@@ -15,12 +15,12 @@ import time
 
 import numpy as np
 
-from . import ir as I
 from .codegen_llvm import XGK, WGK, WG
 from .errors import FermiumRuntimeError
 from .types import ListTy, VecTy, BoolTy
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+ERR_QUAD = 9
 
 
 class _Break(Exception):
@@ -314,22 +314,38 @@ def quad(f, a, b, rtol=1e-10, atol=0.0):
                 resg = resg + s * WG[j // 2]
         return resk * h, abs((resk - resg) * h)
 
-    def rec(lo, hi, tol, depth):
-        res, err = gk(lo, hi)
-        if err <= tol or err <= 1e-15 * abs(res) or depth >= 40 or err != err:
-            return res
-        m = 0.5 * (lo + hi)
-        return rec(lo, m, tol * 0.5, depth + 1) + rec(m, hi, tol * 0.5, depth + 1)
-
     lo = -1.0 if mode == 3 else 0.0
     hi = b if mode == 0 else 1.0
     lo = a if mode == 0 else lo
-    whole, err = gk(lo, hi)
-    tol = max(atol, rtol * abs(whole))
-    if err <= tol:
-        return whole
-    mid = 0.5 * (lo + hi)
-    return rec(lo, mid, tol * 0.5, 1) + rec(mid, hi, tol * 0.5, 1)
+    P, M = 8, 2000
+    width = (hi - lo) / P
+    panels = []
+    for i in range(P):
+        x0 = lo + i * width
+        x1 = hi if i == P - 1 else x0 + width
+        r, e = gk(x0, x1)
+        panels.append([x0, x1, r, e])
+    while True:
+        total = 0.0
+        toterr = 0.0
+        w = 0
+        for i, (_, _, r, e) in enumerate(panels):
+            total = total + r
+            toterr = toterr + e
+            if e > panels[w][3] or (e != e):
+                w = i
+        finite = abs(total) < math.inf
+        goal = max(atol, rtol * abs(total)) if atol == atol else rtol * abs(total)
+        if finite and (toterr <= goal or toterr <= 1e-14 * abs(total)):
+            return total
+        wl, wh = panels[w][0], panels[w][1]
+        mid = 0.5 * (wl + wh)
+        if len(panels) >= M - 1 or mid <= wl or mid >= wh or toterr != toterr or abs(total) == math.inf:
+            raise _Fail(ERR_QUAD, total, toterr)
+        r1, e1 = gk(wl, mid)
+        r2, e2 = gk(mid, wh)
+        panels[w] = [wl, mid, r1, e1]
+        panels.append([mid, wh, r2, e2])
 
 
 # ---------------------------------------------------------------- the interpreter

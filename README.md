@@ -19,15 +19,14 @@ Fermium is a small programming language for physicists.
 - **Errors are one line in physics terms**, with a caret and a hint.
 - **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
 
-> Status: a first version built in one night. See [MORNING_REPORT.md](MORNING_REPORT.md) for what works, what's partial, and the known issues.
+> Status: a first version built in one night. See [PROGRESS.md](PROGRESS.md) for what works, what's partial, and the known issues.
 
 ## Install
 
 ```
 git clone <this repository>
 cd fermium
-python3 -m pip install -e .      # needs Python 3.10+; installs llvmlite and numpy
-python3 -m pip install scipy sympy matplotlib   # for fit, symbolic integrals and plot
+python3 -m pip install -e ".[full]"   # needs Python 3.10+; llvmlite, numpy, and scipy/sympy/matplotlib for fit, symbolic integrals and plot
 fermium doctor                   # checks everything and explains fixes
 ```
 
@@ -42,27 +41,29 @@ m = 0.5 kg
 ω = √(k/m)
 print ω in rad/s                      # 10 rad/s
 
-A = 0.1 m
+A = 10 cm                             # cm, not 0.1 m: here m is also the mass (Fermium would warn)
 x(t) = A cos(ω t)
 v = d/dt x
 print v                               # v(t) = -A ω sin(ω t)   [m/s, for t in s]
 
 F(x) = k x
-W = ∫ F(x) dx from 0 m to 0.2 m
-print W                               # 1.0 J
+W = ∫ F(x) dx from 0 cm to 20 cm
+print W                               # 1 J
 
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 10 cm, x'(0) = 0 m/s
   for t from 0 s to 5 s
-print x(5 s)                          # 0.035 m
+print x(5 s)                          # 3.52006 cm
 ```
 
 Also:
 - `data = load "pendulum.csv"` reads a CSV whose headers carry units, like `L [m], T [s]`.
-- `fit T = 2π √(L / g) to data` fits the model and reports g in m/s².
+- `fit T = 2π √(L / g) to data` fits the model and reports g in m/s². The left side may be a formula of a column: `fit T² = k L to data`.
 - `plot x vs t` saves a PNG with labelled axes.
-- Vectors: `<3, 4> m/s`, `|v|`, `a · b`, `a × b`. ODEs can have vector unknowns.
+- Vectors: `<3, 4> m/s`, `|v|`, `v.x`, `a · b`, `a × b`. ODEs can have vector unknowns: `solve r'' = -G M r / |r|³ with …`.
+- Leibniz notation: `dx/dt` works for functions and in `solve`.
+- `fermium build prog.fm` makes a standalone executable (needs a C compiler; programs using `plot`, `load` or `fit` can't be built yet).
 
 ## Gallery
 
@@ -139,4 +140,4 @@ Project layout:
   - `codegen_llvm.py` (the LLVM backend and numeric kernels)
   - `runtime/` (printing, plots, data, fits)
   - `repl.py`, `fmt.py`, `cli.py`
-- `tests/`: pytest suites (see MORNING_REPORT.md for the current counts).
+- `tests/`: pytest suites.

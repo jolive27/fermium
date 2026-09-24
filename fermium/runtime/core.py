@@ -234,6 +234,9 @@ class Runtime:
         if kind == 8:
             return f"the ODE solver's step became too small near t = {format_number(a)} (SI units); " \
                    f"the solution may blow up there"
+        if kind == 9:
+            return ("this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating "
+                    f"(like sin(x) up to ∞) -- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
         return "runtime error"
 
     # ------------------------------------------------------------ data

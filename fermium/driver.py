@@ -15,7 +15,6 @@ from .codegen_llvm import ModuleGen
 from .errors import Diagnostics, FermiumError, FermiumRuntimeError
 from .parser import parse
 from .runtime.core import Runtime, init_llvm
-from .types import ListTy
 
 _TM = None
 _sys.setrecursionlimit(max(_sys.getrecursionlimit(), 20000))
