@@ -48,7 +48,8 @@ The rule (spec §3.4.2), refined:
 2. Bracketed units are always units: `3 [m/s]`, `x [m]`, `f(x [m]) = ...`.
 3. Everywhere else an identifier is a variable.
 4. Continuing a unit expression after the first unit:
-   - `/` followed by a unit name continues the unit (`50 N/m`, `3 m/s`), even if a variable has that name. You get a warning when it does.
+   - `/` written without a space before it, and followed by a unit name, continues the unit (`50 N/m`, `3 m/s`), even when you have a variable with that name.
+   - `/` with a space before it, followed by the name of one of *your* variables, divides by the variable. So with `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s and not "per gram", and `2.898e-3 m K / T` divides by the temperature T, not by tesla. (Changed after the bootcamp author hit exactly this trap.)
    - A space or `·`/`*` followed by a unit name continues the unit **only if you haven't defined a variable with that name**. So `70 kg g` with your own `g` is 70 kg × g, with a warning.
 5. If the first unit after a number is also one of your variables (`0.2 m` after `m = 0.5 kg`), Fermium prints a warning once per name, suggesting `2*m` or `3 [m]`.
 - **Unit names we deliberately left out, because they collide with physics variables:**

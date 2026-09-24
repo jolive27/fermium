@@ -86,7 +86,7 @@ plot data.T vs data.L to "p.png"    # plot x vs t, plot y in AU vs x in AU
 
 ### ⚠️ Gotchas
 1. **A unit name right after a number is a unit.** `2 g h` = 2 *grams* × Planck's h. `0.5 m v^2` = half a *metre*. Write `2 * g * h`, `½ m v^2`, `0.5 * m * v^2`.
-2. **`/` after a unit continues the unit.** `20 m/s / g` is per *gram*; `2.898e-3 m K / T` is per *tesla*. Write `(20 m/s) / g`.
+2. **`/` right after a unit (no space) continues the unit:** `50 N/m`, `3 m/s`. With a space before the `/`, one of *your* variables wins: `20 m/s / g` divides by your `g`. If in doubt, use parentheses: `(20 m/s) / g`.
 3. `1/2 m v^2` means 1/(2mv²). Write `½ m v^2` or `(1/2) m v^2`.
 4. `LT` is one name; `L T` is L × T. `ωt` is one name; write `ω t`.
 5. `e` is the electron charge: write `exp(x)`, not `e^x`. Angles are radians: `sin(30 deg)`.

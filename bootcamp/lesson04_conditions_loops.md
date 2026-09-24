@@ -244,7 +244,7 @@ highest point: 20.40 m
 formula says: 4.08 s and 20.4 m
 ```
 
-(We wrote `v0 = 20 m/s` before using the formula because `20 m/s / g` would mean 20 m/s *per gram*: the unit rule again! We asked for 4 digits because `0.001 s` has only one significant figure, so Fermium would otherwise show just 2.) The simulation agrees with the textbook formulas to about 0.1%, and making `dt` smaller makes it even closer. So why simulate? Because the formula only works in the simplest case. Add air resistance (try exercise 5!) and there's no neat formula any more, but the simulation needs just one extra line. This idea, **step forward in small time steps**, is how physicists simulate everything from planets to plasmas. You'll use it again in the final project.
+(We gave the launch speed a name, `v0 = 20 m/s`, so the formula reads like the textbook one. We asked for 4 digits because `0.001 s` has only one significant figure, so Fermium would otherwise show just 2.) The simulation agrees with the textbook formulas to about 0.1%, and making `dt` smaller makes it even closer. So why simulate? Because the formula only works in the simplest case. Add air resistance (try exercise 5!) and there's no neat formula any more, but the simulation needs just one extra line. This idea, **step forward in small time steps**, is how physicists simulate everything from planets to plasmas. You'll use it again in the final project.
 
 ## Checking your work with `assert`
 

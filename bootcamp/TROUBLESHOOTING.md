@@ -252,7 +252,7 @@ warning: line 3: 'm' after the number means the unit m, not your variable m
 
 **Means:** a unit name right after a number is **always** a unit. `0.5 m` is half a metre, not half the mass `m`. The program ran, but the answer (in m³/s²) is nonsense.
 
-**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or give the mass a longer name like `mass`. The same trap: `2 g h` (grams), `2 N` (newtons), `2 c` (speed of light). And after `/`: `20 m/s / g` means *per gram*, so write `(20 m/s) / g`.
+**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or give the mass a longer name like `mass`. The same trap: `2 g h` (grams), `2 N` (newtons), `2 c` (speed of light). After `/` the rule is kinder: `20 m/s / g` (with a space before `/`) divides by your variable `g`, but `20 m/s/g` (no spaces) would still mean *per gram*. When in doubt, use parentheses: `(20 m/s) / g`.
 
 ## 11. warning: this is read as a/(b c)
 
