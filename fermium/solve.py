@@ -8,7 +8,6 @@ from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
 from .types import DExpr, NumTy, ListTy, SolTy, DataTy
-from .units import preferred_unit
 
 
 # ============================================================ solve
@@ -171,9 +170,14 @@ def check_solve(ck, s: A.Solve, ctx):
     sol_sym = ck.new_sym(ck.fresh_name("__sol"), SolTy(info), ctx)
     sol_sym.assigned = True
     base = 0
+    sfs = [v.sf for v in y0.values() if v.sf is not None] + [v.sf for v in (t0, t1) if v.sf is not None]
     for x in names:
         n = orders[x]
-        ctx.scope.names[x] = SolView(sol_sym, base, base + n - 1, dims[x], tdim, t, x)
+        view = SolView(sol_sym, base, base + n - 1, dims[x], tdim, t, x)
+        view.hint = y0[(x, 0)].hint
+        view.thint = t0.hint or t1.hint
+        view.sf = min(sfs) if sfs else None
+        ctx.scope.names[x] = view
         base += n
     rtol = 1e-9
     if s.tolerance is not None:
@@ -297,6 +301,35 @@ def check_plot(ck, s: A.Plot, ctx):
     series = []
     labels = []
     for sr in s.series:
+        yunit = xunit = None
+        if isinstance(sr.y, A.Convert):
+            yunit = ck.resolve_unit(sr.y.unit)
+            sr = A.PlotSeries(sr.y.value, sr.x, sr.lo, sr.hi).at(sr)
+        if isinstance(sr.x, A.Convert):
+            xunit = ck.resolve_unit(sr.x.unit)
+            sr = A.PlotSeries(sr.y, sr.x.value, sr.lo, sr.hi).at(sr)
+        entry = _plot_series(ck, sr, ctx, s)
+        for which, u in (("y", yunit), ("x", xunit)):
+            if u is not None:
+                if not ck.U.unify(entry[which + "dim"], u.dim):
+                    raise ck.err(f"can't show {ck.desc(entry[which + 'dim'])} in {u.name}", sr)
+                entry[which + "hint"] = u
+        series.append(entry)
+        labels.append(entry)
+    return _finish_plot(ck, s, series)
+
+
+def _plot_series(ck, sr, ctx, s):
+    if sr.lo is not None and isinstance(sr.x, A.Name):
+        yv = None
+        b, _ = ctx.scope.lookup(sr.y.func.name) if isinstance(sr.y, A.Call) and isinstance(sr.y.func, A.Name) \
+            else (None, None)
+        if isinstance(sr.y, A.Name):
+            b, _ = ctx.scope.lookup(sr.y.name)
+            if isinstance(b, FuncInfo):
+                yv = FuncRef(b)
+        xv = None
+    else:
         yv = _plot_side(ck, sr.y, ctx)
         xv = None
         if isinstance(sr.x, A.Name):
@@ -307,6 +340,7 @@ def check_plot(ck, s: A.Plot, ctx):
                 xv = _plot_side(ck, sr.x, ctx)
         else:
             xv = _plot_side(ck, sr.x, ctx)
+    if True:
         entry = {"ylabel": _label(ck, sr.y), "xlabel": _label(ck, sr.x)}
         if isinstance(yv, SolRef) and xv is None:
             v = yv.view
@@ -314,7 +348,8 @@ def check_plot(ck, s: A.Plot, ctx):
                 raise ck.err(f"{v.name} is a function of {v.tname}; plot it  vs {v.tname}", sr.x)
             sol = ck.var_ref(v.sol_sym, ctx, s)
             comp, use_dy = (v.comp, False) if v.comp <= v.top else (v.top, True)
-            entry.update(kind="sol", sol=sol, comp=comp, dy=use_dy, ydim=v.dim, xdim=v.tdim, yhint=None, xhint=None)
+            entry.update(kind="sol", sol=sol, comp=comp, dy=use_dy, ydim=v.dim, xdim=v.tdim,
+                         yhint=getattr(v, "hint", None), xhint=getattr(v, "thint", None))
             if sr.lo is not None:
                 raise ck.err("a solution is plotted over the range it was solved for (no 'from ... to' needed)", sr)
         elif isinstance(yv, SolRef) and isinstance(xv, SolRef):
@@ -324,7 +359,7 @@ def check_plot(ck, s: A.Plot, ctx):
             sol = ck.var_ref(a.sol_sym, ctx, s)
             entry.update(kind="solxy", sol=sol, comp=a.comp if a.comp <= a.top else a.top, dy=a.comp > a.top,
                          comp2=b.comp if b.comp <= b.top else b.top, dy2=b.comp > b.top,
-                         ydim=a.dim, xdim=b.dim, yhint=None, xhint=None)
+                         ydim=a.dim, xdim=b.dim, yhint=getattr(a, "hint", None), xhint=getattr(b, "hint", None))
         elif xv is None or sr.lo is not None:
             # y is a formula in the (undefined) x variable, sampled over a range
             if sr.lo is None:
@@ -367,8 +402,10 @@ def check_plot(ck, s: A.Plot, ctx):
                                  f"with a range)", node,
                                  hint="e.g.  plot v vs t from 0 s to 5 s   or   plot ys vs xs")
             entry.update(kind="lists", y=yv, x=xv, ydim=yv.ty.dim, xdim=xv.ty.dim, yhint=yv.hint, xhint=xv.hint)
-        series.append(entry)
-        labels.append(entry)
+    return entry
+
+
+def _finish_plot(ck, s, series):
     out = s.out
     if out is None:
         def clean(t):

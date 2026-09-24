@@ -85,6 +85,9 @@ class ModuleGen:
         self.jmpbuf.initializer = ir.Constant(ir.ArrayType(I8, 1024), None)
         self.jmpbuf.align = 16
         self.jmpbuf.linkage = "internal"
+        self.curline = ir.GlobalVariable(self.module, I64, "fm.line")
+        self.curline.initializer = i64(0)
+        self.curline.linkage = "internal"
         self._kernels_built = set()
 
     # ------------------------------------------------------------ declarations
@@ -104,7 +107,7 @@ class ModuleGen:
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
-        e("fm_error", VOID, [I64, F64, F64])
+        e("fm_error", VOID, [I64, F64, F64, I64])
         e("fm_plot_series", VOID, [I64, I64, F64P, I64, F64P, I64])
         e("fm_plot_sol", VOID, [I64, I64, I8P, I64, I64, I64, I64])
         e("fm_plot_done", VOID, [I64])
@@ -212,8 +215,10 @@ class ModuleGen:
         self._kernels_built.add(name)
         return getattr(self, "_k_" + name.replace("fm_", ""))()
 
-    def raise_error(self, b, kind, a=None, c=None):
-        b.call(self.externs["fm_error"], [i64(kind), a if a is not None else f64(0), c if c is not None else f64(0)])
+    def raise_error(self, b, kind, a=None, c=None, line=None):
+        ln = i64(line) if line else b.load(self.curline)
+        b.call(self.externs["fm_error"], [i64(kind), a if a is not None else f64(0), c if c is not None else f64(0),
+                                          ln])
         b.call(self.externs["longjmp"], [b.bitcast(self.jmpbuf, I8P), ir.Constant(I32, 1)])
         b.unreachable()
 
@@ -691,8 +696,18 @@ class FuncGen:
             self.stmt(s)
 
     def stmt(self, s):
+        if getattr(s, "line", 0):
+            self.line = s.line
         m = getattr(self, "s_" + type(s).__name__)
         m(s)
+
+    def mark_line(self):
+        """Record the current source line for errors raised inside kernels."""
+        if getattr(self, "line", 0):
+            self.b.store(i64(self.line), self.mg.curline)
+
+    def fail(self, kind, a=None, c=None):
+        self.mg.raise_error(self.b, kind, a, c, getattr(self, "line", 0) or None)
 
     def s_SAssign(self, s):
         self.store(s.sym, self.expr(s.value))
@@ -763,7 +778,7 @@ class FuncGen:
         hi = self.expr(s.hi)
         st = self.expr(s.step)
         with b.if_then(b.fcmp_unordered("==", st, f64(0))):
-            self.mg.raise_error(b, ERR_STEP, st, f64(0))
+            self.fail(ERR_STEP, st, f64(0))
         span = b.fdiv(b.fsub(hi, lo), st)
         cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
         cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
@@ -827,7 +842,7 @@ class FuncGen:
     def s_SAssert(self, s):
         c = self.expr(s.cond)
         with self.b.if_then(self.b.not_(c)):
-            self.mg.raise_error(self.b, ERR_ASSERT, f64(s.msg_id))
+            self.fail(ERR_ASSERT, f64(s.msg_id))
 
     def s_SPrint(self, s):
         b, ex = self.b, self.mg.externs
@@ -855,9 +870,11 @@ class FuncGen:
         t0 = self.expr(s.t0)
         t1 = self.expr(s.t1)
         if s.method == "rk4":
+            self.mark_line()
             k = self.mg.kernel("fm_rk4")
             sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, self.expr(s.step)])
         else:
+            self.mark_line()
             k = self.mg.kernel("fm_dp45")
             sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)])
         self.store(s.sol_sym, sol)
@@ -968,7 +985,7 @@ class FuncGen:
             na = b.extract_value(a, 1)
             nc = b.extract_value(c, 1)
             with b.if_then(b.icmp_signed("!=", na, nc)):
-                self.mg.raise_error(b, ERR_LEN, b.sitofp(na, F64), b.sitofp(nc, F64))
+                self.fail(ERR_LEN, b.sitofp(na, F64), b.sitofp(nc, F64))
             cd = b.extract_value(c, 0)
             return self.map_list(a, lambda x, i: op(x, b.load(b.gep(cd, [i]))))
         if la:
@@ -1114,11 +1131,12 @@ class FuncGen:
     def elem_ptr(self, lst, idx):
         b = self.b
         n = b.extract_value(lst, 1)
-        i = b.fptosi(b.call(self.mg.intrinsic("floor"), [b.fadd(idx, f64(0.5))]), I64)
+        fl = b.call(self.mg.intrinsic("floor"), [idx])
+        i = b.fptosi(fl, I64)
         bad = b.or_(b.icmp_signed("<", i, i64(1)), b.icmp_signed(">", i, n))
-        bad = b.or_(bad, b.fcmp_unordered("uno", idx, idx))
+        bad = b.or_(bad, b.fcmp_unordered("!=", fl, idx))
         with b.if_then(bad, likely=False):
-            self.mg.raise_error(b, ERR_INDEX, idx, b.sitofp(n, F64))
+            self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
         return b.gep(b.extract_value(lst, 0), [b.sub(i, i64(1))])
 
     def e_IIndex(self, e):
@@ -1128,10 +1146,12 @@ class FuncGen:
     def e_IIntegral(self, e):
         fn = self.mg.lambda_for(e.lam)
         env = self.make_env(e.lam)
+        self.mark_line()
         q = self.mg.kernel("fm_quad")
         return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
 
     def e_ISolEval(self, e):
+        self.mark_line()
         k = self.mg.kernel("fm_sol_eval")
         return self.b.call(k, [self.expr(e.sol), i64(e.comp), self.expr(e.t), i64(1 if e.use_dy else 0)])
 
@@ -1227,7 +1247,7 @@ class FuncGen:
             a, c = args
             na = b.extract_value(a, 1)
             with b.if_then(b.icmp_signed("!=", na, b.extract_value(c, 1))):
-                self.mg.raise_error(b, ERR_LEN, b.sitofp(na, F64), b.sitofp(b.extract_value(c, 1), F64))
+                self.fail(ERR_LEN, b.sitofp(na, F64), b.sitofp(b.extract_value(c, 1), F64))
             acc = self.alloca(F64)
             b.store(f64(0), acc)
             pa, pc = b.extract_value(a, 0), b.extract_value(c, 0)
@@ -1238,7 +1258,7 @@ class FuncGen:
             ys, xs = args
             n = b.extract_value(ys, 1)
             with b.if_then(b.icmp_signed("!=", n, b.extract_value(xs, 1))):
-                self.mg.raise_error(b, ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(xs, 1), F64))
+                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(xs, 1), F64))
             acc = self.alloca(F64)
             b.store(f64(0), acc)
             py, px = b.extract_value(ys, 0), b.extract_value(xs, 0)
@@ -1253,9 +1273,9 @@ class FuncGen:
             n = b.extract_value(xs, 1)
             px, py = b.extract_value(xs, 0), b.extract_value(ys, 0)
             with b.if_then(b.icmp_signed("!=", n, b.extract_value(ys, 1))):
-                self.mg.raise_error(b, ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(ys, 1), F64))
+                self.fail(ERR_LEN, b.sitofp(n, F64), b.sitofp(b.extract_value(ys, 1), F64))
             with b.if_then(b.icmp_signed("<", n, i64(2))):
-                self.mg.raise_error(b, ERR_EMPTY, f64(0), f64(0))
+                self.fail(ERR_EMPTY, f64(0), f64(0))
             res = self.alloca(F64)
             # clamp to the ends
             b.store(b.load(py), res)
@@ -1291,7 +1311,7 @@ class FuncGen:
         if name == "range":
             a, c, st = args
             with b.if_then(b.fcmp_unordered("==", st, f64(0))):
-                self.mg.raise_error(b, ERR_STEP, st, f64(0))
+                self.fail(ERR_STEP, st, f64(0))
             cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(b.fdiv(b.fsub(c, a), st), f64(1e-9))]), f64(1))
             cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
             n = b.fptosi(cnt, I64)
@@ -1337,7 +1357,7 @@ class FuncGen:
         n = b.extract_value(lst, 1)
         if name in ("mean", "std", "min_list", "max_list", "first", "last"):
             with b.if_then(b.icmp_signed("<", n, i64(1))):
-                self.mg.raise_error(b, ERR_EMPTY, f64(0), f64(0))
+                self.fail(ERR_EMPTY, f64(0), f64(0))
         if name == "first":
             return b.load(data)
         if name == "last":

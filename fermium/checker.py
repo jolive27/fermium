@@ -735,7 +735,18 @@ class Checker(C.DiffContext):
                     msg = f"can't subtract {db} from {da}"
                 raise self.err(msg, e, hint=self.mismatch_hint(a, b))
             r = I.IBin(op, a, b, mk(a.ty.dim))
-            r.hint = a.hint if a.hint is not None else b.hint
+            aff_a = a.hint is not None and a.hint.affine
+            aff_b = b.hint is not None and b.hint.affine
+            if op == "+" and aff_a and aff_b:
+                raise self.err(f"can't add two absolute temperatures ({a.hint.name} + {b.hint.name})", e,
+                               hint="to add a temperature change, write it in K, e.g. 20 °C + 5 K")
+            if op == "-" and aff_a and aff_b:
+                r.hint = None      # the difference of two temperatures is a difference: shown in K
+            elif aff_b and op == "-":
+                raise self.err(f"can't subtract an absolute temperature ({b.hint.name}) from this", e,
+                               hint="write temperature changes in K")
+            else:
+                r.hint = a.hint if a.hint is not None else b.hint
         elif op == "*":
             r = I.IBin("*", a, b, mk(a.ty.dim * b.ty.dim))
             r.hint = self._keep_hint(a, b)
@@ -955,6 +966,8 @@ class Checker(C.DiffContext):
             return I.IBuiltin("len", [target], NumTy(DIMLESS))
         idx = self._with_end(idx_ast, target, ctx)
         self.need_num(idx, idx_ast, "a list index")
+        if isinstance(idx, I.IConst) and idx.value != int(idx.value):
+            raise self.err(f"a list index must be a whole number (1, 2, 3, ...), not {idx.value:g}", idx_ast)
         if not self.U.unify(idx.ty.dim, DIMLESS):
             raise self.err(f"a list index must be a plain number (1, 2, 3, ...), not {self.desc(idx.ty.dim)}",
                            idx_ast)
@@ -1045,6 +1058,13 @@ class Checker(C.DiffContext):
         self.unify_or(t.ty.dim, view.tdim, lambda: f"{view.name} is a function of {view.tname}, which is "
                       f"{self.desc(view.tdim)}, not {self.desc(t.ty.dim)}", e.args[0])
         sol = self.var_ref(view.sol_sym, ctx, e)
+        r = self._sol_eval_node(view, sol, t, e)
+        r.sf = self._minsf(t, view) if getattr(view, "sf", None) is not None else t.sf
+        if view.comp == view.comp and getattr(view, "hint", None) is not None and view.name.count("'") == 0:
+            r.hint = view.hint
+        return r
+
+    def _sol_eval_node(self, view, sol, t, e):
         if view.comp <= view.top:
             r = I.ISolEval(sol, view.comp, t, False, NumTy(view.dim))
         elif view.comp == view.top + 1:
@@ -1172,6 +1192,11 @@ class Checker(C.DiffContext):
             info.instances.pop(key, None)
             if e.line is None and node is not None:
                 e.line, e.col = node.line, node.col
+            elif node is not None and node.line and e.line != node.line and not getattr(e, "call_noted", False):
+                argd = ", ".join(f"{p.name} = {type_desc(a.ty, self.U)}" for p, a in zip(f.params, args))
+                note = f"this happened when calling {info.display_name} on line {node.line} (with {argd})"
+                e.hint = f"{e.hint}; {note}" if e.hint else note
+                e.call_noted = True
             raise
         rets = fctx.ret_types
         if not rets:

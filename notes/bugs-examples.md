@@ -20,3 +20,37 @@ plot y in AU vs x in AU to "orbit.png"
 - Expected: axes labelled `x [AU]`, `y [AU]` (either via `in`, or by keeping the unit the user wrote, as `print` does).
 - Actual: parse error "expected 'vs' ... but found 'in'"; `plot y vs x` labels the axes in m with ×10¹¹ offsets.
 - Workaround in examples: divide by the unit (`xs / (1 AU)`) to plot plain numbers and say the unit in a comment, or live with SI axes.
+
+## 3. (bug) `plot f(x) vs x from a to b` — the form documented in docs/reference.md §11 — fails
+```
+f(x) = 3 x^2
+plot f(x) vs x from 0 m to 1 m to "e.png"
+```
+- Expected: plots the formula (reference.md §11 lists "`plot f(x) vs x from 0 m to 1 m` (a formula)").
+- Actual: `line 2: x isn't defined`. Same for `plot x^2 vs x from 0 m to 1 m`.
+- `plot f vs x from 0 m to 1 m` (bare function name) works.
+- Workaround in examples: `plot B vs λ from 50 nm to 3000 nm` (06_blackbody, 09_binding_energy...).
+
+## 4. (usability) The display unit is lost when a value comes back from a user function
+```
+a = 15.75 MeV
+A = 56
+print a * A        # 882.0 MeV   (good)
+f(A) = a A
+print f(56)        # 1.413×10⁻¹⁰ J   <- expected 882.0 MeV
+```
+- Expected: the function result keeps the display unit the user wrote (MeV), as `print a * A` does.
+- Actual: falls back to SI (J). In nuclear-physics examples every function result then needs `in MeV`.
+- Workaround in examples: `print ... in MeV` everywhere.
+
+## 5. (cosmetic) `round`, `floor`, `ceil` results print with a trailing `.0`
+```
+print round(25.2), round(25.2) + 1      # 25.0 26.0   expected: 25 26
+```
+
+## 6. (minor) Python traceback on a closed stdout pipe
+```
+fermium run examples/09_binding_energy.fm | head -1
+```
+- Expected: quiet exit (like other CLI tools), no traceback.
+- Actual: several "Exception ignored on calling ctypes callback ... BrokenPipeError" tracebacks, then "internal error in Fermium: BrokenPipeError".

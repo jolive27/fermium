@@ -318,9 +318,9 @@ class Parser:
         series = []
         while True:
             st = self.tok
-            y = self.expr()
+            y = self.expr_full()
             self.expect_kw("vs", "(write: plot y vs x)")
-            x = self.expr()
+            x = self.expr_full()
             lo = hi = None
             if self.at_kw("from"):
                 self.next()
@@ -648,10 +648,12 @@ class Parser:
             first = right
             while isinstance(first, A.BinOp) and first.implicit and not first.paren:
                 first = first.left
+            if isinstance(first, A.Quantity) and isinstance(first.value, A.Num) and not first.bracket:
+                first = first.value
             if isinstance(first, A.Num) and isinstance(left, A.Num) and not left.paren:
                 self.diags.warn(
                     "this is read as a/(b c): implicit multiplication binds tighter than '/'",
-                    tok=op, hint="write (1/2) m v² or ½ m v² if you meant (1/2)·m·v²")
+                    tok=op, hint="write (1/2) m v², or ½ m v², if you meant one half times m v²")
 
     def unary(self):
         if self.at_op("-"):
@@ -702,12 +704,39 @@ class Parser:
                 continue
             if not self._starts_term():
                 break
-            if self.tok.kind == "NUM" and not self.tok.ws_before:
-                # `x2` is an identifier; `(a)2` is odd -- still multiply
-                pass
+            self._warn_unit_then_term(e)
             r = self.power()
             e = self.span(A.BinOp("*", e, r, implicit=True), t)
+        self._warn_bare_unit(e)
         return e
+
+    def _warn_bare_unit(self, e):
+        """Spec §3.4.2: a bare unit after a number that is also a variable name gets a warning (once per name)."""
+        q = e
+        while isinstance(q, A.BinOp) and q.implicit and not q.paren:
+            q = q.right
+        if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
+            f = q.unit.factors[0]
+            if f.name in self.known and f.name not in self.warned_units and f.name != "c":
+                self.warned_units.add(f.name)
+                self.diags.warn(f"'{f.name}' right after a number is the unit {f.name}, not your variable {f.name}",
+                                line=f.line, col=f.col, length=len(f.name),
+                                hint=f"that's usually what you want; to multiply by the variable write 2*{f.name}, "
+                                     f"and to make the unit explicit write [{f.name}]")
+
+    def _warn_unit_then_term(self, e):
+        """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
+        q = e
+        while isinstance(q, A.BinOp) and q.implicit and not q.paren:
+            q = q.right
+        if isinstance(q, A.Quantity) and not q.bracket and not q.paren and len(q.unit.factors) == 1:
+            f = q.unit.factors[0]
+            if f.name in self.known and f.exp == 1:
+                self.diags.warn(
+                    f"'{f.name}' after the number means the unit {f.name}, not your "
+                    f"variable {f.name}", line=f.line, col=f.col, length=len(f.name),
+                    hint=f"to multiply by the variable write *{f.name} (e.g. 0.5*{f.name}) or put the number in "
+                         f"a name; ½ {f.name} also works")
 
     def power(self):
         t = self.tok
@@ -734,7 +763,12 @@ class Parser:
         if self.at_op("+"):
             self.next()
             return self.exponent()
-        base = self.postfix()
+        if self.tok.kind == "NUM":
+            nt = self.next()
+            base = A.Num(nt.value, nt.sigfigs, nt.digit)
+            base.line, base.col, base.length = nt.line, nt.col, len(nt.raw)
+        else:
+            base = self.postfix()
         if self.at_op("^"):
             self.next()
             return self.span(A.BinOp("^", base, self.exponent()), t)
@@ -1021,14 +1055,6 @@ class Parser:
             return tk.kind == "NAME" and is_unit_name(tk.raw)
 
         # first factor
-        if not explicit:
-            nt = self.tok
-            if nt.value in self.known and nt.raw not in ("c",) and nt.value not in self.warned_units:
-                self.warned_units.add(nt.value)
-                self.diags.warn(
-                    f"'{nt.raw}' right after a number means the unit {nt.raw}, not your variable {nt.raw}",
-                    tok=nt, hint=f"write *{nt.raw} (e.g. 2*{nt.raw}) to multiply by the variable, "
-                                 f"or [{nt.raw}] to make the unit explicit")
         factor(1)
         first = False
         del first
@@ -1037,11 +1063,6 @@ class Parser:
             if t.kind == "OP" and t.value == "/" and (unit_name_here(1) or (
                     self.peek().kind == "OP" and self.peek().value == "(" and (
                         explicit or unit_name_here(2)))):
-                nxt = self.peek()
-                if not explicit and nxt.kind == "NAME" and nxt.value in self.known:
-                    self.diags.warn(
-                        f"'{nxt.raw}' here is read as the unit {nxt.raw}, not your variable {nxt.raw}",
-                        tok=nxt, hint=f"write ({start.raw} ...)/{nxt.raw} with parentheses to divide by the variable")
                 self.next()
                 factor(-1)
             elif t.kind == "OP" and t.value == "/" and explicit and self.peek().kind == "NUM":

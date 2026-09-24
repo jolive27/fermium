@@ -1,0 +1,48 @@
+# 06 — Blackbody radiation: Wien's law and the Stefan–Boltzmann law
+#
+# A hot object glows. Planck's law gives how much power per area, per
+# wavelength and per steradian it emits at each wavelength λ:
+#
+#     B(λ) = 2 h c² / λ⁵ · 1 / (exp(h c / λ k_B T) − 1)
+#
+# Two famous results follow from it:
+#   * Wien's law: the spectrum peaks at λ_max = b / T, with b ≈ 2.898 mm K.
+#     We find the peak ourselves by locating where dB/dλ = 0.
+#   * Stefan–Boltzmann: the total power per area is π ∫ B dλ = σ T⁴.
+#     We do the integral numerically and compare.
+# We use the Sun's surface temperature, T = 5778 K.
+
+T = 5778 K
+B(λ) = 2 h c² / λ⁵ / (exp(h c / (λ k_B T)) - 1)
+
+# The derivative is worked out symbolically by Fermium
+dB = d/dλ B
+
+# Bisection: the slope is positive left of the peak and negative right of it
+lo = 100 nm
+hi = 2000 nm
+for i from 1 to 60
+    mid = (lo + hi) / 2
+    if dB(mid) > 0 W/m³/m/sr
+        lo = mid
+    else
+        hi = mid
+λ_peak = (lo + hi) / 2
+print "peak wavelength (from dB/dλ = 0):", λ_peak in nm
+print "Wien's law b / T:                ", b_W / T in nm
+
+# Total emitted power per square metre
+flux = π * ∫ B(λ) dλ from 0 nm to ∞
+print "π ∫ B dλ =", flux in MW/m²
+print "σ T⁴     =", σ T⁴ in MW/m²
+print "relative difference:", flux / (σ T⁴) - 1
+
+# Multiply by the Sun's area to get its luminosity
+L = 4π R_sun² flux
+print "solar luminosity:", L, " (catalogue value", L_sun, ")"
+
+# Peak wavelengths across the universe
+for temp in [2.725 K, 300 K, 3000 K, 5778 K, 10000 K, 30000 K]
+    print temp, " peaks at", b_W / temp in μm
+
+plot B vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"

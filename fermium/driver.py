@@ -91,6 +91,7 @@ class Program:
     def run(self):
         rt = self.runtime
         rt.error = None
+        rt.error_line = None
         t0 = time.perf_counter()
         code = self.entry()
         self.timings["run"] = time.perf_counter() - t0
@@ -98,7 +99,7 @@ class Program:
             self.out.write(" ".join(rt.line) + "\n")
             rt.line = []
         if code != 0 or rt.error:
-            raise FermiumRuntimeError(rt.error or "runtime error")
+            raise FermiumRuntimeError(rt.error or "runtime error", rt.error_line)
 
 
 def run_source(source, filename="<program>", out=None, base_dir=None, show_warnings=True, err=None):
@@ -171,7 +172,7 @@ class ReplSession:
             self.out.write(" ".join(self.runtime.line) + "\n")
             self.runtime.line = []
         if code != 0 or self.runtime.error:
-            raise FermiumRuntimeError(self.runtime.error or "runtime error")
+            raise FermiumRuntimeError(self.runtime.error or "runtime error", self.runtime.error_line)
 
 
 I, FermiumError  # re-exports

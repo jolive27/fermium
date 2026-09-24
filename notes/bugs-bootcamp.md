@@ -31,3 +31,72 @@ print E
 - **Actual:** one warning on line 2 (`3 m/s`, which obviously means metres per second), then **no warning** on line 3, where `0.5 m v^2` silently means 0.5 metres × v² and prints `4.5 m³/s²`.
 - **Expected:** at least warn on line 3 (the case that actually changes meaning). Ideally don't warn for `3 m/s` at all: `m/s` is unambiguous. Every beginner will define `m = ... kg` and then write speeds in m/s, so the current warning trains them to ignore warnings.
 - **Workaround in lessons:** teach `½ m v²` / `0.5 * m * v^2`, and the gotcha explicitly.
+
+## B3. `plot f(x) vs x from a to b` fails unless `x` already has a value (docs/reference.md §11 form)
+
+```
+f(x) = 50 N/m * x
+plot f(x) vs x from 0 m to 1 m to "f.png"
+```
+- **Expected:** a plot of f over 0–1 m (reference.md §11 lists this form).
+- **Actual:** `line 2: x isn't defined` (caret on the `x` inside `f(x)`). Also fails for `plot sin(x) vs x from 0 to 6`. Works only if a variable `x` was defined earlier (`x = 1`), which it shouldn't need.
+- **Workaround in lessons:** `xs = linspace(0 m, 1 m, 100)` then `plot f(xs) vs xs`.
+
+## B4. The unit Fermium prints can't always be typed back in: `1/s`
+
+```
+print 0.1 1/s
+```
+- **Actual:** `line 1: s isn't defined` / hint `s is a unit; units go right after a number`. But Fermium itself prints angular frequencies as `10 1/s` (DECISIONS D11), so a beginner copying the output back gets an error. `0.1 / s` gives the same error.
+- **Expected:** `0.1 1/s` (or at least `0.1 /s`) accepted, or the hint says "write `0.1 s^-1`".
+- **Workaround in lessons:** `s^-1`.
+
+(B1 addendum: the REPL's own `:help` text says `(or ASCII: g = 4 pi^2 L / T^2)`, which is exactly the line that fails.)
+
+## B5. REPL runs a block after its first indented line, so multi-line blocks and `else` don't work
+
+Typed into `fermium` (the REPL):
+```
+fm> for i from 1 to 3
+...     print i
+1
+2
+3
+fm>     print i^2
+line 1: this line is indented but isn't inside a block
+```
+and
+```
+fm> if x > 2
+...     print "big"
+fm> else
+line 1: didn't expect 'else' here
+```
+- **Expected:** like Python, keep reading `...` lines until an empty line, then run the whole block.
+- **Workaround in lessons:** lessons put loops/ifs in `.fm` files; the REPL is used for one-liners only.
+
+(B2 addendum: `E = 0.5 m v^2 where m = 2 kg, v = 3 m/s` silently prints `4.5 m³/s²` with **no warning at all** — the `where` variable `m` isn't known yet when the unit rule runs.)
+
+## B6. A Python warning leaks out of `fit` when no starting guesses are given
+
+With `bootcamp/data/decay.csv` (header `t [min], counts`):
+```
+d = load "data/decay.csv"
+fit counts = N0 exp(-t / tau) to d
+```
+- **Actual:** the fit is right, but first prints
+```
+/home/user/fermium/fermium/runtime/fitting.py:16: RuntimeWarning: overflow encountered in dot
+  v = float(np.dot(r, r))
+```
+- **Expected:** no Python internals on screen (spec: no tracebacks/Python noise for users). Suppress with `np.errstate(over="ignore")` in the powers-of-ten scan.
+- **Workaround in lessons:** give starting guesses: `... to d with N0 = 1000, tau = 10 min`.
+- Minor: τ is reported as `1206 s` although the column is in minutes; `min` would be friendlier.
+
+## B7. `round` and `floor` print with decimals
+
+```
+print round(2.567), floor(2.7)
+```
+- **Actual:** `3.000 2.0`
+- **Expected:** `3 2` — rounding to a whole number and then printing `3.000` confuses beginners (it looks like it didn't round). Similarly `factorial`-style integer results print as `3.6288×10⁶` instead of `3628800` (`fact(n) = if n <= 1 then 1 else n * fact(n - 1); print fact(10)`).

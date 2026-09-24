@@ -64,6 +64,7 @@ class Runtime:
         self.U = None
         self.line = []
         self.error = None
+        self.error_line = None
         self.datasets = {}
         self.keep = []
         self.plot_series = {}
@@ -107,8 +108,9 @@ class Runtime:
             rt.out.flush()
             rt.line = []
 
-        def error(kind, a, b):
+        def error(kind, a, b, line):
             rt.error = rt.describe_error(kind, a, b)
+            rt.error_line = line or None
 
         def plot_series(pid, idx, xp, nx, yp, ny):
             if nx != ny:
@@ -158,7 +160,7 @@ class Runtime:
             "fm_print_bool": CB(None, c_int64)(print_bool),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
-            "fm_error": CB(None, c_int64, c_double, c_double)(error),
+            "fm_error": CB(None, c_int64, c_double, c_double, c_int64)(error),
             "fm_plot_series": CB(None, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
             "fm_plot_sol": CB(None, c_int64, c_int64, c_void_p, c_int64, c_int64, c_int64, c_int64)(plot_sol),
             "fm_plot_done": CB(None, c_int64)(plot_done),
@@ -174,6 +176,8 @@ class Runtime:
     def describe_error(self, kind, a, b):
         if kind == 1:
             n = int(b)
+            if a == a and a != int(a):
+                return f"a list index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
             if n == 0:
                 return f"index {format_number(a)} is out of range: the list is empty"
             return f"index {format_number(a)} is out of range: the list has {n} element{'s' if n != 1 else ''} " \

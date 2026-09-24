@@ -60,3 +60,56 @@ print xs[4]
 # expected: line 2 (spec Tier 4: one plain line + a caret pointing at the problem)
 ```
 Test: `test_parser.py::test_index_out_of_range_has_line`.
+
+## B7. A huge number literal crashes the lexer (Python OverflowError)
+```
+x = 1e400
+# actual: OverflowError (34, 'Numerical result out of range') from lexer._number (10.0 ** exp)
+# expected: a FermiumError ("this number is too large") -- or at least ∞, never a traceback
+```
+Test: `test_lexer.py::test_huge_exponent_is_clean_error`.
+
+## B8. Multi-digit subscripts don't match their ASCII spelling: `x₁₂` is `x_1_2`, not `x_12`
+```
+x_12 = 3
+print x₁₂        # actual: "x_1_2 isn't defined"   expected: 3
+```
+D9 says "Subscript digits become _N". Worse, `fermium fmt --pretty` turns `x_12` into `x₁₂`,
+so a program that mixes the two spellings changes meaning after formatting (`x_10` in ASCII
+and `x₁₀` elsewhere). Tests: `test_lexer.py::test_multi_digit_subscript`,
+`test_fmt.py::test_pretty_multi_digit_subscript_roundtrip`.
+
+## B9. A UTF-8 byte-order mark at the start of a file is an error
+```
+"﻿x = 3\nprint x"     # actual: unexpected character '﻿' (Zero Width No-Break Space)
+```
+Windows Notepad and some editors save files with a BOM. Expected: ignore a leading BOM.
+Test: `test_lexer.py::test_leading_bom_ignored`.
+
+## B10. Deeply nested / very long expressions crash with RecursionError
+```
+print ((((...80 levels...(1)...)))       -> RecursionError from run_source
+print 1+1+1+...  (1000 terms)            -> RecursionError
+```
+`fermium run` catches RecursionError and prints a message, but `run_source` (and therefore
+the REPL, which prints "internal error in Fermium") does not raise a FermiumError. Expected:
+a FermiumError such as "this expression is nested too deeply". A 1000-term sum is plausible in
+generated code. Test: `test_parser.py::test_long_sum_no_crash`, `test_deep_nesting_clean_error`.
+
+## B11. A non-numeric rational unit exponent crashes the parser (ValueError)
+```
+print 3 [m^(1/x)]
+# actual: ValueError: invalid literal for int() with base 10: 'x'  (parser.unit_exponent)
+# expected: FermiumError "expected a number in the unit's exponent"
+```
+Test: `test_parser.py::test_bad_unit_exponent_clean_error`.
+
+## B12. `fmt --ascii` glues a spelled-out symbol onto the next name, changing meaning
+```
+f = 3
+ω = 2πf          # fmt --ascii -> "omega = 2pif"   ("pif isn't defined")
+print ∂/∂x g     # fmt --ascii -> "print partial/partialx g"   (doesn't parse)
+```
+π and ∂ are single-character tokens, so `πf` / `∂x` need a space when spelled `pi` / `partial`.
+Expected: `2pi f`/`2 pi f` and `partial/partial x`. Test: `test_fmt.py::test_ascii_pi_before_name_keeps_meaning`,
+`test_ascii_partial_keeps_meaning`.
