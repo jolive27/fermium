@@ -84,3 +84,12 @@ print e² / (4π ε_0) in MeV fm
 ```
 print e e       # 2.56697×10⁻³⁸ s² A²
 ```
+
+## 11. (usability) Unhelpful error when `2 T[i]` reads T as tesla
+```
+T = [1 K, 2 K, 3 K]
+print 2 T[2]
+```
+- Expected: an error/hint saying "`2 T` here means 2 tesla (a unit right after a number); write 2*T[2] to use your variable T".
+- Actual: `only lists can be indexed with [...]` + `hint: to call a function use parentheses: f(x)`, which sends the beginner the wrong way. The unit/variable warning (D7 rule 5) is not shown either (see #8: warnings are dropped when there's an error).
+- Workaround in examples: `2*T[i]` (17_heat_equation).

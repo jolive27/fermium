@@ -53,7 +53,7 @@ def optimize(llmod, tm, level=3):
 class Program:
     """A compiled program, ready to run."""
 
-    def __init__(self, source, filename="<program>", base_dir=None, opt_level=3, out=None):
+    def __init__(self, source, filename="<program>", base_dir=None, opt_level=2, out=None):
         self.source = source
         self.filename = filename
         self.base_dir = base_dir or (os.path.dirname(os.path.abspath(filename)) if filename and not

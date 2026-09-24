@@ -149,3 +149,15 @@ print 1 kg * c^2        # prints: 1 kg * c^2
 ## B13. `where` still bypasses the new B2 warning
 
 `E = 0.5 m v^2 where m = 2 kg, v = 3 m/s` → prints `4.5 m³/s²`, no warning (B2 fix works for ordinary variables).
+
+## B14. A function's result loses the unit you wrote (eV → J)
+
+```
+energy(n) = -13.6 eV / n^2
+print energy(1), energy(2)
+print -13.6 eV / 2^2
+```
+- **Actual:** `-2.18×10⁻¹⁸ J -5.45×10⁻¹⁹ J` then `-3.4 eV`.
+- **Expected:** `-13.6 eV -3.4 eV` (DECISIONS D11: the written unit is kept through scaling by plain numbers; it works outside a function but not through a function call).
+- **Workaround in lessons:** `print energy(2) in eV`.
+- Similar: `10°` prints as `10 °` (with a space), and `fmt --pretty` turns `10 deg` into `10 °`.

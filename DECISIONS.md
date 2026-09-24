@@ -137,3 +137,6 @@ The rule (spec §3.4.2), refined:
 
 ## D22. Loading data
 - **What:** `load "file.csv"` reads the header **at compile time**, so column units are known to the checker. Headers look like `L [m], T [s]`. The values are read at run time and converted to SI. Paths are relative to the program's folder.
+
+## D23. LLVM optimization level is O2
+- **What:** Measured on the benchmarks, O3 took 300 ms to compile nbody against O2's 100 ms, and the run times were the same. Compile time counts toward "time to first result", so the default is O2.
