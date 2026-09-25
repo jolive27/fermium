@@ -26,7 +26,7 @@ from .errors import Diagnostics, FermiumError
 from .parser import parse
 from llvmlite import ir
 
-from .runtime.core import display_unit, init_llvm
+from .runtime.core import axis_label, display_unit, init_llvm
 
 RT_C = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime", "aot_rt.c")
 
@@ -110,14 +110,16 @@ def tables_c(tables) -> str:
     lines.append("typedef struct { const char *legend, *ylabel, *xlabel; double yfactor, yoffset, xfactor, xoffset; "
                  "int points; } fm_seriesinfo;")
     lines.append("typedef struct { const char *svg, *shown; int renamed; const char *title; int logx, logy, equal, "
-                 "nseries; const fm_seriesinfo *series; } fm_plotinfo;")
+                 "nseries; const fm_seriesinfo *series; int hasx, hasy; double xlo, xhi, ylo, yhi; int revx, revy; "
+                 "} fm_plotinfo;")
     for i, info in enumerate(tables.plots):
         ss = []
+        opts = info.get("options", {})
         for s in info["series"]:
             yu = display_unit(s["rydim"], s.get("yhint"))
             xu = display_unit(s["rxdim"], s.get("xhint"))
-            yl = s["ylabel"] + (f" [{yu.name}]" if _unit_name(yu) else "")
-            xl = s["xlabel"] + (f" [{xu.name}]" if _unit_name(xu) else "")
+            yl = axis_label(s["ylabel"], _unit_name(yu), opts.get("ylabel"))
+            xl = axis_label(s["xlabel"], _unit_name(xu), opts.get("xlabel"))
             ss.append(f"{{{cs(escape(s['ylabel']))}, {cs(escape(yl))}, {cs(escape(xl))}, {yu.factor!r}, "
                       f"{yu.offset!r}, {xu.factor!r}, {xu.offset!r}, {1 if s.get('points') else 0}}}")
         lines.append(f"static const fm_seriesinfo fm_plot{i}_series[] = {{{', '.join(ss) or '{0}'}}};")
@@ -126,10 +128,18 @@ def tables_c(tables) -> str:
         opts = info.get("options", {})
         svg, renamed = _svg_path(info["out"])
         equal = all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
-                    for s in info["series"])
+                    for s in info["series"]) and "xlim" not in opts and "ylim" not in opts
+        lims = []                        # axis ranges in the first series' display units (D161)
+        s0 = info["series"][0]
+        for which in ("x", "y"):
+            u = display_unit(s0["r" + which + "dim"], s0.get(which + "hint"))
+            lo, hi = opts.get(which + "lim", (0.0, 0.0))
+            lims.append(((lo - u.offset) / u.factor, (hi - u.offset) / u.factor))
         lines.append(f"  {{{cs(svg)}, {cs(svg)}, {1 if renamed else 0}, {cs(escape(opts.get('title') or ''))}, "
                      f"{1 if opts.get('logx') else 0}, {1 if opts.get('logy') else 0}, {1 if equal else 0}, "
-                     f"{len(info['series'])}, fm_plot{i}_series}},")
+                     f"{len(info['series'])}, fm_plot{i}_series, {1 if 'xlim' in opts else 0}, "
+                     f"{1 if 'ylim' in opts else 0}, {lims[0][0]!r}, {lims[0][1]!r}, {lims[1][0]!r}, "
+                     f"{lims[1][1]!r}, {1 if opts.get('revx') else 0}, {1 if opts.get('revy') else 0}}},")
     lines.append("  {0}};")
     return "\n".join(lines) + "\n"
 

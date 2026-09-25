@@ -1,6 +1,7 @@
 """Checking for `solve` (ODEs), `fit` (least squares) and `plot`."""
 from __future__ import annotations
 
+import math
 import os
 
 from . import ast as A
@@ -8,7 +9,7 @@ from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
 from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy, ComplexTy
-from .units import DIMLESS
+from .units import DIMLESS, preferred_unit
 from . import cplx
 
 
@@ -130,8 +131,9 @@ def _take_until(ck, s, ctx):
 def check_root(ck, s: A.Solve, ctx):
     """solve lhs = rhs for x from a to b: find the x in [a, b] where the two sides are equal (the first
     sign change of lhs - rhs, then Illinois regula falsi to full precision) and store it in x."""
-    if s.step is not None or s.method is not None or s.tolerance is not None:
-        raise ck.err("step, tolerance and using are for differential equations; an equation is solved to full "
+    if s.step is not None or s.method is not None or s.tolerance is not None or s.absolute:
+        raise ck.err("step, tolerance, absolute and using are for differential equations; an equation is solved "
+                     "to full "
                      "precision", s)
     x = s.var
     lo = ck.expr(s.lo, ctx)
@@ -215,7 +217,7 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
         known = all(ctx.scope.lookup(x)[0] is not None for x in orders)
         if not orders or (known and not bare):
             return check_root(ck, A.Solve(src_eqs, [], s.var, s.lo, s.hi, s.step, s.method,
-                                          s.tolerance).at(s), ctx)
+                                          s.tolerance, absolute=s.absolute).at(s), ctx)
     if until is not None and not orders:
         raise ck.err("until (a stop condition) is for differential equations", until)
     if not orders:
@@ -444,9 +446,11 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
         if not isinstance(tv, I.IConst) or not (0 < tv.value < 1):
             raise ck.err("the tolerance must be a plain number like 1e-8", s.tolerance)
         rtol = tv.value
+    atol = _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step) if s.absolute else None
     if method in ("radau", "bdf"):
         ck.tables.stiff.append((s.line, method))
     st = I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
+    st.atol = atol                        # per state slot (value in SI, power of 1/|t1 - t0|), or None (D160)
     st.event = event                      # the stop condition's g = lhs - rhs (D39), or None
     st.evtext = evtext if evtext is not None else -1
     st.tname = ck.text(t)                 # for runtime errors: "at ξ = 0"
@@ -459,6 +463,57 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     # (`if t < 0.3 s`), so only then does the step control look for jumps (D40)
     st.tdep = any(t in A.free_names(q.lhs) + A.free_names(q.rhs) for q in eqs)
     return st
+
+
+def _same_dim(ck, a, b):
+    d = ck.U.norm(DExpr.of(a) / DExpr.of(b))
+    return not d.terms and d.const.dimensionless
+
+
+def _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step):
+    """`absolute a[, b …]`: absolute tolerances (D160).  Each value is a constant with a unit; each unknown
+    takes the one in its units, and a derivative slot x' (of a second-order x) takes the one in x's units
+    per unit of time when given, else x's divided by |t1 - t0|.  An unknown with no value in its units, two
+    values in the same units, or a value no unknown uses, is an error.  Returns, per state slot (vectors
+    and complex numbers repeated per component), (value in SI, power k of 1/|t1 - t0|)."""
+    if step is not None:
+        raise ck.err("absolute sets the error control of the adaptive solvers (rk45, radau, bdf); with  step  "
+                     "the steps are fixed, so leave out one of them", s.absolute[0])
+    vals = []
+    for node in s.absolute:
+        v = ck.expr(node, ctx)
+        if not isinstance(v, I.IConst) or not isinstance(v.ty, NumTy) or not (0 < v.value < math.inf):
+            raise ck.err("an absolute tolerance must be a positive constant, like 1e-16 or 1e-9 m", node)
+        for w, _ in vals:
+            if _same_dim(ck, w.ty.dim, v.ty.dim):
+                raise ck.err(f"two absolute tolerances in {ck.desc(v.ty.dim)}; give one value per unit", node)
+        vals.append((v, node))
+    used = set()
+    out = []
+    for (x, k) in layout:
+        want = dims[x] / (DExpr.of(tdim) ** k)
+        hit = next((i for i, (v, _) in enumerate(vals) if _same_dim(ck, v.ty.dim, want)), None)
+        power = 0
+        if hit is None and k > 0:
+            hit = next((i for i, (v, _) in enumerate(vals) if _same_dim(ck, v.ty.dim, dims[x])), None)
+            power = k
+        if hit is None:
+            have = ", ".join(ck.desc(v.ty.dim) for v, _ in vals)
+
+            def sym(d):
+                u = preferred_unit(ck.U.resolve(d))
+                return f" {u.name}" if u.name not in ("", "1") else ""
+            like = ", ".join(f"1e-9{sym(v.ty.dim)}" for v, _ in vals) + f", 1e-12{sym(want)}"
+            raise ck.err(f"no absolute tolerance for {x}{chr(39) * k}, which is {ck.desc(want)} (the values given "
+                         f"are in {have}); add one in its units after a comma, like  absolute {like}",
+                         s.absolute[0])
+        used.add(hit)
+        out.extend([(vals[hit][0].value, power)] * shape[x])
+    for i, (v, node) in enumerate(vals):
+        if i not in used:
+            raise ck.err(f"no unknown of this solve is in {ck.desc(v.ty.dim)}, so this absolute tolerance isn't "
+                         f"used", node)
+    return out
 
 
 def _mass_matrix(ck, eqs, tops_in, names, orders, shape, t):
@@ -706,7 +761,35 @@ def check_plot(ck, s: A.Plot, ctx):
                                     f"{ck.desc(series[0][which + 'dim'])} and {ck.desc(entry[which + 'dim'])})", sr)
         series.append(entry)
         labels.append(entry)
-    return _finish_plot(ck, s, series)
+    return _finish_plot(ck, s, series, ctx)
+
+
+def _plot_options(ck, s, series, ctx):
+    """The plot's options for the runtime, with `x from a to b` / `y from a to b` checked against the axis
+    units and turned into SI numbers (D161); the plot's own units (the first series') show them."""
+    opts = dict(getattr(s, "options", {}))
+    for which in ("x", "y"):
+        rng = opts.pop(which + "range", None)
+        if rng is None:
+            continue
+        vals = []
+        for node in rng:
+            v = ck.expr(node, ctx)
+            ck.need_num(v, node, f"the {which} range")
+            if not isinstance(v, I.IConst):
+                raise ck.err(f"the {which} range must be constants, like  {which} from 1e-12 to 1  or  "
+                             f"{which} from 0 s to 10 s", node)
+            want = series[0][which + "dim"]
+            ck.unify_or(v.ty.dim, want, lambda v=v, want=want: f"the {which} axis is {ck.desc(want)}, but this end of "
+                        f"its range is {ck.desc(v.ty.dim)}", node)
+            vals.append(float(v.value))
+        if not (vals[0] < vals[1]):
+            raise ck.err(f"the {which} range must go from the smaller value to the larger one; to have {which} "
+                         f"decrease along the axis, add  reversed {which}", rng[0])
+        if opts.get("log" + which) and vals[0] <= 0:
+            raise ck.err(f"a log {which} axis can't start at 0 or below", rng[0])
+        opts[which + "lim"] = tuple(vals)
+    return opts
 
 
 def _plot_series(ck, sr, ctx, s):
@@ -801,7 +884,7 @@ def _plot_series(ck, sr, ctx, s):
     return entry
 
 
-def _finish_plot(ck, s, series):
+def _finish_plot(ck, s, series, ctx):
     out = s.out
     if out is None:
         def clean(t):
@@ -809,7 +892,7 @@ def _finish_plot(ck, s, series):
         first = s.series[0]
         out = f"{clean(_label(ck, first.y))}_vs_{clean(_label(ck, first.x))}.png"
     full = out if os.path.isabs(out) else os.path.join(ck.base_dir, out)
-    info = {"out": out, "full": full, "options": getattr(s, "options", {}),
+    info = {"out": out, "full": full, "options": _plot_options(ck, s, series, ctx),
             "series": [{k: v for k, v in e.items() if k in ("ylabel", "xlabel", "kind", "ydim", "xdim", "yhint",
                                                           "xhint", "points")} for e in series]}
     ck.tables.plots.append(info)

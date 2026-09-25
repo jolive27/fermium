@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from conftest import run
+from fermium.errors import FermiumError
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RES = os.path.join(ROOT, "research")
@@ -481,3 +482,56 @@ def test_bbn_network_matches_scipy_radau():
     slow = _bbn_model(weak_scale=M["lam0"] / 1.6887)
     s2 = solve_ivp(slow["rhs"], [t0, 1e4], y0, method="Radau", rtol=1e-8, atol=1e-16, first_step=1e-12)
     assert 4 * s2.y[6, -1] - 4 * he4 == pytest.approx(0.0057, abs=3e-4)
+
+
+BBN_FULL_NETWORK = """
+T0 = 10 MeV
+t0 = 1 / (2 H(T0))
+Yn0 = 1 / (1 + exp(Q_np / T0))
+solve
+    T' = dTdt(T)
+    Yn' = -F_np(T, Yn, Yp) - F_pn(T, Yn, Yp, Yd) + F_ddn(T, Yd, Yn, Y3He) - F_h3n(T, Y3He, Yn, Yp, Y3H) + F_td(T, Y3H, Yd, Yn, Y4He) - F_b7n(T, Y7Be, Yn, Y7Li, Yp)
+    Yp' = F_np(T, Yn, Yp) - F_pn(T, Yn, Yp, Yd) - F_dp(T, Yd, Yp, Y3He) + F_ddp(T, Yd, Yp, Y3H) + F_h3n(T, Y3He, Yn, Yp, Y3H) + F_h3d(T, Y3He, Yd, Yp, Y4He) + F_b7n(T, Y7Be, Yn, Y7Li, Yp) - F_l7p(T, Y7Li, Yp, Y4He)
+    Yd' = F_pn(T, Yn, Yp, Yd) - F_dp(T, Yd, Yp, Y3He) - 2 F_ddn(T, Yd, Yn, Y3He) - 2 F_ddp(T, Yd, Yp, Y3H) - F_td(T, Y3H, Yd, Yn, Y4He) - F_h3d(T, Y3He, Yd, Yp, Y4He)
+    Y3H' = F_ddp(T, Yd, Yp, Y3H) + F_h3n(T, Y3He, Yn, Yp, Y3H) - F_td(T, Y3H, Yd, Yn, Y4He) - F_ta(T, Y3H, Y4He, Y7Li)
+    Y3He' = F_dp(T, Yd, Yp, Y3He) + F_ddn(T, Yd, Yn, Y3He) - F_h3n(T, Y3He, Yn, Yp, Y3H) - F_h3d(T, Y3He, Yd, Yp, Y4He) - F_h3a(T, Y3He, Y4He, Y7Be)
+    Y4He' = F_td(T, Y3H, Yd, Yn, Y4He) + F_h3d(T, Y3He, Yd, Yp, Y4He) - F_h3a(T, Y3He, Y4He, Y7Be) - F_ta(T, Y3H, Y4He, Y7Li) + 2 F_l7p(T, Y7Li, Yp, Y4He)
+    Y7Li' = F_ta(T, Y3H, Y4He, Y7Li) + F_b7n(T, Y7Be, Yn, Y7Li, Yp) - F_l7p(T, Y7Li, Yp, Y4He)
+    Y7Be' = F_h3a(T, Y3He, Y4He, Y7Be) - F_b7n(T, Y7Be, Yn, Y7Li, Yp)
+    with T(t0) = T0, Yn(t0) = Yn0, Yp(t0) = 1 - Yn0, Yd(t0) = 0, Y3H(t0) = 0, Y3He(t0) = 0, Y4He(t0) = 0, Y7Li(t0) = 0, Y7Be(t0) = 0
+    for t from t0 to 1e4 s using radau {opts}
+print "Y_p =", 4 Y4He[end] to 6 digits
+print "D/H =", Yd[end] / Yp[end] to 6 digits
+print "3He/H =", (Y3He[end] + Y3H[end]) / Yp[end] to 6 digits
+print "7Li/H =", (Y7Li[end] + Y7Be[end]) / Yp[end] to 6 digits
+print "Y_n =", Yn[end] to 4 digits
+print "T =", T[end] in MeV to 6 digits
+"""
+
+
+def test_bbn_whole_network_from_10_mev_with_an_absolute_tolerance():
+    """FRICTION #66 (D160): with  absolute 1e-16  the whole network starts at 10 MeV in one radau solve (the
+    published program needs two stages), and agrees with SciPy's Radau at the same rtol and atol."""
+    from scipy.integrate import solve_ivp
+    d = os.path.join(RES, "bbn_network")
+    head = open(os.path.join(d, "bbn.fm"), encoding="utf-8").read().split("# ---- 1. the weak era")[0]
+    # purely relative control (D42) can't start it; the message now points at the tolerance
+    with pytest.raises(FermiumError) as e:
+        run(head + BBN_FULL_NETWORK.format(opts="tolerance 1e-10"), base_dir=d)
+    assert "step became too small near t = 0.00738 s" in e.value.message
+    assert "probably not a blow-up" in e.value.message and "absolute" in e.value.message
+    out = run(head + BBN_FULL_NETWORK.format(opts="tolerance 1e-10 absolute 1e-16, 1e-16 MeV"), base_dir=d)
+    M = _bbn_model()
+    T0, Q = 10.0, 1.29333
+    t0 = 1 / (2 * M["H"](T0 * M["MeV"]))
+    yn0 = 1 / (1 + np.exp(Q / T0))
+    sol = solve_ivp(M["rhs"], [t0, 1e4], [T0, yn0, 1 - yn0, 0, 0, 0, 0, 0, 0], method="Radau", rtol=1e-10,
+                    atol=1e-16, first_step=1e-12)
+    assert sol.success
+    T, n, p, d_, h3, he3, he4, li, be = sol.y[:, -1]
+    assert num(out, "Y_p =") == pytest.approx(4 * he4, rel=1e-5)
+    assert num(out, "D/H =") == pytest.approx(d_ / p, rel=1e-5)
+    assert num(out, "3He/H =") == pytest.approx((he3 + h3) / p, rel=1e-5)
+    assert num(out, "7Li/H =") == pytest.approx((li + be) / p, rel=1e-5)
+    assert num(out, "Y_n =") == pytest.approx(n, rel=1e-3)
+    assert num(out, "T =") == pytest.approx(T, rel=1e-5)

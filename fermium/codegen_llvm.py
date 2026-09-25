@@ -55,6 +55,7 @@ ERR_ODE_NAN = 16            # the right side of an ODE is NaN or infinite at the
 ERR_ODE_RANGE = 17          # an ODE's range starts and ends at the same value
 ERR_NO_EVENT = 18           # solve ... until: the stop condition never happened (D39)
 ERR_ODE_SINGULAR = 33      # the mass matrix of an ODE's highest derivatives is singular (D47)
+ERR_ODE_H_FLAT = 34        # the step became too small but nothing grew: the tolerance, not a blow-up (D160)
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
@@ -1278,8 +1279,8 @@ class ModuleGen:
     def _k_dp45(self):
         push = self.kernel("fm_sol_push")
         fn = self._new_fn("fm_dp45", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64,
-                                            ODE_FN.as_pointer(), F64, F64, I64])
-        f, env, n, y0, t0, t1, rtol, ev, tname, evtext, tdep = fn.args
+                                            ODE_FN.as_pointer(), F64, F64, I64, F64P])
+        f, env, n, y0, t0, t1, rtol, ev, tname, evtext, tdep, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         mal = self.externs["malloc"]
@@ -1362,7 +1363,23 @@ class ModuleGen:
         land = b.fcmp_ordered(">=", hvv, rstop)
         h = b.select(land, rstop, hvv)
         with b.if_then(b.fcmp_ordered("<", h, b.fmul(f64(1e-15), b.fadd(b.call(fabs, [t]), aspan)))):
-            self.raise_error(b, ERR_ODE_H, t, tname)
+            # a blow-up (some component grew over 10³ times both its start and the largest start, or
+            # isn't finite) or, if nothing grew, the tolerance (D160); mirrors runtime/stiff.step_small_kind
+            big = b.alloca(F64)
+            grew = b.alloca(I64)
+            b.store(f64(0), big)
+            b.store(i64(0), grew)
+            with lp.range(i64(0), n) as j:
+                b.store(b.call(fmax, [b.load(big), b.call(fabs, [b.load(b.gep(y0, [j]))])]), big)
+            with lp.range(i64(0), n) as j:
+                vj = b.load(b.gep(y, [j]))
+                lim = b.fmul(f64(1e3), b.call(fmax, [b.call(fabs, [b.load(b.gep(y0, [j]))]), b.load(big)]))
+                bad = b.or_(b.fcmp_unordered("!=", b.fsub(vj, vj), f64(0)),
+                            b.fcmp_ordered(">", b.call(fabs, [vj]), lim))
+                with b.if_then(bad):
+                    b.store(i64(1), grew)
+            kind = b.select(b.icmp_signed("!=", b.load(grew), i64(0)), i64(ERR_ODE_H), i64(ERR_ODE_H_FLAT))
+            self.raise_error(b, kind, t, tname)
         tn = b.select(land, stop, b.fadd(t, b.fmul(dirn, h)))
         hs = b.select(land, b.fsub(stop, t), b.fmul(dirn, h))
         for s in range(1, 7):
@@ -1389,6 +1406,7 @@ class ModuleGen:
             # passes through zero
             dlt = b.call(fabs, [b.fsub(b.load(b.gep(ynew, [j])), b.load(b.gep(y, [j])))])
             sc = b.fmul(rtol, b.fadd(b.call(fmax, [yo, yn]), dlt))
+            sc = b.fadd(sc, b.load(b.gep(atol, [j])))    # `absolute a` (D160); 0 without it
             sc = b.fadd(sc, f64(5e-324))   # smallest subnormal: only guards 0/0 (A37)
             r = b.fdiv(e, sc)
             b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
@@ -2055,12 +2073,12 @@ class FuncGen:
             self.mark_line()
             guard = self.mg.kernel("fm_ode_guard")
             stiff = self.mg.extern("fm_stiff", I64, [I8P, I8P, F64P, I64, F64P, F64, F64, F64, I8P, I64, F64, F64,
-                                                     I64, SOLP.as_pointer()])
+                                                     I64, SOLP.as_pointer(), F64P])
             out = self.alloca(SOLP)
             evp = b.bitcast(ev, I8P)
             status = b.call(stiff, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, i64(n), y0p, t0, t1,
                                     f64(s.rtol), evp, i64(1 if s.method == "bdf" else 0), extra[1], extra[2],
-                                    i64(fmt), out])
+                                    i64(fmt), out, self.abs_tolerances(s, n, t0, t1, null_if_none=True)])
             with b.if_then(b.icmp_signed("!=", status, i64(0)), likely=False):
                 with b.if_then(b.icmp_signed("==", status, i64(2))):
                     b.call(self.mg.externs["longjmp"], [b.bitcast(self.mg.jmpbuf, I8P), ir.Constant(I32, 1)])
@@ -2081,10 +2099,31 @@ class FuncGen:
             self.mark_line()
             k = self.mg.kernel("fm_dp45")
             sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)] + extra +
-                         [i64(1 if getattr(s, "tdep", False) else 0)])
+                         [i64(1 if getattr(s, "tdep", False) else 0), self.abs_tolerances(s, n, t0, t1)])
         if getattr(s.sol_sym, "needs_rhs", False):
             self.attach_rhs(s, sol)
         self.store(s.sol_sym, sol)
+
+    def abs_tolerances(self, s, n, t0, t1, null_if_none=False):
+        """The solve's absolute tolerance per state component (D160), as a stack array: the value, divided
+        by |t1 - t0|^k for a derivative slot that borrows its unknown's (runtime/stiff.abs_tolerances);
+        zeros (or a null pointer for the stiff callback) without  absolute."""
+        spec = getattr(s, "atol", None)
+        if not spec and null_if_none:
+            return ir.Constant(F64P, None)
+        b = self.b
+        arr = self.alloca(ir.ArrayType(F64, n))
+        span = b.call(self.mg.intrinsic("fabs"), [b.fsub(t1, t0)]) if spec else None
+        for j in range(n):
+            if not spec:
+                v = f64(0)
+            else:
+                val, k = spec[j]
+                v = f64(val)
+                for _ in range(k):
+                    v = b.fdiv(v, span)
+            b.store(v, b.gep(arr, [I32(0), I32(j)]))
+        return b.gep(arr, [I32(0), I32(0)])
 
     def attach_rhs(self, s, sol):
         """Keep the right-hand side with the solution, so x'(t) is f at the interpolated state (D46).  Its
@@ -2713,6 +2752,24 @@ class FuncGen:
         if name == "mod":
             a, c = args
             return b.fsub(a, b.fmul(c, b.call(self.mg.intrinsic("floor"), [b.fdiv(a, c)])))
+        if name in ("min_ew", "max_ew"):     # max(xs, 1e-12): element by element (D162); mirrors interp
+            fn = self.mg.intrinsic("minnum" if name == "min_ew" else "maxnum")
+            lists = [i for i, a in enumerate(e.args) if isinstance(a.ty, ListTy)]
+            first = args[lists[0]]
+            n0 = self.llen(first)
+            for i in lists[1:]:
+                ni = self.llen(args[i])
+                with b.if_then(b.icmp_signed("!=", n0, ni)):
+                    self.fail(ERR_LEN, b.sitofp(n0, F64), b.sitofp(ni, F64))
+            datas = {i: self.ldata(args[i]) for i in lists}
+
+            def elem(x, k):
+                vals = [b.load(b.gep(datas[i], [k])) if i in datas else a for i, a in enumerate(args)]
+                r = vals[0]
+                for v in vals[1:]:
+                    r = b.call(fn, [r, v])
+                return r
+            return self.map_list(first, elem)
         if name in ("min", "max"):
             fn = self.mg.intrinsic("minnum" if name == "min" else "maxnum")
             r = args[0]

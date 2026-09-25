@@ -200,6 +200,7 @@ class Checker(ImportMixin, C.DiffContext):
     def __init__(self, diags=None, base_dir=".", repl=False, source_name="<program>"):
         self.diags = diags or Diagnostics()
         self.U = Unifier()
+        self._estack = []          # the expressions being checked, outermost first (for error hints, D163)
         self.base_dir = base_dir
         self.repl = repl
         self.uses_unc = False
@@ -287,6 +288,7 @@ class Checker(ImportMixin, C.DiffContext):
         self._top_units |= {id(s) for s in prog.body if isinstance(s, A.Units)}
         self.note_program(prog, self.globals)
         self.unit_collisions = getattr(prog, "unit_collisions", {})
+        self._prog_ast = prog
         self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
         self.check_uncalled()
@@ -424,10 +426,47 @@ class Checker(ImportMixin, C.DiffContext):
             what = f", {self.desc(u.dim)}" if u is not None else ""
             notes.append(f"note: '{num} {name}' here is {num} {name}{what} (a unit right after a number); "
                          f"for {num} × your variable {name} write {num}*{name}")
+        if stmt is not None and u is not None and ("can't add" in msg or "units" in msg or "[" in msg):
+            # the reading is the cause, so it is the message; the mismatch it led to is a note (D164)
+            num, name = found[0]
+            u = lookup_unit(name)
+            word = next((w for w, sym in SPELLED_UNITS.items() if sym == name), None)
+            unit = f"the unit {word} ({name})" if word else f"the unit {name} ({self.desc(u.dim)})"
+            fix = self._collision_fix(getattr(self, "_prog_ast", stmt), num, name, e.line)
+            e.message = (f"{name} here is read as {unit}, not your variable {name}: '{num} {name}' is a unit right "
+                         f"after a number; write {fix}")
+            called = [h for h in (e.hint or "").split("; ") if h.startswith("this happened when")]
+            e.hint = "\n  ".join([f"the units then don't match: {msg}" + "".join(f"; {h}" for h in called)]
+                                 + notes[1:])
+            return
         if e.hint:
             e.hint = "\n  ".join([e.hint] + notes)
         else:
             e.hint = "\n  ".join([notes[0].removeprefix("note: ")] + notes[1:])
+
+    @staticmethod
+    def _collision_fix(stmt, num, name, line):
+        """How to write `num × your variable name` where the statement has `num name` read as a unit:
+        `4/3 * T` for `4/3 T`, `π²/15 * T⁴` for `π²/15 T⁴`, else `3 * T` (D164)."""
+        import dataclasses
+        todo = [stmt]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, (list, tuple)):
+                todo.extend(n)
+                continue
+            if not dataclasses.is_dataclass(n):
+                continue
+            for q in (getattr(n, "right", None), n):
+                if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and f"{q.value.value:g}" == num and \
+                        len(q.unit.factors) == 1 and q.unit.factors[0].name == name and \
+                        getattr(q, "line", line) == line:
+                    shown = q.unit.text or name
+                    if q is not n and isinstance(n, A.BinOp) and n.op == "/":
+                        return f"{C.to_source(n.left)}/{num} * {shown}"
+                    return f"{num} * {shown}"
+            todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
+        return f"{num}*{name}"
 
     def s_ExprStmt(self, s, ctx):
         e = s.value
@@ -1039,7 +1078,12 @@ class Checker(ImportMixin, C.DiffContext):
         m = getattr(self, "e_" + type(e).__name__, None)
         if m is None:
             raise self.err(f"this kind of expression ({type(e).__name__}) isn't supported here", e)
-        r = m(e, ctx)
+        st = self._estack
+        st.append(e)
+        try:
+            r = m(e, ctx)
+        finally:
+            st.pop()
         if isinstance(r, (FuncRef, SolRef)):
             if not allow_func:
                 if isinstance(r, FuncRef):
@@ -1285,6 +1329,28 @@ class Checker(ImportMixin, C.DiffContext):
     def _is_main_sym(self, sym):
         return sym.func is not None and sym.func.name.startswith("main")
 
+    def _unit_only_ancestor(self, e, known):
+        """The largest expression around the name e (being checked) made only of units that aren't
+        program names, `*`, `/` and whole-number powers, like cm³/(mol s); e itself if none is larger."""
+        def unit_only(n):
+            if isinstance(n, A.Name):
+                return n.name not in known and lookup_unit(n.name) is not None
+            if isinstance(n, A.BinOp) and n.op in ("*", "/"):
+                return unit_only(n.left) and unit_only(n.right)
+            if isinstance(n, A.BinOp) and n.op == "^":
+                return unit_only(n.left) and (isinstance(n.right, A.Num) or isinstance(n.right, A.Neg) and
+                                              isinstance(n.right.operand, A.Num))
+            return False
+        st = self._estack
+        if not st or st[-1] is not e:
+            return e
+        best = e
+        for n in reversed(st[:-1]):
+            if not unit_only(n):
+                break
+            best = n
+        return best
+
     def undefined(self, name, e, ctx):
         # collect known names for suggestions
         known = set()
@@ -1310,6 +1376,11 @@ class Checker(ImportMixin, C.DiffContext):
                 (f"{name} is a unit, and units go right after a number; to multiply by it write * 1 {name} or "
                  f"[{name}] after the value")
         if hint is None and lookup_unit(name) is not None:
+            whole = self._unit_only_ancestor(e, known)
+            if whole is not e:          # rate = cm³/(mol s): a whole unit, used as a value (D163)
+                text = C.to_source(whole)
+                return self.err(f"{text} is a unit, not a value", e,
+                                hint=f"for the quantity write  1 {text}  (a number, then its unit)")
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None and getattr(self, "_after_number", False) and name in SPELLED_UNITS:
             # `3 sec`: the spelled unit, even though sec is also a built-in function (#63)
@@ -3008,6 +3079,16 @@ class Checker(ImportMixin, C.DiffContext):
                 return r
             if n < 2:
                 raise self.err(f"{name} needs at least one argument", e)
+            if any(isinstance(a, I.Expr) and isinstance(a.ty, ListTy) for a in args):
+                # max(xs, 1e-12): element by element, lists of one length and numbers mixed (D162)
+                for i in range(n):
+                    self.need_numlike(args[i], e.args[i], f"an argument of {name}")
+                    self.unify_or(args[0].ty.dim, args[i].ty.dim,
+                                  lambda i=i: f"{name} needs all values in the same units (here "
+                                  f"{self.desc(args[0].ty.dim)} and {self.desc(args[i].ty.dim)})", e.args[i])
+                r = self._bi(name + "_ew", args, ListTy(args[0].ty.dim), args)
+                r.hint = next((a.hint for a in args if isinstance(a.ty, ListTy)), None)
+                return r
             for i in range(n):
                 self.need_num(args[i], e.args[i])
                 self.unify_or(args[0].ty.dim, args[i].ty.dim,

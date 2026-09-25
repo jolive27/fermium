@@ -62,7 +62,8 @@ Rules (see DECISIONS.md D7):
 - **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
 - If a single unit name right after a number is also one of your variables, there are two cases (DECISIONS D7):
   - **Multiplied or divided by something else** (`2 g h`, `0.5 m v²`, `2 g * h`), it's an **error** that asks which you mean: write `2*g` for your variable or `2 [g]` for the unit.
-  - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line or a later one then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L`.
+  - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line then fails its unit check, the reading is the error message itself, and the unit mismatch it caused is the hint (DECISIONS D164): with a temperature `T = 2 MeV`, `E = 4/3 T + 1 MeV` gives `T here is read as the unit tesla (T), not your variable T: '3 T' is a unit right after a number; write 4/3 * T`. If a later line fails, the error adds a note naming the line where it happened.
+- **A unit is not a value:** `rate = cm³/(mol s)` is an error, `cm³/(mol s) is a unit, not a value`, with the hint `for the quantity write  1 cm³/(mol s)` (DECISIONS D163). Write `rate = 1 cm³/(mol s)`.
   - Compound units (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units.
 - **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
 
@@ -252,6 +253,7 @@ print ts
 - **Elements share units:** all elements of a list have the same units.
 - **Indexing starts at 1:** `xs[1]` is the first element and `xs[end]` the last. An index out of range stops the program with a clear message.
 - **Arithmetic works element by element:** `xs + ys`, `2 xs` and `xs^2`. Functions such as `sin(xs)` work on each element.
+- **`max` and `min` with a list and numbers** work element by element: `max(Ys, 1e-12)` floors every element at 10⁻¹² (for a log plot), `min(xs, 1 m)` clamps at 1 m; lists given together must have the same length, and all arguments the same units (DECISIONS D162). `max(xs)` with one list is still its largest element.
 - **Growing a list:** `push(xs, value)` (or `append`) adds an element to the end.
 - **Size:** a list holds at most 10⁹ numbers. Asking for more (`zeros(2e9)`, or a range that long) stops the program with `not enough memory for a list of 2×10⁹ numbers (the most is 10⁹)`.
 - **Sorting:** `sort(xs)` sorts from smallest to largest and puts `NaN` values last.
@@ -533,11 +535,13 @@ print θ1(5 s), θ2(5 s)
   - Without `step`, Fermium uses adaptive Dormand–Prince RK45 (relative tolerance 10⁻⁹).
   - With `step 1 ms`, it uses classic fixed-step RK4. After the solve, Fermium checks the step cheaply (step doubling at 8 points, 24 extra evaluations of the right-hand side) and warns when the estimated error is more than 0.1% of the solution's size: `the step is too coarse for this equation: the estimated error is 80% of the solution's size …; use a smaller step, or drop step to use the adaptive solver`. The warning is shown once per `solve` line.
   - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
+  - **`absolute 1e-16`** adds an absolute tolerance (DECISIONS D160). By default the error control is purely relative, so every component is followed to 10⁻⁹ of its own size, even a species at 10⁻²³ whose value is rounding noise; a reaction network then stops with "the step became too small". With `absolute a`, errors below a no longer count: `tolerance 1e-10 absolute 1e-16` is SciPy's `rtol = 1e-10, atol = 1e-16`. The value has units: each unknown takes the one in its units, so a network with a temperature and abundances writes `absolute 1e-16, 1e-16 MeV` (one value per unit, separated by commas). A derivative slot of a higher-order unknown (x' of `x''`) uses a value in its own units if one is given (`absolute 1e-9 m, 1e-9 m/s`), otherwise x's value divided by the length of the range. An unknown with no value in its units, two values in the same units, or a value no unknown uses, is an error. It works with `rk45`, `radau` and `bdf` (not with `step`), and `fermium build` supports it for rk45. Without `absolute`, nothing changes.
+  - **"The step became too small":** when some unknown has grown to over 10³ times its start (and the largest start), the message says the solution may blow up there; otherwise it says it is probably not a blow-up but the tolerance asking for relative accuracy on tiny values, and suggests `absolute`.
   - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
   - A long RK45 solve that is held back by stiffness warns: `this equation looks stiff: rk45 has taken 526031 steps, held small by stability rather than accuracy …; add using radau after the range`. The "too many steps" error suggests it too.
   - `radau` and `bdf` run SciPy's solvers (they call the compiled right-hand side), so they need SciPy, and `fermium build` refuses them for now (use `fermium run`).
-  - The range comes first, then `step h`; after that `tolerance r`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same):
+  - The range comes first, then `step h`; after that `tolerance r`, `absolute a`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same):
 
 ```fermium
 solve x' = -x / (1 s)
@@ -648,6 +652,7 @@ plot data.T vs data.L to "pendulum.png"
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables.
+  - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
   - Several series: `plot a vs t, b vs t`.
 
 ### Dimensional analysis: analyze
@@ -783,7 +788,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `ellipk(m) ellipe(m)` | complete elliptic integrals K(m) and E(m) with the **parameter m = k²**, as in SciPy and Abramowitz & Stegun (`ellipk(0.5)` = 1.8541; K(1) = ∞) |
 | `sqrt cbrt abs sign` | keep or transform units |
 | `floor ceil round` | need plain numbers: `floor(270 cm)` is an error, because the answer depends on the unit. Write `floor(x / (1 cm)) cm` |
-| `atan2(y, x) hypot(a, b) mod(a, b) min(a, b, …) max(…) clamp(x, lo, hi)` | arguments in the same units |
+| `atan2(y, x) hypot(a, b) mod(a, b) min(a, b, …) max(…) clamp(x, lo, hi)` | arguments in the same units; `max(xs, 1e-12)` with a list is element by element |
 | `len sum mean std min max first last cumsum diff reverse sort` | lists |
 | `linspace(a, b, n) range(a, b, step) zeros(n) ones(n)` | make lists |
 | `push(xs, x)` / `append` | add to a list |
@@ -945,8 +950,8 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | name(params) = expr | name(params) = NEWLINE INDENT block
             | print items | plot series [to "file"] | fit eq to expr [with binds]
             | analyze [name:] q [unit] depends on q [unit], q [unit], ...
-            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
-              (tolerance, using and until in any order)
+            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [absolute a, …] [using rk4|rk45|radau|bdf]
+              (tolerance, absolute, using and until in any order)
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
