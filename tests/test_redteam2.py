@@ -178,10 +178,12 @@ def test_11_using_on_its_own_line(src):
 # ---- #12: eigenvalue problem in r: the error talks about x ---------------------------------------------------
 
 def test_12_singular_point_error_names_the_right_variable():
+    # the singular point is inside the range: since gauntlet #69 (D172) the ends are never evaluated,
+    # so r from 0 nm is the hydrogen problem and works
     src = """V(r) = -e²/(4π ε₀ r)
 solve -ħ²/(2*m_e) * u'' + V(r) u = E u
-    with u(0 nm) = 0, u(5 nm) = 0
-    for r from 0 nm to 5 nm
+    with u(-5 nm) = 0, u(5 nm) = 0
+    for r from -5 nm to 5 nm
     lowest 3"""
     e = error_of(src)
     assert "r = 0" in e.message                 # today: "can't be evaluated at x = 0 (SI units)"
@@ -344,8 +346,8 @@ def test_12_singular_point_error_is_in_your_units_in_jit_and_interp():
     from fermium.interp import run_interpreted
     src = """V(r) = -e²/(4π ε₀ r)
 solve -ħ²/(2*m_e) * u'' + V(r) u = E u
-    with u(0 nm) = 0, u(5 nm) = 0
-    for r from 0 nm to 5 nm
+    with u(-5 nm) = 0, u(5 nm) = 0
+    for r from -5 nm to 5 nm
     lowest 3"""
     e = error_of(src)
     assert "at r = 0 nm" in e.message and "SI units" not in e.message

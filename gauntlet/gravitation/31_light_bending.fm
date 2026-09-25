@@ -29,7 +29,7 @@ print "    Einstein 4m/r0 =", 4 m_sun / r0 in arcsec to 7 digits, " second order
 
 # (b) the quadrature; 1 − u²/u₀² etc. cancel badly for the Sun near u₀, so write
 #     u₀² − u² − 2m(u₀³ − u³) = (u₀ − u)(u₀ + u − 2m(u₀² + u₀ u + u²))
-# (the parameter was first called rg, but `2 rg` is 2 rontograms: r = ronto-, 10⁻²⁷)
+# (the parameter was first called rg, but `2 rg` was 2 rontograms: r = ronto-, 10⁻²⁷; since D174 rg is a name)
 exact_deflection(M_g, r) =
     u0 = 1 / r
     # brackets needed: `… dw from 0 /m to u0 - π` takes u0 − π as the upper limit

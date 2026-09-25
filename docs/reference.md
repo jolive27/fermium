@@ -63,8 +63,9 @@ Rules (see DECISIONS.md D7):
 - If a single unit name right after a number is also one of your variables, there are two cases (DECISIONS D7):
   - **Multiplied or divided by something else** (`2 g h`, `0.5 m v²`, `2 g * h`), it's an **error** that asks which you mean: write `2*g` for your variable or `2 [g]` for the unit.
   - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line then fails its unit check, the reading is the error message itself, and the unit mismatch it caused is the hint (DECISIONS D164): with a temperature `T = 2 MeV`, `E = 4/3 T + 1 MeV` gives `T here is read as the unit tesla (T), not your variable T: '3 T' is a unit right after a number; write 4/3 * T`. If a later line fails, the error adds a note naming the line where it happened.
+  - Compound units continued with `/` (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units. A compound that **starts** with your variable and continues with a space or `*` (`2 m c²` with your own `m`: `c` is also a unit) is the same error as `2 m v` (D170).
 - **A unit is not a value:** `rate = cm³/(mol s)` is an error, `cm³/(mol s) is a unit, not a value`, with the hint `for the quantity write  1 cm³/(mol s)` (DECISIONS D163). Write `rate = 1 cm³/(mol s)`.
-  - Compound units (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units.
+- **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` (a space before `/`, none after) are units: `0 /s`, `8 /m³`, `0.300 /(m s²)`. If a name in them is also your variable (`8 /m³` with a mass `m`), that's an error: write `8 [1/m³]` for the unit, or `8/m³` (no spaces) to divide by your variable (D171).
 - **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
@@ -462,7 +463,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 ```
 
 - **Units:** the result's units are the integrand's units times the variable's units.
-- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a number, a name or a bracketed expression (`to L / 2`, `to 1 / (1 + z)`), Fermium warns that it divides the whole integral (DECISIONS D34, D112); there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it.
+- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a number, a name or a bracketed expression (`to L / 2`, `to 1 / (1 + z)`), Fermium warns that it divides the whole integral (DECISIONS D34, D112); there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it. A spaced `+` or `-` stays in the upper limit (`from 0 to L - a` goes up to L − a), with a warning that says so; for `2 ∫ … from 0 to 1 - π` meaning (2∫…) − π, bracket the integral: `(2 ∫ … to 1) - π` (D173).
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
 - **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
 
@@ -963,7 +964,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 ## 15. Units
 
 - **SI base units:** `m g s A K mol cd`.
-- **SI prefixes:** Q R Y Z E P T G M k h da d c m μ(u) n p f a z y r q, on the prefixable units.
+- **SI prefixes:** Y Z E P T G M k h da d c m μ(u) n p f a z y, on the prefixable units. Of the 2022 prefixes (Q, R, r, q) only `Rg`, `Qg`, `qg` and `Qm` exist: on other units they would make names like `rs`, `rg`, `RC`, `RT` or `qV` units (D174).
 - **Derived units:** `N J W Pa C V F Ω(ohm) S Wb T H Hz Bq Gy Sv lm lx kat`.
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
@@ -1179,6 +1180,7 @@ print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
 - **The eigenvalue** is the one name in the equation that has no value yet (`E` here). Afterwards it is a list, `E[1] < E[2] < …`, with the units the equation gives it (energy).
 - **The states** are `ψ₁ … ψ_N` (ASCII `psi_1`): functions of x like an ODE solution, with `ψ₁'(x)`, `ψ₁''(x)`, `values(ψ₁)`, `times(ψ₁)` (the grid) and `plot ψ₁ vs x, ψ₂ vs x`. Each is normalised, ∫ψ² dx = 1 (so ψ has units 1/√length), and its first lobe (from the left) is positive.
 - **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
+- **Only interior points are used:** the equation is never evaluated at the two ends (ψ = 0 there), so a potential that is singular at an end works: the hydrogen radial equation with `V(r) = -k / r`, `solve -ħ²/(2*m_e) * u'' + V(r) u = E u with u(0 nm) = 0, u(5 nm) = 0 for r from 0 nm to 5 nm lowest 3`, gives −m k²/(2ħ² n²) (D172). A singular point inside the range is still an error.
 - **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
   - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
   - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).

@@ -47,6 +47,29 @@ BUILTINS |= M3_FUNCS
 BUILTINS.update(cplx.COMPLEX_FUNCS)       # re, im, conj, arg, complex, polar, cis (D90)
 
 
+def _loose(name):
+    """A spelling key that ignores case and underscores, with ☉/⊕ spelled out: M_sun, m_sun, Msun, M☉."""
+    return name.lower().replace("_", "").replace("☉", "sun").replace("⊕", "earth")
+
+
+def _unit_name_suggestion(name):
+    """The hint for `in M_sun` and other near-miss unit names (gauntlet #79)."""
+    from .units import _UNITS, UNIT_ASCII
+    same = [u for u in _UNITS if _loose(u) == _loose(name)]
+    if same:
+        pretty = next((u for u in same if u in UNIT_ASCII), same[0])
+        ascii_ = UNIT_ASCII.get(pretty)
+        spelled = f"{pretty} (ASCII {ascii_})" if ascii_ and ascii_ != pretty else pretty
+        if name in all_constants():
+            return (f"{name} is the constant; the unit is {spelled}: write  in {pretty}  (or divide by the "
+                    f"constant: x / {name})")
+        return f"did you mean the unit {spelled}?"
+    close = get_close_matches(name, [u for u in _UNITS if len(u) > 1], n=1, cutoff=0.8)
+    if close:
+        return f"did you mean {close[0]}? (see the units list in docs/reference.md)"
+    return ""
+
+
 class MixedHint(tuple):
     """Display units of a vector whose components have different units: one Unit (or None) each."""
     affine = False
@@ -261,6 +284,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     sugg = "for metric tons write tonne"
                 elif f.name in SPELLED_UNITS:
                     sugg = f"Fermium writes units as symbols: {SPELLED_UNITS[f.name]}"
+                else:
+                    sugg = _unit_name_suggestion(f.name)
                 raise FermiumError(f"'{f.name}' is not a unit Fermium knows", f.line, f.col, len(f.name),
                                    hint=sugg or "see the units list in docs/reference.md")
             if u.affine:
@@ -1403,7 +1428,10 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if hint is None:
             cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(
                 BUILTINS - (set() if getattr(self, "_calling", False) else M3_FUNCS))  # speed ≠ seed (as a value)
-            close = get_close_matches(name, cands, n=1, cutoff=0.7)
+            # `m_sun` is M_sun, not R_sun: a match up to case and underscores comes first (gauntlet #79)
+            close = [k for k in cands if k.lower() == name.lower()] or \
+                [k for k in cands if _loose(k) == _loose(name)] or \
+                get_close_matches(name, cands, n=1, cutoff=0.7)
             if close:
                 hint = f"did you mean {close[0]}?"
         if hint is None and getattr(self, "_after_number", False):
@@ -3525,6 +3553,12 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             except FermiumError as ex:
                 if ex.line is None and getattr(node, "line", None):
                     ex.line, ex.col = node.line, node.col
+                elif getattr(node, "line", None) and ex.line != node.line and \
+                        f"line {node.line}" not in (ex.hint or ""):
+                    # `d/dT N` where N calls a multi-line F: the error points at the call to F; say where
+                    # the derivative was asked for too (gauntlet #71)
+                    ex.hint = (ex.hint + "; " if ex.hint else "") + \
+                        f"(needed for the derivative of {info.display_name} on line {node.line})"
                 raise
             self.cur_ctx = saved
         suffix = "'" * order if len(f.params) == 1 else f"_∂{pname}" * order

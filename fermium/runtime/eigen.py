@@ -35,7 +35,12 @@ def singular_text(name, where):
 
 
 def _coefficients(rhs, xs):
-    """α(x), w(x) of ψ'' = α ψ - w E ψ at each grid point, and checks that the equation has that form."""
+    """α(x), w(x) of ψ'' = α ψ - w E ψ at each grid point, and checks that the equation has that form.
+
+    Only the interior points are evaluated: ψ = 0 at both ends, so the equation is never needed there, and
+    a potential that is singular at an end (the Coulomb -k/r at r = 0) works (FRICTION #69, D172).  The end
+    values are copies of their neighbours, which keeps the arrays full length; every use of them is
+    multiplied by ψ = 0 (or, in the matrix method, not used at all)."""
     import numpy as np
     n = len(xs)
     alpha = np.empty(n)
@@ -44,16 +49,20 @@ def _coefficients(rhs, xs):
     worst_lin = 0.0
     h = abs(xs[1] - xs[0]) if n > 1 else 1.0
     for i, x in enumerate(xs):
+        if i == 0 or i == n - 1:
+            continue
         a0 = rhs(x, [1.0, 0.0, 0.0])[1]
         a1 = rhs(x, [1.0, 0.0, 1.0])[1]
         alpha[i] = a0
         w[i] = a0 - a1
-        if i % 97 == 0 or i == n - 1:
+        if i % 97 == 1 or i == n - 2:
             b0 = rhs(x, [0.0, 1.0, 0.0])[1]              # a ψ' term
             b1 = rhs(x, [0.0, 1.0, 1.0])[1]
             c = rhs(x, [2.0, 0.0, 3.0])[1]                # linear in ψ, and ψ·E
             worst_lin = max(worst_lin, abs(c - (2 * a0 - 6 * w[i])) / (abs(2 * a0) + abs(6 * w[i]) + 1e-300))
             worst_beta = max(worst_beta, (abs(b0) + abs(b1)) * h)     # β ψ' against ψ''/ψ ~ 1/h²
+    if n > 2:
+        alpha[0], w[0], alpha[-1], w[-1] = alpha[1], w[1], alpha[-2], w[-2]
     if not (np.all(np.isfinite(alpha)) and np.all(np.isfinite(w))):
         bad = int(np.argmax(~(np.isfinite(alpha) & np.isfinite(w))))
         raise EigenFail(singular_text("x", f"{xs[bad]:g} (SI units)"), x=float(xs[bad]))
@@ -132,6 +141,15 @@ def _matrix(alpha, w, h, nstates, vectors):
     return eigh_tridiagonal(d, e, eigvals_only=True, select="i", select_range=(0, nstates - 1), tol=4e-308), None
 
 
+def _start_limit(f1, f2, h):
+    """f·ψ at the starting end, where ψ = 0 and ψ' = 1: zero for a regular equation, but finite for a
+    Coulomb-like f ~ 1/x (the hydrogen radial equation at r = 0, #69), where y_0 = (1 - h²f/12) ψ at the
+    end is -h²/12 · lim f ψ.  Extrapolated linearly from f·ψ ≈ f_i · i h at the first two interior points
+    (the end point itself is never evaluated).  For a regular f the extrapolation is O(h²), so it moves y_0
+    by O(h⁴), within Numerov's own error."""
+    return 2.0 * f1 * h - f2 * 2.0 * h
+
+
 def _numerov(f, h, rev=False):
     """ψ'' = f ψ from one end (ψ = 0, next point h); returns the values (rescaled against overflow, so only
     their signs and ratios are meaningful) and the number of sign changes, the end included (Sturm: the
@@ -147,7 +165,7 @@ def _numerov(f, h, rev=False):
     ps = [0.0] * n
     i1 = order[1]
     ps[i1] = h
-    y_prev = 0.0
+    y_prev = -c * _start_limit(f[i1], f[order[2]], h) if n > 2 else 0.0
     y = (1.0 - c * f[i1]) * h
     d = y - y_prev
     nodes = 0
@@ -155,7 +173,8 @@ def _numerov(f, h, rev=False):
         i1, i2 = order[j - 1], order[j]
         d += hh * f[i1] * ps[i1]
         y += d
-        ps[i2] = v = y / (1.0 - c * f[i2])
+        den = 1.0 - c * f[i2]
+        ps[i2] = v = y / den if math.isfinite(den) and den != 0.0 else y
         if abs(v) > 1e150:
             for k in order[:j + 1]:
                 ps[k] *= 1e-150
@@ -174,13 +193,15 @@ def _numerov_end(al, wl, E, h):
     f = [a - q * E for a, q in zip(al, wl)]
     p = h
     y = (1.0 - c * f[1]) * h
-    d = y
+    d = y + c * _start_limit(f[1], f[2], h) if len(f) > 2 else y
     nodes = 0
     last = len(f) - 1
     for i in range(2, last + 1):
         d += hh * f[i - 1] * p
         y += d
-        p2 = y / (1.0 - c * f[i])
+        # at b itself ψ(b) = 0 exactly when y(b) = 0, so the end value is y: the equation's coefficient
+        # at the end point is never needed (#69); the two have the same sign on any usable grid
+        p2 = y if i == last else y / (1.0 - c * f[i])
         if abs(p2) > 1e150:
             p2 *= 1e-150
             y *= 1e-150

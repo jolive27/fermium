@@ -18,7 +18,7 @@ Q = 18.591 keV
 mc2 = m_e c²
 Z = 2
 # F must be one line (with `where`) so that d/dT N works below: written over several
-# lines, `d/dT N` fails with "can't differentiate through F", an error with no line number
+# lines, `d/dT N` fails with "can't differentiate through F" (pointing at the call to F, #71)
 F(T) = 2π η / (1 - exp(-2π η)) where η = Z α (T + mc2) / √((T + mc2)² - mc2²)
 N(T) = F(T) √((T + mc2)² - mc2²) (T + mc2) (Q - T)²
 N0(T) = √((T + mc2)² - mc2²) (T + mc2) (Q - T)²

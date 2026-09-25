@@ -38,6 +38,10 @@ UNITS_NAMED_LIKE_BUILTINS = {"min"}
 VEC_CALC_WORDS ={"grad": "grad", "div": "div", "curl": "curl", "laplacian": "lap"}
 
 
+# keywords that are also the ASCII spelling of a symbol: `integral(b, T) = …` gets a clear error (#78)
+KEYWORD_SPELLED = {"integral": "∫", "partial": "∂", "sqrt": "√", "cbrt": "∛", "nabla": "∇"}
+
+
 class Parser:
     def __init__(self, tokens: list[Token], diags: Diagnostics | None = None, known=None):
         self.toks = tokens
@@ -273,6 +277,10 @@ class Parser:
                     if end_line:
                         self.end_statement()
                     return s
+        if t.kind == "KW" and t.value in KEYWORD_SPELLED and t.raw == t.value and (
+                self.peek().kind == "OP" and self.peek().value == "=" or
+                self.at_op_at(self.i + 1, "(") and not self.peek().ws_before and self._is_funcdef()):
+            raise self._keyword_as_name(t)
         e = self.expr_where()
         if self.at_op("="):
             raise self._assign_to_non_name(t, e)
@@ -330,6 +338,18 @@ class Parser:
             self.end_statement()
         return s
 
+    def at_op_at(self, j, value):
+        tk = self.toks[j] if j < len(self.toks) else None
+        return tk is not None and tk.kind == "OP" and tk.value == value
+
+    def _keyword_as_name(self, t):
+        """`integral(b, T) = …`: integral is the ASCII spelling of ∫ (gauntlet #78)."""
+        sym = KEYWORD_SPELLED[t.value]
+        what = f"the ASCII spelling of {sym}" if sym else "a Fermium keyword"
+        return self.error(f"{t.raw} is {what}, so it can't be the name of a function or variable; pick another name",
+                          tok=t, hint=f"for example {t.raw}_ or I_{t.raw[:3]}" if t.value == "integral" else
+                          f"for example {t.raw}_")
+
     def _assign_to_non_name(self, start, lhs):
         """`h² = GM a (1 − e²)`: only a name can be stored to; point to `solve` (FRICTION #28)."""
         parts = []
@@ -339,6 +359,14 @@ class Parser:
                 parts.append(" ")
             parts.append(tk.raw)
         text = "".join(parts)
+        run = self.toks[self.toks.index(start):self.i]
+        if len(run) > 1 and all(tk.kind == "NAME" for tk in run) and not any(tk.ws_before for tk in run[1:]) and \
+                any(tk.value == "π" for tk in run):
+            # `Ωπ = 2`: π always ends a name, so this is Ω × π (gauntlet #76)
+            prod = " × ".join(tk.raw for tk in run)
+            return self.error(f"can't store a value in {text}: it is read as {prod} (π is always the number π, "
+                              f"even written next to a letter)",
+                              hint=f"name it with an underscore instead, like  {'_'.join(tk.raw for tk in run)} = …")
         var = None
         if isinstance(lhs, A.BinOp) and lhs.op == "^" and isinstance(lhs.left, A.Name):
             var = lhs.left.name
@@ -1500,6 +1528,7 @@ class Parser:
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10⁸ m/s, like 10^8 m/s
+                self._check_compound_collision(None, u)
                 r = self.span(A.Quantity(r, u), t)
             return r
         if self.at_op("^"):
@@ -1509,6 +1538,7 @@ class Parser:
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10^8 m/s
+                self._check_compound_collision(None, u)
                 r = self.span(A.Quantity(r, u), t)
             return r
         return base
@@ -1635,6 +1665,7 @@ class Parser:
                     return self.span(A.Quantity(n, u, bracket=True), t)
                 if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
                     u = self.unit_expr(explicit=False)
+                    self._check_compound_collision(t.raw, u)
                     q = self.span(A.Quantity(n, u), t)
                     nx = self.tok
                     if nx.kind == "OP" and nx.value in ("[", "(") and not nx.ws_before and len(u.factors) == 1 \
@@ -1644,7 +1675,8 @@ class Parser:
                                          f"number), so it can't be followed by '{nx.value}'", tok=nx,
                                          hint=f"to use your variable write {t.raw}*{nm}{nx.value}...")
                     return q
-                if self._unit_reciprocal_follows():
+                self._check_reciprocal_collision(t.raw)
+                if self._unit_reciprocal_follows() or self._bracketed_reciprocal_unit():
                     u = self.unit_expr(explicit=True, reciprocal=True)
                     return self.span(A.Quantity(n, u), t)
             return n
@@ -1689,6 +1721,17 @@ class Parser:
                     self._match(start_i) == self.i - 1
                 return self.span(A.Sqrt(operand, 2 if t.value == "sqrt" else 3), t)
             if t.value == "integral":
+                if t.raw == "integral" and self.at_op_at(self.i + 1, "(") and not self.peek().ws_before:
+                    k = self._match(self.i + 1)
+                    depth = 0
+                    for m in range(self.i + 2, k or self.i + 2):
+                        tk = self.toks[m]
+                        if tk.kind == "OP" and tk.value in "([{":
+                            depth += 1
+                        elif tk.kind == "OP" and tk.value in ")]}":
+                            depth -= 1
+                        elif depth == 0 and tk.kind == "OP" and tk.value == ",":
+                            raise self._keyword_as_name(t)          # integral(1, 2): a call (#78)
                 return self.integral()
             if t.value == "partial":
                 return self.partial_op()
@@ -1797,6 +1840,110 @@ class Parser:
             raise self.error("expected ')' to close this sum" + self._found())
         self.next()
         return self.span(A.Sum(body, vt.value, lo, hi, step), t)
+
+    def _unit_words(self, name):
+        from .units import lookup_unit, dim_name
+        words = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
+                 "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
+                 "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals",
+                 "u": "atomic mass units", "d": "days", "min": "minutes", "yr": "years", "h": "hours",
+                 "t": "tonnes", "au": "AU", "pc": "parsecs"}
+        u = lookup_unit(name)
+        return words.get(name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+
+    def _check_compound_collision(self, num, u):
+        """`2 m c²` with your own m (gauntlet #66, D170): right after a number, `m c²` is a compound unit
+        (metre × c²), but m is also your variable.  Like `2 m v` (D7 rule 5), that is ambiguous when the
+        compound is continued with a space or `*`, so it's an error.  A compound continued with `/`
+        (`9.81 m/s²`) or a power (`3 m²`) stays the unit, as D7 says."""
+        factors = list(u.factors)
+        while self.in_integrand and len(factors) > 1 and factors[-1].exp == 1 and \
+                factors[-1].name.startswith("d") and canonical_name(factors[-1].name[1:]) in self.known:
+            factors.pop()             # `∫ 2 m dm`: the trailing dm is the differential, not part of the unit
+        if len(factors) < 2 or not getattr(u, "juxt_join", False):
+            return
+        f = u.factors[0]
+        if f.name not in self.known:
+            return
+        num = num or "2"
+        text = u.text
+        raise self.error(f"'{num} {text}' is ambiguous: right after a number, {text} is a unit ({f.name} is "
+                         f"{self._unit_words(f.name)} there), but {f.name} is also your variable {f.name}",
+                         tok=next((tk for tk in self.toks if tk.line == f.line and tk.col == f.col), None),
+                         hint=f"write  {num}*{text}  for {num} × your variable {f.name} × the rest, or  "
+                              f"{num} [{text}]  for the unit")
+
+    def _reciprocal_text(self):
+        """Source text of the `/unit` or `/(…)` at the current token."""
+        j = self.i + 1
+        if self.at_op_at(j, "("):
+            k = self._match(j)
+            end = (k if k is not None else j) + 1
+        else:
+            end = j + 1
+        while end < len(self.toks) and (self.toks[end].kind == "SUP" or self.at_op_at(end, "^")):
+            end += 2 if self.at_op_at(end, "^") else 1
+        return self._text(self.i, min(end, len(self.toks)))
+
+    def _check_reciprocal_collision(self, num):
+        """`n = 8 /m³` with your own m (gauntlet #68, D171): written like the unit 1/m³ (a space before
+        '/', none after, as in `0 /s`), but D7 rule 4 divides by your variable after a spaced '/'.
+        Neither reading is safe to guess, so it's an error.  `8/m³` (no spaces) divides by your m, and
+        `8 / m³` (spaces on both sides) too."""
+        t = self.tok
+        if not (t.kind == "OP" and t.value == "/" and t.ws_before and not self.peek().ws_before):
+            return
+        nx = self.peek()
+        names = []
+        if nx.kind == "NAME" and is_unit_name(nx.raw) and \
+                not (self.at_op_at(self.i + 2, "(") and not self.toks[self.i + 2].ws_before):
+            names = [nx]
+        elif nx.kind == "OP" and nx.value == "(" and self._bracketed_reciprocal_unit(any_known=True):
+            names = [tk for tk in self.toks[self.i + 2:self._match(self.i + 1)] if tk.kind == "NAME"]
+        clash = [tk.value for tk in names if tk.value in self.known]
+        if not clash:
+            return
+        v = clash[0]
+        text = self._reciprocal_text()
+        tight = text.lstrip("/")
+        raise self.error(f"'{num} {text}' is ambiguous: right after a number, {text} is the unit 1{text}, but "
+                         f"{v} is also your variable {v}", tok=nx,
+                         hint=f"write  {num} [1{text}]  for the unit, or  {num}/{tight}  (no spaces) to divide by "
+                              f"your variable {v}")
+
+    def _bracketed_reciprocal_unit(self, any_known=False):
+        """`0.300 /(m s²)`: '/' then brackets holding only unit names and exponents (gauntlet #72, D171).
+        None of the names may be your variables (that's the collision error above)."""
+        t = self.tok
+        if not (t.kind == "OP" and t.value == "/" and self.at_op_at(self.i + 1, "(") and
+                not self.peek().ws_before):
+            return False
+        k = self._match(self.i + 1)
+        if k is None or k == self.i + 2:
+            return False
+        first = self.toks[self.i + 2]
+        if first.kind != "NAME":
+            return False
+        prev = None
+        for m in range(self.i + 2, k):
+            tk = self.toks[m]
+            if tk.kind == "NAME":
+                if not is_unit_name(tk.raw) or (tk.value in self.known and not any_known):
+                    return False
+            elif tk.kind == "SUP":
+                pass
+            elif tk.kind == "NUM":
+                if not (prev is not None and ((prev.kind == "OP" and prev.value in ("^", "-", "(", "/")))):
+                    return False
+            elif tk.kind == "OP" and tk.value in ("^", "/", "*", "(", ")", "-"):
+                pass
+            else:
+                return False
+            prev = tk
+        nx = self.toks[k + 1] if k + 1 < len(self.toks) else None
+        if nx is not None and nx.kind == "OP" and nx.value == "(" and not nx.ws_before:
+            return False
+        return True
 
     def _unit_reciprocal_follows(self):
         """`0.1 1/s` or `0.1 /s` right after a number."""
@@ -1991,12 +2138,40 @@ class Parser:
                 hi = self.sum()
             finally:
                 self.limit_start = saved
+            self._warn_sum_in_limit(hi_start)
             if self.at_op("/") and self.tok.ws_before and self._divisor_follows() and \
                     not self._limit_is_infinite(hi_start):
                 self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
                                 tok=self.tok, hint="to divide the limit, write it without spaces (to L/2) or in "
                                                    "parentheses (to (L / 2))")
         return self.span(A.Integral(integrand, var, lo, hi), t)
+
+    def _warn_sum_in_limit(self, start):
+        """`2 ∫ x dx from 0 to 1 - π`: the ' - π' is part of the upper limit (the integral goes up to 1 - π),
+        which on paper usually means (2 ∫ …) - π.  The parse is kept (`to L - a` is a limit), but a spaced
+        binary + or - at the top level of the upper limit warns (gauntlet #67, D173, like D112's '/')."""
+        depth = bars = 0
+        for j in range(start, self.i):
+            tk = self.toks[j]
+            if tk.kind == "OP" and tk.value in "([{":
+                depth += 1
+            elif tk.kind == "OP" and tk.value in ")]}":
+                depth -= 1
+            elif tk.kind == "OP" and tk.value == "|":
+                bars += 1
+            elif tk.kind == "OP" and tk.value in ("+", "-") and j > start and depth == 0 and bars % 2 == 0 \
+                    and tk.ws_before and j + 1 < self.i and self.toks[j + 1].ws_before:
+                pv = self.toks[j - 1]
+                if pv.kind == "OP" and pv.value not in (")", "]", "}", "|"):
+                    continue                              # `to 2 * -1`: a sign, not a sum
+                limit = self._text(start, self.i)
+                rest = self._text(j, self.i)
+                head = self._text(start, j)
+                self.diags.warn(f"the ' {rest}' is part of the upper limit: this integral goes up to {limit}",
+                                tok=tk, hint=f"if that's what you meant, write  to ({limit});  to "
+                                             f"{'add' if tk.value == '+' else 'subtract'} it after integrating, "
+                                             f"write  (… to {head}) {rest}")
+                return
 
     def _divisor_follows(self):
         """After a spaced '/' that ended an upper limit: is a divisor next (a number, a name, or a
@@ -2132,6 +2307,7 @@ class Parser:
             factor(1)
         first = False
         del first
+        juxt_join = False
         while True:
             t = self.tok
             spaced_var = (not explicit and t.kind == "OP" and t.value == "/" and t.ws_before and
@@ -2147,10 +2323,12 @@ class Parser:
                     explicit or self.peek().value not in self.known):
                 self.next()
                 factor(1)
+                juxt_join = True
             elif unit_name_here() and (explicit or (t.value not in self.known and not self._is_call_like())):
                 if not explicit and self.peek().kind == "OP" and self.peek().value == "(" and not self.peek().ws_before:
                     break
                 factor(1)
+                juxt_join = True
             else:
                 if not explicit and unit_name_here() and t.value in self.known and t.ws_before:
                     self.diags.warn(
@@ -2161,6 +2339,7 @@ class Parser:
                        + self._unit_text(start))
         u.line, u.col = start.line, start.col
         u.length = max(1, self.toks[self.i - 1].end - start.start)
+        u.juxt_join = juxt_join
         return u
 
     def _unit_text(self, start_tok):
