@@ -70,7 +70,7 @@ Also:
 - `plot x vs t` saves a PNG with labelled axes.
 - Vectors: `<3, 4> m/s`, `|v|`, `v.x`, `a · b`, `a × b`. ODEs can have vector unknowns: `solve r'' = -G M r / |r|³ with …`.
 - Leibniz notation: `dx/dt` works for functions and in `solve`.
-- `fermium build prog.fm` makes a standalone executable (needs a C compiler; programs using `plot`, `load` or `fit` can't be built yet).
+- `fermium build prog.fm` makes a standalone executable (needs a C compiler). `load`, `fit` and `plot` work in it too; plots are written as SVG, and data files are read from the folder you run the program in.
 
 ## Gallery
 

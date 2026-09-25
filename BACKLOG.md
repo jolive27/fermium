@@ -27,7 +27,7 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 - [ ] Derivatives and partial derivatives of multi-line functions.
 - [ ] Stiff ODE solver (implicit method). Events and root finding in `solve` ("stop when x < 0").
 - [ ] `solve` with a parameter sweep.
-- [ ] `fermium build` for programs that use `plot`, `load` or `fit`.
+- [x] `fermium build` for programs that use `plot`, `load` or `fit` (D31).
 - [ ] `stdlib/` as the spec lays it out (constants, units database, prelude), or record the deviation in DECISIONS.md.
 
 ## Done (moved from above)

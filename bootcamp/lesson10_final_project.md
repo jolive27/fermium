@@ -323,7 +323,7 @@ fermium build orbit.fm
 ./orbit
 ```
 
-`./orbit` (the `./` means "the program in this folder") prints the same result as `fermium run orbit.fm`. Programs that use `plot`, `load` or `fit` can't be built this way yet; Fermium tells you if you try.
+`./orbit` (the `./` means "the program in this folder") prints the same result as `fermium run orbit.fm`. Programs that use `plot`, `load` or `fit` can be built too: run them from the folder that has the data files, and plots come out as `.svg` files (open them in a web browser).
 
 ## Congratulations!
 
