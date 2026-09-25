@@ -140,12 +140,10 @@ void fm_print_num(int64_t fid, double v) {
 }
 
 /* a complex number, 3 + 4i or (3 + 4i) Ω; mirrors fermium.cplx.format_complex (D94) */
-static int is_whole(double v) { return v == v && fabs(v) < 1e7 && v == (double)(long long)v; }
-
 static void fmt_part(const fm_fmt *f, double v, int whole, char *out, size_t cap) {
     if (f->sf < 0) {
         if (f->direct) fmt_num(v, 15, 1, out, cap);
-        else if (whole) snprintf(out, cap, "%lld", (long long)v);
+        else if (whole) snprintf(out, cap, "%lld", (long long)llround(v));
         else fmt_num(v, 3, 0, out, cap);        /* 3 significant figures per part, zeros kept (D94) */
     }
     else fmt_num(v, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
