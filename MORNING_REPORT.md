@@ -28,9 +28,11 @@ Overnight it went from a spec to:
 | **3 significant figures by default when precision is ambiguous or unspecified, display only** | **Done** (D11) | `1/2` → `0.500`, `2π` → `6.28`, `c` → `3.00×10⁸ m/s`. Values with stated precision keep it; whole numbers and literals print exactly; `to N digits` overrides; `1000000/3` → `3.33×10⁵`. The JIT, the interpreter and `fermium build` agree. tests/test_default_sigfigs.py. A test proves it is display only (`x = 1/3; x * 3 - 1` prints `0`). |
 
 ## Phase 1: audit
-AUDIT.md (00:05–00:25 UTC) listed the spec checklist, false doc claims, stubs and 56 broken things (A1–A56).
+AUDIT.md (00:05–00:25 UTC) checked the spec requirements, the doc claims, the stubs and the broken things. It found items A1–A30, and an adversarial pass (notes/bugs-adversarial.md) added A31–A56.
 - All were fixed or documented by 02:00 UTC.
-- The two that remained as documented limitations were later handled by D110 (the zero-integral warning) and D45 (NaN points).
+- Two remain documented limitations of the quadrature:
+  - off-zero singularities (A56);
+  - a narrow peak sitting exactly on a bisection point, which gives half the integral.
 
 ## Phase 2: features (all six done by 02:00 UTC)
 Jupyter kernel and notebook; language server with unit hover, live errors and `\name` completion; VS Code extension; vectors and matrices with units and 3-D vector ODEs; ∂/∂x, ∇, div, curl, laplacian; browser playground (Pyodide); `fermium build` (standalone executables, including load/fit/plot to SVG).
