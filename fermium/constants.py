@@ -13,6 +13,21 @@ import math
 
 from .units import parse_unit_string
 
+_h, _c, _k = 6.62607015e-34, 299792458.0, 1.380649e-23      # exact (2019 SI)
+
+
+def _wien_x():
+    """The root of x = 5 (1 - exp(-x)) (Wien's displacement law), by Newton's method to full precision."""
+    x = 5.0
+    for _ in range(50):
+        g = x - 5 * (1 - math.exp(-x))
+        x_new = x - g / (1 - 5 * math.exp(-x))
+        if x_new == x:
+            break
+        x = x_new
+    return x
+
+
 CONSTANTS = {
     "c": (299792458.0, "m/s", "speed of light in vacuum (exact)", ["c_0"]),
     "h": (6.62607015e-34, "J s", "Planck constant (exact)", []),
@@ -32,11 +47,13 @@ CONSTANTS = {
     "m_μ": (1.883531627e-28, "kg", "muon mass", []),
     "ε_0": (8.8541878188e-12, "F/m", "vacuum electric permittivity", ["eps0"]),
     "μ_0": (1.25663706127e-6, "N/A²", "vacuum magnetic permeability", ["mu0"]),
-    "σ": (5.670374419e-8, "W/(m² K⁴)", "Stefan–Boltzmann constant (exact)", ["sigma_SB"]),
+    "σ": (2 * math.pi ** 5 * _k ** 4 / (15 * _h ** 3 * _c ** 2), "W/(m² K⁴)",
+          "Stefan–Boltzmann constant 2π⁵k⁴/(15h³c²) (exact)", ["sigma_SB"]),
     "α": (7.2973525643e-3, "1", "fine-structure constant", ["alpha_fs"]),
     "a_0": (5.29177210544e-11, "m", "Bohr radius", []),
     "R_∞": (10973731.568157, "1/m", "Rydberg constant", ["R_inf"]),
-    "b_W": (2.897771955e-3, "m K", "Wien wavelength displacement constant", []),
+    "b_W": (_h * _c / (_k * _wien_x()), "m K",
+            "Wien wavelength displacement constant h c/(k x), x = 4.965… (exact)", []),
     "r_e": (2.8179403205e-15, "m", "classical electron radius", []),
     "μ_B": (9.2740100657e-24, "J/T", "Bohr magneton", ["mu_B"]),
     "μ_N": (5.0507837393e-27, "J/T", "nuclear magneton", ["mu_N"]),

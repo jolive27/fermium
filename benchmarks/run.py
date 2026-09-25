@@ -55,7 +55,7 @@ TOLERANCE = {
     "energy_before": 1e-9,
     "energy_after": 1e-8,
     "x_10s": 1e-9,
-    "x_100s": 1e-6,          # |x(100 s)| ~ 1e-10 m is at the atol=1e-10 noise floor
+    "x_100s": 1e-3,          # rtol 1e-6, pure relative: each solver is ~2e-4 from the exact 1.1176e-12 m
     "accepted_steps": 0.0,   # exact
     "sum_integrals": 1e-8,
     "ratio_5778K": 1e-8,

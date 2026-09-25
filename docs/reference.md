@@ -391,9 +391,9 @@ print integral exp(-x^2) dx from -inf to inf
 ```
 
 - **Definite integrals** are computed numerically with adaptive Gauss–Kronrod quadrature (G7/K15, relative tolerance 10⁻¹⁰), compiled to native code.
-- **Infinite limits** (`∞` or `inf`) work, whatever the physical scale: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right.
+- **Infinite limits** (`∞` or `inf`) work for most physical scales: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right. The scan finds the scale of decays and of peaks near the start of the range (or near 0). A narrow peak far from the start (say 1 μm wide at 1 m, integrated from 0 to ∞) can still be missed, and the result is then too small. Split the range around such a peak: `∫ … from 0 m to 2 m` plus `∫ … from 2 m to ∞`.
 - **Singularities:** integrable blow-ups at an end of the range (like 1/√x at 0) work. An integrable blow-up at **0 inside the range** works too: the range is split there. Mild blow-ups like 1/√|x − c| work anywhere, but strong ones away from 0 may fail (see §19).
-- **Integrals that don't converge** (like ∫ 1/x dx from -1 to 1, or sin(x) up to ∞) stop with a clear error instead of giving a number.
+- **Integrals that can't be computed numerically** stop with a clear error ("couldn't compute this integral numerically") instead of giving a number. That happens for integrals that diverge (like ∫ 1/x dx from -1 to 1), and also for some that converge but oscillate without decaying fast enough (like ∫ sin(x)/x dx from 0 to ∞, which is π/2).
 
 ```fermium
 print ∫ exp(-x/(1 nm)) dx from 0 m to ∞          # 1 nm
@@ -458,7 +458,7 @@ print x'(1 s)
 - **Initial conditions:** every unknown needs one, and so does every derivative below the highest. They determine the unknowns' units, and both sides of every equation are unit-checked.
 - **Methods:**
   - Without `step`, Fermium uses adaptive Dormand–Prince RK45 (relative tolerance 10⁻⁹).
-  - With `step 1 ms`, it uses classic fixed-step RK4.
+  - With `step 1 ms`, it uses classic fixed-step RK4. After the solve, Fermium checks the step cheaply (step doubling at 8 points, 24 extra evaluations of the right-hand side) and warns when the estimated error is more than 0.1% of the solution's size: `the step is too coarse for this equation: the estimated error is 80% of the solution's size …; use a smaller step, or drop step to use the adaptive solver`. The warning is shown once per `solve` line.
   - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
   - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
@@ -540,7 +540,7 @@ print t
 - It finds the **first** solution after `a`, even when the two ends already bracket a later one: it looks for the first crossing at 200 points from `a`, then refines it to full double precision (Illinois regula falsi, which keeps the solution bracketed). `solve sin(x) = 0 for x from 1 to 10` gives π. Two solutions closer together than (b − a)/200 can hide each other; narrow the range to separate them.
 - The answer has the units of the range. Inside a loop, each `solve` overwrites the variable.
 - **Derivatives of known functions** are values: with `I(θ)` defined, `solve I'(θm) = 0 for θm from a to b` finds a maximum of I, and with `r` an ODE solution, `solve r(t2) · r'(t2) = 0 km²/s for t2 from …` finds where the radial velocity is zero. Only names that aren't defined yet make a `solve` a differential equation.
-- If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range.
+- If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range. A scan point that lands exactly on a pole (the sides are ∞ there, as in `1/(x - 1.5)` scanned from 1 to 2) is skipped, not taken as a crossing: `solve 1/(x - 1.5) = 2 for x from 1 to 2` gives 2, and `solve 1/(x - 1.5) = 0 …` is the jump error. A point where the sides are undefined (NaN) inside the final bracket is never returned as a solution.
 - **Rounding-noise warning:** if large terms cancel so badly that the two sides differ only by rounding error near the crossing (`(E + ε)² − (pc − ε)²` with E ~ 10²⁰ eV), the answer is printed with a warning; expand the expression on paper so the big terms cancel exactly.
 - `step`, `tolerance` and `using` are only for differential equations.
 
@@ -673,10 +673,12 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Derived units:** `N J W Pa C V F Ω(ohm) S Wb T H Hz Bq Gy Sv lm lx kat`.
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
-- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %`.
+- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal Wh` (`kWh MWh`), `rad sr ° arcmin arcsec rev rpm %`.
   - `rad` and `arcsec` take SI prefixes: `mrad`, `μrad`, `krad/s`; `mas` and `μas` are milli- and micro-arcseconds.
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
-- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
+  - The other way round, **Hz means rad/s**: `1 Hz in rpm` is 9.55 rpm (not 60) and `1 Hz in rad/s` is 1 rad/s (not 2π). Every conversion between a value written or shown in Hz and rev, rpm, rad/s or °/s warns, with the numbers for that case. For cycles per second, write the value in `rev/s` (`50 rev/s in rpm` is 3000 rpm), or multiply by 2π (`2π f in rpm`; `2π f` and `ω/(2π)` drop the Hz or rad/s they came from). Adding or subtracting a Hz value and a rad/s (or rpm) value warns too. See DECISIONS D95.
+  - **Same SI unit, different quantity:** adding or subtracting `Gy` and `Sv` (absorbed and equivalent dose), `Bq` and `Hz`, or `J` and `N m` (energy and torque) warns.
+- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). `°C + °C` and `sum` (or `cumsum`) of a list in °C are errors (`mean` works); `2 T` and `T / 2` of a °C value warn that they scale the absolute temperature. Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
 
 ## 16. Errors
@@ -727,8 +729,8 @@ atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, ex
 
 These are known and not yet fixed. None of them is silent about units.
 
-- **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges don't have this problem (§9).
-- **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
+- **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges handle decays and peaks near the start, but a narrow peak far from the start can still be missed (§9).
+- **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "couldn't compute this integral numerically", although it converges (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.

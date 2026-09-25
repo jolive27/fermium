@@ -361,6 +361,53 @@ def rk4(f, y0, t0, t1, h0, ev=None, tname=-1, evtext=-1):
     return sol
 
 
+RK4_SAMPLES = 8        # step-doubling checks after a fixed-step solve (redteam #5)
+RK4_WARN = 1e-3        # warn when the estimated relative error is larger than this
+
+
+def rk4_error(f, sol):
+    """Mirrors fm_rk4_check in codegen_llvm.py.  A cheap error estimate for a fixed-step RK4 solution:
+    at RK4_SAMPLES evenly spaced steps s, one RK4 step of 2h from the stored (t_s, y_s) is compared with
+    the stored y_{s+2} (two steps of h).  Their difference is 30 times the local error of one h step
+    (step doubling, error ~ h⁵); times the number of steps it estimates the global error, relative to
+    max(|y_s|, |y_s+2|) + |y_s+2 - y_s| per component (D17's scale-free norm).  Costs 3 × RK4_SAMPLES
+    evaluations of the right-hand side."""
+    N, n = sol.n, sol.dim
+    if N < 3:
+        return 0.0
+    worst = 0.0
+    last = -1
+    for k in range(RK4_SAMPLES):
+        s = (k * (N - 3)) // (RK4_SAMPLES - 1)
+        if s == last:
+            continue
+        last = s
+        t, tm, t2 = sol.t[s], sol.t[s + 1], sol.t[s + 2]
+        h = tm - t
+        if not (abs((t2 - tm) - h) <= 1e-9 * abs(h)):      # an event cut the last step short
+            continue
+        H = t2 - t
+        half = H * 0.5
+        y = sol.y[s * n:(s + 1) * n]
+        k1 = sol.dy[s * n:(s + 1) * n]
+        tmp = [y[j] + half * k1[j] for j in range(n)]
+        k2 = f(t + half, tmp)
+        tmp = [y[j] + half * k2[j] for j in range(n)]
+        k3 = f(t + half, tmp)
+        tmp = [y[j] + H * k3[j] for j in range(n)]
+        k4 = f(t + H, tmp)
+        H6 = H / 6
+        for j in range(n):
+            y2 = y[j] + H6 * (k1[j] + 2 * (k2[j] + k3[j]) + k4[j])
+            yr = sol.y[(s + 2) * n + j]
+            sc = max(abs(y[j]), abs(yr)) + abs(yr - y[j])
+            if sc > 0:
+                e = abs(y2 - yr) / sc
+                if e > worst:
+                    worst = e
+    return worst / 30 * (N - 1)
+
+
 A_DP = [[], [1 / 5], [3 / 40, 9 / 40], [44 / 45, -56 / 15, 32 / 9],
         [19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729],
         [9017 / 3168, -355 / 33, 46732 / 5247, 49 / 176, -5103 / 18656],
@@ -655,6 +702,7 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
     h = (b0 - a0) / scan
     fprev, found = fa, False
     a = c = fc = 0.0
+    fjump, xjump, pole = math.nan, 0.0, math.nan      # a scan point that landed on a pole (redteam #4)
     for i in range(1, scan + 1):
         xi = b0 if i == scan else a0 + i * h
         fi = f(xi)
@@ -662,11 +710,19 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
             if scale is not None and abs(fprev) <= NOISE * scale(xi - h):
                 warn(xi)
             return xi
+        if abs(fi) == math.inf:       # on a pole: not a crossing; skip past it
+            fjump, xjump, fprev = fprev, xi, math.nan
+            continue
+        if fjump * fi < 0 and pole != pole:
+            pole = xjump
+        fjump = math.nan
         if fprev * fi < 0:
             a, fa, c, fc, found = xi - h, fprev, xi, fi, True
             break
         fprev = fi
     if not found:
+        if pole == pole:
+            raise _Fail(ERR_POLE, pole, 0.0)
         raise _Fail(ERR_ROOT, a0, b0)
     if scale is not None and abs(fa) <= NOISE * scale(a) and abs(fc) <= NOISE * scale(c):
         warn(c)
@@ -682,8 +738,10 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
         if not (min(a, c) < x < max(a, c)):
             x = 0.5 * (a + c)
         fx = f(x)
-        if fx == 0 or fx != fx:
+        if fx == 0:
             return x
+        if fx != fx:                  # undefined inside the bracket: not a verified root
+            raise _Fail(ERR_POLE, x, 0.0)
         if fx * fc < 0:
             a, fa, side = c, fc, 0
         else:
@@ -938,6 +996,9 @@ class Interpreter:
         elif s.method == "rk4":
             h0 = self.eval(s.step, fr)
             sol = self.kernel(lambda: rk4(f, y0, t0, t1, h0, ev, tname, evtext), fmt)
+            est = rk4_error(f, sol)
+            if est > RK4_WARN:
+                self.rt.warn(7, est, self.line, -1)
         else:
             line = self.line
             sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False),

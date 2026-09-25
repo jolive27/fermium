@@ -296,9 +296,15 @@ class Runtime:
             msg = (f"this equation looks stiff: rk45 has taken {int(a)} steps, held small by stability rather than "
                    f"accuracy (time scales far apart); add  using radau  after the range for an implicit solver "
                    f"made for this")
+        elif kind == 7:
+            msg = (f"the step is too coarse for this equation: the estimated error is {format_number(a * 100, 2)}% "
+                   f"of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or "
+                   f"drop  step  to use the adaptive solver")
         else:
             msg = "warning"
         text = "warning: " + (f"line {line}: " if line else "") + msg
+        if kind == 7 and any(w.startswith(text.split(" is ")[0]) for w in self.warnings):
+            return            # once per solve, not once per loop pass
         if text not in self.warnings:
             self.warnings.append(text)
             try:
@@ -358,8 +364,9 @@ class Runtime:
             return (f"{name} called itself too many times (the program ran out of stack) -- is a base case "
                     f"missing, like  if n <= 0 then ...?")
         if kind == 9:
-            return ("this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating "
-                    f"(like sin(x) up to ∞) -- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
+            return ("couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate "
+                    "without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere "
+                    f"-- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
         if kind == 11:
             if a != a:
                 return "the length of a list must be a number, not NaN"

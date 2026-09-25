@@ -188,7 +188,7 @@ _UNITS = {
     "M☉": (1.98841e30, M, False), "Msun": (1.98841e30, M, False),
     "M_E": (5.9722e24, M, False), "Mearth": (5.9722e24, M, False),
     # energy / power
-    "eV": (_e, J_, True), "erg": (1e-7, J_, False), "cal": (4.184, J_, True),
+    "eV": (_e, J_, True), "erg": (1e-7, J_, False), "cal": (4.184, J_, True), "Wh": (3600.0, J_, True),
     "L☉": (3.828e26, W_, False), "Lsun": (3.828e26, W_, False),
     "hp": (745.69987158227022, W_, False),
     # force / pressure
