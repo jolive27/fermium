@@ -274,10 +274,10 @@ print a · b, a × b, unit(v)
 print 2 v + <1, 1> m/s
 ```
 
-- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2, 3 or 4 components). `vec(3, 4)` is the same as `<3, 4>`.
+- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2 to 16 components; the longer ones are for matrices, below). `vec(3, 4)` is the same as `<3, 4>`.
 - **A number times a vector** can be written side by side: `R <cos(φ), sin(φ), 0>`, `v0 <cos(θ), sin(θ)>`. This needs a space before `<` and none after it, and the `>` right after the last component; otherwise `<` is less-than (`a < b`, `x <y`). `R * <…>` always works.
 - **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D; not defined in 4-D).
-- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`. The index can be any whole number known only when the program runs, like a loop variable: `for i from 1 to 3` … `v[i]`; an index out of range stops the program (`index 4 is out of range: valid indexes here are 1 to 3`). A vector with a different unit on each component needs a fixed index.
+- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`. The index can be any whole number known only when the program runs, like a loop variable: `for i from 1 to 3` … `v[i]`; an index out of range stops the program (`index 4 is out of range: valid indexes here are 1 to 3`). A vector with a different unit on each component needs a fixed index. `v[i] = x` (and `v[i] += x`) sets one component.
 - **More functions:** `angle(a, b)` is the angle between two 2- or 3-vectors, computed as atan2(\|a × b\|, a · b) (accurate near 0 and π; the vectors may have different units). `abs(v)` takes the absolute value of each component (of a matrix too).
 - **A unit after a vector:** `<3, 4> m/s`, `<0, 0> /s` and `<1, 2> 1/s` all work, as after a number.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
@@ -312,8 +312,22 @@ print solve_linear(K, <1, 0> N)
 print K[1, 2], K[2]
 ```
 
-- **Making a matrix:** a list of rows, `[[1, 2], [3, 4]] N/m`, or with a unit on every entry, `[[1 N/m, 0 N/m], [0 N/m, 2 N/m]]`. All entries share one unit. From 1 to 4 rows and 1 to 4 columns. `identity(n)` is the n×n identity matrix (n = 2, 3 or 4).
-- **Printing:** the rows on one line, `[[1, 2], [3, 4]] N/m`.
+- **Making a matrix:** a list of rows, `[[1, 2], [3, 4]] N/m`, or with a unit on every entry, `[[1 N/m, 0 N/m], [0 N/m, 2 N/m]]`. All entries share one unit. From 1 to 16 rows and 1 to 16 columns. `identity(n)` is the n×n identity matrix (n from 2 to 16), and `zeros(r, c)` an r×c matrix of zeros whose unit comes from the first entry you put in it.
+- **Filling a matrix in a loop:** `M[i, j] = value` (and `+=`, `-=`, …) sets one entry; the indexes can be loop variables (checked when the program runs), and the value's unit must be the matrix's. A chain of N masses and springs:
+
+```fermium
+k = 3 N/m
+K = zeros(8, 8)
+for i from 1 to 8
+    K[i, i] = 2 k
+    if i < 8
+        K[i, i + 1] = -k
+        K[i + 1, i] = -k
+print eigenvalues(K) / 0.5 kg          # ω² of the 8 normal modes
+```
+
+- **Printing:** the rows on one line, `[[1, 2], [3, 4]] N/m`. In a computed vector or matrix, an entry below 10⁻¹⁴ of the largest entry is rounding noise and prints as 0 (`inverse(A) A` prints the identity; D197).
+- **Sizes:** matrices up to 4×4 use straight-line code (fastest; `det` by cofactors is exact for whole numbers); from 5×5 to 16×16 the same operations run as loops (Gaussian elimination for `det`, `inverse` and `solve_linear`, and more Jacobi sweeps for eigenvalues), in native code and in `fermium build` executables alike (D195).
 - **Arithmetic:** `A + B`, `A - B` (same size, same units), `2 A`, `A / 2`, `-A`.
 - **Products:** `M v`, `M * v` or `M · v` is a matrix times a vector (a vector); `A B` or `A * B` is the matrix product. The units multiply: a stiffness matrix in N/m times a displacement in m gives a force in N. Write the matrix first; `v M` is an error.
 - **Functions:** `transpose(M)` (also `Mᵀ`), `det(M)` (units to the power n: a 2×2 in N/m has a determinant in N²/m²), `inverse(M)` (units to the power −1: m/N), `solve_linear(M, b)` solves M x = b (x has the units of b divided by those of M; Gaussian elimination with partial pivoting).
@@ -336,7 +350,7 @@ print √(ω2[1]), √(ω2[2])              # the normal-mode angular frequencie
 print eigenvectors(K, M)              # the mode shapes
 ```
 
-- `eigenvalues(M)` of a **symmetric** 2×2, 3×3 or 4×4 matrix is a vector of its eigenvalues, **sorted from smallest to largest**, in the matrix's units (a stiffness matrix in N/m has eigenvalues in N/m). `eigenvectors(M)` is a matrix whose **columns** are the matching unit eigenvectors (column j belongs to eigenvalue j; each one's largest entry is positive). Computed by Jacobi rotations, to machine precision.
+- `eigenvalues(M)` of a **symmetric** matrix (2×2 up to 16×16) is a vector of its eigenvalues, **sorted from smallest to largest**, in the matrix's units (a stiffness matrix in N/m has eigenvalues in N/m). `eigenvectors(M)` is a matrix whose **columns** are the matching unit eigenvectors (column j belongs to eigenvalue j; each one's largest entry is positive). Computed by Jacobi rotations, to machine precision.
 - `eigenvalues(K, M)` and `eigenvectors(K, M)` solve the **generalized** problem K v = λ M v with symmetric K and a symmetric, positive-definite M (a mass matrix). For springs and masses λ = ω², in 1/s². The mode shapes are scaled to unit length. Don't write `eigenvalues(inverse(M) K)`: M⁻¹K is not symmetric, so it is an error that points to `eigenvalues(K, M)`.
 - **Errors** (when the program runs): a matrix that isn't symmetric (entries may differ by at most 10⁻¹⁰ of the largest entry), and a second matrix that isn't positive definite.
 

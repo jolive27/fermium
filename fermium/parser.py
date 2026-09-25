@@ -264,16 +264,17 @@ class Parser:
                     name = self.next()
                     self.next()
                     idx = self.expr()
-                    if self.at_op(","):
-                        raise self.error("the entries of a matrix can't be changed one at a time; build the new "
-                                         "matrix instead, like M = M + [[1, 0], [0, 0]]")
+                    idx2 = None
+                    if self.at_op(","):                  # M[i, j] = … (D195)
+                        self.next()
+                        idx2 = self.expr()
                     if self.at_op(":"):
                         raise self.error("a slice xs[a:b] can be read but not assigned to; set the elements "
                                          "one at a time, like  for i from a to b  then  xs[i] = ...")
                     self.expect_op("]")
                     op = self.next().value
                     val = self.expr_where()
-                    s = self.span(A.IndexAssign(name.value, idx, val, op), name)
+                    s = self.span(A.IndexAssign(name.value, idx, val, op, idx2), name)
                     if end_line:
                         self.end_statement()
                     return s
@@ -1350,7 +1351,7 @@ class Parser:
             if isinstance(first, A.Quantity) and isinstance(first.value, A.Num) and not first.bracket:
                 first = first.value
             if isinstance(first, A.Num) and isinstance(left, A.Num) and not left.paren:
-                a, b = (f"{v:g}" for v in (left.value, first.value))
+                a, b = (A.num_text(v) for v in (left, first))
                 self.diags.warn(
                     f"this is read as a/(b c), i.e. {a}/({b} ...): implicit multiplication binds tighter than '/'",
                     tok=op, hint=f"if you meant ({a}/{b}) times the rest, write ({a}/{b}) with parentheses "
@@ -1455,7 +1456,7 @@ class Parser:
     def _note_collision(self, q, f):
         """Remember `2 L` (a unit after a number, while L is also a variable), so that a unit error on
         the same line can say why (FRICTION #10)."""
-        num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else None
+        num = A.num_text(q.value) if isinstance(q.value, A.Num) else None
         if num is not None:
             lst = self.collisions.setdefault(f.line, [])
             if (num, f.name) not in lst:
@@ -1474,7 +1475,7 @@ class Parser:
         variable of that name (`2 g`, `2 m v`, `3 V`), is ambiguous, and an error: say which you mean.
         Compound units (`9.81 m/s²`, `3 m²`, `2 kg m`) are unambiguous and stay units."""
         from .units import lookup_unit, dim_name
-        num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
+        num = A.num_text(q.value) if isinstance(q.value, A.Num) else "2"
         u = lookup_unit(f.name)
         words = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
                  "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
@@ -1499,7 +1500,7 @@ class Parser:
             then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
             if f.name in self.known and f.name not in self.warned_units and not then_mul:
                 self.warned_units.add(f.name)
-                num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
+                num = A.num_text(q.value) if isinstance(q.value, A.Num) else "2"
                 self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not your variable {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
                                 hint=f"that's fine if you meant the unit (write {num} [{f.name}] to say so); for "
@@ -1680,6 +1681,8 @@ class Parser:
             self.next()
             n = A.Num(t.value, t.sigfigs, t.digit)
             n.line, n.col, n.length = t.line, t.col, len(t.raw)
+            if t.kind == "NUM":
+                n.raw = t.raw                 # quoted as written in warnings (#81)
             if t.kind == "IMAG":             # 4i is 4 × 𝑖 and 1i is 𝑖 (D90); a unit may follow: 4i Ω
                 n = A.Name("𝑖").at(n) if t.value == 1 and t.sigfigs is None else \
                     A.BinOp("*", n, A.Name("𝑖").at(n)).at(n)
@@ -1999,8 +2002,8 @@ class Parser:
         if not self.at_op(">"):
             raise self.error("expected '>' to close this vector (written <x, y> or <x, y, z>)" + self._found())
         self.next()
-        if len(items) not in (2, 3, 4):
-            raise self.error(f"a vector needs 2, 3 or 4 components, not {len(items)}", tok=t)
+        if not 2 <= len(items) <= 16:
+            raise self.error(f"a vector needs 2 to 16 components, not {len(items)}", tok=t)
         v = self.span(A.VecLit(items), t)
         if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
             u = self.unit_expr(explicit=False)

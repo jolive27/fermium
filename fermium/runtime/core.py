@@ -184,8 +184,20 @@ class Runtime:
                 else format_default_seq(xs, DEFAULT_SF)
             return vals, ("" if u.name in ("", "1") else " " + u.name)
 
+        def denoise(f, p, n):
+            """A computed vector's or matrix's entries below 10⁻¹⁴ of its largest are rounding noise and
+            print as 0 (like a complex number's parts, D94; FRICTION #59, D197).  Mirrored in aot_rt.c."""
+            xs = [p[i] for i in range(n)]
+            if f["direct"] is True:
+                return xs
+            big = max((abs(x) for x in xs if math.isfinite(x)), default=0.0)
+            if big > 0:
+                xs = [0.0 if math.isfinite(x) and abs(x) < 1e-14 * big else x for x in xs]
+            return xs
+
         def print_vec(fid, p, n):
-            vals, unit = seq_values(rt.tables.fmts[fid], p, range(n))
+            f = rt.tables.fmts[fid]
+            vals, unit = seq_values(f, denoise(f, p, n), range(n))
             rt.line.append("<" + ", ".join(vals) + ">" + unit)
 
         def print_mvec(fid, p, n):
@@ -202,7 +214,7 @@ class Runtime:
 
         def print_mat(fid, p, r, c):
             f = rt.tables.fmts[fid]
-            vals, unit = seq_values(f, p, range(r * c))        # one number style for the whole matrix
+            vals, unit = seq_values(f, denoise(f, p, r * c), range(r * c))   # one number style for the whole matrix
             rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
             rt.line.append("[" + ", ".join(rows) + "]" + unit)
 

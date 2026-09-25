@@ -165,6 +165,10 @@ def test_unit_after_a_list_literal():
     assert out.splitlines() == ["[1, 2, 3] m", "[500.0, 1500] m", "3 kg"]
 
 
+def test_loop_over_a_list_with_a_unit_keeps_the_precision():
+    assert both("for E in [0.50, 0.75] eV\n    print E").splitlines() == ["0.50 eV", "0.75 eV"]
+
+
 def test_unit_after_a_list_literal_leaves_your_variable_alone():
     # m is a variable here, so [1, 2] m is still [1, 2] × m (as for matrices, D29)
     assert both("m = 3\nprint [1, 2] m") == "[3, 6]"
@@ -279,3 +283,203 @@ def test_nested_helper_errors(src, msg):
 def test_nested_helper_error_says_which_call():
     e = both_error("f(x) =\n    g(s) = s + x\n    return g(1 m)\nprint f(1 s)")
     assert "this happened when calling g on line 3 (with s = length [m])" in e.hint
+
+
+# ---- #51: matrices up to 16×16, filled in a loop (D195); rounding noise printed as 0 (#59, D197) -------------
+
+CHAIN = """N = 8
+k = 3 N/m
+m = 0.5 kg
+K = zeros(8, 8)
+for i from 1 to N
+    K[i, i] = 2 k
+    if i < N
+        K[i, i + 1] = -k
+        K[i + 1, i] = -k
+ω2 = eigenvalues(K) / m
+for n from 1 to N
+    print ω2[n] / (4 k / m * sin(n π / (2 (N + 1)))²) - 1 to 3 digits
+print det(K) to 6 digits
+"""
+
+
+def test_spring_chain_8x8_filled_in_a_loop():
+    """ω² = (4k/m) sin²(nπ/(2(N+1))) for a chain of N masses between two walls."""
+    out = both(CHAIN).splitlines()
+    for line in out[:8]:
+        assert abs(num(line)) < 1e-13
+    assert out[8] == "59049.0 N⁸/m⁸"            # det = kᴺ (N + 1)
+
+
+TIGHT_BINDING = """t = 1.5 eV
+H = zeros(16, 16)
+for i from 1 to 15
+    H[i, i + 1] = -t
+    H[i + 1, i] = -t
+E = eigenvalues(H)
+for n from 1 to 16
+    print E[n] / (-2 t cos(n π / 17)) - 1 to 3 digits
+V = eigenvectors(H)
+print V[3, 1] / (sqrt(2 / 17) sin(3 π / 17)) - 1 to 3 digits
+print Vᵀ V
+"""
+
+
+def test_tight_binding_chain_16x16():
+    """E_n = −2t cos(nπ/(N + 1)), ψ_n(j) = √(2/(N+1)) sin(jnπ/(N+1)), and VᵀV = 1 exactly as printed."""
+    out = both(TIGHT_BINDING).splitlines()
+    for line in out[:17]:
+        assert abs(num(line)) < 1e-12
+    # t has 2 significant figures, so the diagonal shows 1.0; the off-diagonal rounding noise shows 0
+    ident = "[" + ", ".join("[" + ", ".join("1.0" if i == j else "0" for j in range(16)) + "]" for i in range(16)) + "]"
+    assert out[17] == ident
+
+
+def test_big_linear_algebra_matches_numpy():
+    np = pytest.importorskip("numpy")
+    import scipy.linalg
+    rows = [[(3 * i + 7 * j) % 11 - 5 + (12 if i == j else 0) for j in range(6)] for i in range(6)]
+    lit = "[" + ", ".join("[" + ", ".join(str(x) for x in r) + "]" for r in rows) + "]"
+    src = f"""A = {lit} N/m
+b = <1, 2, 3, 4, 5, 6> N
+x = solve_linear(A, b)
+for i from 1 to 6
+    print x[i] in m to 12 digits
+print det(A) to 12 digits
+B = inverse(A)
+print B[2, 3] in m/N to 12 digits
+S = A + Aᵀ
+print eigenvalues(S) in N/m to 12 digits
+M = identity(6) * 2 kg
+M[1, 1] = 1 kg
+M[6, 6] = 3 kg
+print eigenvalues(S, M) in 1/s² to 12 digits
+"""
+    out = both(src).splitlines()
+    a = np.array(rows, dtype=float)
+    x = np.linalg.solve(a, np.arange(1, 7))
+    for i in range(6):
+        assert num(out[i]) == pytest.approx(x[i], rel=1e-10)
+    assert num(out[6]) == pytest.approx(np.linalg.det(a), rel=1e-10)
+    assert num(out[7]) == pytest.approx(np.linalg.inv(a)[1, 2], rel=1e-10)
+    s = a + a.T
+    got = [float(v) for v in out[8].strip("<>").split(">")[0].split(", ")]
+    assert got == pytest.approx(np.linalg.eigvalsh(s).tolist(), rel=1e-10, abs=1e-9)
+    mm = np.diag([1, 2, 2, 2, 2, 3.0])
+    got = [float(v) for v in out[9].strip("<>").split(">")[0].split(", ")]
+    assert got == pytest.approx(scipy.linalg.eigh(s, mm, eigvals_only=True).tolist(), rel=1e-10, abs=1e-9)
+
+
+def test_entry_assignment_forms():
+    src = """M = identity(3) * 2 m
+M[1, 3] = 5 m
+M[2, 2] += 1 m
+M[end, 1] = -1 m
+print M
+v = <1, 2, 3, 4, 5> s
+v[2] *= 10
+i = 4
+v[i] = 0 s
+print v
+"""
+    assert both(src).splitlines() == ["[[2, 0, 5], [0, 3, 0], [-1, 0, 2]] m", "<1, 20, 3, 0, 5> s"]
+
+
+@pytest.mark.parametrize("src,msg", [
+    ("M = zeros(2, 2)\nM[1, 1] = 1 m\nM[1, 2] = 1 s", "the entries of M are length [m]; can't put time [s] in it"),
+    ("M = zeros(2, 2)\nM[1] = 1", "set one entry at a time, like M[i, j] = …"),
+    ("v = <1, 2>\nv[1, 2] = 3", "set one component, like v[i] = …"),
+    ("xs = [1, 2]\nxs[1, 2] = 3", "sets an entry of a matrix, but xs is a list"),
+    ("M = zeros(3, 3)\nM[4, 1] = 1", "there is no index 4 here"),
+    ("M = zeros(17, 17)", "from 1 to 16"),
+    ("n = 3\nM = zeros(n, 2)", "fixed whole numbers"),
+    ("print eigenvalues([[1, 2, 3], [4, 5, 6]])", "square"),
+])
+def test_entry_assignment_errors(src, msg):
+    assert msg in both_error(src).message
+
+
+def test_runtime_index_out_of_range():
+    src = "M = zeros(5, 5)\nfor i from 1 to 6\n    M[i, i] = 1"
+    msgs = []
+    for runner in (run, interp):
+        with pytest.raises(Exception) as e:
+            runner(src)
+        msgs.append(str(e.value))
+    assert msgs[0] == msgs[1]
+    assert "6" in msgs[0]
+
+
+def test_non_symmetric_big_matrix_is_an_error():
+    src = "M = zeros(6, 6)\nM[1, 2] = 1\nprint eigenvalues(M)"
+    for runner in (run, interp):
+        with pytest.raises(Exception) as e:
+            runner(src)
+        assert "symmetric" in str(e.value)
+
+
+def test_rounding_noise_prints_as_zero():
+    src = """A = [[4, 1, 2], [1, 3, 0], [2, 0, 5]] N/m
+print inverse(A) * A
+print eigenvectors([[2, 1, 0], [1, 2, 1], [0, 1, 2]])[2]
+print [[1, 1e-20], [0, 1]]
+"""
+    out = both(src).splitlines()
+    assert out[0] == "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"
+    assert "10⁻¹" not in out[1]                 # the middle mode's exact zero
+    assert out[2] == "[[1, 1e-20], [0, 1]]" or "10⁻²⁰" in out[2]    # written entries are never cleaned
+
+
+@needs_cc
+def test_build_big_matrices(tmp_path):
+    src = CHAIN + TIGHT_BINDING + "w = <1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14> m\nprint w\n"
+    assert built(src, tmp_path) == run(src)
+
+
+# ---- #80 display units (D196), #81 numbers as written (D198), #59 printed formulas (D199) --------------------
+
+def test_display_units_conductivity_speed_squared_radiation_constant():
+    src = """ω_p = 1.4e16 /s
+γ = 1.0e14 /s
+print ε_0 ω_p² / γ
+a = 0.1 m
+ω = 30 /s
+print a² ω²
+print 4σ / c
+E = -5 J/kg
+print E
+print a² ω² in J/kg
+"""
+    out = both(src).splitlines()
+    assert out[0].endswith(" S/m")
+    assert out[1] == "9.0 m²/s²"
+    assert out[2].endswith(" J/(m³ K⁴)")
+    assert out[3] == "-5 J/kg"                    # a unit you wrote is kept
+    assert out[4] == "9.0 J/kg"
+
+
+def test_warning_quotes_the_number_as_written():
+    from conftest import warnings_of
+    ws = warnings_of("m = 2 kg\nn = 2.50e19 m⁻³")
+    assert any("'2.50e19 m' is the unit m" in w for w in ws)
+    assert not any("2.5e+19" in w for w in ws)
+
+
+def test_ambiguity_error_quotes_the_number_as_written():
+    e = both_error("m = 2 kg\nv = 3 m/s\nE = 0.50 m v²")
+    assert "'0.50 m'" in e.message
+
+
+def test_printed_formulas():
+    src = """g = 9.81 m/s²
+v(h) = √(2*g*h)
+print v'
+term(x, y) = sin(3 x) y²
+print ∂²/∂x² term
+y(t) = 20 m/s * t - ½ g t²
+print y
+"""
+    out = both(src).splitlines()
+    assert out[0].startswith("v'(h) = g/√(2·g h)")
+    assert out[1].startswith("∂²term/∂x²(x, y) = ")
+    assert "0.5·g t²" in out[2]

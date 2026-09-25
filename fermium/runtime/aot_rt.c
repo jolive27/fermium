@@ -167,16 +167,30 @@ void fm_print_cplx(int64_t fid, double re, double im) {
     emit(all);
 }
 
+/* a computed vector's or matrix's entries below 1e-14 of its largest are rounding noise: printed as 0
+   (core.denoise, D197); q receives the n values */
+static void denoise(const fm_fmt *f, const double *p, int64_t n, double *q) {
+    double big = 0;
+    for (int64_t i = 0; i < n; i++) {
+        q[i] = p[i];
+        if (isfinite(p[i]) && fabs(p[i]) > big) big = fabs(p[i]);
+    }
+    if (f->direct == 1 || !(big > 0)) return;
+    for (int64_t i = 0; i < n; i++)
+        if (isfinite(q[i]) && fabs(q[i]) < 1e-14 * big) q[i] = 0.0;
+}
+
 static void print_seq(int64_t fid, const double *p, int64_t n, const char *open, const char *close) {
     const fm_fmt *f = &fm_fmts[fid];
     static char out[1 << 15];
     char buf[128];
     int sf = f->sf;
+    int list = !strcmp(open, "[");          /* only lists are shortened: vectors have at most 16 components */
     if (sf >= 0 && !f->direct && sf < 2) sf = 2;
-    int whole = sf < 0 && all_whole(f, p, n, 1);
+    int whole = sf < 0 && all_whole(f, p, n, list);
     strcpy(out, open);
     for (int64_t i = 0; i < n; i++) {
-        if (n > 12 && i == 5) { strcat(out, "…, "); i = n - 3; }
+        if (list && n > 12 && i == 5) { strcat(out, "…, "); i = n - 3; }
         double x = (p[i] - f->offset) / f->factor;
         if (sf < 0) fmt_num(whole ? round(x) : x, whole ? 17 : FM_DEFAULT_SF, whole, buf, sizeof buf);
         else if (f->direct == 1) fmt_written(x, sf, buf, sizeof buf);
@@ -186,12 +200,16 @@ static void print_seq(int64_t fid, const double *p, int64_t n, const char *open,
     }
     strcat(out, close);
     if (f->unit[0] && strcmp(f->unit, "1")) { strcat(out, " "); strcat(out, f->unit); }
-    if (n > 12 && !strcmp(open, "[")) { char c[48]; snprintf(c, sizeof c, "  (%lld values)", (long long)n); strcat(out, c); }
+    if (n > 12 && list) { char c[48]; snprintf(c, sizeof c, "  (%lld values)", (long long)n); strcat(out, c); }
     emit(out);
 }
 
 void fm_print_list(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "[", "]"); }
-void fm_print_vec(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "<", ">"); }
+void fm_print_vec(int64_t fid, double *p, int64_t n) {
+    double q[256];
+    denoise(&fm_fmts[fid], p, n, q);
+    print_seq(fid, q, n, "<", ">");
+}
 
 /* a vector with a unit per component, <1 m, 2 m/s>: formats fid, fid+1, ... (D29) */
 void fm_print_mvec(int64_t fid, double *p, int64_t n) {
@@ -219,9 +237,11 @@ void fm_print_mvec(int64_t fid, double *p, int64_t n) {
 }
 
 /* a matrix, rows on one line: [[1, 2], [3, 4]] N/m */
-void fm_print_mat(int64_t fid, double *p, int64_t r, int64_t c) {
+void fm_print_mat(int64_t fid, double *p0, int64_t r, int64_t c) {
     const fm_fmt *f = &fm_fmts[fid];
-    static char out[4096];
+    static char out[1 << 15];               /* up to 16×16 entries (D195) */
+    double p[256];
+    denoise(f, p0, r * c, p);
     char buf[128];
     int sf = f->sf;
     if (sf >= 0 && !f->direct && sf < 2) sf = 2;

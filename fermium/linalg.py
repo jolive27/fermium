@@ -274,3 +274,53 @@ class FloatOps:
     @staticmethod
     def eq(x, y):
         return x == y
+
+    # ---- loops, arrays and whole-number indexes, for matrices larger than 4×4 (linalg_big, D195)
+    @staticmethod
+    def array(n):
+        return [0.0] * n
+
+    @staticmethod
+    def iarray(n):
+        return [0] * n
+
+    @staticmethod
+    def ld(arr, i):
+        return arr[i]
+
+    @staticmethod
+    def st(arr, i, v):
+        arr[i] = v
+
+    @staticmethod
+    def loop(lo, hi, body):
+        for i in range(lo, hi):
+            body(i)
+
+    @staticmethod
+    def iadd(a, b):
+        return a + b
+
+    @staticmethod
+    def isub(a, b):
+        return a - b
+
+    @staticmethod
+    def imul(a, b):
+        return a * b
+
+    @staticmethod
+    def ieq(a, b):
+        return a == b
+
+    @staticmethod
+    def iselect(c, a, b):
+        return a if c else b
+
+    @staticmethod
+    def and_(a, b):
+        return a and b
+
+    @staticmethod
+    def not_(a):
+        return not a

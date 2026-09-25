@@ -14,7 +14,7 @@ from llvmlite import ir
 from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
-from . import linalg
+from . import linalg, linalg_big
 from . import special
 
 
@@ -124,6 +124,48 @@ class LLOps:
 
     def eq(self, x, y):
         return self.b.fcmp_ordered("==", x, y)
+
+    # ---- loops, arrays and index values, for matrices larger than 4×4 (fermium.linalg_big, D195)
+    @staticmethod
+    def _i(v):
+        return i64(v) if isinstance(v, int) else v
+
+    def array(self, n):
+        return self.gen.alloca(ir.ArrayType(F64, n))
+
+    def iarray(self, n):
+        return self.gen.alloca(ir.ArrayType(I64, n))
+
+    def ld(self, arr, i):
+        return self.b.load(self.b.gep(arr, [I32(0), self._i(i)]))
+
+    def st(self, arr, i, v):
+        self.b.store(v, self.b.gep(arr, [I32(0), self._i(i)]))
+
+    def loop(self, lo, hi, body):
+        with self.gen.lp.range(self._i(lo), self._i(hi)) as i:
+            body(i)
+
+    def iadd(self, a, b):
+        return self.b.add(self._i(a), self._i(b))
+
+    def isub(self, a, b):
+        return self.b.sub(self._i(a), self._i(b))
+
+    def imul(self, a, b):
+        return self.b.mul(self._i(a), self._i(b))
+
+    def ieq(self, a, b):
+        return self.b.icmp_signed("==", self._i(a), self._i(b))
+
+    def iselect(self, c, a, b):
+        return self.b.select(c, self._i(a), self._i(b))
+
+    def and_(self, a, b):
+        return self.b.and_(a, b)
+
+    def not_(self, a):
+        return self.b.not_(a)
 
 
 def i64(v):
@@ -2306,6 +2348,22 @@ class FuncGen:
         xs = [b.extract_element(v, b.add(base, I32(o))) for o in e.offs]
         return xs[0] if len(xs) == 1 else self.pack(xs)
 
+    def e_IVecSet(self, e):
+        """M[i, j] = x, v[i] = x: insertelement at the checked flat index (D195)."""
+        b = self.b
+        v = self.expr(e.v)
+        x = self.expr(e.value)
+        base = i64(0)
+        for idx_e, size, stride in e.idxs:
+            idx = self.expr(idx_e)
+            inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, f64(size)))
+            i = b.fptosi(b.select(inside, idx, f64(1)), I64)
+            bad = b.or_(b.not_(inside), b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, idx, f64(-size))
+            base = b.add(base, b.mul(b.sub(i, i64(1)), i64(stride)))
+        return b.insert_element(v, x, b.trunc(base, I32))
+
     # ------------------------------------------------------------ matrices (D29)
     def unpack(self, v, n):
         return [self.b.extract_element(v, I32(k)) for k in range(n)]
@@ -2329,16 +2387,18 @@ class FuncGen:
         a = self.unpack(args[0], m.n)
         if name == "matmul":
             r, k, c = e.dims3
-            out = linalg.matmul(ops, a, r, k, self.unpack(args[1], k * c), c)
+            la = linalg_big if linalg_big.is_big(r, k, c) else linalg
+            out = la.matmul(ops, a, r, k, self.unpack(args[1], k * c), c)
             return out[0] if len(out) == 1 else self.pack(out)
+        la = linalg_big if linalg_big.is_big(m.r, m.c) else linalg      # loops beyond 4×4 (D195)
         if name == "det":
-            return linalg.det(ops, a, m.r)
+            return la.det(ops, a, m.r)
         if name in ("eigenvalues", "eigenvectors"):
             return self.eigen_op(e, args, ops, a, m.r)
         if name == "inverse":
-            out, piv = linalg.inverse(ops, a, m.r, f64(1), f64(0))
+            out, piv = la.inverse(ops, a, m.r, f64(1), f64(0))
         else:
-            out, piv = linalg.solve(ops, a, m.r, self.unpack(args[1], m.r), 1)
+            out, piv = la.solve(ops, a, m.r, self.unpack(args[1], m.r), 1)[:2]
         bad = None
         for p in piv:
             z = b.fcmp_ordered("==", p, f64(0))
@@ -2368,12 +2428,13 @@ class FuncGen:
             with b.if_then(bad, likely=False):
                 self.fail(kind)
             self.line = saved
+        la = linalg_big if linalg_big.is_big(n) else linalg      # loops beyond 4×4 (D195)
         for mat in mats:
-            check(linalg.asymmetry(ops, mat, n), "<", ERR_NOT_SYMMETRIC)
+            check(la.asymmetry(ops, mat, n), "<", ERR_NOT_SYMMETRIC)
         if len(mats) == 1:
-            vals, vecs = linalg.jacobi_eigen(ops, a, n)
+            vals, vecs = la.jacobi_eigen(ops, a, n)
         else:
-            vals, vecs, piv = linalg.generalized_eigen(ops, a, mats[1], n)
+            vals, vecs, piv = la.generalized_eigen(ops, a, mats[1], n)
             check(piv, "<=", ERR_NOT_POSDEF)
         return self.pack(vals if e.name == "eigenvalues" else vecs)
 

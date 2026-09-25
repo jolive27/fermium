@@ -47,9 +47,9 @@ r = 1 AU
 for v in [40 km/s, 42 km/s, 44 km/s]
     E = ½ v^2 - GM / r
     if E < 0 J/kg
-        print v, "bound, E =", E
+        print v, "bound, E =", E in J/kg
     else
-        print v, "escapes, E =", E
+        print v, "escapes, E =", E in J/kg
 print "escape velocity:", sqrt(2 GM / r) in km/s
 ```
 

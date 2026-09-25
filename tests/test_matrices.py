@@ -156,7 +156,8 @@ def test_matrix_in_functions_and_if():
     out = run("rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]\nv = <1, 0> m\n"
               "print rot(π/2) v to 3 digits\nsq(A) = A A\nprint sq([[1, 1], [0, 1]])\n"
               "big = true\nM = if big then 2 identity(2) else identity(2)\nprint M")
-    assert out.split("\n") == ["<6.12×10⁻¹⁷, 1.00> m", "[[1, 2], [0, 1]]", "[[2, 0], [0, 2]]"]
+    # cos(90°) is 6.12×10⁻¹⁷ in double precision: rounding noise next to 1.00, printed as 0 since D197
+    assert out.split("\n") == ["<0, 1.00> m", "[[1, 2], [0, 1]]", "[[2, 0], [0, 2]]"]
 
 
 def test_matrix_variable_can_be_reassigned():
@@ -167,7 +168,7 @@ def test_matrix_variable_can_be_reassigned():
 @pytest.mark.parametrize("src,phrase", [
     ("print [[1 m, 2 m], [3 m, 4 s]]", "all entries of a matrix need the same units"),
     ("print [[1, 2], [3]]", "every row of a matrix needs the same number of entries"),
-    ("print [[1, 2, 3, 4, 5], [1, 2, 3, 4, 5]]", "at most 4"),
+    ("print [[" + ", ".join(["1"] * 17) + "], [" + ", ".join(["1"] * 17) + "]]", "at most 16×16"),   # D195: was 4
     ("print [[1, 2], [3, 4]] m + [[1, 2], [3, 4]] s", "can't add matrices of length [m] and time [s]"),
     ("print [[1, 2], [3, 4]] + [[1, 2, 3], [4, 5, 6]]", "2×2 matrix and a 2×3 matrix"),
     ("print [[1, 2], [3, 4]] + 1", "can't add a matrix and a single number"),
@@ -177,8 +178,8 @@ def test_matrix_variable_can_be_reassigned():
     ("print 1 / [[1, 2], [3, 4]]", "can't divide by a matrix"),
     ("print det([[1, 2, 3], [4, 5, 6]])", "square"),
     ("print inverse([[1, 2, 3], [4, 5, 6]])", "square"),
-    ("print identity(5)", "identity(n) needs n = 2, 3 or 4"),
-    ("M = identity(2)\nM[1, 1] = 5", "can't be changed one at a time"),
+    ("print identity(17)", "identity(n) needs a whole number n from 2 to 16"),      # D195: was 5 > 4
+    ("M = identity(2)\nM[1, 1] = 5 m", "the entries of M are a plain number (no units); can't put length [m]"),  # D195
     ("n = 3\nprint identity(n)", "a fixed whole number"),
     ("M = identity(2)\nprint M[3, 1]", "row 3"),
     ("M = identity(2)\nprint M[1, 3]", "column 3"),

@@ -260,6 +260,7 @@ class IndexAssign(Node):
     index: Node
     value: Node
     op: str = "="
+    index2: object = None      # M[i, j] = … : the column (D195)
 
 
 @dataclass(eq=False)
@@ -414,6 +415,13 @@ class Program(Node):
 
 
 # ---------------------------------------------------------------- utilities
+def num_text(n):
+    """A number as written in the source (`2.50e19`, not Python's `2.5e+19`) for messages (gauntlet #81);
+    a number the parser made itself has no spelling, so it is formatted."""
+    raw = getattr(n, "raw", None)
+    return raw if raw else f"{n.value:g}"
+
+
 def children(n):
     """Direct child nodes of an expression node (for generic walks)."""
     if isinstance(n, (Num, Str, Bool, Name, End, Load)):

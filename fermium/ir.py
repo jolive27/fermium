@@ -146,6 +146,14 @@ class IVecElem(Expr):
         self.v, self.k, self.ty = v, k, ty
 
 
+class IVecSet(Expr):
+    """A copy of the vector or matrix v with one entry replaced: M[i, j] = x, v[i] = x (D195).  idxs as in
+    IVecIndex (each index checked at run time)."""
+
+    def __init__(self, v, idxs, value, ty, line=0):
+        self.v, self.idxs, self.value, self.ty, self.line = v, idxs, value, ty, line
+
+
 class IVecIndex(Expr):
     """Entries of a vector or matrix picked by indexes known only at run time (v[i], M[i, j], M[i]).
 

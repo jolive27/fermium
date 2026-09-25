@@ -19,7 +19,7 @@ from . import ir as I
 from .errors import FermiumError, FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
-from . import linalg
+from . import linalg, linalg_big
 from .runtime.stiff import abs_tolerances, step_small_kind
 from . import special
 from .uncertain import UFloat, UncertainUse
@@ -1389,6 +1389,18 @@ class Interpreter:
         xs = tuple(v[base + o] for o in e.offs)
         return xs[0] if len(xs) == 1 else xs
 
+    def e_IVecSet(self, e, fr):
+        v = self.eval(e.v, fr)
+        x = self.eval(e.value, fr)
+        base = 0
+        for idx_e, size, stride in e.idxs:
+            idx = self.eval(idx_e, fr)
+            i = int(idx) if math.isfinite(idx) else -1
+            if not (1 <= i <= size) or float(i) != idx:
+                raise _Fail(ERR_INDEX, idx, float(-size))
+            base += (i - 1) * stride
+        return v[:base] + (x,) + v[base + 1:]
+
     def e_IBin(self, e, fr):
         a, b = self.eval(e.a, fr), self.eval(e.b, fr)
         op = {"+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": fmul, "/": fdiv}[e.op]
@@ -1625,20 +1637,22 @@ class Interpreter:
         a = list(args[0])
         if name == "matmul":
             r, k, c = e.dims3
-            out = linalg.matmul(ops, a, r, k, list(args[1]), c)
+            la = linalg_big if linalg_big.is_big(r, k, c) else linalg
+            out = la.matmul(ops, a, r, k, list(args[1]), c)
             return out[0] if len(out) == 1 else tuple(out)
+        la = linalg_big if linalg_big.is_big(m.r, m.c) else linalg      # loops beyond 4×4 (D195)
         if name == "det":
-            return linalg.det(ops, a, m.r)
+            return la.det(ops, a, m.r)
         if name in ("eigenvalues", "eigenvectors"):     # mirrors CodeGen.eigen_op
             n = m.r
             mats = [a] + [list(x) for x in args[1:]]
             fail = None
-            if any(v < 0 for mat in mats for v in linalg.asymmetry(ops, mat, n)):
+            if any(v < 0 for mat in mats for v in la.asymmetry(ops, mat, n)):
                 fail = ERR_NOT_SYMMETRIC
             elif len(mats) == 1:
-                vals, vecs = linalg.jacobi_eigen(ops, a, n)
+                vals, vecs = la.jacobi_eigen(ops, a, n)
             else:
-                vals, vecs, piv = linalg.generalized_eigen(ops, a, mats[1], n)
+                vals, vecs, piv = la.generalized_eigen(ops, a, mats[1], n)
                 if any(p <= 0 for p in piv):
                     fail = ERR_NOT_POSDEF
             if fail is not None:
@@ -1647,9 +1661,9 @@ class Interpreter:
                 raise _Fail(fail)
             return tuple(vals if name == "eigenvalues" else vecs)
         if name == "inverse":
-            out, piv = linalg.inverse(ops, a, m.r, 1.0, 0.0)
+            out, piv = la.inverse(ops, a, m.r, 1.0, 0.0)
         else:
-            out, piv = linalg.solve(ops, a, m.r, list(args[1]), 1)
+            out, piv = la.solve(ops, a, m.r, list(args[1]), 1)[:2]
         if any(p == 0 for p in piv):
             if e.line:
                 self.line = e.line
