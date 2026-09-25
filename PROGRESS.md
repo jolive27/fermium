@@ -52,3 +52,9 @@ _Last updated: 2026-09-24 23:40 UTC_
 
 ## Blocked
 - (none)
+
+## Hourly log
+- 00:31 UTC. **Phase 1 (audit)**:
+  - Done: the clean-clone install, `make check`, all examples and the benchmark re-run; AUDIT.md written.
+  - Fixed so far: A5–A11, A15, A20–A22, A25, A27–A30 and most of the AUDIT §4 items.
+  - Next: the remaining AUDIT items (docs claims, bootcamp output boxes, stale PROGRESS/BACKLOG) and the rest of the adversarial list. Then Phase 2 (Jupyter kernel).
