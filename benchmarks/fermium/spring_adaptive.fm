@@ -5,7 +5,7 @@ k = 100 N/m
 b = 0.5 kg/s
 t0 = clock()
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 100 s tolerance 1e-10
 t1 = clock()
 print "x_100s", x(100 s) / (1 m) to 10 digits

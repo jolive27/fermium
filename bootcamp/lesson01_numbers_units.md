@@ -245,9 +245,11 @@ print sqrt(2 * g * h)
 14.0 m/s
 ```
 
-(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.) When you do write something like `2 g` after making your own `g`, Fermium notices and prints a **warning**, a yellow-flag message that doesn't stop the program:
+(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.)
 
-```fermium
+What if you write `2 g` after making your own `g`? Right after a number, `g` could mean grams (the rule above) or your variable. When `2 g` is multiplied by something else, like `2 g * h` or `2 g h`, you almost certainly meant your variable, so Fermium won't guess: it stops and asks you to say which one you mean.
+
+```
 g = 9.81 m/s^2
 h = 10 m
 print 2 g * h
@@ -255,14 +257,13 @@ print 2 g * h
 
 <!-- output -->
 ```
-warning: line 3: 'g' right after a number is the unit g, not your variable g
+line 3: '2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g
     print 2 g * h
             ^
-  hint: that's fine if you meant the unit; to multiply by your variable write 2*g
-0.02 kg m
+  hint: write  2*g  for 2 × your variable g, or  2 [g]  for the unit
 ```
 
-**Always read warnings.** They usually mean the program does something other than what you meant.
+Write `2*g` (or `2·g`) to multiply by your variable, or `2 [g]` for 2 grams. Units in square brackets are always units. On its own (`x = 0.1 m`, or `from 0 m to 0.2 m`), a number with a unit is read as the unit, with a warning if you also have a variable of that name, because there you almost always mean the unit. Longer units such as `9.81 m/s^2` are never ambiguous.
 
 One more place this rule shows up: `c` (the speed of light) is also a unit, so `1 AU / c` is read as "1 AU-per-speed-of-light", a perfectly good unit of time. Fermium prints it with its value in SI units next to it:
 

@@ -44,7 +44,7 @@ t_end = 30 s                 # e^{-γ t/2} = e^{-30}: the transient is gone
 for ratio in [0.50, 0.90, 0.99, 1.00, 1.10, 2.00]
     ω = ratio ω0
     solve m x'' = -k x - b x' + F0 cos(ω t)
-      with x(0) = 0 m, x'(0) = 0 m/s
+      with x(0) = 0 [m], x'(0) = 0 m/s
       for t from 0 s to t_end
     # x = A cos(ω t − δ) in the steady state, so A² = x² + (x'/ω)²
     xe = x(t_end)

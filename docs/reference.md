@@ -58,7 +58,10 @@ Rules (see DECISIONS.md D7):
 - Anywhere else, a name is a variable. `m v` is m times v.
 - A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
 - **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
-- If a unit name after a number is also one of your variables (for example `0.2 m` when you have a mass `m`), Fermium warns you once and explains how to write the other meaning (`2*m`). It is still the unit: `2 L` is 2 litres even when you have an inductance `L`. If that line then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L` (DECISIONS D34).
+- If a single unit name right after a number is also one of your variables, there are two cases (DECISIONS D7):
+  - **Multiplied or divided by something else** (`2 g h`, `0.5 m v²`, `2 g * h`), it's an **error** that asks which you mean: write `2*g` for your variable or `2 [g]` for the unit.
+  - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line or a later one then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L`.
+  - Compound units (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units.
 - **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
@@ -446,7 +449,7 @@ m = 0.5 kg
 k = 50 N/m
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 5 s
 print x(5 s)
 print x'(1 s)

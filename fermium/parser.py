@@ -684,11 +684,8 @@ class Parser:
                 if isinstance(n, A.BinOp) and n.implicit and isinstance(n.left, A.Quantity) and \
                         not n.left.bracket and len(n.left.unit.factors) == 1:
                     f = n.left.unit.factors[0]
-                    if f.name in names:
-                        self._note_collision(n.left, f)
-                        self.diags.warn(f"'{f.name}' after the number means the unit {f.name}, not the "
-                                        f"{f.name} from 'where'", line=f.line, col=f.col, length=len(f.name),
-                                        hint=f"write *{f.name} (e.g. 0.5*{f.name}) or ½ {f.name}")
+                    if f.name in names and f.exp == 1:
+                        self._ambiguous_unit(n.left, f, where=True)
 
     def where_bindings(self):
         self.next()
@@ -825,10 +822,16 @@ class Parser:
         while self.tok.kind == "OP" and self.tok.value in ("*", "/", "×"):
             if self.tok.value == "/" and self._ends_upper_limit():
                 break
+            c = self._colliding_unit(e)
+            if c is not None:          # `2 g * h`: combined with another factor, `2 g` is ambiguous (D7)
+                self._ambiguous_unit(*c)
             op = self.next()
             den_start = self.i
             tight = not op.ws_before and not self.tok.ws_before
             r = self.unary()
+            c = self._colliding_unit(r)
+            if c is not None and op.value != "/":      # `h * 2 g`
+                self._ambiguous_unit(*c)
             info = None
             if op.value == "/":
                 warned = self._check_ambiguous_division(e, r, op)
@@ -1025,6 +1028,32 @@ class Parser:
             if (num, f.name) not in lst:
                 lst.append((num, f.name))
 
+    def _colliding_unit(self, e):
+        """The (quantity, factor) if e is `2 g` with a single bare unit that is also one of your variables."""
+        if isinstance(e, A.Quantity) and not e.bracket and not e.paren and len(e.unit.factors) == 1:
+            f = e.unit.factors[0]
+            if f.name in self.known and f.name != "c" and f.exp == 1:
+                return e, f
+        return None
+
+    def _ambiguous_unit(self, q, f, where=False):
+        """D7 (revised after the gauntlet): a single unit name right after a number, when you also have a
+        variable of that name (`2 g`, `2 m v`, `3 V`), is ambiguous, and an error: say which you mean.
+        Compound units (`9.81 m/s²`, `3 m²`, `2 kg m`) are unambiguous and stay units."""
+        from .units import lookup_unit, dim_name
+        num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
+        u = lookup_unit(f.name)
+        words = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
+                 "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
+                 "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals", "u": "atomic mass units",
+                 "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
+        what = words.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        whose = f"the {f.name} from 'where'" if where else f"your variable {f.name}"
+        raise self.error(f"'{num} {f.name}' is ambiguous: right after a number, {f.name} is a unit ({what}), "
+                         f"but {f.name} is also {whose}",
+                         tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
+                         hint=f"write  {num}*{f.name}  for {num} × {whose}, or  {num} [{f.name}]  for the unit")
+
     def _warn_bare_unit(self, e):
         """Spec §3.4.2: a bare unit after a number that is also a variable name gets a warning (once per name)."""
         q = e
@@ -1034,13 +1063,14 @@ class Parser:
             f = q.unit.factors[0]
             if f.name in self.known and f.name != "c":
                 self._note_collision(q, f)
-            if f.name in self.known and f.name not in self.warned_units and f.name != "c":
+            then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
+            if f.name in self.known and f.name not in self.warned_units and f.name != "c" and not then_mul:
                 self.warned_units.add(f.name)
                 num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
-                self.diags.warn(f"'{f.name}' right after a number is the unit {f.name}, not your variable {f.name}",
+                self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not your variable {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
-                                hint=f"that's fine if you meant the unit; to multiply by your variable write "
-                                     f"{num}*{f.name}")
+                                hint=f"that's fine if you meant the unit (write {num} [{f.name}] to say so); for "
+                                     f"{num} × your variable write {num}*{f.name}")
 
     def _warn_unit_then_term(self, e):
         """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
@@ -1050,12 +1080,7 @@ class Parser:
         if isinstance(q, A.Quantity) and not q.bracket and not q.paren and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
             if f.name in self.known and f.exp == 1:
-                self._note_collision(q, f)
-                self.diags.warn(
-                    f"'{f.name}' after the number means the unit {f.name}, not your "
-                    f"variable {f.name}", line=f.line, col=f.col, length=len(f.name),
-                    hint=f"to multiply by your variable write {q.value.value:g}*{f.name}"
-                         if isinstance(q.value, A.Num) else f"write *{f.name} to multiply by your variable")
+                self._ambiguous_unit(q, f)
 
     def power(self):
         t = self.tok

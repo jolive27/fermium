@@ -143,9 +143,9 @@ print t
 
 ## ⚠️ Gotcha: the mass `m` and the metre `m`
 
-Physicists love the letter `m` for mass. Fermium also uses `m` for metres. Remember the rule from Lesson 1: **a unit name right after a number is a unit.** So:
+Physicists love the letter `m` for mass. Fermium also uses `m` for metres. Remember Lesson 1: right after a number, a unit name is a unit, and if you also have a variable with that name, Fermium asks you to choose:
 
-```fermium
+```
 m = 2 kg
 v = 3 m/s
 print 0.5 m v^2
@@ -153,14 +153,13 @@ print 0.5 m v^2
 
 <!-- output -->
 ```
-warning: line 3: 'm' after the number means the unit m, not your variable m
+line 3: '0.5 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m
     print 0.5 m v^2
               ^
-  hint: to multiply by your variable write 0.5*m
-4.5 m³/s²
+  hint: write  0.5*m  for 0.5 × your variable m, or  0.5 [m]  for the unit
 ```
 
-`0.5 m` is half a metre, not half the mass, so the answer has silly units. Fermium spotted the clash and warned us. Three correct ways to write kinetic energy:
+Without this check, `0.5 m` would quietly mean half a metre, and the answer would come out in silly units. Three correct ways to write kinetic energy:
 
 ```fermium
 m = 2 kg

@@ -231,7 +231,7 @@ convert.fm, line 1: can't show mass [kg] in N (force [N])
 
 **Fix:** check what you're converting. Often it reveals a mistake in a formula: if your "energy" can't be shown in J, the formula for it is wrong. The message tells you the units it actually has.
 
-## 10. warning: 'm' after the number means the unit m
+## 10. '0.5 m' is ambiguous (a unit name that is also your variable)
 
 <!-- run as mass.fm -->
 ```
@@ -243,16 +243,15 @@ print E
 
 <!-- output -->
 ```
-warning: line 3: 'm' after the number means the unit m, not your variable m
+mass.fm, line 3: '0.5 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m
     E = 0.5 m v^2
             ^
-  hint: to multiply by your variable write 0.5*m
-4.5 m³/s²
+  hint: write  0.5*m  for 0.5 × your variable m, or  0.5 [m]  for the unit
 ```
 
-**Means:** a unit name right after a number is **always** a unit. `0.5 m` is half a metre, not half the mass `m`. The program ran, but the answer (in m³/s²) is nonsense.
+**Means:** right after a number, `m` is the unit metre, but you also have a variable `m`. Multiplied by something else (`0.5 m v^2`), Fermium can't tell which you meant, so it stops instead of guessing. On its own (`x = 0.5 m`) it would be the metre, with a warning.
 
-**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or give the mass a longer name like `mass`. The same trap: `2 g h` (grams), `2 N` (newtons), `2 c` (speed of light). After `/` the rule is kinder: `20 m/s / g` (with a space before `/`) divides by your variable `g`, but `20 m/s/g` (no spaces) would still mean *per gram*. When in doubt, use parentheses: `(20 m/s) / g`.
+**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or write `0.5 [m]` if you really meant half a metre. Giving the mass a longer name like `mass` avoids the question altogether. The same situation: `2 g h` (grams), `3 V I` (volts), `27 b²` (barns). After `/` the rule is kinder: `20 m/s / g` (with a space before `/`) divides by your variable `g`, but `20 m/s/g` (no spaces) would still mean *per gram*. When in doubt, use parentheses: `(20 m/s) / g`.
 
 ## 11. warning: this is read as a/(b c)
 

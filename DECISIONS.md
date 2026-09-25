@@ -51,7 +51,15 @@ The rule (spec §3.4.2), refined:
    - `/` written without a space before it, and followed by a unit name, continues the unit (`50 N/m`, `3 m/s`), even when you have a variable with that name.
    - `/` with a space before it, followed by the name of one of *your* variables, divides by the variable. So with `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s and not "per gram", and `2.898e-3 m K / T` divides by the temperature T, not by tesla. (Changed after the bootcamp author hit exactly this trap.)
    - A space or `·`/`*` followed by a unit name continues the unit **only if you haven't defined a variable with that name**. So `70 kg g` with your own `g` is 70 kg × g, with a warning.
-5. If the first unit after a number is also one of your variables (`0.2 m` after `m = 0.5 kg`), Fermium prints a warning once per name: "that's fine if you meant the unit; to multiply by your variable write 0.2*m".
+5. **Collisions: a single unit name right after a number that is also one of your variables** (revised at 03:45 UTC after the gauntlet hit it in every topic and a review called it the biggest usability flaw):
+   - **Combined with other factors, it's an error** that asks which you mean: `2 g h`, `0.5 m v²`, `2 m v`, `2 g * h`, `h * 2 g`, `2 m / t`. The message says `'2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g`, with the hint `write 2*g for 2 × your variable g, or 2 [g] for the unit`.
+   - **Standing alone, it's the unit, with a warning** (the spec §3.4.2 behaviour): `x(0) = 0.1 m`, `from 0 m to 0.2 m`, `x = 3 m`, `f(2 L)`. A unit error later still gets the note naming the cause (D34, gauntlet #43).
+   - Compound units (`9.81 m/s²`, `3 m²`, `2 kg m`) and bracketed units (`2 [g]`) are never ambiguous. Constants that look like units (`2 G`, `2 h`: neither G nor h is a unit in Fermium) warn when alone.
+   - **Tradeoff.** In a product, "2 grams times h" is almost never meant when you have a variable g, and each gauntlet occurrence (`2 g h`, `2 m m2`, `3 V`, `27 b²`) was a silent or confusing wrong reading. So an error that costs one keystroke (`*` or `[ ]`) is cheap. Standing alone, the unit is almost always meant: an initial position `0.1 m` next to a mass `m` is the spec's own example, and it is protected by the unit check anyway. So erroring there would add friction for no safety.
+   - *Rejected alternatives:*
+     - Always an error on a collision: this breaks the spec's example and every spring program with a mass `m`.
+     - Choose whichever reading type-checks: the meaning of `2 m` would depend on distant code, and error messages would become unpredictable.
+     - A space-sensitive rule (`2m` a unit, `2 m` a product): invisible in print, and a trap of its own.
 - **Unit names we deliberately left out, because they collide with physics variables:**
   - `h` for hour: use `hr`.
   - `t` for tonne: use `tonne`.
