@@ -17,11 +17,12 @@ from dataclasses import dataclass, field
 from .checker import Checker, FuncInfo, SolView
 from .constants import all_constants
 from .errors import Diagnostics, FermiumError
+from .importer import ModuleRef
 from .lexer import KEYWORDS
 from .parser import parse
 from .symbols import LATEX
 from . import ir as I
-from .types import BoolTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
+from .types import BoolTy, ComplexTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
 from .units import lookup_unit, preferred_unit
 
 WORD = re.compile(r"[A-Za-z_\u0370-\u03ff\u1f00-\u1fffħ][A-Za-z0-9_\u0370-\u03ff\u1f00-\u1fffħ₀-₉]*")
@@ -100,6 +101,9 @@ def _type_text(ck: Checker, ty, hint=None):
         return s
     if isinstance(ty, ListTy):
         return "a list of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
+    if isinstance(ty, ComplexTy):
+        return "a complex number of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number (no units)",
+                                                                                   "plain numbers")
     if isinstance(ty, VecTy) and getattr(ty, "mixed", False):
         return f"a {ty.n}-D vector of (" + ", ".join(ck.desc(ck.U.resolve(d)) for d in ty.dims) + ")"
     if isinstance(ty, VecTy):
@@ -131,6 +135,10 @@ def hover_text(an: Analysis, source: str, line: int, char: int):
             return f"```fermium\n{ck.describe_function(b)}\n```"
         except Exception:
             return f"**{name}**: a function"
+    if isinstance(b, ModuleRef):
+        names = b.info.exported()
+        more = ", …" if len(names) > 12 else ""
+        return f"**{name}**: the module {b.info.name} ({b.info.display}): {', '.join(names[:12])}{more}"
     if isinstance(b, SolView):
         d = ck.U.resolve(b.dim)
         what = "vector " if getattr(b, "n", 1) > 1 else ""
@@ -163,6 +171,10 @@ def completions(an: Analysis, source: str, line: int, char: int):
         prefix = m.group()[::-1]
     start = char - len(prefix)
     out = []
+    mod = re.search(r"(" + WORD.pattern + r")\.$", text[:start])
+    b = an.checker.globals.names.get(mod.group(1)) if mod and an.checker is not None else None
+    if isinstance(b, ModuleRef):                 # springs.<Tab>: the module's names
+        return [(n, n, start, "") for n in b.info.exported() if n.startswith(prefix)]
     names = sorted(an.checker.globals.names) if an.checker is not None else []
     for n in names:
         if n.startswith(prefix) and not n.startswith("__") and "'" not in n and "_∂" not in n:

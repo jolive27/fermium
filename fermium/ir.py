@@ -351,3 +351,20 @@ class ILambda:
         self.state = []       # for 'ode': syms bound to y[i]
         self.col_syms = []    # for 'model'
         self.param_syms = []  # for 'model'
+
+
+class IPdeEval(Expr):
+    """u(x, t) of a PDE solution (D83): cubic interpolation in x between grid points (xa + k (xb - xa)/m),
+    Hermite in t between snapshots; comp0: the solution component of grid point 0 (the imaginary part of a
+    complex solution starts at m + 1).  which: 0 = u, 1 = ∂u/∂x, 2 = ∂u/∂t."""
+
+    def __init__(self, sol, xa, xb, m, comp0, x, t, which, ty):
+        self.sol, self.xa, self.xb, self.m, self.comp0 = sol, xa, xb, m, comp0
+        self.x, self.t, self.which, self.ty = x, t, which, ty
+
+
+class SAnimate(Stmt):
+    """plot u vs x animate over t (D83): the runtime draws the frames from the PDE solution."""
+
+    def __init__(self, anim_id, sol, xa, xb):
+        self.anim_id, self.sol, self.xa, self.xb = anim_id, sol, xa, xb

@@ -18,8 +18,11 @@ pytestmark = pytest.mark.skipif(find_cc() is None, reason="no C compiler")
 
 
 def programs():
+    # examples marked "fermium run only" use a solver that runs in Python (eigenvalue problems, PDEs: D82,
+    # D83); fermium build refuses them with an error that tests/test_m3_eigen.py and test_m3_pde.py check
     return [pytest.param(open(f, encoding="utf-8").read(), id=os.path.basename(f))
-            for f in sorted(glob.glob(os.path.join(ROOT, "examples", "*.fm")))]
+            for f in sorted(glob.glob(os.path.join(ROOT, "examples", "*.fm")))
+            if "fermium run only" not in open(f, encoding="utf-8").read()]
 
 
 def reference_programs():
@@ -27,7 +30,9 @@ def reference_programs():
     for i, m in enumerate(re.findall(r"```fermium\n(.*?)```", open(os.path.join(ROOT, "docs", "reference.md"),
                                                                      encoding="utf-8").read(), re.S)):
         # `using radau` runs SciPy, so fermium build refuses it (D42; tests/test_stiff.py checks the error)
-        if not re.search(r"\b(plot|fit|load)\b", m) and not re.search(r"\busing\s+(radau|bdf)\b", m):
+        # eigenvalue problems (lowest N) and PDEs run in Python too (D82, D83; test_m3_*.py check the error)
+        if not re.search(r"\b(plot|fit|load)\b", m) and not re.search(r"\busing\s+(radau|bdf)\b", m) and \
+                not re.search(r"\blowest\s+\d", m) and not re.search(r"solve\s+[^\n]*∂", m):
             progs.append(pytest.param(m, id=f"reference#{i + 1}"))
     return progs
 

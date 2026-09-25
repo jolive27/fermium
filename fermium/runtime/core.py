@@ -116,6 +116,10 @@ class Runtime:
         self.engine_ref = None
         self.err = sys.stderr
         self.warnings = []
+        # the random-number state (D80): compiled code and the interpreter both use this array
+        from ..rng import DEFAULT_STATE
+        self.rng_state = (ctypes.c_uint64 * 4)(*DEFAULT_STATE)
+        self.rng_addr = ctypes.addressof(self.rng_state)
         self._make_callbacks()
 
     # ------------------------------------------------------------ callbacks
@@ -179,6 +183,12 @@ class Runtime:
             vals, unit = seq_values(f, p, range(r * c))        # one number style for the whole matrix
             rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
             rt.line.append("[" + ", ".join(rows) + "]" + unit)
+
+        def print_cplx(fid, re_, im_):
+            """A complex number: 3 + 4i, (3 + 4i) Ω (D94)."""
+            from ..cplx import format_complex
+            f = rt.tables.fmts[fid]
+            rt.line.append(format_complex(re_, im_, f["rdim"], f["hint"], f["sf"], f["direct"]))
 
         def print_textlist(p, n):
             rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
@@ -261,9 +271,32 @@ class Runtime:
                 rt.error = getattr(ex, "message", None) or f"the stiff ODE solver failed: {ex}"
                 return 1
 
+        def fft(kind, a, b, n, dt, out):
+            try:
+                from .spectral import spectrum
+                vals = spectrum(kind, a[:n], b[:n] if b else None, dt)
+                for i, v in enumerate(vals):
+                    out[i] = v
+                return 0
+            except BaseException as ex:          # nothing may escape into the compiled code
+                rt.error = f"the Fourier transform failed: {ex}"
+                return 1
+
+        def pde(guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out):
+            from .m3rt import pde_cb
+            return pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out)
+
+        def animate(aid, solp, xa, xb):
+            from .m3rt import animate_cb
+            return animate_cb(rt, aid, solp, xa, xb)
+
+        def eigen(guard, fn, env, a, b, nstates, grid, method, out):
+            from .m3rt import eigen_cb
+            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out)
+
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
-                   "print_mvec": print_mvec, "print_mat": print_mat,
+                   "print_mvec": print_mvec, "print_mat": print_mat, "print_cplx": print_cplx,
                    "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
                    "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
@@ -273,6 +306,7 @@ class Runtime:
             "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
             "fm_print_mvec": CB(None, c_int64, DPTR, c_int64)(print_mvec),
             "fm_print_mat": CB(None, c_int64, DPTR, c_int64, c_int64)(print_mat),
+            "fm_print_cplx": CB(None, c_int64, c_double, c_double)(print_cplx),
             "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
@@ -288,6 +322,12 @@ class Runtime:
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
                            c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
+            "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
+            "fm_pde": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_double, c_double, c_double,
+                         c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, ctypes.POINTER(c_void_p))(pde),
+            "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
+            "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
+                           ctypes.POINTER(c_void_p))(eigen),
         }
         if llvm is not None:
             for name, cb in self.callbacks.items():

@@ -76,12 +76,12 @@ OPERATORS = ["+-", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "~=",
              "·", "×", "≤", "≥", "≠", "±", "≈", "|", ";", "ᵀ"]
 OP_CANON = {"·": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~="}
 IDENT_EXTRA = set("_°☉∞'")  # ' handled separately; kept out below
-SPECIAL_STANDALONE = {"π", "∞"}
+SPECIAL_STANDALONE = {"π", "∞", "𝑖"}   # 𝑖: the imaginary unit (D90), so 𝑖ħ is 𝑖 · ħ
 
 
 @dataclass
 class Token:
-    kind: str          # NUM NAME KW STR OP SUP PRIME NEWLINE INDENT DEDENT EOF
+    kind: str          # NUM IMAG NAME KW STR OP SUP PRIME NEWLINE INDENT DEDENT EOF
     value: object      # canonical value (float / canonical name / operator / keyword)
     raw: str           # exact source text
     line: int
@@ -389,6 +389,11 @@ class Lexer:
                                p - start)
         if p < len(s) and s[p] == "." and p + 1 < len(s) and s[p + 1] in DIGITS:
             raise FermiumError(f"this number has two decimal points: {s[start:p + 2]}...", line, col, p - start + 2)
+        if p < len(s) and s[p] == "i" and not (p + 1 < len(s) and _is_ident_char(s[p + 1])):
+            # 4i, 2.5i, 1e3i: an imaginary literal (D90). `4 i` (a space) is still 4 times a variable i
+            self.adv(1)
+            self.add("IMAG", value, start, line, col, ws, sigfigs=_count_sigfigs(mantissa), digit=True)
+            return
         self.add("NUM", value, start, line, col, ws, sigfigs=_count_sigfigs(mantissa), digit=True)
 
     def _string(self, ws):

@@ -1,0 +1,48 @@
+# 41 — Partial differential equations: heat in a rod, a plucked string, and a wave packet tunnelling
+#
+# `solve` also takes a PDE in x and t: write the equation with ∂ (∂u/∂t, ∂²u/∂x²), the initial value
+# u(x, 0 s), a boundary condition at each end, and two ranges.  The result u(x, t) can be evaluated,
+# integrated and plotted — or animated.  Compare example 17, which does the heat equation by hand.
+# (fermium run only: PDEs run in Python, so fermium build refuses them.)
+
+# 1. Heat in a copper rod with both ends held at room temperature (Crank–Nicolson)
+L = 0.50 m
+α_Cu = 1.11e-4 m²/s
+T_room = 293 K
+solve ∂T/∂t = α_Cu * ∂²T/∂x²
+    with T(x, 0 s) = T_room + 80 K * sin(π x / L), T(0 m, t) = T_room, T(L, t) = T_room
+    for x from 0 m to L, t from 0 s to 200 s
+bump = T(L / 2, 200 s) - T_room
+exact = 80 K * exp(-α_Cu π² 200 s / L²)
+print "rod: bump after 200 s:", bump to 6 digits, " exact:", exact to 6 digits
+print "rod: relative error:", abs(bump - exact) / exact to 2 digits
+plot T vs x to "gallery/heat_pde.png"
+
+# 2. A guitar string plucked in the middle (a triangle), fixed at both ends
+Ls = 0.65 m
+v = 400 m/s                              # wave speed on the string
+h0 = 3 mm
+solve ∂²y/∂t² = v² ∂²y/∂x²
+    with y(x, 0 s) = h0 * (1 - abs(2 x / Ls - 1)), ∂y/∂t(x, 0 s) = 0 m/s, y(0 m, t) = 0 m, y(Ls, t) = 0 m
+    for x from 0 m to Ls, t from 0 s to 2 Ls / v
+    grid 650
+print "string: middle after half a period:", y(Ls / 2, Ls / v) in mm to 6 digits, " (d'Alembert: exactly -3 mm)"
+print "string: back after one period:", y(Ls / 2, 2 Ls / v) in mm to 6 digits
+print "string: fundamental frequency v/(2L) =", v / (2 Ls) in Hz to 4 digits
+
+# 3. An electron wave packet (0.2 eV) meets a 0.3 eV barrier 1 nm wide: part of it tunnels through
+m = m_e
+σ = 2 nm
+E0 = 0.2 eV
+k0 = sqrt(2*m E0) / ħ
+V(x) = if abs(x) < 0.5 nm then 0.3 eV else 0 eV
+solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x² + V(x) ψ
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-(x + 15 nm)² / (4σ²)) exp(i k0 x), ψ(-60 nm, t) = 0 nm^(-1/2), ψ(60 nm, t) = 0 nm^(-1/2)
+    for x from -60 nm to 60 nm, t from 0 fs to 100 fs
+    grid 1600
+P_back = ∫ |ψ(x, 100 fs)|^2 dx from -60 nm to -0.5 nm
+P_in = ∫ |ψ(x, 100 fs)|^2 dx from -0.5 nm to 0.5 nm
+P_through = ∫ |ψ(x, 100 fs)|^2 dx from 0.5 nm to 60 nm
+print "tunnelling: probability beyond the barrier:", P_through to 3 digits, "  reflected:", P_back to 3 digits
+print "tunnelling: total probability (Crank–Nicolson keeps it):", P_back + P_in + P_through to 4 digits
+plot ψ vs x animate over t frames 40 to "gallery/tunnelling.gif"

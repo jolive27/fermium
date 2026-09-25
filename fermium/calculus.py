@@ -98,6 +98,8 @@ def map_children(e, f):
         return _copy(e, func=f(e.func), args=[f(a) for a in e.args])
     if isinstance(e, A.Index):
         return _copy(e, target=f(e.target), index=f(e.index))
+    if isinstance(e, A.Slice):
+        return _copy(e, lo=f(e.lo) if e.lo is not None else None, hi=f(e.hi) if e.hi is not None else None)
     if isinstance(e, (A.Field, A.Prime)):
         return _copy(e, target=f(e.target))
     if isinstance(e, A.Deriv):
@@ -139,6 +141,9 @@ BUILTIN_DERIVS = {
     "sin": lambda u: call("cos", u),
     "cos": lambda u: neg(call("sin", u)),
     "tan": lambda u: div(num(1), pw(call("cos", u), 2)),
+    "cot": lambda u: neg(div(num(1), pw(call("sin", u), 2))),
+    "sec": lambda u: mul(call("sec", u), call("tan", u)),
+    "csc": lambda u: neg(mul(call("csc", u), call("cot", u))),
     "exp": lambda u: call("exp", u),
     "ln": lambda u: div(num(1), u),
     "log": lambda u: div(num(1), u),
@@ -716,6 +721,8 @@ def _src(e, pretty):
         if e.op == "*":
             l, lp = _src(e.left, pretty)
             r, rp = _src(e.right, pretty)
+            if isinstance(e.left, A.Num) and isinstance(e.right, A.Name) and e.right.name == "𝑖" and lp >= PREC_JUXT:
+                return f"{l}i", PREC_JUXT              # the imaginary literal 4i (D90)
             if lp >= PREC_JUXT and rp >= PREC_JUXT and not r.startswith("-"):
                 sep = " "
                 if isinstance(e.right, (A.Num, A.Quantity)):
@@ -800,6 +807,10 @@ def _src(e, pretty):
         return f"{_src(e.value, pretty)[0]} where {b}", 0
     if isinstance(e, A.End):
         return "end", PREC_ATOM
+    if isinstance(e, A.Slice):
+        lo = _src(e.lo, pretty)[0] if e.lo is not None else ""
+        hi = _src(e.hi, pretty)[0] if e.hi is not None else ""
+        return f"{lo}:{hi}", PREC_ATOM
     if isinstance(e, A.Load):
         return f'load "{e.path}"', PREC_ATOM
     return f"<{type(e).__name__}>", PREC_ATOM
@@ -881,6 +892,8 @@ def to_sympy(e, symbols, positive=frozenset(), quantities=None):
         if isinstance(e, A.Name):
             if e.name == "π":
                 return sp.pi
+            if e.name == "𝑖":             # the imaginary unit (D90), not a real symbol
+                return sp.I
             if e.name not in symbols:
                 if e.name in positive:
                     symbols[e.name] = sp.Symbol(e.name, positive=True)
@@ -912,7 +925,7 @@ def to_sympy(e, symbols, positive=frozenset(), quantities=None):
 
 def SYMPY_FUNCS():
     import sympy as sp
-    return {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "exp": sp.exp, "ln": sp.log, "log": sp.log,
+    return {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "cot": sp.cot, "sec": sp.sec, "csc": sp.csc, "exp": sp.exp, "ln": sp.log, "log": sp.log,
             "sinh": sp.sinh, "cosh": sp.cosh, "tanh": sp.tanh, "asin": sp.asin, "acos": sp.acos,
             "atan": sp.atan, "sqrt": sp.sqrt, "abs": sp.Abs, "asinh": sp.asinh, "acosh": sp.acosh,
             "atanh": sp.atanh, "erf": sp.erf, "erfc": sp.erfc, "sign": sp.sign}
@@ -934,6 +947,8 @@ def from_sympy(x, back=None):
         return num(float(x))
     if x is sp.pi:
         return name("π")
+    if x is sp.I:
+        return name("𝑖")
     if x.is_Symbol:
         if back and x.name in back:
             return back[x.name]

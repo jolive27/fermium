@@ -134,9 +134,10 @@ def env_slots(sym):
 
 
 class ModuleGen:
-    def __init__(self, name="fermium", arena_base=None):
+    def __init__(self, name="fermium", arena_base=None, rng_addr=None):
         self.module = ir.Module(name=name)
         self.arena_base = arena_base
+        self.rng_addr = rng_addr      # the runtime's random-number state (D80), or None for a module global
         self.globals = {}
         self.funcs = {}
         self.pending = []
@@ -1973,6 +1974,10 @@ class FuncGen:
                     b.call(ex["fm_print_mat"], [i64(fid), p, i64(payload.ty.r), i64(payload.ty.c)])
                 else:
                     b.call(ex["fm_print_" + kind], [i64(fid), p, i64(n)])
+            elif kind == "cplx":
+                v = self.expr(payload)
+                f = self.mg.extern("fm_print_cplx", VOID, [I64, F64, F64])
+                b.call(f, [i64(fid), b.extract_element(v, I32(0)), b.extract_element(v, I32(1))])
             elif kind == "bool":
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
@@ -1985,6 +1990,8 @@ class FuncGen:
         b.call(ex["fm_print_end"], [])
 
     def s_SSolve(self, s):
+        if s.method in codegen_m3.PY_SOLVES:           # eigenvalue problems, PDEs (D82, D83)
+            return codegen_m3.py_solve(self, s)
         b = self.b
         n = sum(getattr(e.ty, "n", 1) for e in s.y0)
         y0 = self.alloca(ir.ArrayType(F64, n))
@@ -2551,7 +2558,11 @@ class FuncGen:
         self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)
         self.mark_line()
         k = self.mg.kernel("fm_sol_eval")
-        return self.b.call(k, [self.expr(e.sol), i64(e.comp), self.expr(e.t), i64(1 if e.use_dy else 0)])
+        sol = self.expr(e.sol)
+        dy = i64(1 if e.use_dy else 0)
+        if isinstance(e.ty, ListTy):         # u(ts): the value at each time in a list (#62)
+            return self.map_list(self.expr(e.t), lambda t, i: self.b.call(k, [sol, i64(e.comp), t, dy]))
+        return self.b.call(k, [sol, i64(e.comp), self.expr(e.t), dy])
 
     def e_ISolList(self, e):
         b = self.b
@@ -2595,6 +2606,7 @@ class FuncGen:
     MATH_LIBM = {"asinh": "asinh", "acosh": "acosh", "atanh": "atanh", "erf": "erf", "erfc": "erfc",
                  "gamma": "tgamma", "lgamma": "lgamma", "expm1": "expm1", "log1p": "log1p"}
     NEW_INTRINSICS = {"tan", "asin", "acos", "atan", "sinh", "cosh", "tanh"}
+    RECIPROCAL_TRIG = {"cot": "tan", "sec": "cos", "csc": "sin"}
 
     def math1(self, name, x):
         b = self.b
@@ -2604,6 +2616,8 @@ class FuncGen:
             return b.call(self.mg.libm(name), [x])
         if name in self.MATH_LIBM:
             return b.call(self.mg.libm(self.MATH_LIBM[name]), [x])
+        if name in self.RECIPROCAL_TRIG:      # cot = 1/tan, sec = 1/cos, csc = 1/sin (#63)
+            return b.fdiv(f64(1), self.math1(self.RECIPROCAL_TRIG[name], x))
         if name == "sign":
             pos = b.uitofp(b.fcmp_ordered(">", x, f64(0)), F64)
             neg = b.uitofp(b.fcmp_ordered("<", x, f64(0)), F64)
@@ -2618,6 +2632,11 @@ class FuncGen:
             r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
             return b.fmul(sg, r)
         args = [self.expr(a) for a in e.args]
+        if name in codegen_m3.M3_BUILTINS:
+            return codegen_m3.builtin(self, name, e, args)
+        if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
+            from . import cplx
+            return cplx.ll_builtin(self, e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
@@ -2641,7 +2660,7 @@ class FuncGen:
             if name == "norm":
                 return nrm
             return b.fdiv(args[0], self.splat(nrm, n))
-        if name in self.MATH_INTRINSICS or name in self.MATH_LIBM or name == "sign":
+        if name in self.MATH_INTRINSICS or name in self.MATH_LIBM or name in self.RECIPROCAL_TRIG or name == "sign":
             if isinstance(e.args[0].ty, ListTy):
                 return self.map_list(args[0], lambda x, i: self.math1(name, x))
             return self.math1(name, args[0])
@@ -2671,8 +2690,6 @@ class FuncGen:
             return b.call(self.mg.intrinsic("minnum"), [b.call(self.mg.intrinsic("maxnum"), [x, lo]), hi])
         if name == "factorial":
             return b.call(self.mg.libm("tgamma"), [b.fadd(args[0], f64(1))])
-        if name == "rand":
-            return b.call(self.mg.externs["drand48"], [])
         if name == "clock":
             return b.call(self.mg.externs["fm_clock"], [])
         if name == "len":
@@ -2755,6 +2772,27 @@ class FuncGen:
             return out
         if name == "copy":
             return self.map_list(args[0], lambda x, i: x)
+        if name == "slice":        # xs[a:b], both ends included; xs[a:a-1] is empty (D114)
+            lst, lo, hi = args
+            cnt = self.alloca(I64)
+            srcp = self.alloca(F64P)
+            with b.if_else(b.fcmp_ordered("==", hi, b.fsub(lo, f64(1)))) as (empty, other):
+                with empty:
+                    b.store(i64(0), cnt)
+                    b.store(self.ldata(lst), srcp)
+                with other:
+                    with b.if_then(b.fcmp_ordered("<", hi, b.fsub(lo, f64(1))), likely=False):
+                        self.fail(ERR_ASSERT, f64(e.msg_id))
+                    p = self.elem_ptr(lst, lo)
+                    self.elem_ptr(lst, hi)
+                    b.store(b.add(b.sub(b.fptosi(hi, I64), b.fptosi(lo, I64)), i64(1)), cnt)
+                    b.store(p, srcp)
+            n = b.load(cnt)
+            src = b.load(srcp)
+            out, data = self.new_list(n)
+            with self.lp.range(i64(0), n) as i:
+                b.store(b.load(b.gep(src, [i])), b.gep(data, [i]))
+            return out
         if name == "reverse":
             src = self.ldata(args[0])
             n = self.llen(args[0])
@@ -2901,3 +2939,8 @@ class LambdaGen(FuncGen):
                     self.store(sym, b.load(b.gep(colp, [i])))
                 b.store(self.expr(lam.body), b.gep(out, [i]))
             b.ret_void()
+
+
+from . import codegen_m3  # noqa: E402  (M3 numerics: random numbers, FFT, PDEs; D80–D84)
+codegen_m3.attach(ModuleGen)
+codegen_m3.attach_funcgen(FuncGen)

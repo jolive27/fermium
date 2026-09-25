@@ -146,7 +146,7 @@ Textbook problems from ten fields of physics, solved in Fermium and checked agai
 | astrophysics | 4 | 3 |
 | **total** | **31** | **30** |
 
-Friction items logged: 59; fixed in the language: 52.
+Friction items logged: 59; fixed in the language: 53.
 <!-- /gauntlet-table -->
 
 ## Browser playground

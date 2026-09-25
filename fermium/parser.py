@@ -217,6 +217,12 @@ class Parser:
                 if end_line and not isinstance(s, (A.If, A.For, A.ForIn, A.While, A.Solve)):
                     self.end_statement()
                 return s
+        if (t.kind == "NAME" and t.value == "import" or t.kind == "KW" and t.value == "from") and \
+                self.peek().kind in ("NAME", "STR"):
+            s = self.import_stmt()
+            if end_line:
+                self.end_statement()
+            return s
         if t.kind == "NAME" and t.value == "analyze" and self._is_analyze():
             s = self.analyze_stmt()
             if end_line:
@@ -252,6 +258,9 @@ class Parser:
                     if self.at_op(","):
                         raise self.error("the entries of a matrix can't be changed one at a time; build the new "
                                          "matrix instead, like M = M + [[1, 0], [0, 0]]")
+                    if self.at_op(":"):
+                        raise self.error("a slice xs[a:b] can be read but not assigned to; set the elements "
+                                         "one at a time, like  for i from a to b  then  xs[i] = ...")
                     self.expect_op("]")
                     op = self.next().value
                     val = self.expr_where()
@@ -415,32 +424,28 @@ class Parser:
     def plot_stmt(self):
         t = self.next()
         series = []
-        while True:
-            st = self.tok
-            y = self.expr_full()
-            self.expect_kw("vs", "(write: plot y vs x)")
-            x = self.expr_full()
-            lo = hi = None
-            if self.at_kw("from"):
-                self.next()
-                lo = self.expr()
-                self.expect_kw("to")
-                hi = self.expr()
-            series.append(self.span(A.PlotSeries(y, x, lo, hi), st))
-            if self.at_op(",") or self.at_kw("and"):
-                self.next()
-                continue
-            break
+        saved_nj = self.no_juxt_names
+        # plot y vs x title "…": `x title` isn't a product (#65); plot u vs x animate over t (D83)
+        self.no_juxt_names = saved_nj | {w for w in ("title", "animate") if w not in self.known}
+        try:
+            bare_opts = self._plot_series(series)
+        finally:
+            self.no_juxt_names = saved_nj
         out = None
         opts = {}
-        while self.at_kw("to") or self.at_kw("with"):
-            if self.at_kw("to"):
+
+        def animate_next():
+            return self.tok.kind == "NAME" and self.tok.value == "animate" and "animate" not in self.known
+        while bare_opts or self.at_kw("to") or self.at_kw("with") or animate_next():
+            if not bare_opts and self.at_kw("to"):
                 self.next()
                 if self.tok.kind != "STR":
                     raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
                 out = self.next().value
                 continue
-            self.next()      # with log y / with log / with title "..."
+            if not bare_opts and not animate_next():
+                self.next()      # with log y / with log / with title "..."   (`animate over t` needs no `with`)
+            bare_opts = False
             while True:
                 w = self.tok
                 if w.kind == "NAME" and w.value == "log":
@@ -453,13 +458,23 @@ class Parser:
                 elif w.kind == "NAME" and w.value in ("points", "dots", "markers"):
                     self.next()
                     opts["points"] = True        # scatter: markers, no lines (research/semf_ame2020)
+                elif w.kind == "NAME" and w.value == "animate":
+                    self.next()             # with animate over t [frames 60]  (D83)
+                    if not (self.tok.kind == "NAME" and self.tok.value == "over"):
+                        raise self.error("write  with animate over t  (the variable that changes from frame to frame)")
+                    self.next()
+                    opts["animate"] = self.expect_name("the variable to animate over, like t").value
+                    if self.tok.kind == "NAME" and self.tok.value == "frames" and self.peek().kind == "NUM":
+                        self.next()
+                        opts["frames"] = self.next().value
                 elif w.kind == "NAME" and w.value == "title":
                     self.next()
                     if self.tok.kind != "STR":
                         raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
                     opts["title"] = self.next().value
                 else:
-                    raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\"")
+                    raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\",  "
+                                     "with animate over t")
                 if self.at_op(","):
                     self.next()
                     continue
@@ -467,6 +482,46 @@ class Parser:
         p = self.span(A.Plot(series, out), t)
         p.options = opts
         return p
+
+    def _plot_series(self, series):
+        """The `y vs x [from a to b]` series of a plot, separated by ',' or 'and'. True when plot options
+        follow without `with`: `plot y vs x, title "…"` or `plot y vs x title "…"` (#65)."""
+        while True:
+            st = self.tok
+            y = self.expr_full()
+            if not self.at_kw("vs") and (self.tok.kind == "STR" or (self.tok.kind == "NAME" and
+                                                                    self.tok.value == "title")):
+                raise self.error("expected 'vs' after the quantity to plot; a title goes after the series, "
+                                 "like  plot y vs x, title \"Orbit\"  (or  with title \"Orbit\")")
+            self.expect_kw("vs", "(write: plot y vs x)")
+            x = self.expr_full()
+            lo = hi = None
+            if self.at_kw("from"):
+                self.next()
+                lo = self.expr()
+                self.expect_kw("to")
+                hi = self.expr()
+            series.append(self.span(A.PlotSeries(y, x, lo, hi), st))
+            if self.at_op(",") or self.at_kw("and"):
+                self.next()
+                if self._plot_option_ahead():
+                    return True
+                continue
+            return self.tok.kind == "NAME" and self.tok.value == "title" and self._plot_option_ahead()
+
+    def _plot_option_ahead(self):
+        """After a ',' in a plot: does a plot option (title "…", log [x|y], points) follow rather than
+        another series? Only when the word isn't one of the program's names and its shape fits."""
+        w, nx = self.tok, self.peek()
+        if w.kind != "NAME" or w.value in self.known:
+            return False
+        ends = nx.kind in ("NEWLINE", "EOF") or (nx.kind == "OP" and nx.value == ",") or \
+            (nx.kind == "KW" and nx.value in ("to", "with"))
+        if w.value == "title":
+            return nx.kind == "STR"
+        if w.value == "log":
+            return ends or (nx.kind == "NAME" and nx.value in ("x", "y"))
+        return w.value in ("points", "dots", "markers") and ends
 
     def equation(self):
         st = self.tok
@@ -485,6 +540,7 @@ class Parser:
         method = None
         tol_node = [None]
         until = [None]
+        m3 = {}                   # `lowest N` / `grid N` of an eigenvalue problem or a PDE (D82, D83)
         if self.tok.kind != "NEWLINE":
             eqs.append(self.equation())
             while self.at_op(",") or self.at_kw("and"):
@@ -506,23 +562,74 @@ class Parser:
                 var = vt.value
                 self.expect_kw("from")
                 saved = self.no_juxt_names
-                self.no_juxt_names = saved | {"tolerance", "using", "method", "until"}
+                self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
                 lo = self.expr()
                 self.expect_kw("to")
                 hi = self.expr()
                 if self.at_kw("step"):
                     self.next()
                     step = self.expr()
+                # `tolerance`, `using`/`method` and `until` may follow in any order; the tolerance
+                # expression is parsed with the option words still excluded from juxtaposition, so
+                # `tolerance 1e-11 using radau` does not read `1e-11 using` as a product (D111).
+                seen = set()
+                while self.tok.kind == "NAME":
+                    word = self.tok.value
+                    if word == "tolerance":
+                        key = "tolerance"
+                    elif word in ("using", "method"):
+                        key = "using"
+                    elif word == "until" and "until" not in self.known:
+                        key = "until"
+                    else:
+                        break
+                    if key in seen:
+                        raise self.error(f"'{word}' is given twice in this solve")
+                    seen.add(key)
+                    self.next()
+                    if key == "tolerance":
+                        tol_node[0] = self.expr()
+                    elif key == "using":
+                        method = self.expect_name("a method name (rk4, rk45, radau or bdf)").value
+                    else:
+                        until[0] = self.equation()   # for t from 0 s to 9 s until y = 0 m  (D39)
                 self.no_juxt_names = saved
+                if self.at_op(",") and self.peek().kind == "NAME" and self.peek(2).kind == "KW" and \
+                        self.peek(2).value == "from":
+                    self.next()             # a second range: a PDE in x and t (D83)
+                    m3["var2"] = self.next().value
+                    self.expect_kw("from")
+                    self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
+                    m3["lo2"] = self.expr()
+                    self.expect_kw("to")
+                    m3["hi2"] = self.expr()
+                    if self.at_kw("step"):
+                        self.next()
+                        m3["step2"] = self.expr()
+                    self.no_juxt_names = saved
+                # options after a PDE's second range (the loop above handles them after the first)
                 if self.tok.kind == "NAME" and self.tok.value == "tolerance":
                     self.next()
                     tol_node[0] = self.expr()
                 if self.tok.kind == "NAME" and self.tok.value in ("using", "method"):
                     self.next()
-                    method = self.expect_name("a method name (rk4 or rk45)").value
+                    method = self.expect_name("a method name (rk4, rk45, radau or bdf)").value
                 if self.tok.kind == "NAME" and self.tok.value == "until" and "until" not in self.known:
                     self.next()              # for t from 0 s to 9 s until y = 0 m  (D39)
                     until[0] = self.equation()
+                return True
+            if self.tok.kind == "NAME" and self.tok.value in ("lowest", "grid") and self.tok.value not in self.known \
+                    and self.peek().kind == "NUM":
+                word = self.next().value      # lowest 3 [states]  /  grid 400  (D82, D83)
+                saved = self.no_juxt_names
+                self.no_juxt_names = saved | {"states", "levels", "state", "grid", "lowest", "using", "method"}
+                m3[word] = self.expr()
+                self.no_juxt_names = saved
+                if self.tok.kind == "NAME" and self.tok.value in ("states", "levels", "state") and word == "lowest":
+                    self.next()
+                if self.tok.kind == "NAME" and self.tok.value in ("using", "method") and method is None:
+                    self.next()
+                    method = self.expect_name("a method name (matrix or shooting)").value
                 return True
             return False
 
@@ -566,6 +673,9 @@ class Parser:
         s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
         if until[0] is not None:
             s.until = until[0]
+        s.lowest = m3.get("lowest")
+        s.grid = m3.get("grid")
+        s.var2, s.lo2, s.hi2, s.step2 = m3.get("var2"), m3.get("lo2"), m3.get("hi2"), m3.get("step2")
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
             for n in A.walk(eq.lhs):
@@ -595,6 +705,39 @@ class Parser:
                     if k > 0 and isinstance(g, A.Name) and g.name in unknowns:
                         self._warn_juxt_denominator(info, k, why=f", including the unknown {g.name}")
                         break
+
+    def import_stmt(self):
+        """import mechanics [as m] | import "path/file.fm" [as m] | from mechanics import a [as b], c  (D100)"""
+        t = self.next()
+        frm = t.value == "from"
+        mt = self.next()
+        module, is_path = (mt.value, True) if mt.kind == "STR" else (mt.raw, False)
+        if not frm:
+            alias = None
+            if self.tok.kind == "NAME" and self.tok.value == "as":
+                self.next()
+                alias = self.expect_name("a name after 'as' (like  import astro as a)").value
+            if self.at_op(","):
+                raise self.error("import one module per line", hint="write each on its own line:  import mechanics")
+            self.known.add(alias or mt.value)
+            return self.span(A.Import(module, is_path, alias, None), t)
+        if not (self.tok.kind == "NAME" and self.tok.value == "import"):
+            raise self.error(f"expected 'import' after 'from {mt.raw}'" + self._found(),
+                             hint=f"write  from {mt.raw} import name1, name2")
+        self.next()
+        names = []
+        while True:
+            nt = self.expect_name(f"a name to import from {mt.raw} (like  from nuclear import semf_binding)")
+            alias = None
+            if self.tok.kind == "NAME" and self.tok.value == "as":
+                self.next()
+                alias = self.expect_name("a name after 'as'").value
+            names.append((nt.value, alias))
+            self.known.add(alias or nt.value)
+            if not self.at_op(","):
+                break
+            self.next()
+        return self.span(A.Import(module, is_path, None, names), t)
 
     def _is_analyze(self):
         """`analyze [title:] T depends on ...`: 'depends' follows on the same line (so `analyze` stays a name)."""
@@ -1036,7 +1179,7 @@ class Parser:
         t = self.tok
         if t.kind == "OP" and t.value == "[" and t.ws_before and not self._bracket_is_unit():
             return True
-        if t.kind == "NUM":
+        if t.kind in ("NUM", "IMAG"):
             return True
         if t.kind == "NAME":
             return t.value not in self.no_juxt_names
@@ -1198,10 +1341,13 @@ class Parser:
         if self.at_op("+"):
             self.next()
             return self.exponent()
-        if self.tok.kind == "NUM":
+        if self.tok.kind in ("NUM", "IMAG"):
             nt = self.next()
             base = A.Num(nt.value, nt.sigfigs, nt.digit)
             base.line, base.col, base.length = nt.line, nt.col, len(nt.raw)
+            if nt.kind == "IMAG":
+                base = A.Name("𝑖").at(base) if nt.value == 1 and nt.sigfigs is None else \
+                    A.BinOp("*", base, A.Name("𝑖").at(base)).at(base)
         else:
             base = self.postfix()
         if self.at_op("^"):
@@ -1262,8 +1408,12 @@ class Parser:
                     u = self.unit_expr(explicit=False)          # vec(3, 4) m/s
                     e = self.span(A.Quantity(e, u), t)
             elif self.at_op("[") and not self.tok.ws_before:
-                self.next()
-                idx = self.expr()
+                st = self.next()
+                idx = None if self.at_op(":") else self.expr()
+                if self.at_op(":"):                     # xs[a:b], xs[:b], xs[a:] (D114)
+                    self.next()
+                    hi = None if self.at_op("]") else self.expr()
+                    idx = self.span(A.Slice(idx, hi), st)
                 e = self.span(A.Index(e, idx), t)
                 if self.at_op(","):                     # M[i, j] is M[i][j] (a matrix entry, D29)
                     self.next()
@@ -1287,10 +1437,14 @@ class Parser:
 
     def atom(self):
         t = self.tok
-        if t.kind == "NUM":
+        if t.kind in ("NUM", "IMAG"):
             self.next()
             n = A.Num(t.value, t.sigfigs, t.digit)
             n.line, n.col, n.length = t.line, t.col, len(t.raw)
+            if t.kind == "IMAG":             # 4i is 4 × 𝑖 and 1i is 𝑖 (D90); a unit may follow: 4i Ω
+                n = A.Name("𝑖").at(n) if t.value == 1 and t.sigfigs is None else \
+                    A.BinOp("*", n, A.Name("𝑖").at(n)).at(n)
+                n.imag_literal = True
             if t.digit:
                 if self.at_op("[") and self._bracket_is_unit():
                     u = self.bracket_unit()
@@ -1604,6 +1758,17 @@ class Parser:
     def partial_op(self):
         t = self.next()   # ∂
         order = self._deriv_order()      # ∂²/∂x² or partial^2/partial x^2 (what fmt --ascii writes)
+        if self.tok.kind == "NAME" and self.peek().kind == "OP" and self.peek().value == "/" and \
+                self.peek(2).kind == "KW" and self.peek(2).value == "partial":
+            # Leibniz form ∂u/∂t, ∂²u/∂x² (D83): the derivative of the function u
+            fn = self.next()
+            self.next()
+            self.next()
+            v = self.expect_name("the variable to differentiate by")
+            o2 = self._deriv_order()
+            if o2 != order and o2 != 1:
+                raise self.error(f"the orders don't match: ∂{order}{fn.value}/∂{v.value}{o2}", tok=v)
+            return self.span(A.Deriv(v.value, order, self.span(A.Name(fn.value), fn), partial=True), t)
         self.expect_op("/", "(write ∂/∂x f)")
         self.expect_kw("partial", "(write ∂/∂x f)")
         v = self.expect_name("the variable to differentiate by")
@@ -1637,15 +1802,32 @@ class Parser:
             lo = self.sum()
             self.expect_kw("to")
             saved, self.limit_start = self.limit_start, self.i
+            hi_start = self.i
             try:
                 hi = self.sum()
             finally:
                 self.limit_start = saved
-            if self.at_op("/") and self.tok.ws_before and self.peek().kind in ("NUM", "NAME"):
+            if self.at_op("/") and self.tok.ws_before and self._divisor_follows() and \
+                    not self._limit_is_infinite(hi_start):
                 self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
                                 tok=self.tok, hint="to divide the limit, write it without spaces (to L/2) or in "
                                                    "parentheses (to (L / 2))")
         return self.span(A.Integral(integrand, var, lo, hi), t)
+
+    def _divisor_follows(self):
+        """After a spaced '/' that ended an upper limit: is a divisor next (a number, a name, or a
+        bracketed expression like `/ (1 + z)`)? (FRICTION #8, and research: #61)"""
+        nx = self.peek()
+        return nx.kind in ("NUM", "NAME") or (nx.kind == "OP" and nx.value in ("(", "[", "|")) or \
+            (nx.kind == "KW" and nx.value in ("sqrt", "cbrt"))
+
+    def _limit_is_infinite(self, start):
+        """Is the upper limit starting at token `start` ±∞ (possibly with a unit)? Then ∞ / x is ∞
+        and both readings of `to ∞ / (μ₀ I)` agree, so the '/' dividing the integral needs no warning."""
+        j = start
+        while j < self.i and self.toks[j].kind == "OP" and self.toks[j].value in "+-":
+            j += 1
+        return j < self.i and self.toks[j].kind == "NAME" and self.toks[j].value == "∞"
 
     def _ends_upper_limit(self):
         """At '/': does it end an integral's upper limit? A '/' with a space before it, outside any

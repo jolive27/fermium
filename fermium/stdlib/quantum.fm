@@ -1,0 +1,31 @@
+# quantum: textbook energy levels, wavelengths and tunneling
+# Quantum numbers n are plain numbers.  Energies of atomic scale come out in eV.
+
+# energy of level n (1, 2, 3, …) of a particle of mass m in a 1-D infinite well of width L: n² π² ħ² / (2 m L²)
+box_energy(n [1], mass [kg], L [m]) = n² π² ħ² / (2*mass*L²) in eV
+
+# energy of level n (0, 1, 2, …) of a harmonic oscillator with angular frequency ω: (n + ½) ħ ω
+oscillator_energy(n [1], ω [rad/s]) = (n + 1/2) ħ ω in eV
+
+# de Broglie wavelength of a particle with momentum p: h / p
+de_broglie_wavelength(p [kg m/s]) = h / p in nm
+
+# de Broglie wavelength of a (non-relativistic) particle of mass m with kinetic energy E: h / √(2 m E)
+de_broglie_wavelength_from_energy(mass [kg], E [J]) = h / √(2*mass*E) in nm
+
+# energy of a photon with wavelength λ: h c / λ
+photon_energy(λ [m]) = h c / λ in eV
+
+# reduced mass m1 m2 / (m1 + m2)
+reduced_mass(m1 [kg], m2 [kg]) = m1 m2 / (m1 + m2)
+
+# level n of a hydrogen-like atom, nuclear charge Z and nuclear mass M, with the reduced mass: −μ c² (Z α)² / (2 n²)
+hydrogenlike_level(n [1], Z [1], M [kg]) = -reduced_mass(m_e, M) c² (Z α)² / (2 n²) in eV
+
+# level n of hydrogen (−13.598 eV / n², including the proton's recoil through the reduced mass)
+hydrogen_level(n [1]) = hydrogenlike_level(n, 1, m_p)
+
+# transmission probability through a rectangular barrier of height V0 and width a, for mass m at energy E (exact)
+barrier_transmission(E [J], V0 [J], a [m], mass [kg]) = if E < V0 then 1 / (1 + V0² sinh(√(2*mass*(V0 - E)) a / ħ)² / (4 E (V0 - E)))
+                                       else if E > V0 then 1 / (1 + V0² sin(√(2*mass*(E - V0)) a / ħ)² / (4 E (E - V0)))
+                                       else 1 / (1 + mass a² V0 / (2 ħ²))

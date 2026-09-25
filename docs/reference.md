@@ -11,11 +11,11 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 4. [Printing](#4-printing)
 5. [Functions](#5-functions)
 6. [Conditions and loops](#6-conditions-and-loops)
-7. [Lists and vectors](#7-lists-and-vectors)
+7. [Lists and vectors](#7-lists-and-vectors) (and [complex numbers](#complex-numbers))
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze))
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -24,6 +24,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
 19. [Known limitations](#19-known-limitations)
+20. [Numerics: random numbers, Fourier transforms, eigenstates, PDEs](#20-numerics-random-numbers-fourier-transforms-eigenstates-pdes)
 
 ---
 
@@ -254,6 +255,7 @@ print ts
 - **Size:** a list holds at most 10⁹ numbers. Asking for more (`zeros(2e9)`, or a range that long) stops the program with `not enough memory for a list of 2×10⁹ numbers (the most is 10⁹)`.
 - **Sorting:** `sort(xs)` sorts from smallest to largest and puts `NaN` values last.
 - **Setting an element:** `xs[i] = value`.
+- **Slices:** `xs[a:b]` is a new list of the elements a to b, **both included** (counting from 1, like `xs[i]`): `[10, 20, 30, 40][2:3]` is `[20, 30]`. `xs[:b]` starts at the first element, `xs[a:]` runs to the last, and `end` works inside (`xs[2:end-1]` drops the first and last). `xs[a:a-1]` is the empty list, so `xs[k+1:end]` is empty when k is the length; any other b < a is an error (use `reverse(xs)` to reverse). Slices of an ODE solution's samples work too (`x[2:end]`). A slice can't be assigned to (DECISIONS D114).
 - **Looping:** `for x in xs`.
 
 ### Vectors
@@ -333,6 +335,53 @@ print eigenvectors(K, M)              # the mode shapes
 - `eigenvalues(K, M)` and `eigenvectors(K, M)` solve the **generalized** problem K v = λ M v with symmetric K and a symmetric, positive-definite M (a mass matrix). For springs and masses λ = ω², in 1/s². The mode shapes are scaled to unit length. Don't write `eigenvalues(inverse(M) K)`: M⁻¹K is not symmetric, so it is an error that points to `eigenvalues(K, M)`.
 - **Errors** (when the program runs): a matrix that isn't symmetric (entries may differ by at most 10⁻¹⁰ of the largest entry), and a second matrix that isn't positive definite.
 
+### Complex numbers
+
+```fermium
+z = 3 + 4i
+print z, |z|, arg(z) in °, conj(z)
+print re(z), im(z), z.re, z.im
+print (1 + 2i) * (3 - 1i), 2 / (1 + 1i), (1 + 1i)^2
+print exp(𝑖 π) ≈ -1 + 0i                # Euler's identity
+print sqrt(-4 + 0i), ln(1i), cis(π/3), polar(2, 45°)
+
+R = 100 Ω
+L = 0.5 H
+C = 10 μF
+ω = 2π × 50 Hz
+Z = R + 1i ω L + 1 / (1i ω C)           # an impedance: a complex number in Ω
+print Z, |Z|, arg(Z) in °
+print (230 + 0i) [V] / Z                # the current, in A
+```
+
+- **Writing them:** a number followed directly by `i` is imaginary: `4i`, `2.5i`, `1e3i` (no space; `4 i` is 4 times a variable `i`, so `for i from 1 to n` is unaffected). `𝑖` (Tab: `\imag`) is the imaginary unit on its own (`𝑖ħ ψ'` is 𝑖 · ħ · ψ'). `complex(a, b)` is a + bi, `polar(r, θ)` is r(cos θ + i sin θ), `cis(θ)` is cos θ + i sin θ.
+- **Units:** a complex number has one unit for both parts: an impedance Z = R + iωL in Ω, a wavefunction in m^(-1/2). Write `4i Ω`, `3 Ω + 4i Ω` or `(3 + 4i) [Ω]` (units follow a number, or come in brackets after an expression). Adding Ω to V is an error, as for real numbers.
+- **Printing:** `3 + 4i`, `3 - 4i`, and `(3 + 4i) Ω` with a unit; `in`, `to(z, unit)`, significant figures and `to N digits` work as for real numbers, part by part (whole numbers print exactly only when both parts are whole). A part smaller than 10⁻¹⁴ of |z| is floating-point rounding and prints as 0 (`exp(𝑖 π)` prints `-1 + 0i`).
+- **Arithmetic:** `+ - * /` between complex and real numbers; `z^n` for a whole number n (repeated multiplication), `z^p` for another fixed number p (the principal value, units to the power p), and `z^w`, `2^(1i)` with a complex or variable exponent (plain numbers only). `exp ln log sqrt sin cos tan sinh cosh tanh` take complex plain numbers (`sqrt` keeps units to the power ½; √z also works); these are the principal branches (the cut of `ln` and `sqrt` is the negative real axis).
+- **Parts:** `abs(z)` or `|z|` and `re(z)`, `im(z)` (also `z.re`, `z.im`) keep the units; `arg(z)` is the angle from −π to π; `conj(z)` is the complex conjugate.
+- **Comparisons:** `==`, `!=` and `≈` work; `<`, `>`, `<=`, `>=` are an error (complex numbers aren't ordered; compare `|z|` or `re(z)`).
+- **A variable keeps its kind:** `z = 0` then `z += 1i` is an error; start with `z = 0i`.
+
+```fermium
+# the time-dependent Schrödinger equation for a free particle: ψ(t) = exp(−iEt/ħ)
+E = 1.0 eV
+T = 2 fs
+solve 𝑖ħ ψ' = E ψ with ψ(0 s) = 1 for t from 0 s to T
+print ψ(T), exp(-1i E T / ħ)
+print |ψ(T)| to 6 digits
+print ψ.re(T), ψ.im(T)
+
+# complex integrals and sums: one quadrature per part
+print ∫ exp(1i π t² / 2) dt from 0 to 2          # Fresnel integrals C(2) + i S(2)
+print Σ(cis(2π k / 3) for k from 1 to 2)       # -1
+g(x) = exp(1i k x) where k = 2 /m
+print g'(0 m)
+```
+
+- **Differential equations:** an unknown is complex when its initial value is (`ψ(0) = 1 + 0i`), or when the equation is (`𝑖ħ ψ' = E ψ` with `ψ(0) = 1` is complex). It takes two real state slots (real and imaginary parts), so `rk45`, `rk4`, `radau`/`bdf`, `until` and backward ranges work unchanged. `ψ(t)` and `ψ'(t)` are complex; `ψ.re` and `ψ.im` are real solutions (for `plot ψ.re vs t`, `max(ψ.im)`, `values(ψ.re)`).
+- **Integrals and sums** of a complex expression are computed part by part, each with its own adaptive quadrature. **Derivatives** of functions with complex values work (`𝑖` is a constant to the differentiator), and indefinite integrals hand `𝑖` to SymPy as its imaginary unit.
+- **Not yet:** lists, vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+
 ## 8. Derivatives
 
 ```fermium
@@ -409,7 +458,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 ```
 
 - **Units:** the result's units are the integrand's units times the variable's units.
-- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number or name (`to L / 2`), Fermium warns that it divides the whole integral (DECISIONS D34).
+- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a number, a name or a bracketed expression (`to L / 2`, `to 1 / (1 + z)`), Fermium warns that it divides the whole integral (DECISIONS D34, D112); there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it.
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
 - **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
 
@@ -486,7 +535,7 @@ print θ1(5 s), θ2(5 s)
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
   - A long RK45 solve that is held back by stiffness warns: `this equation looks stiff: rk45 has taken 526031 steps, held small by stability rather than accuracy …; add using radau after the range`. The "too many steps" error suggests it too.
   - `radau` and `bdf` run SciPy's solvers (they call the compiled right-hand side), so they need SciPy, and `fermium build` refuses them for now (use `fermium run`).
-  - The order is `for t from a to b [step h] [tolerance r] [using method]`:
+  - The range comes first, then `step h`; after that `tolerance r`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same):
 
 ```fermium
 solve x' = -x / (1 s)
@@ -523,6 +572,7 @@ print len(times(N1)), "steps"
   - Inside a function, a solution can be used in `∫`, in an equation `solve … for T from a to b`, and at any time `x(t)`, but it can't be returned yet: return a number made from it (DECISIONS D48).
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
+  - `x(ts)` with a list of times gives the list of values, like a function applied to a list: `x(linspace(0 s, 1 s, 11))`. This works for `x'(ts)` too, but not for a vector unknown (lists of vectors aren't supported yet).
 - **Towards smaller t:** the range can go down, `for t from 5 s to 0 s`, with the initial conditions at the start (5 s). This works with both methods (a `step` is always written as a positive size). `times(x)` then decreases, `x[end]` is the value at the end of the range (0 s), and `x(t)` and `plot` work as usual.
 - **Stop condition, `until`:** `until lhs = rhs` on a line of its own stops the solve the first time the two sides cross (after the start), for example when a ball lands. The crossing is located to full precision on the solver's dense output (Dormand–Prince's 4th-order interpolant, or the cubic Hermite for RK4), and the solution ends there: `x[end]` is the value at the crossing and `times(x)[end]` the time. The range's end is then only a limit: if the condition never happens before it, that's an error (so a too-short range can't be mistaken for the answer). The condition can use `t`, the unknowns and their derivatives below the highest (`until y' = 0 m/s` for the top of a flight), in matching units. On one line, write it after the range (`… for t from 0 s to 10 s until y = 0 m`) or after the initial conditions.
 
@@ -595,7 +645,7 @@ plot data.T vs data.L to "pendulum.png"
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
-  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas.
+  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables.
   - Several series: `plot a vs t, b vs t`.
 
 ### Dimensional analysis: analyze
@@ -629,6 +679,69 @@ dimensional analysis of pendulum: T depends on L, m, g
 
 See [bootcamp lesson 11](../bootcamp/lesson11_dimensional_analysis.md) for a tutorial and DECISIONS.md D70 for the design.
 
+## Modules
+
+A **module** is a `.fm` file of functions and constants that other programs import. Fermium ships a
+standard library of modules: `mechanics`, `em`, `nuclear`, `astro`, `quantum` and `stats`, listed with
+every function's units in [stdlib.md](stdlib.md).
+
+```fermium
+import mechanics
+print mechanics.pendulum_period_large(1 m, g_n, 60°)       # 2.15 s: the exact period at 60°
+
+import astro as a
+print a.schwarzschild_radius(10 M☉)
+
+from nuclear import semf_binding, Q_value
+print semf_binding(56, 26)                                  # ⁵⁶Fe, about 495 MeV
+print Q_value(238.0507884 u, 234.0436014 u + 4.00260325 u)  # α decay of ²³⁸U: 4.27 MeV
+
+from quantum import hydrogen_level as E
+print E(2) - E(1)
+```
+
+- **Three forms:** `import mechanics` makes the module's names available as `mechanics.name`;
+  `import astro as a` gives the module a shorter name (`a.name`); `from nuclear import semf_binding, Q_value`
+  makes those names available directly, and `from em import skin_depth as δ` renames one.
+- **Import by path:** `import "lib/springs.fm"` (then `springs.name`), or `import "lib/my-springs.fm" as sp`
+  when the file name isn't a valid name. The path is relative to the folder of the file doing the import.
+- **Where modules are found:** `import springs` looks for `springs.fm` in the folder of the file doing the
+  import, then the program's folder, then the folders listed in `fermium.toml` (below), then the
+  standard library. So a `mechanics.fm` next to your program is used instead of the standard one.
+- **What a module may contain:** function definitions, constants (`a_V = 15.75 MeV`) and imports of other
+  modules. A module can't print, plot, solve or loop when it is imported: `a module can only define
+  functions and constants, but this line has a print`. Its constants are computed once, where it is
+  first imported.
+- **Imported functions are ordinary functions:** they can be passed to other functions, integrated and
+  differentiated: `astro.wien_peak'(5000 K)` and, after `from astro import wien_peak`, `wien_peak'`.
+- **Units are checked across modules** exactly as in one file: a module's functions are checked with the
+  units of each call's arguments, and parameters written with units (`kinetic_energy(mass [kg], v [m/s])`)
+  must get those units.
+- **Each module has its own names.** A module's functions see the module's own functions and constants
+  and the built-in constants, never the importing program's variables. Names starting with `_` are private.
+- **Clear errors:** a module that can't be found (with the folders searched and a close name), a name the
+  module doesn't have, the same name imported from two modules, an imported name that the program also
+  defines, a circular import (`circular import: a → b → a`), and an import inside a block or a function.
+  An error inside a module names the module file and its line, and points at the line of your program
+  that led to it.
+- **The REPL, Jupyter and the editor** understand imports too: in the REPL, `import mechanics` works like in
+  a program (modules are found from the folder the REPL was started in); the language server finds
+  modules from the document's folder.
+
+**`fermium.toml`** marks the folder of a project. `fermium run` (and `check`, the REPL and the editor) reads
+the nearest one, in the program's folder or a parent folder:
+
+```
+[project]
+name = "lab-reports"
+version = "0.1.0"
+
+[paths]
+modules = ["lib", "../shared"]     # folders searched for modules, relative to fermium.toml
+```
+
+See DECISIONS.md D100–D103 for the design.
+
 ## 12. Symbols and ASCII spellings
 
 Every symbol has an ASCII spelling that means exactly the same thing.
@@ -650,6 +763,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | Mᵀ | `transpose(M)` | `\transpose` |
 | ≤ ≥ ≠ ≈ | `<=` `>=` `!=` `~=` | `\le` `\ge` `\ne` `\approx` |
 | ∞ | `inf` | `\infty` |
+| 𝑖 (imaginary unit) | `1i` | `\imag` |
 | ε₀ | `epsilon_0` | `\epsilon\_0` |
 | Å, μm, M☉ | `angstrom`, `um`, `Msun` | `\AA`, `\mu`, `\Msun` |
 
@@ -660,7 +774,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 
 | Function | Meaning |
 |---|---|
-| `sin cos tan asin acos atan sinh cosh tanh exp ln log log10 log2 erf gamma` | need plain numbers (angles are plain numbers) |
+| `sin cos tan cot sec csc asin acos atan sinh cosh tanh asinh acosh atanh exp ln log log10 log2 erf erfc gamma lgamma expm1 log1p` | need plain numbers (angles are plain numbers); `cot`, `sec`, `csc` are 1/tan, 1/cos, 1/sin, `expm1(x)` = eˣ − 1 and `log1p(x)` = ln(1 + x) accurate for tiny x |
 | `besselj(n, x) bessely(n, x)` | Bessel functions J_n and Y_n of whole-number order n (plain numbers; the C library's `jn`/`yn`) |
 | `besseli(n, x) besselk(n, x)` | modified Bessel functions I_n and K_n of whole-number order n (plain numbers) |
 | `ellipk(m) ellipe(m)` | complete elliptic integrals K(m) and E(m) with the **parameter m = k²**, as in SciPy and Abramowitz & Stegun (`ellipk(0.5)` = 1.8541; K(1) = ∞) |
@@ -680,8 +794,13 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `trace(M) row(M, i) column(M, j)` | the sum of the diagonal; a row or a column as a vector |
 | `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
+| `complex(a, b) polar(r, θ) cis(θ)` | make a complex number: a + bi, r(cos θ + i sin θ), cos θ + i sin θ (§7) |
+| `re(z) im(z) abs(z) arg(z) conj(z)` | parts of a complex number (re, im and abs keep its units); also `z.re`, `z.im`, `\|z\|` |
 | `to(x, unit)` | same as `x in unit` |
-| `factorial(n) rand()` | |
+| `factorial(n)` | |
+| `rand() rand(a, b) randn() randn(μ, σ) seed(n) sample(expr, N)` | seeded random numbers and Monte Carlo (§20) |
+| `fft_re(xs) fft_im(xs) ifft(re, im) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20) |
+| `argmax(xs) argmin(xs)` | the position (1-based) of the largest / smallest element |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
 
 ```fermium
@@ -823,13 +942,16 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | print items | plot series [to "file"] | fit eq to expr [with binds]
             | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
+              (tolerance, using and until in any order)
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
+            | import name [as name] | import "file.fm" [as name]
+            | from name import name [as name], name [as name], ...
 expr       := if expr then expr [NEWLINE INDENT] else expr | or-expression
 comparison := sum (cmp sum)*          a < x < b means a < x and x < b
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
-postfix    := atom ( (args) | [index] | .name | ' )*
+postfix    := atom ( (args) | [index] | [a:b] | .name | ' )*
 atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|
             | √atom | ∫ … d x [from a to b] | d/dt atom | dx/dt | ∂/∂x atom | load "file"
             | Σ(expr for x from a to b [step s])
@@ -844,6 +966,149 @@ These are known and not yet fixed. None of them is silent about units.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
-- **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
+- **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
+- **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
+  has imported even if the file changes (restart the REPL to see the change).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
+
+## 20. Numerics: random numbers, Fourier transforms, eigenstates, PDEs
+
+### Random numbers and Monte Carlo
+
+```fermium
+seed(42)                       # the same numbers every run, in fermium run, fermium build and the interpreter
+print rand()                   # uniform in [0, 1)
+print rand(2 m, 3 m)           # uniform in [2 m, 3 m): both ends in the same units
+print randn()                  # standard normal (mean 0, standard deviation 1)
+print randn(9.81 m/s², 0.02 m/s²)   # normal with mean μ and standard deviation σ, in their units
+```
+
+- **`seed(n)`** is a statement on its own line. It restarts the generator: the same seed gives the same numbers, in `fermium run`, in a `fermium build` executable and in the reference interpreter (the generator, xoshiro256\*\*, is written once in LLVM IR and once in Python, DECISIONS D80). A program that never calls `seed` starts as if it had called `seed(0)`, so it is reproducible too. In the REPL and in Jupyter, the numbers continue from one input to the next.
+- **`sample(expr, N)`** evaluates `expr` N times, drawing new random numbers each time, and gives a list with the units of `expr`. With `mean`, `std` and `len`, this is a Monte Carlo estimate with its statistical error:
+
+```fermium
+seed(1)
+N = 100000
+inside = sample(if rand()^2 + rand()^2 < 1 then 1 else 0, N)
+p = mean(inside)
+print "π ≈", 4 p, "±", 4 sqrt(p (1 - p) / N)
+
+# a pendulum's period when its length is known to ±1 cm (Monte Carlo error propagation)
+g = 9.81 m/s²
+Ts = sample(2π sqrt(randn(1.00 m, 0.01 m) / g), 20000)
+print mean(Ts), "±", std(Ts)
+```
+
+- `randn` uses the Box–Muller method (two uniform numbers per normal number). `std` is the sample standard deviation (divides by N − 1).
+
+### Fourier transforms
+
+Fermium has no complex numbers, so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
+
+```fermium
+dt = 1 ms                                  # sampling interval
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V * sin(2π * 50 Hz * ts[i]) + 1 V * cos(2π * 120 Hz * ts[i])
+
+A = amplitude_spectrum(xs)                 # in V: a sine of amplitude 3 V gives a peak of 3 V
+f = frequencies(xs, dt)                    # in Hz: 0, 1 Hz, 2 Hz, …, 500 Hz (the Nyquist frequency)
+k = argmax(A)
+print "strongest:", f[k], "with amplitude", A[k]
+
+P = power_spectrum(xs, dt)                 # power spectral density, in V²/Hz
+print "Parseval:", sum(P) (f[2] - f[1]), "=", mean(xs * xs)
+
+back = ifft(fft_re(xs), fft_im(xs))        # the inverse transform gives back the signal
+print back[10], xs[10]
+```
+
+| Function | Gives | Units |
+|---|---|---|
+| `fft_re(xs)`, `fft_im(xs)` | real and imaginary parts of X_k = Σⱼ xⱼ e^(−2πi jk/n), k = 0 … n − 1 (NumPy's `fft`, not normalised) | those of xs |
+| `ifft(re, im)` | the real part of the inverse transform, (1/n) Σₖ Xₖ e^(2πi jk/n) | those of re and im |
+| `amplitude_spectrum(xs)` | one-sided amplitudes for k = 0 … n/2: \|Xₖ\|/n, doubled except at 0 Hz and at the Nyquist frequency | those of xs |
+| `power_spectrum(xs, dt)` | one-sided power spectral density \|Xₖ\|² dt/n (doubled likewise); Σ P Δf = mean(x²) | xs² × time (V²/Hz) |
+| `frequencies(xs, dt)` or `frequencies(n, dt)` | the frequencies of those n/2 + 1 bins, k/(n dt) (NumPy's `rfftfreq`) | 1/time (Hz) |
+
+- Any length works (not only powers of two). A frequency between two bins shows up in the nearest bins, spread out ("leakage"); a longer signal gives finer bins, Δf = 1/(n dt).
+- `fermium run` and the interpreter use NumPy's FFT; `fermium build` executables use a built-in C FFT (radix 2, and Bluestein's algorithm for other lengths), which agrees to rounding.
+
+### Bound states: solve … lowest N
+
+An equation that is linear in an unknown function ψ, with one undefined constant (the eigenvalue), zero boundary conditions at both ends and `lowest N`, is an **eigenvalue problem**: `solve` finds the N lowest eigenvalues and their eigenfunctions.
+
+```fermium
+m = m_e
+ħω = 1 eV
+ω = ħω / ħ
+V(x) = m ω² x² / 2
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 4
+for n from 1 to 4
+    print "E", n, "=", E[n] in eV, "  (ħω(n - ½) =", ħω (n - 0.5), ")"
+print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
+```
+
+- **The eigenvalue** is the one name in the equation that has no value yet (`E` here). Afterwards it is a list, `E[1] < E[2] < …`, with the units the equation gives it (energy).
+- **The states** are `ψ₁ … ψ_N` (ASCII `psi_1`): functions of x like an ODE solution, with `ψ₁'(x)`, `ψ₁''(x)`, `values(ψ₁)`, `times(ψ₁)` (the grid) and `plot ψ₁ vs x, ψ₂ vs x`. Each is normalised, ∫ψ² dx = 1 (so ψ has units 1/√length), and its first lobe (from the left) is positive.
+- **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
+- **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
+  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
+  - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).
+- The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
+- These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.
+
+
+### Partial differential equations: heat, waves, Schrödinger
+
+With two ranges, `for x from a to b, t from t0 to t1`, `solve` takes a **PDE** for an unknown u(x, t). Write the derivatives with ∂ (ASCII `partial`): `∂u/∂t`, `∂²u/∂x²`, `∂u/∂x`. The conditions after `with` are the initial value `u(x, t0) = …` and a boundary condition at each end, either a value `u(a, t) = …` or a slope `∂u/∂x(a, t) = …` (0 for an insulated end); both may depend on t.
+
+```fermium
+L = 1 m
+D = 0.01 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 10 s
+print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 s / L²)
+print ∂u/∂x(0 m, 5 s), ∂u/∂t(0.5 m, 5 s)
+```
+
+- **Using the solution:** `u(x, t)` anywhere in the range (cubic interpolation in x, Hermite in t), `∂u/∂x(x, t)`, `∂u/∂t(x, t)`, integrals like `∫ u(x, 2 s) dx from 0 m to L`, and plots of a formula like `plot u(x, 2 s) vs x from 0 m to L`.
+- **Pictures:** `plot u vs x` draws u at 6 times in one plot; `plot u vs x animate over t to "heat.gif"` writes an animated GIF (with `frames 30` to choose the number of frames, 60 by default). With a file name that does not end in `.gif` (or without the pillow package) it writes the frames as PNG files in a folder, `heat_frames/`.
+- **Waves:** an equation with `∂²u/∂t²` also needs the initial velocity `∂u/∂t(x, t0) = …`:
+
+```fermium
+c = 2 m/s
+f(x) = 1 cm * exp(-((x - 0.5 m) / 0.05 m)^2)
+solve ∂²u/∂t² = c² ∂²u/∂x²
+    with u(x, 0 s) = f(x), ∂u/∂t(x, 0 s) = 0 m/s, u(0 m, t) = 0 m, u(1 m, t) = 0 m
+    for x from 0 m to 1 m, t from 0 s to 0.1 s
+    grid 1000
+print u(0.7 m, 0.1 s), "  d'Alembert:", (f(0.5 m) + f(0.9 m)) / 2
+```
+
+- **The Schrödinger equation:** `i` in the equation is the imaginary unit, and a complex initial value is written `A(x) exp(i φ(x))`. The solution is complex, so `ψ(x, t)` is the 2-vector <Re ψ, Im ψ>: `|ψ(x, t)|^2` is the probability density, and `ψ(x, t).x`, `ψ(x, t).y` are the real and imaginary parts. An animation shows |ψ|².
+
+```fermium
+m = m_e
+σ = 1 nm
+k0 = 2 / (1 nm)
+solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(i k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 fs to 30 fs
+    grid 2000
+print "norm:", ∫ |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm
+print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", ħ k0 30 fs / m in nm, ")"
+```
+
+- **Methods:** second-order differences in x on `grid N` intervals (400 by default), and in t:
+  - first order in t: **Crank–Nicolson** (the default: second order, stable for any step, and it conserves ∫|ψ|² exactly for the Schrödinger equation), `using implicit` (backward Euler: first order, very robust) or `using explicit` (forward Euler: needs dt ≤ h²/(2D), which Fermium checks and chooses by default). The default is 1000 time steps; `t from 0 s to 10 s step 1 ms` sets the step.
+  - second order in t (waves): the explicit central-difference scheme. It needs c dt ≤ h (Courant number ≤ 1); by default Fermium takes the largest such step, where it is exact for a constant wave speed.
+- **What is supported:** one unknown; linear equations (each term has one factor u, ∂u/∂x or ∂²u/∂x², like `D ∂²u/∂x² - k u + S(x)`); coefficients that depend on x but not on t (a source term without u may depend on t). All units are checked before the program runs, like every other equation.
+- These run in Python (NumPy/SciPy), so `fermium build` refuses them for now. A narrow feature in a wide range can be missed by `∫` (§19): integrate over the part where the solution lives.

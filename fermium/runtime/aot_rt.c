@@ -139,6 +139,36 @@ void fm_print_num(int64_t fid, double v) {
     emit(all);
 }
 
+/* a complex number, 3 + 4i or (3 + 4i) Ω; mirrors fermium.cplx.format_complex (D94) */
+static int is_whole(double v) { return v == v && fabs(v) < 1e7 && v == (double)(long long)v; }
+
+static void fmt_part(const fm_fmt *f, double v, int whole, char *out, size_t cap) {
+    if (f->sf < 0) {
+        if (f->direct) fmt_num(v, 15, 1, out, cap);
+        else if (whole) snprintf(out, cap, "%lld", (long long)v);
+        else fmt_num(v, 3, 0, out, cap);        /* 3 significant figures per part, zeros kept (D94) */
+    }
+    else fmt_num(v, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
+}
+
+void fm_print_cplx(int64_t fid, double re, double im) {
+    const fm_fmt *f = &fm_fmts[fid];
+    double x = re / f->factor, y = im / f->factor, size = hypot(x, y);
+    char bx[128], by[128], body[300], all[400];
+    if (isfinite(size) && size > 0) {       /* a part below 1e-14 |z| is rounding noise */
+        if (fabs(x) < 1e-14 * size) x = 0;
+        if (fabs(y) < 1e-14 * size) y = 0;
+    }
+    int whole = is_whole(x) && is_whole(y);
+    fmt_part(f, x, whole, bx, sizeof bx);
+    fmt_part(f, fabs(y), whole, by, sizeof by);
+    snprintf(body, sizeof body, "%s %s %si", bx, y < 0 ? "-" : "+", by);
+    if (!f->unit[0] || !strcmp(f->unit, "1")) snprintf(all, sizeof all, "%s", body);
+    else if (attached(f->unit)) snprintf(all, sizeof all, "(%s)%s", body, f->unit);
+    else snprintf(all, sizeof all, "(%s) %s", body, f->unit);
+    emit(all);
+}
+
 static void print_seq(int64_t fid, const double *p, int64_t n, const char *open, const char *close) {
     const fm_fmt *f = &fm_fmts[fid];
     static char out[1 << 15];
@@ -362,5 +392,84 @@ int main(void) {
         else fprintf(stderr, "%s\n", err_msg);
         return 1;
     }
+    return 0;
+}
+
+/* ---- Fourier transforms (DECISIONS D81): the same results as runtime/spectral.py (NumPy) up to rounding.
+ * Radix-2 for powers of two, Bluestein's chirp-z (through a power-of-two FFT) for other lengths. */
+static void fft_pow2(double *re, double *im, int64_t n, int inverse) {
+    for (int64_t i = 1, j = 0; i < n; i++) {
+        int64_t bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            double t = re[i]; re[i] = re[j]; re[j] = t;
+            t = im[i]; im[i] = im[j]; im[j] = t;
+        }
+    }
+    for (int64_t len = 2; len <= n; len <<= 1) {
+        double ang = 2 * M_PI / (double)len * (inverse ? 1 : -1);
+        for (int64_t i = 0; i < n; i += len) {
+            for (int64_t k = 0; k < len / 2; k++) {
+                double wr = cos(ang * (double)k), wi = sin(ang * (double)k);
+                double ur = re[i + k], ui = im[i + k];
+                double xr = re[i + k + len / 2], xi = im[i + k + len / 2];
+                double vr = xr * wr - xi * wi, vi = xr * wi + xi * wr;
+                re[i + k] = ur + vr; im[i + k] = ui + vi;
+                re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi;
+            }
+        }
+    }
+}
+
+static void fft_any(double *re, double *im, int64_t n, int inverse) {
+    if ((n & (n - 1)) == 0) { fft_pow2(re, im, n, inverse); return; }
+    int64_t m = 1;
+    while (m < 2 * n - 1) m <<= 1;
+    double *ar = calloc((size_t)m, 8), *ai = calloc((size_t)m, 8), *br = calloc((size_t)m, 8),
+           *bi = calloc((size_t)m, 8), *wr = malloc((size_t)n * 8), *wi = malloc((size_t)n * 8);
+    double sg = inverse ? 1.0 : -1.0;
+    for (int64_t k = 0; k < n; k++) {
+        double a = M_PI * (double)((k * k) % (2 * n)) / (double)n;   /* e^{sg·iπk²/n}, k² reduced mod 2n */
+        wr[k] = cos(a); wi[k] = sg * sin(a);
+        ar[k] = re[k] * wr[k] - im[k] * wi[k];
+        ai[k] = re[k] * wi[k] + im[k] * wr[k];
+    }
+    br[0] = wr[0]; bi[0] = -wi[0];
+    for (int64_t k = 1; k < n; k++) {
+        br[k] = br[m - k] = wr[k];
+        bi[k] = bi[m - k] = -wi[k];
+    }
+    fft_pow2(ar, ai, m, 0);
+    fft_pow2(br, bi, m, 0);
+    for (int64_t k = 0; k < m; k++) {
+        double r = ar[k] * br[k] - ai[k] * bi[k], i = ar[k] * bi[k] + ai[k] * br[k];
+        ar[k] = r; ai[k] = i;
+    }
+    fft_pow2(ar, ai, m, 1);
+    for (int64_t k = 0; k < n; k++) {
+        double r = ar[k] / (double)m, i = ai[k] / (double)m;
+        re[k] = r * wr[k] - i * wi[k];
+        im[k] = r * wi[k] + i * wr[k];
+    }
+    free(ar); free(ai); free(br); free(bi); free(wr); free(wi);
+}
+
+int64_t fm_fft(int64_t kind, double *a, double *b, int64_t n, double dt, double *out) {
+    double *re = malloc((size_t)n * 8), *im = malloc((size_t)n * 8);
+    for (int64_t i = 0; i < n; i++) { re[i] = a[i]; im[i] = (kind == 4 && b) ? b[i] : 0.0; }
+    fft_any(re, im, n, kind == 4);
+    if (kind == 0 || kind == 1) {
+        for (int64_t i = 0; i < n; i++) out[i] = kind == 0 ? re[i] : im[i];
+    } else if (kind == 4) {
+        for (int64_t i = 0; i < n; i++) out[i] = re[i] / (double)n;
+    } else {
+        for (int64_t k = 0; k <= n / 2; k++) {
+            double w = (k == 0 || (n % 2 == 0 && k == n / 2)) ? 1.0 : 2.0;
+            double mag2 = re[k] * re[k] + im[k] * im[k];
+            out[k] = kind == 2 ? w * sqrt(mag2) / (double)n : w * mag2 * dt / (double)n;
+        }
+    }
+    free(re); free(im);
     return 0;
 }

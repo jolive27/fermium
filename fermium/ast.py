@@ -114,6 +114,13 @@ class Index(Node):
 
 
 @dataclass(eq=False)
+class Slice(Node):
+    """`a:b` inside xs[...]: elements a to b, both included (1-based, D114); a or b may be omitted (None)."""
+    lo: Node | None
+    hi: Node | None
+
+
+@dataclass(eq=False)
 class End(Node):
     """`end` inside an index: the last element."""
 
@@ -375,6 +382,18 @@ class Units(Node):
 
 
 @dataclass(eq=False)
+class Import(Node):
+    """`import mechanics`, `import "lib/x.fm" as x`, `from nuclear import semf_binding, Q_value as Q` (D100).
+
+    names is None for a plain import (the module is bound to alias or its own name), else a list of
+    (name, alias-or-None) for from-import."""
+    module: str
+    is_path: bool = False
+    alias: str | None = None
+    names: list | None = None
+
+
+@dataclass(eq=False)
 class Program(Node):
     body: list
 
@@ -394,6 +413,8 @@ def children(n):
         return [n.func] + list(n.args)
     if isinstance(n, Index):
         return [n.target, n.index]
+    if isinstance(n, Slice):
+        return [x for x in (n.lo, n.hi) if x is not None]
     if isinstance(n, (Field, Prime)):
         return [n.target]
     if isinstance(n, Deriv):
