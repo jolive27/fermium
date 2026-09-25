@@ -134,7 +134,7 @@ def build_wheel():
     for d, dirs, fs in os.walk(pkg):
         dirs[:] = sorted(x for x in dirs if x != "__pycache__")
         for f in sorted(fs):
-            if f.endswith((".py", ".c")):
+            if f.endswith((".py", ".c", ".fm")):          # .fm: the standard library (M7)
                 full = os.path.join(d, f)
                 files.append((os.path.relpath(full, ROOT).replace(os.sep, "/"), open(full, "rb").read()))
     files.append((f"{dist}/METADATA", (f"Metadata-Version: 2.1\nName: fermium\nVersion: {version}\n"

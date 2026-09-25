@@ -17,6 +17,7 @@ from . import calculus as C
 from . import ir as I
 from .constants import all_constants
 from .errors import FermiumError, Diagnostics
+from .importer import ImportMixin, ModuleRef
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
                     VOID, Ty,
                     type_desc)
@@ -185,7 +186,7 @@ class CheckedModule:
         self.U = unifier
 
 
-class Checker(C.DiffContext):
+class Checker(ImportMixin, C.DiffContext):
     def __init__(self, diags=None, base_dir=".", repl=False, source_name="<program>"):
         self.diags = diags or Diagnostics()
         self.U = Unifier()
@@ -259,6 +260,7 @@ class Checker(C.DiffContext):
         self.new_funcs = []
         self.new_lambdas = []
         self._prescan_functions(prog.body, ctx)
+        self.note_program(prog, self.globals)
         self.unit_collisions = getattr(prog, "unit_collisions", {})
         self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
@@ -271,7 +273,8 @@ class Checker(C.DiffContext):
     def check_uncalled(self):
         """Check the bodies of functions that were never called, so their errors still show."""
         for name, b in list(self.globals.names.items()):
-            if isinstance(b, FuncInfo) and not b.instances and not b.checked_generic:
+            if isinstance(b, FuncInfo) and not b.instances and not b.checked_generic and \
+                    getattr(b, "module", None) is None:
                 b.checked_generic = True
                 if b.fdef is None:
                     continue
@@ -1084,6 +1087,8 @@ class Checker(C.DiffContext):
         if isinstance(b, SolView):
             self.var_ref(b.sol_sym, ctx, e)   # marks capture/global as needed
             return SolRef(b)
+        if isinstance(b, ModuleRef):
+            raise self.module_as_value(b, name, e)
         raise self.err(f"can't use {name} here", e)
 
     def var_ref(self, sym, ctx, node):
@@ -1155,6 +1160,8 @@ class Checker(C.DiffContext):
                 hint = f"did you mean {a} {b} ({a} times {b})? Fermium reads {name} as one name; put a space between"
                 break
         left = getattr(e, "unit_left", None)
+        if hint is None:
+            hint = self.module_hint(name, ctx)
         if hint is None and lookup_unit(name) is not None and left is not None:
             lt = C.to_source(left)
             hint = (f"{name} is a unit, and units go right after a number; to multiply {lt} by {name} write "
@@ -1820,6 +1827,9 @@ class Checker(C.DiffContext):
         return I.ILoad(len(self.tables.loads) - 1, DataTy(info))
 
     def e_Field(self, e, ctx):
+        mod = self.module_of(e.target, ctx)
+        if mod is not None:                   # mechanics.pendulum_period (D100)
+            return self.module_member(mod, e, ctx)
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, SolRef):
             v = t.view
@@ -2216,6 +2226,9 @@ class Checker(C.DiffContext):
                         if n.func.name in ("max", "min") and len(n.args) > 1:
                             continue
                         found = True
+                    elif n.func.name in ("sum", "mean", "std") and len(n.args) == 1 and \
+                            names & set(A.free_names(a)):
+                        found = True        # sum(xs / σs²): a reduction of the list parameters (M7)
             for c in A.children(n):
                 visit(c)
 
@@ -2243,6 +2256,8 @@ class Checker(C.DiffContext):
         return found
 
     def instantiate(self, info: FuncInfo, args, node, cache=True):
+        if getattr(info, "module", None) is not None and not getattr(info, "in_call", 0):
+            return self.module_call(info, args, node, cache)     # a module's function (D101)
         f = info.fdef
         keyparts = []
         concrete = True
@@ -2345,6 +2360,8 @@ class Checker(C.DiffContext):
                              f"give its name")
                 e.hint = f"{e.hint}; {note}" if e.hint else note
                 e.call_noted = True
+            if getattr(info, "module", None) is not None:
+                self.module_body_error(e, info, node)
             raise
         rets = fctx.ret_types
         if not rets:

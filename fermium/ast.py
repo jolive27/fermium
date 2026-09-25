@@ -367,6 +367,18 @@ class Assert(Node):
 
 
 @dataclass(eq=False)
+class Import(Node):
+    """`import mechanics`, `import "lib/x.fm" as x`, `from nuclear import semf_binding, Q_value as Q` (D100).
+
+    names is None for a plain import (the module is bound to alias or its own name), else a list of
+    (name, alias-or-None) for from-import."""
+    module: str
+    is_path: bool = False
+    alias: str | None = None
+    names: list | None = None
+
+
+@dataclass(eq=False)
 class Program(Node):
     body: list
 

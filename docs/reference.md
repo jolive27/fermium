@@ -15,7 +15,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze))
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -609,6 +609,69 @@ dimensional analysis of pendulum: T depends on L, m, g
 
 See [bootcamp lesson 11](../bootcamp/lesson11_dimensional_analysis.md) for a tutorial and DECISIONS.md D70 for the design.
 
+## Modules
+
+A **module** is a `.fm` file of functions and constants that other programs import. Fermium ships a
+standard library of modules: `mechanics`, `em`, `nuclear`, `astro`, `quantum` and `stats`, listed with
+every function's units in [stdlib.md](stdlib.md).
+
+```fermium
+import mechanics
+print mechanics.pendulum_period_large(1 m, g_n, 60°)       # 2.15 s: the exact period at 60°
+
+import astro as a
+print a.schwarzschild_radius(10 M☉)
+
+from nuclear import semf_binding, Q_value
+print semf_binding(56, 26)                                  # ⁵⁶Fe, about 495 MeV
+print Q_value(238.0507884 u, 234.0436014 u + 4.00260325 u)  # α decay of ²³⁸U: 4.27 MeV
+
+from quantum import hydrogen_level as E
+print E(2) - E(1)
+```
+
+- **Three forms:** `import mechanics` makes the module's names available as `mechanics.name`;
+  `import astro as a` gives the module a shorter name (`a.name`); `from nuclear import semf_binding, Q_value`
+  makes those names available directly, and `from em import skin_depth as δ` renames one.
+- **Import by path:** `import "lib/springs.fm"` (then `springs.name`), or `import "lib/my-springs.fm" as sp`
+  when the file name isn't a valid name. The path is relative to the folder of the file doing the import.
+- **Where modules are found:** `import springs` looks for `springs.fm` in the folder of the file doing the
+  import, then the program's folder, then the folders listed in `fermium.toml` (below), then the
+  standard library. So a `mechanics.fm` next to your program is used instead of the standard one.
+- **What a module may contain:** function definitions, constants (`a_V = 15.75 MeV`) and imports of other
+  modules. A module can't print, plot, solve or loop when it is imported: `a module can only define
+  functions and constants, but this line has a print`. Its constants are computed once, where it is
+  first imported.
+- **Imported functions are ordinary functions:** they can be passed to other functions, integrated and
+  differentiated: `astro.wien_peak'(5000 K)` and, after `from astro import wien_peak`, `wien_peak'`.
+- **Units are checked across modules** exactly as in one file: a module's functions are checked with the
+  units of each call's arguments, and parameters written with units (`kinetic_energy(mass [kg], v [m/s])`)
+  must get those units.
+- **Each module has its own names.** A module's functions see the module's own functions and constants
+  and the built-in constants, never the importing program's variables. Names starting with `_` are private.
+- **Clear errors:** a module that can't be found (with the folders searched and a close name), a name the
+  module doesn't have, the same name imported from two modules, an imported name that the program also
+  defines, a circular import (`circular import: a → b → a`), and an import inside a block or a function.
+  An error inside a module names the module file and its line, and points at the line of your program
+  that led to it.
+- **The REPL, Jupyter and the editor** understand imports too: in the REPL, `import mechanics` works like in
+  a program (modules are found from the folder the REPL was started in); the language server finds
+  modules from the document's folder.
+
+**`fermium.toml`** marks the folder of a project. `fermium run` (and `check`, the REPL and the editor) reads
+the nearest one, in the program's folder or a parent folder:
+
+```
+[project]
+name = "lab-reports"
+version = "0.1.0"
+
+[paths]
+modules = ["lib", "../shared"]     # folders searched for modules, relative to fermium.toml
+```
+
+See DECISIONS.md D100–D103 for the design.
+
 ## 12. Symbols and ASCII spellings
 
 Every symbol has an ASCII spelling that means exactly the same thing.
@@ -749,6 +812,8 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
+            | import name [as name] | import "file.fm" [as name]
+            | from name import name [as name], name [as name], ...
 expr       := if expr then expr [NEWLINE INDENT] else expr | or-expression
 comparison := sum (cmp sum)*          a < x < b means a < x and x < b
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
@@ -769,4 +834,6 @@ These are known and not yet fixed. None of them is silent about units.
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
+- **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
+  has imported even if the file changes (restart the REPL to see the change).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
