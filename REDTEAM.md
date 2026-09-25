@@ -860,3 +860,113 @@ section when this round started.)
 - `hover` on a `table(…)` variable says only "data" (no columns or units); `fermium.selfhost` is not in pyproject's
   `packages`, so `python -m fermium.selfhost` is missing from a non-editable install. *Both fixed: the hover lists the columns and their units; pyproject packages `fermium.selfhost` and its .fm file.*
 - `3𝑖 V` is *V isn't defined*: a unit can't follow an imaginary literal. The hint says what to write instead. *Won't fix: a unit after an imaginary literal would need a new literal rule, and the hint already gives `3𝑖 * 1 V`-style spelling.*
+
+## Round 6 (10:00 UTC)
+
+Reviewer: an independent subagent, on claude/lucid-gauss-9y1ov2 at 94c7a70. The focus was **silent wrong answers
+only** (a plausible number, no error, no warning) in the changes of the last three hours (D190–D223), each checked
+against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` test in `tests/test_redteam6.py` named
+`test_<N>_…`. Delete the mark when the finding is fixed.
+
+**What held up (no findings despite targeted probing):**
+- **Matrices to 16×16 (D195):** a random 12×12 `det`, `solve_linear`, `inverse` entry, symmetric eigenvalues,
+  generalised eigenvalues `eigenvalues(S, M)` (12 digits vs NumPy/SciPy `eigh`) and all 12 eigenvectors (columns,
+  4×10⁻¹⁵ up to sign); the 6×6 Hilbert matrix's `det` (5.37×10⁻¹⁸) and eigenvalues; non-symmetric matrices filled at
+  run time are refused, as are exactly singular ones; `M[i, j] =` with `cm`/`m` entries, `+=`/`-=` with km/m, a
+  non-whole index, and value semantics through a function argument and `B = A`.
+- **Fourth-order eigenfunctions (D190):** infinite well E₁, E₃, ψ₁, ψ₂, ψ₃′ and ψ₂″ at off-grid points to 10
+  digits against √(2/L) sin(nπx/L); `V'(x)` and `d/dx V(x)` inside an eigen equation (x V′ added to an oscillator
+  gives √3 ħω(n − ½) to 10 digits).
+- **`f(xs, ys)`, `table(…)` fits (D191–D193):** pendulum g, a straight line, an exponential with t in ms (τ, N₀ and
+  standard errors equal SciPy `curve_fit`); cm/mm columns; °C columns with `T - T0`; multi-line and integral-valued
+  functions over two lists; number arguments shared; slices.
+- **Nested helpers (D194):** late binding of outer variables, shadowed parameter names, helpers calling helpers,
+  `∫ q(x) dx` inside h(x) using h's x, and loops that update a captured variable.
+- **`d/dt f(point)` (D221):** `d/dx f(2)`, `f(a + 1)`, `∂/∂x g(1, 2)`, `∂/∂x g(1, x)` with x defined (the formula
+  reading, 75), `d/dt x(2 s)` and `d²/dt² x(2 s)` of an ODE solution, products and sums after it.
+- **D210:** `x'(t)` and `d/dt x(t)` of an earlier ODE solution and `f'(t)` of a function inside a new solve (e−1,
+  e·1, 2e⁻¹ exact); `-V'(y)` and `-d/dq W(z)` against SciPy `solve_ivp`.
+- **Units after brackets and lists (D192, D215, D222):** SEMF-style `(…) MeV`, `2 (N - Z) MeV`, `(3 + 1) keV / 2`,
+  `(4) m / (2) s`, `100 (2 + 3) cm`, `[1, 2] m/s`, `[2, 4] cm^-1`, `[3, 4] / 2 s`.
+- **`absolute` in °C/°F (D200):** Newton's cooling to 6 digits with `absolute 1e-6 °C` and `°F` (rk45 and radau).
+- **`str()` and `+` on texts (D216):** units, significant figures, `±`, `in cm`, loops building text.
+- **README and SHOWCASE numbers,** recomputed independently: 9.70 m/s², 31.8 ft/s², 10 rad/s, 1 J, x(5 s) =
+  3.520064 cm (SciPy), −∇φ(0, 3, 4 m) = ⟨0, 0.216, 0.288⟩ V/m, g = 9.801 ± 0.053, range 40.2 m (Monte Carlo mean
+  E[v²] e^(−2σθ²)/g = 40.20 m), finite-well levels 0.2718/1.077/2.379 eV (transcendental equations) and the ground
+  state's 0.0083 outside (closed form 0.008272). (README's comment `# 3.52006 cm` doesn't match the printed `3.52 cm`;
+  cosmetic.)
+
+### 1. D197 prints real entries of a computed matrix as 0: the Minkowski metric, and an inverse (silent). Status: open
+- **Repro:** `one = 1 m²/s²`, `z = 0 m²/s²`, `g = [[-c^2, z, z, z], [z, one, z, z], [z, z, one, z], [z, z, z, one]]`
+  → `print g` is `[[-8.99×10¹⁶, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] m²/s²` (a rank-1 matrix);
+  `print g / c^2` is `[[-1, 0, 0, 0], [0, 0, 0, 0], …]`; `print inverse(g / c^2)` is `[[0, 0, 0, 0], [0, 8.99×10¹⁶,
+  0, 0], …]` (the −1 is gone). Also `print inverse([[1, 0], [0, 1e-15]])` → `[[0, 0], [0, 1.00×10¹⁵]]`, and
+  `print 2 [[1e15, 1], [1, 2]]` → `[[2.00×10¹⁵, 0], [0, 0]]`.
+- **Reference:** NumPy: diag(−c², 1, 1, 1); inverse diag(−1, c², c², c²); [[1, 0], [0, 10¹⁵]]; [[2×10¹⁵, 2], [2, 4]].
+  These entries are exact, not rounding noise: the 10⁻¹⁴-of-the-largest rule can't tell a genuinely small entry from
+  noise when a matrix mixes scales (c² next to 1 is the textbook metric in SI).
+- **Tests:** `test_1_metric_with_c_squared_keeps_its_unit_diagonal`, `test_1_inverse_of_a_diagonal_matrix_keeps_the_small_entry`.
+
+### 2. D197 zeroes an entry written in the program, contrary to its own rule (silent). Status: open
+- **Repro:** `p = <1 AU, 1 mm, 0 m>` / `print p` → `<1, 0, 0> AU`; `print p[2]` → `6.68×10⁻¹⁵ AU`; `print 1 p` and
+  `print <1 AU, 0 m, 0 m> + <0 m, 1 mm, 0 m>` the same. JIT and `--interp` agree.
+- **Reference:** `<1, 6.68×10⁻¹⁵, 0> AU`. D197 and reference §Printing say "entries written in the program … are
+  never changed"; here a written 1 mm prints as 0.
+- **Test:** `test_2_written_vector_entry_is_not_printed_as_zero`.
+
+### 3. The integral noise snap zeroes integrals that are resolvable (silent). Status: open
+- **Repro:** `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` → `0`; `print ∫ sin(x) + 5e-15 dx from -1 to 1` → `0`
+  (also `+ 1e-15` and `∫ x exp(-x^2) + 1e-16 dx from -5 to 5`). `interp.py:905` (and the LLVM mirror) replace any
+  result |r| ≤ 50 ε ∫|f| (1.1×10⁻¹⁴ ∫|f|) by 0.
+- **Reference:** exact 8×10⁻⁹ and 1.0×10⁻¹⁴; SciPy `quad` returns 7.99×10⁻⁹ and 9.99×10⁻¹⁵ (0.1 % off). The
+  threshold is ~50× the rounding error these integrals actually have, so a small net charge or dipole on top of a
+  large antisymmetric part becomes an exact 0 with no warning. (Printing it with a "compatible with 0" note, or a
+  threshold near the actual error estimate, would keep the D44 intent.)
+- **Tests:** `test_3_small_but_resolvable_integral_is_not_snapped_to_zero`, `test_3_constant_offset_on_an_odd_integrand`.
+
+### 4. PDE values inside D206's skipped window are wrong by up to 19 %, with no warning (silent). Status: open
+- **Repro:** `D = 1e-4 m²/s`; `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(1 m, t) = 0 K
+  for x from 0 m to 1 m, t from 0 s to 100 s`; `print u(2.5 mm, 0.05 s), u(5 mm, 0.2 s)` → `40.930 K 35.023 K`.
+- **Reference:** 80 K erfc(x / 2√(Dt)) = 34.336 K and 34.336 K (semi-infinite rod; the far end is 1 m away). The
+  same program with `t from 0 s to 1 s` gives 34.214 K and 34.253 K, so the error is the time step (1000 steps of
+  0.1 s), not the grid. D206 skips the step-doubling check before t0 + 10 h²/D (0.625 s here with h = 2.5 mm), and
+  every value asked for inside that window is unchecked: these are far outside the promised 0.1 % of the range. At least a warning when
+  u is evaluated at a time inside (or near) the unchecked window would make it visible.
+- **Test:** `test_4_heat_step_early_times_are_accurate_or_warned`.
+
+### 5. D190's inverse iteration mixes a near-degenerate pair: a symmetric double well's ground state has no parity (silent). Status: open
+- **Repro:** `V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8`; `solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ with ψ(-3 nm) = 0,
+  ψ(3 nm) = 0 for x from -3 nm to 3 nm lowest 2` (m = m_e) → `ψ₁(-1 nm) = 4.24×10⁴`, `ψ₁(1 nm) = 4.18×10⁴ 1/m^(1/2)`,
+  ⟨x⟩₁ = ∫ x ψ₁² dx = −1.32×10⁻¹¹ m, ⟨x⟩₂ = +1.32×10⁻¹¹ m (the tunnelling splitting is 5×10⁻¹¹ eV). With
+  `lowest 2 using shooting`: 4.21×10⁴ at both points, ⟨x⟩ ≈ 10⁻¹⁴ m. With a barrier half as high (`* 4`), the matrix
+  method is symmetric too.
+- **Reference:** a non-degenerate 1-D bound state of an even potential has definite parity: ψ₁ even, ⟨x⟩ = 0; an
+  independent parity-restricted finite-difference solve gives |ψ₁(±1 nm)| = 4.210×10⁴ m^(−1/2). The Numerov
+  refinement is shifted by the FD eigenvalue, which is within the splitting of the other state, so it converges to a
+  mixture; ammonia-inversion-style problems get a 1.4 % asymmetric ground state and a spurious dipole.
+- **Test:** `test_5_double_well_ground_state_is_symmetric`.
+
+### 6. `d/ds h(2 s)` is h′ at 2 seconds, not the derivative in s (silent). Status: open
+- **Repro:** `h(s) = s^2` / `print d/ds h(2 s)` → `4 s`, no warning. `print d/ds h(2*s)` → `d/ds (h(2·s)) = 2 h'(2·s)`,
+  and `d/dt f(3 t)` gives the formula too. `k(m) = m^2` / `d/dm k(2 m)` → `4 m`. (`u = 1` first, `d/du f(2 u)` does
+  warn.)
+- **Reference:** on paper d/ds h(2s) = 2 h′(2s) = 8s. D221 reads `2 s` as a constant (2 seconds) because the variable of
+  `d/ds` doesn't count as "your variable" for D7, unlike D211's rule for the unknowns of a solve and function
+  parameters (`f(s) = 3 s^2` warns).
+- **Test:** `test_6_derivative_variable_named_like_a_unit_is_the_variable`.
+
+### 7. `∫ 3 s^2 ds` integrates 3 square seconds, with no warning (silent; older than D190). Status: open
+- **Repro:** `print ∫ 3 s^2 ds from 0 to 1` → `3 s²`; `print ∫ 2 m dm from 0 to 1` → `2 m`. No warning, while the
+  same `3 s^2` as a function parameter (`f(s) = 3 s^2`) and `Σ(2 g for g from 1 to 3)` warn (D7).
+- **Reference:** ∫₀¹ 3s² ds = 1 and ∫₀¹ 2m dm = 1. The integration variable should count as your variable for the D7
+  rules (the unit reading with a warning, as elsewhere), the same fix as #6.
+- **Test:** `test_7_integration_variable_named_like_a_unit_warns_or_is_the_variable`.
+
+**Not findings (noted):**
+- A kinked potential (`V = F |x − 0.0123 nm|`, Airy levels) gives E₁ to 1.8×10⁻⁶ at the default grid (0.3428147156 vs
+  0.3428153442 eV; `grid 8000` 5×10⁻⁹, shooting 7×10⁻⁷): the second-order finite-difference value is kept, as D190
+  says when the extrapolation ratio isn't steady; reference §eigen could list kinks next to jumps (~10⁻⁶).
+- `(2 + 3) h` is 5 × Planck's constant with no warning, while `2 h` warns (for hours write 2 hr); the unit `J s` shows.
+- `print d/dt h(0.5)^2` prints `d/dt (h(0.5)²) = 0` (the formula reading, shown).
+- `table(T = Ts)` with Ts in °C reports the column as `T [K]` and `print d.T` in K (D193 says a column keeps its
+  list's display unit); the values are right.
