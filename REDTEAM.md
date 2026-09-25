@@ -54,3 +54,187 @@ Tests are in `tests/test_redteam.py` unless noted.
 - **`1 Gy + 1 Sv` and `1 Bq + 1 Hz` added silently** (the same SI dimension). Adding or subtracting values whose display units are a known confusable pair now warns: Gy/Sv, Bq/Hz, Bq/rad/s, J/N m (torque), and Hz/rad/s from #2 (D95). **Tests:** `test_10_confusable_units_warn_when_added`, `test_10_same_named_units_dont_warn`.
 
 (The reviewer's list had no item 9.)
+
+## Round 2 (05:00 UTC)
+
+Reviewer: an independent subagent, on merge-agents at 889c57f (modules/stdlib D100–D103, seeded RNG/FFT/eigenvalue
+problems/PDEs D80–D83, natural units D60, `analyze` D70, the revised unit-after-number rule D7). Every finding below
+was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fermium build`. Each has an
+`xfail(strict=True)` test in `tests/test_redteam2.py` named `test_<N>_…`. Delete the mark when the finding is fixed.
+
+**What held up (no findings despite targeted probing):**
+- Natural units: conversions through ħc, c² and k_B, G = c = 1, Planck units, regions, and the "computed in natural units" errors.
+- `analyze` in SI: the Reynolds number, Taylor's blast wave, the Planck length, the hydrogen energy scale, and fits with the defined function.
+- The eigenvalue solver:
+  - the finite well matches the transcendental equation to 1e-10;
+  - the infinite well, harmonic oscillator and double well are right, and the linear potential matches the Airy zero;
+  - the matrix and shooting methods agree.
+- RNG: xoshiro256** matches the reference algorithm, moments over 10⁶ draws are right, and JIT = interp = build.
+- FFT against NumPy: odd and even n, Nyquist doubling, Parseval.
+- PDEs (heat, wave, TDSE) against closed forms, with *smooth, compatible* data.
+- Unit checking of lists, branches, `rand`, `linspace`, `ifft` and PDE boundary values.
+- Module errors.
+
+### 1. `2 c` is the speed of light even when `c` is your own variable (wrong-answer, silent). Status: open
+- **Repro:**
+  ```
+  c = 340 m/s          # speed of sound
+  t = 2 s
+  d = 2 c * t
+  print d in m
+  ```
+- **Expected:** 1360 m, or the D7 error "'2 c' is ambiguous … write 2*c or 2 [c]". That error is what `2 g * h`, `2 N * x` and `0.5 m v²` give.
+- **Actual:** `1.19917×10⁹ m`, with no error and no warning. `print 2 c` alone prints `2 c` without the D7 warning that `2 N`, `2 V` and `2 u` get.
+- **Where:** fermium/parser.py, in `_colliding_unit` (line ~1204) and `_warn_bare_unit` (~1233, ~1236). Both skip the name `c` (`f.name != "c"`), probably so the built-in constant doesn't trigger them. The exemption should apply only while `c` is still the built-in constant.
+- **Tests:** `test_1_two_c_times_t_with_your_own_c_is_not_the_speed_of_light`, `test_1_two_c_alone_with_your_own_c_warns`.
+
+### 2. Crank–Nicolson with a coarse time step is silently wrong, even in sign (wrong-answer). Status: open
+- **Repro:**
+  ```
+  L = 1 m
+  D = 0.01 m²/s
+  solve ∂u/∂t = D * ∂²u/∂x²
+      with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+      for x from 0 m to L, t from 0 s to 1000 s step 100 s
+  print u(0.5 m, 1000 s) to 6 digits
+  ```
+- **Expected:** 2 K exp(−Dπ²t/L²) = 2.7×10⁻⁴³ K, or a warning like the RK4 step-doubling one (round 1 #5).
+- **Actual:** `0.0328237 K`, with no warning.
+  - Why: with r = Dπ²Δt/(2L²) = 4.9, CN's amplification factor for this mode is (1 − r)/(1 + r) = −0.66. So the "decay" alternates in sign and is 10⁴¹ times too slow.
+  - Another case: D = 1 m²/s, u₀ = 1 K, t to 0.5 s with step 0.05 s gives u(0.5 m) = 0.00643 K, where the exact value is 0.00916 K (30 % off).
+  - The reference says CN is "stable for any step". That is true, but it reads as "accurate for any step".
+- **Where:** fermium/runtime/pde.py, `pde_solve`. There is no accuracy check on the time step. A step-doubling estimate, as for RK4, would catch this.
+- **Test:** `test_2_coarse_crank_nicolson_step_is_right_or_warns`.
+
+### 3. Crank–Nicolson keeps grid-scale wiggles from incompatible initial and boundary data, with default settings (wrong-answer). Status: open
+- **Repro A (Neumann, the flux is wrong):**
+  ```
+  L = 1 m
+  D = 1 m²/s
+  solve ∂u/∂t = D * ∂²u/∂x²
+      with u(x, 0 s) = 0 K, ∂u/∂x(0 m, t) = -1 K/m, u(L, t) = 0 K
+      for x from 0 m to L, t from 0 s to 5 s
+  print ∂u/∂x(0 m, 5 s) to 6 digits
+  ```
+  - **Expected:** −1 K/m, the imposed slope. By t = 5 s the solution is the steady line 1 K − x·1 K/m to within 10⁻⁵.
+  - **Actual:** `−0.747629 K/m`. With `grid 4000` it is `−0.0100420 K/m`, and u(0 m) gets *worse* on the finer grid (0.99982 K becomes 0.99937 K).
+  - Nearby points give −0.9938, −1.0210 and −0.9996 K/m: a sawtooth.
+  - With initial data that already has slope −1 K/m the result is exact. So the cause is the start-up, not the boundary formula.
+- **Repro B (Dirichlet, a wall that doesn't match u₀):** the same equation with `u(x, 0 s) = 1 K, u(0 m, t) = 0 K, u(L, t) = 0 K`, `t from 0 s to 2 s`, and `print u(0.005 m, 2 s)`.
+  - **Expected:** 5.4×10⁻¹¹ K, from the Fourier series. The peak at L/2 is 3.4×10⁻⁹ K, and Fermium gets that right.
+  - **Actual:** `−0.00265119 K`, and `0.00239863 K` at 2.5 mm. This ±0.0025 K sawtooth at the walls is 10⁶ times the real solution, and it would dominate `plot u vs x`.
+- **Why:** CN's amplification factor for the stiffest grid modes is ≈ −1 (Δt D/h² is 800 at the defaults and 80 000 with grid 4000). So the jump between u₀ and the boundary condition never decays. The usual fix is a few backward-Euler (L-stable) start-up steps, known as Rannacher smoothing.
+- **Where:** fermium/runtime/pde.py, `pde_solve` (the time stepping).
+- **Tests:** `test_3_neumann_slope_at_the_boundary_is_the_one_imposed`, `test_3_step_initial_data_leaves_no_wiggle_at_the_wall`.
+
+### 4. `std` of a single value is 0 (wrong-answer). Status: open
+- **Repro:** `print std([5 m])`, and `import stats` then `print stats.standard_error([5 m])`.
+- **Expected:** an error ("std needs at least 2 values") or NaN. The reference says `std` is the sample standard deviation (it divides by N − 1), which is 0/0 for one value. NumPy's `std(ddof=1)` gives nan.
+- **Actual:** `0 m` for both, so one measurement is reported with zero uncertainty. The JIT, the interpreter and build agree.
+- **Where:** fermium/interp.py, ~1682 `n - 1 if n >= 2 else 1` (and ~1629), mirrored in the JIT and the C runtime.
+- **Test:** `test_4_std_of_a_single_value_is_not_zero` (2 cases).
+
+### 5. stdlib `em.cyclotron_frequency` gives wrong numbers in rev/s and rpm (wrong-answer; only the JIT warns). Status: open
+- **Repro:**
+  ```
+  import em
+  f = em.cyclotron_frequency(e, 1 T, m_p)
+  print f in rev/s to 6 digits
+  ```
+- **Expected:** eB/(2π m_p) = 1.52452×10⁷ turns per second. The module header says "_frequency … are in cycles per second".
+- **Actual:** `2.42635×10⁶ rev/s`, which is 2π too small. `in rpm` gives 1.45581×10⁸ rpm instead of 9.14711×10⁸.
+  - Cause: the function ends in `in Hz`, and Fermium's Hz is rad/s (D27/D95). So the value is tagged as an angular frequency.
+  - The JIT warns, but the hint ("write it in rev/s instead of Hz … or multiply by 2π") asks for a change inside the stdlib that the user can't make. `--interp` prints the wrong number silently (#6).
+  - `cyclotron_angular_frequency(...) in rev/s` is right.
+- **Where:** fermium/stdlib/em.fm (`cyclotron_frequency … in Hz`). `skin_depth(… f [Hz] …)` takes the same kind of value. A likely fix is to return `in rev/s`, or to document the convention in docs/stdlib.md.
+- **Test:** `test_5_cyclotron_frequency_in_rev_per_s`.
+
+### 6. `fermium run --interp` never shows compile-time warnings (JIT/interp difference). Status: open
+- **Repro:** a file with `f = 50 Hz` and `print f in rpm`, run with `fermium run file.fm` and with `fermium run --interp file.fm`.
+- **Expected:** both print the D95 warning "Hz here means rad/s …, so 1 Hz is 9.5493 rpm, not 60 rpm".
+- **Actual:** the JIT prints it. `--interp` prints only `477.465 rpm`.
+  - The same is true of every checker warning: `'2 u' is the unit u, not your variable u`, "implicit multiplication binds tighter than '/'", °C scaling, and confusable units.
+  - The playground passes a Diagnostics object and is fine.
+- **Where:** fermium/cli.py, ~47–49. It calls `run_interpreted(src, args.file)` without `diags` and never prints `diags.warnings`. Compare `driver.run_source`, which prints them.
+- **Test:** `test_6_interp_cli_shows_the_same_warnings_as_the_jit`.
+
+### 7. A qualified module call can't be differentiated (docs/message). Status: open
+- **Repro:**
+  ```
+  import mechanics
+  T(L) = mechanics.pendulum_period(L, 9.81 m/s²)
+  print T'(1 m)
+  ```
+  `f(T) = 2 astro.wien_peak(T)` then `f'(5000 K)` fails the same way, and so does `print d/dL mechanics.pendulum_period(L, 9.81 m/s²)`.
+- **Expected:** 1.00303 s/m, which is what `from mechanics import pendulum_period` gives. The Modules section of the reference says imported functions "can be passed to other functions, integrated and differentiated".
+- **Actual:** `line 2: can't differentiate this expression symbolically`, with the caret at the start of the right-hand side. Nothing says that the `mechanics.` form is the problem.
+- **Where:** fermium/calculus.py, ~468. The symbolic differentiator doesn't resolve a qualified call `mod.f(…)`. It handles only the bare-name form and `mod.f'`.
+- **Test:** `test_7_qualified_module_calls_can_be_differentiated` (2 cases).
+
+### 8. `analyze` after `units natural` silently works modulo ħ and c, and says "length, mass, time" (message). Status: open
+- **Repro:** `units natural(ħ = c = 1)`, then `analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]`.
+- **Expected:** either the SI analysis, or an explicit note that ħ = c = 1 leaves one dimension (energy).
+- **Actual:** `4 quantities, 1 independent dimension (among length, mass, time) → 3 dimensionless groups`, then `so T = L · f(Π₂, Π₃)` and `defined pendulum(L) = L`.
+  - The text names three dimensions and says only one is independent.
+  - ħ and c enter the analysis without being listed.
+  - `pendulum(1 m, 9.81 m/s²)` is then an arity error.
+  - The reference section on `analyze` doesn't mention natural units.
+- **Where:** fermium/dimanalysis.py, ~315. The dimension list uses SI names, while the rank is computed in the natural-unit dimension space.
+- **Test:** `test_8_analyze_in_natural_units_says_so`.
+
+### 9. stdlib `nuclear.bateman_daughter` is NaN for equal half-lives (wrong-answer: NaN, no error). Status: open
+- **Repro:** `from nuclear import bateman_daughter`, then `print bateman_daughter(1000, 10 s, 10 s, 5 s)`.
+- **Expected:** the λ_d → λ_p limit N₀ λ t e^(−λt) = 245.066, or an error saying the formula needs different half-lives.
+- **Actual:** `NaN`, from 0/0 in `N0 λp / (λd - λp) * (…)`. Nearly equal half-lives also lose digits to cancellation.
+- **Where:** fermium/stdlib/nuclear.fm, `bateman_daughter`.
+- **Test:** `test_9_bateman_daughter_equal_half_lives`.
+
+### 10. Differentiating through a multi-line function: the error has no line and no caret (message). Status: open
+- **Repro:**
+  ```
+  g(t) =
+      a = 2 s
+      t^2 / a
+  f(t) = g(t) + 1 s
+  print f'(5 s)
+  ```
+- **Expected:** `file.fm, line 5: …` with a caret, as `print g'(5 s)` gets ("line 4: can only differentiate one-line functions …").
+- **Actual:** the bare text `can't differentiate through g: it's defined over several lines`, with no file, line or source line. The same happens with the stdlib (`f(t) = bateman_daughter(…)`).
+- **Where:** fermium/checker.py, ~3259. It raises `FermiumError(...)` without a line or column.
+- **Test:** `test_10_multiline_function_error_has_a_line`.
+
+### 11. `using shooting` or `using explicit` on its own line gives "expected '=' in this equation" (message). Status: open
+- **Repro:** an eigenvalue `solve` with its options on separate lines, `lowest 3` and then `using shooting`. Or a PDE with `using explicit` on its own line after the `for` line.
+- **Expected:** it works, as `grid 1000` on its own line does, or an error that says `using` goes on the `for` or `lowest` line.
+- **Actual:** `line 5: expected '=' in this equation but the line ended`, with the caret after `using shooting`. docs/reference.md §20 says only "`using matrix` … and `using shooting`, after `lowest N`".
+- **Where:** fermium/parser.py, in the handling of `solve` option lines. `grid` is accepted on its own line; `using` isn't.
+- **Test:** `test_11_using_on_its_own_line` (2 cases).
+
+### 12. Eigenvalue problem in r: the singular-point error talks about x (message). Status: open
+- **Repro:** the textbook radial hydrogen problem: `V(r) = -e²/(4π ε₀ r)`, then `solve -ħ²/(2*m_e) * u'' + V(r) u = E u with u(0 nm) = 0, u(5 nm) = 0 for r from 0 nm to 5 nm lowest 3`.
+- **Expected:** "can't be evaluated at r = 0 …", ideally in the user's units (nm).
+- **Actual:** `the equation can't be evaluated at x = 0 (SI units): NaN or infinite; move the range's end away from a singular point`.
+- **Where:** fermium/runtime/eigen.py, ~52, hard-codes `x`.
+- **Test:** `test_12_singular_point_error_names_the_right_variable`.
+
+### 13. Assigning to a module constant: the hint suggests `solve … for nuclear` (message). Status: open
+- **Repro:** `import nuclear`, then `nuclear.a_V = 16 MeV`.
+- **Expected:** something like "a module's constants can't be changed; copy it: a_V = 16 MeV".
+- **Actual:** `can't store a value in nuclear.a_V: the left side of = must be a variable name`, with the hint `to solve nuclear.a_V = … for nuclear, write  solve nuclear.a_V = … for nuclear from nuclear_min to nuclear_max`.
+- **Where:** fermium/parser.py, ~326. The hint for an assignment target treats `nuclear` as an unknown.
+- **Test:** `test_13_assigning_to_a_module_constant_has_a_sensible_hint`.
+
+### 14. `sample` and `randn` accept nonsense arguments silently (message). Status: open
+- **Repro:**
+  - `print len(sample(rand(), 2.5))` prints `2`.
+  - `print sample(rand(), -1)` prints `[]`.
+  - `print randn(1 m, -1 m)` prints `1.01896 m`.
+- **Expected:** errors. The number of samples must be a whole number ≥ 0 (or ≥ 1), and σ must not be negative.
+- **Where:** the `sample` and `randn` builtins (fermium/codegen_m3.py `builtin`, with mirrors in the interpreter and the C runtime).
+- **Test:** `test_14_bad_sample_counts_and_negative_sigma_are_errors` (3 cases).
+
+**Not reported,** by instruction or because they are already documented:
+- the `∂u/∂t(x, t)` segfault, fixed on merge-agents in 889c57f;
+- digit counts;
+- a decay 1 fm wide integrated over 1 m giving 0 (§19, "narrow peak in a huge finite range");
+- FFT results in `fermium build` differing from NumPy by 10⁻¹⁶.
