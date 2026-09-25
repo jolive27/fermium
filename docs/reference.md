@@ -15,7 +15,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze))
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -537,6 +537,37 @@ plot data.T vs data.L to "pendulum.png"
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas.
   - Several series: `plot a vs t, b vs t`.
 
+### Dimensional analysis: analyze
+
+`analyze name: T [s] depends on L [m], m [kg], g [m/s²]` applies the Buckingham Π theorem: it finds the dimensionless groups that can be made from the target (T) and the quantities it depends on, and says what they imply for the target.
+
+```fermium
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]
+print 2π pendulum(1 m, 9.81 m/s²)
+```
+
+prints
+
+```
+dimensional analysis of pendulum: T depends on L, m, g
+  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group
+  Π₁ = T √(g/L)
+  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)
+  m drops out: nothing else has mass
+  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)
+2.01 s
+```
+
+- **Quantities:** each is a name with a unit in brackets (`L [m]`; only the dimension matters, `[1]` is a pure number), a variable defined earlier, or a built-in constant (`G`, `c`, `ħ`, `e`, `m_e`, `ε₀`, …). A bracketed name is always a new quantity, even if a constant has that name.
+- **Groups:** there are n − r of them (n quantities, r = rank of the dimension matrix). The target is in exactly one group, with exponent 1. The groups are built from the *repeating* quantities: the inputs, in the order written, that are dimensionally independent of the ones before them. So the order chooses the form: `F [N] depends on ρ [kg/m³], v [m/s], A [m²], μ [Pa s]` gives `F = ρ v² A · f(Π₂)` with Π₂ = ρ v √A/μ (the Reynolds number); listing μ first gives `F = μ v √A · f(Π₂)`, with Π₂ = v ρ √A/μ. The other groups are scaled to small exponents (integers or halves), mostly positive.
+- **Conclusion:** one group: `T ∝ …`; several: `T = … · f(Π₂, …)`. An input that is in no group *drops out*, with the reason (`nothing else has mass`).
+- **The result is usable:** with a name, `analyze` defines `name(...)` = the formula for the target without its constant, with the non-constant quantities that appear in it as arguments (bracketed ones keep their units, so `pendulum(1 s, …)` is an error). Use it in formulas or fits: `fit T = C pendulum(L, 9.81 m/s²) to data` fits the pure number C. If the formula has only constants (`analyze planck: ℓ [m] depends on G, ħ, c`), `name` is a plain value and its value is printed. Without a name (`analyze T [s] depends on L [m], g [m/s²]`), nothing is defined.
+- **Errors:** a target whose dimension can't be made from the inputs is an error that says which base dimension is missing (`v can't be made from m, t: v has length, but nothing it depends on has length`), and says so when there is no dimensionless group at all. A name with no known units asks for a bracket. `analyze` only works at the top level (not inside `if`, loops or functions).
+- **Exact:** the dimension matrix is solved with fractions, so fifth roots and halves are exact: `R [m] depends on E [J], ρ [kg/m³], t [s]` gives `R ∝ (E t²/ρ)^(1/5)` (Taylor's blast wave). The printed formulas are valid Fermium.
+- `analyze` stays an ordinary name everywhere else: a line is an analysis only when it has `depends` in it.
+
+See [bootcamp lesson 11](../bootcamp/lesson11_dimensional_analysis.md) for a tutorial and DECISIONS.md D70 for the design.
+
 ## 12. Symbols and ASCII spellings
 
 Every symbol has an ASCII spelling that means exactly the same thing.
@@ -653,6 +684,7 @@ program    := statement*
 statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | name(params) = expr | name(params) = NEWLINE INDENT block
             | print items | plot series [to "file"] | fit eq to expr [with binds]
+            | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue

@@ -36,6 +36,7 @@ Each lesson takes roughly 30–60 minutes.
 | [8](lesson08_integrals.md) | Integrals | `∫ … dx`: work, areas, the blackbody |
 | [9](lesson09_differential_equations.md) | Differential equations | Springs, decay, orbits with `solve` |
 | [10](lesson10_final_project.md) | Final project | Simulate a planet's orbit from scratch |
+| [11](lesson11_dimensional_analysis.md) | Bonus: dimensional analysis | `analyze`: guess a law from units alone (Buckingham Π) |
 
 Extras:
 - [CHEATSHEET.md](CHEATSHEET.md): every symbol, how to type it, and the core commands, on one page.
