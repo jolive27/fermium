@@ -674,6 +674,7 @@ dimensional analysis of pendulum: T depends on L, m, g
 - **Conclusion:** one group: `T ∝ …`; several: `T = … · f(Π₂, …)`. An input that is in no group *drops out*, with the reason (`nothing else has mass`).
 - **The result is usable:** with a name, `analyze` defines `name(...)` = the formula for the target without its constant, with the non-constant quantities that appear in it as arguments (bracketed ones keep their units, so `pendulum(1 s, …)` is an error). Use it in formulas or fits: `fit T = C pendulum(L, 9.81 m/s²) to data` fits the pure number C. If the formula has only constants (`analyze planck: ℓ [m] depends on G, ħ, c`), `name` is a plain value and its value is printed. Without a name (`analyze T [s] depends on L [m], g [m/s²]`), nothing is defined.
 - **Errors:** a target whose dimension can't be made from the inputs is an error that says which base dimension is missing (`v can't be made from m, t: v has length, but nothing it depends on has length`), and says so when there is no dimensionless group at all. A name with no known units asks for a bracket. `analyze` only works at the top level (not inside `if`, loops or functions).
+- **In natural units:** after `units natural(ħ = c = 1)` (or any system that sets constants to 1), `analyze` still works in SI dimensions, since with ħ = c = 1 length, mass and time collapse into powers of energy and the groups would be lost. It says so in a line of its own; the units in brackets are read as SI units, and a variable computed inside the natural region needs a bracketed unit. The function it defines is an ordinary function of the region.
 - **Exact:** the dimension matrix is solved with fractions, so fifth roots and halves are exact: `R [m] depends on E [J], ρ [kg/m³], t [s]` gives `R ∝ (E t²/ρ)^(1/5)` (Taylor's blast wave). The printed formulas are valid Fermium.
 - `analyze` stays an ordinary name everywhere else: a line is an analysis only when it has `depends` in it.
 
@@ -985,7 +986,7 @@ print randn(9.81 m/s², 0.02 m/s²)   # normal with mean μ and standard deviati
 ```
 
 - **`seed(n)`** is a statement on its own line. It restarts the generator: the same seed gives the same numbers, in `fermium run`, in a `fermium build` executable and in the reference interpreter (the generator, xoshiro256\*\*, is written once in LLVM IR and once in Python, DECISIONS D80). A program that never calls `seed` starts as if it had called `seed(0)`, so it is reproducible too. In the REPL and in Jupyter, the numbers continue from one input to the next.
-- **`sample(expr, N)`** evaluates `expr` N times, drawing new random numbers each time, and gives a list with the units of `expr`. With `mean`, `std` and `len`, this is a Monte Carlo estimate with its statistical error:
+- **`sample(expr, N)`** evaluates `expr` N times, drawing new random numbers each time, and gives a list with the units of `expr` (N must be a whole number, 0 or more; `randn(μ, σ)` needs σ ≥ 0). With `mean`, `std` and `len`, this is a Monte Carlo estimate with its statistical error:
 
 ```fermium
 seed(1)
@@ -1000,7 +1001,7 @@ Ts = sample(2π sqrt(randn(1.00 m, 0.01 m) / g), 20000)
 print mean(Ts), "±", std(Ts)
 ```
 
-- `randn` uses the Box–Muller method (two uniform numbers per normal number). `std` is the sample standard deviation (divides by N − 1).
+- `randn` uses the Box–Muller method (two uniform numbers per normal number). `std` is the sample standard deviation (divides by N − 1), so it needs at least 2 values: `std([5 m])` is an error that says so, not 0 m.
 
 ### Fourier transforms
 

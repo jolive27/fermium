@@ -110,7 +110,7 @@ def test_em():
         ("rc_time_constant(1 kΩ, 3 μF)", "s", 3e-3),
         ("rc_charging_voltage(5 V, 1 ms, 2 ms)", "V", 5 * (1 - math.exp(-2))),
         ("cyclotron_angular_frequency(e, 1.5 T, m_p)", "rad/s", e * 1.5 / m_p),
-        ("cyclotron_frequency(-e, 1.5 T, m_e)", "Hz", e * 1.5 / (2 * math.pi * m_e)),
+        ("cyclotron_frequency(-e, 1.5 T, m_e)", "rev/s", e * 1.5 / (2 * math.pi * m_e)),     # turns per second
         ("larmor_radius(m_e, 1e6 m/s, -e, 1 mT)", "m", m_e * 1e6 / (e * 1e-3)),
         ("skin_depth(1.68e-8 ohm m, 60 Hz, 1)", "m", math.sqrt(1.68e-8 / (math.pi * 60 * mu0))),
         ("wire_field(10 A, 1 cm)", "T", mu0 * 10 / (2 * math.pi * 0.01)),

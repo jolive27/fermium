@@ -22,9 +22,16 @@ import math
 
 
 class EigenFail(Exception):
-    def __init__(self, message):
+    def __init__(self, message, x=None):
         super().__init__(message)
         self.message = message
+        self.x = x                  # a singular point (SI): the caller names the variable, in its units
+
+
+def singular_text(name, where):
+    """The singular-point error, with the problem's own variable and units (red team round 2 #12)."""
+    return (f"the equation can't be evaluated at {name} = {where}: NaN or infinite; move the range's end away "
+            f"from a singular point")
 
 
 def _coefficients(rhs, xs):
@@ -49,8 +56,7 @@ def _coefficients(rhs, xs):
             worst_beta = max(worst_beta, (abs(b0) + abs(b1)) * h)     # β ψ' against ψ''/ψ ~ 1/h²
     if not (np.all(np.isfinite(alpha)) and np.all(np.isfinite(w))):
         bad = int(np.argmax(~(np.isfinite(alpha) & np.isfinite(w))))
-        raise EigenFail(f"the equation can't be evaluated at x = {xs[bad]:g} (SI units): NaN or infinite; "
-                        f"move the range's end away from a singular point")
+        raise EigenFail(singular_text("x", f"{xs[bad]:g} (SI units)"), x=float(xs[bad]))
     if worst_lin > 1e-6:
         raise EigenFail("an eigenvalue problem must be linear: every term has one factor ψ, ψ' or ψ'' "
                         "(like -ħ²/(2m) ψ'' + V(x) ψ = E ψ)")

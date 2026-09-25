@@ -33,6 +33,8 @@ def init_llvm():
 CB = ctypes.CFUNCTYPE
 c_double, c_int64, c_void_p = ctypes.c_double, ctypes.c_int64, ctypes.c_void_p
 DPTR = ctypes.POINTER(ctypes.c_double)
+STD_ONE_TEXT = ("std needs at least 2 values: it is the sample standard deviation, which divides by N − 1, so one "
+                "value says nothing about the spread (quote the instrument's uncertainty for a single measurement)")
 ERR_PENDING = -1        # fm_error kind: stop with the message a callback already put in rt.error
 
 
@@ -292,9 +294,9 @@ class Runtime:
             from .m3rt import animate_cb
             return animate_cb(rt, aid, solp, xa, xb)
 
-        def eigen(guard, fn, env, a, b, nstates, grid, method, out):
+        def eigen(guard, fn, env, a, b, nstates, grid, method, tname, fmt, out):
             from .m3rt import eigen_cb
-            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out)
+            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname, fmt)
 
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
@@ -330,7 +332,7 @@ class Runtime:
                          ctypes.POINTER(c_void_p))(pde),
             "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
             "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
-                           ctypes.POINTER(c_void_p))(eigen),
+                           c_int64, c_int64, ctypes.POINTER(c_void_p))(eigen),
         }
         if llvm is not None:
             for name, cb in self.callbacks.items():
@@ -417,6 +419,12 @@ class Runtime:
             return f"these two lists have different lengths ({int(a)} and {int(b)})"
         if kind == 6:
             return "this list is empty"
+        if kind == 24:
+            return STD_ONE_TEXT
+        if kind == 25:
+            return f"the number of samples must be a whole number, 0 or more, not {format_number(a)}"
+        if kind == 26:
+            return "randn(μ, σ): σ is a standard deviation, so it can't be negative"
         if kind == 7:
             return "the step must be a non-zero number that goes from the start towards the end"
         if kind == 8:

@@ -239,6 +239,10 @@ class Checker(ImportMixin, C.DiffContext):
             raise self.err(msg_fn(), node, hint)
 
     def resolve_unit(self, uexpr: A.UnitExpr) -> Unit:
+        return self.nat.canon_unit(self.resolve_unit_si(uexpr))
+
+    def resolve_unit_si(self, uexpr: A.UnitExpr) -> Unit:
+        """The unit in SI dimensions, whatever system is in force (resolve_unit maps it into that system)."""
         total = None
         for f in uexpr.factors:
             u = lookup_unit(f.name)
@@ -264,7 +268,7 @@ class Checker(ImportMixin, C.DiffContext):
         if total is None:
             total = Unit("1", DIMLESS, 1.0)
         total.name = canonical_unit_name(uexpr) or total.name
-        return self.nat.canon_unit(total)
+        return total
 
     # ============================================================ program
     def check_program(self, prog: A.Program, name="main") -> CheckedModule:
@@ -593,12 +597,13 @@ class Checker(ImportMixin, C.DiffContext):
             raise self.err("analyze must be at the top level of the program (not inside a block)", s)
         raw = s.raw or {}
         kinds = {}
+        natural = self.nat.natural      # analyze in SI dimensions even then (red team round 2 #8, D132)
 
         def dim_of(p):
             show = raw.get(p.name, p.name)
             if p.unit is not None:
                 kinds[p.name] = "var"
-                return self.resolve_unit(p.unit).dim
+                return self.resolve_unit_si(p.unit).dim
             b, _ = ctx.scope.lookup(p.name)
             if isinstance(b, ConstInfo):
                 kinds[p.name] = "const"
@@ -607,6 +612,9 @@ class Checker(ImportMixin, C.DiffContext):
                 if not self.U.is_concrete(b.ty.dim):
                     raise self.err(f"the units of {show} aren't known yet", p,
                                    hint=f"give its unit here:  {show} [m]")
+                if natural and getattr(b, "nat", None) is not None and b.nat.natural:
+                    raise self.err(f"{show} was computed in natural units, so its SI dimension (which analyze "
+                                   f"works with) isn't known", p, hint=f"give its unit here instead:  {show} [m]")
                 kinds[p.name] = "var"
                 return self.U.resolve(b.ty.dim)
             if b is None:
@@ -627,6 +635,10 @@ class Checker(ImportMixin, C.DiffContext):
             node = s if e.index is None else ([s.target] + s.inputs)[e.index]
             raise self.err(e.message, node, hint=e.hint)
         lines = report(an, title=s.title)
+        if natural:
+            lines.insert(2, f"  (in SI dimensions: under {self.nat.label()} those constants are pure numbers, so "
+                            f"length, mass and time would collapse into powers of "
+                            f"{'energy' if 'ħ' in self.nat.consts else 'fewer dimensions'} and hide the groups)")
         stmts = [I.SPrint([("text", None, self.text(line))]) for line in lines]
         if not (s.title and an.prefactor):
             return stmts
@@ -3322,7 +3334,12 @@ class Checker(ImportMixin, C.DiffContext):
         body = info.body_expr()
         for _ in range(order):
             saved = self.cur_ctx
-            body = C.diff(body, pname, self._diffctx(info.scope))
+            try:
+                body = C.diff(body, pname, self._diffctx(info.scope))
+            except FermiumError as ex:
+                if ex.line is None and getattr(node, "line", None):
+                    ex.line, ex.col = node.line, node.col
+                raise
             self.cur_ctx = saved
         suffix = "'" * order if len(f.params) == 1 else f"_∂{pname}" * order
         pretty = (info.display_name + "'" * order) if len(f.params) == 1 else \
@@ -3347,7 +3364,10 @@ class Checker(ImportMixin, C.DiffContext):
                 b, _ = scope.lookup(fname)
                 if isinstance(b, FuncInfo):
                     if not b.one_liner:
-                        raise FermiumError(f"can't differentiate through {fname}: it's defined over several lines")
+                        raise FermiumError(f"can't differentiate through {fname}: it's defined over several lines",
+                                           hint=f"symbolic derivatives need one-line functions: write {fname} on "
+                                                f"one line (with  where  for helper names), or use a finite "
+                                                f"difference, (f(x + h) - f(x - h)) / (2h)")
                     return ([p.name for p in b.fdef.params], b.body_expr())
                 return None
 
@@ -3360,6 +3380,24 @@ class Checker(ImportMixin, C.DiffContext):
             def is_solution(self, fname):
                 b, _ = scope.lookup(fname)
                 return isinstance(b, SolView)
+
+            def field_function(self, f):
+                """`mechanics.pendulum_period` in a formula being differentiated (red team round 2 #7): the
+                module's function, bound here under a private name (not exported, can't clash with a user name)
+                so it and its derivatives can be called from this scope like `from … import` names."""
+                class _Ctx:
+                    pass
+                c = _Ctx()
+                c.scope = scope
+                mod = checker.module_of(f.target, c)
+                if mod is None or f.name.startswith("_"):
+                    return None
+                b = mod.scope.names.get(f.name)
+                if not isinstance(b, FuncInfo):
+                    return None
+                key = "_" + C.to_source(f)
+                scope.names.setdefault(key, b)
+                return key
         return DC()
 
     def e_Deriv(self, e, ctx):

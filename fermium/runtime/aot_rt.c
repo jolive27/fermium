@@ -269,7 +269,7 @@ static const char *tname(double b) { return b >= 0 && b == b ? fm_texts[(int64_t
 
 void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     char x[160], y[160];
-    int with_units = kind == 2 || kind == 3 || kind == 8 || kind == 13 || kind == 14 || kind >= 16;
+    int with_units = kind == 2 || kind == 3 || kind == 8 || kind == 13 || kind == 14 || (kind >= 16 && !(kind >= 24 && kind <= 26));
     if (with_units && fmt >= 0) {       /* values with their units, like the Python runtime */
         const fm_fmt *f = &fm_fmts[fmt];
         char bx[128], by[128];
@@ -305,6 +305,9 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 4: snprintf(err_msg, sizeof err_msg, "%s", fm_texts[(int64_t)a]); break;
     case 5: snprintf(err_msg, sizeof err_msg, "these two lists have different lengths (%s and %s)", x, y); break;
     case 6: snprintf(err_msg, sizeof err_msg, "this list is empty"); break;
+    case 25: snprintf(err_msg, sizeof err_msg, "the number of samples must be a whole number, 0 or more, not %s", x); break;
+    case 26: snprintf(err_msg, sizeof err_msg, "randn(\xce\xbc, \xcf\x83): \xcf\x83 is a standard deviation, so it can't be negative"); break;
+    case 24: snprintf(err_msg, sizeof err_msg, "std needs at least 2 values: it is the sample standard deviation, which divides by N \xe2\x88\x92 1, so one value says nothing about the spread (quote the instrument's uncertainty for a single measurement)"); break;
     case 7: snprintf(err_msg, sizeof err_msg, "the step must be a non-zero number that goes from the start towards the end"); break;
     case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near %s = %s%s; the solution may blow up there", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
     case 16: snprintf(err_msg, sizeof err_msg, "the right side of the equation is NaN or infinite at %s = %s (0/0? 1/0?); if the equation is singular there, start slightly away from %s", tname(b), x, x); break;

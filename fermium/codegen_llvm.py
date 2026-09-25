@@ -42,6 +42,7 @@ ERR_QUAD = 9
 ERR_QUAD_NAN = 31          # the integrand is NaN on more than an isolated point (D45)
 ERR_QUAD_INF = 32          # ... or ±∞ (and nowhere NaN): it may blow up there (D45)
 ERR_DEEP = 10
+ERR_STD_ONE = 24
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
 ERR_SINGULAR = 15           # inverse / solve_linear of a singular matrix
@@ -2754,7 +2755,7 @@ class FuncGen:
             a, c, nf = args
             n = self.list_count(nf)
             out, data = self.new_list(n)
-            den = b.sitofp(b.select(b.icmp_signed("<", n, i64(2)), i64(1), b.sub(n, i64(1))), F64)
+            den = b.sitofp(b.sub(n, i64(1)), F64)
             step = b.fdiv(b.fsub(c, a), den)
             with self.lp.range(i64(0), n) as i:
                 b.store(b.fadd(a, b.fmul(b.sitofp(i, F64), step)), b.gep(data, [i]))
@@ -2830,6 +2831,9 @@ class FuncGen:
         if name in ("mean", "std", "min_list", "max_list", "first", "last"):
             with b.if_then(b.icmp_signed("<", n, i64(1))):
                 self.fail(ERR_EMPTY, f64(0), f64(0))
+        if name == "std":        # the N − 1 sample std of one value is 0/0 (red team round 2 #4)
+            with b.if_then(b.icmp_signed("<", n, i64(2))):
+                self.fail(ERR_STD_ONE, f64(0), f64(0))
         if name == "first":
             return b.load(data)
         if name == "last":
@@ -2855,7 +2859,7 @@ class FuncGen:
         with self.lp.range(i64(0), n) as i:
             d = b.fsub(b.load(b.gep(data, [i])), mean)
             b.store(b.fadd(b.load(acc), b.fmul(d, d)), acc)
-        den = b.sitofp(b.select(b.icmp_signed("<", n, i64(2)), i64(1), b.sub(n, i64(1))), F64)
+        den = b.sitofp(b.sub(n, i64(1)), F64)
         return b.call(self.mg.intrinsic("sqrt"), [b.fdiv(b.load(acc), den)])
 
 

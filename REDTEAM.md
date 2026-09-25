@@ -130,14 +130,16 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/runtime/pde.py, `pde_solve` (the time stepping).
 - **Tests:** `test_3_neumann_slope_at_the_boundary_is_the_one_imposed`, `test_3_step_initial_data_leaves_no_wiggle_at_the_wall`.
 
-### 4. `std` of a single value is 0 (wrong-answer). Status: open
+### 4. `std` of a single value is 0 (wrong-answer). Status: fixed
+- **Fix:** `std` of one value is now the run-time error "std needs at least 2 values: it is the sample standard deviation, which divides by N − 1 …" in the JIT, the interpreter and `fermium build` (so `stats.standard_error([5 m])` too) (D133).
 - **Repro:** `print std([5 m])`, and `import stats` then `print stats.standard_error([5 m])`.
 - **Expected:** an error ("std needs at least 2 values") or NaN. The reference says `std` is the sample standard deviation (it divides by N − 1), which is 0/0 for one value. NumPy's `std(ddof=1)` gives nan.
 - **Actual:** `0 m` for both, so one measurement is reported with zero uncertainty. The JIT, the interpreter and build agree.
 - **Where:** fermium/interp.py, ~1682 `n - 1 if n >= 2 else 1` (and ~1629), mirrored in the JIT and the C runtime.
 - **Test:** `test_4_std_of_a_single_value_is_not_zero` (2 cases).
 
-### 5. stdlib `em.cyclotron_frequency` gives wrong numbers in rev/s and rpm (wrong-answer; only the JIT warns). Status: open
+### 5. stdlib `em.cyclotron_frequency` gives wrong numbers in rev/s and rpm (wrong-answer; only the JIT warns). Status: fixed
+- **Fix:** `em.cyclotron_frequency` now returns the turning rate shown in rev/s (value |q|B/m, since 1 rev = 2π), so `in rev/s` and `in rpm` are right; `in Hz` gets the D95 warning; the module header and docs/stdlib.md explain the convention; test_stdlib checks it in rev/s (D134).
 - **Repro:**
   ```
   import em
@@ -152,7 +154,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/stdlib/em.fm (`cyclotron_frequency … in Hz`). `skin_depth(… f [Hz] …)` takes the same kind of value. A likely fix is to return `in rev/s`, or to document the convention in docs/stdlib.md.
 - **Test:** `test_5_cyclotron_frequency_in_rev_per_s`.
 
-### 6. `fermium run --interp` never shows compile-time warnings (JIT/interp difference). Status: open
+### 6. `fermium run --interp` never shows compile-time warnings (JIT/interp difference). Status: fixed
+- **Fix:** `run_interpreted(..., show_warnings=True)`, used by `fermium run --interp`, writes the checker's warnings to stderr before running (and before a compile error), like `driver.run_source`; run-time warnings already went to stderr.
 - **Repro:** a file with `f = 50 Hz` and `print f in rpm`, run with `fermium run file.fm` and with `fermium run --interp file.fm`.
 - **Expected:** both print the D95 warning "Hz here means rad/s …, so 1 Hz is 9.5493 rpm, not 60 rpm".
 - **Actual:** the JIT prints it. `--interp` prints only `477.465 rpm`.
@@ -161,7 +164,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/cli.py, ~47–49. It calls `run_interpreted(src, args.file)` without `diags` and never prints `diags.warnings`. Compare `driver.run_source`, which prints them.
 - **Test:** `test_6_interp_cli_shows_the_same_warnings_as_the_jit`.
 
-### 7. A qualified module call can't be differentiated (docs/message). Status: open
+### 7. A qualified module call can't be differentiated (docs/message). Status: fixed
+- **Fix:** the differentiator resolves `mod.f(…)` to the module's function (bound in the caller's scope under a private name), so `T'`, `f'` and `d/dL mechanics.pendulum_period(…)` work like the `from … import` form.
 - **Repro:**
   ```
   import mechanics
@@ -174,7 +178,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/calculus.py, ~468. The symbolic differentiator doesn't resolve a qualified call `mod.f(…)`. It handles only the bare-name form and `mod.f'`.
 - **Test:** `test_7_qualified_module_calls_can_be_differentiated` (2 cases).
 
-### 8. `analyze` after `units natural` silently works modulo ħ and c, and says "length, mass, time" (message). Status: open
+### 8. `analyze` after `units natural` silently works modulo ħ and c, and says "length, mass, time" (message). Status: fixed
+- **Fix:** `analyze` in a natural-units region works in SI dimensions (bracketed units read as SI, constants by their SI dimensions) and prints a line saying why; a variable computed in natural units asks for a bracketed unit; `pendulum(1 m, 9.81 m/s²)` works (D132).
 - **Repro:** `units natural(ħ = c = 1)`, then `analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]`.
 - **Expected:** either the SI analysis, or an explicit note that ħ = c = 1 leaves one dimension (energy).
 - **Actual:** `4 quantities, 1 independent dimension (among length, mass, time) → 3 dimensionless groups`, then `so T = L · f(Π₂, Π₃)` and `defined pendulum(L) = L`.
@@ -185,14 +190,16 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/dimanalysis.py, ~315. The dimension list uses SI names, while the rank is computed in the natural-unit dimension space.
 - **Test:** `test_8_analyze_in_natural_units_says_so`.
 
-### 9. stdlib `nuclear.bateman_daughter` is NaN for equal half-lives (wrong-answer: NaN, no error). Status: open
+### 9. stdlib `nuclear.bateman_daughter` is NaN for equal half-lives (wrong-answer: NaN, no error). Status: fixed
+- **Fix:** `bateman_daughter` uses t e^(−λp t)(1 − e^(−δt))/δt with `expm1` when |δt| ≤ 1 (δt = (λd − λp) t), giving the limit N₀λt e^(−λt) for equal half-lives and full precision for nearly equal ones; the original form is kept for |δt| > 1 (no overflow).
 - **Repro:** `from nuclear import bateman_daughter`, then `print bateman_daughter(1000, 10 s, 10 s, 5 s)`.
 - **Expected:** the λ_d → λ_p limit N₀ λ t e^(−λt) = 245.066, or an error saying the formula needs different half-lives.
 - **Actual:** `NaN`, from 0/0 in `N0 λp / (λd - λp) * (…)`. Nearly equal half-lives also lose digits to cancellation.
 - **Where:** fermium/stdlib/nuclear.fm, `bateman_daughter`.
 - **Test:** `test_9_bateman_daughter_equal_half_lives`.
 
-### 10. Differentiating through a multi-line function: the error has no line and no caret (message). Status: open
+### 10. Differentiating through a multi-line function: the error has no line and no caret (message). Status: fixed
+- **Fix:** the error now points at the call of the multi-line function (`line 4`, caret at `g(t)`), with a hint (write it on one line with `where`, or use a finite difference); errors without a position inside a derivative get the position of the `'`.
 - **Repro:**
   ```
   g(t) =
@@ -206,28 +213,32 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/checker.py, ~3259. It raises `FermiumError(...)` without a line or column.
 - **Test:** `test_10_multiline_function_error_has_a_line`.
 
-### 11. `using shooting` or `using explicit` on its own line gives "expected '=' in this equation" (message). Status: open
+### 11. `using shooting` or `using explicit` on its own line gives "expected '=' in this equation" (message). Status: fixed
+- **Fix:** `using …` / `method …` is accepted on a line of its own among a solve's clauses, for ODEs, eigenvalue problems and PDEs; giving it twice is an error; docs/reference.md §20 says so.
 - **Repro:** an eigenvalue `solve` with its options on separate lines, `lowest 3` and then `using shooting`. Or a PDE with `using explicit` on its own line after the `for` line.
 - **Expected:** it works, as `grid 1000` on its own line does, or an error that says `using` goes on the `for` or `lowest` line.
 - **Actual:** `line 5: expected '=' in this equation but the line ended`, with the caret after `using shooting`. docs/reference.md §20 says only "`using matrix` … and `using shooting`, after `lowest N`".
 - **Where:** fermium/parser.py, in the handling of `solve` option lines. `grid` is accepted on its own line; `using` isn't.
 - **Test:** `test_11_using_on_its_own_line` (2 cases).
 
-### 12. Eigenvalue problem in r: the singular-point error talks about x (message). Status: open
+### 12. Eigenvalue problem in r: the singular-point error talks about x (message). Status: fixed
+- **Fix:** the singular-point error names the problem's variable and uses its display unit (`at r = 0 nm`), in the JIT (two new fm_eigen arguments: the name's text id and format) and the interpreter.
 - **Repro:** the textbook radial hydrogen problem: `V(r) = -e²/(4π ε₀ r)`, then `solve -ħ²/(2*m_e) * u'' + V(r) u = E u with u(0 nm) = 0, u(5 nm) = 0 for r from 0 nm to 5 nm lowest 3`.
 - **Expected:** "can't be evaluated at r = 0 …", ideally in the user's units (nm).
 - **Actual:** `the equation can't be evaluated at x = 0 (SI units): NaN or infinite; move the range's end away from a singular point`.
 - **Where:** fermium/runtime/eigen.py, ~52, hard-codes `x`.
 - **Test:** `test_12_singular_point_error_names_the_right_variable`.
 
-### 13. Assigning to a module constant: the hint suggests `solve … for nuclear` (message). Status: open
+### 13. Assigning to a module constant: the hint suggests `solve … for nuclear` (message). Status: fixed
+- **Fix:** assigning to `module.name` says "can't change nuclear.a_V: a module's names can't be changed from outside it" with the hint to make a copy; other `a.b = …` targets get a hint about storing in a name of their own.
 - **Repro:** `import nuclear`, then `nuclear.a_V = 16 MeV`.
 - **Expected:** something like "a module's constants can't be changed; copy it: a_V = 16 MeV".
 - **Actual:** `can't store a value in nuclear.a_V: the left side of = must be a variable name`, with the hint `to solve nuclear.a_V = … for nuclear, write  solve nuclear.a_V = … for nuclear from nuclear_min to nuclear_max`.
 - **Where:** fermium/parser.py, ~326. The hint for an assignment target treats `nuclear` as an unknown.
 - **Test:** `test_13_assigning_to_a_module_constant_has_a_sensible_hint`.
 
-### 14. `sample` and `randn` accept nonsense arguments silently (message). Status: open
+### 14. `sample` and `randn` accept nonsense arguments silently (message). Status: fixed
+- **Fix:** `sample(expr, N)` needs N to be a whole number ≥ 0 and `randn(μ, σ)` needs σ ≥ 0: run-time errors 25/26 in the JIT, the interpreter and the C runtime of `fermium build` (D133).
 - **Repro:**
   - `print len(sample(rand(), 2.5))` prints `2`.
   - `print sample(rand(), -1)` prints `[]`.

@@ -87,7 +87,6 @@ print u(0.005 m, 2 s) to 6 digits
 
 # ---- #4: std of one value is 0 ------------------------------------------------------------------------------
 
-@rt2(4)
 @pytest.mark.parametrize("src", ["print std([5 m])", "import stats\nprint stats.standard_error([5 m])"])
 def test_4_std_of_a_single_value_is_not_zero(src):
     try:
@@ -99,7 +98,6 @@ def test_4_std_of_a_single_value_is_not_zero(src):
 
 # ---- #5: stdlib em.cyclotron_frequency converts wrongly to rev/s and rpm -------------------------------------
 
-@rt2(5)
 def test_5_cyclotron_frequency_in_rev_per_s():
     src = "import em\nf = em.cyclotron_frequency(e, 1 T, m_p)\nprint f in rev/s to 6 digits"
     # e B / (2π m_p) = 1.52452×10⁷ turns per second; today 2.42635×10⁶ rev/s (with a JIT-only warning)
@@ -108,7 +106,6 @@ def test_5_cyclotron_frequency_in_rev_per_s():
 
 # ---- #6: `fermium run --interp` never shows compile-time warnings -------------------------------------------
 
-@rt2(6)
 def test_6_interp_cli_shows_the_same_warnings_as_the_jit(tmp_path):
     p = tmp_path / "w.fm"
     p.write_text("f = 50 Hz\nprint f in rpm\n", encoding="utf-8")
@@ -121,7 +118,6 @@ def test_6_interp_cli_shows_the_same_warnings_as_the_jit(tmp_path):
 
 # ---- #7: a call like mechanics.f(...) can't be differentiated ------------------------------------------------
 
-@rt2(7)
 @pytest.mark.parametrize("src,value", [
     ("import mechanics\nT(L) = mechanics.pendulum_period(L, 9.81 m/s²)\nprint T'(1 m) to 6 digits", 1.00303),
     ("import astro\nf(T) = 2 astro.wien_peak(T)\nprint f'(5000 K) in nm/K to 6 digits", -0.231822),
@@ -134,7 +130,6 @@ def test_7_qualified_module_calls_can_be_differentiated(src, value):
 
 # ---- #8: analyze in natural units says "length, mass, time" and silently works modulo ħ and c ----------------
 
-@rt2(8)
 def test_8_analyze_in_natural_units_says_so():
     out = run("units natural(ħ = c = 1)\nanalyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]")
     assert "among length, mass, time" not in out
@@ -143,7 +138,6 @@ def test_8_analyze_in_natural_units_says_so():
 
 # ---- #9: nuclear.bateman_daughter is NaN for equal half-lives ------------------------------------------------
 
-@rt2(9)
 def test_9_bateman_daughter_equal_half_lives():
     src = "from nuclear import bateman_daughter\nprint bateman_daughter(1000, 10 s, 10 s, 5 s) to 6 digits"
     # limit λ → λ: N0 λ t e^(−λt) = 245.066; today NaN
@@ -152,7 +146,6 @@ def test_9_bateman_daughter_equal_half_lives():
 
 # ---- #10: differentiating through a multi-line function: the error has no line -------------------------------
 
-@rt2(10)
 def test_10_multiline_function_error_has_a_line():
     src = "g(t) =\n    a = 2 s\n    t^2 / a\nf(t) = g(t) + 1 s\nprint f'(5 s)"
     e = error_of(src)
@@ -161,7 +154,6 @@ def test_10_multiline_function_error_has_a_line():
 
 # ---- #11: `using …` on its own line: "expected '=' in this equation" ----------------------------------------
 
-@rt2(11)
 @pytest.mark.parametrize("src", [
     """solve -ħ²/(2*m_e) * ψ'' = E ψ
     with ψ(0 nm) = 0, ψ(1 nm) = 0
@@ -185,7 +177,6 @@ def test_11_using_on_its_own_line(src):
 
 # ---- #12: eigenvalue problem in r: the error talks about x ---------------------------------------------------
 
-@rt2(12)
 def test_12_singular_point_error_names_the_right_variable():
     src = """V(r) = -e²/(4π ε₀ r)
 solve -ħ²/(2*m_e) * u'' + V(r) u = E u
@@ -198,7 +189,6 @@ solve -ħ²/(2*m_e) * u'' + V(r) u = E u
 
 # ---- #13: assigning to a module constant: the hint suggests `solve … for nuclear` ---------------------------
 
-@rt2(13)
 def test_13_assigning_to_a_module_constant_has_a_sensible_hint():
     e = error_of("import nuclear\nnuclear.a_V = 16 MeV")
     assert "solve" not in (e.hint or "")
@@ -206,7 +196,6 @@ def test_13_assigning_to_a_module_constant_has_a_sensible_hint():
 
 # ---- #14: sample / randn accept nonsense arguments silently -------------------------------------------------
 
-@rt2(14)
 @pytest.mark.parametrize("src", [
     "print len(sample(rand(), 2.5))",           # today: 2
     "print sample(rand(), -1)",                 # today: []
@@ -288,3 +277,120 @@ print ∂w/∂x(0.5 m, 5 s) to 6 digits
     assert out[2] == pytest.approx(1, abs=2e-5)
     assert out[3] == pytest.approx(-1, rel=1e-3)
     assert out[4] == pytest.approx(-1, rel=1e-3)
+
+
+@pytest.mark.parametrize("args,value", [
+    ("1000, 10 s, 10.000001 s, 5 s", 245.0645401137812),      # nearly equal: no cancellation (mpmath, 40 digits)
+    ("1000, 10 s, 20 s, 5 s", 267.5792681343340),
+    ("1000, 1 s, 1000 s, 800 s", 574.9241016001176),           # δt = −799: no overflow of e^(−δt)
+])
+def test_9_bateman_daughter_is_accurate_near_and_far_from_equal_half_lives(args, value):
+    src = f"from nuclear import bateman_daughter\nprint bateman_daughter({args}) to 12 digits"
+    assert num(run(src)) == pytest.approx(value, rel=1e-10)
+
+
+def test_7_qualified_module_call_in_a_derivative_formula():
+    src = "import mechanics\nT(L) = mechanics.pendulum_period(L, 9.81 m/s²)\nprint T''(1 m) to 6 digits\n" \
+          "print (d/dL mechanics.pendulum_period(L, 9.81 m/s²))(1 m) to 6 digits"
+    out = run(src).splitlines()
+    assert num(out[0]) == pytest.approx(-0.501517, rel=1e-5)
+    assert num(out[1]) == pytest.approx(1.00303, rel=1e-5)
+
+
+def test_4_std_of_one_value_says_why_in_jit_interp_and_build(tmp_path):
+    from fermium.interp import run_interpreted
+    from fermium.aot import build, find_cc
+    src = "xs = [5 m]\nprint std(xs)"
+    e = error_of(src)
+    assert "std needs at least 2 values" in e.message and e.line == 2
+    with pytest.raises(FermiumError, match="std needs at least 2 values"):
+        run_interpreted(src, "<t>", out=io.StringIO())
+    assert num(run("print std([4 m, 6 m]) to 10 digits")) == pytest.approx(math.sqrt(2), rel=1e-9)
+    if find_cc() is None:
+        pytest.skip("no C compiler")
+    exe = str(tmp_path / "p")
+    build(src, str(tmp_path / "p.fm"), exe)
+    r = subprocess.run([exe], capture_output=True, text=True, timeout=120)
+    assert r.returncode != 0 and "std needs at least 2 values" in r.stderr and "N − 1" in r.stderr
+
+
+@pytest.mark.parametrize("same_line,own_line", [
+    ("    lowest 3 using shooting\n", "    lowest 3\n    using shooting\n"),
+    ("    lowest 3 using shooting\n", "    using shooting\n    lowest 3\n"),
+])
+def test_11_using_on_its_own_line_means_the_same(same_line, own_line):
+    head = "solve -ħ²/(2*m_e) * ψ'' = E ψ\n    with ψ(0 nm) = 0, ψ(1 nm) = 0\n    for x from 0 nm to 1 nm\n"
+    tail = "print E[1] in eV to 6 digits\n"
+    assert run(head + own_line + tail) == run(head + same_line + tail)
+    assert num(run(head + own_line + tail)) == pytest.approx(0.376030, rel=1e-4)    # π²ħ²/(2 m_e L²)
+
+
+def test_11_using_twice_is_an_error():
+    e = error_of("solve -ħ²/(2*m_e) * ψ'' = E ψ\n    with ψ(0 nm) = 0, ψ(1 nm) = 0\n    for x from 0 nm to 1 nm\n"
+                 "    lowest 3 using matrix\n    using shooting\nprint E[1]")
+    assert "twice" in e.message
+
+
+def test_11_pde_using_explicit_on_its_own_line_is_explicit():
+    src = """solve ∂u/∂t = (0.01 m²/s) * ∂²u/∂x²
+    with u(x, 0 s) = 2 K * sin(π x / 1 m), u(0 m, t) = 0 K, u(1 m, t) = 0 K
+    for x from 0 m to 1 m, t from 0 s to 10 s{sep}using explicit
+print u(0.5 m, 10 s) to 8 digits
+"""
+    assert run(src.format(sep="\n    ")) == run(src.format(sep=" "))
+
+
+def test_12_singular_point_error_is_in_your_units_in_jit_and_interp():
+    from fermium.interp import run_interpreted
+    src = """V(r) = -e²/(4π ε₀ r)
+solve -ħ²/(2*m_e) * u'' + V(r) u = E u
+    with u(0 nm) = 0, u(5 nm) = 0
+    for r from 0 nm to 5 nm
+    lowest 3"""
+    e = error_of(src)
+    assert "at r = 0 nm" in e.message and "SI units" not in e.message
+    with pytest.raises(FermiumError) as ei:
+        run_interpreted(src, "<t>", out=io.StringIO())
+    assert ei.value.message == e.message
+
+
+@pytest.mark.parametrize("src,msg", [
+    ("n = 2.5\nprint len(sample(rand(), n))", "whole number, 0 or more, not 2.5"),
+    ("n = -1\nprint sample(rand(), n)", "whole number, 0 or more, not -1"),
+    ("s = -1 m\nprint randn(1 m, s)", "can't be negative"),
+])
+def test_14_bad_arguments_say_why_in_jit_interp_and_build(src, msg, tmp_path):
+    from fermium.interp import run_interpreted
+    from fermium.aot import build, find_cc
+    e = error_of(src)
+    assert msg in e.message and e.line == 2
+    with pytest.raises(FermiumError, match=msg.replace("(", r"\(").replace(".", r"\.")):
+        run_interpreted(src, "<t>", out=io.StringIO())
+    if find_cc() is None:
+        pytest.skip("no C compiler")
+    exe = str(tmp_path / "p")
+    build(src, str(tmp_path / "p.fm"), exe)
+    r = subprocess.run([exe], capture_output=True, text=True, timeout=120)
+    assert r.returncode != 0 and msg in r.stderr
+
+
+def test_14_good_sample_counts_and_sigma_zero_still_work():
+    assert run("print len(sample(rand(), 3))") == "3"
+    assert run("print len(sample(rand(), 0))") == "0"
+    assert run("print randn(1 m, 0 m)") == "1 m"
+
+
+def test_8_analyze_in_natural_units_is_the_si_analysis_and_its_function_works():
+    src = ("units natural(ħ = c = 1)\nanalyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]\n"
+           "print pendulum(1 m, 9.81 m/s²) in s to 6 digits\n"
+           "analyze planck: l [m] depends on G, ħ, c\nprint planck in m to 4 digits")
+    out = run(src).splitlines()
+    assert "3 independent dimensions (length, mass, time)" in out[1]
+    assert "so T ∝ √(L/g)" in "\n".join(out)
+    assert num(out[7]) == pytest.approx(math.sqrt(1 / 9.81), rel=1e-5)
+    assert num(out[-1]) == pytest.approx(1.616e-35, rel=1e-3)
+
+
+def test_8_a_variable_computed_in_natural_units_asks_for_its_unit():
+    e = error_of("units natural(ħ = c = 1)\nE = 2 MeV\nanalyze x: t [s] depends on E, ħ")
+    assert "computed in natural units" in e.message and e.line == 3

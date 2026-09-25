@@ -45,16 +45,16 @@ def solstruct(ts, ys, dys, dim):
     return ctypes.cast(sp, c_void_p).value
 
 
-def eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out):
+def eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname=-1, fmt=-1):
     """fm_eigen: 0 = ok, 1 = solver error (rt.error set), 2 = the equation stopped with its own error."""
-    from .eigen import EigenFail, eigen_solve
+    from .eigen import EigenFail, eigen_solve, singular_text
     try:
         f = compiled_rhs(guard, fn, env, 3)
         xs, ys, dys, _ = eigen_solve(f, a, b, nstates, grid, "shooting" if method == 1 else "matrix")
     except _Inner:
         return 2
     except EigenFail as ex:
-        rt.error = ex.message
+        rt.error = ex.message if ex.x is None else singular_text(rt.tname(tname), rt.fmt_value(ex.x, int(fmt)))
         return 1
     except BaseException as ex:          # nothing may escape into the compiled code
         rt.error = f"the eigenvalue solver failed: {ex}"

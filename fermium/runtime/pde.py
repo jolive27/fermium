@@ -17,7 +17,10 @@ Methods (second-order differences in x; the grid has M intervals):
 - first order in t: the θ-method on the semi-discrete system u' = T u + b(t): Crank–Nicolson (θ = ½, the
   default: second order and unconditionally stable; unitary for Schrödinger, so ‖ψ‖ is conserved to rounding),
   implicit (backward Euler, θ = 1), explicit (forward Euler, θ = 0, stable only for dt ≤ h²/(2 max D)).
-  One sparse LU factorisation, then one solve per step.
+  One sparse LU factorisation, then one solve per step.  CN on real equations starts with 4 L-stable SDIRK2
+  steps (Rannacher-style smoothing of incompatible initial/boundary data, D131), and CN/implicit are checked by
+  step doubling: the default step is halved until the estimated error is under PDE_TOL, a step of your own
+  that is too coarse warns (D131).
 - second order in t: the explicit central-difference (leapfrog) scheme, stable for c dt ≤ h (Courant ≤ 1);
   by default dt is the largest step with Courant number ≤ 1 (at exactly 1, it is exact for constant c).
 Boundary conditions: u = g(t) (Dirichlet) or ∂u/∂x = g(t) (Neumann, by a ghost point).
