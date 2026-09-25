@@ -34,6 +34,9 @@ typedef struct {
     const char *title;             /* XML-escaped, "" = none */
     int logx, logy, equal, nseries;
     const fm_seriesinfo *series;
+    int hasx, hasy;                /* with x from a to b / y from a to b (D161), in display units */
+    double xlo, xhi, ylo, yhi;
+    int revx, revy;                /* with reversed x / reversed y */
 } fm_plotinfo;
 
 extern const fm_loadinfo fm_loads[];
@@ -795,6 +798,8 @@ void fm_plot_done(int64_t pid) {
     axis ax, ay;
     range_of(xlo, xhi, P->logx, &ax);
     range_of(ylo, yhi, P->logy, &ay);
+    if (P->hasx) { ax.lo = P->logx ? log10(P->xlo) : P->xlo; ax.hi = P->logx ? log10(P->xhi) : P->xhi; }
+    if (P->hasy) { ay.lo = P->logy ? log10(P->ylo) : P->ylo; ay.hi = P->logy ? log10(P->yhi) : P->yhi; }
     const double W = 770, H = 495;
     double L = 90, R = W - 25, T = P->title[0] ? 45 : 25, B = H - 62;
     if (P->equal && !P->logx && !P->logy) {       /* orbits look round: same scale on both axes */
@@ -802,8 +807,10 @@ void fm_plot_done(int64_t pid) {
         if (sx > sy) { double c = (ay.lo + ay.hi) / 2, h = sx * (B - T) / 2; ay.lo = c - h; ay.hi = c + h; }
         else { double c = (ax.lo + ax.hi) / 2, h = sy * (R - L) / 2; ax.lo = c - h; ax.hi = c + h; }
     }
-#define PX(v) (L + (ax_t(&ax, (v)) - ax.lo) / (ax.hi - ax.lo) * (R - L))
-#define PY(v) (B - (ax_t(&ay, (v)) - ay.lo) / (ay.hi - ay.lo) * (B - T))
+#define FX(v) ((ax_t(&ax, (v)) - ax.lo) / (ax.hi - ax.lo))
+#define FY(v) ((ax_t(&ay, (v)) - ay.lo) / (ay.hi - ay.lo))
+#define PX(v) (P->revx ? R - FX(v) * (R - L) : L + FX(v) * (R - L))
+#define PY(v) (P->revy ? T + FY(v) * (B - T) : B - FY(v) * (B - T))
     mkdirs_for(P->svg);
     FILE *f = fopen(P->svg, "w");
     if (!f) {
@@ -916,4 +923,6 @@ void fm_plot_done(int64_t pid) {
     acc_clear(acc);
 #undef PX
 #undef PY
+#undef FX
+#undef FY
 }

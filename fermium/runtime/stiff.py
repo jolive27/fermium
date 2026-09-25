@@ -14,6 +14,7 @@ from ..errors import FermiumRuntimeError
 
 # error kinds shared with codegen_llvm / interp (describe_error in core.py)
 ERR_ODE_H, ERR_ODE_NAN, ERR_ODE_RANGE, ERR_NO_EVENT, ERR_STIFF_STEPS = 8, 16, 17, 18, 23
+ERR_ODE_H_FLAT = 34       # the step became too small, but nothing grew: the tolerance, not a blow-up (D160)
 MAX_STEPS = 1_000_000
 METHODS = ("radau", "bdf")
 
@@ -50,7 +51,37 @@ def _illinois(g, a, ga, c, gc):
     return c
 
 
-def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=-1.0):
+def step_small_kind(y0, y):
+    """Which "the step became too small" error to give (D160): ERR_ODE_H ("the solution may blow up") when
+    some component has grown to over 10³ times both its start and the largest starting component (so an
+    unknown that starts at 0 counts once it outgrows the others' starts), or isn't finite; otherwise
+    ERR_ODE_H_FLAT, whose message points at the tolerance (relative accuracy asked of tiny values).
+    Mirrored in the LLVM kernel (fm_dp45)."""
+    big = 0.0
+    for v in y0:
+        big = max(big, abs(v))
+    for a, v in zip(y0, y):
+        if not (v - v == 0) or abs(v) > 1e3 * max(abs(a), big):
+            return ERR_ODE_H
+    return ERR_ODE_H_FLAT
+
+
+def abs_tolerances(spec, t0, t1):
+    """The absolute tolerance of each state component (D160) from the checker's (value, k) pairs: the
+    value, divided by |t1 - t0|^k for a derivative slot that borrows its unknown's tolerance; None when the
+    solve has no  absolute  option."""
+    if not spec:
+        return None
+    span = abs(t1 - t0)
+    out = []
+    for v, k in spec:
+        for _ in range(k):           # divided k times, exactly as the compiled code does
+            v = v / span
+        out.append(v)
+    return out
+
+
+def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=-1.0, atol_user=None):
     """Solve y' = f(t, y) from t0 to t1 (either direction) with an implicit method.
 
     f(t, y) takes and returns sequences of floats; g(t, y) is the stop condition's lhs - rhs (or None).
@@ -83,6 +114,11 @@ def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=
     known = [s for s in sizes if 0 < s < math.inf]
     fallback = min(known) if known else 1.0
     atol = np.array([rtol * 1e-6 * (s if 0 < s < math.inf else fallback) for s in sizes])
+    # `absolute a` (D160): SciPy's atol is at least the user's, now and after every step; without it,
+    # nothing changes
+    user = None if atol_user is None else np.asarray(atol_user, dtype=float)
+    if user is not None:
+        atol = np.maximum(atol, user)
 
     def fun(t, y):
         return np.asarray(f(t, y.tolist()), dtype=float)
@@ -102,9 +138,9 @@ def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=
             with np.errstate(all="ignore"):
                 solver.step()
         except (ValueError, np.linalg.LinAlgError, ZeroDivisionError, OverflowError):
-            raise StiffFail(ERR_ODE_H, told, tname) from None     # inf/NaN in the Newton matrix: blows up
+            raise StiffFail(step_small_kind(y0, ys[-n:]), told, tname) from None     # inf/NaN in the Newton matrix
         if solver.status == "failed":
-            raise StiffFail(ERR_ODE_H, told, tname)
+            raise StiffFail(step_small_kind(y0, ys[-n:]), told, tname)
         steps += 1
         if steps > MAX_STEPS:
             raise StiffFail(ERR_STIFF_STEPS, solver.t, tname)
@@ -112,6 +148,8 @@ def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=
         y = solver.y.tolist()
         # the floor follows the step's own change, like the |y_new − y| term of RK45's norm (D17)
         solver.atol = np.maximum(rtol * np.abs(solver.y - np.asarray(ys[-n:])), 1e-300)
+        if user is not None:
+            solver.atol = np.maximum(solver.atol, user)
         if not _finite(y):
             raise StiffFail(ERR_ODE_H, told, tname)
         if g is not None:
