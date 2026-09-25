@@ -79,3 +79,48 @@ appears, the result would be silently wrong. I'd not change the behaviour, but a
   from a 5 × 10⁻⁷ rad effect. The Newtonian control gives 10⁻¹⁵ rad.
 - Kepler's equation with the textbook names, `solve E - e sin(E) = M for E from 0 to 2π`, works.
 - `in arcsec`, `in AU`, `in km²/s²`, `in hr` all as expected.
+
+## Second pass
+
+Problems: `21_restricted_three_body.fm` (rotating-frame vector ODE with Ω × r', Lagrange points,
+Routh's criterion, Jacobi constant), `22_jupiter_slingshot.fm` (a hyperbolic flyby set up from its
+orbital elements and integrated in the inertial frame with a moving planet),
+`23_perturbed_precession.fm` (exact 1/r³ precession, the apsidal-angle integral with 1/√ blow-ups at
+both ends, the ODE, and a 1/r⁴ force). Tests: `tests/test_gauntlet2_gravitation.py`.
+
+### G7. `2 V v_inf` is two volts (awkward; repeat of #10, see mechanics M10)
+
+`u_out = √(V² + v_inf² + 2 V v_inf sin(δ))` with `V` = Jupiter's orbital speed. This time the
+first-pass fix worked as intended: the error was on the same line and carried the note `'2 V' here
+is 2 V, voltage [V] (a unit right after a number); for 2 × your variable V write 2*V`. Still, a
+planet's speed called V is textbook notation. **Fix:** see M10.
+
+### G8. No event location, so every apsis needs a bracket (awkward; M1/#33 still open)
+
+The flyby's periapsis: `solve radial(t_p) = 0 m²/s for t_p from 0 s to t_end` with a hand-written
+`radial(t) = (r(t) - V_J t) · (r'(t) - V_J)`. The next perihelion: bracket 0.75 P to 1.25 P, because
+the aphelion is also a root of r · r' = 0. It works, but "stop at the next perihelion" is what one
+means. **Fix:** `solve … until r · r' = 0` with a direction (as SciPy's `events`).
+
+### G9. No `angle(a, b)` between vectors (cosmetic)
+
+The flyby's turning angle is `acos(rel_in · rel_out / (|rel_in| |rel_out|))`. An `angle(a, b)`
+(computed as atan2(|a × b|, a · b), accurate near 0 and π) would read better.
+
+### Physics note (not a language problem)
+
+Starting the flyby on the exact hyperbola at 1000 r_p, the heliocentric speed gain between the two
+mirror points is 4.520 km/s, 0.5 % more than the asymptotic 4.497 km/s: at 1000 r_p the probe is
+still 0.36 % faster than v∞ relative to Jupiter. The program prints both; the ODE matches the
+finite-distance value to 7 digits.
+
+### What helped from the first pass
+
+- `GM_sun` (#27): the precession problem uses the exact IAU value, no G·M round-off.
+- 3-D vector ODEs with cross products in the rotating frame, `-2 Ωv × v - Ωv × (Ωv × r)`, as in
+  Murray & Dermott; the Jacobi constant is conserved to 12 digits over 360 days.
+- A matrix times a vector in initial conditions (`r(0) = rot pos_pf`, rot a 2×2 rotation matrix).
+- An explicitly time-dependent force in a vector ODE (`r - V_J t`, a moving planet).
+- The apsidal-angle integral with inverse-square-root blow-ups at **both** ends, its upper end
+  found by an algebraic `solve`: 7 digits with no substitution. (The SciPy reference needed one.)
+- Algebraic solves (L1, apsides, periapsis time) are one line each.

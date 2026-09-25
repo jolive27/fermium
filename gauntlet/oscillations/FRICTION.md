@@ -93,3 +93,71 @@ or caret, unlike compile errors. With several integrals in a program you have to
   algebraic `solve θ(t_q) = 0 for t_q from …` on the ODE result, both just work.
 - `mod(ω t − atan2(…), 2π)` and `δ in deg` read like the textbook.
 - A zero on the right of `solve char(ω) = 0 for …` is accepted whatever the units of `char`.
+
+## Second pass
+
+Problems: `21_three_mass_chain.fm` (normal modes by `eigenvalues(K, M)`, modal projection, energy
+per mode), `22_parametric_resonance.fm` (Mathieu equation: the Floquet trace from two ODEs inside a
+function, exact band edges by an algebraic `solve` on that function), `23_duffing_oscillator.fm`
+(exact period integral, Lindstedt–Poincaré, driven steady state against harmonic balance).
+Tests: `tests/test_gauntlet2_oscillations.py`.
+
+### O10. A vector can't be indexed by a loop variable (awkward)
+
+```
+ω2 = eigenvalues(K, M)
+for n from 1 to 3
+    print √(ω2[n]), 2 √(k / m) sin(n π / 8)
+```
+
+→ `a vector's component must be picked with a fixed number, like v[1], or v.x`. The natural "compare
+mode n with the formula" loop has to be unrolled into three lines; the three mode shapes have to be
+picked out one entry at a time: `v1 = <W[1, 1], W[2, 1], W[3, 1]>`. **Fix:** allow a runtime index
+into a vector whose components share one unit (with a bounds check, like lists); and add
+`column(M, j)` (or `M[:, j]`) so that a mode shape is one expression.
+
+### O11. `2 m m2` is two metres × m × m2, and a number is printed anyway (wrong answer with a warning; see mechanics M10)
+
+In the symmetric-mode quadratic `√((sym ± √(sym² − 8 k² m m2)) / (2 m m2))` the `2 m` is 2 metres.
+Only a warning; the line printed `3.90879 kg^(1/2)/(m^(1/2) s)` instead of `7.81758 1/s`, because
+nothing forced a unit check. Someone skimming the output could miss the odd unit. Fixed in the
+program with `2*m`. **Fix:** as M10; also, a `print` of a value with fractional powers of base units
+could warn ("did a unit sneak in?").
+
+### O12. Round-off shown next to 3-figure numbers in matrices (cosmetic)
+
+`print eigenvectors(K, M)` shows `[[0.500, 0.707, -0.500], [0.707, -8.76×10⁻¹⁷, 0.707], …]`: the
+exact zero of the middle mode. The M-orthogonality check prints `4.16×10⁻¹⁷ kg`, which is fine for
+a check. **Fix:** in a printed matrix or vector, show entries below ~1e-12 of the largest entry as 0.
+
+### O13. `√` of a negative number is a silent NaN (awkward)
+
+`growth(γ)` uses `√(D² − 4)`; off resonance (|D| < 2) it would print `NaN` with no reason given
+(`x = -1.0`, `print √(x² - 4)` → `NaN`; `ln(-0.5)` → `NaN`). For a physicist a NaN in a table means
+a debugging session. **Fix:** the first time a NaN is made, a warning "√ of a negative number (−3)
+on line N"; or print `NaN (from √ of a negative number, line N)`.
+
+### O14. Angular frequencies mix `1/s` and `rad/s` on one line (cosmetic; #29)
+
+`2π / T_exact(A)` prints `5.029896 1/s` next to `ω_pert1(A)` = `5.030000 rad/s` on the same line,
+because ω₀ was written in rad/s. `√(k/m)` is `1/s`. Same quantity, two spellings.
+**Fix:** show 1/s as rad/s for a value computed as 2π/T or √(k/m)… or accept that `in rad/s` has to
+be written each time.
+
+### Physics note (not a language problem)
+
+The Lindstedt–Poincaré second-order coefficient in terms of the **turning point** A is −21/256, not
+the often-quoted −15/256 (that one is for the amplitude of the fundamental harmonic). The test
+caught it: the exact period integral disagreed with −15/256 at order ε², and agrees with −21/256 to
+order ε³.
+
+### What helped from the first pass
+
+- `eigenvalues(K, M)` / `eigenvectors(K, M)` (#22): the chain problem is linear algebra that reads
+  like Goldstein, with units (K in N/m, M in kg, ω² in 1/s²), and `½ x0 · (K x0)` for ½xᵀKx.
+- `solve` twice inside a multi-line function, and then an algebraic `solve D(γ) = -2 for γ …` on
+  that function (hundreds of ODE solves): worked the first time, 0.4 s for the whole program.
+- `solve … for` inside a `for A in [...]` loop over amplitudes, overwriting the solution each pass.
+- The integrable 1/√ end-point blow-up of the exact Duffing period integral: right to 7 digits.
+- Bare `0` in a matrix literal whose other entries have units (`[[2k, -k, 0], …]`), `identity(3) m`.
+- The #10 warning at least fired for O11; the M8 fix ("`2 m` next to your variable m") is visible.

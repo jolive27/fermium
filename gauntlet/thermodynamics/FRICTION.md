@@ -66,3 +66,80 @@ Fix: show products/quotients of an absolute °C temperature in K.
 ## T6. `1/s` is shown as `1/s` — cosmetic
 
 `print k` shows `0.00112157 1/s`; `in 1/min` works. `s⁻¹` or `/s` would read better; minor.
+
+## Second pass
+
+Problems: `21_van_der_waals_maxwell.fm` (spinodals, the equal-area Maxwell construction with three
+levels of nested `solve`, latent heat, Clausius–Clapeyron by redoing the construction at T ± 0.1 K),
+`22_debye_einstein.fm` (the Debye integral against Einstein, the T³ and Dulong–Petit limits,
+C = 3R/2, the entropy as ∫C/T dT of an integral), `23_photon_carnot_stirling.fm` (the photon-gas
+adiabat as an ODE in V, a Carnot cycle leg by leg, Stirling with and without a regenerator).
+Tests: `tests/test_gauntlet2_thermodynamics.py`.
+
+### T7. The van der Waals `b` is the barn: `3 b`, `27 b²` (awkward, silent until later; see mechanics M10)
+
+`V_c = 3b`, `P_c = a / (27 b²)`, `solve … for V_l from 1.01 b to …`: every one of these is barns.
+`27 b²` only warned, and the error came on the *next* line (`can't show a quantity with units
+[kg m/(s² mol²)] in MPa`), without the note naming `27 b` as the cause, because the note is only
+added to an error on the same line. Inside a function (`from 1.01 b to 3b`) the error came from
+another line entirely: `line 4: can't subtract [m³/mol] from area [m²] … (with V = area [m²])`. The
+vdW `b` is universal notation. Workaround: `3*b`, `27*b²`, `1.01*b` everywhere. **Fix:** M10; and
+consider not reading `b` as the barn right after a number when the program defines a variable `b`
+(`barn` stays available).
+
+### T8. A failing `solve` inside a function doesn't say which call failed (awkward)
+
+`area(temp, P)` solves `P_vdw(V_l, temp) = P`. When the outer `solve area(T, P_s) = 0 J/mol for P_s
+from 3.0 MPa to 3.9 MPa` tried a P below the spinodal pressure (no liquid root exists), the error was
+`line 7: this equation has no solution between 4.30967×10⁻⁵ m³/mol and 0.00012801 m³/mol`, with no
+word about which P, or that it was reached from the outer solve on line 11. **Fix:** add "while
+evaluating area(T = 273 K, P = 3.0 MPa), called from the solve on line 11" to runtime errors raised
+inside functions.
+
+### T9. `from 0 to θ_D / T` divides the integral, and the error that follows doesn't say why (awkward; #8 follow-up)
+
+`C_D(T) = 9 R (T/θ_D)³ ∫ x^4 exp(x) / (exp(x) - 1)² dx from 0 to θ_D / T`: the #8 warning fired
+("the ' / ' after the upper limit divides the whole integral"), then the error `exp needs a plain
+number, but got temperature [K]`, pointing at `exp(x)`. Both are right, but the error doesn't
+connect them: x is a temperature *because* the limit became θ_D. Textbooks write exactly
+`∫₀^{θ_D/T}`. Workaround: `to (θ_D / T)`. **Fix:** when the integration variable's units come from a
+limit that the ` / ` rule shortened, say so in the error ("x has the units of the upper limit θ_D;
+did you mean `to (θ_D / T)`?"); or, when dividing the whole integral fails the unit check and
+dividing the limit passes it, take the latter.
+
+### T10. exp overflow gives NaN, reported as "doesn't converge" on the wrong line (bug)
+
+The entropy `S_D(T) = ∫ C_D(u) / u du from 0 K to T` makes the inner Debye integral's upper limit
+θ_D/u huge as u → 0, where `x^4 exp(x) / (exp(x) - 1)²` is ∞/∞ = NaN for x > 709. Result:
+`line 30: this integral doesn't converge … the estimate was NaN ± NaN`, and line 30 is the
+`solve C_D(T_half) = 3 R / 2 …` line, not the entropy integral (known #13). Workaround: write the
+integrand as `x^4 exp(-x) / (1 - exp(-x))²`, as a numerical analyst would, not as Kittel does.
+**Fix:** (i) report NaN integrands as such ("the integrand is NaN at x = 7.1×10²: ∞/∞, probably exp
+overflow"), on the right line; (ii) evaluate `exp(x)/(exp(x) − 1)^n` patterns in the overflow-safe
+form (SymPy rewrite or a code-generation rule).
+
+### T11. `3 V` with V the ODE's independent variable is 3 volts, with no warning or note (bug)
+
+`solve T' = -T / (3 V) with T(1.00 L) = 3000 K for V from 1.00 L to 8.00 L` →
+`the two sides of this equation don't match: left is a quantity with units [K/m³], right is a
+quantity with units [s³ A K/(kg m²)]`. No warning beforehand and no "'3 V' here is 3 volts" note:
+the independent variable of `solve` is not treated as a user variable by the #10 checks. The units
+in the message are the only clue. Workaround: `3*V`. **Fix:** register the `for V from …` variable as
+a user name for the unit/variable clash warning and the note.
+
+### T12. The radiation constant prints in base SI (cosmetic; #29)
+
+`a_rad = 4σ / c` prints `7.56573×10⁻¹⁶ kg/(m s² K⁴)`; books write J/(m³ K⁴). **Fix:** extend the
+composite display units (J/(m³ K⁴), or prefer J/m³ over kg/(m s²) when further units follow).
+
+### What helped from the first pass
+
+- The algebraic `solve` (#1, T3) is the whole Maxwell construction: spinodals from `∂/∂V` of a
+  two-argument function, the liquid and gas volumes from `solve`s inside a function that returns a
+  vector `<V_l, V_g>`, the equal-area pressure from a `solve` on a function that itself runs three
+  `solve`s and an integral, and dP_s/dT by calling all of that at T ± 0.1 K. 0.6 s in total;
+  P_s/P_c = 0.64700, the textbook value, and Clapeyron holds to 5 digits.
+- An ODE with the **volume** as the independent variable and the initial condition at 1.00 L
+  (`T(1.00 L) = 3000 K`).
+- Integrals of functions defined by integrals (∫C_D/T dT), including the 0 K end, once T10 is avoided.
+- `4σ / c`, `R_gas`, and `in μJ`, `in kPa/K`, `in cm³/mol` all as expected.

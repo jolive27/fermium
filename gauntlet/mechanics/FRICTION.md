@@ -134,3 +134,89 @@ variable if it has one.
 - `W(s) = ∫ F(x) dx from 0 m to s` (an integral with a variable limit, as a function) just works,
   and `W(x_stop)` printed `-3.1×10⁻¹⁵ J`, i.e. zero.
 - `β = 0.400 /m`, `(1 - x/R) in %`, `a ~= b` all did what I expected.
+
+## Second pass
+
+Problems: `21_intermediate_axis.fm` (Euler's equations as one vector ODE, Landau's elliptic
+solution), `22_double_pendulum.fm` (Lagrange's equations, normal modes, energy, Lyapunov growth),
+`23_brachistochrone.fm` (a functional, its stationarity by differentiating under the integral sign,
+rolling). Tests: `tests/test_gauntlet2_mechanics.py`.
+
+### M9. Two second derivatives in one equation are refused, with a misleading error (bug)
+
+Lagrange's equations for the double pendulum come out with θ₁'' and θ₂'' in *both* equations (a
+mass matrix). Written as on paper:
+
+```
+solve a'' + 0.5 b'' = -a / (1 s²),
+      b'' + 0.5 a'' = -b / (1 s²)
+  with a(0) = 1 m, b(0) = 0 m, a'(0) = 0 m/s, b'(0) = 0 m/s
+  for t from 0 s to 1 s
+```
+
+gives `line 1: ' (prime) means a derivative; it only works on functions and ODE solutions`, pointing
+at `0.5 b''`. `b` *is* an unknown of this very `solve`; the real restriction is "each equation must
+contain exactly one highest derivative". Workaround used: solve the 2×2 linear system for the
+accelerations with `solve_linear` inside a helper function, and make θ = <θ₁, θ₂> one vector
+unknown (`solve a'' = acc(a, a')`). That works nicely, but a physicist should not have to invert the
+mass matrix by hand. **Fix:** the equations are linear in the highest derivatives, so collect them
+into M(q, q') q'' = f(q, q') and solve that linear system in every right-hand-side call; at minimum,
+say "a'' and b'' both appear in equation 1: write each equation for one highest derivative, or solve
+for them with solve_linear".
+
+### M10. `2 g` is two grams, again (wrong answer with only a warning; repeat of #10)
+
+`√(2 g yc(θ))` in the brachistochrone functional: a warning only, the program went on, and the unit
+error came three lines later on `print T_pert(0) - T_cycloid` (units `m^(1/2)/kg^(1/2)`), without the
+"'2 g' here is 2 grams" note, because the note is only attached to an error on the same line. The
+two `print`s before it would have printed nonsense with odd units. Across this pass the same trap
+hit `2 g`, `2 m`, `2 V`, `27 b²`, `3 b` and `3 V` (oscillations O11, gravitation G7, thermodynamics
+T7 and T11): six times in twelve problems. **Fix:** when a number is followed by a unit name that is
+also a user variable *and* the product is multiplied by further user variables (`2 g yc(θ)`,
+`2 V v_inf`, `2 m m2`), make it an error asking for `2*g` (or `(2 g)` for the unit); or carry the
+"unit right after a number" provenance with the value so that a later unit error can name it.
+
+### M11. d/dε of an integral fails with "doesn't converge" when the integrand is 0/0 at an end (bug)
+
+`T_pert(ε) = ∫ √(xc'(θ)² + …) / √(2*g (yc(θ) + ε a sin(πθ/θf)²)) dθ from 0 to θf` with
+`yc(θ) = a (1 - cos(θ))`, then `dT = d/dε T_pert` and `print dT(0)`:
+
+```
+this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating
+(like sin(x) up to ∞) -- the estimate was 0.000164321 ± 2.29482×10⁻¹³ in SI units
+```
+
+The integrand of dT/dε is finite (each term tends to a constant as θ → 0), but it is a difference
+of 0/0 terms, and `1 − cos θ` loses all its digits near 0. T_pert itself integrates fine. Three
+problems: (i) the refusal contradicts its own estimate (± 2e-13); (ii) in the full program the error
+named the line of a *different* integral (the straight-line one, several lines earlier); in a small
+repro it named no line at all (known #13); (iii) the fix a physicist has to find is numerical:
+`yc(θ) = 2 a sin(θ/2)²`. With it, dT/dε(0) = 3e-17 s and d²T/dε² = 0.164943 s, matching SciPy to
+1e-4. **Fix:** when the integrand is NaN at a few nodes next to an end point but the estimate has
+converged, drop those nodes (or evaluate slightly inside) instead of refusing; and let SymPy rewrite
+`1 - cos(x)` as `2 sin(x/2)²` when simplifying derivatives.
+
+### M12. `<0, 0> /s` is not a vector with a unit (awkward)
+
+`a'(0) = <0, 0> /s` → `s isn't defined … s is a unit; units go right after a number`. `0 /s` works
+for a number and `<0, 0> rad/s` works, so the space-slash form after `>` is the odd one out.
+**Fix:** after a vector literal's `>`, accept `/unit` exactly as after a number.
+
+### M13. The printed derivative formula shows `2 g·(…)` (cosmetic, but a trap)
+
+`print dT` shows `… √(2 g·(yc(θ) + ε a sin(π θ/θf)²)) …`: the variable `g` printed in a way that,
+pasted back into a program, means two grams. **Fix:** print `2*g` or `2·g` when a variable's name is
+also a unit.
+
+### What helped from the first pass
+
+- The algebraic `solve … for` (#1): flip times, the cycloid's θ_f, the quarter period of the slow
+  mode, all one line each, on ODE solutions or on formulas.
+- The Leibniz rule (#18): `d/dε` and `d²/dε²` of a function defined by an integral, exactly what a
+  first-variation argument needs.
+- The `a/b (c)` warning (#9) caught a real slip: `√(g / l1 (2 - √2))`.
+- Vector ODEs with a user function on the right (`solve ω' = euler(ω)`), vectors of angles, and
+  `solve_linear` inside that function all compile; 20 s of chaotic double pendulum conserves energy
+  to 1e-9, and the separation of neighbouring trajectories matches SciPy to 3 %.
+- `eigenvalues(K, M)` / `eigenvectors(K, M)` (#22) give the double pendulum's (2 ∓ √2) g/l at once.
+- Still open and still felt: M1/#33 (no "stop when"; every event needed a hand-picked bracket).

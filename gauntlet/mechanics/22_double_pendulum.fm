@@ -1,0 +1,82 @@
+# Mechanics 22 — The double pendulum: Lagrange's equations, normal modes, energy and chaos
+#
+# (Goldstein §1.6 and §6.1; Taylor §7.3, §11.4 and §12.9; Hand & Finch ch. 1.)
+# Two point masses m₁ = m₂ = 1.00 kg hang on massless rods l₁ = l₂ = 1.00 m, one
+# below the other; θ₁, θ₂ are measured from the downward vertical, Δ = θ₁ − θ₂.
+# Lagrange's equations are
+#     (m₁ + m₂) l₁ θ₁'' + m₂ l₂ θ₂'' cos Δ + m₂ l₂ θ₂'² sin Δ + (m₁ + m₂) g sin θ₁ = 0
+#     l₂ θ₂'' + l₁ θ₁'' cos Δ − l₁ θ₁'² sin Δ + g sin θ₂ = 0
+#
+#   (a) Small oscillations: T = ½ q'ᵀ M q', V = ½ qᵀ K q with
+#       M = [[(m₁+m₂) l₁², m₂ l₁ l₂], [m₂ l₁ l₂, m₂ l₂²]], K = diag((m₁+m₂) g l₁, m₂ g l₂).
+#       Get the normal-mode frequencies from eigenvalues(K, M) and compare with
+#       ω² = (g/l)(2 ∓ √2). Start the full nonlinear equations in the slow mode at
+#       1° and time the first zero crossing (a quarter period).
+#   (b) Large amplitude: release from θ₁ = θ₂ = 120°. Check energy conservation
+#       after 20 s.
+#   (c) Chaos: a second run starts 10⁻⁸ rad away in θ₂. Print the separation
+#       |Δθ₁| + |Δθ₂| at 4, 8 and 12 s (by 12 s it has saturated) and estimate the Lyapunov exponent
+#       from its growth. Compare a gentle start (θ₁ = θ₂ = 10°), where the
+#       separation only grows slowly.
+
+m1 = 1.00 kg
+m2 = 1.00 kg
+l1 = 1.00 m
+l2 = 1.00 m
+g = 9.81 m/s²
+
+# (a) normal modes of small oscillations
+M = [[(m1 + m2) l1², m2 l1 l2], [m2 l1 l2, m2 l2²]]
+K = [[(m1 + m2) g l1, 0], [0, m2 g l2]]
+ω2 = eigenvalues(K, M)
+print "slow mode:", √(ω2[1]) to 6 digits, "vs", √(g / l1 * (2 - √2)) to 6 digits
+print "fast mode:", √(ω2[2]) to 6 digits, "vs", √(g / l1 * (2 + √2)) to 6 digits
+shape = eigenvectors(K, M)
+ratio = shape[2, 1] / shape[1, 1]
+print "slow mode shape θ₂/θ₁:", ratio to 6 digits, "vs √2 =", √2 to 6 digits
+
+# The full equations. Written as above, with θ₁'' and θ₂'' in both equations, `solve`
+# refuses them (FRICTION M9), so the 2×2 linear system for the accelerations is solved
+# with solve_linear, and θ = <θ₁, θ₂> is one vector unknown.
+acc(θ, w) =
+    Δ = θ.x - θ.y
+    A = [[(m1 + m2) l1, m2 l2 cos(Δ)], [m2 l1 cos(Δ), m2 l2]]
+    rhs = <-m2 l2 w.y² sin(Δ) - (m1 + m2) g sin(θ.x), m2 l1 w.x² sin(Δ) - m2 g sin(θ.y)>
+    return solve_linear(A, rhs)
+
+solve a'' = acc(a, a')
+  with a(0) = <1°, ratio * 1°>, a'(0) = <0, 0> rad/s
+  for t from 0 s to 3 s tolerance 1e-12
+a1(t) = a(t).x
+solve a1(t_q) = 0 for t_q from 0 s to 3 s
+print "slow mode from the ODE at 1°:", 2π / (4 t_q) to 6 digits
+
+# (b) large amplitude, energy
+energy(θ, w) = ½ (m1 + m2) l1² w.x² + ½ m2 l2² w.y² + m2 l1 l2 w.x w.y cos(θ.x - θ.y) - (m1 + m2) g l1 cos(θ.x) - m2 g l2 cos(θ.y)
+
+solve p'' = acc(p, p')
+  with p(0) = <120°, 120°>, p'(0) = <0, 0> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+print "energy at 0 s:", energy(p(0 s), p'(0 s)) to 10 digits
+print "energy at 20 s:", energy(p(20 s), p'(20 s)) to 10 digits
+print "θ₁, θ₂ at 2 s:", p(2 s).x to 6 digits, p(2 s).y to 6 digits
+
+# (c) a neighbour 1e-8 rad away
+solve q'' = acc(q, q')
+  with q(0) = <120°, 120° + 1e-8>, q'(0) = <0, 0> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+sep(t) = abs(q(t).x - p(t).x) + abs(q(t).y - p(t).y)
+print "separation at 4 s:", sep(4 s) to 4 digits
+print "separation at 8 s:", sep(8 s) to 4 digits
+print "separation at 12 s:", sep(12 s) to 4 digits
+print "Lyapunov estimate (4 s to 8 s):", ln(sep(8 s) / sep(4 s)) / (4 s) to 3 digits
+
+# the gentle start
+solve r'' = acc(r, r')
+  with r(0) = <10°, 10°>, r'(0) = <0, 0> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+solve u'' = acc(u, u')
+  with u(0) = <10°, 10° + 1e-8>, u'(0) = <0, 0> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+sep_gentle(t) = abs(u(t).x - r(t).x) + abs(u(t).y - r(t).y)
+print "gentle start, separation at 12 s:", sep_gentle(12 s) to 3 digits

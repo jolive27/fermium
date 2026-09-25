@@ -134,17 +134,17 @@ Textbook problems from ten fields of physics, solved in Fermium and checked agai
 <!-- gauntlet-table -->
 | Topic | Pass 1 | Pass 2 |
 |---|---|---|
-| mechanics | 3 | 0 |
-| oscillations | 3 | 0 |
-| gravitation | 3 | 0 |
-| thermodynamics | 3 | 0 |
+| mechanics | 3 | 3 |
+| oscillations | 3 | 3 |
+| gravitation | 3 | 3 |
+| thermodynamics | 3 | 3 |
 | electromagnetism | 3 | 3 |
 | optics waves | 3 | 3 |
 | special relativity | 3 | 3 |
 | quantum | 3 | 3 |
 | nuclear | 3 | 3 |
 | astrophysics | 4 | 3 |
-| **total** | **31** | **18** |
+| **total** | **31** | **30** |
 
 Friction items logged: 38; fixed in the language: 33.
 <!-- /gauntlet-table -->
