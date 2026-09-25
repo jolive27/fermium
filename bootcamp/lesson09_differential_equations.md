@@ -59,7 +59,7 @@ plot saved to spring.png
 
 ![Spring oscillation](spring.png)
 
-For a second derivative, write `x''` (or `d²/dt² x`; the form `d²x/dt²` isn't understood yet). A second-order equation (with x″) needs **two** initial conditions: the starting position `x(0)` and the starting velocity `x'(0)`. If you forget one, Fermium tells you which is missing.
+For a second derivative, write `x''` (or `d²x/dt²`, or `d²/dt² x`). A second-order equation (with x″) needs **two** initial conditions: the starting position `x(0)` and the starting velocity `x'(0)`. If you forget one, Fermium tells you which is missing.
 
 You don't need to rearrange the equation to "x″ = …" yourself. Fermium does that: `mass x'' = -k x` is fine. (We called the mass `mass` rather than `m`, to avoid the metre gotcha from Lesson 2.)
 

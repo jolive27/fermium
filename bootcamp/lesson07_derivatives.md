@@ -62,7 +62,7 @@ v(t) = 20 m/s - t·9.81 m/s^2   [m/s, for t in s]
 0.380 m/s
 ```
 
-Second derivatives are written `d²/dt² y` (or `d^2/dt^2 y`), or simply `y''`. (The form `d²y/dt²` isn't understood yet: Fermium says `d isn't defined`. Use one of the others.) Here's an oscillation, x(t) = A cos(ωt), differentiated twice:
+Second derivatives are written `y''`, `d²y/dt²` (ASCII: `d^2y/dt^2`), or `d²/dt² y`. They all mean the same thing. Here's an oscillation, x(t) = A cos(ωt), differentiated twice:
 
 ```fermium
 A = 0.1 m

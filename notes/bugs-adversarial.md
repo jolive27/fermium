@@ -250,3 +250,25 @@ print r''(3)     # error "can't take that many derivatives of the solution r''"
 print r[end]     # error "r is a vector; use its components, like r.x" -- no "line 2:" prefix,
                  # and the final vector <cos 3, sin 3> would be a natural answer
 ```
+
+## A20. Deep or infinite recursion segfaults the whole process (also kills the REPL)
+```
+f(x) = x * f(x - 1)          # forgot the base case
+print f(3)                   # actual: "Segmentation fault" (exit 139)   expected: a one-line runtime error
+```
+```
+f(n) = if n <= 0 then 0 else 1 + f(n - 1)
+print f(10000000)            # actual: Segmentation fault   (f(100000) works)
+```
+Suggestion: a depth counter in each user function (runtime error "f called itself more than
+N times -- is a base case missing?"), or a guard page/stack check. Related: `f(x) = f(x)`
+(never called) fails to compile with "this program is nested too deeply" and no line number.
+
+## A21. Calling a function before its definition silently uses a constant of the same name
+```
+print h(2)
+h(x) = x^2
+# actual: 1.32521×10⁻³³ J s   (Planck constant × 2)     expected: 4, or an error "h is defined
+# as a function on line 2, after this line"
+```
+Same for any name that is also a constant (`c(2)`, `e(1)`, `G(3)`, `k_B(...)`), silently.

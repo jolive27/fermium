@@ -531,7 +531,7 @@ ic.fm, line 1: missing initial condition: x'(start)
 
 An equation with x″ needs both `x(0)` and `x'(0)`.
 
-**Second derivatives written as `d²x/dt²`.** First derivatives in Leibniz notation work (`dx/dt`), but `d²x/dt²` isn't understood yet. In a formula you get `d isn't defined`; inside `solve` you get `this solve has no derivatives in it`. Write `x''` or `d²/dt² x` instead.
+**Second derivatives written as `d²x/dt²`.** These work now, and so do `d^2x/dt^2`, `x''` and `d²/dt² x`. If you see `d isn't defined`, check that there's no space inside `d²x` and that the orders match (`d²x/dt²`, not `d²x/dt`).
 
 **Asking a solution for a time outside its range.**
 

@@ -222,7 +222,7 @@ print a
 print v(0.1 s)
 ```
 
-- **Syntax:** `x'`, `x''`, `dx/dt`, `d/dt x` and `d²/dt² x` differentiate a one-line function (`d²x/dt²` is not supported yet; write `x''` or `d²/dt² x`). The result is a new function, whose units are the numerator's units divided by the denominator's.
+- **Syntax:** `x'`, `x''`, `dx/dt`, `d²x/dt²`, `d/dt x` and `d²/dt² x` all differentiate a one-line function. The result is a new function, whose units are the numerator's units divided by the denominator's.
 - **Printing a function** shows its formula and units, for example `v(t) = -A ω sin(ω t)   [m/s, for t in s]`.
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
