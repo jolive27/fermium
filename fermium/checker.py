@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import math
 import os
+import re
 from difflib import get_close_matches
 from fractions import Fraction
 
@@ -390,6 +391,20 @@ class Checker(C.DiffContext):
             raise self.err("functions must be defined at the top level of the program (not inside a block)", s)
         info = FuncInfo(s.name, s, ctx.scope)
         ctx.scope.names[s.name] = info
+        params = {p.name for p in s.params}
+        binds = list(s.where or [])
+        stmts = list(s.body) if isinstance(s.body, list) else [s.body]
+        while stmts:          # every where-binding in the body, at any depth
+            n = stmts.pop()
+            if isinstance(n, A.Where):
+                binds += n.bindings
+            for v in vars(n).values():
+                stmts += [x for x in (v if isinstance(v, list) else [v]) if isinstance(x, A.Node)]
+        for name, val in binds:      # f(x) = 2 x where x = 5 s ignores the argument (A31)
+            if name in params:
+                self.diags.warn(f"'where {name} = ...' hides the parameter {name} of {s.name}, so the "
+                                f"argument is ignored", line=val.line or s.line, col=val.col,
+                                hint=f"rename the where-variable, or drop {name} from {s.name}(...)")
         return None
 
     def s_Print(self, s, ctx):
@@ -641,7 +656,7 @@ class Checker(C.DiffContext):
     def s_ForIn(self, s, ctx):
         lst = self.expr(s.iterable, ctx, allow_func=True)
         if isinstance(lst, SolRef):
-            lst = self.sol_values(lst.view)
+            lst = self.sol_values(lst.view, s.iterable)
         if isinstance(lst.ty, TextListTy):
             sym = self.loop_var(s.var, STR, ctx, s)
             sym.assigned = True
@@ -941,11 +956,10 @@ class Checker(C.DiffContext):
             if op == "+" and aff_a and aff_b:
                 raise self.err(f"can't add two absolute temperatures ({a.hint.name} + {b.hint.name})", e,
                                hint="to add a temperature change, write it in K, e.g. 20 °C + 5 K")
-            if op == "-" and aff_a and aff_b:
-                r.hint = None      # the difference of two temperatures is a difference: shown in K
-            elif aff_b and op == "-":
-                raise self.err(f"can't subtract an absolute temperature ({b.hint.name}) from this", e,
-                               hint="write temperature changes in K")
+            if op == "-" and aff_b:
+                # the difference of two temperatures is a difference: shown in K. The left side may be
+                # in K (300 K - 20 °C, or T - Ta in Newton's law of cooling), since K is absolute too (A47)
+                r.hint = None
             else:
                 r.hint = a.hint if a.hint is not None else b.hint
         elif op == "*":
@@ -1027,6 +1041,21 @@ class Checker(C.DiffContext):
         if b.hint is not None and self._dimless(a) and a.hint is None:
             return b.hint
         return None
+
+    def _arg_hint(self, r, args):
+        """f(E) = E; f(3 MeV) shows MeV: a result with no unit of its own takes the unit of the first
+        argument of the same dimension (hints are per call site; the instance is shared) (A40)."""
+        if r.hint is not None or not isinstance(r.ty, NumTy):
+            return
+        d = self.U.norm(r.ty.dim)
+        if not d.concrete:
+            return
+        for a in args:
+            if isinstance(a.ty, NumTy) and a.hint is not None and not a.hint.affine:
+                da = self.U.norm(a.ty.dim)
+                if da.concrete and tuple(da.const.e) == tuple(d.const.e):
+                    r.hint = a.hint
+                    return
 
     def _minsf(self, *vs):
         s = [v.sf for v in vs if getattr(v, "sf", None) is not None]
@@ -1161,9 +1190,21 @@ class Checker(C.DiffContext):
         if not self.U.unify(v.ty.dim, u.dim):
             raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e,
                            hint="the units you convert to must measure the same kind of quantity")
+        self._warn_angle_in_hz(v, u, e)
         v.hint = u
         v.direct = False
         return v
+
+    def _warn_angle_in_hz(self, v, u, e):
+        """`1 rev/min in Hz` is 2π/60 Hz, because angles are plain numbers (D6, D27; A46)."""
+        def words(unit):
+            return set(re.findall(r"[^\s/·*^()⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+", unit.name)) if unit is not None else set()
+        angles = words(v.hint) & {"rev", "rpm", "rad", "°", "deg", "arcmin", "arcsec"}
+        if angles and any(w.endswith("Hz") for w in words(u)):
+            a = sorted(angles)[0]
+            self.diags.warn(f"angles are plain numbers (1 rev = 2π), so a rate in {a} converted to Hz is "
+                            f"an angular frequency: 1 rev/min is 2π/60 = 0.105 Hz", line=e.line, col=e.col,
+                            hint="to count turns per second write  in rev/s  (1 rev/min = 1/60 rev/s)")
 
     def e_Digits(self, e, ctx):
         v = self.expr(e.value, ctx)
@@ -1236,7 +1277,7 @@ class Checker(C.DiffContext):
             if e.name in ("t", "time", "times"):
                 return I.ISolList(v.sol_sym and self.var_ref(v.sol_sym, ctx, e), v.comp, "t", ListTy(v.tdim))
             if e.name in ("values", "v"):
-                return self.sol_values(v)
+                return self.sol_values(v, e)
         if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
             if e.name not in ("x", "y", "z"):
                 raise self.err(f"a vector's components are .x, .y and .z (not .{e.name})", e)
@@ -1252,9 +1293,9 @@ class Checker(C.DiffContext):
         names = ", ".join(c["name"] for c in cols)
         raise self.err(f"the data has no column called {e.name} (columns: {names})", e)
 
-    def sol_values(self, v: SolView):
+    def sol_values(self, v: SolView, node=None):
         if v.n > 1:
-            raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", None)
+            raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", node)
         s = self._ivar(v.sol_sym)
         if self.cur_ctx is not None:
             s = self.var_ref(v.sol_sym, self.cur_ctx, None)
@@ -1267,6 +1308,9 @@ class Checker(C.DiffContext):
             return I.IBuiltin("len", [target], NumTy(DIMLESS))
         idx = self._with_end(idx_ast, target, ctx)
         self.need_num(idx, idx_ast, "a list index")
+        if isinstance(idx, I.IConst) and not math.isfinite(idx.value):     # xs[inf], xs[0/0] (A32)
+            shown = "NaN" if math.isnan(idx.value) else ("∞" if idx.value > 0 else "-∞")
+            raise self.err(f"a list index must be a whole number (1, 2, 3, ...), not {shown}", idx_ast)
         if isinstance(idx, I.IConst) and idx.value != int(idx.value):
             raise self.err(f"a list index must be a whole number (1, 2, 3, ...), not {idx.value:g}", idx_ast)
         if not self.U.unify(idx.ty.dim, DIMLESS):
@@ -1304,8 +1348,21 @@ class Checker(C.DiffContext):
             if not isinstance(idx, I.IConst):
                 raise self.err("a vector's component must be picked with a fixed number, like v[1], or v.x", e.index)
             return self.vec_elem(t, int(idx.value) - 1, e.index)
+        if isinstance(t, SolRef) and t.view.n > 1:      # r[end] of a vector solution is a vector (A19)
+            v = t.view
+            comps = []
+            for k in range(v.n):
+                sub = SolView(v.sol_sym, v.comp + k, v.top + k, v.dim, v.tdim, v.tname, v.name)
+                sub.stride = v.stride
+                vals = self.sol_values(sub, e)
+                r = I.IIndex(vals, self.index_expr(e.index, vals, ctx), NumTy(v.dim), e.line)
+                r.hint = getattr(v, "hint", None)
+                comps.append(r)
+            r = I.IVec(comps, VecTy(v.dim, v.n))
+            r.hint = getattr(v, "hint", None)
+            return r
         if isinstance(t, SolRef):
-            t = self.sol_values(t.view)
+            t = self.sol_values(t.view, e)
         if isinstance(t, I.Expr) and isinstance(t.ty, TextListTy):
             return I.IIndex(t, self.index_expr(e.index, t, ctx), STR, e.line)
         if isinstance(t, FuncRef) or not isinstance(t.ty, ListTy):
@@ -1400,6 +1457,7 @@ class Checker(C.DiffContext):
             comps = []
             for k in range(view.n):
                 sub = SolView(view.sol_sym, view.comp + k, view.top + k, view.dim, view.tdim, view.tname, view.name)
+                sub.stride = view.stride      # so r''(t) of a vector solution uses the ODE's right side (A19)
                 comps.append(self._sol_eval_node(sub, sol, t, e))
             return I.IVec(comps, VecTy(view.dim, view.n))
         if view.comp <= view.top:
@@ -1423,6 +1481,11 @@ class Checker(C.DiffContext):
             scalar_args = list(args)
             scalar_args[i] = I.IConst(0, NumTy(args[i].ty.dim))
             call = self.instantiate(info, scalar_args, node)
+            if not isinstance(call.ty, NumTy):       # f(x) = <x, 2x>; f([1, 2]) (A48)
+                what = "a vector" if isinstance(call.ty, VecTy) else "something other than a number"
+                raise self.err(f"{info.display_name} returns {what}, so it can't be applied to each element "
+                               f"of a list (lists of vectors aren't supported yet)", node,
+                               hint="loop over the list and push the components into separate lists")
             r = I.IMap(call.func, args, i, ListTy(call.ty.dim))
             r.sf = call.sf
             return r
@@ -1464,6 +1527,8 @@ class Checker(C.DiffContext):
                                 visit(x)
             if isinstance(s, A.ForIn) and isinstance(s.iterable, A.Name) and s.iterable.name in names:
                 found = True
+            if isinstance(s, A.IndexAssign) and s.target in names:     # v[i] = ... (A16)
+                found = True
         for s in body:
             visit_stmt(s)
         return found
@@ -1486,6 +1551,7 @@ class Checker(C.DiffContext):
             r = I.ICall(inst, args, inst.ret_ty)
             r.sf = self._minsf(*args, inst) if inst.sf is not None else self._minsf(*args)
             r.hint = getattr(inst, "ret_hint", None)
+            self._arg_hint(r, args)
             return r
         inst = I.IFunc(self.fresh_name(info.name), [])
         inst.display = info.display_name
@@ -1563,6 +1629,7 @@ class Checker(C.DiffContext):
         inst.ret_hint = rets[0].hint if len(rets) == 1 else None
         r = I.ICall(inst, args, rt)
         r.hint = inst.ret_hint
+        self._arg_hint(r, args)
         r.sf = self._minsf(*args, inst)
         if len(rets) == 1 and isinstance(rets[0], I.Expr) and rets[0].hint is not None and \
                 isinstance(rets[0], I.IVar) is False and info.one_liner and False:
@@ -1601,7 +1668,7 @@ class Checker(C.DiffContext):
         for a in e.args:
             v = self.expr(a, ctx, allow_func=True)
             if isinstance(v, SolRef):
-                v = self.sol_values(v.view)
+                v = self.sol_values(v.view, a)
             if isinstance(v, FuncRef):
                 raise self.err(f"{v.info.display_name} is a function; give it an argument", a)
             args.append(v)
