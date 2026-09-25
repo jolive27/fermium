@@ -361,6 +361,11 @@ def check_plot(ck, s: A.Plot, ctx):
                 if not ck.U.unify(entry[which + "dim"], u.dim):
                     raise ck.err(f"can't show {ck.desc(entry[which + 'dim'])} in {u.name}", sr)
                 entry[which + "hint"] = u
+        if series:          # one pair of axes: every series in the same units (A23)
+            for which in ("x", "y"):
+                ck.unify_or(series[0][which + "dim"], entry[which + "dim"],
+                            lambda: f"all series in one plot need the same {which} units (here "
+                                    f"{ck.desc(series[0][which + 'dim'])} and {ck.desc(entry[which + 'dim'])})", sr)
         series.append(entry)
         labels.append(entry)
     return _finish_plot(ck, s, series)

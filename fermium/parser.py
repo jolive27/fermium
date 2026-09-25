@@ -1171,7 +1171,14 @@ class Parser:
 
     def integral(self):
         t = self.next()
-        body = self.sum()
+        # The integration variable is a variable inside the integrand: `∫ 1/u du` is 1/u, not
+        # "per atomic mass unit" (A54). Look ahead for the trailing `du` before reading the integrand.
+        new = self._integration_vars() - self.known
+        self.known |= new
+        try:
+            body = self.sum()
+        finally:
+            self.known -= new
         integrand, var = self._split_dvar(body)
         if var is None:
             raise self.error("this integral is missing its 'dx' (the variable to integrate over)", tok=t,
@@ -1183,6 +1190,27 @@ class Parser:
             self.expect_kw("to")
             hi = self.sum()
         return self.span(A.Integral(integrand, var, lo, hi), t)
+
+    def _integration_vars(self):
+        """Names v of the `dv` tokens that end the integrand starting at the current token."""
+        depth, j, last = 0, self.i, []
+        while j < len(self.toks):
+            t = self.toks[j]
+            if t.kind in ("NEWLINE", "EOF") or (depth == 0 and t.kind == "KW") or \
+                    (depth == 0 and t.kind == "OP" and t.value in (",", "=")):
+                break
+            if t.kind == "OP" and t.value in "([{":
+                depth += 1
+            elif t.kind == "OP" and t.value in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            if depth == 0 and t.kind == "NAME" and t.value.startswith("d") and len(t.value) > 1:
+                last.append(canonical_name(t.value[1:]))
+            elif not (t.kind == "OP" and t.value in ")]}"):
+                last = []
+            j += 1
+        return set(last)
 
     def _split_dvar(self, e):
         """Pull a trailing `dx` out of the integrand: `F(x) dx` -> (F(x), 'x')."""
