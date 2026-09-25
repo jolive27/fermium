@@ -1,6 +1,6 @@
 """Planck spectral radiance integrated over nu in [1e11, 1e16] Hz for 1000
 temperatures in [1000, 10000] K with scipy.integrate.quad (QUADPACK QAGS,
-21-point Gauss-Kronrod, adaptive), epsrel = 1e-8, epsabs = 0."""
+21-point Gauss-Kronrod, adaptive), epsrel = 1e-10 (the tolerance of every Fermium integral), epsabs = 0."""
 import math
 import time
 
@@ -20,7 +20,7 @@ def planck(nu, x):
 
 
 def band(T):
-    val, _ = quad(planck, 1e11, 1e16, args=(H / (KB * T),), epsabs=0.0, epsrel=1e-8, limit=200)
+    val, _ = quad(planck, 1e11, 1e16, args=(H / (KB * T),), epsabs=0.0, epsrel=1e-10, limit=200)
     return val
 
 

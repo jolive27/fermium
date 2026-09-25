@@ -1,6 +1,6 @@
 """Planck spectral radiance integrated over nu in [1e11, 1e16] Hz for 1000
 temperatures in [1000, 10000] K. Hand-written globally adaptive Gauss-Kronrod
-(7-point Gauss / 15-point Kronrod) with rtol = 1e-8, same strategy as QuadGK.jl:
+(7-point Gauss / 15-point Kronrod) with rtol = 1e-10 (the tolerance of every Fermium integral), same strategy as QuadGK.jl:
 repeatedly bisect the segment with the largest error estimate |K15 - G7|."""
 import heapq
 import math
@@ -40,7 +40,7 @@ def gk15(f, a, b):
     return ik, abs(ik - ig)
 
 
-def quadgk(f, a, b, rtol=1e-8, atol=0.0, maxsegs=100_000):
+def quadgk(f, a, b, rtol=1e-10, atol=0.0, maxsegs=100_000):
     i, e = gk15(f, a, b)
     heap = [(-e, a, b, i)]
     total_i, total_e = i, e

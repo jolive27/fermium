@@ -108,9 +108,19 @@ def test_3_readme_adaptive_row_is_not_a_spot_check():
 
 
 def test_3_readme_python_multipliers_match_results():
+    """The README's pure-Python multipliers are those of benchmarks/RESULTS.md (within rounding); re-measured
+    in M5, so the test reads both files instead of fixed numbers."""
+    import re
     readme = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
-    for m in ("20.5×", "86×", "58×"):
-        assert m in readme, m
+    results = open(os.path.join(ROOT, "benchmarks", "RESULTS.md"), encoding="utf-8").read()
+    rows = {"nbody": "N-body", "blackbody": "Blackbody", "unit_loop": "Loop with units"}
+    for bench, label in rows.items():
+        m = re.search(rf"^\| {bench} \| Python \(pure\) \|[^|]*\|[^|]*\|[^|]*\| ([0-9.]+)×", results, re.M)
+        assert m, bench
+        want = float(m.group(1))
+        line = next(ln for ln in readme.splitlines() if ln.startswith(f"| {label}"))
+        got = float(re.search(r"~([0-9.]+)× Julia \|$", line).group(1))
+        assert abs(got - want) <= 0.06 * want, (bench, got, want)
 
 
 # ---- #4: roots at a pole ---------------------------------------------------------------------------------

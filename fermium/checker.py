@@ -248,6 +248,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         self.repl = repl
         self.uses_unc = False
         self.arena = repl         # top-level variables live in an arena of slots (REPL, Python API D142)
+        self.par_stack = []       # the parallel for loops being checked (M5, D152)
         self.tables = Tables()
         self.root = Scope(kind="root")
         for name, (val, unit, desc) in all_constants().items():
@@ -396,11 +397,21 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         return out
 
     # ============================================================ statements
+    def _par_here(self, ctx):
+        """The parallel for being checked, if new variables made here belong to its iterations."""
+        if self.par_stack and ctx.lam is None and ctx.func is self.par_stack[-1]["func"]:
+            return self.par_stack[-1]
+        return None
+
     def new_sym(self, name, ty, ctx):
         storage = "local"
-        if ctx.is_main and (self.repl or self.arena) and ctx.lam is None:
+        par = self._par_here(ctx)
+        if ctx.is_main and (self.repl or self.arena) and ctx.lam is None and par is None:
             storage = "arena"
         sym = I.Sym(name, ty, storage, ctx.func)
+        if par is not None:          # a variable set inside a parallel for: each iteration has its own
+            sym.par_private = True
+            par["private"].append(sym)
         sym.nat = self.nat
         if ctx.lam is None:
             ctx.func.locals.append(sym)
@@ -995,6 +1006,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def loop_var(self, name, ty, ctx, node):
         b, _ = ctx.scope.lookup(name)
+        if isinstance(b, I.Sym) and self._par_here(ctx) is not None and not getattr(b, "par_private", False):
+            b = None         # inside a parallel for, an inner loop gets its own variable (D152)
         if isinstance(b, I.Sym) and b.func is ctx.func and type(b.ty) is type(ty):
             if isinstance(ty, NumTy) and self.U.unify(b.ty.dim, ty.dim) or isinstance(ty, StrTy):
                 if getattr(b, "unset_msg", None) is not None:    # the variable of an earlier loop
@@ -1032,6 +1045,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err(f"this range is {self.desc(lo.ty.dim)}, so it needs a step with units", s,
                                hint="add e.g.  step 0.1 s")
             st = I.IConst(1, NumTy(DIMLESS))
+        if getattr(s, "parallel", False):
+            return self.parallel_for(s, lo, hi, st, ctx)
         sym = self.loop_var(s.var, NumTy(lo.ty.dim), ctx, s)
         sym.hint = lo.hint
         sym.sf = None
@@ -1046,6 +1061,187 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         ctx.loop -= 1
         self._after_loop(sym, s.line)
         return I.SFor(sym, lo, hi, st, body)
+
+    # ------------------------------------------------------------ parallel for (M5, D152)
+    PAR_NO_STMT = ((I.SPrint, "print"), (I.SPlot, "plot"), (I.SSolve, "solve"), (I.SFit, "fit"),
+                   (I.SPush, "push"), (I.SAnimate, "plot ... animate"), (I.SReturn, "return"), (I.SBreak, "break"))
+    PAR_NO_BUILTIN = {"rand", "rand2", "randn", "randn2", "seed", "sample"}
+
+    def parallel_for(self, s, lo, hi, st, ctx):
+        """`parallel for i from a to b`: the iterations run at the same time on several threads.  Each
+        iteration may set its own variables, write xs[i] (its own element) of lists made before the loop,
+        and add to sums (s += …, s -= …), which are added up in a fixed order (D152).  Anything else that two
+        iterations could both touch is a compile-time error."""
+        if self._par_here(ctx) is not None:
+            raise self.err("a parallel for can't be inside another parallel for", s,
+                           hint="make the inner loop a plain for; the outer loop already uses every core")
+        if ctx.lam is not None:
+            raise self.err("a parallel for can't be used here (inside an integral or equation)", s)
+        par = {"func": ctx.func, "private": [], "line": s.line}
+        before = dict(ctx.scope.names)
+        self.par_stack.append(par)
+        try:
+            # always a new variable: each iteration has its own i, which has no value after the loop
+            sym = self.new_sym(s.var, NumTy(lo.ty.dim), ctx)
+            ctx.scope.names[s.var] = sym
+            sym.hint = lo.hint
+            sym.sf = None
+            sym.direct = True
+            sym.assigned = True
+            ctx.loop += 1
+            reg = self._enter_region(ctx, "for", s.line)
+            try:
+                body = self.block(s.body, ctx)
+            finally:
+                self._exit_region(ctx, reg)
+            ctx.loop -= 1
+        finally:
+            self.par_stack.pop()
+        for p in par["private"]:
+            p.region = None
+            p.unset_msg = f"{p.name} has no value here: it belongs to the iterations of the parallel for on line " \
+                          f"{s.line}, so it isn't kept after the loop"
+            if ctx.scope.names.get(p.name) is p and p.name in before:
+                ctx.scope.names[p.name] = before[p.name]     # the variable of that name from before the loop
+        out = I.SFor(sym, lo, hi, st, body)
+        out.par = self.parallel_info(sym, body, par, s)
+        return out
+
+    def parallel_info(self, isym, body, par, node):
+        """Check that the iterations of a parallel for can't interfere; returns what the back ends need:
+        the sums (reductions), the lists written as xs[i], and the other lists read (checked at run time not
+        to be the same list as a written one)."""
+        private = {p.id for p in par["private"]} | {isym.id}
+        reductions, written, red_ops = [], [], set()
+
+        def err(msg, line=None, hint=None):
+            e = self.err(msg, node, hint=hint)
+            if line and line != getattr(node, "line", None):
+                e.line, e.col, e.length = line, 1, 1
+            return e
+
+        def is_i(ix):
+            return isinstance(ix, I.IVar) and ix.sym is isym
+
+        def banned(st, line, who=None):
+            for cls, what in self.PAR_NO_STMT:
+                if isinstance(st, cls) and not (who and cls is I.SReturn):
+                    if who:
+                        raise err(f"{who} uses {what}, so it can't be called inside a parallel for", line)
+                    why = "the loop has to run to the end" if cls in (I.SBreak, I.SReturn) else \
+                        "the iterations run at the same time, in no fixed order"
+                    raise err(f"{what} can't be used inside a parallel for: {why}", line,
+                              hint="keep the values in a list with xs[i] = …, then use them after the loop")
+
+        def stmts(ss):
+            for st in ss:
+                line = getattr(st, "line", 0) or None
+                banned(st, line)
+                if isinstance(st, I.SFor) and getattr(st, "par", None):
+                    raise err("a parallel for can't be inside another parallel for", line)
+                if isinstance(st, (I.SFor, I.SForIn)) and st.sym.id not in private:
+                    raise err(f"{st.sym.name} is shared by all the iterations of this parallel for, so it can't "
+                              f"be a loop variable inside it", line, hint="use a new name for the inner loop")
+                if isinstance(st, I.SAssign) and st.sym.id not in private:
+                    v = st.value
+                    ok = isinstance(st.sym.ty, NumTy) and isinstance(v, I.IBin) and v.op in "+-" and \
+                        isinstance(v.a, I.IVar) and v.a.sym is st.sym and \
+                        all(x is not st.sym for x in self._par_syms(v.b))
+                    if not ok:
+                        raise err(f"{st.sym.name} is shared by all the iterations of this parallel for, so it "
+                                  f"can't be set inside it", line,
+                                  hint=f"only sums are allowed:  {st.sym.name} += …  (added up in a fixed order);"
+                                       f" or give each iteration its own new variable")
+                    red_ops.add(id(v))
+                    if st.sym not in reductions:
+                        reductions.append(st.sym)
+                if isinstance(st, I.SIndexAssign):
+                    if st.sym.id in private:
+                        raise err(f"{st.sym.name} is made inside the parallel for; changing its elements there "
+                                  f"isn't supported", line, hint="build it with a formula instead")
+                    if not is_i(st.idx):
+                        raise err(f"each iteration of a parallel for may only write its own element, "
+                                  f"{st.sym.name}[{isym.name}]", line,
+                                  hint=f"two iterations writing the same element would race; index with the loop "
+                                       f"variable {isym.name}")
+                    if st.sym not in written:
+                        written.append(st.sym)
+                for sub in (getattr(st, "body", None), getattr(st, "then", None), getattr(st, "other", None)):
+                    if isinstance(sub, list):
+                        stmts(sub)
+        stmts(body)
+        red_ids = {r.id for r in reductions}
+        w_ids = {w.id for w in written}
+        lists = []
+
+        def walk(x, line, fstack):
+            if isinstance(x, (list, tuple)):
+                for y in x:
+                    walk(y, line, fstack)
+                return
+            if not isinstance(x, (I.Expr, I.Stmt, I.ILambda)):
+                return
+            if isinstance(x, I.Stmt) and getattr(x, "line", 0):
+                line = x.line
+            if isinstance(x, I.SIndexAssign) and x.sym.id in w_ids:
+                walk(x.value, line, fstack)
+                return
+            if isinstance(x, I.IIndex) and isinstance(x.lst, I.IVar) and x.lst.sym.id in w_ids and not fstack:
+                if not is_i(x.idx):
+                    raise err(f"{x.lst.sym.name} is written by the iterations ({x.lst.sym.name}[{isym.name}] = …), "
+                              f"so inside the loop it can only be read as {x.lst.sym.name}[{isym.name}]", line)
+                return
+            if isinstance(x, I.IBin) and id(x) in red_ops:
+                walk(x.b, line, fstack)
+                return
+            if isinstance(x, I.IVar):
+                sy = x.sym
+                if sy.id in red_ids:
+                    raise err(f"the sum {sy.name} can't be read inside the parallel for: its value is only known "
+                              f"after the loop", line)
+                if sy.id in w_ids:
+                    raise err(f"{sy.name} is written by the iterations ({sy.name}[{isym.name}] = …), so inside "
+                              f"the loop it can only be read as {sy.name}[{isym.name}]", line)
+                if isinstance(sy.ty, ListTy) and sy.id not in private and sy not in lists and \
+                        (sy.func is par["func"] or sy.storage in ("global", "arena")):
+                    lists.append(sy)
+                return
+            if isinstance(x, I.IBuiltin) and x.name in self.PAR_NO_BUILTIN:
+                raise err("random numbers can't be drawn inside a parallel for: the iterations run in a different "
+                          "order each time, so the results would change from run to run", line,
+                          hint="draw them before the loop, into a list")
+            if isinstance(x, (I.ICall, I.IMap)):
+                f = x.func
+                who = f.name.split(".")[0]
+                if f in fstack:
+                    raise err(f"{who} calls itself; a recursive function can't be used inside a parallel for", line)
+                for st in f.body:
+                    banned(st, line, who)
+                walk(f.body, line, fstack + [f])
+            for v in vars(x).values():
+                walk(v, line, fstack)
+        walk(body, getattr(node, "line", 0), [])
+        pairs, seen = [], set()
+        for w in written:
+            for o in written + lists:
+                if o is not w and frozenset((w.id, o.id)) not in seen:
+                    seen.add(frozenset((w.id, o.id)))
+                    pairs.append((w, o, self.text(f"{w.name} and {o.name}")))
+        return {"reductions": reductions, "written": written, "lists": lists, "alias": pairs}
+
+    @staticmethod
+    def _par_syms(e):
+        out = []
+        stack = [e]
+        while stack:
+            x = stack.pop()
+            if isinstance(x, I.IVar):
+                out.append(x.sym)
+            elif isinstance(x, (I.Expr, I.ILambda)):
+                stack.extend(vars(x).values())
+            elif isinstance(x, (list, tuple)):
+                stack.extend(x)
+        return out
 
     def s_ForIn(self, s, ctx):
         lst = self.expr(s.iterable, ctx, allow_func=True)
@@ -1331,6 +1527,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         msg = getattr(sym, "unset_msg", None)
         if msg and any(sym.id in reg["assigned"][-1] for reg in getattr(ctx, "regions", [])):
             msg = None          # set earlier in this same loop body / branch (gauntlet friction #4)
+        if msg and ctx.lam is None and (sym.func is ctx.func) and getattr(sym, "par_private", False):
+            raise self.err(msg, node, hint="to keep values from the loop, write them to a list made before it "
+                                           "(ys[i] = …) or add them up (s += …)")
         if msg and ctx.lam is None and (sym.func is ctx.func):
             where = msg.split("inside ")[1].split(",")[0]
             raise self.err(msg, node, hint=f"give {sym.name} a value before {where}, e.g.  {sym.name} = 0")
@@ -1342,7 +1541,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             # symbol from an enclosing function
             if sym.storage in ("global", "arena"):
                 return self._ivar(sym)
-            if sym.func is not None and getattr(sym.func, "is_main", False) or self._is_main_sym(sym):
+            if getattr(sym, "par_private", False):
+                pass        # private to a parallel for: passed in the env, never a shared global (D152)
+            elif sym.func is not None and getattr(sym.func, "is_main", False) or self._is_main_sym(sym):
                 sym.storage = "global"
                 return self._ivar(sym)
             if sym not in lam.captures:
@@ -1364,6 +1565,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     p = getattr(p, "parent", None)
             return self._ivar(sym)
         if sym.func is not ctx.func and sym.storage == "local":
+            if getattr(sym, "par_private", False):
+                raise self.err(f"{sym.name} belongs to one iteration of a parallel for and can't be used in "
+                               f"another function", node)
             if self._is_main_sym(sym):
                 sym.storage = "global"
             else:

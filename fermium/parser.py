@@ -229,6 +229,16 @@ class Parser:
             return s
         if t.kind == "NAME" and t.value == "use" and self.peek().kind == "NAME" and self.peek().value == "python":
             return self.use_python_stmt(end_line)
+        if t.kind == "NAME" and t.value == "parallel" and self.peek().kind == "KW" and self.peek().value == "for":
+            self.next()
+            s = self.for_stmt()
+            if isinstance(s, A.ForIn):
+                raise self.error("parallel for works with a range of numbers: write  parallel for i from 1 to n",
+                                 t, hint="loop over the indexes: parallel for i from 1 to len(xs), then use xs[i]")
+            s.parallel = True
+            s.length = (s.col - t.col) + 3 if s.line == t.line else 8     # underline "parallel for"
+            s.col = t.col
+            return s
         if t.kind == "NAME" and t.value == "analyze" and self._is_analyze():
             s = self.analyze_stmt()
             if end_line:

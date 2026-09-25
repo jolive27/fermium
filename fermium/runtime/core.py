@@ -518,6 +518,10 @@ class Runtime:
         if kind == 14:
             return (f"the two sides of this equation jump past each other near {self.fmt_value(a, fmt)} (like tan "
                     f"at 90°) instead of crossing: that's not a solution; narrow the range")
+        if kind == 40:
+            return (f"{self.tables.texts[int(a)]} are the same list (one was set from the other), so the iterations "
+                    f"of this parallel for would write and read the same numbers at the same time; make a copy "
+                    f"first, e.g.  ys = xs * 1")
         if kind == 12:
             return (f"this for loop has no definite number of steps: it goes from {format_number(a)} to "
                     f"{format_number(b)} (NaN in the start, end or step)")

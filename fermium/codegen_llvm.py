@@ -8,6 +8,7 @@ the integrand / right-hand side is inlined into them and everything is native.
 from __future__ import annotations
 
 import math
+import os
 
 from llvmlite import ir
 
@@ -33,6 +34,19 @@ LIST = LISTH.as_pointer()                          # a list value is a pointer t
 # solution: n, dim, cap, t*, y*, dy*, the right-hand side f(t, y, dy, env) (or null) and its env (D46)
 SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P, I8P, F64P])
 SOLP = SOL.as_pointer()
+
+# M5 speed-ups (D150, D152).  Each can be switched off with FERMIUM_DISABLE=name,name (or "all") to measure
+# what it is worth; the printed results never depend on them (tests/test_parallel.py checks that).
+#   int_loops  integer loop counters and indexing (D150)
+#   parallel   parallel for on several threads; off: one thread, same blocks, same numbers (D152)
+M5_OPTS = ("int_loops", "parallel")
+M5_OFF = set(M5_OPTS) if os.environ.get("FERMIUM_DISABLE", "") == "all" else \
+    {w.strip() for w in os.environ.get("FERMIUM_DISABLE", "").split(",") if w.strip()}
+
+
+def m5(name):
+    return name not in M5_OFF
+
 
 SCALAR_FN = ir.FunctionType(F64, [F64, F64P])
 ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
@@ -169,6 +183,17 @@ class ModuleGen:
         self.qvar.initializer = f64(-1)
         self.qvar.linkage = "internal"
         self._kernels_built = set()
+        # fm_raise: stop the program after fm_error (a longjmp to the current thread's jump buffer: the
+        # program's, or a parallel for worker's, D152).  Its body is written by finish_raise().
+        self.raiser = ir.Function(self.module, ir.FunctionType(VOID, []), "fm_raise")
+        self.raiser.linkage = "internal"
+        self.raiser.attributes.add("noreturn")
+        self.raiser.attributes.add("noinline")
+        # not "cold": LLVM then puts the function in a section of its own (.text.unlikely), and MCJIT's
+        # unwind-table registration for such a module outlives the module; a later backtrace() through JIT
+        # frames (NumPy calls one) crashed in _Unwind_Find_FDE (found in M5, D152)
+        self.uses_par = False
+        self.par_count = 0
         self._checked_malloc()
 
     def _checked_malloc(self):
@@ -277,6 +302,7 @@ class ModuleGen:
         g.emit_body(main.body)
         if not g.b.block.is_terminated:
             g.b.ret_void()
+        self.finish_raise()
         # trampoline with setjmp so runtime errors can unwind
         run = ir.Function(self.module, ir.FunctionType(I32, []), entry_name)
         b = ir.IRBuilder(run.append_basic_block("entry"))
@@ -345,8 +371,158 @@ class ModuleGen:
         kind = kind if isinstance(kind, ir.Value) else i64(kind)
         b.call(self.externs["fm_error"], [kind, a if a is not None else f64(0), c if c is not None else f64(0),
                                           ln, b.load(self.errfmt)])
+        b.call(self.raiser, [])
+        b.unreachable()
+
+    # ------------------------------------------------------------ parallel for runtime (M5, D152)
+    PAR_MAXT = 256              # most threads
+    PAR_STACK = 64 << 20        # stack of each worker thread
+    JB_WORDS = 64               # a jmp_buf (glibc: 200 bytes) in 8-byte words, with room to spare
+
+    def finish_raise(self):
+        b = ir.IRBuilder(self.raiser.append_basic_block("e"))
+        if self.uses_par:
+            tids, jbufs, active, nt = self._par_globals()
+            with b.if_then(b.icmp_signed("!=", b.load(active), i64(0))):
+                me = b.call(self.extern("pthread_self", I64, []), [])
+                lp = LoopHelper(b, self.raiser)
+                with lp.range(i64(0), b.load(nt)) as k:
+                    with b.if_then(b.icmp_unsigned("==", b.load(b.gep(tids, [I32(0), k])), me)):
+                        jb = b.bitcast(b.gep(jbufs, [I32(0), k]), I8P)
+                        b.call(self.externs["longjmp"], [jb, ir.Constant(I32, 1)])
+                        b.unreachable()
         b.call(self.externs["longjmp"], [b.bitcast(self.jmpbuf, I8P), ir.Constant(I32, 1)])
         b.unreachable()
+
+    def _par_globals(self):
+        g = self.module.globals.get("fm.par.tids")
+        if g is None:
+            T = self.PAR_MAXT
+            g = ir.GlobalVariable(self.module, ir.ArrayType(I64, T), "fm.par.tids")
+            g.initializer = ir.Constant(ir.ArrayType(I64, T), None)
+            g.linkage = "internal"
+            jt = ir.ArrayType(ir.ArrayType(I64, self.JB_WORDS), T)
+            j = ir.GlobalVariable(self.module, jt, "fm.par.jbufs")
+            j.initializer = ir.Constant(jt, None)
+            j.linkage = "internal"
+            j.align = 16
+            for name in ("fm.par.active", "fm.par.nt", "fm.par.threads"):
+                v = ir.GlobalVariable(self.module, I64, name)
+                v.initializer = i64(0)
+                v.linkage = "internal"
+        gl = self.module.globals
+        return gl["fm.par.tids"], gl["fm.par.jbufs"], gl["fm.par.active"], gl["fm.par.nt"]
+
+    def _k_par_threads(self):
+        """How many threads a parallel for uses: FERMIUM_THREADS if it is set to a positive number, else the
+        number of online processors (at most PAR_MAXT); read once."""
+        self._par_globals()
+        cache = self.module.globals["fm.par.threads"]
+        fn = self._new_fn("fm_par_threads", I64, [], inline=False)
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        if not m5("parallel"):
+            b.ret(i64(1))
+            return fn
+        with b.if_then(b.icmp_signed(">", b.load(cache), i64(0))):
+            b.ret(b.load(cache))
+        name = b"FERMIUM_THREADS\0"
+        gs = ir.GlobalVariable(self.module, ir.ArrayType(I8, len(name)), "fm.par.envname")
+        gs.initializer = ir.Constant(ir.ArrayType(I8, len(name)), bytearray(name))
+        gs.linkage = "internal"
+        gs.global_constant = True
+        v = b.call(self.extern("getenv", I8P, [I8P]), [b.bitcast(gs, I8P)])
+        t = b.alloca(I64)
+        b.store(i64(0), t)
+        with b.if_then(b.icmp_unsigned("!=", v, ir.Constant(I8P, None))):
+            b.store(b.call(self.extern("atol", I64, [I8P]), [v]), t)
+        with b.if_then(b.icmp_signed("<=", b.load(t), i64(0))):
+            b.store(b.call(self.extern("sysconf", I64, [I32]), [ir.Constant(I32, 84)]), t)   # _SC_NPROCESSORS_ONLN
+        n = b.load(t)
+        n = b.select(b.icmp_signed("<", n, i64(1)), i64(1), n)
+        n = b.select(b.icmp_signed(">", n, i64(self.PAR_MAXT)), i64(self.PAR_MAXT), n)
+        b.store(n, cache)
+        b.ret(n)
+        return fn
+
+    PAR_ARG = ir.LiteralStructType([I8P, I8P, I64, I64])      # worker, ctx, slot, status
+
+    def _k_par_tramp(self):
+        """void *fm_par_tramp(arg): runs one thread's share of a parallel for.  Registers the thread in its
+        slot and sets a jump buffer there, so that a run-time error in the loop body (fm_raise) comes back
+        here: status 1."""
+        tids, jbufs, _, _ = self._par_globals()
+        fn = self._new_fn("fm_par_tramp", I8P, [I8P], inline=False)
+        fn.attributes.add("noinline")
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        a = b.bitcast(fn.args[0], self.PAR_ARG.as_pointer())
+        k = b.load(b.gep(a, [I32(0), I32(2)]))
+        b.store(b.call(self.extern("pthread_self", I64, []), []), b.gep(tids, [I32(0), k]))
+        r = b.call(self.externs["_setjmp"], [b.bitcast(b.gep(jbufs, [I32(0), k]), I8P)])
+        with b.if_else(b.icmp_signed("==", r, ir.Constant(I32, 0))) as (ok, failed):
+            with ok:
+                w = b.bitcast(b.load(b.gep(a, [I32(0), I32(0)])), ir.FunctionType(I8P, [I8P]).as_pointer())
+                b.call(w, [b.load(b.gep(a, [I32(0), I32(1)]))])
+                b.store(i64(0), b.gep(a, [I32(0), I32(3)]))
+            with failed:
+                b.store(i64(1), b.gep(a, [I32(0), I32(3)]))
+        b.ret(ir.Constant(I8P, None))
+        return fn
+
+    def _k_par_run(self):
+        """i64 fm_par_run(worker, ctx, nblocks): run worker(ctx) on min(threads, nblocks) threads (this one
+        included) and wait for them; 1 if a run-time error stopped one of them (its message is set).  The
+        recursion check is off meanwhile (fm.stackbase = 0: the checker rejects recursive functions in a
+        parallel for, and the check measures from this thread's stack)."""
+        tids, jbufs, active, ntg = self._par_globals()
+        threads = self.kernel("fm_par_threads")
+        tramp = self.kernel("fm_par_tramp")
+        fn = self._new_fn("fm_par_run", I64, [I8P, I8P, I64], inline=False)
+        worker, ctx, nb = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        T = b.call(threads, [])
+        T = b.select(b.icmp_signed("<", nb, T), nb, T)
+        T = b.select(b.icmp_signed("<", T, i64(1)), i64(1), T)
+        args = b.alloca(self.PAR_ARG, size=self.PAR_MAXT)
+        thr = b.alloca(I64, size=self.PAR_MAXT)
+        started = b.alloca(I64, size=self.PAR_MAXT)
+        attr = b.alloca(ir.ArrayType(I64, 16))           # pthread_attr_t (56 bytes on glibc x86-64)
+        attrp = b.bitcast(attr, I8P)
+        b.call(self.extern("pthread_attr_init", I32, [I8P]), [attrp])
+        b.call(self.extern("pthread_attr_setstacksize", I32, [I8P, I64]), [attrp, i64(self.PAR_STACK)])
+        with lp.range(i64(0), T) as k:
+            b.store(i64(0), b.gep(tids, [I32(0), k]))
+            a = b.gep(args, [k])
+            b.store(worker, b.gep(a, [I32(0), I32(0)]))
+            b.store(ctx, b.gep(a, [I32(0), I32(1)]))
+            b.store(k, b.gep(a, [I32(0), I32(2)]))
+            b.store(i64(0), b.gep(a, [I32(0), I32(3)]))
+        b.store(T, ntg)
+        b.store(i64(1), active)
+        saved = b.load(self.stackbase)
+        b.store(i64(0), self.stackbase)
+        create = self.extern("pthread_create", I32, [I64.as_pointer(), I8P, ir.FunctionType(I8P, [I8P]).as_pointer(),
+                                                      I8P])
+        with lp.range(i64(1), T) as k:
+            rc = b.call(create, [b.gep(thr, [k]), attrp, tramp, b.bitcast(b.gep(args, [k]), I8P)])
+            b.store(b.zext(b.icmp_signed("==", rc, ir.Constant(I32, 0)), I64), b.gep(started, [k]))
+        b.call(tramp, [b.bitcast(b.gep(args, [i64(0)]), I8P)])
+        join = self.extern("pthread_join", I32, [I64, I8P])
+        with lp.range(i64(1), T) as k:
+            with b.if_else(b.icmp_signed("!=", b.load(b.gep(started, [k])), i64(0))) as (yes, no):
+                with yes:
+                    b.call(join, [b.load(b.gep(thr, [k])), ir.Constant(I8P, None)])
+                with no:        # no thread could be made: this one does that share
+                    b.call(tramp, [b.bitcast(b.gep(args, [k]), I8P)])
+        b.store(i64(0), active)
+        b.store(saved, self.stackbase)
+        b.call(self.extern("pthread_attr_destroy", I32, [I8P]), [attrp])
+        st = b.alloca(I64)
+        b.store(i64(0), st)
+        with lp.range(i64(0), T) as k:
+            b.store(b.or_(b.load(st), b.load(b.gep(args, [k, I32(3)]))), st)
+        b.ret(b.load(st))
+        return fn
 
     def _new_fn(self, name, ret, args, inline=True):
         fn = ir.Function(self.module, ir.FunctionType(ret, args), name)
@@ -471,15 +647,6 @@ class ModuleGen:
     QUAD_ULPS = 8 * 2.220446049250313e-16    # a NaN panel this narrow (relative) is one point (D45)
     QUAD_ROUND = 50 * 2.220446049250313e-16   # an error below this × ∫|f| is rounding (QUADPACK's 50 ε, D44)
 
-    def _qabs(self):
-        """fm.qabs: the ∫|g| estimates of the fm_quadcore calls of the current fm_quad call, added up."""
-        g = self.module.globals.get("fm.qabs")
-        if g is None:
-            g = ir.GlobalVariable(self.module, F64, "fm.qabs")
-            g.initializer = f64(0)
-            g.linkage = "internal"
-        return g
-
     def _qzero(self):
         """fm.qzero: how many quiet first tries of a vector integral's components came out as exactly 0 because
         every sample was 0 (red team round 3 #5); the vector warns when all of its components did."""
@@ -492,18 +659,17 @@ class ModuleGen:
 
     def _k_quad(self):
         """∫ f from a to b (fm_quadin), with a warning when the result is exactly 0 because the integrand was
-        0 at every node: a narrow peak in a wide range can hide between the nodes (D110).  fm.qabs is saved
-        and restored around the call, so an integral inside the integrand doesn't count."""
+        0 at every node: a narrow peak in a wide range can hide between the nodes (D110).  The fm_quadcore calls
+        add their ∫|g| estimates into `qabs`, a variable of this call (so an integral inside the integrand
+        doesn't count, and integrals on several threads of a parallel for don't mix, D152)."""
         inner = self.kernel("fm_quadin")
-        g = self._qabs()
         fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
         f, env, a, bb, rtol, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
-        saved = b.load(g)
+        g = b.alloca(F64)
         b.store(f64(0), g)
-        r = b.call(inner, [f, env, a, bb, rtol, atol])
+        r = b.call(inner, [f, env, a, bb, rtol, atol, g])
         mine = b.load(g)
-        b.store(saved, g)
         zero = b.and_(b.fcmp_ordered("==", r, f64(0)), b.fcmp_ordered("==", mine, f64(0)))
         zero = b.and_(zero, b.fcmp_ordered("!=", a, bb))
         soft = b.fcmp_ordered("<", atol, f64(0))          # the quiet first try (D44): counted, not warned
@@ -523,20 +689,20 @@ class ModuleGen:
         corek = self.kernel("fm_quadcore")
         fin = self.kernel("fm_quadfin")
         scan = self.kernel("fm_qscan")
-        fn = self._new_fn("fm_quadin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
-        f, env, a, bb, rtol, atol = fn.args
+        fn = self._new_fn("fm_quadin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64, F64P], inline=False)
+        f, env, a, bb, rtol, atol, qabs = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         nosplit = b.alloca(F64, size=2)
         b.store(f64(0), nosplit)
 
         def core(args):
             if args[2].constant == 0:
-                return b.call(fin, [args[0], args[1], args[3], args[4], args[5], args[6]])
-            return b.call(corek, args + [nosplit])
+                return b.call(fin, [args[0], args[1], args[3], args[4], args[5], args[6], qabs])
+            return b.call(corek, args + [nosplit, qabs])
         fabs = self.intrinsic("fabs")
         inf = f64(math.inf)
         with b.if_then(b.fcmp_ordered(">", a, bb)):
-            b.ret(b.fsub(f64(0), b.call(fn, [f, env, bb, a, rtol, atol])))
+            b.ret(b.fsub(f64(0), b.call(fn, [f, env, bb, a, rtol, atol, qabs])))
         with b.if_then(b.fcmp_ordered("==", a, bb)):
             b.ret(f64(0))
         a_inf = b.fcmp_ordered("==", b.call(fabs, [a]), inf)
@@ -568,19 +734,19 @@ class ModuleGen:
         """A finite range; if fm_quadcore finds an interior singularity, integrate up to it and from it,
         so it becomes an end-point singularity (which the smoothstep substitution handles)."""
         core = self.kernel("fm_quadcore")
-        fn = self._new_fn("fm_quadfin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
-        f, env, a, bb, rtol, atol = fn.args
+        fn = self._new_fn("fm_quadfin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64, F64P], inline=False)
+        f, env, a, bb, rtol, atol, qabs = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         sp = b.alloca(F64, size=2)
         b.store(f64(1), sp)
-        r = b.call(core, [f, env, i64(0), a, bb, rtol, atol, sp])
+        r = b.call(core, [f, env, i64(0), a, bb, rtol, atol, sp, qabs])
         with b.if_then(b.fcmp_ordered("!=", b.load(sp), f64(2))):
             b.ret(r)
         c = b.load(b.gep(sp, [i64(1)]))
         b.store(f64(0), sp)
         # both pieces start at c (u = 0, where the u grid is finest): ∫_a^c = -∫_c^a
-        b.ret(b.fsub(b.call(core, [f, env, i64(0), c, bb, rtol, atol, sp]),
-                     b.call(core, [f, env, i64(0), c, a, rtol, atol, sp])))
+        b.ret(b.fsub(b.call(core, [f, env, i64(0), c, bb, rtol, atol, sp, qabs]),
+                     b.call(core, [f, env, i64(0), c, a, rtol, atol, sp, qabs])))
         return fn
 
     def _k_quadcore(self):
@@ -593,9 +759,9 @@ class ModuleGen:
         counts as 0 with error width × the neighbours' largest |g| (D45).  If a NaN/∞ panel is left when
         the budget runs out, the error says where the integrand was NaN or infinite."""
         gk = self.kernel("fm_gk15")
-        fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P],
+        fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P, F64P],
                           inline=False)
-        f, env, mode, a, bb, rtol, atol, split = fn.args
+        f, env, mode, a, bb, rtol, atol, split, qabs = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
@@ -683,7 +849,6 @@ class ModuleGen:
         done = b.and_(finite, done)
         with b.if_then(done):
             b.call(free, [raw])
-            qabs = self._qabs()
             b.store(b.fadd(b.load(qabs), totabs), qabs)
             b.ret(total)
         # not converged: give up with an error when out of budget, the result is not finite,
@@ -1825,6 +1990,7 @@ class FuncGen:
             self.b.branch(self.body_bb)
         self.slots = {}
         self.loops = []
+        self.intvars = {}         # sym id -> i64 value of an integer loop's variable (s_SFor)
         self.lp = LoopHelper(self.b, fn)
 
     # ------------------------------------------------------------ storage
@@ -1895,8 +2061,7 @@ class FuncGen:
 
     def s_SIndexAssign(self, s):
         lst = self.load(s.sym)
-        idx = self.expr(s.idx)
-        p = self.elem_ptr(lst, idx)
+        p = self.index_ptr(lst, s.idx)
         self.b.store(self.expr(s.value), p)
 
     def s_SPush(self, s):
@@ -1955,8 +2120,56 @@ class FuncGen:
             b.branch(cond)
         b.position_at_end(end)
 
+    INT_LIMIT = 2.0 ** 40     # integer constants up to this size take part in integer loop counters
+
+    @staticmethod
+    def _assigns(stmts, sym):
+        """Does any statement in `stmts` (at any depth) set the variable `sym`?"""
+        for st in stmts:
+            if isinstance(st, (I.SAssign, I.SFor, I.SForIn)) and st.sym is sym:
+                return True
+            for sub in (getattr(st, "body", None), getattr(st, "then", None), getattr(st, "other", None)):
+                if sub and FuncGen._assigns(sub, sym):
+                    return True
+        return False
+
+    def int_expr(self, e):
+        """An i64 with exactly the value of the whole-number expression e, or None when that can't be known
+        at compile time.  Whole numbers: integer constants, the variables of integer loops (M5, D150) and
+        their sums and differences (all far below 2⁵³, where doubles are exact)."""
+        if isinstance(e, I.IConst):
+            v = e.value
+            if isinstance(e.ty, NumTy) and abs(v) <= self.INT_LIMIT and v == math.floor(v):
+                return i64(int(v))
+            return None
+        if isinstance(e, I.IVar):
+            return self.intvars.get(e.sym.id)
+        if isinstance(e, I.INeg) and isinstance(e.ty, NumTy):
+            a = self.int_expr(e.a)
+            return None if a is None else self.b.sub(i64(0), a)
+        if isinstance(e, I.IBin) and e.op in "+-" and isinstance(e.ty, NumTy) and \
+                isinstance(e.a.ty, NumTy) and isinstance(e.b.ty, NumTy):
+            a = self.int_expr(e.a)
+            if a is None:
+                return None
+            c = self.int_expr(e.b)
+            if c is None:
+                return None
+            return self.b.add(a, c) if e.op == "+" else self.b.sub(a, c)
+        return None
+
     def s_SFor(self, s):
+        if getattr(s, "par", None) is not None:
+            return self.parallel_for(s)
         b, fn = self.b, self.fn
+        # An integer loop (M5, D150): a whole-number start and step, and a variable the body doesn't set.
+        # Its values are kept as an i64 k = lo + i·st and the variable is the double of k: the same numbers
+        # as lo + i·st in doubles (exact below 2⁵³), but indexing x[k] needs no float-to-integer checks.
+        ilo = ist = None
+        if m5("int_loops") and isinstance(s.step, I.IConst) and not self._assigns(s.body, s.sym):
+            ist = self.int_expr(s.step)
+            if ist is not None and ist.constant != 0:
+                ilo = self.int_expr(s.lo)
         lo = self.expr(s.lo)
         hi = self.expr(s.hi)
         st = self.expr(s.step)
@@ -1980,16 +2193,92 @@ class FuncGen:
         b.position_at_end(cond)
         b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
         b.position_at_end(body)
-        self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
+        if ilo is not None:
+            k = b.add(ilo, b.mul(b.load(iv), ist))
+            self.store(s.sym, b.sitofp(k, F64))
+            self.intvars[s.sym.id] = k
+        else:
+            self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
         self.loops.append((inc, end))
         self.emit_body(s.body)
         self.loops.pop()
+        self.intvars.pop(s.sym.id, None)
         if not b.block.is_terminated:
             b.branch(inc)
         b.position_at_end(inc)
         b.store(b.add(b.load(iv), i64(1)), iv)
         b.branch(cond)
         b.position_at_end(end)
+
+    def for_count(self, s):
+        """lo, step and the number of iterations (i64) of a for loop over a range; ends with an error for a zero
+        or NaN step (the same count as s_SFor and interp.s_SFor)."""
+        b = self.b
+        lo = self.expr(s.lo)
+        hi = self.expr(s.hi)
+        st = self.expr(s.step)
+        with b.if_then(b.fcmp_unordered("==", st, f64(0))):
+            self.fail(ERR_STEP, st, f64(0))
+        span = b.fdiv(b.fsub(hi, lo), st)
+        cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
+        cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+        with b.if_then(b.fcmp_unordered("uno", cnt, cnt), likely=False):
+            self.fail(ERR_RANGE, lo, hi)
+        cnt = b.select(b.fcmp_ordered(">", cnt, f64(2.0 ** 62)), f64(2.0 ** 62), cnt)
+        return lo, st, b.fptosi(cnt, I64)
+
+    def parallel_for(self, s):
+        """parallel for (D152): the body becomes a worker function; fm_par_run runs it on several threads, which
+        take blocks of the range (I.par_blocks) from a shared counter.  Each block adds up its own sums from 0
+        into partials[block]; afterwards this thread adds the partials in block order."""
+        b = self.b
+        info = s.par
+        self.mg.uses_par = True
+        ilo = ist = None
+        if m5("int_loops") and isinstance(s.step, I.IConst) and not self._assigns(s.body, s.sym):
+            ist = self.int_expr(s.step)
+            if ist is not None and ist.constant != 0:
+                ilo = self.int_expr(s.lo)
+        lo, st, n = self.for_count(s)
+        for w, o, text in info["alias"]:
+            same = b.icmp_unsigned("==", b.ptrtoint(self.load(w), I64), b.ptrtoint(self.load(o), I64))
+            with b.if_then(same, likely=False):
+                self.fail(I.ERR_PAR_ALIAS, f64(text), f64(0))
+        reds = info["reductions"]
+        nred = max(1, len(reds))
+        nb = b.select(b.icmp_signed("<", n, i64(I.PAR_BLOCKS)), n, i64(I.PAR_BLOCKS))
+        partials = self.alloca(ir.ArrayType(F64, I.PAR_BLOCKS * nred))
+        counter = self.alloca(I64)
+        b.store(i64(0), counter)
+        # the worker
+        self.mg.par_count += 1
+        wfn = ir.Function(self.mg.module, ir.FunctionType(I8P, [I8P]), f"par.{self.mg.par_count}")
+        wfn.linkage = "internal"
+        g = ParGen(self.mg, wfn, self.owner, s, ilo is not None, ist.constant if ilo is not None else 0)
+        g.line = getattr(self, "line", 0)
+        g.emit()
+        # its context: lo, st, n, nb, &counter, partials, integer lo, then the addresses of this function's
+        # variables it uses
+        K = ParGen.FIXED + len(g.captured)
+        ctx = self.alloca(ir.ArrayType(I64, K))
+        vals = [b.bitcast(lo, I64), b.bitcast(st, I64), n, nb, b.ptrtoint(counter, I64),
+                b.ptrtoint(partials, I64), ilo if ilo is not None else i64(0)]
+        vals += [b.ptrtoint(self.slot(sym), I64) for sym in g.captured]
+        for k, v in enumerate(vals):
+            b.store(v, b.gep(ctx, [I32(0), I32(k)]))
+        with b.if_then(b.icmp_signed(">", n, i64(0))):
+            run = self.mg.kernel("fm_par_run")
+            status = b.call(run, [b.bitcast(wfn, I8P), b.bitcast(ctx, I8P), nb])
+            with b.if_then(b.icmp_signed("!=", status, i64(0)), likely=False):
+                b.call(self.mg.raiser, [])       # the worker's error message is already set
+                b.unreachable()
+            for r, sym in enumerate(reds):
+                acc = self.alloca(F64)
+                b.store(self.load(sym), acc)
+                with self.lp.range(i64(0), nb) as k:
+                    p = b.gep(partials, [I32(0), b.add(b.mul(k, i64(nred)), i64(r))])
+                    b.store(b.fadd(b.load(acc), b.load(p)), acc)
+                self.store(sym, b.load(acc))
 
     def s_SForIn(self, s):
         b, fn = self.b, self.fn
@@ -2586,9 +2875,16 @@ class FuncGen:
             b.store(v, b.gep(data, [i64(i)]))
         return out
 
-    def elem_ptr(self, lst, idx):
+    def elem_ptr(self, lst, idx, k=None):
+        """Pointer to lst[idx] (1-based), stopping with an error outside 1..len.  k: the index as an i64 when
+        it is known to be a whole number (int_expr), which makes the check two integer comparisons."""
         b = self.b
         n = self.llen(lst)
+        if k is not None:
+            bad = b.icmp_unsigned(">=", b.sub(k, i64(1)), n)      # k < 1 or k > n
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, b.sitofp(k, F64), b.sitofp(n, F64))
+            return b.gep(self.ldata(lst), [b.sub(k, i64(1))])
         # check in floating point first: fptosi of NaN or of a number beyond 2^63 is undefined
         inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, b.sitofp(n, F64)))
         i = b.fptosi(b.select(inside, idx, f64(1)), I64)
@@ -2597,9 +2893,15 @@ class FuncGen:
             self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
         return b.gep(self.ldata(lst), [b.sub(i, i64(1))])
 
+    def index_ptr(self, lst, idx_expr):
+        k = self.int_expr(idx_expr)
+        if k is not None:
+            return self.elem_ptr(lst, None, k)
+        return self.elem_ptr(lst, self.expr(idx_expr))
+
     def e_IIndex(self, e):
         lst = self.expr(e.lst)
-        v = self.b.load(self.elem_ptr(lst, self.expr(e.idx)))
+        v = self.b.load(self.index_ptr(lst, e.idx))
         return self.b.fptosi(v, I64) if isinstance(e.ty, StrTy) else v
 
     def e_IIntegral(self, e):
@@ -3025,6 +3327,107 @@ class FuncGen:
             b.store(b.fadd(b.load(acc), b.fmul(d, d)), acc)
         den = b.sitofp(b.sub(n, i64(1)), F64)
         return b.call(self.mg.intrinsic("sqrt"), [b.fdiv(b.load(acc), den)])
+
+
+class ParGen(FuncGen):
+    """The worker function of a parallel for (D152): void *par.N(i64 *ctx).  Takes blocks of the range from
+    the shared counter until none are left; variables made in the body live in this function (one copy per
+    thread), the sums in accumulators that start at 0 in each block, and the enclosing function's variables
+    are reached through the addresses in ctx."""
+    FIXED = 7
+
+    def __init__(self, mg, fn, owner, s, int_mode, ist):
+        super().__init__(mg, fn, owner)
+        self.s = s
+        self.int_mode, self.ist = int_mode, ist
+        self.captured = []
+        self.red_ids = {r.id: k for k, r in enumerate(s.par["reductions"])}
+        self.accs = {}
+        with self.b.goto_block(self.entry):
+            self.b.position_before(self.entry.terminator)
+            self.ctxp = self.b.bitcast(fn.args[0], I64.as_pointer())
+
+    def ctx_word(self, k):
+        with self.b.goto_block(self.entry):
+            self.b.position_before(self.entry.terminator)
+            return self.b.load(self.b.gep(self.ctxp, [I32(k)]))
+
+    def slot(self, sym):
+        if sym.id in self.slots:
+            return self.slots[sym.id]
+        if sym.id in self.red_ids:
+            p = self.alloca(F64, sym.name + ".acc")
+        elif sym.storage == "local" and not getattr(sym, "par_private", False):
+            # a variable of the enclosing function: its address is in ctx.  The body can't change it (the checker
+            # allows no writes to shared variables), so each thread copies its value once, into a variable
+            # of its own that LLVM keeps in a register
+            k = self.FIXED + len(self.captured)
+            self.captured.append(sym)
+            w = self.ctx_word(k)
+            p = self.alloca(lltype(sym.ty), sym.name)
+            with self.b.goto_block(self.entry):
+                self.b.position_before(self.entry.terminator)
+                self.b.store(self.b.load(self.b.inttoptr(w, lltype(sym.ty).as_pointer())), p)
+        else:
+            return super().slot(sym)
+        self.slots[sym.id] = p
+        return p
+
+    def emit(self):
+        b, fn, s = self.b, self.fn, self.s
+        lo = b.bitcast(self.ctx_word(0), F64)
+        st = b.bitcast(self.ctx_word(1), F64)
+        n, nb = self.ctx_word(2), self.ctx_word(3)
+        counter = b.inttoptr(self.ctx_word(4), I64.as_pointer())
+        partials = b.inttoptr(self.ctx_word(5), F64P)
+        ilo = self.ctx_word(6)
+        reds = s.par["reductions"]
+        nred = max(1, len(reds))
+        q, rem = b.sdiv(n, nb), b.srem(n, nb)
+        take = fn.append_basic_block("p.take")
+        work = fn.append_basic_block("p.work")
+        done = fn.append_basic_block("p.done")
+        b.branch(take)
+        b.position_at_end(take)
+        blk = b.atomic_rmw("add", counter, i64(1), "monotonic")
+        b.cbranch(b.icmp_signed(">=", blk, nb), done, work)
+        b.position_at_end(work)
+
+        def start(k):     # I.par_blocks: k q + min(k, rem)
+            return b.add(b.mul(k, q), b.select(b.icmp_signed("<", k, rem), k, rem))
+        first, last = start(blk), start(b.add(blk, i64(1)))
+        for sym in reds:
+            self.store(sym, f64(0))
+        iv = self.alloca(I64)
+        b.store(first, iv)
+        cond = fn.append_basic_block("p.c")
+        body = fn.append_basic_block("p.b")
+        inc = fn.append_basic_block("p.i")
+        end = fn.append_basic_block("p.e")
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(b.icmp_signed("<", b.load(iv), last), body, end)
+        b.position_at_end(body)
+        if self.int_mode:
+            k = b.add(ilo, b.mul(b.load(iv), i64(self.ist)))
+            self.store(s.sym, b.sitofp(k, F64))
+            self.intvars[s.sym.id] = k
+        else:
+            self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
+        self.loops.append((inc, end))
+        self.emit_body(s.body)
+        self.loops.pop()
+        if not b.block.is_terminated:
+            b.branch(inc)
+        b.position_at_end(inc)
+        b.store(b.add(b.load(iv), i64(1)), iv)
+        b.branch(cond)
+        b.position_at_end(end)
+        for r, sym in enumerate(reds):
+            b.store(self.load(sym), b.gep(partials, [b.add(b.mul(blk, i64(nred)), i64(r))]))
+        b.branch(take)
+        b.position_at_end(done)
+        b.ret(ir.Constant(I8P, None))
 
 
 class LambdaGen(FuncGen):

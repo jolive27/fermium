@@ -325,6 +325,7 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
         break;
     case 14: snprintf(err_msg, sizeof err_msg, "the two sides of this equation jump past each other near %s (like tan at 90 degrees) instead of crossing: that's not a solution; narrow the range", x); break;
     case 13: snprintf(err_msg, sizeof err_msg, "this equation has no solution between %s and %s: the two sides never cross there (checked at 200 points)", x, y); break;
+    case 40: snprintf(err_msg, sizeof err_msg, "%s are the same list (one was set from the other), so the iterations of this parallel for would write and read the same numbers at the same time; make a copy first, e.g.  ys = xs * 1", fm_texts[(int64_t)a]); break;
     case 12: snprintf(err_msg, sizeof err_msg, "this for loop has no definite number of steps: it goes from %s to %s (NaN in the start, end or step)", x, y); break;
     case 15: snprintf(err_msg, sizeof err_msg, "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no unique solution"); break;
     case 21: snprintf(err_msg, sizeof err_msg, "eigenvalues and eigenvectors need a symmetric matrix (M[i, j] = M[j, i]), like a stiffness or mass matrix; for K v = ω² M v write eigenvalues(K, M) rather than eigenvalues(inverse(M) K)"); break;
