@@ -79,7 +79,7 @@ class PythonMixin:
             runit = self._py_unit(sig.ret_unit, sig) if sig.ret_unit is not None else None
             sigs[_ascii(sig.name)] = {"params": params, "shape": sig.ret_shape, "unit": runit}
         existing = ctx.scope.names.get(name)
-        if existing is not None:
+        if existing is not None and not (isinstance(existing, PyModRef) and self.repl):   # the REPL may redo it
             if isinstance(existing, PyModRef) and existing.module == s.module and not s.sigs:
                 return []
             raise self.err(f"{name} already means something in this program, so it can't also be the Python "

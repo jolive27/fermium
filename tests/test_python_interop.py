@@ -253,6 +253,9 @@ def test_repl_keeps_the_python_module():
     s.execute("x = np.sqrt(16)\n")
     s.execute("print x + np.sqrt(9)\n")
     assert out.getvalue().strip() == "7"
+    s.execute("use python numpy as np:\n    hypot(a [m], b [m]) -> [m]\n")     # declared again, with units
+    s.execute("print np.hypot(3 m, 4 m)\n")
+    assert out.getvalue().strip().split("\n")[-1] == "5 m"
 
 
 def test_fmt_keeps_python_names_after_the_dot():
@@ -373,6 +376,13 @@ def test_runtime_errors_and_load_from_a_file(tmp_path):
         mod.inv(5)
     assert mod.half(1) == 0.5                        # still usable after an error
     assert "lib.fm" in repr(mod)
+
+
+def test_runaway_recursion_called_from_python_is_a_clean_error():
+    mod = fermium.compile("f(x) = x * f(x - 1)\n", out=io.StringIO())
+    with pytest.raises(FermiumRuntimeError):
+        mod.f(3)
+    assert fermium.compile("sq(x) = x²", out=io.StringIO()).sq(3) == 9
 
 
 def test_run_explicitly_and_output():
