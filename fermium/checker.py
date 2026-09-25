@@ -25,7 +25,7 @@ from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy,
 from .linalg import transpose_index
 from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
 
-MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+MATH1 = {"sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
 SAME1 = {"abs", "floor", "ceil", "round"}
 SPECIAL2 = {"besselj", "bessely", "besseli", "besselk"}      # (n, x): whole-number order n (#50)
@@ -1275,6 +1275,10 @@ class Checker(ImportMixin, C.DiffContext):
                  f"[{name}] after the value")
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
+        if hint is None and getattr(self, "_after_number", False) and name in SPELLED_UNITS:
+            # `3 sec`: the spelled unit, even though sec is also a built-in function (#63)
+            return self.err(f"'{name}' isn't a unit Fermium knows (or a variable you've defined)", e,
+                            hint=f"Fermium writes units as symbols: {SPELLED_UNITS[name]}")
         if hint is None:
             cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(
                 BUILTINS - (set() if getattr(self, "_calling", False) else M3_FUNCS))  # speed ≠ seed (as a value)
@@ -2254,7 +2258,31 @@ class Checker(ImportMixin, C.DiffContext):
         r.hint, r.sf = (t.hint[k] if isinstance(t.hint, MixedHint) else t.hint), t.sf
         return r
 
+    def e_Slice(self, e, ctx):
+        raise self.err("a:b can only be used inside [...] to take part of a list, like xs[2:5]", e)
+
+    def slice_expr(self, e, ctx):
+        """xs[a:b]: a new list of elements a to b, both included (1-based, D114)."""
+        t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, SolRef) and t.view.n == 1:
+            t = self.sol_values(t.view, e)
+        if not isinstance(t, I.Expr) or not isinstance(t.ty, ListTy):
+            what = "a vector" if isinstance(t, I.Expr) and isinstance(t.ty, (VecTy, MatTy)) else "this"
+            raise self.err(f"only lists can be sliced with [a:b], and {what} isn't a list", e.target,
+                           hint="pick single components with v[1], v[2], ...")
+        sl = e.index
+        lo = self.index_expr(sl.lo, t, ctx) if sl.lo is not None else I.IConst(1, NumTy(DIMLESS))
+        hi = self.index_expr(sl.hi, t, ctx) if sl.hi is not None else I.IBuiltin("len", [t], NumTy(DIMLESS))
+        r = I.IBuiltin("slice", [t, lo, hi], ListTy(t.ty.dim))
+        r.msg_id = self.text("a slice xs[a:b] runs from a up to b, so b can't be smaller than a − 1 "
+                             "(xs[a:a-1] is the empty list); to reverse a list use reverse(xs)")
+        r.line = e.line
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
     def e_Index(self, e, ctx):
+        if isinstance(e.index, A.Slice):
+            return self.slice_expr(e, ctx)
         if isinstance(e.target, A.Index):             # M[i, j] (parsed as M[i][j]) or M[i][j]
             inner = self.expr(e.target.target, ctx, allow_func=True)
             if isinstance(inner, I.Expr) and isinstance(inner.ty, MatTy):
@@ -2398,9 +2426,14 @@ class Checker(ImportMixin, C.DiffContext):
         if len(e.args) != 1:
             raise self.err(f"{view.name} takes one argument ({view.tname})", e)
         t = self.expr(e.args[0], ctx)
-        self.need_num(t, e.args[0])
+        self.need_numlike(t, e.args[0])     # a list of times gives the list of values, like f(xs) (#62)
         self.unify_or(t.ty.dim, view.tdim, lambda: f"{view.name} is a function of {view.tname}, which is "
                       f"{self.desc(view.tdim)}, not {self.desc(t.ty.dim)}", e.args[0])
+        if isinstance(t.ty, ListTy) and view.n > 1:
+            raise self.err(f"{view.name} is a vector, so it can't be evaluated at each element of a list "
+                           f"(lists of vectors aren't supported yet)", e,
+                           hint=f"loop over the list, or take one component, like {view.name}.x or "
+                                f"{view.name}[1]")
         sol = self.var_ref(view.sol_sym, ctx, e)
         r = self._sol_eval_node(view, sol, t, e)
         tf = I.IConst(0, NumTy(view.tdim))
@@ -2421,17 +2454,18 @@ class Checker(ImportMixin, C.DiffContext):
                 sub.stride = view.stride      # so r''(t) of a vector solution uses the ODE's right side (A19)
                 comps.append(self._sol_eval_node(sub, sol, t, e))
             return I.IVec(comps, VecTy(view.dim, view.n))
+        ty = ListTy(view.dim) if isinstance(t.ty, ListTy) else NumTy(view.dim)
         if view.comp <= view.top:
-            r = I.ISolEval(sol, view.comp, t, False, NumTy(view.dim))
+            r = I.ISolEval(sol, view.comp, t, False, ty)
         elif view.comp == view.top + view.stride:
-            r = I.ISolEval(sol, view.top, t, True, NumTy(view.dim))
+            r = I.ISolEval(sol, view.top, t, True, ty)
             view.sol_sym.needs_rhs = True       # keep the right-hand side with the solution (D46)
         else:
             raise self.err(f"can't take that many derivatives of the solution {view.name}", e)
         return r
 
     # one-argument built-ins that can be passed to a function: simpson(sin, 0, π, 100) (D43)
-    PASSABLE_BUILTINS = ("sin", "cos", "tan", "exp", "ln", "log", "log10", "log2", "sinh", "cosh", "tanh",
+    PASSABLE_BUILTINS = ("sin", "cos", "tan", "cot", "sec", "csc", "exp", "ln", "log", "log10", "log2", "sinh", "cosh", "tanh",
                          "asin", "acos", "atan", "sqrt", "cbrt", "abs")
 
     def call_args(self, arg_asts, ctx):
@@ -2706,7 +2740,7 @@ class Checker(ImportMixin, C.DiffContext):
 
     # ------------------------------------------------------------ builtins
     def builtin(self, name, e, ctx):
-        if name in ("sin", "cos", "tan") and len(e.args) == 1 and isinstance(e.args[0], A.Num) and e.args[0].digit \
+        if name in ("sin", "cos", "tan", "cot", "sec", "csc") and len(e.args) == 1 and isinstance(e.args[0], A.Num) and e.args[0].digit \
                 and e.args[0].value >= 10 and e.args[0].value == int(e.args[0].value):
             v = int(e.args[0].value)
             self.diags.warn(f"{name}({v}) is the {name} of {v} radians", line=e.line, col=e.col,
