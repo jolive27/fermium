@@ -49,7 +49,8 @@ JULIA_DEPOT = ROOT / ".tools" / "julia-depot"
 
 BENCHMARKS = ["nbody", "spring_rk4", "spring_adaptive", "blackbody", "unit_loop", "forces", "startup"]
 LANGS = ["fermium", "fermium-base", "julia", "python", "numpy"]
-THREADS = os.cpu_count() or 1     # threads for the parallel benchmark (forces); --threads changes it
+THREADS = os.cpu_count() or 1
+LOAD_AT_START = "n/a"     # threads for the parallel benchmark (forces); --threads changes it
 REFERENCE_LANG = "julia"   # results and speed ratios are compared against this
 
 # nbody steps used by the runner for each language (normalized per step anyway).
@@ -62,7 +63,7 @@ TOLERANCE = {
     "energy_after": 1e-8,
     "x_10s": 1e-9,
     "x_100s": 1e-3,          # rtol 1e-6, pure relative: each solver is ~2e-4 from the exact 1.1176e-12 m
-    "accepted_steps": 0.0,   # exact
+    "accepted_steps": None,  # not compared: Fermium's step-size controller differs by design (D17)
     "sum_integrals": 1e-8,
     "ratio_5778K": 1e-8,
     "E_J": 1e-12,
@@ -269,10 +270,7 @@ def machine_info():
         "julia": tool_version([str(JULIA), "--version"]) if JULIA.exists() else "not installed",
         "threads": THREADS,
     }
-    try:
-        info["load"] = " / ".join(f"{x:.2f}" for x in os.getloadavg()) + " (1 / 5 / 15 min)"
-    except OSError:
-        info["load"] = "n/a"
+    info["load"] = LOAD_AT_START
     try:
         import numpy
         info["numpy"] = numpy.__version__
@@ -338,6 +336,8 @@ def check_agreement(records):
                     continue
                 rv = ref[refkey]
                 tol = TOLERANCE.get(key, 1e-8)
+                if tol is None:
+                    continue
                 rel = abs(val - rv) / max(abs(rv), 1e-300)
                 if rel > tol:
                     ok = False
@@ -563,11 +563,27 @@ def main():
     ap.add_argument("--timeout", type=float, default=900, help="seconds per run (default 900)")
     ap.add_argument("--threads", type=int, default=THREADS,
                     help=f"threads for the parallel benchmark, forces (default: all {THREADS} cores)")
+    ap.add_argument("--report-only", action="store_true",
+                    help="rewrite RESULTS.md from results.json (after changing the report code) without running")
     args = ap.parse_args()
     globals()["THREADS"] = max(1, args.threads)
+
     if args.slow_repeats is None:
         args.slow_repeats = min(args.repeats, 3)
+    if args.report_only:
+        data = json.loads((BENCH_DIR / "results.json").read_text())
+        globals()["THREADS"] = data["machine"].get("threads", THREADS)
+        runs = {r["lang"]: r.get("runs") for r in data["records"] if r.get("runs") and r["bench"] != "startup"}
+        args.repeats = runs.get("fermium", args.repeats)
+        args.slow_repeats = runs.get("python", args.slow_repeats)
+        write_report(data["records"], data["machine"], args)
+        return 0
 
+    global LOAD_AT_START
+    try:
+        LOAD_AT_START = " / ".join(f"{x:.2f}" for x in os.getloadavg()) + " (1 / 5 / 15 min)"
+    except OSError:
+        pass
     langs = [l for l in LANGS if l in args.langs.split(",")]
     benches = [b for b in BENCHMARKS if b in args.benchmarks.split(",")]
     records = []
