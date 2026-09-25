@@ -127,6 +127,17 @@ Measured on the same machine, median of repeated runs. The full table, methods a
 
 Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.1–0.33 s against 0.9–2.8 s for the whole process), because Julia spends that time JIT-compiling. A program that computes one number takes 0.11 s in Fermium and 0.25 s in Julia (the `startup` row in RESULTS.md).
 
+## Browser playground
+
+`web/` is a static site that runs Fermium in the browser with [Pyodide](https://pyodide.org): an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It uses the reference interpreter (`fermium run --interp`), because llvmlite doesn't exist in the browser, so it is slower than the desktop compiler; its output matches `fermium run`.
+
+```
+python3 web/build.py                  # examples, symbols and a wheel of fermium -> web/gen/
+python3 -m http.server -d web 8000    # then open http://localhost:8000/
+```
+
+Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` downloads it (about 45 MB) into `web/pyodide/`, and the page then works offline. `web/gen/` and `web/pyodide/` are build outputs and are not committed.
+
 ## Documentation
 - [Language reference](docs/reference.md)
 - [Rosetta page](docs/rosetta.md): the same programs in Fermium, Julia and Python
@@ -148,4 +159,5 @@ Project layout:
   - `codegen_llvm.py` (the LLVM backend and numeric kernels)
   - `runtime/` (printing, plots, data, fits)
   - `repl.py`, `fmt.py`, `cli.py`
+  - `interp.py` (the reference interpreter: no LLVM, also used by the browser playground)
 - `tests/`: pytest suites.

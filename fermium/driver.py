@@ -13,6 +13,7 @@ from . import ir as I
 from .checker import Checker
 from .codegen_llvm import ModuleGen
 from .errors import Diagnostics, FermiumError, FermiumRuntimeError
+from .tables import finalize_tables  # noqa: F401  (re-exported: aot.py and tests import it from here)
 from .parser import parse
 from .runtime.core import Runtime, init_llvm
 
@@ -29,20 +30,6 @@ def target_machine():
     target = llvm.Target.from_default_triple()
     return target.create_target_machine(cpu=_TM[0], features=_TM[1], opt=3, reloc="default",
                                         codemodel="jitdefault")
-
-
-def finalize_tables(tables, U, start=0):
-    """Resolve dimension expressions now that all constraints are known."""
-    for f in tables.fmts:
-        f["rdim"] = U.resolve(f["dim"])
-    for p in tables.plots:
-        for s in p["series"]:
-            s["rydim"] = U.resolve(s["ydim"])
-            s["rxdim"] = U.resolve(s["xdim"])
-    for f in tables.fits:
-        f["rdims"] = [U.resolve(d) for d in f["dims"]]
-        f["rydim"] = U.resolve(f["ydim"])
-        f["col_units"] = {c["unit"].dim: c["unit"] for c in f.get("columns", []) if c["unit"].name not in ("1",)}
 
 
 def optimize(llmod, tm, level=3):

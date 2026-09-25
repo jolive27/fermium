@@ -10,3 +10,5 @@ dist/
 .ruff_cache/
 tests/programs/*.png
 .claude/
+web/gen/
+web/pyodide/
