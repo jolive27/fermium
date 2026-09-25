@@ -148,6 +148,6 @@ def test_rpm_unit():
 
 def test_rev_per_min_in_hz_warns():
     w = warnings_of("print 1 rev/min in Hz")
-    assert any("2π/60" in m for m in w)
+    assert any("1 rev/min is 0.10472 Hz here, not 0.0166667 Hz" in m for m in w)   # tailored text (redteam #2)
     assert run("print 1 rev/min in Hz") == "0.10472 Hz"
     assert not warnings_of("print 3 /s in Hz")

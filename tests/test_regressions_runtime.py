@@ -55,7 +55,7 @@ def test_infinite_integrals_at_physical_scales(src, want):
 @pytest.mark.parametrize("src", ["print ∫ 1/x dx from 0 to 1", "print ∫ 1/x dx from 1 to inf",
                                  "print ∫ sin(x) dx from 0 to inf", "print ∫ 1/x^2 dx from -1 to 1"])
 def test_divergent_integrals_still_rejected(src):
-    assert "converge" in str(error_of(src))
+    assert "couldn't compute this integral" in str(error_of(src))
 
 
 @pytest.mark.parametrize("src,msg", [

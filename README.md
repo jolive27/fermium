@@ -119,13 +119,13 @@ Measured on the same machine, median of repeated runs. The full table, methods a
 
 | Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|
-| N-body, 1M steps | 1.28× Julia | 1× | ~56× Julia |
+| N-body, 1M steps | 1.28× Julia | 1× | ~58× Julia |
 | Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory) | 1.82× Julia | 1× | ~21× Julia |
-| Damped spring, adaptive RK45, same accuracy | ~1.1× Julia (spot check; next full run updates RESULTS.md) | 1× | ~21× Julia |
-| Blackbody integrals | 0.91× Julia (faster) | 1× | ~23× Julia |
-| Loop with units | 1.09× Julia | 1× | ~80× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 0.83× Julia (median of 3 runs) | 1× | ~36× Julia |
+| Blackbody integrals | 0.91× Julia (faster) | 1× | ~20.5× Julia |
+| Loop with units | 1.09× Julia | 1× | ~86× Julia |
 
-Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.1–0.33 s against 0.9–2.8 s for the whole process), because Julia spends that time JIT-compiling. A program that computes one number takes 0.11 s in Fermium and 0.25 s in Julia (the `startup` row in RESULTS.md).
+Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.1–0.33 s against 0.9–2.8 s for the whole process), because Julia spends that time starting up: loading its runtime and packages, the untimed warm-up call each benchmark makes, and JIT-compiling. A program that computes one number takes 0.11 s in Fermium and 0.25 s in Julia (the `startup` row in RESULTS.md).
 
 ## Gauntlet
 
@@ -146,7 +146,7 @@ Textbook problems from ten fields of physics, solved in Fermium and checked agai
 | astrophysics | 4 | 3 |
 | **total** | **31** | **30** |
 
-Friction items logged: 59; fixed in the language: 48.
+Friction items logged: 59; fixed in the language: 53.
 <!-- /gauntlet-table -->
 
 ## Browser playground

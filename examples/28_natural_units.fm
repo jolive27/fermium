@@ -1,0 +1,36 @@
+# Natural units (ħ = c = 1): the particle physicist's way of writing formulas.
+# A mass is an energy, a length or a time is 1/energy. Units are still checked,
+# and `in` converts any result back to SI exactly (see docs/reference.md and
+# DECISIONS D60).
+
+# Before the units line everything is SI, as usual
+τ_μ = 2.1969811 μs          # muon lifetime (PDG)
+
+units natural(ħ = c = 1)
+
+# Atomic physics: the Bohr radius and the Rydberg energy
+a0 = 1/(α m_e)
+print "Bohr radius:       ", a0 in fm, "=", a0 in Å
+E_R = α^2 m_e / 2
+print "Rydberg energy:    ", E_R in eV
+
+# Compton wavelengths: λ = 2π/m, ƛ = 1/m
+print "electron Compton λ:", 2π/m_e in pm
+print "proton ƛ:          ", 1/m_p in fm
+
+# Yukawa: the range of the nuclear force is the pion's reduced Compton wavelength
+m_π = 139.57039 MeV
+print "pion range 1/m_π:  ", 1/m_π in fm
+
+# A 1 GeV muon: time dilation lets it travel kilometres
+p = 1 GeV
+βγ = p/m_μ
+print "muon decay length: ", βγ τ_μ in km
+
+# Gravity: G = 1/M_Planck², and the Schwarzschild radius of the Sun
+print "G =", G in GeV^-2
+print "Planck mass:       ", 1/sqrt(G) in GeV, "=", 1/sqrt(G) in kg
+print "Sun's r_s = 2GM:   ", 2 G M☉ in km
+
+# ħc, the conversion factor between MeV and fm
+print "ħc =", ħ c in MeV fm

@@ -15,11 +15,11 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze))
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
-15. [Units](#15-units)
+15. [Units](#15-units) (and [natural units](#natural-units-units-natural-units-nuclear-units-astro))
 16. [Errors](#16-errors)
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
@@ -58,7 +58,10 @@ Rules (see DECISIONS.md D7):
 - Anywhere else, a name is a variable. `m v` is m times v.
 - A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
 - **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
-- If a unit name after a number is also one of your variables (for example `0.2 m` when you have a mass `m`), Fermium warns you once and explains how to write the other meaning (`2*m`). It is still the unit: `2 L` is 2 litres even when you have an inductance `L`. If that line then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L` (DECISIONS D34).
+- If a single unit name right after a number is also one of your variables, there are two cases (DECISIONS D7):
+  - **Multiplied or divided by something else** (`2 g h`, `0.5 m v²`, `2 g * h`), it's an **error** that asks which you mean: write `2*g` for your variable or `2 [g]` for the unit.
+  - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line or a later one then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L`.
+  - Compound units (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units.
 - **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
@@ -438,9 +441,12 @@ print integral exp(-x^2) dx from -inf to inf
 ```
 
 - **Definite integrals** are computed numerically with adaptive Gauss–Kronrod quadrature (G7/K15, relative tolerance 10⁻¹⁰), compiled to native code.
-- **Infinite limits** (`∞` or `inf`) work, whatever the physical scale: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right.
+- **Infinite limits** (`∞` or `inf`) work for most physical scales: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right. The scan finds the scale of decays and of peaks near the start of the range (or near 0). A narrow peak far from the start (say 1 μm wide at 1 m, integrated from 0 to ∞) can still be missed, and the result is then too small. Split the range around such a peak: `∫ … from 0 m to 2 m` plus `∫ … from 2 m to ∞`.
 - **Singularities:** integrable blow-ups at an end of the range (like 1/√x at 0) work. An integrable blow-up at **0 inside the range** works too: the range is split there. Mild blow-ups like 1/√|x − c| work anywhere, but strong ones away from 0 may fail (see §19).
 - **Integrals that don't converge** (like ∫ 1/x dx from -1 to 1, or sin(x) up to ∞) stop with a clear error instead of giving a number.
+- **Integrals that are 0** (by symmetry: `∫ sin(x) dx from -1 to 1`, the y component of a field that has none) converge: the error is judged against ∫|f| as well as against the result, so a 0 made of rounding noise is accepted (it prints as something like 10⁻¹⁷). A component of a vector integral that is noise compared with the other components is accepted to 10⁻¹⁰ of the vector's size (DECISIONS D44).
+- **NaN or ∞ in the integrand:** a 0/0 at a single point (like sin(x)/x at 0, if a sample lands exactly there) doesn't matter: once the quadrature has narrowed it down to a few floating-point numbers next to finite values, that point counts as 0. A NaN or ∞ over a stretch of the range is an error that says where, for example `the integrand is NaN at x = 767.1 (0/0? ∞/∞? an overflow like exp(710)?)` for `x⁴ exp(x) / (exp(x) - 1)²` up to 800: rewrite such an integrand in an overflow-safe form, `x⁴ exp(-x) / (1 - exp(-x))²`. `1 - cos(θ)` loses all its digits for tiny θ (it is exactly 0 below 10⁻⁸); write `2 sin(θ/2)²` (DECISIONS D45).
+- **Integrals that can't be computed numerically** stop with a clear error ("couldn't compute this integral numerically") instead of giving a number. That happens for integrals that diverge (like ∫ 1/x dx from -1 to 1), and also for some that converge but oscillate without decaying fast enough (like ∫ sin(x)/x dx from 0 to ∞, which is π/2).
 
 ```fermium
 print ∫ exp(-x/(1 nm)) dx from 0 m to ∞          # 1 nm
@@ -493,19 +499,34 @@ m = 0.5 kg
 k = 50 N/m
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 5 s
 print x(5 s)
 print x'(1 s)
 ```
 
 - **Writing the equation:** use primes (`x'`, `x''`), `dx/dt`, `d/dt x` or `d²/dt² x`. Each equation is solved for its highest derivative automatically, and it must appear linearly. Initial conditions use primes: `x'(0) = 0 m/s`.
+- **Several highest derivatives in one equation** (Lagrange's equations, where θ₁'' and θ₂'' appear in both, M(q, q') q'' = f): write them as on paper. The equations must be linear in the highest derivatives (their coefficients may depend on t and the unknowns); Fermium collects the coefficients symbolically and solves the small linear system (Gaussian elimination with pivoting, up to 4 unknowns that are numbers) at every step. If the matrix is singular at some time, the error says when (DECISIONS D47). In `0.5 b''` with an unknown `b`, `b` is the unknown, not the unit barn.
+
+```fermium
+m1 = 1.0 kg
+m2 = 0.5 kg
+l1 = 1.0 m
+l2 = 0.7 m
+g = 9.81 m/s²
+solve (m1 + m2) l1 θ1'' + m2 l2 θ2'' cos(θ1 - θ2) + m2 l2 θ2'² sin(θ1 - θ2) + (m1 + m2) g sin(θ1) = 0 N,
+      l2 θ2'' + l1 θ1'' cos(θ1 - θ2) - l1 θ1'² sin(θ1 - θ2) + g sin(θ2) = 0 m/s²
+  with θ1(0 s) = 1.2, θ2(0 s) = -0.5, θ1'(0 s) = 0 /s, θ2'(0 s) = 0 /s
+  for t from 0 s to 5 s
+print θ1(5 s), θ2(5 s)
+```
+
 - **Vector unknowns:** `solve r'' = -G M_sun r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 29.8> km/s for t from 0 yr to 1 yr`. Afterwards `r(t)` is a vector, and `plot r.y vs r.x` draws the path.
 - **Systems:** separate equations with commas or `and`, or put them on the indented lines below `solve`. For example: `solve x' = -a x, y' = a x - b y with ...`
 - **Initial conditions:** every unknown needs one, and so does every derivative below the highest. They determine the unknowns' units, and both sides of every equation are unit-checked.
 - **Methods:**
   - Without `step`, Fermium uses adaptive Dormand–Prince RK45 (relative tolerance 10⁻⁹).
-  - With `step 1 ms`, it uses classic fixed-step RK4.
+  - With `step 1 ms`, it uses classic fixed-step RK4. After the solve, Fermium checks the step cheaply (step doubling at 8 points, 24 extra evaluations of the right-hand side) and warns when the estimated error is more than 0.1% of the solution's size: `the step is too coarse for this equation: the estimated error is 80% of the solution's size …; use a smaller step, or drop step to use the adaptive solver`. The warning is shown once per `solve` line.
   - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
   - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
@@ -544,7 +565,8 @@ print len(times(N1)), "steps"
 ```
 
 - **Using the result:**
-  - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative.
+  - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative. The highest derivative (`x'(t)` of an unknown in `x' = …`, `x''(t)` in `x'' = …`) is the right-hand side evaluated at the interpolated state, so it is as accurate as `x(t)` itself; the right side uses the values its variables had when the `solve` ran (DECISIONS D46). `plot x' vs t` still draws the interpolant's derivative.
+  - Inside a function, a solution can be used in `∫`, in an equation `solve … for T from a to b`, and at any time `x(t)`, but it can't be returned yet: return a number made from it (DECISIONS D48).
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
 - **Towards smaller t:** the range can go down, `for t from 5 s to 0 s`, with the initial conditions at the start (5 s). This works with both methods (a `step` is always written as a positive size). `times(x)` then decreases, `x[end]` is the value at the end of the range (0 s), and `x(t)` and `plot` work as usual.
@@ -587,7 +609,7 @@ print t
 - It finds the **first** solution after `a`, even when the two ends already bracket a later one: it looks for the first crossing at 200 points from `a`, then refines it to full double precision (Illinois regula falsi, which keeps the solution bracketed). `solve sin(x) = 0 for x from 1 to 10` gives π. Two solutions closer together than (b − a)/200 can hide each other; narrow the range to separate them.
 - The answer has the units of the range. Inside a loop, each `solve` overwrites the variable.
 - **Derivatives of known functions** are values: with `I(θ)` defined, `solve I'(θm) = 0 for θm from a to b` finds a maximum of I, and with `r` an ODE solution, `solve r(t2) · r'(t2) = 0 km²/s for t2 from …` finds where the radial velocity is zero. Only names that aren't defined yet make a `solve` a differential equation.
-- If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range.
+- If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range. A scan point that lands exactly on a pole (the sides are ∞ there, as in `1/(x - 1.5)` scanned from 1 to 2) is skipped, not taken as a crossing: `solve 1/(x - 1.5) = 2 for x from 1 to 2` gives 2, and `solve 1/(x - 1.5) = 0 …` is the jump error. A point where the sides are undefined (NaN) inside the final bracket is never returned as a solution.
 - **Rounding-noise warning:** if large terms cancel so badly that the two sides differ only by rounding error near the crossing (`(E + ε)² − (pc − ε)²` with E ~ 10²⁰ eV), the answer is printed with a warning; expand the expression on paper so the big terms cancel exactly.
 - `step`, `tolerance` and `using` are only for differential equations.
 
@@ -621,6 +643,37 @@ plot data.T vs data.L to "pendulum.png"
   - `... to "file.png"` chooses the file name.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas.
   - Several series: `plot a vs t, b vs t`.
+
+### Dimensional analysis: analyze
+
+`analyze name: T [s] depends on L [m], m [kg], g [m/s²]` applies the Buckingham Π theorem: it finds the dimensionless groups that can be made from the target (T) and the quantities it depends on, and says what they imply for the target.
+
+```fermium
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]
+print 2π pendulum(1 m, 9.81 m/s²)
+```
+
+prints
+
+```
+dimensional analysis of pendulum: T depends on L, m, g
+  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group
+  Π₁ = T √(g/L)
+  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)
+  m drops out: nothing else has mass
+  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)
+2.01 s
+```
+
+- **Quantities:** each is a name with a unit in brackets (`L [m]`; only the dimension matters, `[1]` is a pure number), a variable defined earlier, or a built-in constant (`G`, `c`, `ħ`, `e`, `m_e`, `ε₀`, …). A bracketed name is always a new quantity, even if a constant has that name.
+- **Groups:** there are n − r of them (n quantities, r = rank of the dimension matrix). The target is in exactly one group, with exponent 1. The groups are built from the *repeating* quantities: the inputs, in the order written, that are dimensionally independent of the ones before them. So the order chooses the form: `F [N] depends on ρ [kg/m³], v [m/s], A [m²], μ [Pa s]` gives `F = ρ v² A · f(Π₂)` with Π₂ = ρ v √A/μ (the Reynolds number); listing μ first gives `F = μ v √A · f(Π₂)`, with Π₂ = v ρ √A/μ. The other groups are scaled to small exponents (integers or halves), mostly positive.
+- **Conclusion:** one group: `T ∝ …`; several: `T = … · f(Π₂, …)`. An input that is in no group *drops out*, with the reason (`nothing else has mass`).
+- **The result is usable:** with a name, `analyze` defines `name(...)` = the formula for the target without its constant, with the non-constant quantities that appear in it as arguments (bracketed ones keep their units, so `pendulum(1 s, …)` is an error). Use it in formulas or fits: `fit T = C pendulum(L, 9.81 m/s²) to data` fits the pure number C. If the formula has only constants (`analyze planck: ℓ [m] depends on G, ħ, c`), `name` is a plain value and its value is printed. Without a name (`analyze T [s] depends on L [m], g [m/s²]`), nothing is defined.
+- **Errors:** a target whose dimension can't be made from the inputs is an error that says which base dimension is missing (`v can't be made from m, t: v has length, but nothing it depends on has length`), and says so when there is no dimensionless group at all. A name with no known units asks for a bracket. `analyze` only works at the top level (not inside `if`, loops or functions).
+- **Exact:** the dimension matrix is solved with fractions, so fifth roots and halves are exact: `R [m] depends on E [J], ρ [kg/m³], t [s]` gives `R ∝ (E t²/ρ)^(1/5)` (Taylor's blast wave). The printed formulas are valid Fermium.
+- `analyze` stays an ordinary name everywhere else: a line is an analysis only when it has `depends` in it.
+
+See [bootcamp lesson 11](../bootcamp/lesson11_dimensional_analysis.md) for a tutorial and DECISIONS.md D70 for the design.
 
 ## 12. Symbols and ASCII spellings
 
@@ -723,11 +776,68 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Derived units:** `N J W Pa C V F Ω(ohm) S Wb T H Hz Bq Gy Sv lm lx kat`.
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
-- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %`.
+- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal Wh` (`kWh MWh`), `rad sr ° arcmin arcsec rev rpm %`.
   - `rad` and `arcsec` take SI prefixes: `mrad`, `μrad`, `krad/s`; `mas` and `μas` are milli- and micro-arcseconds.
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
-- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
+  - The other way round, **Hz means rad/s**: `1 Hz in rpm` is 9.55 rpm (not 60) and `1 Hz in rad/s` is 1 rad/s (not 2π). Every conversion between a value written or shown in Hz and rev, rpm, rad/s or °/s warns, with the numbers for that case. For cycles per second, write the value in `rev/s` (`50 rev/s in rpm` is 3000 rpm), or multiply by 2π (`2π f in rpm`; `2π f` and `ω/(2π)` drop the Hz or rad/s they came from). Adding or subtracting a Hz value and a rad/s (or rpm) value warns too. See DECISIONS D95.
+  - **Same SI unit, different quantity:** adding or subtracting `Gy` and `Sv` (absorbed and equivalent dose), `Bq` and `Hz`, or `J` and `N m` (energy and torque) warns.
+- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). `°C + °C` and `sum` (or `cumsum`) of a list in °C are errors (`mean` works); `2 T` and `T / 2` of a °C value warn that they scale the absolute temperature. Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
+
+### Natural units: `units natural`, `units nuclear`, `units astro`
+
+Particle and nuclear physicists set ħ = c = 1: then a mass is an energy, and a length or a time is 1/energy.
+Write `units natural(ħ = c = 1)` (or just `units natural`) on its own line, and from there on Fermium
+works the same way. Units are still checked, and `in` gives the answer back in SI:
+
+```fermium
+units natural(ħ = c = 1)
+a0 = 1/(α m_e)          # the Bohr radius, as on paper
+print a0                # 268.173 MeV⁻¹
+print a0 in fm          # 52917.7 fm
+print a0 in Å           # 0.529177 Å
+m_π = 139.57 MeV
+print 1/m_π in fm       # range of the pion-exchange force: 1.4138 fm
+print ħ, c              # 1 1
+```
+
+- **What is checked:** "modulo ħ and c". A mass plus an energy is fine (`1 kg + 1 J`), and so is a length
+  plus a time (1 s is 2.998×10⁸ m). An energy plus a length is still an error, because it is E + 1/E:
+  `can't add energy or mass [MeV] to length or time (1/energy) [MeV⁻¹]`. `in` must match the power of energy too.
+- **Constants** take their natural-unit values: ħ and c are exactly 1, `m_e` is 0.511 MeV,
+  and `G` is 1/M_Planck² = 6.70883×10⁻³⁹ GeV⁻², so `2 G M☉ in km` is the Schwarzschild radius, 2.95325 km.
+- **Printing:** a value with no unit of its own is shown in powers of MeV. A unit you wrote is kept
+  (`m = 1 kg` prints as `1 kg`). Converting back is exact: `x in fm` multiplies by ħc = 197.327 MeV fm,
+  and `m in kg` divides by c². Fermium works out the powers of ħ and c for you.
+- **Other constants:** you can set any independent set of ħ, c, k_B, G and ε_0 to 1. With
+  `units natural(ħ = c = k_B = 1)` a temperature is an energy (`300 K in meV` is 25.852 meV).
+  `units natural(G = c = 1)` gives geometrized units (M☉ is 1476.63 m), and `units natural(ħ = c = G = 1)`
+  gives Planck units.
+- **`units nuclear`** is ħ = c = 1, with results shown in MeV, and in fm for 1/energy (fm² for cross
+  sections): `print 1/(139.57 MeV)` shows `1.4138 fm`.
+- **`units astro`** doesn't set anything to 1: it is ordinary SI checking. A value with no unit of its own
+  is shown in M☉, AU, yr, L☉ or km/s, so `print G` shows `39.4769 AU³/(M☉ yr²)` (that is 4π²).
+- **A region:** end the line with `:` and indent the lines under it. The natural units then hold for
+  those lines only. SI variables from before the region convert into it automatically. A value computed
+  inside the region leaves it only through `in`, because 1/MeV could be a length or a time:
+
+```fermium
+L = 2 m
+units nuclear:
+    E = 10 MeV
+    k = 1/(1 fm)
+    print E, k          # 10 MeV 197.327 MeV
+r = 1/k in fm           # an ordinary SI length again
+print r in m, E in J
+```
+
+- **Functions:** a function defined outside a region can be used inside it. It is checked again in natural
+  units, and it gives the same physics (`f(m) = m c²` gives the same joules). A function defined inside a
+  region can only be used where the same constants are 1.
+- **Rules:** a `units` line goes at the top level (not inside a function, loop or `if`), and `units SI`
+  switches back. A variable set outside a region can't be changed inside it. An ODE solution can't cross
+  a region boundary, and `load` isn't allowed inside a natural region. `fermium build` works as usual.
+  See DECISIONS D60 for the design.
 
 ## 16. Errors
 
@@ -760,6 +870,7 @@ program    := statement*
 statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | name(params) = expr | name(params) = NEWLINE INDENT block
             | print items | plot series [to "file"] | fit eq to expr [with binds]
+            | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
@@ -777,8 +888,8 @@ atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, ex
 
 These are known and not yet fixed. None of them is silent about units.
 
-- **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges don't have this problem (§9).
-- **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
+- **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges handle decays and peaks near the start, but a narrow peak far from the start can still be missed (§9).
+- **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "couldn't compute this integral numerically", although it converges (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.

@@ -38,7 +38,7 @@ print "first-order largest growth rate:", h ω0 / 4 to 6 digits
 D(γ) =
     T = 2π / γ
     solve x1'' = -ω0² (1 + h cos(γ t)) x1
-      with x1(0) = 1 m, x1'(0) = 0 m/s
+      with x1(0) = 1 [m], x1'(0) = 0 m/s
       for t from 0 s to T tolerance 1e-12
     solve x2'' = -ω0² (1 + h cos(γ t)) x2
       with x2(0) = 0 m, x2'(0) = 1 m/s

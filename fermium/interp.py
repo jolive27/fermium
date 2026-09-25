@@ -18,17 +18,19 @@ import numpy as np
 from . import ir as I
 from .errors import FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
-from .types import ListTy, VecTy, MatTy, BoolTy
+from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
 from . import linalg
 from . import special
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
+ERR_QUAD_NAN, ERR_QUAD_INF = 31, 32
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
 ERR_ROOT, ERR_POLE = 13, 14
 ERR_SINGULAR = 15
 ERR_NOT_SYMMETRIC, ERR_NOT_POSDEF = 21, 22
 ERR_ODE_NAN, ERR_ODE_RANGE, ERR_NO_EVENT = 16, 17, 18
+ERR_ODE_SINGULAR = 33
 
 
 class _Break(Exception):
@@ -149,6 +151,7 @@ class Sol:
         self.t = []
         self.y = []
         self.dy = []
+        self.rhs = None         # f(t, y) for x'(t) at the interpolated state (D46)
 
     @property
     def n(self):
@@ -181,22 +184,28 @@ class Sol:
         ta, tb = self.t[i], self.t[i + 1]
         h = tb - ta
         s = (t - ta) / h
-        ia, ib = i * dim + comp, (i + 1) * dim + comp
-        ya, yb = self.y[ia], self.y[ib]
-        ma, mb = self.dy[ia] * h, self.dy[ib] * h
         s2 = s * s
         s3 = s2 * s
+        h00 = 2 * s3 - 3 * s2 + 1
+        h10 = s3 - 2 * s2 + s
+        h01 = -2 * s3 + 3 * s2
+        h11 = s3 - s2
+
+        def herm(c):
+            ia, ib = i * dim + c, (i + 1) * dim + c
+            ya, yb = self.y[ia], self.y[ib]
+            ma, mb = self.dy[ia] * h, self.dy[ib] * h
+            return ya, yb, ma, mb, h00 * ya + h10 * ma + (h01 * yb + h11 * mb)
+        if use_dy and self.rhs is not None:
+            return self.rhs(t, [herm(c)[4] for c in range(dim)])[comp]
+        ya, yb, ma, mb, r = herm(comp)
         if use_dy:
             d00 = 6 * s2 - 6 * s
             d10 = 3 * s2 - 4 * s + 1
             d01 = 6 * s - 6 * s2
             d11 = 3 * s2 - 2 * s
             return ((d00 * ya + d10 * ma) + (d01 * yb + d11 * mb)) / h
-        h00 = 2 * s3 - 3 * s2 + 1
-        h10 = s3 - 2 * s2 + s
-        h01 = -2 * s3 + 3 * s2
-        h11 = s3 - s2
-        return h00 * ya + h10 * ma + (h01 * yb + h11 * mb)
+        return r
 
 
 # Dormand–Prince's dense output (Hairer, Nørsett & Wanner, DOPRI5): stage weights of the 4th-order term
@@ -359,6 +368,53 @@ def rk4(f, y0, t0, t1, h0, ev=None, tname=-1, evtext=-1):
         raise _Fail(ERR_NO_EVENT, t1, float(evtext))
     sol.push(t1, y, k1)
     return sol
+
+
+RK4_SAMPLES = 8        # step-doubling checks after a fixed-step solve (redteam #5)
+RK4_WARN = 1e-3        # warn when the estimated relative error is larger than this
+
+
+def rk4_error(f, sol):
+    """Mirrors fm_rk4_check in codegen_llvm.py.  A cheap error estimate for a fixed-step RK4 solution:
+    at RK4_SAMPLES evenly spaced steps s, one RK4 step of 2h from the stored (t_s, y_s) is compared with
+    the stored y_{s+2} (two steps of h).  Their difference is 30 times the local error of one h step
+    (step doubling, error ~ h⁵); times the number of steps it estimates the global error, relative to
+    max(|y_s|, |y_s+2|) + |y_s+2 - y_s| per component (D17's scale-free norm).  Costs 3 × RK4_SAMPLES
+    evaluations of the right-hand side."""
+    N, n = sol.n, sol.dim
+    if N < 3:
+        return 0.0
+    worst = 0.0
+    last = -1
+    for k in range(RK4_SAMPLES):
+        s = (k * (N - 3)) // (RK4_SAMPLES - 1)
+        if s == last:
+            continue
+        last = s
+        t, tm, t2 = sol.t[s], sol.t[s + 1], sol.t[s + 2]
+        h = tm - t
+        if not (abs((t2 - tm) - h) <= 1e-9 * abs(h)):      # an event cut the last step short
+            continue
+        H = t2 - t
+        half = H * 0.5
+        y = sol.y[s * n:(s + 1) * n]
+        k1 = sol.dy[s * n:(s + 1) * n]
+        tmp = [y[j] + half * k1[j] for j in range(n)]
+        k2 = f(t + half, tmp)
+        tmp = [y[j] + half * k2[j] for j in range(n)]
+        k3 = f(t + half, tmp)
+        tmp = [y[j] + H * k3[j] for j in range(n)]
+        k4 = f(t + H, tmp)
+        H6 = H / 6
+        for j in range(n):
+            y2 = y[j] + H6 * (k1[j] + 2 * (k2[j] + k3[j]) + k4[j])
+            yr = sol.y[(s + 2) * n + j]
+            sc = max(abs(y[j]), abs(yr)) + abs(yr - y[j])
+            if sc > 0:
+                e = abs(y2 - yr) / sc
+                if e > worst:
+                    worst = e
+    return worst / 30 * (N - 1)
 
 
 A_DP = [[], [1 / 5], [3 / 40, 9 / 40], [44 / 45, -56 / 15, 32 / 9],
@@ -556,80 +612,157 @@ class _Split(Exception):
         self.c = c
 
 
-def _quadfin(f, a, b, rtol, atol):
+def _quadfin(f, a, b, rtol, atol, name=-1):
     """Mirrors fm_quadfin: split a finite range at an interior singularity."""
     try:
-        return _quadcore(f, 0, a, b, rtol, atol, split=True)
+        return _quadcore(f, 0, a, b, rtol, atol, split=True, name=name)
     except _Split as sp:
-        return _quadcore(f, 0, sp.c, b, rtol, atol) - _quadcore(f, 0, sp.c, a, rtol, atol)
+        return _quadcore(f, 0, sp.c, b, rtol, atol, name=name) - _quadcore(f, 0, sp.c, a, rtol, atol, name=name)
 
 
-def _quadcore(f, mode, p, q, rtol, atol, split=False):
+QUAD_ULPS = 8 * 2.220446049250313e-16       # a NaN panel this narrow (relative) is one point (D45)
+QUAD_ROUND = 50 * 2.220446049250313e-16      # an error below this × ∫|f| is rounding (D44)
+
+
+def _qx(mode, p, q, u):
+    """Mirrors ModuleGen._qx: x for the quadrature variable u."""
+    if mode == 0:
+        L = q - p
+        v = 1.0 - u
+        return p + L * (u * u * (3.0 - 2.0 * u)) if u <= 0.5 else q - L * (v * v * (1.0 + 2.0 * u))
+    sx = q * fdiv(u, 1.0 - u)
+    return p + sx if mode == 1 else p - sx
+
+
+def _quadcore(f, mode, p, q, rtol, atol, split=False, name=-1):
+    """Mirrors fm_quadcore / fm_gk15 (D44, D45)."""
     def qf(u):
         if mode == 0:
             L = q - p
             v = 1.0 - u
-            x = p + L * (u * u * (3.0 - 2.0 * u)) if u <= 0.5 else q - L * (v * v * (1.0 + 2.0 * u))
+            x = _qx(0, p, q, u)
             if x == p or x == q:
                 return 0.0
             return f(x) * (6.0 * (u * v) * L)
         om = 1.0 - u
-        sx = q * fdiv(u, om)
-        return fdiv(f(p + sx if mode == 1 else p - sx) * q, om * om)
+        return fdiv(f(_qx(mode, p, q, u)) * q, om * om)
 
     def gk(lo, hi):
+        """(result, error, ∫|g|, u of a NaN/∞ node or NaN, largest finite |g|)"""
         c = 0.5 * (lo + hi)
         h = 0.5 * (hi - lo)
-        fc = qf(c)
+        st = [math.nan, 0.0]
+
+        def node(u):
+            g = qf(u)
+            if abs(g) < math.inf:
+                st[1] = max(st[1], abs(g))
+                return g
+            if g != g:
+                st[0] = u               # a NaN node: +u, wins over a ±∞ node: -u
+            elif not (st[0] > 0):
+                st[0] = -u
+            st[1] = max(st[1], 0.0)
+            return 0.0
+        fc = node(c)
         resk = fc * WGK[7]
         resg = fc * WG[3]
+        rabs = abs(fc) * WGK[7]
         for j in range(7):
             dx = h * XGK[j]
-            s = qf(c - dx) + qf(c + dx)
+            f1 = node(c - dx)
+            f2 = node(c + dx)
+            s = f1 + f2
             resk = resk + s * WGK[j]
+            rabs = rabs + (abs(f1) + abs(f2)) * WGK[j]
             if j % 2 == 1:
                 resg = resg + s * WG[j // 2]
-        return resk * h, abs((resk - resg) * h)
+        return resk * h, abs((resk - resg) * h), abs(rabs * h), st[0], st[1]
+
+    def panel(x0, x1, g):
+        r, e, ra, badu, gmax = g
+        if badu == badu:            # a NaN/∞ node: 0 with an infinite error (D45)
+            return [x0, x1, 0.0, math.inf, 0.0, badu, gmax]
+        return [x0, x1, r, e, ra, badu, gmax]
+
+    def tiny_x(u0, u1):
+        xa, xb = _qx(mode, p, q, u0), _qx(mode, p, q, u1)
+        ext = abs(xb - xa)
+        return ext <= QUAD_ULPS * max(abs(q - p) if mode == 0 else abs(q), max(abs(xa), abs(xb))) \
+            and ext < math.inf
+
+    def exclude_run(wl, wh):
+        """Mirrors the run search in fm_quadcore: True if the NaN/∞ panels around [wl, wh] are one point."""
+        ends, gs = [], []
+        by_end = ({pn[0]: i for i, pn in enumerate(panels)}, {pn[1]: i for i, pn in enumerate(panels)})
+        for fr, to, cur in ((1, 0, wl), (0, 1, wh)):
+            while True:
+                j = by_end[fr].get(cur, -1)        # panel ends are unique: the one panel that ends here
+                if j < 0:
+                    break
+                pn = panels[j]
+                if pn[5] == pn[5]:
+                    cur = pn[to]
+                    continue
+                break
+            ends.append(cur)
+            gs.append(panels[j][6] if j >= 0 else -1.0)
+        G = max(gs[0], gs[1])
+        if not (G >= 0 and tiny_x(ends[0], ends[1])):
+            return False
+        for pn in panels:
+            if pn[0] >= ends[0] and pn[1] <= ends[1]:
+                pn[2], pn[3], pn[4], pn[6] = 0.0, (pn[1] - pn[0]) * G, 0.0, -1.0
+        return True
 
     P, M = 8, 2000
+    limit = 250 if atol < 0 else M - 1          # QUAD_SOFT for the quiet first try (D44)
     width = 1.0 / P
     panels = []
     for i in range(P):
         x0 = i * width
         x1 = 1.0 if i == P - 1 else x0 + width
-        r, e = gk(x0, x1)
-        panels.append([x0, x1, r, e])
+        panels.append(panel(x0, x1, gk(x0, x1)))
     while True:
         total = 0.0
         toterr = 0.0
+        totabs = 0.0
         w = 0
-        for i, (_, _, r, e) in enumerate(panels):
-            total = total + r
+        for i, pn in enumerate(panels):
+            e = pn[3]
+            total = total + pn[2]
             toterr = toterr + e
+            totabs = totabs + pn[4]
             if e > panels[w][3] or (e != e):
                 w = i
         finite = abs(total) < math.inf
         goal = max(atol, rtol * abs(total)) if atol == atol else rtol * abs(total)
-        if finite and (toterr <= goal or toterr <= 1e-14 * abs(total)):
+        if finite and (toterr <= goal or toterr <= 1e-14 * abs(total) or toterr <= QUAD_ROUND * totabs):
             return total
-        wl, wh = panels[w][0], panels[w][1]
+        wl, wh, wbad = panels[w][0], panels[w][1], panels[w][5]
+        if wbad == wbad and panels[w][6] >= 0 and tiny_x(wl, wh) and exclude_run(wl, wh):
+            continue
         mid = 0.5 * (wl + wh)
         stuck = (wh - wl) <= 1e-13 * max(abs(wl), abs(wh))
         if stuck and finite and toterr <= 1e-7 * abs(total):
             return total
-        if split and (len(panels) >= M - 1 or stuck):
+        if split and (len(panels) >= limit or stuck):
             um = 1.0 - mid
             c = p + (q - p) * (mid * mid * (3.0 - 2.0 * mid)) if mid <= 0.5 else q - (q - p) * (um * um * (1.0 + 2.0 * mid))
             if abs(c) <= 1e-9 * (q - p):
                 c = 0.0
             if p < c < q:
                 raise _Split(c)
-        if len(panels) >= M - 1 or stuck or toterr != toterr or abs(total) == math.inf:
+        if atol < 0 and (len(panels) >= limit or stuck or toterr != toterr or abs(total) == math.inf):
+            return math.nan     # the quiet first try for a component of a vector integral (D44)
+        if (len(panels) >= limit or stuck) and wbad == wbad:
+            raise _Fail(ERR_QUAD_NAN if wbad > 0 else ERR_QUAD_INF, _qx(mode, p, q, abs(wbad)), float(name))
+        if len(panels) >= limit or stuck or toterr != toterr or abs(total) == math.inf:
             raise _Fail(ERR_QUAD, total, toterr)
-        r1, e1 = gk(wl, mid)
-        r2, e2 = gk(mid, wh)
-        panels[w] = [wl, mid, r1, e1]
-        panels.append([mid, wh, r2, e2])
+        g1 = gk(wl, mid)
+        g2 = gk(mid, wh)
+        panels[w] = panel(wl, mid, g1)
+        panels.append(panel(mid, wh, g2))
 
 
 def _qscan(f, base, sign):
@@ -655,6 +788,7 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
     h = (b0 - a0) / scan
     fprev, found = fa, False
     a = c = fc = 0.0
+    fjump, xjump, pole = math.nan, 0.0, math.nan      # a scan point that landed on a pole (redteam #4)
     for i in range(1, scan + 1):
         xi = b0 if i == scan else a0 + i * h
         fi = f(xi)
@@ -662,11 +796,19 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
             if scale is not None and abs(fprev) <= NOISE * scale(xi - h):
                 warn(xi)
             return xi
+        if abs(fi) == math.inf:       # on a pole: not a crossing; skip past it
+            fjump, xjump, fprev = fprev, xi, math.nan
+            continue
+        if fjump * fi < 0 and pole != pole:
+            pole = xjump
+        fjump = math.nan
         if fprev * fi < 0:
             a, fa, c, fc, found = xi - h, fprev, xi, fi, True
             break
         fprev = fi
     if not found:
+        if pole == pole:
+            raise _Fail(ERR_POLE, pole, 0.0)
         raise _Fail(ERR_ROOT, a0, b0)
     if scale is not None and abs(fa) <= NOISE * scale(a) and abs(fc) <= NOISE * scale(c):
         warn(c)
@@ -682,8 +824,10 @@ def root(f, a0, b0, scan=200, scale=None, warn=None):
         if not (min(a, c) < x < max(a, c)):
             x = 0.5 * (a + c)
         fx = f(x)
-        if fx == 0 or fx != fx:
+        if fx == 0:
             return x
+        if fx != fx:                  # undefined inside the bracket: not a verified root
+            raise _Fail(ERR_POLE, x, 0.0)
         if fx * fc < 0:
             a, fa, side = c, fc, 0
         else:
@@ -701,25 +845,25 @@ def _count(nf):
     return max(0, int(nf))
 
 
-def quad(f, a, b, rtol=1e-10, atol=0.0):
+def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1):
     """Mirrors fm_quad / fm_quadcore / fm_qscan in codegen_llvm.py."""
     if a > b:
-        return -quad(f, b, a, rtol, atol)
+        return -quad(f, b, a, rtol, atol, name)
     if a == b:
         return 0.0
     a_inf, b_inf = abs(a) == math.inf, abs(b) == math.inf
     if not (a_inf or b_inf):
-        return _quadfin(f, a, b, rtol, atol)
+        return _quadfin(f, a, b, rtol, atol, name=name)
     if not a_inf:
         L = _qscan(f, a, 1.0)
-        return _quadfin(f, a, a + L, rtol, atol) + _quadcore(f, 1, a + L, L, rtol, atol)
+        return _quadfin(f, a, a + L, rtol, atol, name=name) + _quadcore(f, 1, a + L, L, rtol, atol, name=name)
     if not b_inf:
         L = _qscan(f, b, -1.0)
-        return _quadcore(f, 2, b - L, L, rtol, atol) + _quadfin(f, b - L, b, rtol, atol)
+        return _quadcore(f, 2, b - L, L, rtol, atol, name=name) + _quadfin(f, b - L, b, rtol, atol, name=name)
     lr, ll = _qscan(f, 0.0, 1.0), _qscan(f, 0.0, -1.0)
     vr, vl = abs(f(lr)) * lr, abs(f(-ll)) * ll
     c = lr if not (vr < vl) else -ll
-    return _quadcore(f, 2, c, abs(c), rtol, atol) + _quadcore(f, 1, c, abs(c), rtol, atol)
+    return _quadcore(f, 2, c, abs(c), rtol, atol, name=name) + _quadcore(f, 1, c, abs(c), rtol, atol, name=name)
 
 
 # ---------------------------------------------------------------- the interpreter
@@ -940,10 +1084,23 @@ class Interpreter:
         elif s.method == "rk4":
             h0 = self.eval(s.step, fr)
             sol = self.kernel(lambda: rk4(f, y0, t0, t1, h0, ev, tname, evtext), fmt)
+            est = rk4_error(f, sol)
+            if est > RK4_WARN:
+                self.rt.warn(7, est, self.line, -1)
         else:
             line = self.line
             sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False),
                                            lambda c: self.rt.warn(2, c, line, -1)), fmt)
+        if getattr(s.sol_sym, "needs_rhs", False):
+            # mirrors FuncGen.attach_rhs: the numbers the right side reads, as they are now (D46)
+            lam = s.rhs
+            own = {x.id for x in list(lam.params) + list(lam.state) + list(lam.locals)}
+            snap = Frame(fr)
+            for x in I.referenced_syms(lam.body):
+                if x.id not in own and (x in lam.captures or x.storage in ("global", "arena") and
+                                        isinstance(x.ty, (NumTy, BoolTy, VecTy, MatTy))):
+                    snap.vars[x.id] = fr.get(x)
+            sol.rhs = self.ode_rhs(lam, snap)
         fr.set(s.sol_sym, sol)
 
     def s_SFit(self, s, fr):
@@ -1146,7 +1303,10 @@ class Interpreter:
     def e_IIntegral(self, e, fr):
         f = self.scalar_fn(e.lam, fr)
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
-        return self.kernel(lambda: quad(f, lo, hi))
+        name = getattr(e, "xname", -1)
+        atol = -1.0 if getattr(e, "soft", False) else \
+            self.eval(e.atol, fr) if getattr(e, "atol", None) is not None else 0.0
+        return self.kernel(lambda: quad(f, lo, hi, atol=atol, name=name), getattr(e, "xfmt", -1))
 
     def e_ISum(self, e, fr):
         f = self.scalar_fn(e.lam, fr)
@@ -1266,6 +1426,10 @@ class Interpreter:
         if any(p == 0 for p in piv):
             if e.line:
                 self.line = e.line
+            if hasattr(e, "sing_t"):          # the mass matrix of an ODE (D47)
+                f = _Fail(ERR_ODE_SINGULAR, self._sing_t, float(e.sing_text))
+                f.fmt = getattr(e, "sing_fmt", -1)
+                raise f
             raise _Fail(ERR_SINGULAR)
         return tuple(out)
 
@@ -1278,6 +1442,8 @@ class Interpreter:
             from . import cplx
             return cplx.py_builtin(e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
+            if hasattr(e, "sing_t"):
+                self._sing_t = self.eval(e.sing_t, fr)
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
             a = args[0]

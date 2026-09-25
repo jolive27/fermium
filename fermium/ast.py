@@ -301,6 +301,17 @@ class Fit(Node):
 
 
 @dataclass(eq=False)
+class Analyze(Node):
+    """`analyze pendulum: T [s] depends on L [m], m [kg], g`: Buckingham Π analysis (D70).
+
+    target and inputs are Params (name + optional unit); `raw` maps each name to its spelling."""
+    title: str | None
+    target: Param
+    inputs: list          # list[Param]
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass(eq=False)
 class If(Node):
     cond: Node
     then: list
@@ -353,6 +364,14 @@ class ExprStmt(Node):
 class Assert(Node):
     cond: Node
     message: str | None = None
+
+
+@dataclass(eq=False)
+class Units(Node):
+    """`units natural(ħ = c = 1)` (the rest of the program) or `units nuclear:` + a block (D60)."""
+    system: str
+    consts: list = field(default_factory=list)
+    body: list | None = None
 
 
 @dataclass(eq=False)

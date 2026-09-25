@@ -1,6 +1,8 @@
 """Damped spring m x'' = -k x - b x', adaptive Dormand-Prince RK45, 0 -> 100 s,
-rtol = 1e-8, atol = 1e-10. Hand-written; step-size control and initial step
-selection follow scipy.integrate.solve_ivp(method="RK45")."""
+purely relative error control: rtol = 1e-6, atol = 1e-30 (matched to Fermium's
+`tolerance 1e-6`, D17). Hand-written; step-size control and initial step
+selection follow scipy.integrate.solve_ivp(method="RK45").
+Exact solution: x(100 s) = 1.1176166148e-12 m."""
 import math
 import time
 
@@ -89,7 +91,7 @@ def dopri5(x, v, t, tend, rtol, atol):
 
 def main():
     t0 = time.perf_counter()
-    x, _, nacc = dopri5(0.1, 0.0, 0.0, 100.0, 1e-8, 1e-10)
+    x, _, nacc = dopri5(0.1, 0.0, 0.0, 100.0, 1e-6, 1e-30)
     t = time.perf_counter() - t0
     print(f"x_100s {x:.10g}")
     print(f"accepted_steps {nacc}")

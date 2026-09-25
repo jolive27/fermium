@@ -262,8 +262,11 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near %s = %s%s; the solution may blow up there", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
     case 16: snprintf(err_msg, sizeof err_msg, "the right side of the equation is NaN or infinite at %s = %s (0/0? 1/0?); if the equation is singular there, start slightly away from %s", tname(b), x, x); break;
     case 17: snprintf(err_msg, sizeof err_msg, "the range of %s is empty: it starts and ends at %s", tname(b), x); break;
+    case 33: snprintf(err_msg, sizeof err_msg, "%s%s: the matrix of their coefficients is singular (a zero mass or length?)", fm_texts[(int64_t)b], x); break;
     case 18: snprintf(err_msg, sizeof err_msg, "%s%s; make the range longer", fm_texts[(int64_t)b], x); break;
-    case 9: snprintf(err_msg, sizeof err_msg, "this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating (like sin(x) up to ∞)"); break;
+    case 31: snprintf(err_msg, sizeof err_msg, "the integrand is NaN at %s = %s (0/0? ∞/∞? an overflow like exp(710)?), so this integral can't be computed; rewrite the integrand so it stays finite there, e.g. exp(x) / (exp(x) - 1)² as exp(-x) / (1 - exp(-x))², or 1 - cos(x) as 2 sin(x/2)²", (b == b && b >= 0) ? fm_texts[(int64_t)b] : "x", x); break;
+    case 32: snprintf(err_msg, sizeof err_msg, "couldn't compute this integral: the integrand is infinite at %s = %s (1/0? an overflow like exp(710)?), so it may blow up there (like 1/x at 0); if it shouldn't, rewrite it so it stays finite, e.g. 1 - cos(x) as 2 sin(x/2)²", (b == b && b >= 0) ? fm_texts[(int64_t)b] : "x", x); break;
+    case 9: snprintf(err_msg, sizeof err_msg, "couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere"); break;
     case 10: snprintf(err_msg, sizeof err_msg, "%s called itself too many times (the program ran out of stack) -- is a base case missing?", a >= 0 ? fm_texts[(int64_t)a] : "a function"); break;
     case 11:
         if (a != a) snprintf(err_msg, sizeof err_msg, "the length of a list must be a number, not NaN");
@@ -294,6 +297,14 @@ void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
         fprintf(stderr, "warning: line %lld: the two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n", (long long)ln, x);
     else if (kind == 2)
         fprintf(stderr, "warning: line %lld: this equation looks stiff: rk45 has taken %lld steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n", (long long)ln, (long long)a);
+    else if (kind == 7) {
+        static int64_t warned_line = -1;       /* once per solve, not once per loop pass */
+        char pc[64];
+        if (ln == warned_line) return;
+        warned_line = ln;
+        fmt_num(a * 100, 2, 1, pc, sizeof pc);
+        fprintf(stderr, "warning: line %lld: the step is too coarse for this equation: the estimated error is %s%% of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or drop  step  to use the adaptive solver\n", (long long)ln, pc);
+    }
 }
 
 static int cmp_double(const void *a, const void *b) {

@@ -343,3 +343,5 @@ Pick one or more. Solutions for the first four are in the solutions file.
 Solutions: [solutions/lesson10.md](solutions/lesson10.md)
 
 **Where to go next:** the [language reference](../docs/reference.md) has every feature, and the `examples/` folder has dozens of physics programs to read and modify. Pick a problem from your physics course and solve it in Fermium. Good luck!
+
+**Bonus:** [Lesson 11 — Dimensional analysis](lesson11_dimensional_analysis.md): let Fermium guess a law of physics from units alone.

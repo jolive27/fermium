@@ -8,12 +8,13 @@ from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
 from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy, ComplexTy
+from .units import DIMLESS
 from . import cplx
 
 
 class _NeedComplex(Exception):
     """An equation turned out complex (1i ħ ψ' = E ψ) while its unknowns started real: check again with them
-    complex (D92)."""
+    complex (D93)."""
 
     def __init__(self, names):
         super().__init__(names)
@@ -47,6 +48,30 @@ def _normalize_derivs(e, tvar):
             and not e.left.paren:
         return A.Prime(A.Name(canonical_name(e.left.name[1:])).at(e.left), 1).at(e)
     return e
+
+
+def _unit_primes(e, unknowns):
+    """`0.5 b''` with b an unknown of the solve: after a number, b reads as a unit (barn), and the prime
+    lands on the quantity 0.5 b.  A prime on a quantity means nothing, so read it as 0.5 · b'' (M9)."""
+    e = C.map_children(e, lambda c: _unit_primes(c, unknowns))
+    if isinstance(e, A.Prime) and isinstance(e.target, A.Quantity) and not e.target.bracket:
+        fs = e.target.unit.factors
+        if len(fs) == 1 and fs[0].exp == 1 and fs[0].name in unknowns:
+            return A.BinOp("*", e.target.value, A.Prime(A.Name(fs[0].name).at(e.target), e.order).at(e),
+                           True).at(e)
+    return e
+
+
+def _ic_names(initial):
+    """The unknowns named by the initial conditions: x(0) = …, x'(0) = …"""
+    out = set()
+    for ic in initial:
+        f = ic.lhs.func if isinstance(ic.lhs, A.Call) else None
+        while isinstance(f, A.Prime):
+            f = f.target
+        if isinstance(f, A.Name):
+            out.add(f.name)
+    return out
 
 
 def _prime_uses(e, called, bare):
@@ -169,6 +194,8 @@ def check_solve(ck, s: A.Solve, ctx, force_complex=frozenset()):
 def _check_solve(ck, s: A.Solve, ctx, force_complex):
     t = s.var
     src_eqs, initial, until = _take_until(ck, s, ctx)
+    unknowns = _ic_names(initial)
+    src_eqs = [A.Equation(_unit_primes(q.lhs, unknowns), _unit_primes(q.rhs, unknowns)).at(q) for q in src_eqs]
     eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in src_eqs]
     orders = {}
     for q in eqs:
@@ -226,7 +253,7 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     # initial conditions
     y0 = {}
     shape = {}
-    is_c = {x: x in force_complex for x in names}      # complex unknowns: two state slots each (D92)
+    is_c = {x: x in force_complex for x in names}      # complex unknowns: two state slots each (D93)
     for ic in initial:
         lhs = ic.lhs
         if isinstance(lhs, A.BinOp) and lhs.op == "/" and isinstance(lhs.right, A.Call) and \
@@ -335,7 +362,16 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
                          f"right is {ck.desc(rv.ty.dim)}", q)
     # assign equations to unknowns and isolate the highest derivative
     assigned = {}
+    coupled = None
+    tops_in = []
     for q in eqs:
+        present = {}
+        _find_derivs(q.lhs, present)
+        _find_derivs(q.rhs, present)
+        tops_in.append([x for x in names if present.get(x) == orders[x]])
+    if any(len(ts) > 1 for ts in tops_in):
+        coupled = _mass_matrix(ck, eqs, tops_in, names, orders, shape, t)
+    for q in (eqs if coupled is None else []):
         present = {}
         _find_derivs(q.lhs, present)
         _find_derivs(q.rhs, present)
@@ -348,10 +384,14 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
         assigned[x] = C.isolate(q.lhs, q.rhs, target)
     for x in names:
         del scope.names[x + "'" * orders[x]]
+    if coupled is not None:
+        tops_ir = _mass_matrix_ir(ck, coupled, names, orders, dims, tdim, lam, lctx, t)
     body = []
     for (x, k) in layout:
         if k < orders[x] - 1:
             body.append(ck.var_ref(scope.names[x + "'" * (k + 1)], lctx, s))
+        elif coupled is not None:
+            body.append(tops_ir[x])
         else:
             e = assigned[x]
             v = ck.expr(e, lctx)
@@ -407,10 +447,74 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     tf = I.IConst(0, NumTy(tdim))
     tf.hint = t0.hint or t1.hint
     st.tfmt = ck.fmt(tf)
+    if coupled is not None:            # the singular-mass-matrix error shows t like the solve's other errors
+        tops_ir[names[0]].binds[0][1].sing_fmt = st.tfmt
     # does the right side depend on t itself (not only through the unknowns)?  Only then can it jump in t
     # (`if t < 0.3 s`), so only then does the step control look for jumps (D40)
     st.tdep = any(t in A.free_names(q.lhs) + A.free_names(q.rhs) for q in eqs)
     return st
+
+
+def _mass_matrix(ck, eqs, tops_in, names, orders, shape, t):
+    """Equations with several highest derivatives, like Lagrange's equations for a double pendulum,
+    M(q, q') q'' = f(q, q') (D47).  Returns, per equation, (equation, the coefficients of the highest
+    derivatives in the order of `names`, the rest) as ASTs: Σ_j a_ij x_j^(n) + r_i = 0."""
+    tops = [x + "'" * orders[x] for x in names]
+    q0 = next(q for q, ts in zip(eqs, tops_in) if len(ts) > 1)
+    both = " and ".join(x + "'" * orders[x] for x in tops_in[eqs.index(q0)])
+    vec = [x for x in names if shape[x] > 1]
+    if vec:
+        raise ck.err(f"{both} both appear in one equation, which works only for unknowns that are numbers, but "
+                     f"{vec[0]} is a vector; write its components as separate unknowns", q0)
+    if len(names) > 4:
+        raise ck.err(f"{both} both appear in one equation; that works for up to 4 unknowns (this solve has "
+                     f"{len(names)}); solve for the highest derivatives yourself, e.g. with solve_linear", q0)
+    targets = [A.Prime(A.Name(x), orders[x]) for x in names]
+    out = []
+    for q in eqs:
+        r = C.linear_coeffs(q.lhs, q.rhs, targets)
+        if r is None:
+            raise ck.err(f"{both} both appear in one equation; that works when every equation is linear in "
+                         f"{', '.join(tops)} (like m1 a'' + k b'' = F, with coefficients that may depend on {t} and "
+                         f"the unknowns), and this one isn't", q)
+        out.append((q, r[0], r[1]))
+    for j in range(len(names)):
+        if all(C.is_num(coeffs[j], 0) for _, coeffs, _ in out):
+            raise ck.err(f"{tops[j]} drops out of the equations (its coefficients are all 0), so they can't be "
+                         f"solved for it", q0)
+    return out
+
+
+def _mass_matrix_ir(ck, coupled, names, orders, dims, tdim, lam, lctx, t):
+    """The highest derivatives from M x'' = -r at each evaluation of the right side: fermium.linalg's
+    Gaussian elimination with partial pivoting on the n×n system (n ≤ 4), as in solve_linear (D47).  The
+    coefficients are checked like any expression of the right side; their units are consistent because
+    each equation was (the matrix mixes units, which is fine once units are erased)."""
+    n = len(names)
+    entries, rhs = [], []
+    for q, coeffs, r0 in coupled:
+        for a in coeffs:
+            v = ck.expr(a, lctx)
+            ck.need_num(v, q, "a coefficient of a highest derivative")
+            entries.append(v)
+        v = ck.expr(A.Neg(r0).at(q), lctx)
+        ck.need_num(v, q, "the equation")
+        rhs.append(v)
+    plain = DExpr.of(DIMLESS)
+    acc = I.IBuiltin("solve_linear", [I.IVec(entries, MatTy(plain, n, n)), I.IVec(rhs, VecTy(plain, n))],
+                     VecTy(plain, n))
+    acc.line = coupled[0][0].line
+    tops = [x + "'" * orders[x] for x in names]
+    acc.sing_t = I.IVar(lam.params[0])       # a singular matrix: an ODE error naming t (not "this matrix")
+    acc.sing_text = ck.text(f"the equations don't determine {' and '.join(tops)} at {t} = ")
+    sym = I.Sym("__accel", VecTy(plain, n), "local", lam)
+    sym.assigned = True
+    lam.locals.append(sym)
+    out = {}
+    for j, x in enumerate(names):
+        e = I.IVecElem(I.IVar(sym), j, NumTy(dims[x] / (DExpr.of(tdim) ** orders[x])))
+        out[x] = I.ILet([(sym, acc)], e) if j == 0 else e
+    return out
 
 
 def _check_until(ck, until, orders, lam, lctx, t):

@@ -43,9 +43,10 @@ def test_one_half_a_b_squared():
     assert any("a/(b c)" in m for m in w)
 
 
-def test_one_half_m_v_squared_warns():
-    # reference §3: "1/2 m v² means 1/(2 m v²), and Fermium warns you"
-    w = warnings_of("m = 2 kg\nv = 3 m/s\nE = 1/2 m v²")
+def test_one_half_m_v_squared_is_ambiguous():
+    # `2 m v²` with a mass m: combined with another factor, `2 m` is ambiguous (D7, revised)
+    assert "is ambiguous" in str(error_of("m = 2 kg\nv = 3 m/s\nE = 1/2 m v²"))
+    w = warnings_of("mass = 2 kg\nv = 3 m/s\nE = 1/2 mass v²")
     assert any("a/(b c)" in m for m in w)
 
 
@@ -173,7 +174,7 @@ def test_compound_units():
 
 def test_unit_collision_warns_once():
     w = warnings_of("m = 0.5 kg\ny = 0.2 m\nz = 0.3 m")
-    hits = [x for x in w if "right after a number" in x or "after the number" in x]
+    hits = [x for x in w if "is the unit m, not your variable" in x]
     assert len(hits) == 1
     assert "m" in hits[0]
 

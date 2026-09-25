@@ -245,9 +245,11 @@ print sqrt(2 * g * h)
 14.0 m/s
 ```
 
-(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.) When you do write something like `2 g` after making your own `g`, Fermium notices and prints a **warning**, a yellow-flag message that doesn't stop the program:
+(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.)
 
-```fermium
+What if you write `2 g` after making your own `g`? Right after a number, `g` could mean grams (the rule above) or your variable. When `2 g` is multiplied by something else, like `2 g * h` or `2 g h`, you almost certainly meant your variable, so Fermium won't guess: it stops and asks you to say which one you mean.
+
+```
 g = 9.81 m/s^2
 h = 10 m
 print 2 g * h
@@ -255,14 +257,13 @@ print 2 g * h
 
 <!-- output -->
 ```
-warning: line 3: 'g' right after a number is the unit g, not your variable g
+line 3: '2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g
     print 2 g * h
             ^
-  hint: that's fine if you meant the unit; to multiply by your variable write 2*g
-0.02 kg m
+  hint: write  2*g  for 2 × your variable g, or  2 [g]  for the unit
 ```
 
-**Always read warnings.** They usually mean the program does something other than what you meant.
+Write `2*g` (or `2·g`) to multiply by your variable, or `2 [g]` for 2 grams. Units in square brackets are always units. On its own (`x = 0.1 m`, or `from 0 m to 0.2 m`), a number with a unit is read as the unit, with a warning if you also have a variable of that name, because there you almost always mean the unit. Longer units such as `9.81 m/s^2` are never ambiguous.
 
 One more place this rule shows up: `c` (the speed of light) is also a unit, so `1 AU / c` is read as "1 AU-per-speed-of-light", a perfectly good unit of time. Fermium prints it with its value in SI units next to it:
 
@@ -294,6 +295,27 @@ print 20 m/s/g
 The first line is 20 m/s divided by your `g`: a time, 2.04 s, just as you meant. In the second line there's no space, so `/g` carries on the unit: 20 metres per second per **gram**. The same goes for a temperature called `T`: `2.898e-3 m K / T` divides by your `T`, but `m K/T` (no space) would be kelvin per *tesla*. When in doubt, use parentheses: `(20 m/s) / g`.
 
 (The space only matters for names you've given a value yourself. `c` above is Fermium's own constant, so in `1 AU / c` it's still read as a unit.)
+
+## Bonus: natural units (ħ = c = 1)
+
+In nuclear and particle physics, people set ħ = c = 1. Then a mass is an energy, and a length is 1/energy. Fermium can work this way too. Put `units natural` (or `units nuclear`, which shows lengths in fm) on a line of its own, and `in` turns the answer back into SI:
+
+```fermium
+units natural
+a0 = 1/(α m_e)
+print a0 in fm
+print a0 in Å
+print 1/(139.57 MeV) in fm
+```
+
+<!-- output -->
+```
+52917.7 fm
+0.529177 Å
+1.4138 fm
+```
+
+Units are still checked. A mass plus an energy is fine, but an energy plus a length is still an error, because that is E + 1/E. There's more in the [reference](../docs/reference.md#natural-units-units-natural-units-nuclear-units-astro).
 
 ## Summary
 

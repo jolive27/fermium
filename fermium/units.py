@@ -188,7 +188,7 @@ _UNITS = {
     "M☉": (1.98841e30, M, False), "Msun": (1.98841e30, M, False),
     "M_E": (5.9722e24, M, False), "Mearth": (5.9722e24, M, False),
     # energy / power
-    "eV": (_e, J_, True), "erg": (1e-7, J_, False), "cal": (4.184, J_, True),
+    "eV": (_e, J_, True), "erg": (1e-7, J_, False), "cal": (4.184, J_, True), "Wh": (3600.0, J_, True),
     "L☉": (3.828e26, W_, False), "Lsun": (3.828e26, W_, False),
     "hp": (745.69987158227022, W_, False),
     # force / pressure
@@ -223,6 +223,17 @@ _BLOCKED = {"ft", "mi", "Pa" + "", "cd", "min", "pc", "ha", "nmi", "Gs", "ms_", 
 UNIT_PRETTY = {"deg": "°", "degC": "°C", "degF": "°F", "angstrom": "Å", "ohm": "Ω",
                "Msun": "M☉", "Rsun": "R☉", "Lsun": "L☉"}
 UNIT_ASCII = {v: k for k, v in UNIT_PRETTY.items()}
+
+
+# The factors of the non-SI units come from Fermium itself: fermium/selfhost/units_db.fm is a Fermium program
+# (checked by Fermium's unit checker) whose output is fermium/units_selfhosted.py (moonshot M8, D105).
+try:
+    from .units_selfhosted import FACTORS as _SELF_HOSTED
+    for _name, _factor in _SELF_HOSTED.items():
+        if _name in _UNITS:
+            _UNITS[_name] = (_factor,) + tuple(_UNITS[_name][1:])
+except ImportError:      # pragma: no cover - the generated file is part of the package
+    pass
 
 
 def lookup_unit(name: str):

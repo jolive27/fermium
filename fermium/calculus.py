@@ -837,6 +837,38 @@ def isolate(lhs, rhs, target, placeholder="__H__"):
     return simplify(neg(div(b, a)))
 
 
+def linear_coeffs(lhs, rhs, targets):
+    """lhs - rhs = Σ a_j · target_j + r0, for equations linear in the targets (AST nodes, e.g. θ1'', θ2'':
+    Lagrange's mass-matrix form, D47).  Returns ([a_j], r0), each simplified, or None if the equation
+    isn't linear in them (a coefficient still contains a target)."""
+    names = [f"__T{j}__" for j in range(len(targets))]
+    keys = {key(t): n for t, n in zip(targets, names)}
+
+    def repl(e):
+        k = key(e)
+        if k in keys:
+            return A.Name(keys[k])
+        return map_children(e, repl)
+
+    D = simplify(repl(sub(lhs, rhs)))
+
+    class Plain(DiffContext):
+        def user_function(self, f):
+            return None
+
+    coeffs = []
+    for n in names:
+        try:
+            a = simplify(_d(D, n, Plain()))
+        except FermiumError:
+            return None
+        if a is None or any(depends_on(a, m) for m in names):
+            return None
+        coeffs.append(a)
+    r0 = simplify(subst(D, {n: num(0) for n in names}))
+    return coeffs, r0
+
+
 # ---------------------------------------------------------------- SymPy bridge
 def to_sympy(e, symbols, positive=frozenset(), quantities=None):
     """Fermium AST -> SymPy.  Names become real symbols, or positive ones when listed in `positive`.

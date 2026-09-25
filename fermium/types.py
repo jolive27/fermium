@@ -87,6 +87,7 @@ class Unifier:
 
     def __init__(self):
         self.subst = {}   # DimVar -> DExpr
+        self.namer = None  # describes dimensions in natural units inside a `units natural` region (D60)
 
     def norm(self, d) -> DExpr:
         d = DExpr.of(d)
@@ -121,6 +122,8 @@ class Unifier:
         return self.norm(d).concrete
 
     def describe(self, d) -> str:
+        if self.namer is not None:
+            return self.namer(self.resolve(d))
         return dim_name(self.resolve(d))
 
 

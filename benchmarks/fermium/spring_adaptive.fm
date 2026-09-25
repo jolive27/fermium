@@ -1,12 +1,16 @@
 # Damped spring, adaptive Dormand–Prince RK45 from 0 to 100 s.
-# tolerance 1e-10 gives about the same final error (~2e-10 m) as the Julia/SciPy runs (rtol 1e-8, atol 1e-10).
+# Matched settings: Fermium's error control is purely relative (D17), so the Julia, Python and SciPy
+# versions use the same kind of control, rtol = 1e-6 with atol = 1e-30.
+# Exact solution: x(100 s) = 1.1176166148e-12 m. Measured: Fermium 1.11735e-12 m (relative error 2.4e-4,
+# 4297 steps); Julia/Python/SciPy 1.11745e-12 m (relative error 1.5e-4, 4903 steps). Comparable accuracy,
+# not identical: the step-size controllers differ.
 m = 1 kg
 k = 100 N/m
 b = 0.5 kg/s
 t0 = clock()
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
-  for t from 0 s to 100 s tolerance 1e-10
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
+  for t from 0 s to 100 s tolerance 1e-6
 t1 = clock()
 print "x_100s", x(100 s) / (1 m) to 10 digits
 print "accepted_steps", len(x) - 1

@@ -31,23 +31,27 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - **Tools:** `fermium run/check/fmt/doctor/build`, the REPL with `\name` Tab completion and history saved in `~/.fermium_history`, the VS Code extension (highlighting and `\name` completion). `fermium doctor` reports the C compiler that `fermium build` needs.
 - **Speed:** within 2× of Julia's compute time on 4 of the 5 benchmarks (benchmarks/RESULTS.md, 00:09 UTC run); whole-process times are shorter than Julia's.
 
-## Partial
-- **Adaptive-ODE benchmark:** results disagree with Julia and SciPy in the 00:09 RESULTS.md (Fermium took 2066 steps against 3713). The solver's error norm changed after that run (A15), so it needs a re-run.
-- **Derivatives and ∂:** only of one-line functions and formulas.
-- **`fermium build`:** no `plot`, `load` or `fit`; needs a C compiler.
-- **Vectors:** no matrices and no lists of vectors.
-- **Uncertainties:** `±` is reserved and gives a friendly error; not implemented (docs/uncertainties.md).
-- **VS Code:** live errors, hover with units and `\name` completion come from the language server (`fermium lsp`, tested over stdio); the extension itself is tested under Node with a stand-in for the VS Code API, not in a running VS Code.
-- **`stdlib/`:** empty. Constants and units live in `fermium/constants.py` and `fermium/units.py`.
+## Partial (checked 03:40 UTC)
+- **Adaptive-ODE benchmark:** the committed spring_adaptive benchmark is not matched in accuracy with Julia (Fermium's DP45 is purely relative; Julia uses rtol + atol). Red team round 1 measured it at about 7× slower at *far higher* accuracy, and about 0.8× Julia at matched pure-relative settings. A red-team fix agent is switching it to matched settings and re-measuring; until then the README row is not trustworthy.
+- **Derivatives, ∂ and ∇:** only of one-line functions and formulas (now including Σ sums and functions defined by integrals); not of multi-line functions.
+- **`fermium build`:** load/fit/plot work (plots as SVG), but not `using radau/bdf`; needs a C compiler.
+- **Matrices:** up to 4×4, one unit for all entries, not fillable in a loop; no lists of vectors or matrices.
+- **Complex numbers:** not yet (agent working, top priority from the review).
+- **Uncertainties:** `±` is reserved and gives a friendly error; not implemented (moonshot M4).
+- **VS Code:** the language server is tested over stdio; the extension itself only under Node with a stand-in for the VS Code API, not in a running VS Code.
+- **Browser playground:** runs the reference interpreter (slower than native); generated files need `python3 web/build.py`; plain textarea editor.
+- **Stiff solver:** `using radau`/`bdf` call SciPy (about 0.2 ms per step); RK45 only warns about stiffness, it doesn't switch.
+- **`stdlib/`:** empty. Constants and units live in `fermium/constants.py` and `fermium/units.py` (moonshot M7).
 
 ## Known issues
-Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A55 are fixed; A3 and A56 are partly fixed):
-- **Narrow peak at a subdivision point (silent wrong answer, AUDIT §4.5):** `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` gives exactly half (0.0886 against 0.177). A peak at 1000.5 is right.
-- **A3 (partly fixed):** a narrow peak in a huge finite range can be missed: `∫ exp(-x²) dx from -1e6 to 1e6` prints 0.
-- **A56 (partly fixed):** strong interior singularities away from 0 (`|x - 0.3|^-0.8`, and even `^-0.6`) are rejected as "doesn't converge".
-- **Traps by design:** `2 G` is 2 × the gravitational constant (gauss is `gauss`), `2 h` is 2 × Planck's constant (both warn), and `2 g` is 2 grams (warns if you defined your own `g`).
+- **Narrow peaks in integrals (silent wrong answers):** a peak much narrower than the range can be missed (prints 0) or counted half (a peak at the exact middle). Red team round 1 found more cases, including infinite ranges with a peak far from 0. Warnings for unreliable estimates are being added (review priority 3).
+- **Strong interior singularities away from 0** (`|x - 0.3|^-0.8`) fail; documented, with the workaround (shift the variable).
+- **Unit after a number vs a variable of the same name** (`2 g` with your own g): today a warning plus a note on unit errors; being replaced by a clearer rule (review priority 2).
+- **Hz and rad/s** are the same unit to the checker, so conversions between Hz and rev/rpm are off by 2π without a warning (red-team fix in progress).
+- **Fixed-step RK4** can give confidently wrong answers with a too-large step (red-team fix in progress: a step-doubling check).
 - `sqrt(-1)` is NaN and `factorial(-1)` is ∞, silently.
 - No garbage collection: list memory is only freed when the program ends.
+- Open gauntlet friction: see gauntlet/FRICTION.md (59 logged, 47 fixed).
 
 ## Done
 - 22:18 Read the spec. Wrote CLAUDE.md.
@@ -108,3 +112,4 @@ Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A55 ar
 - 01:00 UTC — Phase 1 audit fixes: quadrature rewritten (A3/A44/A51/A56), A33/A34/A37/A41/A43/A55 fixed by me; checker + calculus agents fixed A16–A19, A26, A31–A32, A35, A38, A40, A42, A45–A49, A52 (merged). 1561 tests pass, 3 xfail. Agents now on A23/A24/A54 and AUDIT §2 docs.
 - 02:00 UTC — Phase 1 closed (all audit items fixed or documented; A56 off-zero singularities and the mid-range half-peak are documented limitations). Phase 2 items 1–6 all done and merged. Gauntlet first pass: 31 problems, 38 friction items, 7 fixed; parser/solve/calculus friction agents running. 2051 tests pass.
 - 03:05 UTC — Gauntlet second pass merged (30 harder problems; 61 total). Friction: 59 logged, 35 fixed. Fixed E9 (nested-integral capture, wrong answer) and A5 (ODE first step, wrong answer) myself. Higher-order functions merged. 2254 tests pass.
+- 04:05 UTC — Review priorities in progress: (1) complex numbers agent running; (2) unit-after-number rule revised (error when a colliding unit is combined with other factors, warning when alone; D7), bootcamp updated; (3) integral-reliability warnings queued behind the numerics agent; (4) PROGRESS Partial rewritten. Moonshots: M1 natural units and M2 dimensional analysis merged; M3 numerics and M7 modules running. Research: #1 SEMF/AME2020 done, batch 2–7 running. Red team round 1: 10 findings, fix agent running. Gauntlet friction 59 logged / 47 fixed.

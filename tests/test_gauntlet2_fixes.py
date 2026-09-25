@@ -27,8 +27,8 @@ def test_A5_first_step_follows_the_solution_scale():
 
 def test_43_unit_collision_note_reaches_later_lines():
     from conftest import error_of
-    e = error_of("g = 9.81 m/s²\nh = 2 m\nv = √(2 g h)\nt = v / g\nprint t in s")
-    assert "t depends on line 3, where '2 g' was read as a unit" in (e.hint or "")
+    e = error_of("g = 9.81 m/s²\nw = 2 g\na = w\nprint a in m/s²")
+    assert "a depends on line 2, where '2 g' was read as a unit" in (e.hint or "")
 
 
 def test_41_dimensionless_result_isnt_shown_in_degrees():
