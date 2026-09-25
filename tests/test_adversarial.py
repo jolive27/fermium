@@ -624,7 +624,6 @@ print x(0), values(x)[1]"""
     assert run(src) == "1 1"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A16: index assignment alone doesn't make a list parameter")
 def test_index_assignment_makes_list_parameter():
     assert run("f(v) =\n    v[1] = 42\n    0\nxs = [1, 2, 3]\nprint f(xs), xs") == "0 [42, 2, 3]"
 
@@ -658,7 +657,6 @@ print r(1 yr) in AU"""
     assert close(got[0], s.y[0, -1] / AU, 1e-5) and close(got[1], s.y[1, -1] / AU, 1e-4)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A19: r''(t) of a vector solution is refused")
 def test_vector_solution_second_derivative():
     src = "solve r'' = -r with r(0) = <1, 0>, r'(0) = <0, 1> for t from 0 to 3\nprint r''(3)"
     assert run(src) == run("print <-cos(3), -sin(3)>")
@@ -789,13 +787,11 @@ print en, em"""
     assert en < 1e-8 and em < 1e-6
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A31: a where-binding silently shadows a parameter")
 def test_where_shadowing_parameter_warns():
     from conftest import warnings_of
     assert warnings_of("f(x) = 2 x where x = 5 s\nprint f(1 s)")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A32: xs[inf] crashes the checker with OverflowError")
 def test_infinite_constant_index_is_a_fermium_error():
     from fermium.errors import FermiumError
     with pytest.raises(FermiumError):
@@ -881,7 +877,6 @@ def test_cli_non_utf8_file(tmp_path):
     assert "Traceback" not in r.stderr and r.returncode != 0
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A40: argument's display unit lost through a function")
 def test_function_keeps_argument_display_unit():
     assert run("f(E) = E\nprint f(3 MeV)") == "3 MeV"
 
@@ -915,7 +910,6 @@ def test_first_derivative_repeated_factor():
     assert close(got, 8.25545148831716, 1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A42: (∂/∂x f)(1, 2) no longer parses after the A29 fix")
 def test_call_parenthesised_partial_with_two_arguments():
     assert run("f(x, y) = x^2 y\nprint (∂/∂x f)(1, 2), (partial/partial y f)(1, 2)") == "4 1"
 
@@ -987,19 +981,16 @@ def test_fit_decay_rate_form(tmp_path):
     assert out.split("\n")[-1] == "2.99 ms"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A45: fit with a time constant in the denominator fails silently")
 def test_fit_decay_time_constant_form(tmp_path):
     _decay_csv(tmp_path)
     out = run('d = load "decay.csv"\nfit N = A exp(-t/τ) to d\nprint τ in ms', base_dir=str(tmp_path))
     assert out.split("\n")[-1] == "2.99 ms"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A47: K minus °C rejected")
 def test_kelvin_minus_celsius():
     assert run("print 300 K - 20 °C") == "6.85 K"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A47: Newton's law of cooling with a °C ambient is rejected")
 def test_newton_cooling_celsius():
     out = run("Ta = 20 °C\nsolve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
               "print T(30 min) in °C")
@@ -1017,7 +1008,6 @@ def test_ode_in_milliseconds():
                "print V(1 ms), times(V)[end]") == "1.8394 V 5 ms"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A48: mapping a vector-valued function over a list crashes codegen")
 def test_map_vector_function_over_list_is_a_fermium_error():
     from fermium.errors import FermiumError
     with pytest.raises(FermiumError):
