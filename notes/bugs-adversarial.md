@@ -160,7 +160,7 @@ assert x > 2, "x too small"
 without a message). The same doubled prefix appears in `fermium build` executables. Expected
 `as.fm, line 2: x too small`.
 
-## A13. `fermium build` executables print "runtime error" for a non-converging integral
+## A13. [FIXED] `fermium build` executables print "runtime error" for a non-converging integral
 The C runtime (`fermium/runtime/aot_rt.c`, `fm_error`) has no case for error kind 9, which
 `runtime/core.py` now describes ("this integral doesn't converge ...").
 ```

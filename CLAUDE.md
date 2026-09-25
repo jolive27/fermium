@@ -14,7 +14,7 @@ Fermium is a programming language for physicists (the user is a physics undergra
 - Architecture: Python 3 front end → typed IR → LLVM (llvmlite) JIT. Full spec: `FERMIUM_SPEC_1.md`.
 
 ## Operating rules (spec §5, §6)
-1. **Not done before 7:00 AM Eastern (11:00 UTC), Fri Sep 25 2026.** When Tiers 1–4b are done, work Tier 5 from `BACKLOG.md`. If the backlog is empty, review critically and add to it. Going idle early is the main failure mode.
+1. **Not done before 9:00 AM Eastern (13:00 UTC), Fri Sep 25 2026** (the user extended the end time from 7 AM).** When Tiers 1–4b are done, work Tier 5 from `BACKLOG.md`. If the backlog is empty, review critically and add to it. Going idle early is the main failure mode.
 2. **Git**: commit after every working step with a clear message; push at least every 30 min. Never commit a broken build — run `make check` before every commit.
 3. **`PROGRESS.md`** is always current: done / in progress / next / blocked, with timestamps.
 4. **Resuming**: read PROGRESS.md, DECISIONS.md, BACKLOG.md, `git log`, run the tests, continue from "Next".
@@ -34,7 +34,7 @@ Fermium is a programming language for physicists (the user is a physics undergra
 - `fermium run file.fm`, `fermium` (REPL), `fermium fmt --pretty|--ascii file.fm`, `fermium doctor`.
 
 ## Night plan, part 2 (user instruction received 00:05 UTC, after Tier 4 was complete)
-Keep working until 11:00 UTC. The phases, in order:
+Keep working until **13:00 UTC** (9 AM ET; the user extended it). The phases, in order:
 1. **Strict audit:** start from a clean clone. Follow bootcamp Lesson 0, then run `make check`, all examples, every bootcamp snippet and the benchmarks. Write AUDIT.md and fix everything in it.
 2. **Features, in order:**
    1. Jupyter kernel and an example notebook
@@ -48,4 +48,4 @@ Keep working until 11:00 UTC. The phases, in order:
 
 Other rules:
 - Add a timestamped line to PROGRESS.md on the hour.
-- At 10:30 UTC stop new work and write MORNING_REPORT.md. Include the audit, Phase 2 status, gauntlet counts, the top 10 frictions and what is still weak.
+- At **12:30 UTC** stop new work and write MORNING_REPORT.md. Include the audit, Phase 2 status, gauntlet counts, the top 10 frictions and what is still weak.

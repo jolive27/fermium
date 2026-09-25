@@ -38,7 +38,7 @@ _Last updated: 2026-09-24 23:40 UTC_
 - 23:35 Fixed the bootcamp's 29 reported issues, except B27 (solve continuation-line indentation) and B29 (per-element units in lists). Most important: `20 m/s / g` now divides by your g (D7).
 - 23:40 README with gallery. 1066 tests passing.
 
-- 00:05 **New user direction received.** Tiers 1–4 are complete. The plan is now Phases 1–4 (see CLAUDE.md, "Night plan, part 2").
+- 00:05 **New user direction received.** Tiers 1–4 are complete. The plan is now Phases 1–4 (see CLAUDE.md, "Night plan, part 2"). The end time moved to 13:00 UTC (9 AM ET), and the report is due at 12:30 UTC.
 
 ## In progress
 - Tier 5 hardening.

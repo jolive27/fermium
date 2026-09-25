@@ -605,7 +605,143 @@ def test_build_matches_run(tmp_path):
     assert out == run(src)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A13: built executables print 'runtime error' for error kind 9")
 def test_build_divergent_integral_message(tmp_path):
-    _, err = _build_and_run("print ∫ 1/x dx from 0 to 1", tmp_path)
+    _, err = _build_and_run("print ∫ 1/x dx from 0 to 1", tmp_path)       # was BUG A13
     assert "converge" in err
+
+
+# ---------------------------------------------------------------------------
+# Round 2
+# ---------------------------------------------------------------------------
+def test_list_reference_semantics_d26():
+    assert run("xs = []\nys = xs\nfor i from 1 to 100\n    push(xs, i)\nprint len(ys), sum(ys)") == "100 5050"
+    assert run("g() =\n    zs = [1, 2]\n    zs\na = g()\nb = g()\npush(a, 9)\nprint a, b") == "[1, 2, 9] [1, 2]"
+    assert run("xs = [3, 1, 2]\nys = sort(xs)\nys[1] = 100\nprint xs") == "[3, 1, 2]"
+    assert run("xs = [1, 2, 3]\nys = cumsum(xs)\nys[1] = 50\nprint xs") == "[1, 2, 3]"
+
+
+def test_solution_samples_are_copies():
+    src = """solve x' = -x with x(0) = 1 for t from 0 to 1
+ws = values(x)
+ws[1] = 100
+for i from 1 to 100
+    push(ws, 0)
+print x(0), values(x)[1]"""
+    assert run(src) == "1 1"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A16: index assignment alone doesn't make a list parameter")
+def test_index_assignment_makes_list_parameter():
+    assert run("f(v) =\n    v[1] = 42\n    0\nxs = [1, 2, 3]\nprint f(xs), xs") == "0 [42, 2, 3]"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A17: `2 dm` after a number is decimetres, not the differential")
+def test_constant_integrand_with_unit_like_differential():
+    assert run("print ∫ 2 dm from 0 kg to 1 kg") == "2 kg"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A18: d|r(t)|/dt uses the scalar sign() rule")
+def test_derivative_of_vector_length():
+    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1)")
+    assert close(num(out), 10 / (2 * math.sqrt(3)))
+
+
+def test_vector_kepler_orbit_in_si_units_matches_scipy():
+    si = pytest.importorskip("scipy.integrate")
+    np = pytest.importorskip("numpy")
+    src = """GM = G M_sun
+solve r'' = -GM r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 30> km/s for t from 0 s to 1 yr
+print r(1 yr) in AU"""
+    out = run(src)
+    got = [float(v) for v in out.split(">")[0].strip("<").split(",")]
+    GM = 6.6743e-11 * num(run("print M_sun in kg"))
+    AU, yr = 149597870700.0, 31557600.0
+
+    def f(t, y):
+        r3 = np.hypot(y[0], y[1]) ** 3
+        return [y[2], y[3], -GM * y[0] / r3, -GM * y[1] / r3]
+    s = si.solve_ivp(f, [0, yr], [AU, 0, 0, 3e4], rtol=1e-12, atol=1e-3)
+    assert close(got[0], s.y[0, -1] / AU, 1e-5) and close(got[1], s.y[1, -1] / AU, 1e-4)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A19: r''(t) of a vector solution is refused")
+def test_vector_solution_second_derivative():
+    src = "solve r'' = -r with r(0) = <1, 0>, r'(0) = <0, 1> for t from 0 to 3\nprint r''(3)"
+    assert run(src) == run("print <-cos(3), -sin(3)>")
+
+
+def _run_cli(src, tmp_path, seconds=20):
+    f = tmp_path / "p.fm"
+    f.write_text(src)
+    return subprocess.run([sys.executable, "-m", "fermium.cli", "run", str(f)], capture_output=True, text=True,
+                          timeout=seconds, cwd=ROOT)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A20: runaway recursion segfaults the process")
+def test_runaway_recursion_is_a_clean_error(tmp_path):
+    r = _run_cli("f(x) = x * f(x - 1)\nprint f(3)\n", tmp_path)
+    assert r.returncode == 1 and "line" in r.stderr
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A21: calling a function before its definition uses the constant h")
+def test_call_before_definition_does_not_use_constant():
+    with pytest.raises(Exception):
+        run("print h(2)\nh(x) = x^2")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A22: negating an absolute °C temperature")
+def test_negating_absolute_celsius_is_rejected():
+    with pytest.raises(Exception):
+        run("T = 20 °C\nprint -T")
+
+
+def test_negative_celsius_through_functions_and_where():
+    assert run("f(T) = T in K\nprint f(-5 °C)") == "268.15 K"
+    assert run("T = -5 °C\nprint T + 10 K, T - 10 K") == "5 °C -15 °C"
+    assert run("T = [-5 °C, 5 °C]\nprint mean(T), max(T), min(T)") == "0 °C 5 °C -5 °C"
+
+
+def test_fit_matches_scipy_curve_fit(tmp_path):
+    (tmp_path / "pend.csv").write_text("L [cm], T [ms]\n10, 634\n20, 897\n40, 1269\n80, 1794\n")
+    (tmp_path / "temp.csv").write_text("T [°C], P [kPa]\n-10, 90\n0, 100\n25, 110\n")
+    out = run('data = load "pend.csv"\nfit T = 2π √(L / g) to data\nprint g in m/s^2', base_dir=str(tmp_path))
+    assert "g = 9.812 m/s²" in out and "standard error 0.0023 m/s²" in out
+    out = run('d = load "temp.csv"\nfit P = a + b T to d\nprint a in Pa', base_dir=str(tmp_path))
+    assert close(num(out.split("\n")[-1]), -49773.08, 1e-3)       # T column converted from °C to K
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A25: gamma(x) is rewritten to γ(x) and then undefined")
+def test_gamma_function():
+    assert run("print gamma(5)") == "24"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A26: derivative of x^(1/3) at negative x is NaN though f(-8) = -2")
+def test_cube_root_derivative_negative():
+    assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8)")), 1 / 12)
+
+
+def test_builtin_list_and_math_functions():
+    assert run("print mod(-7, 3), mod(7, -3), mod(7.5 m, 2 m)") == "2 -2 1.5 m"
+    assert run("print interp(2.5, [1, 2, 3], [10, 20, 30]), trapz([1, 1, 1], [0, 1, 3])") == "25 3"
+    assert run("print diff([1, 4, 9]), cumsum([1, 2, 3]), reverse([1, 2, 3]), sort([3, 1, 2])") == \
+        "[3, 5] [1, 3, 6] [3, 2, 1] [1, 2, 3]"
+    assert run("print min(3 m, 2 m, 50 cm), max([1 s, 5 s]), hypot(3 m, 4 m)") == "0.5 m 5 s 5 m"
+    assert run("print std([1, 2, 3, 4])") == "1.29099"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A27: variable set only in an untaken if-branch reads a made-up value")
+def test_variable_assigned_only_in_untaken_branch():
+    with pytest.raises(Exception):
+        run("x = 1\nif x > 2\n    y = 3 m\nprint y")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A27: variable set only inside a loop that never ran reads garbage")
+def test_variable_assigned_only_in_empty_loop():
+    with pytest.raises(Exception):
+        run("while false\n    w = 1\nprint w")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A27: function local set only in an untaken branch")
+def test_function_local_assigned_only_in_untaken_branch():
+    with pytest.raises(Exception):
+        run("f(x) =\n    if x > 0\n        y = 2 x\n    y\nprint f(-1)")
