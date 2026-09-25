@@ -40,7 +40,7 @@ def _is_zero(v):
 
 # ============================================================ eigenvalue problems (D82)
 def check_eigen(ck, s: A.Solve, ctx):
-    from .solve import _find_derivs, _normalize_derivs
+    from .solve import _find_derivs, _normalize_derivs, _known_called, _ic_names
     x = s.var
     if s.step is not None or s.tolerance is not None or getattr(s, "until", None) is not None or s.absolute:
         raise ck.err("step, tolerance, absolute and until are for initial-value problems; an eigenvalue problem (lowest N) "
@@ -51,8 +51,9 @@ def check_eigen(ck, s: A.Solve, ctx):
     q0 = s.equations[0]
     q = A.Equation(_normalize_derivs(q0.lhs, x), _normalize_derivs(q0.rhs, x)).at(q0)
     orders = {}
-    _find_derivs(q.lhs, orders)
-    _find_derivs(q.rhs, orders)
+    known = _known_called(ctx, [q.lhs, q.rhs], _ic_names(s.initial))
+    _find_derivs(q.lhs, orders, known)
+    _find_derivs(q.rhs, orders, known)
     if len(orders) != 1:
         raise ck.err("an eigenvalue problem needs one unknown function with a second derivative, like ψ''", q0)
     psi, order = next(iter(orders.items()))

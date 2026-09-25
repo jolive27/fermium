@@ -111,7 +111,8 @@ def test_unit_lookalike_constant_warns():
     from conftest import warnings_of
     assert any("for hours write 2 hr" in w for w in warnings_of("print 2 h"))
     assert any("gauss" in w for w in warnings_of("x = 3 G\nprint x"))
-    assert not warnings_of("h = 2\nprint 3 h")
+    # (h = 2 itself warns that Planck's constant is now your variable, D213; no lookalike warning on 3 h)
+    assert not [w for w in warnings_of("h = 2\nprint 3 h") if "is now your variable" not in w]
     assert not warnings_of("E = h * 1 Hz\nprint E")
     assert not warnings_of("T = 5800 K\nB(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)\nprint B(1 THz)")
     assert not warnings_of("ν = 1 Hz\nprint 2 h ν")

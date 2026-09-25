@@ -119,7 +119,7 @@ print to(g, km/hr^2)
 - `print a, b, c` prints the values separated by spaces.
 - `print x to 6 digits` shows 6 significant figures instead of the automatic choice.
 - **How many digits by default:** a result shows as many significant figures as its least precise input (`1.20 m` has 3; at least 2). When that is ambiguous or unspecified (all inputs exact, like `1/2`, `2π`, `c`), it shows **3** (`0.500`, `6.28`, `3.00×10⁸ m/s`). Whole numbers below 10⁷ print exactly, and a value written as a literal prints as written (DECISIONS D11). This is display only: calculations always use the full double-precision value.
-- Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Text can't be used in arithmetic.
+- Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Texts are joined with `+` (`"3p" + "1/2"`), and `str(x)` shows a number as text, as print would (`"E = " + str(E)`); text can't be used in other arithmetic (D216).
 - `x in unit` shows a value in another unit. The units must measure the same kind of quantity.
 - Numbers are printed with sensible significant figures: the fewest significant figures of the inputs, but at least 2.
 - Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...).
@@ -298,7 +298,7 @@ print ts
 - **Indexing starts at 1:** `xs[1]` is the first element and `xs[end]` the last. An index out of range stops the program with a clear message.
 - **Arithmetic works element by element:** `xs + ys`, `2 xs` and `xs^2`. Functions such as `sin(xs)` work on each element.
 - **`max` and `min` with a list and numbers** work element by element: `max(Ys, 1e-12)` floors every element at 10⁻¹² (for a log plot), `min(xs, 1 m)` clamps at 1 m; lists given together must have the same length, and all arguments the same units (DECISIONS D162). `max(xs)` with one list is still its largest element.
-- **Growing a list:** `push(xs, value)` (or `append`) adds an element to the end.
+- **Growing a list:** `push(xs, value)` (or `append`) adds an element to the end; `clear(xs)` empties it (from inside a function too, D216).
 - **Size:** a list holds at most 10⁹ numbers. Asking for more (`zeros(2e9)`, or a range that long) stops the program with `not enough memory for a list of 2×10⁹ numbers (the most is 10⁹)`.
 - **Sorting:** `sort(xs)` sorts from smallest to largest and puts `NaN` values last.
 - **Setting an element:** `xs[i] = value`.

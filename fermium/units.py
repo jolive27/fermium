@@ -541,6 +541,10 @@ def format_default_seq(xs, sig: int = 3) -> list:
 
 
 # Unit names written out in words -> the symbol Fermium uses (only for suggestions in error messages)
+# symbols whose unit isn't obvious from its dimension, for messages like "u here is read as the unit u
+# (atomic mass unit)" (D211)
+UNIT_NAMES_LONG = {"u": "atomic mass unit", "b": "barn", "l": "litre", "L": "litre", "Da": "dalton"}
+
 SPELLED_UNITS = {
     "meter": "m", "meters": "m", "metre": "m", "metres": "m", "second": "s", "seconds": "s", "sec": "s",
     "secs": "s", "kilogram": "kg", "kilograms": "kg", "gram": "g", "grams": "g", "kilometer": "km",

@@ -53,6 +53,7 @@ ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
 MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+ERR_ODE_STEPS_FROM = 1_000_000     # + 1 + the variable's text id: "too many steps", a = reached, b = start (D214)
 ERR_QUAD = 9
 ERR_QUAD_NAN = 31          # the integrand is NaN on more than an isolated point (D45)
 ERR_QUAD_INF = 32          # ... or ±∞ (and nowhere NaN): it may blow up there (D45)
@@ -271,6 +272,8 @@ class ModuleGen:
         e("fm_print_textlist", VOID, [F64P, I64])
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
+        e("fm_text_concat", I64, [I64, I64])
+        e("fm_text_num", I64, [I64, F64])
         e("fm_print_end", VOID, [])
         e("fm_error", VOID, [I64, F64, F64, I64, I64])
         e("fm_warn", VOID, [I64, F64, I64, I64])
@@ -1592,7 +1595,8 @@ class ModuleGen:
         cnt = b.add(b.load(nsteps), i64(1))
         b.store(cnt, nsteps)
         with b.if_then(b.icmp_signed(">", cnt, i64(20_000_000))):
-            self.raise_error(b, ERR_ODE_STEPS, t, tname)
+            # the place reached and the start, with the variable's name in the kind (D214)
+            self.raise_error(b, b.add(b.fptosi(tname, I64), i64(ERR_ODE_STEPS_FROM + 1)), t, t0)
         tgt = b.icmp_signed("!=", b.load(hastgt), i64(0))
         stop = b.select(tgt, b.load(tgtlo), t1)
         rstop = b.fmul(dirn, b.fsub(stop, t))
@@ -2110,6 +2114,10 @@ class FuncGen:
         lst = self.load(s.sym)
         p = self.index_ptr(lst, s.idx)
         self.b.store(self.expr(s.value), p)
+
+    def s_SClear(self, s):
+        hdr = self.b.load(self.slot(s.sym))
+        self.b.store(i64(0), self.b.gep(hdr, [I32(0), I32(1)]))      # length 0, the block is kept (D216)
 
     def s_SPush(self, s):
         b = self.b
@@ -3173,6 +3181,10 @@ class FuncGen:
             with b.if_then(b.fcmp_ordered("==", cnt, args[1])):
                 b.call(self.mg.externs["fm_warn"], [i64(3), f64(0), b.load(self.mg.curline), i64(-1)])
             return f64(0)
+        if name == "text_concat":         # "3p" + label (D216): a new text, made by the runtime
+            return b.call(self.mg.externs["fm_text_concat"], args)
+        if name == "text_num":            # str(x) (D216)
+            return b.call(self.mg.externs["fm_text_num"], [i64(int(e.args[0].value)), args[1]])
         if name in codegen_m3.M3_BUILTINS:
             return codegen_m3.builtin(self, name, e, args)
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py

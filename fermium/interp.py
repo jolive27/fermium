@@ -26,6 +26,8 @@ from .uncertain import UFloat, UncertainUse
 from . import uncertain as U
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+ERR_ODE_STEPS_FROM = 1_000_000     # + 1 + the variable's text id: "too many steps", a = reached, b = start (D214)
+ODE_MAX_STEPS = 20_000_000         # RK45 steps before "too many steps" (the compiled kernel has the same limit)
 ERR_QUAD = 9
 ERR_QUAD_NAN, ERR_QUAD_INF = 31, 32
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
@@ -558,8 +560,8 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=Non
         if not (remaining > 1e-14 * abs(t1) and remaining > 0):
             break
         count += 1
-        if count > 20_000_000:
-            raise _Fail(ERR_ODE_STEPS, t, float(tname))
+        if count > ODE_MAX_STEPS:
+            raise _Fail(ERR_ODE_STEPS_FROM + 1 + int(tname), t, t0)       # reached, and the start (D214)
         stop = tgt_lo if has_tgt else t1
         rstop = dirn * (stop - t)
         land = hv >= rstop
@@ -1024,6 +1026,9 @@ class Interpreter:
         lst = fr.get(s.sym)
         i = self.index(self.eval(s.idx, fr), len(lst))
         lst[i] = self.eval(s.value, fr)
+
+    def s_SClear(self, s, fr):
+        fr.get(s.sym).clear()
 
     def s_SPush(self, s, fr):
         v = self.eval(s.value, fr)
@@ -1883,6 +1888,10 @@ class Interpreter:
             saved, _QZERO[0] = _QZERO[0], 0.0
             return saved
         args = [self.eval(a, fr) for a in e.args]
+        if name == "text_concat":         # D216
+            return self.rt.text_concat(int(args[0]), int(args[1]))
+        if name == "text_num":
+            return self.rt.text_num(int(args[0]), args[1])
         if name == "qzero_check":
             cnt, _QZERO[0] = _QZERO[0], args[0]
             if cnt == args[1]:

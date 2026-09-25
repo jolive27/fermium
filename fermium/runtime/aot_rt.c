@@ -24,7 +24,21 @@ typedef struct {
 } fm_fmt;
 
 extern const fm_fmt fm_fmts[];
-extern const char *fm_texts[];
+extern const char *fm_texts0[];
+extern const long long fm_ntexts0;
+/* the text table: the program's texts, then those made while it runs ("3p" + "1/2", str(x)) (D216) */
+static const char **fm_textv = NULL;
+static int64_t fm_ntext = 0, fm_captext = 0;
+static const char **fm_texts_(void) {
+    if (!fm_textv) {
+        fm_captext = fm_ntexts0 + 64;
+        fm_textv = malloc(sizeof(char *) * fm_captext);
+        memcpy(fm_textv, fm_texts0, sizeof(char *) * fm_ntexts0);
+        fm_ntext = fm_ntexts0;
+    }
+    return fm_textv;
+}
+#define fm_texts (fm_texts_())
 extern int fm_run(void);
 
 static char line[1 << 16];
@@ -134,14 +148,51 @@ static void fmt_value_w(const fm_fmt *f, double v, int sig_default, int whole_ok
     else fmt_num(x, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
 }
 
-void fm_print_num(int64_t fid, double v) {
+static void num_text(int64_t fid, double v, char *all, size_t cap) {
     const fm_fmt *f = &fm_fmts[fid];
-    char buf[128], all[256];
+    char buf[128];
     fmt_value(f, v, 15, buf, sizeof buf);
-    if (!f->unit[0] || !strcmp(f->unit, "1")) snprintf(all, sizeof all, "%s", buf);
-    else if (attached(f->unit)) snprintf(all, sizeof all, "%s%s", buf, f->unit);
-    else snprintf(all, sizeof all, "%s %s", buf, f->unit);
+    if (!f->unit[0] || !strcmp(f->unit, "1")) snprintf(all, cap, "%s", buf);
+    else if (attached(f->unit)) snprintf(all, cap, "%s%s", buf, f->unit);
+    else snprintf(all, cap, "%s %s", buf, f->unit);
+}
+
+void fm_print_num(int64_t fid, double v) {
+    char all[256];
+    num_text(fid, v, all, sizeof all);
     emit(all);
+}
+
+/* a text made while the program runs; the same text keeps one id (D216) */
+static int64_t text_add(const char *s) {
+    const char **t = fm_texts_();
+    for (int64_t i = fm_ntexts0; i < fm_ntext; i++)
+        if (!strcmp(t[i], s)) return i;
+    if (fm_ntext == fm_captext) {
+        fm_captext *= 2;
+        fm_textv = realloc(fm_textv, sizeof(char *) * fm_captext);
+    }
+    char *c = malloc(strlen(s) + 1);
+    strcpy(c, s);
+    fm_textv[fm_ntext] = c;
+    return fm_ntext++;
+}
+
+int64_t fm_text_concat(int64_t a, int64_t b) {
+    const char *x = fm_texts[a], *y = fm_texts[b];
+    size_t n = strlen(x), m = strlen(y);
+    char *s = malloc(n + m + 1);
+    memcpy(s, x, n);
+    memcpy(s + n, y, m + 1);
+    int64_t r = text_add(s);
+    free(s);
+    return r;
+}
+
+int64_t fm_text_num(int64_t fid, double v) {
+    char all[256];
+    num_text(fid, v, all, sizeof all);
+    return text_add(all);
 }
 
 /* a complex number, 3 + 4i or (3 + 4i) Ω; mirrors fermium.cplx.format_complex (D94) */
@@ -309,6 +360,30 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     }
     err_line = ln;
     if (kind == -1) return;            /* ERR_PENDING: load/fit/plot already wrote err_msg */
+    if (kind >= 1000000 && kind < 2000000) {
+        /* too many steps: a = the place reached, b = the start, the variable's name in the kind; enough digits
+           to tell the two apart (2499.4 s, not 2500 s next to a start of 2500 s) (D214) */
+        const char *nm = tname((double)(kind - 1000001));
+        for (int sig = 3; sig <= 15; sig++) {
+            char bx[128], by[128];
+            if (fmt >= 0) {
+                const fm_fmt *f = &fm_fmts[fmt];
+                const char *sep = (f->unit[0] && strcmp(f->unit, "1")) ? " " : "";
+                fmt_num((a - f->offset) / f->factor, sig, 1, bx, sizeof bx);
+                fmt_num((b - f->offset) / f->factor, sig, 1, by, sizeof by);
+                snprintf(x, sizeof x, "%s%s%s", bx, sep, f->unit);
+                snprintf(y, sizeof y, "%s%s%s", by, sep, f->unit);
+            } else {
+                fmt_num(a, sig, 1, bx, sizeof bx);
+                fmt_num(b, sig, 1, by, sizeof by);
+                snprintf(x, sizeof x, "%s (SI units)", bx);
+                snprintf(y, sizeof y, "%s (SI units)", by);
+            }
+            if (strcmp(x, y) != 0) break;
+        }
+        snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (20 million: it got from %s = %s only to %s = %s); if the equation is stiff (time scales far apart, like a 164 \xce\xbcs half-life in a chain followed for hours), add  using radau  after the range; otherwise the solution may blow up", nm, y, nm, x);
+        return;
+    }
     switch (kind) {
     case 1:
         if (a != a)

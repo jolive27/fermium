@@ -23,8 +23,16 @@ class _NeedComplex(Exception):
 
 
 # ============================================================ solve
-def _find_derivs(e, out):
-    """Collect {name: max order} for x', x'', d/dt x in an equation side."""
+def _find_derivs(e, out, known=()):
+    """Collect {name: max order} for x', x'', d/dt x in an equation side.  `known` holds defined functions
+    whose derivative is only applied to an argument (`V'(x)`): those are values, not unknowns (D210)."""
+    if known and isinstance(e, A.Call) and isinstance(e.func, (A.Prime, A.Deriv)):
+        f = e.func
+        tgt = f.target if isinstance(f, A.Prime) else f.operand
+        if isinstance(tgt, A.Name) and tgt.name in known:
+            for a in e.args:
+                _find_derivs(a, out, known)
+            return
     if isinstance(e, A.Prime) and isinstance(e.target, A.Name):
         out[e.target.name] = max(out.get(e.target.name, 0), e.order)
         return
@@ -32,7 +40,16 @@ def _find_derivs(e, out):
         out[e.operand.name] = max(out.get(e.operand.name, 0), e.order)
         return
     for c in A.children(e):
-        _find_derivs(c, out)
+        _find_derivs(c, out, known)
+
+
+def _known_called(ctx, sides, keep=()):
+    """Defined functions (or solutions) whose derivative appears only applied to an argument, `V'(x)`, in
+    these equation sides: they are known values, so only the other derivatives are unknowns (D210)."""
+    called, bare = set(), set()
+    for e in sides:
+        _prime_uses(e, called, bare)
+    return {n for n in called - bare if n not in keep and ctx.scope.lookup(n)[0] is not None}
 
 
 def _normalize_derivs(e, tvar):
@@ -206,9 +223,10 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     src_eqs = [A.Equation(_unit_primes(q.lhs, unknowns), _unit_primes(q.rhs, unknowns)).at(q) for q in src_eqs]
     eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in src_eqs]
     orders = {}
+    known = _known_called(ctx, [side for q in eqs for side in (q.lhs, q.rhs)], unknowns)
     for q in eqs:
-        _find_derivs(q.lhs, orders)
-        _find_derivs(q.rhs, orders)
+        _find_derivs(q.lhs, orders, known)
+        _find_derivs(q.rhs, orders, known)
     if not initial and len(eqs) == 1 and s.var is not None and until is None and s.var not in orders:
         # I'(θ) of a function or ODE solution that already exists is a value, not an unknown (#3)
         called, bare = set(), set()

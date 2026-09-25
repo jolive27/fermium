@@ -71,10 +71,11 @@ def tables_c(tables) -> str:
         name = u.name if u.name not in ("1",) else ""
         lines.append(f"  {{{u.factor!r}, {u.offset!r}, {sf}, {int(f['direct'] or 0)}, {cs(name)}}},")
     lines.append("  {1.0, 0.0, -1, 0, \"\"}};")
-    lines.append("const char *fm_texts[] = {")
+    lines.append("const char *fm_texts0[] = {")
     for t in tables.texts:
         lines.append(f"  {cs(t)},")
     lines.append('  ""};')
+    lines.append(f"const long long fm_ntexts0 = {len(tables.texts)};")     # texts made at run time follow (D216)
     # ---- load: each file's header (checked when the program runs) and its columns' SI conversion
     lines.append("typedef struct { const char *header; double factor, offset; } fm_colinfo;")
     lines.append("typedef struct { const char *path; int ncols; const fm_colinfo *cols; } fm_loadinfo;")

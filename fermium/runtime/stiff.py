@@ -19,6 +19,9 @@ MAX_STEPS = 1_000_000
 METHODS = ("radau", "bdf")
 
 
+ERR_STIFF_STEPS_FROM = 2_000_000   # + 1 + the variable's text id: a = reached, b = start (D214)
+
+
 class StiffFail(Exception):
     def __init__(self, kind, a=0.0, b=0.0):
         super().__init__(kind)
@@ -143,7 +146,8 @@ def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=
             raise StiffFail(step_small_kind(y0, ys[-n:]), told, tname)
         steps += 1
         if steps > MAX_STEPS:
-            raise StiffFail(ERR_STIFF_STEPS, solver.t, tname)
+            # the place reached and the start, with the variable's name in the kind (D214)
+            raise StiffFail(ERR_STIFF_STEPS_FROM + 1 + int(tname), float(solver.t), t0)
         t = float(solver.t)
         y = solver.y.tolist()
         # the floor follows the step's own change, like the |y_new − y| term of RK45's norm (D17)
