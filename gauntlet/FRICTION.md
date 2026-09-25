@@ -29,7 +29,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 21 | A | thermodynamics (T2) | `°C` can't be used in compound units (`°C/min`) | Open |
 | 22 | A | oscillations (O6) | No matrices or eigenvalues for normal modes | Fixed: matrices, `det`, `solve_linear` (D33); `eigenvalues(M)`, `eigenvectors(M)` and `eigenvalues(K, M)` for K v = ω² M v by Jacobi rotations (D34) |
 | 23 | A | quantum (Q6) | No complex numbers | Open |
-| 24 | A | quantum (Q5) | Functions can't be passed to functions | Open |
+| 24 | A | quantum (Q5) | Functions can't be passed to functions | Fixed: a function (name, `f'`, `d/dt (…)`, `∇φ`, or a built-in like `sin`) can be passed; each call specializes the function at compile time, so units are checked per passed function (`simpson(f, a, b, n)`, `shoot(V, E)`) (D43) |
 | 25 | A | nuclear (N1) | Stiff decay chains need millions of RK45 steps: no implicit solver | Open |
 | 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Fixed: `err(g)` gives a fitted parameter's standard error, with units |
 | 27 | A | gravitation (G5) | No `GM_sun` / `GM_earth` constants | Fixed: `GM_sun` (`GM☉`, IAU nominal) and `GM_earth` constants |
