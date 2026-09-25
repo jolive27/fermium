@@ -902,7 +902,6 @@ D2_FUZZ = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A41: factor_common drops a repeated factor")
 @pytest.mark.parametrize("formula,f", D2_FUZZ, ids=[c[0] for c in D2_FUZZ])
 def test_second_derivative_fuzz_cases(formula, f):
     mpmath = pytest.importorskip("mpmath")
@@ -912,7 +911,6 @@ def test_second_derivative_fuzz_cases(formula, f):
     assert close(got, want, 2e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A41: first derivative of a product with a repeated inner factor")
 def test_first_derivative_repeated_factor():
     got = num(run("f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)\ng = f'\nprint g(13/10)"))
     assert close(got, 8.25545148831716, 1e-5)
@@ -1017,3 +1015,27 @@ def test_vector_errors_are_clean():
     assert "2-vector and a 3-vector" in str(error_of("print <1,2> · <1,2,3>"))
     assert "no component 3" in str(error_of("v = <1,2>\nprint v.z"))
     assert "2 or 3 components" in str(error_of("print <1, 2, 3, 4>"))
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A51: infinite-range integrals assume a scale of ~1 SI unit")
+@pytest.mark.parametrize("src,want", [
+    ("a = 1 fm\nprint ∫ exp(-r/a) dr from 0 m to ∞ in fm", 1.0),
+    ("a = 0.529e-10 m\nprint ∫ 4π r² exp(-2 r/a) / (π a³) dr from 0 m to ∞", 1.0),
+    ("σ = 1 fm\nprint ∫ exp(-x^2/(2 σ^2)) dx from -∞ to ∞ in fm", math.sqrt(2 * math.pi)),
+    ("E0 = 1 MeV\nprint ∫ exp(-E/E0) dE from 0 J to ∞ in MeV", 1.0),
+    ("print ∫ exp(-t/(1 ns)) dt from 0 s to ∞ in ns", 1.0),
+    ("a = 1 AU\nprint ∫ exp(-r/a) dr from 0 m to ∞ in AU", 1.0),
+])
+def test_infinite_integral_physical_scales(src, want):
+    assert close(num(run(src)), want, 1e-5)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A52: derivative of the Fermi function is NaN far above μ")
+def test_fermi_function_derivative_far_tail():
+    out = run("kT = 0.025 eV\nμ = 5 eV\nf(E) = 1/(exp((E - μ)/kT) + 1)\ng = f'\nprint g(30 eV)")
+    assert "NaN" not in out
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A52: tanh'' at large x is NaN")
+def test_tanh_second_derivative_large_argument():
+    assert run("f(x) = tanh(x)\nh = f''\nprint h(1000)") in ("0", "-0")

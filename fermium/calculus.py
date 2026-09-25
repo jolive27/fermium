@@ -191,27 +191,37 @@ def factor_common(e):
     terms = _sum_terms(e)
     if len(terms) < 2:
         return e
+    from collections import Counter
     fl = []
     for sign, t in terms:
         c, fs = _factors(t)
-        fl.append((sign * c, {key(f): f for f in fs}, fs))
-    common = set(fl[0][1])
-    for _, d, _ in fl[1:]:
-        common &= set(d)
-    common = [k for k in fl[0][1] if k in common and not isinstance(fl[0][1][k], A.Num)]
+        fs = [f for f in fs if not isinstance(f, A.Num)]
+        fl.append((sign * c, Counter(key(f) for f in fs), {key(f): f for f in fs}, fs))
+    # a factor is common if every term has it; take the smallest number of copies (x·x·y and x·y share one x)
+    common = Counter(fl[0][1])
+    for _, cnt, _, _ in fl[1:]:
+        common &= cnt
     if not common:
         return e
     rest = None
-    for c, d, fs in sorted(fl, key=lambda x: x[0] < 0):
-        remaining = [f for f in fs if key(f) not in common]
+    for c, cnt, byk, fs in sorted(fl, key=lambda x: x[0] < 0):
+        drop = Counter(common)
+        remaining = []
+        for f in fs:
+            k = key(f)
+            if drop[k] > 0:
+                drop[k] -= 1
+            else:
+                remaining.append(f)
         t = _build_product(abs(c), remaining)
         if rest is None:
             rest = neg(t) if c < 0 else t
         else:
             rest = sub(rest, t) if c < 0 else add(rest, t)
     out = rest
-    for k in common:
-        out = mul(out, fl[0][1][k])
+    for k, n in common.items():
+        for _ in range(n):
+            out = mul(out, fl[0][2][k])
     return simplify(out)
 
 

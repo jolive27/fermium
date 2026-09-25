@@ -536,7 +536,7 @@ nuclear-physics user every `f(E)` needs `in MeV`. Display hints are per call sit
 could carry its argument's hint (the instance is shared per dimension, so this must be done at
 the call, not in the monomorphised body).
 
-## A41. (HIGH) Symbolic derivative drops a factor: `exp(sin(exp(x)))''` is wrong
+## A41. [FIXED] (HIGH) Symbolic derivative drops a factor: `exp(sin(exp(x)))''` is wrong
 Found by fuzzing f, f', f'' against mpmath (tests/test_adversarial.py has the fuzz cases).
 ```
 f(x) = exp(sin(exp(x)))
@@ -665,3 +665,63 @@ g = d/dt (a t^2) where a = 3
 print g(1)        # error "d/dt(...) is a function; give it an argument, like d/dt(...)(x)"
                   # expected 6 (works without `where`, with a = 3 on its own line)
 ```
+
+## A50. (low / latent) A loaded column is a list header over NumPy's buffer; `push` reallocs it
+`e_IColumn` wraps the pointer returned by `fm_column` (NumPy's array data) in a list header
+with cap = len, so
+```
+d = load "pend.csv"
+xs = d.L
+xs[1] = 7 m          # changes d.L too (shared, fine under D26)
+push(xs, 5 m)        # realloc()s memory owned by NumPy -- undefined behaviour; d.L still has 4 values
+print xs, d.L        # [700, 20, 40, 80, 500] cm [700, 20, 40, 80] cm
+```
+I couldn't make it crash (the datasets seem to stay alive for the whole run), but a
+realloc/free of a NumPy-owned block is heap corruption waiting to happen (REPL sessions,
+future GC of datasets). Copy the column into a malloc'd buffer (or give it cap = -1 so push
+copies first), and decide whether `push(xs, …)` on a column alias should affect `d.L`.
+
+## A51. (HIGH) Integrals to ∞ are wrong whenever the physical scale isn't ~1 in SI units
+The ∞ transform `x = a + u/(1-u)` assumes the integrand lives on a scale of ~1 SI unit. With
+nuclear, atomic, or astronomical scales the result is silently 0, or a false "doesn't converge":
+```
+a = 1 fm
+print ∫ exp(-r/a) dr from 0 m to ∞                             # actual: 0 m     expected: 1 fm
+a = 0.529e-10 m
+print ∫ 4π r² exp(-2 r/a) / (π a³) dr from 0 m to ∞            # actual: 0       expected: 1 (hydrogen 1s normalisation!)
+σ = 1 fm
+print ∫ exp(-x^2/(2 σ^2)) dx from -∞ to ∞ in fm                # actual: 0 fm    expected: 2.50663 fm
+E0 = 1 MeV
+print ∫ exp(-E/E0) dE from 0 J to ∞ in MeV                     # actual: 0 MeV   expected: 1 MeV
+print ∫ exp(-t/(1 ns)) dt from 0 s to ∞ in ns                  # actual: 0 ns    expected: 1 ns
+a = 1 AU
+print ∫ exp(-r/a) dr from 0 m to ∞ in AU                       # actual: "doesn't converge ... estimate
+                                                               #  1.49598×10¹¹ ± 158.646"  expected: 1 AU
+print ∫ exp(-t/(1 Gyr)) dt from 0 s to ∞                       # actual: "doesn't converge ... NaN ± NaN"
+```
+(Dimensionless ones like ∫ x³/(eˣ-1) dx = 6.49394 are fine.) This hits exactly this user's
+fields (nuclear physics, astrophysics). Suggestion: pick the transform scale L from the problem
+-- e.g. the magnitude of the finite limit if non-zero, else scan the integrand at x = 10^k (k from
+-40 to 40) for where it's largest / where it decays, and use x = a + L·u/(1-u); or split
+[a, ∞) into [a, a + L] + [a + L, ∞). The divergence heuristic also needs to be scale-aware
+(the AU case had the right value, 1.496e11 m, but was rejected).
+
+## A52. Symbolic derivatives overflow to NaN (∞/∞) where the true value is ~0 -- Fermi function
+```
+kT = 0.025 eV
+μ = 5 eV
+f(E) = 1/(exp((E - μ)/kT) + 1)          # Fermi-Dirac occupation
+g = f'
+print g(30 eV)      # actual: NaN   expected: -0 (≈ -1.4e-435 → 0)
+f(x) = tanh(x)
+h = f''             # h(x) = -2 sinh(x)/cosh(x)³
+print h(1000)       # NaN, expected 0
+f(x) = 1/cosh(x)
+print f'(800)       # NaN (g(x) = -sinh(x)/cosh(x)²), expected 0
+```
+The derivative is formally right, but exp(x)/(exp(x)+1)², sinh/cosh³ etc. are evaluated as
+∞/∞. Plotting or integrating such a derivative over a range (e.g. -∂f/∂E over the band) gives
+NaN. Possible fixes: rewrite quotients of exponentials (divide through by the dominant term),
+use sech/tanh forms, or evaluate `a/b` as 0 when |b| = ∞ and a is finite... at least for
+the standard functions' derivative rules (d tanh = 1 - tanh², d sech = -sech·tanh).
+(Also a display oddity: the unit of g is shown as s²/(kg m²) rather than 1/J or 1/eV.)
