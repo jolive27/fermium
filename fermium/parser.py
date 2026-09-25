@@ -1179,7 +1179,7 @@ class Parser:
         t = self.tok
         if t.kind == "OP" and t.value == "[" and t.ws_before and not self._bracket_is_unit():
             return True
-        if t.kind == "NUM":
+        if t.kind in ("NUM", "IMAG"):
             return True
         if t.kind == "NAME":
             return t.value not in self.no_juxt_names
@@ -1341,10 +1341,13 @@ class Parser:
         if self.at_op("+"):
             self.next()
             return self.exponent()
-        if self.tok.kind == "NUM":
+        if self.tok.kind in ("NUM", "IMAG"):
             nt = self.next()
             base = A.Num(nt.value, nt.sigfigs, nt.digit)
             base.line, base.col, base.length = nt.line, nt.col, len(nt.raw)
+            if nt.kind == "IMAG":
+                base = A.Name("𝑖").at(base) if nt.value == 1 and nt.sigfigs is None else \
+                    A.BinOp("*", base, A.Name("𝑖").at(base)).at(base)
         else:
             base = self.postfix()
         if self.at_op("^"):
@@ -1434,10 +1437,14 @@ class Parser:
 
     def atom(self):
         t = self.tok
-        if t.kind == "NUM":
+        if t.kind in ("NUM", "IMAG"):
             self.next()
             n = A.Num(t.value, t.sigfigs, t.digit)
             n.line, n.col, n.length = t.line, t.col, len(t.raw)
+            if t.kind == "IMAG":             # 4i is 4 × 𝑖 and 1i is 𝑖 (D90); a unit may follow: 4i Ω
+                n = A.Name("𝑖").at(n) if t.value == 1 and t.sigfigs is None else \
+                    A.BinOp("*", n, A.Name("𝑖").at(n)).at(n)
+                n.imag_literal = True
             if t.digit:
                 if self.at_op("[") and self._bracket_is_unit():
                     u = self.bracket_unit()

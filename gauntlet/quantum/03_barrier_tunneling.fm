@@ -13,9 +13,9 @@
 # barrier, to its left edge x = 0.  There ψ = A e^{ikx} + B e^{−ikx}
 # (continuous with ψ, ψ' at x = 0) and the incoming amplitude is A = ½(ψ + ψ'/(ik)), so T = 1/|A|².
 #
-# Fermium has no complex numbers, so ψ = u + i w is carried as two real
-# functions.  The solver can't integrate towards smaller x, so we use the
-# distance s = a − x from the right edge (d²/ds² = d²/dx², d/ds = −d/dx).
+# ψ is complex: the solve carries its real and imaginary parts as two state slots.
+# We integrate in the distance s = a − x from the right edge (d²/ds² = d²/dx²,
+# d/ds = −d/dx), so the start is where the transmitted wave is known.
 
 V0 = 5.00 eV
 a = 0.500 nm
@@ -26,17 +26,14 @@ a = 0.500 nm
 V(x) = if x >= 0 nm and x <= a then V0 else 0 eV
 
 transmission(E) =
-    k_in = √(2 m_e E) / ħ
-    solve u'' = (2 m_e / ħ²) (V(a - s) - E) u,
-          w'' = (2 m_e / ħ²) (V(a - s) - E) w
-      with u(0 nm) = 1, u'(0 nm) = 0 nm^-1,
-           w(0 nm) = 0, w'(0 nm) = -k_in
+    k = √(2 m_e E) / ħ
+    # on the far side ψ = e^{ik(x−a)}: ψ = 1 and dψ/dx = ik, so dψ/ds = −ik
+    solve ψ'' = (2 m_e / ħ²) (V(a - s) - E) ψ
+      with ψ(0 nm) = 1 + 0i, ψ'(0 nm) = -1i k
       for s from 0 nm to a tolerance 1e-12
-    # back at x = 0; convert the s-derivatives to x-derivatives
-    s1 = a
-    re_A = ½ (u(s1) - w'(s1) / k_in)
-    im_A = ½ (w(s1) + u'(s1) / k_in)
-    return 1 / (re_A² + im_A²)
+    # at x = 0: the incoming amplitude A = ½ (ψ + (dψ/dx)/(ik)), and dψ/dx = −ψ'(s)
+    A = ½ (ψ(a) - ψ'(a) / (1i k))
+    return 1 / |A|²
 
 exact(E) =
     if E < V0

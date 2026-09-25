@@ -7,8 +7,18 @@ from . import ast as A
 from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
-from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy
+from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy, ComplexTy
 from .units import DIMLESS
+from . import cplx
+
+
+class _NeedComplex(Exception):
+    """An equation turned out complex (1i ħ ψ' = E ψ) while its unknowns started real: check again with them
+    complex (D93)."""
+
+    def __init__(self, names):
+        super().__init__(names)
+        self.names = frozenset(names)
 
 
 # ============================================================ solve
@@ -172,13 +182,22 @@ def check_root(ck, s: A.Solve, ctx):
     return ck.assign_to(x, r, s, ctx)
 
 
-def check_solve(ck, s: A.Solve, ctx):
+def check_solve(ck, s: A.Solve, ctx, force_complex=frozenset()):
     if getattr(s, "lowest", None) is not None:        # an eigenvalue problem (D82)
         from .m3solve import check_eigen
         return check_eigen(ck, s, ctx)
     if getattr(s, "var2", None) is not None:          # a PDE in x and t (D83)
         from .m3solve import check_pde
         return check_pde(ck, s, ctx)
+    try:
+        return _check_solve(ck, s, ctx, force_complex)
+    except _NeedComplex as nc:
+        if nc.names <= force_complex:
+            raise ck.err("this equation is complex, but its unknowns can't be made complex", s)
+        return check_solve(ck, s, ctx, force_complex | nc.names)
+
+
+def _check_solve(ck, s: A.Solve, ctx, force_complex):
     t = s.var
     src_eqs, initial, until = _take_until(ck, s, ctx)
     unknowns = _ic_names(initial)
@@ -240,6 +259,7 @@ def check_solve(ck, s: A.Solve, ctx):
     # initial conditions
     y0 = {}
     shape = {}
+    is_c = {x: x in force_complex for x in names}      # complex unknowns: two state slots each (D93)
     for ic in initial:
         lhs = ic.lhs
         if isinstance(lhs, A.BinOp) and lhs.op == "/" and isinstance(lhs.right, A.Call) and \
@@ -268,7 +288,9 @@ def check_solve(ck, s: A.Solve, ctx):
         if isinstance(v.ty, VecTy) and v.ty.mixed:
             raise ck.err("a vector unknown needs the same units in every component (write separate unknowns "
                          "for quantities in different units, like x and v)", ic.rhs)
-        n_here = v.ty.n if isinstance(v.ty, VecTy) else 1
+        if isinstance(v.ty, ComplexTy):
+            is_c[x] = True
+        n_here = v.ty.n if isinstance(v.ty, VecTy) and not isinstance(v.ty, ComplexTy) else 1
         if shape.setdefault(x, n_here) != n_here:
             raise ck.err(f"the initial values of {x} don't match: one is a {shape[x]}-vector, another a "
                          f"{'number' if n_here == 1 else f'{n_here}-vector'}", ic.rhs)
@@ -284,6 +306,15 @@ def check_solve(ck, s: A.Solve, ctx):
                 abs(t0.value) + 1e-300) and not (at.value == 0 and t0.value == 0):
             raise ck.err(f"initial conditions must be at the start of the range ({t} = start)", lhs.args[0])
         y0[(x, k)] = v
+    for (x, k), v in list(y0.items()):
+        if is_c[x]:
+            if shape[x] != 1:
+                raise ck.err(f"{x} can't be both complex and a vector (vectors of complex numbers aren't supported "
+                             f"yet)", s)
+            y0[(x, k)] = cplx.promote(v)          # ψ'(0) = 0 for a complex ψ is 0 + 0i
+    for x in names:
+        if is_c[x]:
+            shape[x] = 2
     missing = [x + "'" * k + "(start)" for (x, k) in layout if (x, k) not in y0]
     if missing:
         raise ck.err(f"missing initial condition{'s' if len(missing) > 1 else ''}: {', '.join(missing)}", s,
@@ -300,6 +331,8 @@ def check_solve(ck, s: A.Solve, ctx):
     scope.names[t] = tsym
     def ty_of(x, k):
         d = dims[x] / (DExpr.of(tdim) ** k)
+        if is_c[x]:
+            return ComplexTy(d)
         return VecTy(d, shape[x]) if shape[x] > 1 else NumTy(d)
     for (x, k) in layout:
         sym = I.Sym(x + "'" * k, ty_of(x, k), "local", lam)
@@ -319,6 +352,14 @@ def check_solve(ck, s: A.Solve, ctx):
         rv = ck.expr(q.rhs, lctx)
         ck.need_numlike(lv, q.lhs, "the left side", allow_vec=True)
         ck.need_numlike(rv, q.rhs, "the right side", allow_vec=True)
+        if cplx.is_c(lv) or cplx.is_c(rv):
+            present = {}
+            _find_derivs(q.lhs, present)
+            _find_derivs(q.rhs, present)
+            real = [x for x in present if x in is_c and not is_c[x]]
+            if real:
+                raise _NeedComplex(real)
+            lv, rv = cplx.promote(lv), cplx.promote(rv)
         if (lv.ty.n if isinstance(lv.ty, VecTy) else 1) != (rv.ty.n if isinstance(rv.ty, VecTy) else 1):
             raise ck.err("one side of this equation is a vector and the other isn't (or they have different "
                          "lengths)", q)
@@ -360,6 +401,10 @@ def check_solve(ck, s: A.Solve, ctx):
         else:
             e = assigned[x]
             v = ck.expr(e, lctx)
+            if is_c[x] and isinstance(v.ty, NumTy):
+                v = cplx.promote(v)
+            elif cplx.is_c(v) and not is_c[x]:
+                raise _NeedComplex([x])
             if (v.ty.n if isinstance(v.ty, VecTy) else 1) != shape[x]:
                 raise ck.err(f"{x}{chr(39) * orders[x]} must be {'a number' if shape[x] == 1 else 'a vector'} "
                              f"like {x}", s)
@@ -385,6 +430,7 @@ def check_solve(ck, s: A.Solve, ctx):
         view = SolView(sol_sym, base, base + (n - 1) * w, dims[x], tdim, t, x)
         view.n = w
         view.stride = w
+        view.cplx = is_c[x]
         view.hint = y0[(x, 0)].hint
         view.hints = {k: y0[(x, k)].hint for k in range(n)}
         view.thint = t0.hint or t1.hint

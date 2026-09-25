@@ -91,6 +91,8 @@ Severity scale: blocker / wrong answer / awkward / cosmetic.
 - **Had to write:** ψ = u + i w as two real equations, and A = ½[(u − w'/k) + i(w + u'/k)] worked
   out by hand (`03`).
 - **Fix:** a complex type (`i` or `im`), `abs`, `conj`, `re`, `im`, and complex unknowns in `solve`.
+- **Fixed (D90–D95):** `solve ψ'' = … ψ with ψ(0 nm) = 1 + 0i, ψ'(0 nm) = -1i k`, then
+  `A = ½ (ψ(a) - ψ'(a) / (1i k))` and `T = 1 / |A|²` (`03` now reads like that).
 
 ### Q7. `solve` can't integrate towards smaller t, and the error talks about a step I never gave
 - **Wanted:** start from the transmitted wave at x = a and integrate `for x from a to 0 nm`.

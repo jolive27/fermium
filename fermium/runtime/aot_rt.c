@@ -100,6 +100,36 @@ void fm_print_num(int64_t fid, double v) {
     emit(all);
 }
 
+/* a complex number, 3 + 4i or (3 + 4i) Ω; mirrors fermium.cplx.format_complex (D94) */
+static int is_whole(double v) { return v == v && fabs(v) < 1e7 && v == (double)(long long)v; }
+
+static void fmt_part(const fm_fmt *f, double v, int whole, char *out, size_t cap) {
+    if (f->sf < 0) {
+        if (f->direct) fmt_num(v, 15, 1, out, cap);
+        else if (whole) snprintf(out, cap, "%lld", (long long)v);
+        else fmt_num(v, 3, 0, out, cap);        /* 3 significant figures per part, zeros kept (D94) */
+    }
+    else fmt_num(v, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
+}
+
+void fm_print_cplx(int64_t fid, double re, double im) {
+    const fm_fmt *f = &fm_fmts[fid];
+    double x = re / f->factor, y = im / f->factor, size = hypot(x, y);
+    char bx[128], by[128], body[300], all[400];
+    if (isfinite(size) && size > 0) {       /* a part below 1e-14 |z| is rounding noise */
+        if (fabs(x) < 1e-14 * size) x = 0;
+        if (fabs(y) < 1e-14 * size) y = 0;
+    }
+    int whole = is_whole(x) && is_whole(y);
+    fmt_part(f, x, whole, bx, sizeof bx);
+    fmt_part(f, fabs(y), whole, by, sizeof by);
+    snprintf(body, sizeof body, "%s %s %si", bx, y < 0 ? "-" : "+", by);
+    if (!f->unit[0] || !strcmp(f->unit, "1")) snprintf(all, sizeof all, "%s", body);
+    else if (attached(f->unit)) snprintf(all, sizeof all, "(%s)%s", body, f->unit);
+    else snprintf(all, sizeof all, "(%s) %s", body, f->unit);
+    emit(all);
+}
+
 static void print_seq(int64_t fid, const double *p, int64_t n, const char *open, const char *close) {
     const fm_fmt *f = &fm_fmts[fid];
     static char out[1 << 15];
