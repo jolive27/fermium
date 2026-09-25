@@ -1,0 +1,43 @@
+# Quantum 02 — The harmonic oscillator by the shooting method
+#
+# (Griffiths §2.3 and Problem 2.55.)  An electron is bound in a parabolic
+# potential V(x) = ½ m ω² x² with ħω = 1.000 eV (a model quantum dot).
+# Solve  −ħ²/2m ψ'' + V ψ = E ψ  numerically for the four lowest levels and
+# compare with E_n = ħω (n + ½).
+#
+# Method: V is even, so the eigenstates are even (ψ(0) = 1, ψ'(0) = 0) or
+# odd (ψ(0) = 0, ψ'(0) = 1).  Integrate outward to x_max = 7 oscillator
+# lengths (a = √(ħ/mω)).  Away from an eigenvalue ψ blows up to +∞ or −∞
+# there; the sign flips as E crosses an eigenvalue: solve ψ(x_max) = 0 for E.
+
+ħω = 1.000 eV
+ω = ħω / ħ
+a = √(ħ / (m_e ω))
+x_max = 7 a
+V(x) = ½ m_e ω² x²
+
+# parity p = 0 for even states, 1 for odd
+psi_end(E, p) =
+    solve ψ'' = (2 m_e / ħ²) (V(x) - E) ψ
+      with ψ(0 nm) = (1 - p) [nm^(-1/2)], ψ'(0 nm) = p [nm^(-3/2)]
+      for x from 0 nm to x_max
+    return ψ(x_max)
+
+print "oscillator length a =", a in nm
+# Walk up in E to bracket each level (see 01 for why), then refine with solve.
+for p from 0 to 1
+    found = 0
+    E_lo = 0.05 eV
+    while found < 2
+        E_hi = E_lo + 0.1 eV
+        if psi_end(E_lo, p) * psi_end(E_hi, p) < 0
+            solve psi_end(E, p) = 0 nm^(-1/2) for E from E_lo to E_hi
+            n = 2 found + p
+            found += 1
+            print "n =", n, " E_shoot =", E in eV to 10 digits, " ħω(n+½) =", ħω (n + ½) in eV to 10 digits
+        E_lo = E_hi
+
+# The analytic ground state ψ₀ = (1/(π a²))^(1/4) exp(−x²/2a²):
+# check ⟨V⟩ = ħω/4 (half the ground-state energy, the virial theorem).
+ψ0(x) = (1 / (π a²))^(1/4) exp(-x² / (2 a²))
+print "<V> in ground state =", ∫ V(x) ψ0(x)² dx from -∞ to ∞ in eV to 10 digits

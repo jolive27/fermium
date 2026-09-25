@@ -1,0 +1,44 @@
+# Quantum 01 — Particle in a box by the shooting method
+#
+# (Griffiths §2.2; the numerical method is Griffiths Problem 2.61 / Giordano ch. 10.)
+# An electron is trapped in an infinite square well of width L = 1.000 nm.
+# Inside the well the time-independent Schrödinger equation is
+#
+#     −ħ²/2m ψ'' = E ψ,       ψ(0) = 0,  ψ(L) = 0.
+#
+# Find the three lowest energies numerically: start at x = 0 with ψ = 0 and
+# some slope, integrate to x = L, and adjust E until ψ(L) = 0 ("shooting").
+# Compare with the exact E_n = n²π²ħ²/(2 m_e L²).  Also check the normalised
+# ground state ∫|ψ|² dx = 1 and ⟨x⟩ = L/2.
+
+L = 1.000 nm
+
+# ψ(L) for a trial energy.  ψ carries its physical units (1/√length), so the
+# unit checker catches a misplaced factor in the equation.
+psi_end(E) =
+    solve ψ'' = -(2 m_e E / ħ²) ψ
+      with ψ(0 nm) = 0 nm^(-1/2), ψ'(0 nm) = 1 nm^(-3/2)
+      for x from 0 nm to L
+    return ψ(L)
+
+exact(n) = n² π² ħ² / (2 m_e L²)
+
+# The energies are the roots of ψ(L) = 0.  `solve … for E from a to b` is
+# meant to find the first root above a, but when ψ(L) has opposite signs at a
+# and b it returns *some* root in between (see FRICTION.md), so first walk up
+# in small steps to bracket each level, then let solve refine it.
+dE = 0.05 eV
+E_lo = 0.01 eV
+n = 0
+while n < 3
+    E_hi = E_lo + dE
+    if psi_end(E_lo) * psi_end(E_hi) < 0
+        n += 1
+        solve psi_end(E) = 0 nm^(-1/2) for E from E_lo to E_hi
+        print "n =", n, " E_shoot =", E in eV to 10 digits, " E_exact =", exact(n) in eV to 10 digits
+    E_lo = E_hi
+
+# Ground state, normalised: ψ₁ = √(2/L) sin(πx/L)
+ψ1(x) = √(2/L) sin(π x / L)
+print "norm =", ∫ ψ1(x)² dx from 0 nm to L to 10 digits
+print "<x> =", ∫ x ψ1(x)² dx from 0 nm to L in nm to 10 digits
