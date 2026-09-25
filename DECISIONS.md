@@ -13,10 +13,10 @@ Each entry has **what** was decided, **why**, and the **alternatives** we consid
 
 ## D2. Numeric kernels are generated as LLVM IR too
 - **What:** Adaptive Gauss–Kronrod (G7/K15) quadrature, fixed-step RK4, adaptive Dormand–Prince RK45 and Hermite evaluation of ODE solutions are all built with llvmlite's IR builder (`ModuleGen._k_*`). The integrand or right-hand side is passed as a function pointer. The kernel is `alwaysinline`, so after inlining LLVM sees a direct call and can inline the user's formula into the solver loop.
-- **Why:** "Numerics that must be fast are compiled to native code" (spec §2). Clang is not available on a beginner's Mac.
+- **Why:** "Numerics that must be fast are compiled to native code" (spec §2). A C compiler is **optional**: a beginner's Mac often has none (it comes with the Xcode command-line tools), and running programs, the REPL, `check` and `fmt` never need one, because llvmlite brings its own LLVM. Only `fermium build` (D25) needs a C compiler, to link the executable; `fermium doctor` reports whether one was found.
 - **Alternatives:**
   - Calling SciPy from JIT code would add per-evaluation call overhead.
-  - Writing the kernels in C would need a C compiler.
+  - Writing the kernels in C would make a C compiler necessary for every program, not just for `fermium build`.
 
 ## D3. Non-hot-path features call back into Python
 - **What:** `print`, `plot`, `load` and `fit` are ctypes callbacks (`runtime/core.py`). `fit` compiles the model to a native vectorized function, `void model(p*, cols**, n, out*)`, and SciPy's `least_squares` calls it through ctypes.
@@ -45,13 +45,13 @@ Each entry has **what** was decided, **why**, and the **alternatives** we consid
 ## D7. Units after numbers
 The rule (spec §3.4.2), refined:
 1. A unit name right after a **digit literal** is a unit: `3 m`, `9.81 m/s²`. This does *not* apply after `½`, `π` or other symbols, so `½ m v²` is one half times the mass m times v².
-2. Bracketed units are always units: `3 [m/s]`, `x [m]`, `f(x [m]) = ...`.
+2. Bracketed units are always units: `3 [m/s]`, and parameter annotations `f(x [m]) = ...`. (A variable can't be declared with one: `x [m] = 3` is a parse error.)
 3. Everywhere else an identifier is a variable.
 4. Continuing a unit expression after the first unit:
    - `/` written without a space before it, and followed by a unit name, continues the unit (`50 N/m`, `3 m/s`), even when you have a variable with that name.
    - `/` with a space before it, followed by the name of one of *your* variables, divides by the variable. So with `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s and not "per gram", and `2.898e-3 m K / T` divides by the temperature T, not by tesla. (Changed after the bootcamp author hit exactly this trap.)
    - A space or `·`/`*` followed by a unit name continues the unit **only if you haven't defined a variable with that name**. So `70 kg g` with your own `g` is 70 kg × g, with a warning.
-5. If the first unit after a number is also one of your variables (`0.2 m` after `m = 0.5 kg`), Fermium prints a warning once per name, suggesting `2*m` or `3 [m]`.
+5. If the first unit after a number is also one of your variables (`0.2 m` after `m = 0.5 kg`), Fermium prints a warning once per name: "that's fine if you meant the unit; to multiply by your variable write 0.2*m".
 - **Unit names we deliberately left out, because they collide with physics variables:**
   - `h` for hour: use `hr`.
   - `t` for tonne: use `tonne`.
@@ -60,7 +60,8 @@ The rule (spec §3.4.2), refined:
 - **Why:** This matches what physicists write on paper while keeping the rule predictable.
 
 ## D8. Implicit multiplication binds tighter than `/` and `*`
-- **What:** `h c / λ k_B T` means (h c)/(λ k_B T), as in textbooks and papers. As a result, `1/2x` = 1/(2x) and `1/2 m v²` = 1/(2 m v²). When the numerator is a number and the denominator starts with a number (`1/2 m`), Fermium warns and suggests `½ m v²` or `(1/2) m v²`.
+- **What:** `h c / λ k_B T` means (h c)/(λ k_B T), as in textbooks and papers. As a result, `1/2x` = 1/(2x) and `1/2 mass v²` = 1/(2 mass v²). When the numerator is a number and the denominator is a number times a variable (`1/2x`, `1/2 x`, `1/2 mass v²`), Fermium warns and suggests `(1/2)` or `½`.
+  - **Not warned:** when the name after the number is a **unit**, D7 applies first: `2 m` is two metres, so `1/2 m` is 0.5 1/m and `1/2 kg` is 0.5 1/kg, with no precedence warning. If you also have a variable `m`, you get D7's unit-or-variable warning instead (rule 5), and the value is still 0.5 1/m. Write `½ m v²` for the kinetic energy.
 - **Powers bind tighter than juxtaposition:** `4π² L` = 4·π²·L and `x^2y` = x²·y.
 - **Other rules:**
   - Unary minus applies to the whole implicit product: `-A ω sin(ω t)`.
@@ -118,7 +119,7 @@ The rule (spec §3.4.2), refined:
 ## D17. ODEs: `solve`
 - **Unknowns:** the names that appear with primes (`x'`, `x''`) or as `d/dt x`. Each equation is solved for its highest derivative by symbolic linear isolation (`calculus.isolate`), so `m x'' = -k x - b x'` works.
 - **Checks:** Initial conditions give the units of the unknowns, and all of them are required. Both sides of each equation are dimension-checked.
-- **Methods:** `step h` selects fixed-step RK4. The step is adjusted slightly so the range is covered exactly. Without a step, Fermium uses Dormand–Prince 5(4) with rtol = 1e-9 and a **scale-free** error norm: sc = rtol·(max(|y|,|y_new|) + 10⁻³·max|y| so far + 10⁻³·max|dy/dt| so far·(t₁−t₀)). This keeps the tolerance meaningful whether the values are 10⁻¹⁵ m or 10³⁰ kg. *(Revised at 00:30 after adversarial tests A5 and A15. The norm is now **purely relative**: sc = rtol·(max(|y|,|y_new|) + |y_new − y|). The step's own change stands in for the size when a component crosses zero. When shrinking the step no longer reduces the error, which happens for an unknown that starts at exactly 0 (x' = t⁴), the step is accepted. Decays such as e⁻⁶⁰ ≈ 10⁻²⁷ now keep full relative accuracy, and the earlier absolute floors are gone.)*
+- **Methods:** `step h` selects fixed-step RK4. The step is adjusted slightly so the range is covered exactly. Without a step, Fermium uses Dormand–Prince 5(4) with rtol = 1e-9 and a **scale-free** error norm: sc = rtol·(max(|y|,|y_new|) + 10⁻³·max|y| so far + 10⁻³·max|dy/dt| so far·(t₁−t₀)). This keeps the tolerance meaningful whether the values are 10⁻¹⁵ m or 10³⁰ kg. *(Revised after adversarial tests A5 and A15. The norm is now **purely relative**: sc = rtol·(max(|y|,|y_new|) + |y_new − y|). The step's own change stands in for the size when a component crosses zero. When shrinking the step no longer reduces the error, which happens for an unknown that starts at exactly 0 (x' = t⁴), the step is accepted. Decays such as e⁻⁶⁰ ≈ 10⁻²⁷ now keep full relative accuracy, and the earlier absolute floors are gone.)*
 - **Results:** The result is a dense solution. `x(2 s)` uses cubic Hermite interpolation with the stored derivatives. `x'(t)` is the derivative of that cubic, which is third-order accurate. `x''(t)` also works, and so do `plot x vs t`, `plot y vs x` (phase or orbit plots), `values(x)`, `times(x)`, `x[end]` and `max(x)`.
 
 ## D18. `fit`
