@@ -192,3 +192,39 @@ def test_hydrogen_levels_match_bohr_with_reduced_mass():
     assert num(out, "Lyman α (2p → 1s):") == pytest.approx(121.567, rel=2e-5)     # NIST (fine structure ~10⁻⁵)
     assert num(out, "without the reduced mass it would be") == pytest.approx(lya * mu / m_e, rel=1e-6)
     assert num(out, "2p: u² peaks at r =") == pytest.approx(4 * m_e / mu, rel=1e-5)
+
+
+def test_friedmann_planck2018_matches_quad():
+    """Age, epochs and distances for Planck 2018 ΛCDM vs scipy.integrate.quad and brentq."""
+    from scipy.constants import G, c, pi, sigma
+    from scipy.integrate import quad
+    from scipy.optimize import brentq
+    out = run_prog("friedmann_planck2018", "friedmann.fm")
+    mpc, yr = 3.0856775814913673e22, 365.25 * 86400
+    gyr, gly = 1e9 * yr, 1e9 * c * yr
+    H0, om = 67.4e3 / mpc, 0.315
+    og = 4 * sigma * 2.7255 ** 4 / c ** 3 / (3 * H0 ** 2 / (8 * pi * G))
+    orad = og * (1 + 7 / 8 * (4 / 11) ** (4 / 3) * 3.046)
+    ol = 1 - om - orad
+
+    def H(a):
+        return H0 * np.sqrt(orad / a ** 4 + om / a ** 3 + ol)
+
+    def age(a1):
+        return quad(lambda a: 1 / (a * H(a)), 0, a1, epsabs=0, epsrel=1e-12, limit=200)[0]
+
+    assert num(out, "Ω_r =") == pytest.approx(orad, rel=1e-3)
+    t0 = age(1) / gyr
+    assert num(out, "age of the universe t₀ =") == pytest.approx(t0, rel=1e-4)
+    assert num(out, "until a = 1:") == pytest.approx(t0, rel=1e-4)
+    assert abs(t0 - 13.787) < 0.020                           # Planck 2018 VI, Table 2: 13.787 ± 0.020 Gyr
+    assert num(out, "matter–Λ equality: z =") == pytest.approx((ol / om) ** (1 / 3) - 1, rel=1e-3)
+    zq = brentq(lambda z: om * (1 + z) ** 3 + 2 * orad * (1 + z) ** 4 - 2 * ol, 0, 10)
+    assert num(out, "(q = 0): z =") == pytest.approx(zq, rel=1e-3)
+    assert num(out, "at t =") == pytest.approx(age(1 / (1 + zq)) / gyr, rel=1e-3)
+    assert num(out, "matter–radiation equality: z =") == pytest.approx(om / orad - 1, rel=1e-3)
+    dc = c * quad(lambda z: 1 / H(1 / (1 + z)), 0, 1100, epsrel=1e-12, limit=200)[0]
+    assert num(out, "comoving distance to z = 1100:") == pytest.approx(dc / mpc, rel=1e-4)
+    assert num(out, "age of the universe at z = 1100:") == pytest.approx(age(1 / 1101) / yr, rel=1e-3)
+    ph = c * quad(lambda a: 1 / (a * a * H(a)), 0, 1, epsrel=1e-12, limit=200)[0]
+    assert num(out, "particle horizon today (comoving):") == pytest.approx(ph / gly, rel=1e-3)

@@ -35,7 +35,7 @@ r in m, u dimensionless). Runs in about 1.5 s. Run it from this folder with `fer
 
 ## What writing it in Fermium showed
 - The shooting method is short: a function with a `solve` inside returns `u[end]`, and the algebraic `solve` root-finds
-  on it directly, even though each evaluation is a whole ODE solve (about 2 500 of them in 1.5 s).
+  on it directly, even though each evaluation is a whole ODE solve (the program runs in 1.5 s).
 - `in a_0` is refused ("'a_0' is not a unit Fermium knows"): constants can't be used as display units, so `plot … vs
   r in a_0` needs a hand-made list of r/a₀. Atomic units (`units atomic`, or `in a_0`, `in Ry`) would help here.
 - An ODE solution can't be called with a list (`u(rs)` is "this value must be a number, but it is a list"), unlike a

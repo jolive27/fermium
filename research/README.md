@@ -11,3 +11,4 @@ computation.
 | 3 | [Lane–Emden polytropes and the Chandrasekhar mass](lane_emden_chandrasekhar/) | ξ₁, −ξ₁²θ′(ξ₁) for n = 1, 1.5, 3 vs Chandrasekhar (1939) table (all digits); M_Ch = 5.825/μ_e² M☉ vs 5.83 | done |
 | 4 | [U-238 decay series: Bateman equations, secular equilibrium](u238_chain/) | 15 members (radau) vs the closed-form Bateman solution, all digits; Rn-222 99 % in-growth 25.40 d | done |
 | 5 | [Hydrogen levels from the radial Schrödinger equation (shooting, reduced mass)](hydrogen_levels/) | n = 1..4, all l: Bohr × μ/m_e to 9×10⁻⁹; Lyman α 121.5684 nm vs 121.567 nm (NIST) | done |
+| 6 | [Age of the universe for Planck 2018 ΛCDM (Friedmann equation)](friedmann_planck2018/) | t₀ = 13.791 Gyr vs 13.787 ± 0.020 Gyr (Planck 2018 VI); z_eq 3419 vs 3387 ± 21; D_C(z = 1100) = 13 866 Mpc | done |
