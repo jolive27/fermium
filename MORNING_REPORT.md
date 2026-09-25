@@ -63,9 +63,11 @@ Jupyter kernel and notebook; language server with unit hover, live errors and `\
 | 7 | Rutherford scattering, Monte Carlo | χ² = 35.6 / 35 bins vs exact | Geiger–Marsden 1913 |
 | 8 | pp vs CNO crossover | 17.8–18.1 MK | ≈ 17–18 MK |
 | 9 | BBN network (stiff, 12 reactions, 10 MeV → 10⁴ s) | Y_p = 0.2423, D/H = 2.60×10⁻⁵, ⁷Li/H = 5.1×10⁻¹⁰ (SciPy agreement 3×10⁻⁶) | Y_p = 0.2471, D/H = 2.51×10⁻⁵ (Fields 2020). Y_p is 1.9 % low: Born weak rates, as expected. |
+| 10 | Nuclear shell model (Woods–Saxon + spin–orbit, Bohr & Mottelson parameters, ~450 eigenvalue problems) | the 7 largest shell gaps at N = 2, 8, 20, 28, 50, 82, 126 (without spin–orbit: 2, 8, 20, 40, 70); ²⁰⁸Pb N = 126 gap 3.54 MeV; rms over 13 levels 0.48 MeV | 3.43 MeV measured; the magic numbers |
+| 11 | Hydrogen recombination (Saha + Peebles three-level atom, radau) | z_* = 1089.6 (τ = 1); x_e(200) = 3.9×10⁻⁴ | z_* = 1089.92 ± 0.25 (Planck 2018). Part of the agreement is luck: helium and the multi-level atom are left out, and the README says so. |
 
 Honest caveats:
-- The BBN rate coefficients and the Geiger–Marsden table were typed from memory of the published forms. They are cross-checked (detailed balance, yields against modern codes) but not proof-read against the papers, since there was no network access.
+- The BBN rate coefficients, the Geiger–Marsden table and the ²⁰⁸Pb single-particle energies were typed from memory of the published forms. They are cross-checked (detailed balance, yields against modern codes) but not proof-read against the papers, since there was no network access.
 
 ## Phase 3 and 7: textbook gauntlet
 - 81 problems in all: 31 in pass 1, 30 in pass 2 and 20 in pass 3 (graduate: Kapitza pendulum, Hulse–Taylor decay, hydrogen fine structure, deuteron, TOV, Gamow peak, …). Each is checked against closed forms, SciPy or published values.
@@ -77,7 +79,8 @@ Honest caveats:
 | 1 (03:35) | 10 | Hz/rpm, the pole returned as a root, coarse RK4, °C sums | all |
 | 2 (05:00) | 14 | `2 c` with your own c, Crank–Nicolson coarse step and sawtooth, `std` of one value, cyclotron frequency, Bateman NaN | all 14 |
 | 3 (06:30) | 15 | `36 km/h` read as km / Planck's h, °C in products, `°C ± %`, early PDE transients, vector zero integrals | all 15 |
-| 4 (07:30) | TBD | TBD | TBD |
+| 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
+| 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | fixes in progress |
 
 ## Benchmarks
 TBD at 12:30 (M5): measured on a quiet machine, Fermium vs Julia vs Python, same algorithms and tolerances.
@@ -87,5 +90,5 @@ TBD at 12:30 (M5): measured on a quiet machine, Fermium vs Julia vs Python, same
 - **Eigenvalue problems, PDEs, stiff solvers and FFT are Python-backed** (NumPy/SciPy), so `fermium build` refuses the first three.
 - **Integration can still miss a narrow feature that is only partly sampled.** Only the all-zero case warns (D110).
 - **The unit-after-number rule is still the sharpest edge:** `2 g`, `8 K`, `2 b` and `0.25 T` collide with common variable names. They are caught (errors or warnings), but they cost time: 7 of 20 graduate problems hit one.
-- **Matrices stop at 4×4** (a fix is in progress), and there are no lists of vectors.
+- **Matrices go up to 16×16,** with one unit per matrix. There are no lists of vectors, and `solve` can't take a list of unknowns.
 - **The machine was heavily loaded all night,** so benchmark numbers need the quiet-machine re-run.

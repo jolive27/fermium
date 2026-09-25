@@ -23,7 +23,7 @@ Below are the problems beginners meet most often, with the exact message Fermium
 7. [sin needs a plain number](#7-sin-needs-a-plain-number)
 8. [e is the elementary charge](#8-e-is-the-elementary-charge)
 9. [can't show … in …](#9-cant-show-in)
-10. [warning: 'm' after the number means the unit m](#10-warning-m-after-the-number-means-the-unit-m)
+10. ['0.5 m' is ambiguous (a unit name that is also your variable)](#10-05-m-is-ambiguous-a-unit-name-that-is-also-your-variable)
 11. [warning: this is read as a/(b c)](#11-warning-this-is-read-as-ab-c)
 12. [index 4 is out of range](#12-index-out-of-range)
 13. [expected ')' to close '('](#13-missing-parenthesis)

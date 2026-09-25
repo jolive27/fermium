@@ -1380,6 +1380,15 @@ class Parser:
                 self._ambiguous_unit(*c)
             info = None
             if op.value == "/":
+                last = e
+                while isinstance(last, (A.BinOp, A.Neg)) and not last.paren and \
+                        (isinstance(last, A.Neg) or last.implicit):
+                    last = last.operand if isinstance(last, A.Neg) else last.right
+                if isinstance(last, A.Integral) and getattr(last, "div_info", None) is not None and \
+                        last.div_info["tok"] is op and "divisor" not in last.div_info:
+                    last.div_info["divisor"] = r               # `∫ … to E / (2 P0)`: for the checker (D205)
+                    r.limit_div_of = last
+                    last.div_info["div_text"] = self._text(den_start, self.i)
                 warned = self._check_ambiguous_division(e, r, op)
                 info = self._juxt_denominator(r, op, den_start, tight, warned)
             e = self.span(A.BinOp(op.value, e, r), t)
@@ -1650,6 +1659,19 @@ class Parser:
         self._warn_bare_unit(e)
         return e
 
+    def _num_text(self, q, default="2"):
+        """The number of a quantity as it was written (`8.5e28`, not `8.5e+28`), for messages (round 4 #9)."""
+        n = q.value if isinstance(q, A.Quantity) else q
+        return A.num_text(n) if isinstance(n, A.Num) else default
+
+    def _drop_warnings_between(self, line, col0, col1):
+        """An error about a token replaces the warnings the parser gave on the way to it (a lone-unit warning,
+        'reading L as your variable'), which would contradict it (red team round 4 #10, D207)."""
+        ws = self.diags.warnings
+        keep = [w for w in ws if not (w.line == line and w.col is not None and col0 <= w.col <= col1)]
+        if len(keep) != len(ws):
+            ws[:] = keep
+
     def _note_collision(self, q, f):
         """Remember `2 L` (a unit after a number, while L is also a variable), so that a unit error on
         the same line can say why (FRICTION #10)."""
@@ -1674,7 +1696,7 @@ class Parser:
         variable of that name (`2 g`, `2 m v`, `3 V`), is ambiguous, and an error: say which you mean.
         Compound units (`9.81 m/s²`, `3 m²`, `2 kg m`) are unambiguous and stay units."""
         from .units import lookup_unit, dim_name
-        num = A.num_text(q.value) if isinstance(q.value, A.Num) else "2"
+        num = self._num_text(q)
         u = lookup_unit(f.name)
         words = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
                  "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
@@ -1683,6 +1705,8 @@ class Parser:
         what = words.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
         whose = f"the {f.name} from 'where'" if where else (
             f"the unknown {f.name} of this solve" if f.name in self.solve_unknowns else f"your variable {f.name}")
+        self._drop_warnings_between(f.line, q.col or 0, max(self.tok.col or 0, f.col or 0) if
+                                    self.tok.line == f.line else 10 ** 9)
         raise self.error(f"'{num} {f.name}' is ambiguous: right after a number, {f.name} is a unit ({what}), "
                          f"but {f.name} is also {whose}",
                          tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
@@ -1700,12 +1724,18 @@ class Parser:
             then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
             if f.name in self.known and f.name not in self.warned_units and not then_mul:
                 self.warned_units.add(f.name)
-                num = A.num_text(q.value) if isinstance(q.value, A.Num) else "2"
-                who = "the unknown" if f.name in self.solve_unknowns else "your variable"
-                self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not {who} {f.name}",
+                num = self._num_text(q)
+                ut = q.unit.text.strip() or f.name          # the whole unit as written: `m^-3`, not `m` (#9)
+                alt = ""
+                if f.exp != 1:
+                    from .units import _fmt_exp
+                    alt = f"1/{f.name}{_fmt_exp(-f.exp)}" if f.exp < 0 else f"{f.name}{_fmt_exp(f.exp)}"
+                    alt = f" (or [{alt}])" if alt and alt != ut else ""
+                who = "the unknown" if f.name in self.solve_unknowns else "your variable"    # D211
+                self.diags.warn(f"'{num} {ut}' is the unit {ut}, not {who} {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
-                                hint=f"that's fine if you meant the unit (write {num} [{f.name}] to say so); for "
-                                     f"{num} × {who} write {num}*{f.name}")
+                                hint=f"that's fine if you meant the unit (write {num} [{ut}]{alt} to say so); for "
+                                     f"{num} × {who} write {num}*{ut}")
 
     def _warn_unit_then_term(self, e):
         """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
@@ -2368,18 +2398,26 @@ class Parser:
                 hi = self.sum()
             finally:
                 self.limit_start = saved
-            self._warn_sum_in_limit(hi_start)
+            sum_info = self._sum_in_limit(hi_start, hi)
+            div_tok = None
             if self.at_op("/") and self.tok.ws_before and self._divisor_follows() and \
                     not self._limit_is_infinite(hi_start):
-                self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
-                                tok=self.tok, hint="to divide the limit, write it without spaces (to L/2) or in "
-                                                   "parentheses (to (L / 2))")
+                div_tok = self.tok
+            node = self.span(A.Integral(integrand, var, lo, hi), t)
+            # Both limit warnings (D112, D173) are decided by the checker, which knows whether each reading
+            # has consistent units (red team round 4 #6, #7, D205)
+            node.sum_info = sum_info
+            if div_tok is not None:
+                node.div_info = {"tok": div_tok, "hi_text": self._text(hi_start, self.i)}
+            return node
         return self.span(A.Integral(integrand, var, lo, hi), t)
 
-    def _warn_sum_in_limit(self, start):
+    def _sum_in_limit(self, start, hi):
         """`2 ∫ x dx from 0 to 1 - π`: the ' - π' is part of the upper limit (the integral goes up to 1 - π),
-        which on paper usually means (2 ∫ …) - π.  The parse is kept (`to L - a` is a limit), but a spaced
-        binary + or - at the top level of the upper limit warns (gauntlet #67, D173, like D112's '/')."""
+        which on paper usually means (2 ∫ …) - π.  The parse is kept (`to L - a` is a limit); a spaced binary
+        + or - at the top level of the upper limit is recorded here, and the checker warns when both readings
+        have consistent units (gauntlet #67, D173; red team round 4 #6, D205).  Returns None or a dict with
+        the token, the texts, and the head and first rest term of the limit's AST."""
         depth = bars = 0
         for j in range(start, self.i):
             tk = self.toks[j]
@@ -2394,14 +2432,15 @@ class Parser:
                 pv = self.toks[j - 1]
                 if pv.kind == "OP" and pv.value not in (")", "]", "}", "|"):
                     continue                              # `to 2 * -1`: a sign, not a sum
-                limit = self._text(start, self.i)
-                rest = self._text(j, self.i)
-                head = self._text(start, j)
-                self.diags.warn(f"the ' {rest}' is part of the upper limit: this integral goes up to {limit}",
-                                tok=tk, hint=f"if that's what you meant, write  to ({limit});  to "
-                                             f"{'add' if tk.value == '+' else 'subtract'} it after integrating, "
-                                             f"write  (… to {head}) {rest}")
-                return
+                # the first split of the left spine of the sum: head = its left, rest = its right
+                split, n = None, hi
+                while isinstance(n, A.BinOp) and n.op in ("+", "-") and not n.paren and not n.implicit:
+                    split, n = n, n.left
+                return {"tok": tk, "limit": self._text(start, self.i), "rest": self._text(j, self.i),
+                        "head": self._text(start, j), "op": tk.value,
+                        "head_node": split.left if split is not None else None,
+                        "rest_node": split.right if split is not None else None}
+        return None
 
     def _divisor_follows(self):
         """After a spaced '/' that ended an upper limit: is a divisor next (a number, a name, or a
@@ -2471,6 +2510,14 @@ class Parser:
                     return e.value, var
                 u = A.UnitExpr(e.unit.factors[:-1], e.unit.text[:-len(f.name)].rstrip()).at(e.unit)
                 return A.Quantity(e.value, u, e.bracket).at(e), var
+        if isinstance(e, A.Neg) and not e.paren:
+            # `∫ x * -2 dx`: the dx sits inside the negated factor (red team round 4 #5)
+            inner, var = self._split_dvar(e.operand)
+            if var is not None:
+                n = A.Neg(inner)
+                n.line, n.col, n.length = e.line, e.col, e.length
+                return n, var
+            return e, None
         if isinstance(e, A.BinOp) and not e.paren:
             if e.implicit and isinstance(e.right, A.Name) and e.right.name.startswith("d") \
                     and len(e.right.name) > 1:
@@ -2518,6 +2565,8 @@ class Parser:
             nt = self.next()
             nt.role = "unit"
             name = nt.raw
+            if not explicit:
+                self._check_prefix_split(nt)
             exp = self.unit_exponent()
             f = A.UnitFactor(name, exp * sign)
             f.line, f.col, f.length = nt.line, nt.col, len(nt.raw)
@@ -2545,7 +2594,7 @@ class Parser:
                           self.peek().kind == "NAME" and self.peek().value in self.known)
             if t.kind == "OP" and t.value == "/" and not spaced_var and (unit_name_here(1) or (
                     self.peek().kind == "OP" and self.peek().value == "(" and (
-                        explicit or unit_name_here(2)))):
+                        explicit or (unit_name_here(2) and self._bracket_all_units(self.i + 1, t.ws_before))))):
                 self.next()
                 factor(-1)
             elif t.kind == "OP" and t.value == "/" and explicit and self.peek().kind == "NUM":
@@ -2572,6 +2621,58 @@ class Parser:
         u.length = max(1, self.toks[self.i - 1].end - start.start)
         u.juxt_join = juxt_join
         return u
+
+    # Prefixed units a physics course uses all the time: never read as two of your variables (D203)
+    COMMON_PREFIXED = frozenset("""
+        kg mg μg ug km cm mm μm um nm pm fm dm ms μs us ns ps fs kHz MHz GHz THz mV kV MV μV uV mA μA uA nA pA
+        kW MW GW mW μW kJ MJ GJ mJ μJ keV MeV GeV TeV meV kPa MPa GPa hPa mL μL mmol kmol μmol mT μT uT nT μF uF
+        nF pF mF mH μH uH kΩ MΩ mΩ kohm Mohm μC uC nC pC mC mK μK nK kN mN kBq MBq GBq mGy mSv μSv uSv mbar kcal
+        Myr Gyr kyr kpc Mpc Gpc mrad μrad krad dB""".split())
+
+    def _check_prefix_split(self, nt):
+        """`E = 1.5 kT` with your own k and T is the unit kilotesla, while `k T` was meant: a prefixed unit
+        that spells two of your variables (prefix and unit) is almost never meant as the unit, unless it is
+        a unit everybody uses (`500 nm` next to a refractive index n and an order m).  Warn, like a lone
+        unit that is also your variable (D7 rule 5; red team round 4 #3, D203)."""
+        from .units import lookup_unit, PREFIXES, _UNITS
+        name = nt.raw
+        if name in _UNITS or name in self.known or name in self.COMMON_PREFIXED or lookup_unit(name) is None:
+            return
+        for p in sorted(PREFIXES, key=len, reverse=True):
+            rest = name[len(p):]
+            if name.startswith(p) and rest and p in self.known and rest in self.known:
+                if name in self.warned_units:
+                    return
+                self.warned_units.add(name)
+                k = self.toks.index(nt)
+                num = self.toks[k - 1].raw if k > 0 and self.toks[k - 1].kind == "NUM" else "2"
+                u = lookup_unit(name)
+                from .units import dim_name
+                what = dim_name(u.dim).split(" [")[0]
+                self.diags.warn(f"'{num} {name}' is the unit {name} (the prefix {p} on the unit {rest}: a "
+                                f"{what}), not your {p} times your {rest}", tok=nt,
+                                hint=f"write  {num} {p} {rest}  (with a space) for {num} × {p} × {rest}, or  "
+                                     f"{num} [{name}]  if you mean the unit")
+                return
+
+    def _bracket_all_units(self, j, spaced):
+        """At the '(' at token j after a unit and '/': does the bracket hold only unit names (and exponents,
+        `*`, `/`)?  With a spaced '/' (D7 rule 4), a name that is your variable makes it a division too:
+        `60 s / (m c_w)` divides by your m and c_w, while `9.81 kg / (m s²)` without your m stays the unit
+        (red team round 4 #4, D204)."""
+        k = self._match(j)
+        if k is None:
+            return True          # let the unit parser report the missing ')'
+        for m in range(j + 1, k):
+            tk = self.toks[m]
+            if tk.kind == "NAME":
+                if not is_unit_name(tk.raw) or (spaced and tk.value in self.known):
+                    return False
+            elif tk.kind == "OP" and tk.value not in ("^", "/", "*", "(", ")", "-"):
+                return False
+            elif tk.kind not in ("NAME", "OP", "SUP", "NUM"):
+                return False
+        return True
 
     def _no_hour_h(self, t, explicit, start):
         """`36 km/h` and `[km/h]`: h is Planck's constant, not the hour, so dividing a unit by it is almost always

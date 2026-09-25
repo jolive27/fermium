@@ -742,6 +742,54 @@ The rule (spec §3.4.2), refined:
 ## D199. Printed formulas: ∂²f/∂x², and no `2 g` for your variable g (gauntlet #59, E14, M13)
 - **What:** a second partial derivative is named `∂²term/∂x²` (it was `∂2term/∂x2`), and a printed formula never puts a number right before a variable whose name is also a unit: `g/√(2·g h)` (ASCII `2*g`), not `g/√(2 g h)`, which pasted back into a program means 2 grams. Other products print as before (`2x`, `m v`).
 
+## D200. `absolute 1e-6 °C` is a temperature step (red team round 4 #1)
+- **What:** an absolute tolerance written in °C or °F is read as a size of error, a temperature difference: `absolute 1e-6 °C` is 10⁻⁶ K, as `absolute 1e-6 K` is. Before, D12's reading made it the absolute temperature 273.15 K + 10⁻⁶ K, which switched the error control off (Newton's cooling gave 26.65 °C instead of 23.49 °C, silently, in the JIT, the interpreter and `fermium build`).
+- **Why:** a tolerance is always a difference; the same choice as `± 0.5 °C` (D120). `tolerance` is a plain number, so it has no such question.
+- **Alternative:** refusing °C/°F in `absolute` (an extra error for a form whose meaning is clear).
+
+## D201. An absolute tolerance at least as large as the starting values warns (red team round 4 #18)
+- **What:** each `absolute` value is compared with the largest initial value (written as a constant) of the unknowns in its units. If it is at least as large, the solve warns: *this absolute tolerance is 1000× the largest starting value in its units (1 m), so the error control is effectively off …*, hint *… make it much smaller than the values … (check the unit: mm, not km?)*. Unknowns that all start at 0 give no scale and nothing is said (an abundance growing from 0 with `absolute 1e-16`).
+- **Why:** `absolute 1 km` for a 1 m oscillator (a typo for mm) printed 89.2 m for −0.839 m with no message. A warning, not an error: the value is legal and the threshold is a heuristic.
+- **Alternatives:** compare with the solution's range after the run (needs a run-time check in three back ends for a compile-time mistake); a stricter threshold like 1 % of the start (would fire on deliberately loose runs).
+
+## D202. Hz and rev/rpm at the Python boundaries warn like `in Hz` (red team round 4 #2)
+- **What:** `use python` functions with a parameter declared `[Hz]` (or `[rpm]`, `[rev/s]`) and Fermium functions called from Python through `fermium.compile` with such a parameter now give the D95 warning when the argument is in the other family: `np.positive(60 rpm)` for `f [Hz]` warns that 1 rpm is 0.10472 Hz here, not 0.0166667 Hz; `mod.g(Q(1, "Hz"))` for `w [rpm]` warns that 1 Hz is 9.5493 rpm, not 60 rpm. The warning text comes from one helper (`checker.hz_angle_mixup`) shared with `in`. From Python it goes to stderr (unless `warnings=False`) and to `mod.warnings`.
+- **Why:** the value is still converted by the rad = 1 rule (D6, D27), which is self-consistent; what was missing was the warning that native code gives, and Python code receives the converted number with no trace.
+- **Alternative:** converting cycles ↔ turns (Hz = rev/s) at the boundary only: the same number would mean different things inside and outside Fermium.
+
+## D203. A prefixed unit that spells two of your variables warns (red team round 4 #3)
+- **What:** right after a number, a prefixed unit whose prefix and unit are both your variables (`1.5 kT` with your k and T: kilotesla) warns: *'1.5 kT' is the unit kT (the prefix k on the unit T: a magnetic field), not your k times your T*, hint *write 1.5 k T (with a space) … or 1.5 [kT] if you mean the unit*. Units that every course uses (`nm`, `kg`, `mV`, `MeV`, `ms`, `kPa`, … listed in `Parser.COMMON_PREFIXED`) never warn, so `500 nm` next to a refractive index n and an order m, or `2 kg` next to a spring constant k and g, stay quiet.
+- **Why a warning, not the D7 error:** it is the lone-unit case of D7 rule 5 (a unit alone after a number is the unit, with a warning), and the output (`1.5 kT`) already shows the unit, so the warning is enough to catch the eye.
+- **Alternatives:** an error (would need an exception list anyway); checking every prefixed unit (fires on `2 kg` in half the mechanics programs).
+
+## D204. `/ (…)` after a unit is a unit denominator only if the bracket holds units (red team round 4 #4)
+- **What:** after a unit, `/` followed by a bracket continues the unit only when every name in the bracket is a unit name, and, with a space before the `/` (D7 rule 4), none of them is your variable. So `P 60 s / (m c_w)` divides by your m and c_w (14.3 K), and `9.81 kg / (m s²)` or `3 J/(kg K)` stay units. Before, the first name decided and the parser stopped with "expected ')'".
+- **Alternative:** backtracking on the parse error (hides real errors in units written in brackets).
+
+## D205. The integral-limit warnings (D112, D173) are decided by the units (red team round 4 #6, #7)
+- **What:** the parser still reads `to T - t0` as the limit and `to E / (2 P0)` as a division of the whole integral (D34, D173), but it only records these places; the checker decides:
+  - **Both readings type-check** → the old warning. For `+`/`-` that is when the integral has the integration variable's units (a dimensionless integrand, like δ = 2∫… − π); for `/`, when the divisor is a plain number (`to 2π / (2π)`, `to 1 / (1 + z)`).
+  - **Only the written reading type-checks** → no warning: `∫ v dt from 0 s to T - t0` is 24 m (the other reading would be metres minus seconds).
+  - **The written reading fails, the other works** → the error says how to write it: `∫ P0 dt from 0 s to E / (2 P0)` stops with *the limits of this integral are time [s] and energy [J]: the ' / ' after the upper limit divides the whole integral, not the limit*, hint *to divide the limit, write to (E / (2 P0))*; `to T - x0` with x0 in metres keeps the unit error with the hint *… to subtract it after integrating, write (… to T) - x0*.
+- **Why not choose the reading that type-checks silently in the third case:** D7's rejected alternative: the meaning would depend on units defined far away. An error that names the fix costs one edit.
+- **Limitation:** factors in front of the integral (`k ∫ … to T - t0`) are not included in the "other reading" check for `+`/`-`.
+
+## D206. PDE step control measures the error against the solution's range and starts after a jump's layer (red team round 4 #8)
+- **What:** (1) the step-doubling estimate (D131, D183) is now relative to the solution's range (largest − smallest value, boundary values included) instead of its largest absolute value, so a problem in °C, in K, or with an offset is judged the same way; a constant solution falls back to its size. (2) When the initial value and a Dirichlet boundary value disagree at t0 (a rod at 0 K whose end is held at 80 K), checks before t0 + 10 h²/D are skipped: there the jump is a layer thinner than a grid cell, which no time step resolves and which doesn't affect later times. Solutions without such a jump are checked exactly as before (the D183 fast-mode cases still warn).
+- **Result:** the textbook step change gives u(0.1 m, 1000 s) = 65.8435 K (Fourier series 65.84355 K) with no warning, in ~2 s instead of ~3 s; 20 °C/100 °C gives 85.8435 °C, the same.
+- **Alternatives:** raising the tolerance (hides real errors); smoothing the initial data (changes the problem).
+
+## D207. The unit-after-number messages quote the source; an error replaces the warnings before it (red team round 4 #9, #10)
+- **What:** the D7 lone-unit warning quotes the number as written and the whole unit (`'8.5e28 m^-3' is the unit m^-3 …`, hint `write 8.5e28 [m^-3] (or [1/m³])`), not `8.5e+28 [m]`. When the D7 rule 5 error ("'5000 m' is ambiguous") is raised, warnings the parser gave on the way to it for the same quantity ("'5000 m' is the unit m", "reading 'L' as your variable L") are dropped, since they contradict the error.
+
+## D208. A cancellation down to rounding noise leaves no uncertainty (red team round 4 #11)
+- **What:** when two contributions of one error source are added (`uncertain._sum2`, used by every +, −, ×, ÷) and the sum is below 10⁻¹³ of the terms, it is 0. So `T / sqrt(L)` with T = 2π√(L/g) prints `2.01 ± 0 s/m^(1/2)` and `(y / 3) * 3 - y` prints `0 ± 0 m`. A value with σ = 0 prints by the default rule of plain numbers (D11): `2.01 ± 0`, not 20 digits.
+- **Why:** first-order propagation can only be as exact as double precision; a 10⁻¹⁸ σ from rounding in ∂f/∂x is not a measurement uncertainty, and D121's "value to the second digit of σ" turned it into 20 printed digits.
+- **Alternative:** a relative threshold on the final σ (would also drop real, very small relative uncertainties, like a clock's 10⁻¹⁸).
+
+## D209. Slicing a data table is an error about tables (red team round 4 #17)
+- **What:** `fit … to data[2:5]` stops with *a data table can't be sliced with [a:b]; its columns are lists, and those can be*, hint *to fit some of the rows, slice the columns and make a table of them: fit … to table(L = data.L[2:5], T = data.T[2:5])* (D193's `table(…)`; tested). Slicing a table directly would need a table-valued slice in all three back ends, for a form that `table(…)` already covers.
+
 ## D210. A defined function's derivative in a solve is a value (gauntlet #87)
 - **What:** in `solve` (ODEs and eigenvalue problems), a derivative of a function or ODE solution that already exists, applied to an argument (`f'(r)`, `d/dr f(r)`, `V'(x)`), is a value, not an unknown. Only derivatives of the other names count as unknowns: `_find_derivs` in fermium/solve.py takes the set of such known names (`_known_called`: called only with an argument, never bare, defined in scope, not named by a boundary/initial condition), and both `_check_solve` and `check_eigen` (fermium/m3solve.py) use it. The root-finding rule of #3 (`solve I'(θ) = 0 for θ …`) is unchanged.
 - **Why:** writing the spin–orbit term as `f'(r)` is how the paper writes it; the unknown is always the function with the boundary or initial conditions, and a defined function is never an unknown.

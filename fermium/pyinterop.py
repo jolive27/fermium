@@ -173,6 +173,9 @@ class PythonMixin:
                 self.unify_or(a.ty.dim, unit.dim, lambda: f"{display} expects {pname} in {unit.name} (declared on "
                               f"line {ref.line}), but got {self.desc(a.ty.dim)}", node)
                 facs.append(float(unit.factor))
+                if getattr(a, "hint", None) is not None:
+                    # Python receives the number in the declared unit: 60 rpm as [Hz] is 2π, not 1 (D95, D202)
+                    self._warn_angle_in_hz(a, unit, node, where=f"passing {pname} to {display} as [{unit.name}]: ")
             ints.append(bool(is_int))
             pnames.append(pname)
         runit = sig["unit"] if sig is not None else None

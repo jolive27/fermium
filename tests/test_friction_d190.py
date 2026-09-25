@@ -461,7 +461,8 @@ print a² ω² in J/kg
 def test_warning_quotes_the_number_as_written():
     from conftest import warnings_of
     ws = warnings_of("m = 2 kg\nn = 2.50e19 m⁻³")
-    assert any("'2.50e19 m' is the unit m" in w for w in ws)
+    # the whole unit is quoted, so the hint's [m⁻³] keeps the density a density (red team round 4 #9, D207)
+    assert any("'2.50e19 m⁻³' is the unit m⁻³" in w for w in ws)
     assert not any("2.5e+19" in w for w in ws)
 
 
