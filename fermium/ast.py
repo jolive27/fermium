@@ -227,9 +227,16 @@ class Where(Node):
 
 @dataclass(eq=False)
 class Uncertain(Node):
-    """`a ± b` -- reserved for the future (see spec §3.7)."""
+    """`a ± b`: a measured value with its standard uncertainty (D120).  `5.0 ± 0.2 m` gives the unit to both."""
     value: Node
     err: Node
+
+
+@dataclass(eq=False)
+class Propagate(Node):
+    """`propagate montecarlo [N samples]` + a block of formulas (D123)."""
+    samples: Node | None
+    body: list
 
 
 # ---------------------------------------------------------------- statements

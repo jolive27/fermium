@@ -25,6 +25,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 18. [Grammar summary](#18-grammar-summary)
 19. [Known limitations](#19-known-limitations)
 20. [Numerics: random numbers, Fourier transforms, eigenstates, PDEs](#20-numerics-random-numbers-fourier-transforms-eigenstates-pdes)
+21. [Uncertainties: ±, error propagation, Monte Carlo](#21-uncertainties--error-propagation-monte-carlo)
 
 ---
 
@@ -640,9 +641,9 @@ plot data.T vs data.L to "pendulum.png"
 - **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
-  - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables, and `err(g)` is g's standard error (same units; NaN if it couldn't be estimated), so it can be carried into later results: `print err(g)/g`. Values are shown to the second digit of their standard error.
+  - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables (in a program that uses `±`, uncertain values with the fit's covariance, §21), and `err(g)` is g's standard error (same units; NaN if it couldn't be estimated), so it can be carried into later results: `print err(g)/g`. Values are shown to the second digit of their standard error.
 - **Plots:** each form saves a PNG with labelled axes (units included) and prints where it was saved.
-  - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines.
+  - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines. Uncertain values (§21) are drawn with error bars.
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
@@ -757,7 +758,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | x² | `x^2` | `\^2` |
 | ∫ | `integral` | `\int` |
 | ∂ | `partial` | `\partial` |
-| ± | `+-` (reserved for uncertainties) | `\pm` |
+| ± | `+-` (uncertainties, §21) | `\pm` |
 | ° | `deg` | `\deg` |
 | °C | `degC` | `\celsius` |
 | · × | `*` | `\cdot` `\times` |
@@ -803,6 +804,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `fft_re(xs) fft_im(xs) ifft(re, im) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20) |
 | `argmax(xs) argmin(xs)` | the position (1-based) of the largest / smallest element |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
+| `value(x) uncertainty(x) rel(x)` | the parts of an uncertain value `x = 1.20 ± 0.01 m` (§21); `rel` is σ/\|x\| |
 
 ```fermium
 print besselj(0, 2.404825557695773) to 3 digits    # a zero of J₀
@@ -968,7 +970,7 @@ These are known and not yet fixed. None of them is silent about units.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
-- **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
+- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, don't work in the REPL or Jupyter, and can't go directly into vectors, integrals or ODEs (use `propagate montecarlo`). `fit` doesn't weight points by their uncertainties.
 - **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
   has imported even if the file changes (restart the REPL to see the change).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
@@ -1113,3 +1115,56 @@ print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m
   - second order in t (waves): the explicit central-difference scheme. It needs c dt ≤ h (Courant number ≤ 1); by default Fermium takes the largest such step, where it is exact for a constant wave speed.
 - **What is supported:** one unknown; linear equations (each term has one factor u, ∂u/∂x or ∂²u/∂x², like `D ∂²u/∂x² - k u + S(x)`); coefficients that depend on x but not on t (a source term without u may depend on t). All units are checked before the program runs, like every other equation.
 - These run in Python (NumPy/SciPy), so `fermium build` refuses them for now. A narrow feature in a wide range can be missed by `∫` (§19): integrate over the part where the solution lives.
+
+## 21. Uncertainties: ±, error propagation, Monte Carlo
+
+A measured value is written with `±` (ASCII `+-`). The unit at the end belongs to both numbers:
+
+```fermium
+L = 1.20 ± 0.01 m
+T = (2.21 ± 0.02) s
+g = 4π² L / T²
+print g, g in ft/s²
+print value(g), uncertainty(g), rel(g) to 2 digits
+print L - L, L / L
+print 5.0 ± 3%, 20.0 ± 0.5 °C, 1.20 m ± 1 cm
+```
+
+- **Writing them:** `1.20 ± 0.01 m`, `(1.20 ± 0.01) m` and `1.20 m ± 1 cm` are the same measurement. `x ± 3%` is relative. For a temperature the uncertainty is a difference (`20.0 ± 0.5 °C` is ±0.5 K). Both parts need the same units; `1.20 m ± 0.01` is an error. `±` binds tighter than `+` and `-` and looser than `*` and `/`. `(a ± b) ± c` adds a second, independent uncertainty (statistical and systematic).
+- **Lists:** `[0.90 s, 1.27 s] ± 0.02 s` (or a list of uncertainties) makes each element its own measurement; `data.T ± 0.02 s` works on a column. `mean`, `sum` and `Σ` propagate.
+- **Propagation:** first order (the standard lab-course rule), through every operator, math function, user function, derivative and sum, with **correlations tracked exactly**: each `±` is an independent source, and a value remembers how much of each source it contains. So `L - L` is `0 ± 0`, and `L L` has twice the relative uncertainty of L, while the product of two independent measurements has √2 times. Units are checked as for plain numbers.
+- **Printing:** the uncertainty is rounded to 2 significant figures and the value to the same decimal place: `9.70 ± 0.19 m/s²`, `(6.674 ± 0.015)×10⁻¹¹`. `in unit` converts both. The default precision and `to N digits` don't apply to uncertain values.
+- **Parts:** `value(x)`, `uncertainty(x)` and `rel(x)` (σ/|x|) are plain numbers. `err(x)` is the same as `uncertainty(x)` (and still the standard error of a fitted parameter).
+- **Comparisons** (`<`, `==`, `if`, `min`, `max`) use the value.
+- **Fits:** in a program that uses uncertainties, the parameters of `fit` are uncertain values with the fit's standard errors and the correlations between them, so a later `A + B` or `τ ln(2)` has the right uncertainty. (In a program without any `±`, fits work as in §11.) The fit itself doesn't weight the points by their uncertainties.
+- **Plots:** a list of uncertain values is drawn with error bars, a function whose value is uncertain as a curve with a ±1σ band.
+
+### Monte Carlo: propagate montecarlo
+
+When a formula is too curved for the linear rule, simulate the measurement instead. The block runs its formulas N times (default 100 000) with every uncertain input drawn from a normal distribution, and each result becomes mean ± standard deviation:
+
+```fermium
+v = 10.0 ± 0.1 m/s
+θ = 45 ± 5°
+print "linear:", v² sin(2θ) / g_n
+propagate montecarlo 20000 samples
+    R = v² sin(2θ) / g_n
+print "Monte Carlo:", R
+```
+
+- At 45° the slope of the range is zero, so the linear rule ignores the angle; the simulation shows the range getting shorter and more spread out.
+- The samples come from the seeded generator of §20: the same program gives the same numbers, and `seed(n)` before the block changes them. Correlated inputs (say g and a later formula that uses g) are sampled consistently, and the results stay linked to the inputs, so later formulas keep the correlations.
+- Only formulas (`name = …`, `if`, loops, `solve`) go in the block: no `print`, `plot` or `fit`. A block that needs one sample at a time (an `if` on a sampled value, an integral, an ODE) runs more slowly, with a default of 10 000 samples.
+- **Integrals, `solve` (ODEs and equations) and vectors** can't take uncertain values directly; they stop with a message that points here. Inside `propagate montecarlo` they work:
+
+```fermium
+k = 0.50 ± 0.05 1/s
+propagate montecarlo 2000 samples
+    solve x' = -k x with x(0 s) = 1.0 m for t from 0 s to 2 s
+    x2 = x(2 s)
+print x2
+```
+
+### How it runs
+
+A program that uses `±`, `value`/`uncertainty`/`rel` or `propagate montecarlo` is run by Fermium's reference interpreter instead of native code (the uncertain values are Python objects with a value and one entry per error source). It is slower than native code, `fermium build` refuses such a program, and the REPL and the Jupyter kernel don't support uncertainties yet. See DECISIONS.md D120–D124.

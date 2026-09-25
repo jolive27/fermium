@@ -20,7 +20,7 @@
     "keyword": {
       "patterns": [
         { "name": "keyword.control.fermium", "match": "\\b(if|else|elif|then|for|from|to|step|in|while|return|break|continue|where|and|or|not|assert)\\b" },
-        { "name": "keyword.other.fermium", "match": "\\b(print|plot|vs|solve|with|fit|load|integral|partial|sqrt|cbrt|tolerance|digits)\\b" },
+        { "name": "keyword.other.fermium", "match": "\\b(print|plot|vs|solve|with|fit|load|integral|partial|sqrt|cbrt|tolerance|digits|propagate|montecarlo|samples)\\b" },
         { "name": "keyword.operator.calculus.fermium", "match": "[∫∂√∛]|\\bd/d[\\p{L}_]+" },
         { "name": "constant.language.boolean.fermium", "match": "\\b(true|false)\\b" }
       ]

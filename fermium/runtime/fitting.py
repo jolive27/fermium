@@ -43,7 +43,8 @@ def _initial_guess(f, y, guess, scales=_POW10):
     return p
 
 
-def least_squares_fit(f, y, guess):
+def least_squares_fit(f, y, guess, extra=None):
+    """extra: a dict that receives the covariance matrix of the parameters as extra["cov"] (D124)."""
     y = np.asarray(y, dtype=float)
     n, k = len(y), len(guess)
     if n < k:
@@ -72,7 +73,7 @@ def least_squares_fit(f, y, guess):
             res = cand
     if res is None:
         raise FermiumRuntimeError("the fit failed: the model can't be evaluated at the starting guesses")
-    return _finish(res, res.x, res.fun, n, k)
+    return _finish(res, res.x, res.fun, n, k, extra)
 
 
 def _run(least_squares, resid, p0, x_scale, n, k):
@@ -80,7 +81,7 @@ def _run(least_squares, resid, p0, x_scale, n, k):
                         gtol=1e-14, max_nfev=20000)
 
 
-def _finish(res, best, r, n, k):
+def _finish(res, best, r, n, k, extra=None):
     rss = float(np.dot(r, r))
     dof = max(1, n - k)
     errs = [None] * k
@@ -88,6 +89,8 @@ def _finish(res, best, r, n, k):
         J = res.jac
         cov = np.linalg.inv(J.T @ J) * (rss / dof)
         errs = [math.sqrt(cov[i, i]) if cov[i, i] >= 0 else None for i in range(k)]
+        if extra is not None:
+            extra["cov"] = cov
     except np.linalg.LinAlgError:
         pass
     return list(best), errs, math.sqrt(rss / n)

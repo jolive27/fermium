@@ -180,8 +180,7 @@ class Parser:
             t = self.tok
             hint = None
             if t.kind == "OP" and t.value == "+-":
-                raise self.error("uncertainties (±) are planned for a future version of Fermium",
-                                 hint="for now write the value without its uncertainty")
+                raise self.error("± needs a value on its left, like  L = 1.20 ± 0.01 m")
             if t.kind == "OP" and t.value == "=":
                 hint = "use == to compare two values; = stores a value in a variable"
             if t.kind == "OP" and t.value in ("+", "-") and self.peek().kind == "OP" and self.peek().value == t.value:
@@ -228,6 +227,9 @@ class Parser:
             if end_line:
                 self.end_statement()
             return s
+        if t.kind == "NAME" and t.value == "propagate" and self.peek().kind == "NAME" and \
+                self.peek().value in ("montecarlo", "monte_carlo", "MonteCarlo"):
+            return self.propagate_stmt()
         if t.kind == "NAME" and t.value == "units" and self.peek().kind == "NAME" and \
                 self.peek().value in ("natural", "nuclear", "astro", "SI"):
             return self.units_stmt(end_line)
@@ -275,6 +277,25 @@ class Parser:
         if end_line:
             self.end_statement()
         return s
+
+    def propagate_stmt(self):
+        """propagate montecarlo [N [samples]] + an indented block (or ':' and one formula) (D123)."""
+        t = self.next()
+        self.next()
+        n = None
+        if not (self.at_op(":") or self.tok.kind in ("NEWLINE", "EOF")):
+            if self.tok.kind == "NUM" or self.tok.kind == "NAME" and self.peek().kind == "NAME":
+                k = self.next()        # `100000 samples`, `N samples`: not a number with a unit
+                n = A.Num(k.value, k.sigfigs).at(k) if k.kind == "NUM" else A.Name(k.value).at(k)
+            else:
+                n = self.sum()
+            if self.tok.kind == "NAME" and self.tok.value in ("samples", "sample"):
+                self.next()
+        if not (self.at_op(":") or self.tok.kind == "NEWLINE"):
+            raise self.error("write  propagate montecarlo 100000 samples  and put the formulas on the indented "
+                             "lines below it")
+        body = self.block()
+        return self.span(A.Propagate(n, body), t)
 
     def units_stmt(self, end_line=True):
         """units natural(ħ = c = 1) | units nuclear | units astro | units SI, optionally with ':' + a block (D60)."""
@@ -1029,15 +1050,30 @@ class Parser:
 
     def sum(self):
         t = self.tok
-        e = self.product()
-        while self.tok.kind == "OP" and self.tok.value in ("+", "-", "+-"):
+        e = self.pm_term()
+        while self.tok.kind == "OP" and self.tok.value in ("+", "-"):
             op = self.next()
-            if op.value == "+-":
-                raise FermiumError("uncertainties (±) are planned for a future version of Fermium",
-                                   op.line, op.col, len(op.raw),
-                                   hint="for now write the value without its uncertainty, e.g. 5.0 m")
-            r = self.product()
+            r = self.pm_term()
             e = self.span(A.BinOp(op.value, e, r), t)
+        return e
+
+    def pm_term(self):
+        """a ± b binds tighter than + and - and looser than * and / (D120): 2 x ± 0.1 is (2 x) ± 0.1."""
+        t = self.tok
+        e = self.product()
+        while self.tok.kind == "OP" and self.tok.value == "+-":
+            op = self.next()
+            if self.tok.kind in ("NEWLINE", "EOF", "DEDENT") or self.at_op(")") or self.at_op(","):
+                raise self.error("± needs the uncertainty after it, like  L = 1.20 ± 0.01 m", op)
+            r = self.product()
+            if isinstance(e, A.Uncertain) and not e.paren:
+                raise self.error("a value can only have one ±; to add a second (independent) uncertainty, write  "
+                                 "(a ± b) ± c", op)
+            # `5.0 ± 0.2 m`: the unit written after the uncertainty belongs to both numbers
+            if isinstance(e, A.Num) and not e.paren and isinstance(r, A.Quantity) and not r.paren and \
+                    isinstance(r.value, A.Num) and not r.bracket and r.unit.text.strip() != "%":
+                e = A.Quantity(e, r.unit).at(e)
+            e = self.span(A.Uncertain(e, r), t)
         return e
 
     def product(self):
@@ -1226,6 +1262,10 @@ class Parser:
     def juxt(self):
         t = self.tok
         e = self.power()
+        if isinstance(e, A.Uncertain) and e.paren and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and \
+                self.tok.value not in self.known and not self._is_call_like():
+            u = self.unit_expr(explicit=False)          # (5.0 ± 0.2) m: the unit applies to both (D120)
+            e = self.span(A.Quantity(e, u), t)
         while True:
             if self.at_op("[") and self.tok.ws_before and self._bracket_is_unit():
                 u = self.bracket_unit()
@@ -1558,7 +1598,7 @@ class Parser:
                 self.expect_op("|", "to close the absolute value |x|")
                 return self.span(A.Abs(e), t)
             if t.value == "+-":
-                raise self.error("uncertainties (±) are planned for a future version of Fermium")
+                raise self.error("± needs a value on its left, like  L = 1.20 ± 0.01 m")
         if t.kind == "NEWLINE" or t.kind == "EOF":
             prev = self.toks[self.i - 1] if self.i > 0 else None
             pp = self.toks[self.i - 2] if self.i > 1 else None

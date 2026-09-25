@@ -22,7 +22,7 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 
 ## Features
 - [ ] Matrices with units, and lists of vectors (vectors are done: D24).
-- [ ] Uncertainties (§3.7): the `NumTy` flavour `{value, sigma}` with first-order propagation. `±` is already reserved in the lexer and parser.
+- [x] Uncertainties (§3.7): done in M4 (D120–D124). Open: native code, REPL/Jupyter, weighted fits, uncertain vectors.
 - [ ] Browser playground (Pyodide can't run llvmlite's JIT; could use the reference interpreter, `fermium run --interp`).
 - [ ] Derivatives and partial derivatives of multi-line functions.
 - [ ] Stiff ODE solver (implicit method). Events and root finding in `solve` ("stop when x < 0").

@@ -475,22 +475,22 @@ reserved.fm, line 1: 'step' is a reserved word in Fermium, so it can't be a vari
 
 The reserved words are `if else then for from to step in while return break continue print plot vs solve with fit load and or not where true false integral partial sqrt cbrt assert`. Use `dt`, `my_step`, `v_s`, etc.
 
-**± isn't available yet.**
+**± with the unit in the middle.**
 
 <!-- run as pm.fm -->
 ```
-L = 1.20 +- 0.01
+L = 1.20 m +- 0.01
 ```
 
 <!-- output -->
 ```
-pm.fm, line 1: uncertainties (±) are planned for a future version of Fermium
-    L = 1.20 +- 0.01
-             ^^
-  hint: for now write the value without its uncertainty, e.g. 5.0 m
+pm.fm, line 1: the uncertainty after ± is a plain number (no units) but the value is length [m]; both need the same units
+    L = 1.20 m +- 0.01
+                  ^^^^
+  hint: write the unit once at the end, like  L = 1.20 ± 0.01 m
 ```
 
-Uncertainties are planned. For now, keep the value and its uncertainty in two variables (`L = 1.20 m`, `dL = 0.01 m`), and print `"+/-"` as text.
+The value and its uncertainty need the same units. Write the unit once, at the end: `L = 1.20 ± 0.01 m` (it then belongs to both numbers), or give both a unit: `1.20 m ± 1 cm`. See [Lesson 12](lesson12_lab_report.md).
 
 **A data file that can't be found.**
 
