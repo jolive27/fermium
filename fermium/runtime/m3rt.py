@@ -47,10 +47,11 @@ def solstruct(ts, ys, dys, dim):
 
 def eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname=-1, fmt=-1):
     """fm_eigen: 0 = ok, 1 = solver error (rt.error set), 2 = the equation stopped with its own error."""
-    from .eigen import EigenFail, eigen_solve, singular_text
+    from .eigen import EigenFail, degenerate_text, eigen_solve, singular_text
     try:
         f = compiled_rhs(guard, fn, env, 3)
-        xs, ys, dys, _ = eigen_solve(f, a, b, nstates, grid, "shooting" if method == 1 else "matrix")
+        xs, ys, dys, _ = eigen_solve(f, a, b, nstates, grid, "shooting" if method == 1 else "matrix",
+                                     warn=lambda k, rel: rt.warn_text(degenerate_text(k, rel)))
     except _Inner:
         return 2
     except EigenFail as ex:

@@ -422,7 +422,85 @@ def _numerov_vector(alpha, w, h, E, start):
     return x, lam
 
 
-def eigen_solve(rhs, a, b, nstates, grid=2000, method="matrix"):
+DEGENERATE_REL = 1e-8     # levels closer than this (relative to the largest |E|) count as nearly degenerate (D233)
+
+
+def _sign_changes(p):
+    """Nodes of a grid function: sign changes among the values above 10⁻⁶ of the largest (end tails ignored)."""
+    import numpy as np
+    big = p[np.abs(p) > 1e-6 * float(np.max(np.abs(p)))]
+    return int(np.count_nonzero(np.signbit(big[1:]) != np.signbit(big[:-1])))
+
+
+def _symmetric(raw_alpha, raw_w):
+    """Is the equation symmetric about the middle of the range (V(a + b - x) = V(x) at every grid point)?"""
+    import numpy as np
+    for c in (np.asarray(raw_alpha, dtype=float), np.asarray(raw_w, dtype=float)):
+        if not np.all(np.isfinite(c)):
+            return False
+        tol = 1e-10 * max(float(np.max(np.abs(c))), 1e-300)
+        if float(np.max(np.abs(c - c[::-1]))) > tol:
+            return False
+    return True
+
+
+def degenerate_text(k, rel):
+    """The warning for levels k+1 and k+2 (1-based) that are nearly degenerate (D233)."""
+    from .core import format_number
+    n = k + 1
+    return (f"levels {n} and {n + 1} are nearly degenerate (ΔE/E = {format_number(rel, 2)}); their eigenfunctions "
+            f"ψ{_sub(n)}, ψ{_sub(n + 1)} can be any mixture of the two: use them only through combinations, or "
+            f"break the symmetry")
+
+
+def _sub(n):
+    return str(n).translate(str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉"))
+
+
+def _near_degenerate(energies, vecs, raw_alpha, raw_w, warn=None):
+    """Red team round 6 #5 (D233): two levels whose splitting is below DEGENERATE_REL of the energy scale (a
+    symmetric double well's tunnelling pair) can't be told apart by the eigenvector solvers, which return any
+    mixture of the two.  If the equation is symmetric about the middle of the range, the pair is replaced by its
+    even and odd combinations (the true eigenfunctions have definite parity), the one with fewer nodes first.
+    Otherwise `warn(k, relative splitting)` is called: the pair is only meaningful through combinations."""
+    import numpy as np
+    n = len(energies)
+    if n < 2:
+        return
+    scale = max(abs(float(E)) for E in energies) or 1.0
+    sym = None
+    k = 0
+    while k < n - 1:
+        split = abs(float(energies[k + 1]) - float(energies[k]))
+        if split > DEGENERATE_REL * scale:
+            k += 1
+            continue
+        if sym is None:
+            sym = _symmetric(raw_alpha, raw_w)
+        if not sym:
+            if warn is not None:
+                warn(k, split / scale)
+            k += 2
+            continue
+        p, q = np.asarray(vecs[k], dtype=float), np.asarray(vecs[k + 1], dtype=float)
+        combos = []
+        for parity in (1.0, -1.0):
+            # the combination c₁p + c₂q whose part of the other parity is smallest (least squares)
+            other = np.column_stack([p - parity * p[::-1], q - parity * q[::-1]])
+            c = np.linalg.svd(other, full_matrices=False)[2][-1]
+            v = c[0] * p + c[1] * q
+            v = 0.5 * (v + parity * v[::-1])
+            nv = float(np.linalg.norm(v))
+            if nv == 0.0:
+                break
+            combos.append(v * (float(np.linalg.norm(p)) / nv))
+        if len(combos) == 2:
+            combos.sort(key=_sign_changes)
+            vecs[k], vecs[k + 1] = combos
+        k += 2
+
+
+def eigen_solve(rhs, a, b, nstates, grid=2000, method="matrix", warn=None):
     """Returns (xs, ys, dys, energies): xs the grid (2·grid intervals), ys/dys flattened rows of
     [ψ1, ψ1', …, ψN, ψN', E1 … EN] and their x-derivatives."""
     import numpy as np
@@ -466,6 +544,7 @@ def eigen_solve(rhs, a, b, nstates, grid=2000, method="matrix"):
                 if better is not None:
                     energies[k] = better
             vecs.append(psi)
+    _near_degenerate(energies, vecs, raw_alpha, raw_w, warn)
     cols, dcols = [], []
     for E, psi in zip(energies, vecs):
         f = raw_alpha - raw_w * E                  # ψ'' = f ψ at the grid points themselves

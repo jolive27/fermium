@@ -1776,12 +1776,14 @@ class Interpreter:
 
     def m3_eigen(self, s, fr):
         """solve … lowest N: the same Python solver the compiled code calls (runtime/eigen.py)."""
-        from .runtime.eigen import EigenFail, eigen_solve, singular_text
+        from .runtime.eigen import EigenFail, degenerate_text, eigen_solve, singular_text
         f = self.ode_rhs(s.rhs, fr)
         a, b = self.eval(s.t0, fr), self.eval(s.t1, fr)
         try:
             xs, ys, dys, _ = self.kernel(lambda: eigen_solve(f, a, b, s.nstates, s.grid,
-                                                             "shooting" if s.eig_method == 1 else "matrix"),
+                                                             "shooting" if s.eig_method == 1 else "matrix",
+                                                             warn=lambda k, rel: self.rt.warn_text(
+                                                                 degenerate_text(k, rel))),
                                          getattr(s, "tfmt", -1))
         except EigenFail as ex:
             msg = ex.message if ex.x is None else \
