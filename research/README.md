@@ -14,3 +14,4 @@ computation.
 | 6 | [Age of the universe for Planck 2018 ΛCDM (Friedmann equation)](friedmann_planck2018/) | t₀ = 13.791 Gyr vs 13.787 ± 0.020 Gyr (Planck 2018 VI); z_eq 3419 vs 3387 ± 21; D_C(z = 1100) = 13 866 Mpc | done |
 | 7 | [Rutherford scattering: Monte Carlo vs dσ/dΩ ∝ 1/sin⁴(θ/2) and Geiger–Marsden 1913](rutherford_mc/) | 2×10⁷ α: χ² = 35.6 for 35 bins vs exact Rutherford; N sin⁴(θ/2) flat like Geiger–Marsden (±20 %) | done |
 | 8 | [pp chain vs CNO cycle: crossover temperature](pp_cno_crossover/) | 17.79 MK (Carroll & Ostlie rates), 18.06 MK (Kippenhahn & Weigert) vs ≈ 17–18 MK; ν = 3.9 and 19.9 vs T⁴, T^19.9 | done |
+| 9 | [Big Bang nucleosynthesis: a stiff 12-reaction network from 10 MeV to 10⁴ s (radau)](bbn_network/) | Y_p = 0.2423 vs 0.2471 (Fields 2020; Born weak rates, −1.9 %); D/H 2.60×10⁻⁵ vs 2.51×10⁻⁵; ³He/H 1.03×10⁻⁵; ⁷Li/H 5.1×10⁻¹⁰ vs 4.7–5.6; SciPy agrees to 3×10⁻⁶ | done |
