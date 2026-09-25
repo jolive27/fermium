@@ -115,7 +115,7 @@ def test_62_solution_maps_over_a_list_of_times():
 
 def test_62_mapped_solution_matches_pointwise_calls_and_converts():
     src = SOL + ("ts = linspace(0 s, 3 s, 7)\nys = x(ts)\nprint len(ys), sum(ys) to 8 digits\n"
-                 "s = 0 m\nfor t in ts\n    s = s + x(t)\nprint s to 8 digits\nprint x([1 s]) in cm to 4 digits")
+                 "s = 0 m\nfor t in ts\n    s = s + x(t)\nprint s to 8 digits\nprint x([1 [s]]) in cm to 4 digits")
     lines = both(src).split("\n")
     assert lines[0].split()[0] == "7"
     assert lines[0].split(" ", 1)[1] == lines[1]

@@ -159,7 +159,7 @@ def test_force_sum_matches_interpreter(monkeypatch):
 def test_step_and_non_integer_ranges(monkeypatch):
     src = """
 s = 0 s
-parallel for t from 0 s to 1 s step 0.1 s
+parallel for t from 0 [s] to 1 [s] step 0.1 [s]
     s += t
 print s to 17 digits
 q = 0

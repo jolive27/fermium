@@ -277,16 +277,18 @@ def test_1_h_after_a_unit_is_an_error_that_says_hr(src):
 
 def test_1_hint_names_the_number_and_how_to_divide():
     e = error_of("v = 36 km/h\nprint v")
-    assert "36 km/hr" in e.hint and "(36 km) / h" in e.hint
+    assert "36 km/hr" in e.hint and "(36 km)/h" in e.hint
     e = error_of("h = 2 m\nprint 36 km/h")
-    assert "36 km / h" in e.hint and "your h" in e.hint
+    assert "(36 km)/h" in e.hint and "your h" in e.hint
+    e = error_of("print 36 km / h")                  # spaces don't matter (D235)
+    assert "36 km/hr" in e.hint
 
 
 def test_1_hours_and_dividing_by_planck_still_work():
     assert run("v = 36 km/hr\nprint v in m/s") == "10 m/s"
     assert run("f(v [km/hr]) = v in m/s\nprint f(36 km/hr)") == "10 m/s"
-    assert num(run("print 2 eV / h in Hz to 4 digits")) == pytest.approx(4.836e14, rel=1e-3)
-    assert run("h = 2 m\nprint 36 km / h") == "18000"
+    assert num(run("print (2 eV)/h in Hz to 4 digits")) == pytest.approx(4.836e14, rel=1e-3)
+    assert run("h = 2 m\nprint (36 km)/h") == "18000"
     assert run("x = [h]\nprint len(x)") == "1"
 
 

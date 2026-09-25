@@ -244,3 +244,33 @@ def _ascii_token(toks, i, closers, diags):
             return f"{mant}e{ex}"
         return raw
     return t.raw
+
+
+def fix_source(source: str, rounds: int = 20) -> tuple[str, int]:
+    """`fermium fmt --fix`: rewrite every unit/variable collision (the A1 rule, D235) as a bracketed unit that keeps
+    what Fermium 1 did there: `x(0) = 0.1 m` next to a mass m becomes `0.1 [m]`, `20 m/s / g` becomes `20 [m/s] / g`
+    and `20 m/s/g` becomes `20 [m/s/g]`.  Returns the new source and the number of edits."""
+    from .lexer import tokenize, Lexer
+    from .parser import Parser
+    total = 0
+    for _ in range(rounds):
+        d = Diagnostics()
+        toks = tokenize(source, d)
+        p = Parser(toks, d)
+        p.fix_mode = True
+        err = None
+        try:
+            p.parse_program()
+        except FermiumError as e:
+            err = e
+        if not p.fixes:
+            if err is not None:
+                raise err
+            return source, total
+        norm = Lexer(source).src
+        text = source if len(norm) == len(source) else norm
+        for a, b, rep in sorted(p.fixes, reverse=True):
+            text = text[:a] + rep + text[b:]
+        source = text
+        total += len(p.fixes)
+    return source, total

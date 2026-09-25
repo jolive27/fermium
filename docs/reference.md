@@ -54,19 +54,25 @@ G_N = 6.674e-11 N m²/kg²
 c_light = 3.00×10⁸ m/s
 ```
 
-Rules (see DECISIONS.md D7):
-- A unit name immediately after a number is a unit: `3 m` is 3 metres.
-- Units in brackets are always units: `3 [m/s]`, and in a function parameter, `f(x [m]) = ...` (see §5). A variable can't be declared with a bracket: `x [m] = 3` is an error; write `x = 3 m`.
-- Anywhere else, a name is a variable. `m v` is m times v.
-- A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
-- **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
-- If a single unit name right after a number is also one of your variables, there are two cases (DECISIONS D7):
-  - **Multiplied or divided by something else** (`2 g h`, `0.5 m v²`, `2 g * h`), it's an **error** that asks which you mean: write `2*g` for your variable or `2 [g]` for the unit.
-  - **On its own** (`x(0) = 0.1 m`, `from 0 m to 0.2 m`), it's the unit, with a warning. If that line then fails its unit check, the reading is the error message itself, and the unit mismatch it caused is the hint (DECISIONS D164): with a temperature `T = 2 MeV`, `E = 4/3 T + 1 MeV` gives `T here is read as the unit tesla (T), not your variable T: '3 T' is a unit right after a number; write 4/3 * T`. If a later line fails, the error adds a note naming the line where it happened.
-  - Compound units continued with `/` (`9.81 m/s²`) and bracketed units (`2 [g]`) are always units. A compound that **starts** with your variable and continues with a space or `*` (`2 m c²` with your own `m`: `c` is also a unit) is the same error as `2 m v` (D170).
+**The unit rule** (DECISIONS D235):
+
+1. Right after a number comes a unit: `3 m`, `9.81 m/s²`, `50 N/m`.
+2. If that unit is a single name that is also one of your variables (`2 g` with your own `g`, `0.1 m` with a mass `m`), Fermium stops and asks which you mean: `2*g` for your variable, `2 [g]` for the unit.
+3. In a compound unit (`3 m/s`, `2 kg m²`) the first name is always a unit; any later name that is also your variable is an error that asks the same question.
+
+Brackets are always units: `3 [m/s]`, `x [m]`, and in a function parameter, `f(x [m]) = ...` (see §5). A name that doesn't come right after a number is always a variable: `m v` is m times v. **Spaces never change meaning.**
+
+- A unit continues through `/` (`m/s`), a space (`N m`), `*` or `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`. A variable can't be declared with a bracket: `x [m] = 3` is an error; write `x = 3 m`.
+- **Dividing by your own variable:** with `g = 9.81 m/s²`, `20 m/s/g` and `20 m/s / g` are both errors that ask which you mean (g is also grams). Write `(20 m/s)/g` to divide by your g, or `20 [m/s/g]` for per gram. Likewise `(2.898e-3 m K)/T` divides by a temperature `T`.
+- **A spring next to a mass:** with a mass `m` defined first, `k = 50 N/m` asks too (the later `m` is your variable); write `k = 50 [N/m]`.
+- **An explicit `*`** before your variable multiplies: `1.2 fm * A^(1/3)` with your `A` is 1.2 fm × A^(1/3).
+- **c** (the speed of light, usable as a unit) continues a unit only after `/`: `938 MeV/c²` is a mass, `0.9 c` a speed, and `2 m c²` is 2 m times c² (so with your own mass `m` it asks).
+- **After a bracket:** `(1/2) m v²` is ½·m·v² with your m. A unit that isn't one of your names may follow a bracket: `(51 - 33 (N - Z)/A) MeV`. A list literal takes a unit like a number: `[1, 2, 3] m`; with your own `m` it asks (`[1, 2]*m` multiplies).
+- **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` are units whatever the spacing: `0.5 /s`, `8/m³`, `0.300 /(m s²)`. A name there that is your variable is divided by (`1/T` is one over your period `T`); a bracket that mixes your variables with units (`0.300 /(m s²)` with your `m`) asks. `36 km/h` is an error with or without spaces: in Fermium h is Planck's constant, not the hour (write `km/hr`).
+- **Fixing old programs:** `fermium fmt --fix file.fm` rewrites every collision as a bracketed unit that keeps what Fermium 1 did (`0.1 [m]`, `50 [N/m]`); the language server offers the same quick fix.
 - **A unit is not a value:** `rate = cm³/(mol s)` is an error, `cm³/(mol s) is a unit, not a value`, with the hint `for the quantity write  1 cm³/(mol s)` (DECISIONS D163). Write `rate = 1 cm³/(mol s)`.
 - **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` (a space before `/`, none after) are units: `0 /s`, `8 /m³`, `0.300 /(m s²)`. If a name in them is also your variable (`8 /m³` with a mass `m`), that's an error: write `8 [1/m³]` for the unit, or `8/m³` (no spaces) to divide by your variable (D171).
-- **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
+- **Per minute:** right after a number, `/ min` is the minute, so `15.3 / min` is 15.3 per minute. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
 
@@ -561,7 +567,7 @@ print φ(0.5 m, 0.5 m) to 6 digits, lap(0.3 m, 0.7 m)     # V₀/4, and 0: it so
 
 ```fermium
 m = 0.5 kg
-k = 50 N/m
+k = 50 [N/m]
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
   with x(0) = 0.1 [m], x'(0) = 0 m/s
@@ -1266,7 +1272,7 @@ D = 0.01 m²/s
 solve ∂u/∂t = D * ∂²u/∂x²
     with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
     for x from 0 m to L, t from 0 s to 10 s
-print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 s / L²)
+print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 [s] / L²)
 print ∂u/∂x(0 m, 5 s), ∂u/∂t(0.5 m, 5 s)
 ```
 
@@ -1295,7 +1301,7 @@ solve 𝑖 ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
     for x from -40 nm to 40 nm, t from 0 fs to 30 fs
     grid 2000
 print "norm:", ∫ |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm
-print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", ħ k0 30 fs / m in nm, ")"
+print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", ħ k0 30 [fs] / m in nm, ")"
 ```
 
 - **Methods:** second-order differences in x on `grid N` intervals (400 by default), and in t:

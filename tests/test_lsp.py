@@ -30,7 +30,7 @@ def test_error_is_a_problem_with_a_range():
 
 
 def test_warnings_are_problems():
-    an = analyze("m = 2 kg\nx = 3 m\n")
+    an = analyze("c_w = 4186 J/(kg K)\nQ = c_w * 1 kg * 10 degC\n")
     assert [(p.line, p.severity) for p in an.problems] == [(2, "warning")]
 
 
@@ -149,5 +149,43 @@ def test_language_server_over_stdio(tmp_path):
         items = comp["result"]["items"]
         assert items[0]["label"] == "\\theta" and items[0]["textEdit"]["newText"] == "θ"
         assert items[0]["textEdit"]["range"]["start"] == {"line": 0, "character": 4}
+    finally:
+        c.close()
+
+
+# ---- the A1 quick fix (D235): the same edit as `fermium fmt --fix` ---------------------------------------------
+
+def test_quick_fix_for_a_unit_variable_collision():
+    from fermium.lsp import quick_fixes
+    src = "g = 9.81 m/s²\nprint 20 m/s/g\n"
+    an = analyze(src)
+    [(title, p, edits)] = quick_fixes(an, src)
+    assert p.severity == "error" and "ambiguous" in p.message
+    assert edits == [(1, 9, 1, 14, "[m/s/g]")] and "[m/s/g]" in title
+    src = "m = 0.5 kg\nx = 0.1 m\n"
+    [(_, _, edits)] = quick_fixes(analyze(src), src)
+    assert edits == [(1, 8, 1, 9, "[m]")]
+
+
+def test_quick_fix_over_stdio(tmp_path):
+    c = Client()
+    try:
+        rid = c.send("initialize", {"processId": None, "rootUri": None, "capabilities": {}})
+        init = c.wait(lambda m: m.get("id") == rid)
+        assert init["result"]["capabilities"]["codeActionProvider"]
+        c.send("initialized", {}, notify=True)
+        uri = (tmp_path / "b.fm").as_uri()
+        c.send("textDocument/didOpen", {"textDocument": {"uri": uri, "languageId": "fermium", "version": 1,
+                                                         "text": "m = 2 kg\nx = 3 m\n"}}, notify=True)
+        c.wait(lambda m: m.get("method") == "textDocument/publishDiagnostics")
+        rid = c.send("textDocument/codeAction", {"textDocument": {"uri": uri},
+                                                 "range": {"start": {"line": 1, "character": 0},
+                                                           "end": {"line": 1, "character": 7}},
+                                                 "context": {"diagnostics": []}})
+        r = c.wait(lambda m: m.get("id") == rid)
+        [act] = r["result"]
+        assert act["kind"] == "quickfix"
+        [te] = act["edit"]["changes"][uri]
+        assert te["newText"] == "[m]" and te["range"]["start"] == {"line": 1, "character": 6}
     finally:
         c.close()

@@ -26,7 +26,7 @@ from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy,
                     type_desc)
 from .linalg import transpose_index
 from .linalg_big import MAX_DIM
-from .units import SPELLED_UNITS, UNIT_NAMES_LONG, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
+from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
 
 MATH1 = {"sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
@@ -361,7 +361,6 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         self._prescan_functions(prog.body, ctx)
         self._top_units |= {id(s) for s in prog.body if isinstance(s, A.Units)}
         self.note_program(prog, self.globals)
-        self.unit_collisions = getattr(prog, "unit_collisions", {})
         self._prog_ast = prog
         self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
@@ -451,119 +450,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         m = getattr(self, "s_" + type(s).__name__, None)
         if m is None:
             raise self.err(f"this kind of statement ({type(s).__name__}) isn't supported here", s)
-        try:
-            r = m(s, ctx)
-        except FermiumError as e:
-            self._explain_unit_collision(e, s)
-            raise
-        self._track_collision_taint(s)
-        return r
-
-    @staticmethod
-    def _stmt_names(s):
-        """Every Name used anywhere in a statement (A.walk only follows expressions)."""
-        import dataclasses
-        out, todo = set(), [s]
-        while todo:
-            n = todo.pop()
-            if isinstance(n, A.Name):
-                out.add(n.name)
-            if isinstance(n, (list, tuple)):
-                todo.extend(n)
-            elif dataclasses.is_dataclass(n):
-                todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
-        return out
-
-    def _track_collision_taint(self, s):
-        """Remember names computed on a line where `2 g` was read as a unit though g is a variable, so a unit
-        error on a later line can point back to it (gauntlet #43)."""
-        tainted = self.__dict__.setdefault("collision_taint", {})
-        target = getattr(s, "name", None) if isinstance(s, (A.Assign, A.FuncDef)) else None
-        if not target:
-            return
-        coll = getattr(self, "unit_collisions", {})
-        if s.line in coll:
-            tainted[target] = s.line
-            return
-        for nm in self._stmt_names(s):
-            if nm in tainted and nm != target:
-                tainted[target] = tainted[nm]
-                return
-
-    def _explain_unit_collision(self, e, stmt=None):
-        """A unit error on a line where `2 L` was read as 2 litres though L is also a variable: say so
-        (FRICTION #10; the reading itself is the spec §3.4.2 rule and doesn't change).  For a later line,
-        name the variable computed from such a line (gauntlet #43)."""
-        found = getattr(self, "unit_collisions", {}).get(e.line)
-        if not found and stmt is not None and not getattr(e, "collision_noted", False):
-            tainted = getattr(self, "collision_taint", {})
-            names = sorted(nm for nm in self._stmt_names(stmt) if nm in tainted)
-            msg = str(e.message)
-            if names and ("[" in msg or "unit" in msg):
-                e.collision_noted = True
-                ln = tainted[names[0]]
-                nums = ", ".join(f"'{num} {nm}'" for num, nm in self.unit_collisions.get(ln, []))
-                note = (f"note: {names[0]} depends on line {ln}, where {nums} was read as a unit (a unit right after "
-                        f"a number); if you meant your variable there, write the * (like 2*g)")
-                e.hint = f"{e.hint}\n  {note}" if e.hint else note
-            return
-        if not found or getattr(e, "collision_noted", False):
-            return
-        msg = str(e.message)
-        if "[" not in msg and "unit" not in msg:
-            return
-        e.collision_noted = True
-        notes = []
-        for num, name in found:
-            u = lookup_unit(name)
-            what = f", {self.desc(u.dim)}" if u is not None else ""
-            notes.append(f"note: '{num} {name}' here is {num} {name}{what} (a unit right after a number); "
-                         f"for {num} × your variable {name} write {num}*{name}")
-        if stmt is not None and u is not None and ("can't add" in msg or "units" in msg or "[" in msg):
-            # the reading is the cause, so it is the message; the mismatch it led to is a note (D164)
-            num, name = found[0]
-            u = lookup_unit(name)
-            word = next((w for w, sym in SPELLED_UNITS.items() if sym == name), None)
-            unit = f"the unit {word} ({name})" if word else (
-                f"the unit {name} ({UNIT_NAMES_LONG[name]})" if name in UNIT_NAMES_LONG
-                else f"the unit {name} ({self.desc(u.dim)})")
-            fix = self._collision_fix(getattr(self, "_prog_ast", stmt), num, name, e.line)
-            unknown = (e.line, name) in getattr(getattr(self, "_prog_ast", None), "unknown_collisions", ())
-            who = f"the unknown {name} of this solve" if unknown else f"your variable {name}"
-            e.message = (f"{name} here is read as {unit}, not {who}: '{num} {name}' is a unit right "
-                         f"after a number; write {fix}")
-            called = [h for h in (e.hint or "").split("; ") if h.startswith("this happened when")]
-            e.hint = "\n  ".join([f"the units then don't match: {msg}" + "".join(f"; {h}" for h in called)]
-                                 + notes[1:])
-            return
-        if e.hint:
-            e.hint = "\n  ".join([e.hint] + notes)
-        else:
-            e.hint = "\n  ".join([notes[0].removeprefix("note: ")] + notes[1:])
-
-    @staticmethod
-    def _collision_fix(stmt, num, name, line):
-        """How to write `num × your variable name` where the statement has `num name` read as a unit:
-        `4/3 * T` for `4/3 T`, `π²/15 * T⁴` for `π²/15 T⁴`, else `3 * T` (D164)."""
-        import dataclasses
-        todo = [stmt]
-        while todo:
-            n = todo.pop()
-            if isinstance(n, (list, tuple)):
-                todo.extend(n)
-                continue
-            if not dataclasses.is_dataclass(n):
-                continue
-            for q in (getattr(n, "right", None), n):
-                if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and A.num_text(q.value) == num and \
-                        len(q.unit.factors) == 1 and q.unit.factors[0].name == name and \
-                        getattr(q, "line", line) == line:
-                    shown = q.unit.text or name
-                    if q is not n and isinstance(n, A.BinOp) and n.op == "/":
-                        return f"{C.to_source(n.left)}/{num} * {shown}"
-                    return f"{num} * {shown}"
-            todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
-        return f"{num}*{name}"
+        return m(s, ctx)
 
     def s_ExprStmt(self, s, ctx):
         e = s.value

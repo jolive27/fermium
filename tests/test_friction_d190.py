@@ -169,9 +169,11 @@ def test_loop_over_a_list_with_a_unit_keeps_the_precision():
     assert both("for E in [0.50, 0.75] eV\n    print E").splitlines() == ["0.50 eV", "0.75 eV"]
 
 
-def test_unit_after_a_list_literal_leaves_your_variable_alone():
-    # m is a variable here, so [1, 2] m is still [1, 2] × m (as for matrices, D29)
-    assert both("m = 3\nprint [1, 2] m") == "[3, 6]"
+def test_unit_after_a_list_literal_naming_your_variable_asks():
+    # m is a variable here: [1, 2] m was [1, 2] × m (D29, D222); since the A1 rule a list takes a unit as a number
+    # does, so it asks (D235), and [1, 2]*m is the product
+    assert "ambiguous" in both_error("m = 3\nprint [1, 2] m").message
+    assert both("m = 3\nprint [1, 2]*m") == "[3, 6]"
 
 
 PENDULUM = """L = [0.20, 0.40, 0.60, 0.80, 1.00] m
@@ -460,12 +462,12 @@ print a² ω² in J/kg
     assert out[4] == "9.0 J/kg"
 
 
-def test_warning_quotes_the_number_as_written():
-    from conftest import warnings_of
-    ws = warnings_of("m = 2 kg\nn = 2.50e19 m⁻³")
-    # the whole unit is quoted, so the hint's [m⁻³] keeps the density a density (red team round 4 #9, D207)
-    assert any("'2.50e19 m⁻³' is the unit m⁻³" in w for w in ws)
-    assert not any("2.5e+19" in w for w in ws)
+def test_collision_error_quotes_the_number_as_written():
+    # the whole unit is quoted, so the hint's [m⁻³] keeps the density a density (red team round 4 #9, D207; since
+    # D235 the lone collision is an error)
+    e = both_error("m = 2 kg\nn = 2.50e19 m⁻³")
+    assert "'2.50e19 m⁻³' is ambiguous" in e.message and "2.50e19 [m⁻³]" in e.hint
+    assert "2.5e+19" not in e.message + e.hint
 
 
 def test_ambiguity_error_quotes_the_number_as_written():

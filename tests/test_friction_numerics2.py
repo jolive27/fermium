@@ -276,7 +276,7 @@ def test_44_nonlinear_in_the_highest_derivatives_is_a_clear_error():
 
 
 def test_44_vector_unknown_in_a_coupled_equation_is_a_clear_error():
-    e = both_error("solve r'' + s'' = <0, 0> m/s², s'' = <1, 0> m/s²\n"
+    e = both_error("solve r'' + s'' = <0, 0> [m/s²], s'' = <1, 0> [m/s²]\n"
                    "  with r(0 s) = <0, 0> m, r'(0 s) = <0, 0> m/s, s(0 s) = <0, 0> m, s'(0 s) = <0, 0> m/s\n"
                    "  for t from 0 s to 1 s")
     assert "r'' and s'' both appear in one equation" in e.message and "r is a vector" in e.message
@@ -284,7 +284,7 @@ def test_44_vector_unknown_in_a_coupled_equation_is_a_clear_error():
 
 def test_44_singular_mass_matrix_is_an_ode_error():
     e = both_error("m = 1 kg\nsolve m a'' + m c'' = 1 N, a'' + c'' = 2 m/s²\n"
-                   "  with a(0 s) = 0 m, c(0 s) = 0 m, a'(0 s) = 0 m/s, c'(0 s) = 0 m/s\n  for t from 0 s to 1 s")
+                   "  with a(0 s) = 0 [m], c(0 s) = 0 [m], a'(0 s) = 0 m/s, c'(0 s) = 0 m/s\n  for t from 0 s to 1 s")
     assert e.message.startswith("the equations don't determine a'' and c'' at t = 0 s")
     assert "singular" in e.message
 

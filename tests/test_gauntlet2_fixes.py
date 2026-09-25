@@ -25,10 +25,11 @@ def test_A5_first_step_follows_the_solution_scale():
     assert abs(float(out) - 1) < 1e-6
 
 
-def test_43_unit_collision_note_reaches_later_lines():
+def test_43_unit_collision_is_reported_where_it_is():
+    # the note on a later line (D34) became unnecessary: the collision itself is the error (A1 rule, D235)
     from conftest import error_of
     e = error_of("g = 9.81 m/s²\nw = 2 g\na = w\nprint a in m/s²")
-    assert "a depends on line 2, where '2 g' was read as a unit" in (e.hint or "")
+    assert e.line == 2 and "'2 g' is ambiguous" in e.message
 
 
 def test_41_dimensionless_result_isnt_shown_in_degrees():

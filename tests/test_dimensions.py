@@ -6,7 +6,7 @@ from conftest import run, run_lines, error_of, check_only
 from fermium.errors import FermiumError
 
 XT = "x = 3 m\nt = 2 s\n"
-SPRING = "m = 1 kg\nk = 5 N/m\n"
+SPRING = "m = 1 kg\nk = 5 [N/m]\n"
 CSV = "L [m], T [s]\n0.5, 1.42\n1.0, 2.01\n1.5, 2.46\n2.0, 2.84\n"
 
 # (id, program, phrases that must all appear in the message, line of the error)
@@ -76,7 +76,7 @@ REJECT = [
     ("int_result", "k = 5 N/m\nF(x) = k x\nW = ∫ F(x) dx from 0 m to 1 m\nprint W + 1 N", ["can't add", "energy [J]", "force [N]"], 4),
     ("int_limit_vs_param", "f(x) = sin(x)\nprint ∫ f(x) dx from 0 m to 1 m", ["sin needs a plain number"], None),
     # ODEs
-    ("ode_sides", SPRING + "solve m x'' = -k\n  with x(0) = 0.1 m, x'(0) = 0 m/s\n  for t from 0 s to 1 s",
+    ("ode_sides", SPRING + "solve m x'' = -k\n  with x(0) = 0.1 [m], x'(0) = 0 m/s\n  for t from 0 s to 1 s",
      ["two sides of this equation don't match", "force [N]", "spring constant [N/m]"], 3),
     ("ode_ic_units", SPRING + "solve m x'' = -k x\n  with x(0) = 0.1 s, x'(0) = 0 m/s\n  for t from 0 s to 1 s",
      ["x'"], 4),
@@ -186,7 +186,7 @@ ACCEPT = [
     ("print √(2 G M_earth / R_earth) in km/s to 6 digits", "11.1799 km/s"),
     ("print a_0 in Å to 6 digits", "0.529177 Å"),
     # rational exponents
-    ("A = 27\nprint 1.2 fm A^(1/3)", "3.6 fm"),
+    ("A = 27\nprint 1.2 [fm] A^(1/3)", "3.6 fm"),
     ("print (8 m³)^(1/3)", "2 m"),
     ("x = 4 m²\nprint x^(1/2)", "2 m"),
     ("print (1 m^3)^(2/3)", "1 m²"),

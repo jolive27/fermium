@@ -23,7 +23,7 @@
 #   (e) Second-order perturbation theory moves both edges down by h²ω₀/32. Check.
 
 m = 0.100 kg
-k0 = 10.0 N/m
+k0 = 10.0 [N/m]
 h = 0.100
 ω0 = √(k0 / m)
 
@@ -41,9 +41,9 @@ D(γ) =
       with x1(0) = 1 [m], x1'(0) = 0 m/s
       for t from 0 s to T tolerance 1e-12
     solve x2'' = -ω0² (1 + h cos(γ t)) x2
-      with x2(0) = 0 m, x2'(0) = 1 m/s
+      with x2(0) = 0 [m], x2'(0) = 1 m/s
       for t from 0 s to T tolerance 1e-12
-    return x1(T) / (1 m) + x2'(T) / (1 m/s)
+    return x1(T) / (1 [m]) + x2'(T) / (1 m/s)
 
 growth(γ) =
     d = abs(D(γ))

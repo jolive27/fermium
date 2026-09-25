@@ -13,7 +13,7 @@ solve ∂T/∂t = α_Cu * ∂²T/∂x²
     with T(x, 0 s) = T_room + 80 K * sin(π x / L), T(0 m, t) = T_room, T(L, t) = T_room
     for x from 0 m to L, t from 0 s to 200 s
 bump = T(L / 2, 200 s) - T_room
-exact = 80 K * exp(-α_Cu π² 200 s / L²)
+exact = 80 K * exp(-α_Cu π² 200 [s] / L²)
 print "rod: bump after 200 s:", bump to 6 digits, " exact:", exact to 6 digits
 print "rod: relative error:", abs(bump - exact) / exact to 2 digits
 plot T vs x to "gallery/heat_pde.png"

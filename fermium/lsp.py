@@ -36,6 +36,7 @@ class Problem:
     message: str
     severity: str      # "error" or "warning"
     hint: str | None = None
+    fix: list = field(default_factory=list)     # (start, end, new text) source offsets: the quick fix (D235)
 
 
 @dataclass
@@ -59,7 +60,8 @@ def analyze(source: str, base_dir: str = ".") -> Analysis:
         an.checker = ck
     except FermiumError as e:
         diags = None
-        an.problems.append(Problem(e.line or 1, e.col or 1, e.length, e.message, "error", e.hint))
+        an.problems.append(Problem(e.line or 1, e.col or 1, e.length, e.message, "error", e.hint,
+                                   list(getattr(e, "fix", None) or [])))
         # hover still works for everything above the error
         lines = source.split("\n")
         stop = (e.line or 1) - 1
@@ -77,6 +79,30 @@ def analyze(source: str, base_dir: str = ".") -> Analysis:
         for w in diags.warnings:
             an.problems.append(Problem(w.line or 1, w.col or 1, w.length or 1, w.message, "warning", w.hint))
     return an
+
+
+def _offset_pos(source: str, off: int):
+    """0-based (line, code-point column) of a source offset."""
+    before = source[:off]
+    line = before.count("\n")
+    return line, off - (before.rfind("\n") + 1)
+
+
+def quick_fixes(an: Analysis, source: str):
+    """The quick fixes for the problems found: (title, problem, [(line0, col0, line1, col1, new text)]), 0-based.
+    A unit/variable collision (the A1 rule, D235) is fixed the way `fermium fmt --fix` does it."""
+    out = []
+    for p in an.problems:
+        if not p.fix:
+            continue
+        edits = []
+        for a, b, text in p.fix:
+            (l0, c0), (l1, c1) = _offset_pos(source, a), _offset_pos(source, b)
+            edits.append((l0, c0, l1, c1, text))
+        what = " and ".join(f"'{t}'" for *_, t in edits)
+        out.append((f"Fermium: write {what} (keep the unit reading)" if any(t.startswith("[") for *_, t in edits)
+                    else f"Fermium: write {what} (your variable)", p, edits))
+    return out
 
 
 def word_at(source: str, line: int, char: int):
@@ -274,6 +300,24 @@ def serve():                      # pragma: no cover - exercised by tests/test_l
     @server.feature(T.TEXT_DOCUMENT_DID_SAVE)
     def did_save(ls, params):
         refresh(ls, params.text_document.uri)
+
+    @server.feature(T.TEXT_DOCUMENT_CODE_ACTION,
+                    T.CodeActionOptions(code_action_kinds=[T.CodeActionKind.QuickFix]))
+    def code_action(ls, params):
+        uri = params.text_document.uri
+        doc = ls.workspace.get_text_document(uri)
+        an = cache.get(uri) or analyze(doc.source, doc_dir(uri))
+        actions = []
+        for title, p, edits in quick_fixes(an, doc.source):
+            ln = p.line - 1
+            if not (params.range.start.line <= ln <= params.range.end.line):
+                continue
+            tes = [T.TextEdit(range=T.Range(T.Position(l0, to_utf16(_line(doc.source, l0), c0)),
+                                            T.Position(l1, to_utf16(_line(doc.source, l1), c1))), new_text=t)
+                   for l0, c0, l1, c1, t in edits]
+            actions.append(T.CodeAction(title=title, kind=T.CodeActionKind.QuickFix, is_preferred=True,
+                                        edit=T.WorkspaceEdit(changes={uri: tes})))
+        return actions
 
     @server.feature(T.TEXT_DOCUMENT_HOVER)
     def hover(ls, params):

@@ -26,7 +26,7 @@ print ∇φ
 print -∇φ(0 m, 3 m, 4 m)
 
 m = 0.5 kg
-k = 50 N/m
+k = 50 [N/m]
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
   with x(0) = 10 cm, x'(0) = 0 m/s

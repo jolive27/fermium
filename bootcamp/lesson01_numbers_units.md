@@ -282,8 +282,8 @@ Dividing by a variable you made yourself is friendlier. If you put a **space bef
 
 ```fermium
 g = 9.81 m/s^2
-print 20 m/s / g
-print 20 m/s/g
+print 20 [m/s] / g
+print 20 [m/s/g]
 ```
 
 <!-- output -->

@@ -152,8 +152,8 @@ def test_indentation_preserved():
 
 
 def test_unit_after_variable_name_not_prettified_as_unit():
-    # `deg` after a number is a unit; `deg` elsewhere is a variable and stays as written
-    assert pretty("deg = 3\nx = 30 deg") == "deg = 3\nx = 30 °"
+    # `deg` in brackets is the unit (prettified); `deg` as a variable stays as written
+    assert pretty("deg = 3\nx = 30 [deg] + deg") == "deg = 3\nx = 30 [°] + deg"
 
 
 def test_pretty_idempotent():
@@ -203,7 +203,7 @@ PRETTY_CORPUS = [
     "A = 0.1 m\nω = 10 rad/s\nx(t) = A cos(ω t)\nv = d/dt x\na = x''\nprint v\nprint a\nprint v(0.1 s)",
     "k = 50 N/m\nF(x) = k x\nW = ∫ F(x) dx from 0 m to 0.2 m\nprint W\nprint ∫ exp(-x²) dx from -∞ to ∞",
     "print ħ c in MeV fm\nprint m_e c² in MeV\nprint k_B (300 K) in eV",
-    "A = 56\nR = 1.2 fm A^(1/3)\nprint R, ∛A",
+    "A = 56\nR = 1.2 [fm] A^(1/3)\nprint R, ∛A",
     "x = 3 m\nif x ≥ 2 m and x ≠ 5 m\n    print \"far\"\nelse\n    print \"near\"",
     "G_N = 6.674×10⁻¹¹ N m²/kg²\nc_light = 3.00×10⁸ m/s\nprint G_N, c_light",
     "θ₀ = 30°\nprint sin(θ₀), cos(θ₀)²  + sin(θ₀)²",
@@ -213,7 +213,7 @@ PRETTY_CORPUS = [
     "xs = [1 m, 2 m, 3 m]\nys = 2 xs + 1 m\nprint ys, √(sum(ys²))",
     "λ = 500 nm\nE = h c / λ\nprint E in eV",
     "f(x) = x³ - 2x\nprint f', f''\nprint f'(2)",
-    "m = 0.5 kg\nk = 50 N/m\nb = 0.2 kg/s\nsolve m x'' = -k x - b x'\n  with x(0) = 0.1 m, x'(0) = 0 m/s\n  for t from 0 s to 5 s\nprint x(5 s)",
+    "m = 0.5 kg\nk = 50 [N/m]\nb = 0.2 kg/s\nsolve m x'' = -k x - b x'\n  with x(0) = 0.1 [m], x'(0) = 0 m/s\n  for t from 0 s to 5 s\nprint x(5 s)",
     "total = 0 m\nfor i from 1 to 10\n    total += i · 1 cm\nprint total\nprint 1 ≈ 1.0000001",
     "E = ½ m v² where m = 2 kg, v = 3 m/s\nprint E\nprint |-3 m|",
 ]

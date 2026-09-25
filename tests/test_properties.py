@@ -102,5 +102,5 @@ def test_fmt_round_trip_is_identity_on_ascii(f):
 
 def test_fraction_exponent_units():
     assert run("print (8 m³)^(1/3)") == "2 m"
-    assert run("A = 64\nprint 1.2 fm A^(1/3)") == "4.8 fm"
+    assert run("A = 64\nprint 1.2 [fm] A^(1/3)") == "4.8 fm"
     assert Fraction(1, 3)

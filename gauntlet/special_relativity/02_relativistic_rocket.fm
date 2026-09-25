@@ -34,7 +34,7 @@ print "    tau(5 yr) =", τ(T) in yr to 10 digits, "  exact", c / g * asinh(g T 
 # (b) find the Earth time of the midpoint from the solution itself
 solve x(t_mid) = d / 2 for t_mid from 0 yr to 5 yr
 print "(b) Earth time =", 2 t_mid in yr to 10 digits, "  ship time =", 2 τ(t_mid) in yr to 10 digits,
-      "  exact ship time", 2 c / g * acosh(1 + g d / (2 c²)) in yr to 10 digits
+      "  exact ship time", 2 [c] / g * acosh(1 + g d / (2 c²)) in yr to 10 digits
 print "    top speed =", v(t_mid) in c to 10 digits
 
 # (c) relativistic velocity addition

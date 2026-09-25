@@ -14,7 +14,7 @@
 #       and measure the amplitude and phase; compare with (b).
 
 m = 0.200 kg
-k = 80.0 N/m
+k = 80.0 [N/m]
 b = 0.400 kg/s
 F0 = 0.500 N
 

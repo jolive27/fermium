@@ -261,7 +261,7 @@ solve h'' = -g
   for t from 0 s to 100 s
   until h = 0 m
 print times(h)[end] to 15 digits, h[end] to 15 digits, h'[end] to 15 digits
-print 2 × 10 m/s / g to 15 digits"""
+print 2 × 10 [m/s] / g to 15 digits"""
     lines = both(src).split("\n")
     t_end, h_end, v_end = numbers(lines[0])
     assert t_end == pytest.approx(20 / 9.8, rel=1e-13)

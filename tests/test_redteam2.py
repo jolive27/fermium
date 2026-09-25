@@ -41,8 +41,9 @@ def test_1_two_c_times_t_with_your_own_c_is_not_the_speed_of_light():
     assert num(out) == pytest.approx(1360)      # today: 1.19917×10⁹ m, silently
 
 
-def test_1_two_c_alone_with_your_own_c_warns():
-    assert warnings_of("c = 340 m/s\nprint 2 c in m/s")     # `2 N`, `2 V`, `2 u` all warn; `2 c` doesn't
+def test_1_two_c_alone_with_your_own_c_is_an_error():
+    # like `2 N`, `2 V`, `2 u` (it warned before the A1 rule, D235)
+    assert "'2 c' is ambiguous" in error_of("c = 340 m/s\nprint 2 c in m/s").message
 
 
 # ---- #2: Crank–Nicolson with a coarse step: silently wrong ---------------------------------------------------

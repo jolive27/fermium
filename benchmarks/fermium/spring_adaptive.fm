@@ -5,13 +5,13 @@
 # 4297 steps); Julia/Python/SciPy 1.11745e-12 m (relative error 1.5e-4, 4903 steps). Comparable accuracy,
 # not identical: the step-size controllers differ.
 m = 1 kg
-k = 100 N/m
+k = 100 [N/m]
 b = 0.5 kg/s
 t0 = clock()
 solve m x'' = -k x - b x'
   with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 100 s tolerance 1e-6
 t1 = clock()
-print "x_100s", x(100 s) / (1 m) to 10 digits
+print "x_100s", x(100 s) / (1 [m]) to 10 digits
 print "accepted_steps", len(x) - 1
 print "TIME_INNER", (t1 - t0) / (1 s)

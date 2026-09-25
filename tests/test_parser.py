@@ -44,7 +44,7 @@ def test_one_half_a_b_squared():
 
 
 def test_one_half_m_v_squared_is_ambiguous():
-    # `2 m v²` with a mass m: combined with another factor, `2 m` is ambiguous (D7, revised)
+    # `2 m v²` with a mass m: `2 m` is ambiguous (the A1 rule, D235)
     assert "is ambiguous" in str(error_of("m = 2 kg\nv = 3 m/s\nE = 1/2 m v²"))
     w = warnings_of("mass = 2 kg\nv = 3 m/s\nE = 1/2 mass v²")
     assert any("a/(b c)" in m for m in w)
@@ -172,29 +172,33 @@ def test_compound_units():
     assert run("print 2 s^-1 == 2 s⁻¹") == "true"
 
 
-def test_unit_collision_warns_once():
-    w = warnings_of("m = 0.5 kg\ny = 0.2 m\nz = 0.3 m")
-    hits = [x for x in w if "is the unit m, not your variable" in x]
-    assert len(hits) == 1
-    assert "m" in hits[0]
+def test_unit_collision_is_an_error_even_alone():
+    # A1 rule, sentence 2 (D235; it was a warning under D7)
+    e = error_of("m = 0.5 kg\ny = 0.2 m")
+    assert "'0.2 m' is ambiguous" in e.message and "0.2 [m]" in e.hint and "0.2*m" in e.hint
+    assert warnings_of("m = 0.5 kg\ny = 0.2 [m]\nz = 0.3 [m]") == []
 
 
 def test_unit_collision_still_means_unit():
-    assert run("m = 0.5 kg\ny = 0.2 m\nprint y") == "0.2 m"
+    assert run("m = 0.5 kg\ny = 0.2 [m]\nprint y") == "0.2 m"
 
 
 def test_no_collision_warning_without_variable():
     assert warnings_of("y = 0.2 m") == []
 
 
-def test_space_continued_unit_prefers_variable():
-    # `70 kg g` with your own g is 70 kg × g, with a warning (D7.4)
-    assert run("g = 2\nprint 70 kg g") == "140 kg"
-    assert any("your variable g" in m for m in warnings_of("g = 2\ny = 70 kg g"))
+def test_space_continued_unit_naming_your_variable_is_an_error():
+    # `70 kg g` with your own g: a later name of the unit is your variable (A1 sentence 3, D235; D7.4 read g)
+    e = error_of("g = 2\nprint 70 kg g")
+    assert "'70 kg g' is ambiguous" in e.message and "(70 kg) g" in e.hint and "70 [kg g]" in e.hint
+    assert run("g = 2\nprint 70 [kg] g") == "140 kg"
+    assert warnings_of("g = 2\ny = 70 [kg] g") == []
 
 
-def test_slash_continued_unit_is_unit_even_with_variable():
-    assert run("s = 5 kg\nprint 3 m/s") == "3 m/s"
+def test_slash_continued_unit_naming_your_variable_is_an_error():
+    # D7 rule 4 read the unit here; the A1 rule asks (D235)
+    assert "'3 m/s' is ambiguous" in error_of("s = 5 kg\nprint 3 m/s").message
+    assert run("s = 5 kg\nprint 3 [m/s]") == "3 m/s"
 
 
 def test_unit_then_variable():
@@ -267,11 +271,11 @@ def test_indefinite_integral_is_symbolic():
 
 
 # ====================================================================== solve
-SPRING = ("m = 0.5 kg\nk = 50 N/m\nb = 0.2 kg/s\n")
+SPRING = ("m = 0.5 kg\nk = 50 [N/m]\nb = 0.2 kg/s\n")
 
 
 def test_solve_multiline_clauses():
-    src = SPRING + ("solve m x'' = -k x - b x'\n  with x(0) = 0.1 m, x'(0) = 0 m/s\n"
+    src = SPRING + ("solve m x'' = -k x - b x'\n  with x(0) = 0.1 [m], x'(0) = 0 m/s\n"
                     "  for t from 0 s to 5 s\nprint x(5 s)\nprint x'(1 s)")
     x5, v1 = run_lines(src)
     assert x5.endswith(" m") and float(x5.split()[0]) == pytest.approx(0.0352006, rel=2e-2)

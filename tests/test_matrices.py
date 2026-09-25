@@ -198,7 +198,7 @@ def test_matrix_errors(src, phrase):
 
 # ------------------------------------------------------------------ vectors: per-component units
 def test_state_vector_keeps_a_unit_per_component():
-    out = run("s = <1 m, 2 m/s>\nprint s\nprint s.x, s.y, s[2]\nprint s * 2\nprint 2 kg * s\nprint s / (2 s)")
+    out = run("s = <1 m, 2 m/s>\nprint s\nprint s.x, s.y, s[2]\nprint s * 2\nprint 2 kg * s\nprint s / (2 [s])")
     assert out.split("\n") == ["<1 m, 2 m/s>", "1 m 2 m/s 2 m/s", "<2 m, 4 m/s>", "<2 kg m, 4 kg m/s>",
                                "<0.500 m/s, 1.00 m/s²>"]
 
@@ -209,13 +209,13 @@ def test_state_vector_negation_and_if():
 
 
 def test_state_vectors_add_component_by_component():
-    out = run("s = <1 m, 2 m/s, 3 kg>\nq = <10 m, 20 m/s, 30 kg>\nprint s + q\nprint q - s\n"
+    out = run("s = <1 m, 2 m/s, 3 kg>\nq = <10 m, 20 [m/s], 30 kg>\nprint s + q\nprint q - s\n"
               "s = s + q\nprint s")
     assert out.split("\n") == ["<11 m, 22 m/s, 33 kg>", "<9 m, 18 m/s, 27 kg>", "<11 m, 22 m/s, 33 kg>"]
 
 
 def test_state_vector_in_a_function():
-    out = run("advance(s, dt) = s + <s.y dt, -ω² s.x dt> where ω = 2 rad/s\n"
+    out = run("advance(s, dt) = s + <s.y dt, -ω² s.x dt> where ω = 2 [rad/s]\n"
               "print advance(<1 m, 0 m/s>, 0.1 s)")
     assert out == "<1.0 m, -0.40 m/s>"      # 0.1 s has 1 significant figure; shown with 2 (D11)
 
@@ -259,8 +259,8 @@ print inverse(K) to 17 digits
 print det(K) to 17 digits
 print K Kᵀ to 17 digits
 print K x - F to 17 digits
-s = <1 m, 2 m/s>
-print s + <0.1 m, 0.2 m/s>, 3 s
+st = <1 m, 2 m/s>
+print st + <0.1 m, 0.2 m/s>, 3 s
 M = [[1, 2], [3, 4]] kg
 print M[2, 1], M[1], M * <1, 1> m/s
 """

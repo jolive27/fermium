@@ -31,13 +31,13 @@ def both_error(src):
     return e1.value
 
 
-# ---- #66: `2 m c²` with your own m was 2 × the compound unit m·c² (D170) ------------------------------------
+# ---- #66: `2 m c²` with your own m was 2 × the compound unit m·c² (D170; since the A1 rule, D235, c continues a
+# unit only after '/', so `2 m` is the single-name question) ----------------------------------------------------
 
 @pytest.mark.parametrize("src,shown", [
-    ("m = 2 kg\nprint 1 J / (2 m c²)", "2 m c²"),
-    ("m = 2 kg\nprint 1 J / (2 m * c²)", "2 m * c²"),
-    ("m = 2 kg\nE = 2 m c² + 1 J", "2 m c²"),
-    ("N = 3\nprint 2 N m", "2 N m"),
+    ("m = 2 kg\nprint 1 J / (2 m c²)", "2 m"),
+    ("m = 2 kg\nprint 1 J / (2 m * c²)", "2 m"),
+    ("m = 2 kg\nE = 2 m c² + 1 J", "2 m"),
 ])
 def test_66_compound_unit_starting_with_your_variable_is_an_error(src, shown):
     e = both_error(src)
@@ -50,8 +50,9 @@ def test_66_compound_unit_starting_with_your_variable_is_an_error(src, shown):
     ("m = 2 kg\nprint 1 J / (2*m c²) to 3 digits", "2.78×10⁻¹⁸"),
     ("m = 2 kg\nprint 1 J / (2 [m c²]) to 3 digits", "5.56×10⁻¹⁸ kg/m"),
     ("m = 2 kg\ng = 9.81 m/s²\nprint g", "9.81 m/s²"),                 # a '/' compound stays the unit (D7)
-    ("print 2 m c² to 3 digits", "2.00 m c²"),                         # no variable m: the unit
+    ("print 2 m c² to 3 digits", "1.80×10¹⁷ m³/s²"),                   # no variable m: 2 m times c² (D235)
     ("print 2 kg m", "2 kg m"),                                        # kg isn't your variable
+    ("N = 3\nprint 2 N m", "2 N m"),                                   # the first name is always a unit (D235)
 ])
 def test_66_unambiguous_forms_are_unchanged(src, out):
     assert both(src) == out
@@ -85,18 +86,18 @@ def test_67_no_warning_when_the_limit_is_clear(src, out):
 
 # ---- #68 and #72: `/unit` and `/(units)` right after a number (D171) ----------------------------------------
 
-def test_68_slash_unit_after_a_number_colliding_with_your_variable_is_an_error():
-    e = both_error("m = 2 kg\nn = 8 /m³\nprint n")
-    assert "'8 /m³' is ambiguous" in e.message
-    assert "8 [1/m³]" in e.hint and "8/m³" in e.hint
+def test_68_single_name_with_a_power_colliding_with_your_variable_is_an_error():
+    e = both_error("m = 2 kg\nn = 8 m⁻³\nprint n")        # A1 sentence 2 (D235)
+    assert "'8 m⁻³' is ambiguous" in e.message and "8 [m⁻³]" in e.hint
 
 
 @pytest.mark.parametrize("src,out", [
     ("n = 8 /m³\nprint n", "8 1/m³"),                                 # no variable m: the unit
-    ("m = 2 kg\nprint 8/m³", "1 1/kg³"),                              # no spaces: divides by your m
-    ("m = 2 kg\nprint 8 / m³", "1 1/kg³"),                            # spaced: divides by your m
+    ("m = 2 kg\nprint 8/m³", "1 1/kg³"),                              # divides by your m
+    ("m = 2 kg\nprint 8 / m³", "1 1/kg³"),                            # spaces don't matter (D235)
+    ("m = 2 kg\nprint 8 /m³", "1 1/kg³"),                             # (D171 made this one an error)
     ("m = 2 kg\nprint 8 [1/m³]", "8 1/m³"),
-    ("m = 2 kg\nprint 8 m⁻³", "8 1/m³"),
+    ("m = 2 kg\nprint 8 [m⁻³]", "8 1/m³"),
 ])
 def test_68_the_clear_forms(src, out):
     assert both(src) == out

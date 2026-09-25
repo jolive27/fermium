@@ -134,9 +134,10 @@ def test_7_integration_variable_named_like_a_unit_warns_or_is_the_variable():
     from fermium.driver import run_source
     import io
     out, err = io.StringIO(), io.StringIO()
-    run_source("print ∫ 3 s^2 ds from 0 to 1\n", "<t>", out=out, err=err)
-    # ∫₀¹ 3s² ds = 1; Fermium prints `3 s²` silently (a parameter `f(s) = 3 s^2` and `Σ(2 g for g …)` do warn)
-    assert out.getvalue().strip() == "1" or "warning" in err.getvalue(), out.getvalue()
+    # ∫₀¹ 3s² ds = 1; Fermium printed `3 s²` silently; since the A1 rule (D235) it asks which s is meant
+    with pytest.raises(Exception) as ei:
+        run_source("print ∫ 3 s^2 ds from 0 to 1\n", "<t>", out=out, err=err)
+    assert "'3 s^2' is ambiguous" in str(ei.value)
 
 
 def _run_both(src):
@@ -151,8 +152,10 @@ def _run_both(src):
 
 
 def test_6_derivative_variable_collision_is_an_error_that_names_both_readings():
-    for src, frag in (("h(s) = s^2\nprint d/ds h(2 s)\n", "'2 s' is ambiguous: s is the variable you differentiate by"),
-                      ("k(m) = m^2\nprint d/dm k(2 m)\n", "'2 m' is ambiguous: m is the variable you differentiate by"),
+    for src, frag in (("h(s) = s^2\nprint d/ds h(2 s)\n", "'2 s' is ambiguous: right after a number, s is a unit "
+                                                        "(seconds), but s is also the variable s you differentiate by"),
+                      ("k(m) = m^2\nprint d/dm k(2 m)\n", "'2 m' is ambiguous: right after a number, m is a unit "
+                                                        "(metres), but m is also the variable m you differentiate by"),
                       ("g(x, s) = x s\nprint ∂/∂s g(1, 2 s)\n", "'2 s' is ambiguous")):
         out, err = _run_both(src)
         assert out == "" and frag in err, (src, out, err)
@@ -165,10 +168,11 @@ def test_6_derivative_variable_collision_is_an_error_that_names_both_readings():
 
 
 def test_7_integration_variable_m_and_ode_variable_warn():
+    # these warned (D232); since the A1 rule (D235) they ask which is meant
     out, err = _run_both("print ∫ 2 m dm from 0 to 1\n")
-    assert "'2 m' is the unit m, not your variable m" in err, err
+    assert "'2 m' is ambiguous" in err, err
     out, err = _run_both("solve y' = 3 s^2 with y(0) = 0 for s from 0 to 1\nprint y(1)\n")
-    assert "'3 s^2' is the unit s^2, not your variable s" in err, err
+    assert "'3 s^2' is ambiguous" in err, err
     out, err = _run_both("solve y' = 3 s y with y(0) = 1 for s from 0 to 1\nprint y(1)\n")
     assert "'3 s' is ambiguous" in err, err
     assert run("print ∫ 3*s^2 ds from 0 to 1\n") == "1"

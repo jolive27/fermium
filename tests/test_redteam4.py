@@ -9,7 +9,7 @@ import re
 
 import pytest
 
-from conftest import run
+from conftest import run, error_of
 from fermium.driver import run_source
 from fermium.errors import FermiumError
 from numparse import num
@@ -123,11 +123,11 @@ def test_8_heat_step_change_is_accurate_and_quiet():
 # ---- #9: the hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` --------------------------------------
 
 def test_9_lone_unit_hint_keeps_the_whole_unit_and_the_number_as_written():
-    out, err = run_err("m = 9.11e-31 kg\nn = 8.5e28 m^-3\nprint n\n")
-    assert out == "8.5×10²⁸ 1/m³"
-    # following today's hint (8.5e+28 [m]) would turn the density into a length
-    assert "[m]" not in err
-    assert "8.5e+28" not in err
+    # following the old hint (8.5e+28 [m]) would turn the density into a length; since the A1 rule (D235) the
+    # collision is an error whose hint keeps the whole unit
+    e = error_of("m = 9.11e-31 kg\nn = 8.5e28 m^-3\nprint n\n")
+    assert "8.5e28 [m^-3]" in e.hint and "[m]" not in e.hint and "8.5e+28" not in e.hint
+    assert run("m = 9.11e-31 kg\nn = 8.5e28 [m^-3]\nprint n\n") == "8.5×10²⁸ 1/m³"
 
 
 # ---- #10: one token gets a warning ("is the unit") and then an error ("is ambiguous") ------------------------------
@@ -254,7 +254,7 @@ def test_2_fermium_compile_hz_parameter_given_rpm_warns():
 
 
 def test_3_common_prefixed_units_next_to_your_variables_stay_quiet():
-    out, err = run_err("n = 1.5\nm = 2\nk = 3 N/m\ng = 9.81 m/s^2\nlam = 500 nm\nM = 2 kg\nprint lam, M\n")
+    out, err = run_err("n = 1.5\nm = 2\nk = 3 [N/m]\ng = 9.81 m/s^2\nlam = 500 nm\nM = 2 kg\nprint lam, M\n")
     assert out == "500 nm 2 kg"
     assert "warning" not in err
     out, err = run_err("k = 1.38e-23 J/K\nT = 300 K\nprint 1.5 k T\n")

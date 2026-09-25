@@ -37,7 +37,7 @@ v(t) = u(t) / γ(t)
 # (a) the traveller's age: integrate over each leg (u has corners at the switches)
 τ_trip = ∫ 1/γ(t) dt from 0 yr to T
 γ_max = √(1 + (g t1 / c)²)
-τ_exact = 4 c / g * asinh(g t1 / c) + 2 tc / γ_max
+τ_exact = 4 [c] / g * asinh(g t1 / c) + 2 tc / γ_max
 print "(a) Earth twin ages", T in yr to 6 digits
 print "    traveller ages", τ_trip in yr to 10 digits, "  exact", τ_exact in yr to 10 digits
 print "    top speed =", v(t1) in c to 10 digits
@@ -45,7 +45,7 @@ print "    top speed =", v(t1) in c to 10 digits
 # (b) the turning point
 x_far = ∫ v(t) dt from 0 yr to T_leg
 print "(b) turning point at", x_far in ly to 10 digits,
-      "  exact", 2 c² / g * (γ_max - 1) + v(t1) tc in ly to 10 digits
+      "  exact", 2 [c²] / g * (γ_max - 1) + v(t1) tc in ly to 10 digits
 print "    back home: x(T) =", ∫ v(t) dt from 0 yr to T in ly to 3 digits
 
 # (c) the same trip as ODEs with a switching acceleration
@@ -63,6 +63,6 @@ print "(c) ODE: traveller ages", τ(T) in yr to 10 digits, "  turning point", x(
 
 # (d) four accelerating legs and a 40-year trip
 τ_goal = 40.0 yr
-solve 4 c / g * asinh(g t_a / c) = τ_goal for t_a from 0 yr to 1e6 yr
+solve 4 [c] / g * asinh(g t_a / c) = τ_goal for t_a from 0 yr to 1e6 yr
 print "(d) each leg lasts", t_a in yr to 8 digits, "of Earth time; Earth ages", 4 t_a in yr to 8 digits
-print "    farthest point", 2 c² / g * (√(1 + (g t_a / c)²) - 1) in ly to 8 digits
+print "    farthest point", 2 [c²] / g * (√(1 + (g t_a / c)²) - 1) in ly to 8 digits

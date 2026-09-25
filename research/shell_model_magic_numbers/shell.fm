@@ -13,7 +13,7 @@ a = 0.67 fm
 r_box = 40 fm                      # far outside the nucleus: bound states have died away (see README)
 f(r, R) = 1 / (1 + exp((r - R) / a))
 dfdr(r, R) = -f(r, R) (1 - f(r, R)) / a
-ħω(A) = 41 MeV / A^(1/3)           # the oscillator shell spacing, the natural unit for a shell gap
+ħω(A) = 41 [MeV] / A^(1/3)           # the oscillator shell spacing, the natural unit for a shell gap
 
 # level names: with spin–orbit, index 1 is s1/2, then 2l for j = l + ½ and 2l + 1 for j = l − ½
 names = ["s1/2", "p3/2", "p1/2", "d5/2", "d3/2", "f7/2", "f5/2", "g9/2", "g7/2", "h11/2", "h9/2", "i13/2", "i11/2", "j15/2", "j13/2"]

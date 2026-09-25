@@ -59,7 +59,7 @@ print "60 deg:", proj_range(20 m/s, 60 deg)
 `b` has units of m K, written `2.898e-3 m K`. Because there's a space before the `/`, `/ T` divides by your parameter `T` (Lesson 1). Written without the space, `m K/T` would mean "kelvin per **tesla**".
 
 ```fermium
-peak(T) = 2.898e-3 m K / T
+peak(T) = 2.898e-3 [m K] / T
 print "Sun:  ", peak(5778 K) in nm
 print "human:", peak(310 K) in um
 ```

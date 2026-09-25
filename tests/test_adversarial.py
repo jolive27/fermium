@@ -357,10 +357,10 @@ def _ivp(f, span, y0):
 
 def test_damped_oscillator_matches_scipy():
     src = """m = 0.5 kg
-k = 50 N/m
+k = 50 [N/m]
 b = 0.2 kg/s
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 5 s
 print x[end] in m to 6 digits
 print x(1 s) in m to 6 digits
@@ -857,7 +857,7 @@ def test_fmt_round_trip_more():
                 "θ₀ = 0.1\nω₁₂ = 2\nprint θ₀ ω₁₂, √θ₀, ∛8",
                 "print 1 Å, 2 μm, 3 M☉ in kg, 20 °C, ∞, -∞",
                 "x = 2\nprint ¼ x, ¾ x, ⅓ x, x⁻¹, x²·x",
-                "T = 300 K\nprint 2.898e-3 m K / T"]:
+                "T = 300 K\nprint 2.898e-3 [m K] / T"]:
         base = run(src)
         a = format_source(src, "ascii")
         assert run(a) == base

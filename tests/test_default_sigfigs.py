@@ -90,7 +90,8 @@ def test_large_rounded_numbers_use_powers_of_ten(src, out):
     ("print [1.2345, 2], [1.5, 9e1]", "[1.2345, 2] [1.5, 90]"),      # red team round 4 #14
     ("print 10000000", "10000000"),
     ("print [0.10, 0.20]", "[0.10, 0.20]"),
-    ("print 2 kg c^2", "2 kg c² (= 1.80×10¹⁷ J)"),                   # round 4 #13
+    ("print 2 kg c^2", "1.80×10¹⁷ J"),     # round 4 #13; c multiplies (D235: it continues a unit only after '/')
+    ("print 2 [kg c^2]", "2 kg c² (= 1.80×10¹⁷ J)"),
     ("print ∫ <cos(x), sin(x), 0> dx from 0 to π/2", "<1, 1, 0>"),     # (rounding noise shows since D230)
     ("print ∫ sin(x) + 1e-9 dx from -π to π", "6.28×10⁻⁹"),           # a real small value survives
     ("print 0.125 * 1.0", "0.12"),                                    # round 4 #16: ties to even (documented)

@@ -159,7 +159,7 @@ def test_until_backwards_and_vectors():
     src = """
 g = 9.81 m/s²
 solve y'' = -g with y(0) = 0 m, y'(0) = 10 m/s for t from 0 s to 5 s using radau until y = 0 m
-print abs(times(y)[end] / (2 * 10 m/s / g) - 1)
+print abs(times(y)[end] / (2 * 10 [m/s] / g) - 1)
 print abs(y'[end] / (-10 m/s) - 1)
 solve x' = -x / 2 s with x(3 s) = 1 m for t from 3 s to 0 s using radau
 print abs(x[end] / (exp(1.5) * 1 m) - 1)

@@ -110,11 +110,12 @@ def test_88_2_u_combined_is_ambiguous_and_names_the_unknown():
     assert "2*u" in err.hint
 
 
-def test_88_2_u_alone_says_it_is_read_as_the_atomic_mass_unit():
+def test_88_2_u_alone_asks_which_is_meant():
     err = both_error("solve -ħ²/(2*m_e) * u'' = E u - 2 u with u(0 nm) = 0, u(3 nm) = 0 "
                      "for x from 0 nm to 3 nm lowest 2")
-    assert err.message.startswith("u here is read as the unit u (atomic mass unit), not the unknown u of this "
-                                  "solve: '2 u' is a unit right after a number; write 2 * u")
+    assert err.message.startswith("'2 u' is ambiguous: right after a number, u is a unit (atomic mass units), but u "
+                                  "is also the unknown u of this solve")      # the A1 rule (D235)
+    assert "2*u" in err.hint and "2 [u]" in err.hint
 
 
 def test_88_other_units_in_the_solve_are_unchanged():

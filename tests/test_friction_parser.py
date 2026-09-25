@@ -124,18 +124,15 @@ def test_existing_one_half_warning_is_not_doubled():
 
 
 # ---------------------------------------------------------------- #10: 2 L is 2 litres: say so in unit errors
-def test_unit_error_after_collision_names_the_cause():
-    # D164: the reading is now the message itself, and the mismatch it caused is the hint
+def test_collision_stops_before_any_unit_error():
+    # D164 turned a later unit error into this message; since the A1 rule (D235) the collision itself is the error
     e = error_of("T = 2.0 s\nfor t from 0 s to 1.2 T\n    print t")
-    assert "T here is read as the unit tesla (T), not your variable T" in e.message
-    assert "'1.2 T' is a unit right after a number" in e.message and "write 1.2 * T" in e.message
-    assert "time [s] to magnetic field [T]" in e.hint
+    assert "'1.2 T' is ambiguous" in e.message and "1.2*T" in e.hint and "1.2 [T]" in e.hint
 
 
-def test_unit_error_in_function_body_after_collision():
+def test_collision_in_a_function_body():
     e = error_of("L = 2 m\nf(x) = x + 2 L\nprint f(1 m)")
-    assert "L here is read as the unit liter (L), not your variable L" in e.message and "write 2 * L" in e.message
-    assert "can't add" in e.hint and "when calling f" in e.hint
+    assert "'2 L' is ambiguous" in e.message and "2*L" in e.hint
 
 
 def test_no_collision_note_without_a_collision():
@@ -143,9 +140,9 @@ def test_no_collision_note_without_a_collision():
     assert "right after a number" not in (e.hint or "")
 
 
-def test_collision_reading_itself_is_unchanged():
-    # spec §3.4.2: a unit right after a digit literal is a unit, even when a variable has its name
-    assert run("L = 3 m\nprint 2 L in L") == "2 L"
+def test_collision_reading_in_brackets():
+    # a unit in brackets is always the unit, even when a variable has its name (D235)
+    assert run("L = 3 m\nprint 2 [L] in L") == "2 L"
 
 
 # ---------------------------------------------------------------- #14: m_π

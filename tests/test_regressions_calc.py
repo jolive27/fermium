@@ -120,7 +120,7 @@ def test_constant_integrand_with_unit_like_differential():
 def test_unit_like_names_still_units_outside_integrals():
     assert run("x = 2 dm\nprint x in m") == "0.200 m"
     assert run("print ∫ 2 dm dx from 0 to 1") == "0.200 m"
-    assert run("print ∫ 2 m dm from 0 kg to 1 kg") == "2 kg m"
+    assert run("print ∫ 2 [m] dm from 0 kg to 1 kg") == "2 kg m"
 
 
 # ---------------------------------------------------------------- A49: d/dt (...) where ...

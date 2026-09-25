@@ -258,16 +258,15 @@ def test_69_other_unit_hints_are_unchanged():
 
 
 # ---------------------------------------------------------------- #86: a unit read in place of your variable (D164)
-@pytest.mark.parametrize("src,fix", [
-    ("T = 2 MeV\nE = 4/3 T + 1 MeV", "write 4/3 * T"),
-    ("T = 2 MeV\nx = π²/15 T⁴ + (1 J)⁴", "write π²/15 * T⁴"),
-    ("T = 2 MeV\nρ(T) = (4/3) T + 4/3 T\nprint ρ(T)", "write 4/3 * T"),
+# Since the A1 rule (D235) the collision itself is the error, before any unit mismatch it would cause.
+@pytest.mark.parametrize("src,shown", [
+    ("T = 2 MeV\nE = 4/3 T + 1 MeV", "3 T"),
+    ("T = 2 MeV\nx = π²/15 T⁴ + (1 J)⁴", "15 T⁴"),
+    ("T = 2 MeV\nρ(T) = (4/3) T + 4/3 T\nprint ρ(T)", "3 T"),
 ])
-def test_70_the_unit_reading_is_the_message(src, fix):
+def test_70_the_collision_is_the_message(src, shown):
     e = error_of(src)
-    assert e.message.startswith("T here is read as the unit tesla (T), not your variable T")
-    assert e.message.endswith(fix)
-    assert e.hint.startswith("the units then don't match: can't add")
+    assert e.message.startswith(f"'{shown}' is ambiguous: right after a number, T is a unit (tesla), but T is also")
 
 
 def test_70_the_fix_works():

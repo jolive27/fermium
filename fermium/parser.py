@@ -66,13 +66,14 @@ class Parser:
         self.abs_depth = 0
         self.no_juxt_names = set()
         self.warned_units = set()
-        self.collisions = {}         # line -> [(number, name)]: `2 L` read as a unit though L is a variable
         self.in_integrand = 0
         self.limit_start = None      # token index where an integral's upper limit starts (FRICTION #8)
-        self.unknown_collisions = set()   # (line, name): `2 u` read as a unit though u is a solve's unknown
         self._named = None           # every name the program assigns, defines or loops over (D215)
         self.deriv_vars = set()      # variables of the d/ds, ∂/∂s whose operand is being parsed (D231)
         self.solve_unknowns = set()  # the unknowns of the solve being parsed: names written with a prime (D211)
+        self.fix_mode = False        # `fmt --fix`: rewrite unit/variable collisions instead of stopping (D235)
+        self.fixes = []              # fix mode: (start, end, replacement) edits in the source
+        self._fix_whole = []         # fix mode: units to bracket whole once read (v1 read on through a collision)
 
     # ------------------------------------------------------------ helpers
     @property
@@ -162,8 +163,6 @@ class Parser:
             body.append(self.statement())
             self.skip_newlines()
         prog = A.Program(body)
-        prog.unit_collisions = self.collisions
-        prog.unknown_collisions = self.unknown_collisions
         return prog
 
     def block(self):
@@ -497,7 +496,7 @@ class Parser:
                 items.append(self.print_item())
         if self.at_kw("where"):
             binds = self.where_bindings()
-            self._warn_where_units(items, binds)
+            self._check_where_collisions(items, {b for b, _ in binds})
             items = [it if isinstance(it, A.Str) else A.Where(it, binds).at(it) for it in items]
         return self.span(A.Print(items), t)
 
@@ -1219,20 +1218,9 @@ class Parser:
         e = self.expr_full()
         if self.at_kw("where"):
             binds = self.where_bindings()
-            self._warn_where_units([e], binds)
+            self._check_where_collisions([e], {b for b, _ in binds})
             e = self.span(A.Where(e, binds), t)
         return e
-
-    def _warn_where_units(self, exprs, binds):
-        """`0.5 m v² where m = 2 kg`: the m after 0.5 is metres, not the where-variable."""
-        names = {b for b, _ in binds}
-        for ex in exprs:
-            for n in A.walk(ex):
-                if isinstance(n, A.BinOp) and n.implicit and isinstance(n.left, A.Quantity) and \
-                        not n.left.bracket and len(n.left.unit.factors) == 1:
-                    f = n.left.unit.factors[0]
-                    if f.name in names and f.exp == 1:
-                        self._ambiguous_unit(n.left, f, where=True)
 
     def where_bindings(self):
         self.next()
@@ -1389,16 +1377,10 @@ class Parser:
         while self.tok.kind == "OP" and self.tok.value in ("*", "/", "×"):
             if self.tok.value == "/" and self._ends_upper_limit():
                 break
-            c = self._colliding_unit(e)
-            if c is not None:          # `2 g * h`: combined with another factor, `2 g` is ambiguous (D7)
-                self._ambiguous_unit(*c)
             op = self.next()
             den_start = self.i
             tight = not op.ws_before and not self.tok.ws_before
             r = self.unary()
-            c = self._colliding_unit(r)
-            if c is not None and op.value != "/":      # `h * 2 g`
-                self._ambiguous_unit(*c)
             info = None
             if op.value == "/":
                 last = e
@@ -1651,7 +1633,6 @@ class Parser:
                 continue
             if not self._starts_term():
                 break
-            self._warn_unit_then_term(e)
             ws, ri = self.tok.ws_before, self.i
             r = self.power()
             if isinstance(r, A.Name) and not isinstance(e, A.Num):
@@ -1677,7 +1658,6 @@ class Parser:
                     for tk, rl in zip(self.toks[j0:j0 + 16], roles):
                         tk.role = rl
                     self.i = j0
-        self._warn_bare_unit(e)
         return e
 
     def _num_text(self, q, default="2"):
@@ -1693,105 +1673,188 @@ class Parser:
         if len(keep) != len(ws):
             ws[:] = keep
 
-    def _note_collision(self, q, f):
-        """Remember `2 L` (a unit after a number, while L is also a variable), so that a unit error on
-        the same line can say why (FRICTION #10)."""
-        num = A.num_text(q.value) if isinstance(q.value, A.Num) else None
-        if num is not None:
-            lst = self.collisions.setdefault(f.line, [])
-            if (num, f.name) not in lst:
-                lst.append((num, f.name))
-            if f.name in self.solve_unknowns:
-                self.unknown_collisions.add((f.line, f.name))
+    # ------------------------------------------------------------ the unit-name rule (A1, D235)
+    # 1. Right after a number comes a unit: `3 m`, `9.81 m/s²`, `50 N/m`.
+    # 2. If that unit is a single name that is also one of your variables, Fermium stops and asks which you mean.
+    # 3. In a compound unit the first name is always a unit; any later name that is also your variable is an error.
+    # Brackets are always units; a name that doesn't come right after a number is a variable; spaces never matter.
+    # In fix mode (`fermium fmt --fix`, the language server's quick fix) each collision is rewritten as a bracketed
+    # unit that keeps what v1 did there, and parsing goes on with v1's reading.
 
-    def _colliding_unit(self, e):
-        """The (quantity, factor) if e is `2 g` with a single bare unit that is also one of your variables."""
-        if isinstance(e, A.Quantity) and not e.bracket and not e.paren and len(e.unit.factors) == 1:
-            f = e.unit.factors[0]
-            if f.name in self.known and f.exp == 1:
-                return e, f
-        return None
+    def _whose(self, name, where=False):
+        if where:
+            return f"the {name} from 'where'"
+        if name in self.deriv_vars:
+            return f"the variable {name} you differentiate by"
+        if name in self.solve_unknowns:
+            return f"the unknown {name} of this solve"
+        return f"your variable {name}"
 
-    def _ambiguous_unit(self, q, f, where=False):
-        """D7 (revised after the gauntlet): a single unit name right after a number, when you also have a
-        variable of that name (`2 g`, `2 m v`, `3 V`), is ambiguous, and an error: say which you mean.
-        Compound units (`9.81 m/s²`, `3 m²`, `2 kg m`) are unambiguous and stay units."""
+    def _number_before(self, start):
+        k = self.toks.index(start)
+        prev = self.toks[k - 1] if k > 0 else None
+        return prev.raw if prev is not None and prev.kind == "NUM" else "2"
+
+    def _add_fix(self, fix):
+        """Record a fix-mode edit; an edit inside one already recorded (or the same) adds nothing."""
+        a, b, _ = fix
+        self.fixes[:] = [f for f in self.fixes if not (a <= f[0] and f[1] <= b)]
+        if not any(f[0] <= a and b <= f[1] for f in self.fixes):
+            self.fixes.append(fix)
+
+    def _unit_span_text(self, a, b):
+        """The unit written by tokens a..b, with spaces only between names (`m/s/g`, `kg m`, `J/(kg K)`)."""
+        out = []
+        for j in range(a, b + 1):
+            tk = self.toks[j]
+            pv = self.toks[j - 1] if j > a else None
+            tight = pv is None or tk.kind in ("SUP", "PRIME") or (tk.kind == "OP" and tk.value in "/*^)") or \
+                (pv.kind == "OP" and pv.value in "/*^(-")
+            out.append(("" if tight or not tk.ws_before else " ") + tk.raw)
+        return "".join(out)
+
+    def _bracket_fix(self, first, last):
+        """The edit that writes the unit from token `first` to token `last` in brackets."""
+        text = self._unit_span_text(self.toks.index(first), self.toks.index(last))
+        return (first.start, last.end, f"[{text}]")
+
+    def _unit_end_from(self, j):
+        """The last token of a unit that starts at token j, reading every unit name (for a quick fix)."""
+        last = j
+        k = j + 1
+        while k < len(self.toks):
+            tk = self.toks[k]
+            if tk.kind == "SUP":
+                last = k
+            elif tk.kind == "OP" and tk.value == "^" and k + 1 < len(self.toks):
+                k += 1
+                if self.toks[k].kind == "OP" and self.toks[k].value in ("-", "("):
+                    m = self._match(k) if self.toks[k].value == "(" else k + 1
+                    k = m if m is not None else k
+                last = k
+            elif tk.kind == "OP" and tk.value in ("/", "*") and k + 1 < len(self.toks) and \
+                    self.toks[k + 1].kind == "NAME" and self._unit_tok(self.toks[k + 1]):
+                k += 1
+                last = k
+            elif tk.kind == "NAME" and self._unit_tok(tk) and tk.ws_before and \
+                    not (k + 1 < len(self.toks) and self.toks[k + 1].kind == "OP" and self.toks[k + 1].value == "("
+                         and not self.toks[k + 1].ws_before):
+                last = k
+            else:
+                break
+            k += 1
+        return self.toks[last]
+
+    def _later_collision(self, start, nt, old_continues):
+        """Sentence 3: a later name of a compound unit (`20 m/s/g`, `2 kg m`) that is also your variable.
+        Returns True to go on reading the unit (fix mode, where v1 did), False to stop before the name (fix mode)."""
         from .units import lookup_unit, dim_name
+        so_far_last = self.toks[self.i - 1]
+        if self.fix_mode:
+            if old_continues:
+                self._fix_whole.append(start)
+                return True
+            self._add_fix(self._bracket_fix(start, so_far_last))
+            return False
+        num = self._number_before(start)
+        a = self.toks.index(start)
+        so_far = self._unit_span_text(a, self.i - 1)
+        full_last = self._unit_end_from(self.toks.index(nt))
+        full = self._unit_span_text(a, self.toks.index(full_last))
+        u = lookup_unit(nt.raw)
+        what = UNIT_WORDS.get(nt.value) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        whose = self._whose(nt.value)
+        op = self.tok.value if self.tok.kind == "OP" else " "
+        use = f"({num} {so_far})/{nt.raw}  to divide by {whose}" if op == "/" else \
+            f"({num} {so_far}) {nt.raw}  for {num} {so_far} × {whose}"
+        e = self.error(f"'{num} {full}' is ambiguous: right after a number, {full} is one unit ({nt.raw} is {what} "
+                       f"there), but {nt.raw} is also {whose}", tok=nt,
+                       hint=f"write  {use}, or  {num} [{full}]  for the unit")
+        e.fix = [self._bracket_fix(start, full_last) if old_continues else self._bracket_fix(start, so_far_last)]
+        raise e
+
+    def _single_collision(self, q, start_tok, where=False):
+        """Sentence 2: `2 g`, `0.1 m`, `2 T` right after a number, when that single name is also your variable."""
+        from .units import lookup_unit, dim_name
+        f = q.unit.factors[0]
+        first = next(tk for tk in self.toks if tk.line == f.line and tk.col == f.col)
+        last = self._factor_last(self.toks.index(first))
+        fix = self._bracket_fix(first, last)
+        if self.fix_mode:
+            self._add_fix(fix)
+            return
         num = self._num_text(q)
+        ut = q.unit.text.strip() or f.name
         u = lookup_unit(f.name)
         what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
-        if f.name in self.deriv_vars and not where:
-            self._deriv_var_collision(q, f)
-        whose = f"the {f.name} from 'where'" if where else (
-            f"the unknown {f.name} of this solve" if f.name in self.solve_unknowns else f"your variable {f.name}")
-        self._drop_warnings_between(f.line, q.col or 0, max(self.tok.col or 0, f.col or 0) if
-                                    self.tok.line == f.line else 10 ** 9)
-        raise self.error(f"'{num} {f.name}' is ambiguous: right after a number, {f.name} is a unit ({what}), "
-                         f"but {f.name} is also {whose}",
-                         tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
-                         hint=f"write  {num}*{f.name}  for {num} × {whose}, or  {num} [{f.name}]  for the unit")
+        whose = self._whose(f.name, where)
+        e = self.error(f"'{num} {ut}' is ambiguous: right after a number, {f.name} is a unit ({what}), but "
+                       f"{f.name} is also {whose}", tok=first,
+                       hint=f"write  {num}*{ut}  for {num} × {whose}, or  {num} [{ut}]  for the unit")
+        e.fix = [fix]
+        raise e
 
-    def _list_unit_collision(self, open_tok):
-        """D7 rule 5 for list and matrix literals (red team 5 #5, D222): `[1, 2, 3] m` when m is also your
-        variable.  D192 keeps the product reading (as for matrices, D29), but not silently: standing alone it
-        warns, and combined with other factors (`[1, 2] m v`) it is an error that asks which you mean."""
+    def _list_collision(self, open_tok):
+        """`[1, 2, 3] m` when m is also your variable: a unit follows a list literal as it follows a number (D192), so
+        sentence 2 applies.  Fermium 1 multiplied by your variable (D222); fix mode keeps that with a `*`."""
         from .units import lookup_unit, dim_name
         f = self.tok
+        prev = self.toks[self.i - 1]
+        if self.fix_mode:
+            self._add_fix((prev.end, f.start, "*"))
+            return
         j = self.toks.index(open_tok)
-        text = "".join((" " if tk.ws_before and k > j else "") + tk.raw for k, tk in
-                       enumerate(self.toks[j:self.i], start=j))
+        text = self._text(j, self.i)
         if len(text) > 24:
             text = "[…]"
-        nxt = self.peek()
-        alone = nxt.kind in ("NEWLINE", "EOF", "KW") or (nxt.kind == "OP" and nxt.value in
-                                                          (",", ")", "]", "}", "+", "-", "=", "==", "<", ">",
-                                                           "<=", ">=", "!=", ":", "+-", "±"))
         u = lookup_unit(f.value)
         what = UNIT_WORDS.get(f.value) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
-        if not alone:
-            raise self.error(f"'{text} {f.raw}' is ambiguous: after a list, {f.raw} could be the unit ({what}), "
-                             f"but {f.raw} is also your variable {f.raw}", tok=f,
-                             hint=f"write  {text}*{f.raw}  for your variable, or  {text} [{f.raw}]  for the unit")
-        self.diags.warn(f"'{text} {f.raw}' multiplies by your variable {f.raw}, not the unit {f.raw} ({what})",
-                        tok=f, hint=f"that's fine if you meant your variable (write {text}*{f.raw} to say so); "
-                                    f"for the unit write {text} [{f.raw}]")
+        e = self.error(f"'{text} {f.raw}' is ambiguous: after a list, {f.raw} is a unit ({what}), but {f.raw} is also "
+                       f"your variable {f.raw}", tok=f,
+                       hint=f"write  {text}*{f.raw}  for your variable, or  {text} [{f.raw}]  for the unit")
+        e.fix = [(prev.end, f.start, "*")]
+        raise e
 
-    def _warn_bare_unit(self, e):
-        """Spec §3.4.2: a bare unit after a number that is also a variable name gets a warning (once per name)."""
-        q = e
-        while isinstance(q, A.BinOp) and q.implicit and not q.paren:
-            q = q.right
-        if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
-            f = q.unit.factors[0]
-            if f.name in self.deriv_vars and isinstance(q.value, A.Num):
-                self._deriv_var_collision(q, f)
-            if f.name in self.known:
-                self._note_collision(q, f)
-            then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
-            if f.name in self.known and f.name not in self.warned_units and not then_mul:
-                self.warned_units.add(f.name)
-                num = self._num_text(q)
-                ut = q.unit.text.strip() or f.name          # the whole unit as written: `m^-3`, not `m` (#9)
-                alt = ""
-                if f.exp != 1:
-                    from .units import _fmt_exp
-                    alt = f"1/{f.name}{_fmt_exp(-f.exp)}" if f.exp < 0 else f"{f.name}{_fmt_exp(f.exp)}"
-                    alt = f" (or [{alt}])" if alt and alt != ut else ""
-                who = "the unknown" if f.name in self.solve_unknowns else "your variable"    # D211
-                self.diags.warn(f"'{num} {ut}' is the unit {ut}, not {who} {f.name}",
-                                line=f.line, col=f.col, length=len(f.name),
-                                hint=f"that's fine if you meant the unit (write {num} [{ut}]{alt} to say so); for "
-                                     f"{num} × {who} write {num}*{ut}")
+    def _check_where_collisions(self, exprs, names):
+        """The rule for the names a `where` defines (`0.1 m where m = 2 kg`): they are your variables in the
+        expression before `where`, which was read before they were known."""
+        for ex in exprs:
+            for n in A.walk(ex):
+                if not (isinstance(n, A.Quantity) and not n.bracket and not n.paren and isinstance(n.value, A.Num)):
+                    continue
+                fs = n.unit.factors
+                if len(fs) == 1 and fs[0].name in names:
+                    self._single_collision(n, None, where=True)
+                for f in fs[1:]:
+                    if f.name in names:
+                        first = next(tk for tk in self.toks if tk.line == fs[0].line and tk.col == fs[0].col)
+                        nt = next(tk for tk in self.toks if tk.line == f.line and tk.col == f.col)
+                        last = self._unit_end_from(self.toks.index(first))
+                        fix = self._bracket_fix(first, last)
+                        if self.fix_mode:
+                            self._add_fix(fix)
+                            break
+                        num = self._num_text(n)
+                        e = self.error(f"'{num} {n.unit.text}' is ambiguous: right after a number, {n.unit.text} is "
+                                       f"one unit, but {f.name} is also the {f.name} from 'where'", tok=nt,
+                                       hint=f"write  {num} [{n.unit.text}]  for the unit, or put the number and "
+                                            f"its unit in brackets before using {f.name}")
+                        e.fix = [fix]
+                        raise e
 
-    def _warn_unit_then_term(self, e):
-        """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
-        q = e
-        while isinstance(q, A.BinOp) and q.implicit and not q.paren:
-            q = q.right
-        if isinstance(q, A.Quantity) and not q.bracket and not q.paren and len(q.unit.factors) == 1:
-            f = q.unit.factors[0]
-            if f.name in self.known and f.exp == 1:
-                self._ambiguous_unit(q, f)
+    def _factor_last(self, j):
+        """The last token of the unit factor that starts at token j: its exponent (`m²`, `m^-3`, `m^(1/2)`)."""
+        k = j + 1
+        if k < len(self.toks) and self.toks[k].kind == "SUP":
+            return self.toks[k]
+        if k < len(self.toks) and self.toks[k].kind == "OP" and self.toks[k].value == "^":
+            k += 1
+            if self.toks[k].kind == "OP" and self.toks[k].value == "-":
+                k += 1
+            if self.toks[k].kind == "OP" and self.toks[k].value == "(":
+                k = self._match(k) or k
+            return self.toks[k]
+        return self.toks[j]
 
     def power(self):
         t = self.tok
@@ -1806,7 +1869,6 @@ class Parser:
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10⁸ m/s, like 10^8 m/s
-                self._check_compound_collision(None, u)
                 r = self.span(A.Quantity(r, u), t)
             return r
         if self.at_op("^"):
@@ -1816,7 +1878,6 @@ class Parser:
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10^8 m/s
-                self._check_compound_collision(None, u)
                 r = self.span(A.Quantity(r, u), t)
             return r
         return base
@@ -1969,18 +2030,13 @@ class Parser:
                     u = self.bracket_unit()
                     return self.span(A.Quantity(n, u, bracket=True), t)
                 if self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
+                    ustart = self.tok
                     u = self.unit_expr(explicit=False)
-                    self._check_compound_collision(t.raw, u)
                     q = self.span(A.Quantity(n, u), t)
-                    nx = self.tok
-                    if nx.kind == "OP" and nx.value in ("[", "(") and not nx.ws_before and len(u.factors) == 1 \
-                            and u.factors[0].name in self.known:
-                        nm = u.factors[0].name
-                        raise self.error(f"'{t.raw} {nm}' means {t.raw} of the unit {nm} (a unit right after a "
-                                         f"number), so it can't be followed by '{nx.value}'", tok=nx,
-                                         hint=f"to use your variable write {t.raw}*{nm}{nx.value}...")
+                    if len(u.factors) == 1 and u.factors[0].name in self.known:
+                        self._single_collision(q, ustart)       # `0.1 m` with your m: which one? (A1, D235)
                     return q
-                self._check_reciprocal_collision(t.raw)
+                self._check_mixed_reciprocal(t.raw)
                 if self._unit_reciprocal_follows() or self._bracketed_reciprocal_unit():
                     u = self.unit_expr(explicit=True, reciprocal=True)
                     return self.span(A.Quantity(n, u), t)
@@ -2080,9 +2136,8 @@ class Parser:
                     # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
                     u = self.unit_expr(explicit=False)
                     lst = self.span(A.Quantity(lst, u), t)
-                elif items and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and \
-                        self.tok.value in self.known and not self._is_call_like():
-                    self._list_unit_collision(t)
+                elif items and self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
+                    self._list_collision(t)       # [1, 2, 3] m with your m: a unit follows a list as a number (D235)
                 return lst
             if t.value == "<":
                 return self.vector_literal()
@@ -2160,72 +2215,28 @@ class Parser:
         u = lookup_unit(name)
         return words.get(name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
 
-    def _check_compound_collision(self, num, u):
-        """`2 m c²` with your own m (gauntlet #66, D170): right after a number, `m c²` is a compound unit
-        (metre × c²), but m is also your variable.  Like `2 m v` (D7 rule 5), that is ambiguous when the
-        compound is continued with a space or `*`, so it's an error.  A compound continued with `/`
-        (`9.81 m/s²`) or a power (`3 m²`) stays the unit, as D7 says."""
-        factors = list(u.factors)
-        while self.in_integrand and len(factors) > 1 and factors[-1].exp == 1 and \
-                factors[-1].name.startswith("d") and canonical_name(factors[-1].name[1:]) in self.known:
-            factors.pop()             # `∫ 2 m dm`: the trailing dm is the differential, not part of the unit
-        if len(factors) < 2 or not getattr(u, "juxt_join", False):
+    def _check_mixed_reciprocal(self, num):
+        """`0.300 /(m s²)` right after a number, with your own m: the bracket holds only unit names, some of them your
+        variables and some not, so it is neither the unit 1/(m s²) nor a division by variables: ask (D235)."""
+        if not (self.at_op("/") and self.at_op_at(self.i + 1, "(") and self._bracket_all_units(self.i + 1)):
             return
-        f = u.factors[0]
-        if f.name not in self.known:
+        k = self._match(self.i + 1)
+        names = [tk for tk in self.toks[self.i + 2:k] if tk.kind == "NAME"]
+        yours = [tk for tk in names if tk.value in self.known]
+        if not yours or len(yours) == len(names):
             return
-        num = num or "2"
-        text = u.text
-        raise self.error(f"'{num} {text}' is ambiguous: right after a number, {text} is a unit ({f.name} is "
-                         f"{self._unit_words(f.name)} there), but {f.name} is also your variable {f.name}",
-                         tok=next((tk for tk in self.toks if tk.line == f.line and tk.col == f.col), None),
-                         hint=f"write  {num}*{text}  for {num} × your variable {f.name} × the rest, or  "
-                              f"{num} [{text}]  for the unit")
+        text = self._unit_span_text(self.i, k)
+        v = yours[0].raw
+        raise self.error(f"'{num} {text}' is ambiguous: right after a number, {text} is the unit 1{text}, but {v} is "
+                         f"also your variable {v}", tok=yours[0],
+                         hint=f"write  {num} [1{text}]  for the unit, or give the units their own number to divide "
+                              f"by your {v}")
 
-    def _reciprocal_text(self):
-        """Source text of the `/unit` or `/(…)` at the current token."""
-        j = self.i + 1
-        if self.at_op_at(j, "("):
-            k = self._match(j)
-            end = (k if k is not None else j) + 1
-        else:
-            end = j + 1
-        while end < len(self.toks) and (self.toks[end].kind == "SUP" or self.at_op_at(end, "^")):
-            end += 2 if self.at_op_at(end, "^") else 1
-        return self._text(self.i, min(end, len(self.toks)))
-
-    def _check_reciprocal_collision(self, num):
-        """`n = 8 /m³` with your own m (gauntlet #68, D171): written like the unit 1/m³ (a space before
-        '/', none after, as in `0 /s`), but D7 rule 4 divides by your variable after a spaced '/'.
-        Neither reading is safe to guess, so it's an error.  `8/m³` (no spaces) divides by your m, and
-        `8 / m³` (spaces on both sides) too."""
+    def _bracketed_reciprocal_unit(self):
+        """`0.300 /(m s²)` right after a number: '/' then brackets holding only unit names and exponents, none of
+        them your variable (gauntlet #72; spaces don't matter, D235)."""
         t = self.tok
-        if not (t.kind == "OP" and t.value == "/" and t.ws_before and not self.peek().ws_before):
-            return
-        nx = self.peek()
-        names = []
-        if nx.kind == "NAME" and self._unit_tok(nx) and \
-                not (self.at_op_at(self.i + 2, "(") and not self.toks[self.i + 2].ws_before):
-            names = [nx]
-        elif nx.kind == "OP" and nx.value == "(" and self._bracketed_reciprocal_unit(any_known=True):
-            names = [tk for tk in self.toks[self.i + 2:self._match(self.i + 1)] if tk.kind == "NAME"]
-        clash = [tk.value for tk in names if tk.value in self.known]
-        if not clash:
-            return
-        v = clash[0]
-        text = self._reciprocal_text()
-        tight = text.lstrip("/")
-        raise self.error(f"'{num} {text}' is ambiguous: right after a number, {text} is the unit 1{text}, but "
-                         f"{v} is also your variable {v}", tok=nx,
-                         hint=f"write  {num} [1{text}]  for the unit, or  {num}/{tight}  (no spaces) to divide by "
-                              f"your variable {v}")
-
-    def _bracketed_reciprocal_unit(self, any_known=False):
-        """`0.300 /(m s²)`: '/' then brackets holding only unit names and exponents (gauntlet #72, D171).
-        None of the names may be your variables (that's the collision error above)."""
-        t = self.tok
-        if not (t.kind == "OP" and t.value == "/" and self.at_op_at(self.i + 1, "(") and
-                not self.peek().ws_before):
+        if not (t.kind == "OP" and t.value == "/" and self.at_op_at(self.i + 1, "(")):
             return False
         k = self._match(self.i + 1)
         if k is None or k == self.i + 2:
@@ -2237,7 +2248,7 @@ class Parser:
         for m in range(self.i + 2, k):
             tk = self.toks[m]
             if tk.kind == "NAME":
-                if not self._unit_tok(tk) or (tk.value in self.known and not any_known):
+                if not self._unit_tok(tk) or tk.value in self.known:
                     return False
             elif tk.kind == "SUP":
                 pass
@@ -2255,17 +2266,15 @@ class Parser:
         return True
 
     def _unit_reciprocal_follows(self):
-        """`0.1 1/s` or `0.1 /s` right after a number."""
+        """`0.1 1/s`, `0.1 /s` or `0.1/s` right after a number: a unit name after '/' that isn't your variable (a name
+        that is your variable is divided by: it doesn't come right after the number; spaces don't matter, D235)."""
         t = self.tok
         if t.kind == "NUM" and t.value == 1 and t.digit and self.peek().kind == "OP" and self.peek().value == "/":
             nx = self.peek(2)
-            return nx.kind == "NAME" and self._unit_tok(nx)
+            return nx.kind == "NAME" and self._unit_tok(nx) and nx.value not in self.known
         if t.kind == "OP" and t.value == "/" and self.peek().kind == "NAME" and self._unit_tok(self.peek()) and \
                 self.peek().value not in self.known and \
-                (not self.peek().ws_before or self.peek().value in UNITS_NAMED_LIKE_BUILTINS) and \
                 not (self.peek(2).kind == "OP" and self.peek(2).value == "(" and not self.peek(2).ws_before):
-            # `15.3 / min / g`: after a number, `min` can only be the minute (min the function is never
-            # divided by), so the spaced form is a unit too (FRICTION #15)
             return True
         return False
 
@@ -2407,19 +2416,6 @@ class Parser:
         finally:
             self.known, self.deriv_vars = saved_known, saved_dv
 
-    def _deriv_var_collision(self, q, f):
-        """`2 s` inside the operand of d/ds (D231): an error that says which reading is which."""
-        from .units import lookup_unit, dim_name
-        num = self._num_text(q)
-        ut = q.unit.text.strip() or f.name
-        u = lookup_unit(f.name)
-        what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
-        self._drop_warnings_between(f.line, q.col or 0, 10 ** 9)
-        raise self.error(f"'{num} {ut}' is ambiguous: {f.name} is the variable you differentiate by, but right "
-                         f"after a number {f.name} is the unit {what}",
-                         tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
-                         hint=f"write  {num}*{ut}  for {num} × the variable {f.name}, or  {num} [{ut}]  for the unit")
-
     def partial_op(self):
         t = self.next()   # ∂
         order = self._deriv_order()      # ∂²/∂x² or partial^2/partial x^2 (what fmt --ascii writes)
@@ -2454,11 +2450,6 @@ class Parser:
         try:
             body = self.sum()
             integrand, var = self._split_dvar(body)
-            if integrand is not body and var in new:
-                # `∫ 3 s^2 ds`: the unit s² was read together with the trailing `ds`, so the lone-unit check
-                # (D7 rule 5) saw a compound unit; check the integrand again now that `ds` is split off, with the
-                # integration variable counted as your variable (red team round 6 #7, D232)
-                self._warn_bare_unit(integrand)
         finally:
             self.known -= new
             self.limit_start = saved_limit
@@ -2667,38 +2658,61 @@ class Parser:
         del first
         juxt_join = False
         while True:
+            # The unit goes on through `/`, `*` and spaces while unit names follow (spaces never matter).
+            # Right after a number (not explicit), a later name that is also your variable is an error that
+            # asks which you mean (the A1 rule, sentence 3; D235).
             t = self.tok
             self._no_hour_h(t, explicit, start)
-            spaced_var = (not explicit and t.kind == "OP" and t.value == "/" and t.ws_before and
-                          self.peek().kind == "NAME" and self.peek().value in self.known)
-            if t.kind == "OP" and t.value == "/" and not spaced_var and (unit_name_here(1) or (
-                    self.peek().kind == "OP" and self.peek().value == "(" and (
-                        explicit or (unit_name_here(2) and self._bracket_all_units(self.i + 1, t.ws_before))))):
+            if t.kind == "OP" and t.value == "/" and unit_name_here(1):
+                if not explicit and self.peek().value in self.known:
+                    if self._later_collision(start, self.peek(), old_continues=not t.ws_before):
+                        self.next()
+                        factor(-1)
+                        continue
+                    break
+                self.next()
+                factor(-1)
+            elif t.kind == "OP" and t.value == "/" and self.peek().kind == "OP" and self.peek().value == "(" and (
+                    explicit or (unit_name_here(2) and self._bracket_all_units(self.i + 1))):
+                clash = [] if explicit else [tk for tk in self.toks[self.i + 2:self._match(self.i + 1) or self.i]
+                                             if tk.kind == "NAME" and tk.value in self.known]
+                if clash and not self._later_collision(start, clash[0], old_continues=not t.ws_before):
+                    break
                 self.next()
                 factor(-1)
             elif t.kind == "OP" and t.value == "/" and explicit and self.peek().kind == "NUM":
                 break
-            elif t.kind == "OP" and t.value == "*" and unit_name_here(1) and (
-                    explicit or self.peek().value not in self.known):
+            elif t.kind == "OP" and t.value == "*" and unit_name_here(1):
+                if not explicit and self.peek().value == "c":
+                    break                 # `2 kg * c²`: the constant c multiplies (D235)
+                if not explicit and self.peek().value in self.known:
+                    break                 # `1.2 fm * A^(1/3)`: an explicit * before your variable multiplies (D235)
                 self.next()
                 factor(1)
                 juxt_join = True
-            elif unit_name_here() and (explicit or (t.value not in self.known and not self._is_call_like())):
+            elif unit_name_here() and (explicit or not self._is_call_like()):
                 if not explicit and self.peek().kind == "OP" and self.peek().value == "(" and not self.peek().ws_before:
                     break
+                if not explicit and t.value == "c":
+                    break                 # `2 m c²`: c continues a unit only after '/' (`MeV/c²`), D235
+                if not explicit and self.in_integrand and t.raw.startswith("d") and len(t.raw) > 1 and \
+                        canonical_name(t.raw[1:]) in self.known:
+                    break                 # `∫ 2 [m] dm`: the trailing dm is the differential, not decimetres
+                if not explicit and t.value in self.known:
+                    if not self._later_collision(start, t, old_continues=False):
+                        break
                 factor(1)
                 juxt_join = True
             else:
-                if not explicit and unit_name_here() and t.value in self.known and t.ws_before:
-                    self.diags.warn(
-                        f"reading '{t.raw}' as your variable {t.raw}, not the unit {t.raw}",
-                        tok=t, hint=f"write [{self._unit_text(start)} {t.raw}] if you meant the unit")
                 break
         u = A.UnitExpr(factors, ("1" if reciprocal and self._unit_text(start).startswith("/") else "")
                        + self._unit_text(start))
         u.line, u.col = start.line, start.col
         u.length = max(1, self.toks[self.i - 1].end - start.start)
         u.juxt_join = juxt_join
+        if start in self._fix_whole:
+            self._fix_whole.remove(start)
+            self._add_fix(self._bracket_fix(start, self.toks[self.i - 1]))
         return u
 
     # Prefixed units a physics course uses all the time: never read as two of your variables (D203)
@@ -2734,18 +2748,17 @@ class Parser:
                                      f"{num} [{name}]  if you mean the unit")
                 return
 
-    def _bracket_all_units(self, j, spaced):
-        """At the '(' at token j after a unit and '/': does the bracket hold only unit names (and exponents,
-        `*`, `/`)?  With a spaced '/' (D7 rule 4), a name that is your variable makes it a division too:
-        `60 s / (m c_w)` divides by your m and c_w, while `9.81 kg / (m s²)` without your m stays the unit
-        (red team round 4 #4, D204)."""
+    def _bracket_all_units(self, j):
+        """At the '(' at token j after a unit and '/': does the bracket hold only unit names (and exponents, `*`,
+        `/`)?  `3 J/(kg K)` continues the unit; `60 s / (m c_w)` divides (c_w isn't a unit; red team 4 #4).
+        A name in it that is your variable is the A1 collision error (D235)."""
         k = self._match(j)
         if k is None:
             return True          # let the unit parser report the missing ')'
         for m in range(j + 1, k):
             tk = self.toks[m]
             if tk.kind == "NAME":
-                if not is_unit_name(tk.raw) or (spaced and tk.value in self.known):
+                if not is_unit_name(tk.raw):
                     return False
             elif tk.kind == "OP" and tk.value not in ("^", "/", "*", "(", ")", "-"):
                 return False
@@ -2756,29 +2769,28 @@ class Parser:
     def _no_hour_h(self, t, explicit, start):
         """`36 km/h` and `[km/h]`: h is Planck's constant, not the hour, so dividing a unit by it is almost always
         a mistake for km/hr; it is an error rather than a silent 5×10³⁷ s/(kg m) (red team round 3 #1, D180).
-        Only a tight `/` (no spaces) right after a unit, or any `/ h` inside brackets; `2 eV / h` divides."""
+        Spaces don't matter (D235): `2 eV / h` is the same error; `(2 eV)/h` divides by Planck's constant."""
         if not (t.kind == "OP" and t.value == "/"):
             return
         h = self.peek()
         if h.kind != "NAME" or h.raw != "h":
             return
-        if not explicit and (t.ws_before or h.ws_before):
-            return
         after = self.peek(2)
         if after.kind == "OP" and after.value == "(" and not after.ws_before:
             return                                          # km/h(x): a call of your function h
         unit = self._unit_text(start)
-        k = self.toks.index(start)
-        num = self.toks[k - 1].raw + " " if not explicit and k > 0 and self.toks[k - 1].kind == "NUM" else ""
+        num = self._number_before(start) + " " if not explicit else ""
         if explicit:
             raise self.error(f"'{unit}/h' isn't a unit: in Fermium h is Planck's constant, not the hour", tok=h,
                              hint=f"write {unit}/hr for {unit} per hour")
-        if "h" in self.known:
-            hint = f"write {num}{unit}/hr for {unit} per hour, or  {num}{unit} / h  (with spaces) to divide by your h"
-        else:
-            hint = f"write {num}{unit}/hr for {unit} per hour, or  ({num}{unit}) / h  to divide by Planck's constant"
-        raise self.error(f"'{num}{unit}/h': in Fermium h is Planck's constant, not the hour, so this would divide "
-                         f"by Planck's constant", tok=h, hint=hint)
+        who = "your h" if "h" in self.known else "Planck's constant"
+        e = self.error(f"'{num}{unit}/h': in Fermium h is Planck's constant, not the hour, so this would divide "
+                       f"by Planck's constant", tok=h,
+                       hint=f"write {num}{unit}/hr for {unit} per hour, or  ({num}{unit})/h  to divide by {who}")
+        if self.fix_mode and (t.ws_before or h.ws_before):      # v1 divided when a space was there
+            self._add_fix(self._bracket_fix(start, self.toks[self.i - 1]))
+            return
+        raise e
 
     def _unit_text(self, start_tok):
         prev = self.toks[self.i - 1]

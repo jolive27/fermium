@@ -209,7 +209,7 @@ def test_9_celsius_product_warning_points_at_the_reading():
 
 def test_10_check_with_warnings_doesnt_say_no_problems(tmp_path):
     f = tmp_path / "w.fm"
-    f.write_text("m = 2 kg\nx = 3 m\n")
+    f.write_text("c_w = 4186 J/(kg K)\nQ = c_w * 1 kg * 10 degC\n")   # (a lone unit collision is an error since D235)
     p = subprocess.run([sys.executable, "-m", "fermium", "check", str(f)], capture_output=True, text=True,
                        cwd=ROOT, timeout=120)
     both = p.stdout + p.stderr

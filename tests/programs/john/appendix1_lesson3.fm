@@ -1,0 +1,20 @@
+F_grav(m1, m2, r) = G m1 m2 / r^2
+print F_grav(M_earth, 70 kg, R_earth)          # 686 N
+
+R(A) = r₀ A^(1/3) where r₀ = 1.2 fm
+print R(12), R(56), R(238)                     # 2.75 fm, 4.59 fm, 7.44 fm
+
+proj_range(v₀, θ) = v₀² sin(2θ)/g where g = 9.81 m/s^2
+print proj_range(20 m/s, 30 deg), proj_range(20 m/s, 45 deg), proj_range(20 m/s, 60 deg)
+                                               # 35.3 m, 40.8 m, 35.3 m
+
+peak(T) = b / T where b = 2.898e-3 m K
+print peak(5778 K) in nm, peak(5778 K) in um, peak(310 K) in nm, peak(310 K) in um
+                                               # 502 nm, 0.502 um, 9.35×10³ nm, 9.35 um
+
+fall_time(h) =
+    g = 9.81 m/s^2
+    t = √(2 h / g)
+    return t
+
+print fall_time(330 m)                         # 8.20 s

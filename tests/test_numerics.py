@@ -132,10 +132,10 @@ def test_ode_exponential_decay_rk45():
 @pytest.mark.parametrize("method", ["", "step 1 ms"])
 def test_damped_oscillator_vs_solve_ivp(method):
     """Both RK45 and fixed-step RK4 agree with SciPy (rtol 1e-12) to 1e-6 relative of the amplitude."""
-    src = ("m = 0.5 kg\nk = 50 N/m\nb = 0.2 kg/s\n"
-           "solve m x'' = -k x - b x'\n  with x(0) = 0.1 m, x'(0) = 0 m/s\n"
+    src = ("m = 0.5 kg\nk = 50 [N/m]\nb = 0.2 kg/s\n"
+           "solve m x'' = -k x - b x'\n  with x(0) = 0.1 [m], x'(0) = 0 m/s\n"
            f"  for t from 0 s to 5 s {method}\n"
-           "print x(5 s) / (1 m) to 15 digits\nprint x'(2.5 s) / (1 m/s) to 15 digits")
+           "print x(5 s) / (1 [m]) to 15 digits\nprint x'(2.5 s) / (1 m/s) to 15 digits")
     got = nums(run(src))
     sol = solve_ivp(lambda t, y: [y[1], (-50 * y[0] - 0.2 * y[1]) / 0.5], (0, 5), [0.1, 0], rtol=1e-12,
                     atol=1e-14, dense_output=True)

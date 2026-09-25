@@ -19,10 +19,10 @@ v = d/dt x                   # symbolic: -A ω sin(ω t), units m/s
 a = x''
 
 F(x) = k x
-W = ∫ F(x) dx from 0 m to 0.2 m     # 1.0 J
+W = ∫ F(x) dx from 0 [m] to 0.2 [m]     # 1.0 J
 
 solve m x'' = -k x - b x'
-  with x(0) = 0.1 m, x'(0) = 0 m/s
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
   for t from 0 s to 5 s
 plot x vs t
 

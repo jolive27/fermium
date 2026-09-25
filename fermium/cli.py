@@ -96,24 +96,35 @@ def cmd_check(args):
 
 
 def cmd_fmt(args):
-    from .fmt import format_source
+    from .fmt import format_source, fix_source
     from .errors import Diagnostics
     src = _read(args.file)
-    mode = "ascii" if args.ascii else "pretty"
+    name = os.path.basename(args.file)
     d = Diagnostics()
     try:
-        out = format_source(src, mode, d)
+        if args.fix:
+            out, n = fix_source(src)
+            what = f"fixed {n} unit/variable collision{'s' if n != 1 else ''}"
+            if args.pretty or args.ascii:
+                out = format_source(out, "ascii" if args.ascii else "pretty", d)
+        else:
+            mode = "ascii" if args.ascii else "pretty"
+            out = format_source(src, mode, d)
+            what = f"formatted ({mode})"
     except FermiumError as e:
-        sys.stderr.write(e.format(src, os.path.basename(args.file)) + "\n")
+        sys.stderr.write(e.format(src, name) + "\n")
         return 1
     for w in d.warnings:
         sys.stderr.write(w.format(src) + "\n")
     if args.write:
         with open(args.file, "w", encoding="utf-8") as fh:
             fh.write(out)
-        print(f"rewrote {args.file} ({mode})")
+        print(f"rewrote {args.file}: {what}")
     else:
         sys.stdout.write(out)
+        sys.stdout.flush()
+        # the formatted source looks like program output: say it wasn't run (spec A3.4)
+        sys.stderr.write(f"{what.split(' (')[0]} {name} (not run — use fermium run)\n")
     return 0
 
 
@@ -179,6 +190,8 @@ def main(argv=None):
     g = f.add_mutually_exclusive_group()
     g.add_argument("--pretty", action="store_true", help="ASCII -> symbols (pi -> π, sqrt -> √, ^2 -> ²)")
     g.add_argument("--ascii", action="store_true", help="symbols -> ASCII")
+    f.add_argument("--fix", action="store_true",
+                   help="rewrite unit/variable collisions as bracketed units: 0.1 m -> 0.1 [m] (keeps the old meaning)")
     f.add_argument("-w", "--write", action="store_true", help="rewrite the file instead of printing")
     bld = sub.add_parser("build", help="compile a program into a standalone executable (needs a C compiler)")
     bld.add_argument("file")
