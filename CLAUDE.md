@@ -49,3 +49,28 @@ Keep working until **13:00 UTC** (9 AM ET; the user extended it). The phases, in
 Other rules:
 - Add a timestamped line to PROGRESS.md on the hour.
 - At **12:30 UTC** stop new work and write MORNING_REPORT.md. Include the audit, Phase 2 status, gauntlet counts, the top 10 frictions and what is still weak.
+
+## Night plan, part 3 (user instruction received ~03:15 UTC): run until 13:00 UTC (9 AM ET)
+After any context compaction: re-read CLAUDE.md, PROGRESS.md and this plan before continuing.
+Rules unchanged: tests first, commit often, push ≤ 30 min, PROGRESS.md accurate (timestamped line every hour),
+never claim something works without a test. Stuck > 30 min → PROGRESS "Blocked", move on. Never finish early.
+Finish in-progress Phase 1–4 work, then:
+
+**Phase 5 moonshots (in order, each to a tested, documented, honest state):**
+- M1 natural units: `units natural(ħ = c = 1)`, `units nuclear` (MeV, fm, ħc = 197.327 MeV fm), `units astro` (M☉, R☉, AU, yr); fully checked; SI restored on output.
+- M2 dimensional analysis: `analyze pendulum: T depends on L, m, g` → Buckingham Π groups, suggests T ∝ √(L/g); bootcamp bonus lesson.
+- M3 serious numerics: stiff (done: radau/bdf, D42) + automatic stiffness detection; eigenvalue problems `solve -ħ²/2m ψ'' + V ψ = E ψ` (shooting + matrix) with units; 1-D PDEs (heat, wave, TDSE Crank–Nicolson) with animated output; FFT, root finding (done D32), Monte Carlo, seeded random numbers. All validated vs SciPy/analytic.
+- M4 uncertainties: `5.0 ± 0.2 m`, linear propagation with correlation tracking (x − x = 0), `propagate montecarlo`; into fit and plot; bootcamp lab-report lesson.
+- M5 beat Julia: `parallel for`, SIMD-friendly codegen, optimization pass; match/beat Julia on ≥ 2 benchmarks honestly; RESULTS.md before/after.
+- M6 Python interop: `use python numpy` with units checked at the boundary; call compiled Fermium from Python.
+- M7 modules: `import`, stdlib modules (mechanics, em, nuclear, astro, quantum, stats), minimal `fermium.toml`.
+- M8 self-hosting: rewrite one compiler component (unit database or formatter) in Fermium, same tests; document.
+
+**Phase 6 research reproductions** (research/<name>/ with README, code, plots, comparison with published numbers):
+SEMF fit to AME2020 (+ residuals, magic numbers); neutron-star M–R from TOV; BBN network (stiff); pp vs CNO crossover;
+Lane–Emden → Chandrasekhar; U-238 Bateman chain; Rutherford MC vs analytic; hydrogen levels; Friedmann age (Planck 2018); more.
+**Phase 7** gauntlet continues (graduate level). **Phase 8** red team every 90 min (independent subagent reviewer; log in REDTEAM.md).
+Hourly quality passes continue.
+**At 12:30 UTC:** stop new work; MORNING_REPORT.md (whole run: audit, Phase 2, each moonshot done/partial/not started with evidence,
+research vs published, gauntlet counts, red-team findings, final benchmark table, test count, honest weaknesses) + SHOWCASE.md
+(5 most impressive things with copy-pasteable demos). Push by 13:00 UTC.
