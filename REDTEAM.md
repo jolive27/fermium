@@ -300,7 +300,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **stdlib:** `stats.linear_*` matches `numpy.polyfit`, SEMF(56, 26) = 495 MeV, and `hydrogen_level` is right.
   `box_energy` works in natural units, and `mechanics`, `nuclear` and `astro` accept uncertain arguments.
 
-### 1. `36 km/h` is 36 km divided by Planck's constant, silently (wrong-answer). Status: open
+### 1. `36 km/h` is 36 km divided by Planck's constant, silently (wrong-answer). Status: fixed (an error with the hint `36 km/hr` (h stays Planck's constant; `[km/h]` and `in km/h` say so too); D180)
 - **Repro:** `v = 36 km/h` then `print v`.
 - **Expected:** 36 km/h (10 m/s). An error is also acceptable: `h` is not a unit, and the unit list says "for
   hours write hr".
@@ -312,7 +312,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** the parser's unit-after-number rule (D7), and `checker.resolve_unit_si`. The checker already
   tells people that `h` isn't hours (hint "for hours write hr"), but only inside brackets.
 
-### 2. `m c ΔT` with ΔT in °C silently uses the absolute temperature (wrong-answer). Status: open
+### 2. `m c ΔT` with ΔT in °C silently uses the absolute temperature (wrong-answer). Status: fixed (a °C value in a Δ-named variable or parameter (also from Python) is an error; a °C number written into a product with units warns; D181)
 - **Repro:** `print 1 kg * 4186 J/(kg K) * 10 °C`. The same happens in three other forms:
   - with `ΔT = 10 °C`;
   - with a function `heat(m [kg], ΔT [K]) = m 4186 J/(kg K) ΔT` called as `heat(1 kg, 10 °C)`;
@@ -324,7 +324,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
   is multiplied into a product whose unit isn't a temperature, and when a °C argument is passed to a `[K]`
   parameter.
 
-### 3. `20.0 °C ± 3%` is ±8.8 °C (wrong-answer). Status: open
+### 3. `20.0 °C ± 3%` is ±8.8 °C (wrong-answer). Status: fixed (3 % of the reading as written (±0.60 °C); D182)
 - **Repro:** `t = 20.0 °C ± 3%` then `print t`.
 - **Expected:** ±0.60 °C (3 % of the reading), or an error or warning that a relative uncertainty of a °C value is
   ambiguous.
@@ -332,7 +332,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
   and `20.0 ± 0.5 °C` is right, but the relative form uses the absolute value.
 - **Likely location:** `pm_rel` (checker.py:2179, and `pm` in interp.py).
 
-### 4. Crank–Nicolson step control misses the early transient (wrong-answer). Status: open
+### 4. Crank–Nicolson step control misses the early transient (wrong-answer). Status: fixed (step doubling also compares the first steps and the first 1/8 of the run, and the early steps are kept as snapshots: repro B is 1.130 K (exact 1.131 K), repro A warns; D183)
 - **Repro A:** `solve ∂u/∂t = D * ∂²u/∂x²` with:
   - D = 1 m²/s and L = 1 m;
   - `u(x, 0 s) = 1 K * sin(20 π x / L)`, with both walls at 0 K;
@@ -351,14 +351,14 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** `_checks` and `CHECKPOINTS` in fermium/runtime/pde.py. The check should include early steps:
   the first few, and the times a user will evaluate.
 
-### 5. The zero-integral warning misses vector integrands (wrong-answer). Status: open
+### 5. The zero-integral warning misses vector integrands (wrong-answer). Status: fixed (a vector integral whose components were all 0 at every sample warns once, in the JIT, the interpreter and `fermium build` (D110))
 - **Repro:** `print ∫ <exp(-x²), 0> dx from -1e6 to 1e6`.
 - **Expected:** `<1.77, 0>`, or D110's warning. The scalar `∫ exp(-x²) dx from -1e6 to 1e6` warns.
 - **Actual:** `<0, 0>`, silently, in the JIT, the interpreter and `fermium build`. A complex integrand does warn.
 - **Likely location:** the vector path of `fm_quad` (D44's "quiet first try" per component) in codegen_llvm.py,
   interp.quad and aot_rt.c.
 
-### 6. `fermium.compile` returns a complex number as a real 2-array (wrong-answer). Status: open
+### 6. `fermium.compile` returns a complex number as a real 2-array (wrong-answer). Status: fixed (complex results come back as `fermium.ComplexQuantity`, a Python complex with `.unit`)
 - **Repro:** `mod = fermium.compile("z = 3 + 4i\nf(x) = x + 1i\nw(x [Ω]) = x + 2i Ω\n")`, then `mod["z"]`,
   `mod.f(2)` and `mod.w(3)`.
 - **Expected:** a Python complex (or a complex NumPy value) with its unit, or a clear error. The Python interop
@@ -367,14 +367,14 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
   are the same as the vector <3, 4>, so NumPy's `abs(mod["z"])` gives `[3, 4]`, not 5.
 - **Likely location:** result conversion in fermium/api.py. `ComplexTy` is a subclass of `VecTy` (D91).
 
-### 7. `cot`, `sec`, `csc` of an uncertain value crash with a Python traceback (crash). Status: open
+### 7. `cot`, `sec`, `csc` of an uncertain value crash with a Python traceback (crash). Status: fixed (derivatives of cot, sec and csc added, and a test that every math function has one)
 - **Repro:** `x = 1.0 ± 0.1` then `print cot(x)` (also `sec` and `csc`).
 - **Expected:** `0.64 ± 0.14` (σ = csc²(1)·0.1), `1.85 ± 0.29` and `1.188 ± 0.076`.
 - **Actual:** `KeyError: 'cot'` from fermium/uncertain.py:262 (`DERIV[name]`): a traceback instead of a message.
   D113 added these functions after D120 wrote the derivative table.
 - **Likely location:** `DERIV` in fermium/uncertain.py.
 
-### 8. A negative measurement with a unit can't be written (message). Status: open
+### 8. A negative measurement with a unit can't be written (message). Status: fixed (the unit after σ is shared through a minus sign on either number)
 - **Repro:** `q = -5.0 ± 0.2 m` then `print q`. Also `x = 5.0 ± -0.2 m`.
 - **Expected:** `-5.00 ± 0.20 m`, as `(-5.0 ± 0.2) m` and `-5.0 ± 0.2` already give. For the second, "an
   uncertainty can't be negative", as the plain `5.0 ± -0.2` already says.
@@ -402,7 +402,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** `units.format_number` and its mirrors (printing in core.py, and aot_rt.c). They should switch
   to ×10ⁿ when the rounding position is left of the units digit.
 
-### 10. The Schrödinger PDE rejects the complex constant 𝑖 (complex × PDE). Status: open
+### 10. The Schrödinger PDE rejects the complex constant 𝑖 (complex × PDE). Status: fixed (𝑖 (and 1i) work in a PDE; a bare i is an error when the program has its own i; ψ(x, t) is a complex number; §20 updated; D184)
 - **Repro:** the §20 TDSE example with `𝑖` instead of `i`. `𝑖` is the complex constant of D90 (Tab `\imag`):
   `solve 𝑖 ħ ∂ψ/∂t = … with ψ(x, 0 fs) = … exp(𝑖 k0 x), …`.
 - **Expected:** the same solution as with `i`.
@@ -415,7 +415,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** the initial-value type check in the PDE front end (fermium/solve.py and checker.py),
   fermium/runtime/pde.py, and docs/reference.md §20.
 
-### 11. A run-time error inside a module gives the module's line as the program's line (message). Status: open
+### 11. A run-time error inside a module gives the module's line as the program's line (message). Status: fixed (the error names the module and its line, at the calling line (JIT, interpreter, build); D185)
 - **Repro:** a 4-line program: `import stats`, `x = 1`, `y = 2`, `print stats.standard_error([5 m])`.
 - **Expected:** "line 4" (the call), or the module and its line (`stats.fm, line 6`), as compile-time errors in
   modules already give.
@@ -427,14 +427,14 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** run-time line tracking in the interpreter (`self.line`) and in codegen. Both take the line
   from the module's nodes without remapping it.
 
-### 12. `fermium build` repeats the zero-integral warning on every call (JIT/build difference). Status: open
+### 12. `fermium build` repeats the zero-integral warning on every call (JIT/build difference). Status: fixed (the executable prints each warning text once, like the JIT)
 - **Repro:** `f(a) = ∫ exp(-(x - a)²) dx from -1e6 to 1e6`, then `for k from 1 to 3` / `print f(k)`. Also
   `print ∫ exp(-x²) * (1 + 1i) dx from -1e6 to 1e6` (once per part).
 - **Expected:** once per line, as D110 says and as the JIT and the interpreter do.
 - **Actual:** the executable prints the warning 3 times (and twice for the complex integral).
 - **Likely location:** the once-per-line bookkeeping of `fm_warn` kind 3 in aot_rt.c.
 
-### 13. The `tolerance` option accepts units, and can't go on its own line (unit-safety / parse). Status: open
+### 13. The `tolerance` option accepts units, and can't go on its own line (unit-safety / parse). Status: fixed (`tolerance` must be a plain number between 0 and 1 (separate messages), and can go on its own line)
 - **Repro A:** `solve x' = -x / (1 s) with x(0 s) = 1 m for t from 0 s to 1 s tolerance 1e-6 m` (or `0.001 s`).
   - **Expected:** an error, because the tolerance is a relative plain number (§10).
   - **Actual:** accepted silently. Also, `tolerance 2` is refused with "must be a plain number like 1e-8", although
@@ -446,7 +446,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** fermium/solve.py:443, which checks for `IConst` and the range but not the dimension; and the
   parser's handling of option lines after `for`.
 
-### 14. Complex numbers are called vectors in error messages (message). Status: open
+### 14. Complex numbers are called vectors in error messages (message). Status: fixed ("a complex number", with hints for re(z)/im(z) and `.re`)
 - **Repro:**
   - `use python numpy as np`, then `print np.abs(1 + 2i)` → "a Python function takes numbers and lists of numbers,
     but argument 1 is a vector", with the hint "pass the components one at a time, like v.x";
@@ -455,7 +455,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Expected:** "a complex number", and a hint with `re(z)`/`im(z)` (or `z.re`).
 - **Likely location:** fermium/pyinterop.py:161 and checker.py:2546 test for `VecTy` before `ComplexTy`.
 
-### 15. Nits in messages. Status: open
+### 15. Nits in messages. Status: fixed (all three: no doubled word; "b is a list"; fermium.compile names itself, and the interop section states the limit)
 - **Doubled word:** `use python numpy as np`, `units natural(ħ = c = 1)`, then `print np.sin(E / (1 MeV))` →
   "Python functions can't be called inside  units units natural (ħ = c = 1)  yet" (pyinterop.py:142).
 - **Wrong reason:** a `propagate montecarlo` block with `b = [a, 2 a]` in it → "needs at least one formula

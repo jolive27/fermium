@@ -249,6 +249,10 @@ DERIV = {
     "erfc": lambda x: -2 / math.sqrt(math.pi) * math.exp(-x * x),
     "gamma": lambda x: math.gamma(x) * _dgamma(x), "lgamma": _dgamma, "expm1": math.exp,
     "log1p": lambda x: _div(1.0, 1 + x), "abs": lambda x: -1.0 if x < 0 else 1.0,
+    # D113's reciprocal functions (red team round 3 #7): d cot = -csc², d sec = sec tan, d csc = -csc cot
+    "cot": lambda x: -_div(1.0, math.sin(x) ** 2),
+    "sec": lambda x: _div(math.sin(x), math.cos(x) ** 2),
+    "csc": lambda x: -_div(math.cos(x), math.sin(x) ** 2),
 }
 STEP = {"floor", "ceil", "round", "sign"}      # piecewise constant: the result is a plain number
 

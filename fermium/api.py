@@ -23,8 +23,9 @@ import sys
 import numpy as np
 
 from . import ir as I
+from .checker import _delta_name
 from .errors import FermiumError
-from .types import BoolTy, ListTy, MatTy, NumTy, VecTy
+from .types import BoolTy, ComplexTy, ListTy, MatTy, NumTy, VecTy
 from .units import DIMLESS, Unit, format_number, parse_unit_string, preferred_unit
 
 __all__ = ["compile", "load", "Module", "Quantity", "Q", "QuantityArray"]
@@ -103,6 +104,55 @@ class Quantity(float):
 
 
 Q = Quantity
+
+
+class ComplexQuantity(complex):
+    """A complex number with a unit (red team round 3 #6).  It *is* a Python complex, holding the value in SI units
+    (both parts share one unit, D91); arithmetic on it gives plain complex numbers."""
+
+    @classmethod
+    def _si(cls, re, im, dim, hint=None):
+        q = complex.__new__(cls, re, im)
+        q.dim = dim
+        q.shown = _display(dim, hint)
+        return q
+
+    @property
+    def unit(self):
+        n = self.shown.name
+        return "" if n in ("1", "") else n
+
+    @property
+    def si(self):
+        return complex(self)
+
+    @property
+    def value(self):
+        """The number in its display unit (`unit`)."""
+        return complex(self) / self.shown.factor
+
+    def to(self, unit):
+        u = _unit(unit)
+        if u.dim != self.dim or u.offset:
+            raise ValueError(f"can't convert {self} to {unit}: different dimensions")
+        return complex(self) / u.factor
+
+    def __repr__(self):
+        return f"ComplexQuantity({self.value!r}, {self.unit!r})"
+
+    def __str__(self):
+        v = self.value
+        sign = "-" if v.imag < 0 or (v.imag == 0 and str(v.imag).startswith("-")) else "+"
+        s = f"{format_number(v.real, 6)} {sign} {format_number(abs(v.imag), 6)}i"
+        return f"({s}) {self.unit}" if self.unit else s
+
+    def __reduce__(self):
+        return (_complex_quantity, (self.value, self.unit))
+
+
+def _complex_quantity(value, unit):
+    u = _unit(unit)
+    return ComplexQuantity._si(value.real * u.factor, value.imag * u.factor, u.dim, u)
 
 
 class QuantityArray(np.ndarray):
@@ -205,6 +255,9 @@ def _session(out, base_dir):
     from .driver import ReplSession
 
     class _Session(ReplSession):
+        where = "programs compiled from Python (fermium.compile, fermium.load)"
+        where_hint = "run the program with  fermium run file.fm , or pass value(x) and uncertainty(x) separately"
+
         def __init__(self):
             super().__init__(out=out, base_dir=base_dir)
             # a program, not a prompt: the REPL's conveniences (echoing bare expressions, redefining a variable
@@ -312,6 +365,9 @@ class Module:
             n = ctypes.c_int64.from_address(hdr + 8).value
             vals = np.ctypeslib.as_array((ctypes.c_double * n).from_address(data)).copy() if n > 0 else []
             return QuantityArray._si(vals, U.resolve(ty.dim), sym.hint)
+        if isinstance(ty, ComplexTy):       # a complex number, not the vector <re, im> (red team round 3 #6)
+            return ComplexQuantity._si(self._s.arena[sym.slot], self._s.arena[sym.slot + 1], U.resolve(ty.dim),
+                                       sym.hint)
         if isinstance(ty, VecTy) and not isinstance(ty, MatTy):
             vals = [self._s.arena[sym.slot + k] for k in range(ty.n)]
             dims = [U.resolve(d) for d in ty.comp_dims()] if ty.mixed else [U.resolve(ty.dim)] * ty.n
@@ -390,6 +446,14 @@ class Function:
                             f"({', '.join(p.name for p in params)}), but got {len(args)}")
         kinds = []
         for x, p in zip(args, params):
+            shown = getattr(x, "shown", None)
+            if shown is not None and getattr(shown, "offset", 0) and _delta_name(p.name):
+                # Q(10, "°C") is 283.15 K; as a ΔT it would be 28× too big (red team round 3 #2, D181)
+                what = f"{format_number(x.value)} {shown.name} is {format_number(float(x))} K" \
+                    if isinstance(x, Quantity) else f"values in {shown.name} are read as kelvins from absolute zero"
+                raise FermiumError(f"calling {self.name} from Python: {p.name} looks like a temperature change, "
+                                   f"but a value in {shown.name} is an absolute temperature ({what})",
+                                   hint="pass a change of temperature in K, like Q(10, \"K\")")
             dd = s.checker.resolve_unit(p.unit).dim if p.unit is not None else None
             kinds.append(_arg_kind(x, dd, self.name, p.name))
         key = (self.name,) + tuple((k, d) for k, d, _ in kinds)

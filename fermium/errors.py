@@ -43,6 +43,35 @@ class FermiumRuntimeError(FermiumError):
     pass
 
 
+# Run-time line numbers of code from a module (red team round 3 #11, D185).  A module function's IR carries
+# `(k << MODLINE_SHIFT) | line`, where k - 1 is the text id of the module's file name (stats.fm); when it runs, the
+# line of the call in the program is added as `callline << 32`.  So a run-time error inside a module says where
+# in the module it happened and points at the line of the program that called it.  Plain program lines are small.
+MODLINE_SHIFT = 20
+MODLINE_MAX = (1 << MODLINE_SHIFT) - 1
+
+
+def encode_module_line(k, line):
+    if not line or line > MODLINE_MAX or not (0 < k < (1 << 12)) or line >= (1 << MODLINE_SHIFT):
+        return line
+    return (k << MODLINE_SHIFT) | line
+
+
+def decode_line(code, texts):
+    """(program line or None, suffix) for a run-time line code: suffix is '' for program code, else
+    ' (in stats.fm, line 6)'."""
+    try:
+        code = int(code)
+    except (TypeError, ValueError):
+        return code, ""
+    if code <= MODLINE_MAX:
+        return code or None, ""
+    call, low = code >> 32, code & 0xFFFFFFFF
+    k, ml = low >> MODLINE_SHIFT, low & MODLINE_MAX
+    name = texts[k - 1] if texts is not None and 0 < k <= len(texts) else "a module"
+    return call or None, f" (in {name}, line {ml})"
+
+
 class Warning_:
     def __init__(self, message, line=None, col=None, length=1, hint=None):
         self.message = message

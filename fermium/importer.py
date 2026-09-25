@@ -12,6 +12,7 @@ import os
 from difflib import get_close_matches
 
 from . import ast as A
+from . import ir as I
 from .errors import Diagnostics, FermiumError
 from .modules import available_modules, resolve_module, stdlib_dir
 
@@ -206,6 +207,7 @@ class ImportMixin:
         finally:
             loading.pop()
             (self.future_funcs, self.unit_collisions, self.positive_names, self.collision_taint) = saved
+        _encode_lines(stmts, self.text(display) + 1)      # run-time errors in its constants name the module (D185)
         for w in pdiags.warnings:
             self.diags.warnings.append(w)
         self._relocate_warnings(n0, info, s)
@@ -241,7 +243,13 @@ class ImportMixin:
         n0 = len(self.diags.warnings)
         info.in_call = getattr(info, "in_call", 0) + 1
         try:
-            return self.instantiate(info, args, node, cache)
+            r = self.instantiate(info, args, node, cache)
+            inst = getattr(r, "func", None)
+            if isinstance(inst, I.IFunc) and not getattr(inst, "module_code", False):
+                inst.module_code = True            # run-time errors inside say where in the module (D185)
+                k = self.text(info.module.display) + 1
+                _encode_lines(inst, k)
+            return r
         except FermiumError as e:
             f = info.fdef
             if (e.line, e.col) == (f.line, f.col):       # about the definition (e.g. never returns)
@@ -299,6 +307,37 @@ class ImportMixin:
                            f"from {b.info.name} import {name}"
             s = s.parent
         return None
+
+
+def _encode_lines(root, k):
+    """Give the IR of a module function (or a module's top-level code) module line codes (errors.py, D185).
+    Lambdas inside it (integrands, right-hand sides) are included; called functions are not (a module function
+    is encoded when it is instantiated, a program function passed in keeps its own lines)."""
+    from .errors import encode_module_line, MODLINE_MAX
+    seen = set()
+    todo = [root]
+    while todo:
+        n = todo.pop()
+        if id(n) in seen:
+            continue
+        seen.add(id(n))
+        if isinstance(n, (list, tuple)):
+            todo.extend(n)
+            continue
+        if isinstance(n, dict):
+            todo.extend(n.values())
+            continue
+        if not isinstance(n, (I.Expr, I.Stmt, I.ILambda)) and n is not root:
+            continue
+        for attr in ("line", "def_line"):
+            v = getattr(n, attr, None)
+            if isinstance(v, int) and not isinstance(v, bool) and 0 < v <= MODLINE_MAX:
+                setattr(n, attr, encode_module_line(k, v))
+        for key, v in vars(n).items():
+            if isinstance(v, (I.Sym, I.IFunc)) or key in ("ty", "hint"):
+                continue
+            if isinstance(v, (list, tuple, dict, I.Expr, I.Stmt, I.ILambda)):
+                todo.append(v)
 
 
 def _safe(stem):

@@ -664,6 +664,17 @@ class Parser:
                     self.next()
                     method = self.expect_name("a method name (matrix or shooting)").value
                 return True
+            # `tolerance 1e-12` on a line of its own, like `using bdf` (red team round 3 #13)
+            if self.tok.kind == "NAME" and self.tok.value == "tolerance" and "tolerance" not in self.known and \
+                    not (self.peek().kind == "OP" and self.peek().value == "="):
+                if tol_node[0] is not None:
+                    raise self.error("'tolerance' is given twice in this solve")
+                self.next()
+                saved = self.no_juxt_names
+                self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
+                tol_node[0] = self.expr()
+                self.no_juxt_names = saved
+                return True
             # `using shooting` / `using explicit` on a line of its own, like `grid 400` (red team round 2 #11)
             if self.tok.kind == "NAME" and self.tok.value in ("using", "method") and \
                     self.tok.value not in self.known and self.peek().kind == "NAME":
@@ -1179,9 +1190,14 @@ class Parser:
                 raise self.error("a value can only have one ±; to add a second (independent) uncertainty, write  "
                                  "(a ± b) ± c", op)
             # `5.0 ± 0.2 m`: the unit written after the uncertainty belongs to both numbers
-            if isinstance(e, A.Num) and not e.paren and isinstance(r, A.Quantity) and not r.paren and \
-                    isinstance(r.value, A.Num) and not r.bracket and r.unit.text.strip() != "%":
-                e = A.Quantity(e, r.unit).at(e)
+            # (also through a minus sign on either number: `-5.0 ± 0.2 m`, and `5.0 ± -0.2 m` reaches the
+            # "can't be negative" check; red team round 3 #8)
+            ev = e.operand if isinstance(e, A.Neg) and not e.paren else e
+            rq = r.operand if isinstance(r, A.Neg) and not r.paren else r
+            if isinstance(ev, A.Num) and not ev.paren and isinstance(rq, A.Quantity) and not rq.paren and \
+                    isinstance(rq.value, A.Num) and not rq.bracket and rq.unit.text.strip() != "%":
+                q = A.Quantity(ev, rq.unit).at(ev)
+                e = A.Neg(q).at(e) if ev is not e else q
             e = self.span(A.Uncertain(e, r), t)
         return e
 
@@ -1318,6 +1334,10 @@ class Parser:
             return not any(self.toks[m].kind == "OP" and self.toks[m].value == "," for m in range(self.i, k))
         if t.kind == "NUM" and t.value == 1 and self.toks[j + 1].kind == "OP" and self.toks[j + 1].value in ("/", "]"):
             return True
+        nx = self.toks[j + 1]
+        if t.kind == "NAME" and t.raw == "h" and "h" not in self.known and (
+                nx.kind == "SUP" or (nx.kind == "OP" and nx.value in ("]", "/", "^"))):
+            return True        # `2 [h]` means hours, not a list holding Planck's constant: the unit check says so (D180)
         return False
 
     def _starts_term(self):
@@ -2102,6 +2122,7 @@ class Parser:
         del first
         while True:
             t = self.tok
+            self._no_hour_h(t, explicit, start)
             spaced_var = (not explicit and t.kind == "OP" and t.value == "/" and t.ws_before and
                           self.peek().kind == "NAME" and self.peek().value in self.known)
             if t.kind == "OP" and t.value == "/" and not spaced_var and (unit_name_here(1) or (
@@ -2130,6 +2151,33 @@ class Parser:
         u.line, u.col = start.line, start.col
         u.length = max(1, self.toks[self.i - 1].end - start.start)
         return u
+
+    def _no_hour_h(self, t, explicit, start):
+        """`36 km/h` and `[km/h]`: h is Planck's constant, not the hour, so dividing a unit by it is almost always
+        a mistake for km/hr; it is an error rather than a silent 5×10³⁷ s/(kg m) (red team round 3 #1, D180).
+        Only a tight `/` (no spaces) right after a unit, or any `/ h` inside brackets; `2 eV / h` divides."""
+        if not (t.kind == "OP" and t.value == "/"):
+            return
+        h = self.peek()
+        if h.kind != "NAME" or h.raw != "h":
+            return
+        if not explicit and (t.ws_before or h.ws_before):
+            return
+        after = self.peek(2)
+        if after.kind == "OP" and after.value == "(" and not after.ws_before:
+            return                                          # km/h(x): a call of your function h
+        unit = self._unit_text(start)
+        k = self.toks.index(start)
+        num = self.toks[k - 1].raw + " " if not explicit and k > 0 and self.toks[k - 1].kind == "NUM" else ""
+        if explicit:
+            raise self.error(f"'{unit}/h' isn't a unit: in Fermium h is Planck's constant, not the hour", tok=h,
+                             hint=f"write {unit}/hr for {unit} per hour")
+        if "h" in self.known:
+            hint = f"write {num}{unit}/hr for {unit} per hour, or  {num}{unit} / h  (with spaces) to divide by your h"
+        else:
+            hint = f"write {num}{unit}/hr for {unit} per hour, or  ({num}{unit}) / h  to divide by Planck's constant"
+        raise self.error(f"'{num}{unit}/h': in Fermium h is Planck's constant, not the hour, so this would divide "
+                         f"by Planck's constant", tok=h, hint=hint)
 
     def _unit_text(self, start_tok):
         prev = self.toks[self.i - 1]

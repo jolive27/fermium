@@ -36,8 +36,8 @@ m = m_e
 E0 = 0.2 eV
 k0 = sqrt(2*m E0) / ħ
 V(x) = if abs(x) < 0.5 nm then 0.3 eV else 0 eV
-solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x² + V(x) ψ
-    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-(x + 15 nm)² / (4σ²)) exp(i k0 x), ψ(-60 nm, t) = 0 nm^(-1/2), ψ(60 nm, t) = 0 nm^(-1/2)
+solve 𝑖 ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x² + V(x) ψ
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-(x + 15 nm)² / (4σ²)) exp(𝑖 k0 x), ψ(-60 nm, t) = 0 nm^(-1/2), ψ(60 nm, t) = 0 nm^(-1/2)
     for x from -60 nm to 60 nm, t from 0 fs to 100 fs
     grid 1600
 P_back = ∫ |ψ(x, 100 fs)|^2 dx from -60 nm to -0.5 nm

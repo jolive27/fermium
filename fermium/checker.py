@@ -110,6 +110,25 @@ class FuncInfo:
         return b
 
 
+def _kind_of(ty):
+    """'a list', 'a complex number', … for messages."""
+    from .types import ComplexTy
+    if isinstance(ty, ListTy):
+        return "a list"
+    if isinstance(ty, ComplexTy):
+        return "a complex number"
+    if isinstance(ty, VecTy):
+        return "a vector"
+    if isinstance(ty, MatTy):
+        return "a matrix"
+    return "not a number"
+
+
+def _delta_name(name):
+    """ΔT, Δθ, δT, delta_T (which the lexer spells δ_T), dT: a name that says "a change" (D181)."""
+    return name.startswith(("Δ", "δ")) or name.lower().startswith("delta") or name in ("dT", "dθ", "d_T")
+
+
 class SolView:
     n = 1          # vector length (1 = a plain number)
     stride = 1     # slots between successive derivatives
@@ -255,7 +274,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if u is None:
                 sugg = ""
                 if f.name in ("h",):
-                    sugg = "for hours write hr"
+                    sugg = "h is Planck's constant, not the hour; for hours write hr"
                 elif f.name in ("t",):
                     sugg = "for metric tons write tonne"
                 elif f.name in SPELLED_UNITS:
@@ -504,6 +523,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
     def assign_to(self, name, v, node, ctx):
         if isinstance(v.ty, type(VOID)) or v.ty is None:
             raise self.err("this doesn't produce a value to store", node)
+        if _delta_name(name) and self._abs_temp(v):
+            self._delta_abs_temp_error(name, v, getattr(node, "value", node) or node)
         b, scope = ctx.scope.lookup(name)
         owned = isinstance(b, I.Sym) and (b.func is ctx.func or (b.storage == "arena" and ctx.is_main)) \
             and (ctx.lam is None or b in getattr(ctx.lam, "locals", []))
@@ -1136,6 +1157,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.hint = u
         r.sf = v.sf
         r.direct = isinstance(e.value, A.Num)
+        if u.affine and isinstance(e.value, A.Num):
+            r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
         return r
 
     def lookup(self, name, ctx, node):
@@ -1440,6 +1463,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if r.hint is not None and r.hint.affine:
                 k = b if a.hint is r.hint else a
                 self._warn_scaled_temperature(r.hint, "×", k, e)
+            else:
+                self._warn_absolute_in_product(a, b, e)
+                self._warn_absolute_in_product(b, a, e)
         elif op == "/":
             r = I.IBin("/", a, b, mk(a.ty.dim / b.ty.dim))
             r.hint = a.hint if self._dimless(b) and a.hint is not None and b.hint is None else None
@@ -1447,6 +1473,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 self._drop_turn_hint(r, a, b, "/")
             if r.hint is not None and r.hint.affine:
                 self._warn_scaled_temperature(r.hint, "/", b, e)
+            else:
+                self._warn_absolute_in_product(a, b, e)      # ΔT/Δx; b / T (Wien) is absolute by nature
         else:
             raise self.err(f"unknown operator {op}", e)
         r.sf = self._minsf(a, b)
@@ -1750,6 +1778,44 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         down = (op == "/" and abs(v / two_pi - 1) < 1e-12) or (op == "*" and abs(v * two_pi - 1) < 1e-12)
         if (kind == "cycles" and up) or (kind == "angular" and down):
             r.hint = None
+
+    def _abs_temp(self, v):
+        """Is v an absolute temperature written in °C/°F (not a difference, D12)?"""
+        h = getattr(v, "hint", None)
+        return isinstance(v, I.Expr) and isinstance(v.ty, (NumTy, ListTy)) and h is not None and \
+            getattr(h, "affine", False) and not getattr(v, "tdelta", False)
+
+    def _delta_abs_temp_error(self, name, v, node):
+        """ΔT = 10 °C, or 10 °C passed as ΔT: a Δ name says "a change", °C says "a reading" (red team round 3 #2,
+        D181)."""
+        u = v.hint
+        lit = getattr(v, "abs_literal", None)
+        if lit is None:
+            raise self.err(f"{name} looks like a temperature change, but this value in {u.name} is an absolute "
+                           f"temperature (Fermium reads {u.name} values as absolute temperatures in K)", node,
+                           hint="write a change of temperature in K, or as a difference like T2 - T1")
+        x = format_number(lit[0])
+        k = format_number(float(lit[0]) * u.factor + u.offset)
+        step = format_number(float(lit[0]) * u.factor, 3)
+        raise self.err(f"{name} looks like a temperature change, but a value in {u.name} is an absolute temperature "
+                       f"({x} {u.name} is {k} K)", node,
+                       hint=f"write a change of temperature in K ({x} {u.name} → {step} K), or as a difference like "
+                            f"T2 - T1")
+
+    def _warn_absolute_in_product(self, a, b, e):
+        """`4186 J/(kg K) * 10 °C`: a °C/°F number written out and multiplied by a quantity with units enters as
+        the absolute temperature (283.15 K), which is right in p V = n R T and 28× wrong in Q = m c ΔT (red team
+        round 3 #2, D181).  A variable in °C (T = 25 °C; k_B T) is not warned about: that is the usual way to
+        write an absolute temperature."""
+        lit = getattr(a, "abs_literal", None)
+        if lit is None or not self._abs_temp(a) or self._dimless(b):
+            return
+        u = a.hint
+        x, k = format_number(lit[0]), format_number(float(lit[0]) * u.factor + u.offset)
+        self.diags.warn(f"{x} {u.name} is an absolute temperature, so it enters this formula as {k} K",
+                        line=e.line, col=e.col,
+                        hint=f"for a temperature change (ΔT in Q = m c ΔT) write {format_number(lit[0] * u.factor, 3)} "
+                             f"K; for an absolute temperature (p V = n R T) write {k} K to make it clear")
 
     def _warn_scaled_temperature(self, u, op, k, e):
         """2 T or T / 2 with T in °C/°F scales the absolute temperature (in K) (D12, redteam #6)."""
@@ -2176,7 +2242,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                f"{self.desc(v.ty.dim)}; both need the same units", e.err,
                                hint="write the unit once at the end, like  L = 1.20 ± 0.01 m")
         ty = ListTy(v.ty.dim) if isinstance(v.ty, ListTy) else NumTy(v.ty.dim)
-        r = I.IBuiltin("pm_rel" if rel else "pm", [v, s], ty)
+        args = [v, s]
+        if rel and v.hint is not None and getattr(v.hint, "affine", False) and not getattr(v, "tdelta", False):
+            # 20.0 °C ± 3%: 3 % of the reading as written (0.60 K), not of 293.15 K (red team round 3 #3, D182)
+            args.append(I.IConst(v.hint.offset, NumTy(v.ty.dim)))
+        r = I.IBuiltin("pm_rel" if rel else "pm", args, ty)
         h = v.hint if v.hint is not None else (None if rel else s.hint)
         r.hint = h if h is None or not getattr(h, "affine", False) or v.hint is h else None
         r.sf = None
@@ -2542,6 +2612,10 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         self.need_numlike(t, e.args[0])     # a list of times gives the list of values, like f(xs) (#62)
         self.unify_or(t.ty.dim, view.tdim, lambda: f"{view.name} is a function of {view.tname}, which is "
                       f"{self.desc(view.tdim)}, not {self.desc(t.ty.dim)}", e.args[0])
+        if isinstance(t.ty, ListTy) and view.n > 1 and getattr(view, "cplx", False):
+            raise self.err(f"{view.name} is complex, so it can't be evaluated at each element of a list "
+                           f"(lists of complex numbers aren't supported yet)", e,
+                           hint=f"loop over the list, or take the real or imaginary part, like {view.name}.re")
         if isinstance(t.ty, ListTy) and view.n > 1:
             raise self.err(f"{view.name} is a vector, so it can't be evaluated at each element of a list "
                            f"(lists of vectors aren't supported yet)", e,
@@ -2745,6 +2819,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             r.hint = getattr(inst, "ret_hint", None)
             self._arg_hint(r, args)
             return r
+        for p, a in zip(f.params, fargs):
+            if not isinstance(a, FuncRef) and _delta_name(p.name) and self._abs_temp(a):
+                self._delta_abs_temp_error(p.name, a, node)
         uses = self._func_param_uses(info)
         for p, a in zip(f.params, fargs):
             if not isinstance(a, FuncRef) and uses.get(p.name, (False,))[0]:
@@ -3383,6 +3460,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 outs.append(st.sym)
                 st.sym.sf, st.sym.direct = None, False
         if not outs:
+            other = next((st for st in body if isinstance(st, I.SAssign)), None)
+            if other is not None:       # b = [a, 2 a]: a formula, but not for a number (red team round 3 #15)
+                raise self.err(f"propagate montecarlo gives uncertainties to plain numbers, but "
+                               f"{other.sym.name} is {_kind_of(other.sym.ty)}; give each number its own formula, like "
+                               f"{other.sym.name}1 = …, {other.sym.name}2 = …", s)
             raise self.err("propagate montecarlo needs at least one formula (name = …) in its block", s)
         r = I.SPropagate(n, body, outs)
         return r
@@ -3786,6 +3868,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if not isinstance(r, I.IVec) or r.ty.mixed or not all(isinstance(it, I.IIntegral) for it in r.items):
             return r
         binds, total = [], None
+        mark = self.new_sym(self.fresh_name("__vint"), NumTy(DIMLESS), ctx)
+        mark.assigned = True
+        binds.append((mark, I.IBuiltin("qzero_mark", [], NumTy(DIMLESS))))
         for it in r.items:
             sym = self.new_sym(self.fresh_name("__vint"), NumTy(it.ty.dim), ctx)
             sym.assigned = True
@@ -3795,8 +3880,13 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             v = I.IVar(sym)
             size = I.IIf(I.ICmp("==", v, v, BOOL), I.IBuiltin("abs", [v], it.ty), I.IConst(0.0, it.ty), it.ty)
             total = size if total is None else I.IBin("+", total, size, it.ty)
+        # every component 0 at every sample: one zero-integral warning for the vector (red team round 3 #5, D110)
+        check = self.new_sym(self.fresh_name("__vint"), NumTy(DIMLESS), ctx)
+        check.assigned = True
+        binds.append((check, I.IBuiltin("qzero_check", [I.IVar(mark), I.IConst(float(len(r.items)),
+                                                                                 NumTy(DIMLESS))], NumTy(DIMLESS))))
         items = []
-        for (sym, _), it in zip(binds, r.items):
+        for (sym, _), it in zip(binds[1:], r.items):
             it.atol = I.IBin("*", I.IConst(1e-10, NumTy(DIMLESS)), total, it.ty)
             v = I.IVar(sym)
             items.append(I.IIf(I.ICmp("==", v, v, BOOL), v, it, it.ty))

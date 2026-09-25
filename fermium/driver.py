@@ -206,6 +206,8 @@ class ReplSession:
     """Incremental compilation: each input becomes a new LLVM module sharing an arena of globals."""
 
     ARENA_SLOTS = 1 << 16
+    where = "the REPL or Jupyter"       # named in "doesn't work here yet" messages
+    where_hint = "save the lines in a .fm file and run it"
 
     def __init__(self, out=None, base_dir=None):
         self.out = out or sys.stdout
@@ -243,8 +245,8 @@ class ReplSession:
         prog = parse(text, self.diags, known=self.known)
         module = self.checker.check_program(prog, name="main")
         if module.uses_unc:
-            raise FermiumError("uncertainties (±, propagate montecarlo) work in programs (fermium run file.fm) "
-                               "but not yet in the REPL or Jupyter", hint="save the lines in a .fm file and run it")
+            raise FermiumError(f"uncertainties (±, propagate montecarlo) work in programs (fermium run file.fm) "
+                               f"but not yet in {self.where}", hint=self.where_hint)
         for s in prog.body:
             if hasattr(s, "name"):
                 self.known.add(s.name)

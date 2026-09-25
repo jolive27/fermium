@@ -532,12 +532,12 @@ print θ1(5 s), θ2(5 s)
 - **Methods:**
   - Without `step`, Fermium uses adaptive Dormand–Prince RK45 (relative tolerance 10⁻⁹).
   - With `step 1 ms`, it uses classic fixed-step RK4. After the solve, Fermium checks the step cheaply (step doubling at 8 points, 24 extra evaluations of the right-hand side) and warns when the estimated error is more than 0.1% of the solution's size: `the step is too coarse for this equation: the estimated error is 80% of the solution's size …; use a smaller step, or drop step to use the adaptive solver`. The warning is shown once per `solve` line.
-  - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
+  - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1, with no units: `tolerance 1e-6 m` is an error). It has no effect on RK4.
   - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
   - A long RK45 solve that is held back by stiffness warns: `this equation looks stiff: rk45 has taken 526031 steps, held small by stability rather than accuracy …; add using radau after the range`. The "too many steps" error suggests it too.
   - `radau` and `bdf` run SciPy's solvers (they call the compiled right-hand side), so they need SciPy, and `fermium build` refuses them for now (use `fermium run`).
-  - The range comes first, then `step h`; after that `tolerance r`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same):
+  - The range comes first, then `step h`; after that `tolerance r`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same), on the range's line or each on a line of its own:
 
 ```fermium
 solve x' = -x / (1 s)
@@ -852,7 +852,10 @@ print(mod["g"])              # 9.81 m/s²  (also mod.g)
   Python: 11× for a Leibniz series with `(-1)^k` on the (shared) test machine; tests/test_python_interop.py
   prints the measured ratio.
 - **Limits:** arguments are numbers and lists (not vectors, matrices, functions or text); results are
-  numbers, lists, vectors, matrices or booleans. The program is compiled like a REPL session: each new
+  numbers, lists, vectors, matrices, booleans or complex numbers (a `fermium.ComplexQuantity`: a Python
+  `complex` in SI units with `.unit`, `.value` and `.to()`). A program with uncertainties (`±`) can't be
+  compiled this way yet (D122): run it with `fermium run`. A `Q(…, "°C")` passed to a parameter named like a
+  temperature change (`ΔT`) is an error (D181). The program is compiled like a REPL session: each new
   argument signature compiles a small extra piece of code (tens of milliseconds).
 
 See DECISIONS.md D140–D142 for the design.
@@ -967,8 +970,8 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
   - The other way round, **Hz means rad/s**: `1 Hz in rpm` is 9.55 rpm (not 60) and `1 Hz in rad/s` is 1 rad/s (not 2π). Every conversion between a value written or shown in Hz and rev, rpm, rad/s or °/s warns, with the numbers for that case. For cycles per second, write the value in `rev/s` (`50 rev/s in rpm` is 3000 rpm), or multiply by 2π (`2π f in rpm`; `2π f` and `ω/(2π)` drop the Hz or rad/s they came from). Adding or subtracting a Hz value and a rad/s (or rpm) value warns too. See DECISIONS D95.
   - **Same SI unit, different quantity:** adding or subtracting `Gy` and `Sv` (absorbed and equivalent dose), `Bq` and `Hz`, or `J` and `N m` (energy and torque) warns.
-- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). `°C + °C` and `sum` (or `cumsum`) of a list in °C are errors (`mean` works); `2 T` and `T / 2` of a °C value warn that they scale the absolute temperature. Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
-- **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
+- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). `°C + °C` and `sum` (or `cumsum`) of a list in °C are errors (`mean` works); `2 T` and `T / 2` of a °C value warn that they scale the absolute temperature. A temperature *change* is written in K: `ΔT = 10 °C` (any name starting with Δ, δ or delta, or dT, for a variable or a parameter) is an error, since 10 °C is 283.15 K, and a number in °C written into a product with units (`4186 J/(kg K) * 1 kg * 10 °C`) warns that it enters as 283.15 K (D181). A variable in °C in `n R T` or `k_B T` is an absolute temperature, as it should be. Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
+- **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`; `h` is Planck's constant, so `36 km/h` and `[km/h]` are errors that say to write `km/hr` or `kph`, D180), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
 
 ### Natural units: `units natural`, `units nuclear`, `units astro`
 
@@ -1120,7 +1123,7 @@ print mean(Ts), "±", std(Ts)
 
 ### Fourier transforms
 
-Fermium has no complex numbers, so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
+Lists hold real numbers (lists of complex numbers aren't supported yet, D91), so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
 
 ```fermium
 dt = 1 ms                                  # sampling interval
@@ -1209,14 +1212,14 @@ solve ∂²u/∂t² = c² ∂²u/∂x²
 print u(0.7 m, 0.1 s), "  d'Alembert:", (f(0.5 m) + f(0.9 m)) / 2
 ```
 
-- **The Schrödinger equation:** `i` in the equation is the imaginary unit, and a complex initial value is written `A(x) exp(i φ(x))`. The solution is complex, so `ψ(x, t)` is the 2-vector <Re ψ, Im ψ>: `|ψ(x, t)|^2` is the probability density, and `ψ(x, t).x`, `ψ(x, t).y` are the real and imaginary parts. An animation shows |ψ|².
+- **The Schrödinger equation:** `𝑖` (Tab `\imag`, or `1i`) in the equation is the imaginary unit (see [Complex numbers](#complex-numbers)), and a complex initial value is written `A(x) exp(𝑖 φ(x))`. A bare `i` also means the imaginary unit here, as long as the program has no variable called `i`; if it has one, that is an error, so that your `i` is never silently replaced by √−1 (D184). The solution is complex, so `ψ(x, t)` is a complex number: `|ψ(x, t)|^2` is the probability density, and `ψ(x, t).re`, `ψ(x, t).im` (or `re(…)`, `im(…)`) are the real and imaginary parts. An animation shows |ψ|².
 
 ```fermium
 m = m_e
 σ = 1 nm
 k0 = 2 / (1 nm)
-solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
-    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(i k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+solve 𝑖 ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(𝑖 k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
     for x from -40 nm to 40 nm, t from 0 fs to 30 fs
     grid 2000
 print "norm:", ∫ |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm
@@ -1243,7 +1246,7 @@ print L - L, L / L
 print 5.0 ± 3%, 20.0 ± 0.5 °C, 1.20 m ± 1 cm
 ```
 
-- **Writing them:** `1.20 ± 0.01 m`, `(1.20 ± 0.01) m` and `1.20 m ± 1 cm` are the same measurement. `x ± 3%` is relative. For a temperature the uncertainty is a difference (`20.0 ± 0.5 °C` is ±0.5 K). Both parts need the same units; `1.20 m ± 0.01` is an error. `±` binds tighter than `+` and `-` and looser than `*` and `/`. `(a ± b) ± c` adds a second, independent uncertainty (statistical and systematic).
+- **Writing them:** `1.20 ± 0.01 m`, `(1.20 ± 0.01) m` and `1.20 m ± 1 cm` are the same measurement. `x ± 3%` is relative. For a temperature the uncertainty is a difference (`20.0 ± 0.5 °C` is ±0.5 K), and a relative one is a percentage of the reading as written (`20.0 °C ± 3%` is ±0.60 °C, D182). A negative value takes the unit the same way: `-5.0 ± 0.2 m`. Both parts need the same units; `1.20 m ± 0.01` is an error. `±` binds tighter than `+` and `-` and looser than `*` and `/`. `(a ± b) ± c` adds a second, independent uncertainty (statistical and systematic).
 - **Lists:** `[0.90 s, 1.27 s] ± 0.02 s` (or a list of uncertainties) makes each element its own measurement; `data.T ± 0.02 s` works on a column. `mean`, `sum` and `Σ` propagate.
 - **Propagation:** first order (the standard lab-course rule), through every operator, math function, user function, derivative and sum, with **correlations tracked exactly**: each `±` is an independent source, and a value remembers how much of each source it contains. So `L - L` is `0 ± 0`, and `L L` has twice the relative uncertainty of L, while the product of two independent measurements has √2 times. Units are checked as for plain numbers.
 - **Printing:** the uncertainty is rounded to 2 significant figures and the value to the same decimal place: `9.70 ± 0.19 m/s²`, `(6.674 ± 0.015)×10⁻¹¹`. `in unit` converts both. The default precision and `to N digits` don't apply to uncertain values.
