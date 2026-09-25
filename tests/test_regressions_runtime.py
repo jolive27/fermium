@@ -30,6 +30,9 @@ def both(src):
     ("∫ (x^(-2) + 1)^0.4 dx from 0 to 1", 5.160306768626711),
     ("∫ exp(-(x-100)^2) dx from -inf to inf", math.sqrt(math.pi)),
     ("∫ exp(x) dx from -inf to 0", 1.0),
+    ("∫ abs(x)^(-0.8) dx from -1 to 1", 10.0),
+    ("∫ abs(x)^(-0.9) dx from -1 to 2", 10 + 10 * 2 ** 0.1),
+    ("∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3", 13.731208414065762),
     ("∫ 1/(1 + x^2) dx from -inf to inf", math.pi),
 ])
 def test_singular_and_offset_integrals(src, want):

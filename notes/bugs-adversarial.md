@@ -759,7 +759,7 @@ Printed to 6 s.f., so "maximum height of a projectile" style answers are wrong i
 digit. Refine around the best sample with the dense interpolant (solve x'(t) = 0 in the
 neighbouring steps, e.g. a few Newton/bisection steps on the Hermite cubic / RHS).
 
-## A56. (regression in the rewritten quadrature) Interior |x|^-p singularities with p ≥ ~0.8 are rejected
+## A56. [MOSTLY FIXED: singularities at 0 are split there and work; |x - c|^-0.8 with c ≠ 0 still fails -- doubles can't resolve x - c below ~1e-17, and fixing it needs QUADPACK-style ε extrapolation] (regression in the rewritten quadrature) Interior |x|^-p singularities with p ≥ ~0.8 are rejected
 Endpoint singularities work (`∫ x^(-0.9) dx from 0 to 1` = 10) and interior 1/√ works, but an
 interior singularity a bit stronger than 1/√ is now reported as divergent:
 ```

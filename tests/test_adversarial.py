@@ -952,11 +952,12 @@ def test_weak_singularity_accuracy():
     assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.160306768626711, 1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A56: interior |x|^-0.8 singularity rejected as divergent")
 @pytest.mark.parametrize("integral,want", [
     ("((1/x)^2 + 1)^(2/5) dx from -2 to 3", 13.7312084140662),
     ("abs(x)^(-0.8) dx from -1 to 1", 10.0),
-    ("abs(x - 3/10)^(-0.8) dx from 0 to 1", 5 * (0.3 ** 0.2 + 0.7 ** 0.2)),
+    pytest.param("abs(x - 3/10)^(-0.8) dx from 0 to 1", 5 * (0.3 ** 0.2 + 0.7 ** 0.2),
+                 marks=pytest.mark.xfail(strict=True, reason="BUG A56 (limitation): a strong singularity at a "
+                                         "non-zero interior point needs extrapolation (QUADPACK's ε-algorithm)")),
     ("abs(x)^(-0.9) dx from -1 to 2", 10 * (1 + 2 ** 0.1)),
 ])
 def test_interior_algebraic_singularity(integral, want):

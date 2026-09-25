@@ -293,7 +293,20 @@ def dp45(f, y0, t0, t1, rtol):
     return sol
 
 
-def _quadcore(f, mode, p, q, rtol, atol):
+class _Split(Exception):
+    def __init__(self, c):
+        self.c = c
+
+
+def _quadfin(f, a, b, rtol, atol):
+    """Mirrors fm_quadfin: split a finite range at an interior singularity."""
+    try:
+        return _quadcore(f, 0, a, b, rtol, atol, split=True)
+    except _Split as sp:
+        return _quadcore(f, 0, sp.c, b, rtol, atol) - _quadcore(f, 0, sp.c, a, rtol, atol)
+
+
+def _quadcore(f, mode, p, q, rtol, atol, split=False):
     def qf(u):
         if mode == 0:
             L = q - p
@@ -346,6 +359,13 @@ def _quadcore(f, mode, p, q, rtol, atol):
         stuck = (wh - wl) <= 1e-13 * max(abs(wl), abs(wh))
         if stuck and finite and toterr <= 1e-7 * abs(total):
             return total
+        if split and (len(panels) >= M - 1 or stuck):
+            um = 1.0 - mid
+            c = p + (q - p) * (mid * mid * (3.0 - 2.0 * mid)) if mid <= 0.5 else q - (q - p) * (um * um * (1.0 + 2.0 * mid))
+            if abs(c) <= 1e-9 * (q - p):
+                c = 0.0
+            if p < c < q:
+                raise _Split(c)
         if len(panels) >= M - 1 or stuck or toterr != toterr or abs(total) == math.inf:
             raise _Fail(ERR_QUAD, total, toterr)
         r1, e1 = gk(wl, mid)
@@ -379,13 +399,13 @@ def quad(f, a, b, rtol=1e-10, atol=0.0):
         return 0.0
     a_inf, b_inf = abs(a) == math.inf, abs(b) == math.inf
     if not (a_inf or b_inf):
-        return _quadcore(f, 0, a, b, rtol, atol)
+        return _quadfin(f, a, b, rtol, atol)
     if not a_inf:
         L = _qscan(f, a, 1.0)
-        return _quadcore(f, 0, a, a + L, rtol, atol) + _quadcore(f, 1, a + L, L, rtol, atol)
+        return _quadfin(f, a, a + L, rtol, atol) + _quadcore(f, 1, a + L, L, rtol, atol)
     if not b_inf:
         L = _qscan(f, b, -1.0)
-        return _quadcore(f, 2, b - L, L, rtol, atol) + _quadcore(f, 0, b - L, b, rtol, atol)
+        return _quadcore(f, 2, b - L, L, rtol, atol) + _quadfin(f, b - L, b, rtol, atol)
     lr, ll = _qscan(f, 0.0, 1.0), _qscan(f, 0.0, -1.0)
     vr, vl = abs(f(lr)) * lr, abs(f(-ll)) * ll
     c = lr if not (vr < vl) else -ll

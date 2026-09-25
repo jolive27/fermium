@@ -374,11 +374,19 @@ class ModuleGen:
         """∫ f from a to b.  Finite ranges go straight to fm_quadcore; a half-line [a, ∞) is split at
         a + L, with L the integrand's length scale (fm_qscan), into a finite piece and a tail; (-∞, ∞)
         is split at the scan's peak into two tails."""
-        core = self.kernel("fm_quadcore")
+        corek = self.kernel("fm_quadcore")
+        fin = self.kernel("fm_quadfin")
         scan = self.kernel("fm_qscan")
         fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
         f, env, a, bb, rtol, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
+        nosplit = b.alloca(F64, size=2)
+        b.store(f64(0), nosplit)
+
+        def core(args):
+            if args[2].constant == 0:
+                return b.call(fin, [args[0], args[1], args[3], args[4], args[5], args[6]])
+            return b.call(corek, args + [nosplit])
         fabs = self.intrinsic("fabs")
         inf = f64(math.inf)
         with b.if_then(b.fcmp_ordered(">", a, bb)):
@@ -388,17 +396,17 @@ class ModuleGen:
         a_inf = b.fcmp_ordered("==", b.call(fabs, [a]), inf)
         b_inf = b.fcmp_ordered("==", b.call(fabs, [bb]), inf)
         with b.if_then(b.not_(b.or_(a_inf, b_inf))):
-            b.ret(b.call(core, [f, env, i64(0), a, bb, rtol, atol]))
+            b.ret(core([f, env, i64(0), a, bb, rtol, atol]))
         with b.if_then(b.not_(a_inf)):          # [a, ∞)
             L = b.call(scan, [f, env, a, f64(1)])
             m = b.fadd(a, L)
-            b.ret(b.fadd(b.call(core, [f, env, i64(0), a, m, rtol, atol]),
-                         b.call(core, [f, env, i64(1), m, L, rtol, atol])))
+            b.ret(b.fadd(core([f, env, i64(0), a, m, rtol, atol]),
+                         core([f, env, i64(1), m, L, rtol, atol])))
         with b.if_then(b.not_(b_inf)):          # (-∞, b]
             L = b.call(scan, [f, env, bb, f64(-1)])
             m = b.fsub(bb, L)
-            b.ret(b.fadd(b.call(core, [f, env, i64(2), m, L, rtol, atol]),
-                         b.call(core, [f, env, i64(0), m, bb, rtol, atol])))
+            b.ret(b.fadd(core([f, env, i64(2), m, L, rtol, atol]),
+                         core([f, env, i64(0), m, bb, rtol, atol])))
         # (-∞, ∞): split at the larger of the two peaks the scans find
         lr = b.call(scan, [f, env, f64(0), f64(1)])
         ll = b.call(scan, [f, env, f64(0), f64(-1)])
@@ -406,8 +414,27 @@ class ModuleGen:
         vl = b.fmul(b.call(fabs, [b.call(f, [b.fneg(ll), env])]), ll)
         c = b.select(b.fcmp_unordered(">=", vr, vl), lr, b.fneg(ll))
         L = b.call(fabs, [c])
-        b.ret(b.fadd(b.call(core, [f, env, i64(2), c, L, rtol, atol]),
-                     b.call(core, [f, env, i64(1), c, L, rtol, atol])))
+        b.ret(b.fadd(core([f, env, i64(2), c, L, rtol, atol]),
+                     core([f, env, i64(1), c, L, rtol, atol])))
+        return fn
+
+    def _k_quadfin(self):
+        """A finite range; if fm_quadcore finds an interior singularity, integrate up to it and from it,
+        so it becomes an end-point singularity (which the smoothstep substitution handles)."""
+        core = self.kernel("fm_quadcore")
+        fn = self._new_fn("fm_quadfin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
+        f, env, a, bb, rtol, atol = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        sp = b.alloca(F64, size=2)
+        b.store(f64(1), sp)
+        r = b.call(core, [f, env, i64(0), a, bb, rtol, atol, sp])
+        with b.if_then(b.fcmp_ordered("!=", b.load(sp), f64(2))):
+            b.ret(r)
+        c = b.load(b.gep(sp, [i64(1)]))
+        b.store(f64(0), sp)
+        # both pieces start at c (u = 0, where the u grid is finest): ∫_a^c = -∫_c^a
+        b.ret(b.fsub(b.call(core, [f, env, i64(0), c, bb, rtol, atol, sp]),
+                     b.call(core, [f, env, i64(0), c, a, rtol, atol, sp])))
         return fn
 
     def _k_quadcore(self):
@@ -415,9 +442,9 @@ class ModuleGen:
         keep a list of panels, always bisect the one with the largest error estimate, stop when the
         total error is small enough."""
         gk = self.kernel("fm_gk15")
-        fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64],
+        fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P],
                           inline=False)
-        f, env, mode, a, bb, rtol, atol = fn.args
+        f, env, mode, a, bb, rtol, atol, split = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
@@ -480,6 +507,20 @@ class ModuleGen:
             b.call(free, [raw])
             b.ret(total)
         bad = b.or_(b.icmp_signed(">=", cnt, i64(M - 1)), stuck)
+        # a finite range that gets stuck or runs out of panels may have an interior singularity: ask
+        # the caller (fm_quadfin) to split the range there, snapping to 0 when it is that close
+        with b.if_then(b.and_(bad, b.fcmp_ordered("==", b.load(split), f64(1)))):
+            um = b.fsub(f64(1), mid)
+            xl = b.fadd(a, b.fmul(b.fsub(bb, a), b.fmul(b.fmul(mid, mid), b.fsub(f64(3), b.fmul(f64(2), mid)))))
+            xh = b.fsub(bb, b.fmul(b.fsub(bb, a), b.fmul(b.fmul(um, um), b.fadd(f64(1), b.fmul(f64(2), mid)))))
+            c = b.select(b.fcmp_ordered("<=", mid, f64(0.5)), xl, xh)
+            near0 = b.fcmp_ordered("<=", b.call(fabs, [c]), b.fmul(f64(1e-9), b.fsub(bb, a)))
+            c = b.select(near0, f64(0), c)
+            with b.if_then(b.and_(b.fcmp_ordered(">", c, a), b.fcmp_ordered("<", c, bb))):
+                b.store(f64(2), split)
+                b.store(c, b.gep(split, [i64(1)]))
+                b.call(free, [raw])
+                b.ret(f64(math.nan))
         bad = b.or_(bad, b.fcmp_unordered("uno", toterr, toterr))
         bad = b.or_(bad, b.fcmp_ordered("==", b.call(fabs, [total]), inf))
         with b.if_then(bad):
