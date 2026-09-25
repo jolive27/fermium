@@ -138,3 +138,39 @@ def test_lane_emden_and_chandrasekhar_mass():
     rho_c = (0.6 * msun / (4 * pi * b ** 1.5 * omega["1.5"])) ** 2
     R = table["1.5"][0] * np.sqrt(b) * rho_c ** (-1 / 6)
     assert floats(line_of(out, "n = 3/2 white dwarf").split("R =")[1])[0] == pytest.approx(R / 1e3, rel=5e-3)
+
+
+def test_u238_chain_matches_analytic_bateman():
+    """The 15-member U-238 series (radau) against the closed-form Bateman solution in 60-digit arithmetic."""
+    import mpmath as mp
+    out = run_prog("u238_chain", "u238_chain.fm")
+    mp.mp.dps = 60
+    yr, day, mn = mp.mpf(365.25 * 86400), mp.mpf(86400), mp.mpf(60)
+    half = [4.468e9 * yr, 24.10 * day, 1.159 * mn, 2.455e5 * yr, 7.538e4 * yr, 1600 * yr, 3.8235 * day,
+            3.098 * mn, 26.8 * mn, 19.9 * mn, mp.mpf("164.3e-6"), 22.20 * yr, 5.012 * day, 138.376 * day]
+    lam = [mp.log(2) / h for h in half]
+
+    def activity(n, t, lams=lam):          # λ_n N_n(t) / N_1(0), members 0-based, pure parent at t = 0
+        s = sum(mp.exp(-lams[j] * t) / mp.fprod([lams[k] - lams[j] for k in range(n + 1) if k != j])
+                for j in range(n + 1))
+        return mp.fprod(lams[:n + 1]) * s
+
+    names = {"Th-234": 1, "U-234": 3, "Th-230": 4, "Ra-226": 5, "Rn-222": 6, "Po-214": 10, "Po-210": 13}
+    for T in (1, 1000, 100000, 3000000):
+        line = line_of(out, f"t = {T} yr :")
+        for name, i in names.items():
+            v = num(line, name)
+            exact = float(activity(i, T * yr) / activity(0, T * yr))
+            assert v == pytest.approx(exact, rel=2e-4), (T, name)
+    worst = max(abs(float(activity(i, 3e6 * yr) / activity(0, 3e6 * yr)) - 1) for i in range(1, 14))
+    assert num(out, "largest |A_i/A(U-238) − 1| =") == pytest.approx(worst, rel=0.05)
+    assert worst < 1e-3                                                  # secular equilibrium
+    assert abs(num(out, "total/N₀ − 1 =")) < 1e-9
+    assert num(out, "activity of 1 kg of U-238:") == pytest.approx(12.44e6, rel=1e-3)   # 12.4 kBq/g
+    # two-member in-growth: A2/A1 = λ2/(λ2 − λ1) (1 − exp(−(λ2 − λ1) t)) = 0.99
+    for text, (l1, l2) in {"Rn-222 reaches": (lam[5], lam[6]), "Th-234 reaches": (lam[0], lam[1])}.items():
+        t99 = -mp.log(1 - 0.99 * (l2 - l1) / l2) / (l2 - l1) / day
+        assert num(line_of(out, text), "after") == pytest.approx(float(t99), rel=1e-4)
+    assert num(line_of(out, "Rn-222 reaches"), "after") == pytest.approx(3.8235 * np.log(100) / np.log(2), rel=5e-4)   # 6.64 half-lives
+    t99 = -mp.log(1 - 0.99 * (lam[1] - lam[0]) / lam[1]) / (lam[1] - lam[0])
+    assert num(out, "A(Pa-234m)/A(U-238) =") == pytest.approx(float(activity(2, t99) / activity(0, t99)), rel=1e-4)
