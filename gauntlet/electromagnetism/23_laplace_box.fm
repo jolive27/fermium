@@ -1,0 +1,73 @@
+# Electromagnetism 23 — Laplace's equation in a box, by separation of variables
+#
+# A long metal pipe of square cross-section, side a = 2.00 cm, has three walls
+# grounded and the fourth (the lid, y = a) held at V₀ = 100 V, insulated from
+# the others at the corners. Inside, ∇²φ = 0, and separation of variables gives
+#
+#     φ(x, y) = Σ over odd n of (4V₀/nπ) sin(nπx/a) sinh(nπy/a) / sinh(nπ).
+#
+# (a) Sum the series (odd n up to 199) at the centre, where superposition of
+#     the four rotated problems gives exactly V₀/4, and at (a/4, 3a/4).
+# (b) Show that each term satisfies Laplace's equation (∂²/∂x² + ∂²/∂y² of a
+#     term is 0), and check that the sum is harmonic with the mean-value
+#     property: φ at the centre is the average of φ around a circle about it.
+# (c) Check the boundary values: 0 on the grounded walls; on the lid the
+#     truncated series is the Fourier series of a square wave.
+# (d) Find the charge per unit length induced on the grounded bottom wall,
+#     λ = −ε₀ ∫ ∂φ/∂y (x, 0) dx from 0 to a.
+# (e) The 3-D version: a cube of side a with one face at V₀ and five grounded.
+#     The double series (odd n, m) at the centre must give V₀/6.
+# (Griffiths Ex. 3.4 and Prob. 3.15; Jackson §2.9)
+
+a = 2.00 cm
+V0 = 100 V
+N = 199
+
+term(n, x, y) = 4 V0 / (n π) * sin(n π x / a) * sinh(n π y / a) / sinh(n π)
+
+φ(x, y) =
+    total = 0 V
+    for n from 1 to N step 2
+        total += term(n, x, y)
+    total
+
+# (a)
+print "(a) φ(centre) =", φ(a/2, a/2) in V to 10 digits, "  V0/4 =", V0/4 in V to 10 digits
+print "    φ(a/4, 3a/4) =", φ(a/4, 3*a/4) in V to 10 digits
+
+# (b) each term is harmonic: the two second derivatives cancel
+print "(b) ∂²/∂x² term =", ∂²/∂x² term
+print "    ∂²/∂y² term =", ∂²/∂y² term
+# `∇²term` would take n as a third coordinate (and it never finishes compiling:
+# FRICTION E11), and `∇²φ` refuses a function written over several lines (E12),
+# so the Laplacian is spelled out.
+lap(n, x, y) = (∂²/∂x² term)(n, x, y) + (∂²/∂y² term)(n, x, y)
+print "    Laplacian of term 3 at (a/7, a/5) =", lap(3, a/7, a/5) in V/m² to 3 digits,
+      "  vs ∂²/∂x² alone", (∂²/∂x² term)(3, a/7, a/5) in V/m² to 3 digits
+r0 = a/4
+circle_avg = ∫ φ(a/2 + r0 cos(θ), a/2 + r0 sin(θ)) dθ from 0 to 2π / (2π)
+print "    average of φ on a circle about the centre =", circle_avg in V to 10 digits
+
+# (c) the walls
+print "(c) φ on the left wall, bottom wall =", φ(0 m, a/3) in V, φ(a/3, 0 m) in V
+print "    φ at the middle of the lid (N terms) =", φ(a/2, a) in V to 10 digits
+
+# (d) the induced charge on the bottom wall
+σ(x) =
+    total = 0 C/m²
+    for n from 1 to N step 2
+        total += -ε₀ (∂/∂y term)(n, x, 0 m)
+    total
+λ_bottom = ∫ σ(x) dx from 0 m to a
+print "(d) λ on the bottom wall =", λ_bottom in pC/m to 10 digits
+
+# (e) the cube, centre
+Nc = 41
+φ_cube(x, y, z) =
+    total = 0 V
+    for n from 1 to Nc step 2
+        for k from 1 to Nc step 2
+            γ = π √(n² + k²) / a
+            total += 16 V0 / (π² n k) * sin(n π x / a) * sin(k π y / a) * sinh(γ z) / sinh(γ a)
+    total
+print "(e) cube centre =", φ_cube(a/2, a/2, a/2) in V to 10 digits, "  V0/6 =", V0/6 in V to 10 digits

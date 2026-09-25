@@ -1,0 +1,56 @@
+# Electromagnetism 21 — A proton in crossed electric and magnetic fields
+#
+# A proton starts from rest at the origin in a uniform electric field
+# E = 1.00 kV/m ŷ and a uniform magnetic field B = 0.100 T ẑ, and it is also
+# given a velocity 2.00 km/s along ẑ (parallel to B). The Lorentz force law is
+#
+#     m r'' = q (E + r' × B).
+#
+# (a) Find the cyclotron frequency ω = qB/m, the period T and the E × B drift
+#     velocity v_d = E × B / B².
+# (b) Solve the equation of motion for three cyclotron periods. The exact path
+#     is a cycloid (plus the free drift along B),
+#         x = R (ωt − sin ωt),  y = R (1 − cos ωt),  z = v_z t,   R = E/(Bω).
+#     Compare r(t) with it at t = T/4, T/2 and 3T.
+# (c) Check that the velocity averaged over one period is v_d, that the top
+#     speed in the xy plane is 2 v_d (at t = T/2, the top of the cycloid), and
+#     that the kinetic energy gained equals the work q E y done by the field.
+# (Griffiths, Introduction to Electrodynamics, Ex. 5.2)
+
+q = e
+M = m_p                                   # `m` would clash with the unit metre
+E = <0, 1.00e3, 0> V/m
+B = <0, 0, 0.100> T
+v_z = 2.00 km/s
+
+# (a)
+ω = q |B| / M
+T = 2π / ω
+v_d = E × B / |B|²
+R = |E| / (|B| ω)
+print "(a) ω =", ω in rad/s to 8 digits
+print "    T =", T in ns to 8 digits
+print "    v_d_x =", v_d.x in m/s to 8 digits, " v_d_y =", v_d.y in m/s to 3 digits
+print "    R =", R in mm to 8 digits
+
+# (b) the Lorentz force as a vector ODE
+solve M r'' = q (E + r' × B)
+  with r(0) = <0, 0, 0> mm, r'(0) = <0 m/s, 0 m/s, v_z>
+  for t from 0 s to 3*T tolerance 1e-11
+
+cycloid(t) = <R (ω t - sin(ω t)), R (1 - cos(ω t)), v_z t>
+for f in [0.25, 0.5, 3]
+    print "(b) t/T =", f, " r =", r(f*T) in mm, " cycloid =", cycloid(f*T) in mm
+print "    x(T/4) =", r(T/4).x in mm to 8 digits, "  exact", cycloid(T/4).x in mm to 8 digits
+print "    y(T/2) =", r(T/2).y in mm to 8 digits, "  exact", cycloid(T/2).y in mm to 8 digits
+print "    x(3T) =", r(3*T).x in mm to 8 digits, "  exact", cycloid(3*T).x in mm to 8 digits
+print "    z(3T) =", r(3*T).z in mm to 8 digits, "  exact", cycloid(3*T).z in mm to 8 digits
+
+# (c) the drift, the top speed and the work-energy theorem
+v_avg = (r(T) - r(0 s)) / T
+print "(c) <v_x> over a period =", v_avg.x in m/s to 8 digits
+v_top = r'(T/2)
+print "    speed in the xy plane at T/2 =", √(v_top.x² + v_top.y²) / |v_d| to 8 digits, "× v_d"
+t1 = 0.3*T
+KE(t) = ½ M (|r'(t)|² - v_z²)
+print "    KE gained by 0.3 T =", KE(t1) in eV to 8 digits, "  q E y =", q |E| r(t1).y in eV to 8 digits
