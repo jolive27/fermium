@@ -18,6 +18,7 @@ M3_BUILTINS = {"rand", "rand2", "randn", "randn2", "seed", "sample", "fft_re", "
                "power_spectrum", "frequencies", "argmax", "argmin"}
 FFT_KIND = {"fft_re": 0, "fft_im": 1, "amplitude_spectrum": 2, "power_spectrum": 3, "ifft": 4}
 ERR_LEN, ERR_EMPTY, ERR_PENDING = 5, 6, -1
+ERR_SAMPLE_COUNT, ERR_NEG_SIGMA = 25, 26      # red team round 2 #14
 
 
 def _i64(v):
@@ -126,12 +127,19 @@ def builtin(g, name, e, args):
         return b.call(mg.kernel("fm_randn"), [])
     if name == "randn2":
         mu, sig = args
+        with b.if_then(b.fcmp_ordered("<", sig, ir.Constant(F64, 0.0)), likely=False):
+            g.fail(ERR_NEG_SIGMA, sig)
         return b.fadd(mu, b.fmul(sig, b.call(mg.kernel("fm_randn"), [])))
     if name == "seed":
         b.call(mg.kernel("fm_seed"), [args[0]])
         return ir.Constant(F64, 0.0)
     if name == "sample":
-        n = g.list_count(args[0])
+        nf = args[0]
+        bad = b.or_(b.fcmp_ordered("<", nf, ir.Constant(F64, 0.0)),
+                    b.fcmp_ordered("!=", nf, b.call(mg.intrinsic("floor"), [nf])))
+        with b.if_then(bad, likely=False):
+            g.fail(ERR_SAMPLE_COUNT, nf)
+        n = g.list_count(nf)
         fn = mg.lambda_for(e.lam)
         env = g.make_env(e.lam)
         out, data = g.new_list(n)
@@ -304,19 +312,21 @@ def py_solve(g, s):
     guard = mg.kernel("fm_ode_guard")
     out = g.alloca(SOLP)
     if s.method == "eigen":
-        ext = mg.extern("fm_eigen", I64, [I8P, I8P, F64P, F64, F64, I64, I64, I64, SOLP.as_pointer()])
+        ext = mg.extern("fm_eigen", I64, [I8P, I8P, F64P, F64, F64, I64, I64, I64, I64, I64, SOLP.as_pointer()])
         status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, t0, t1,
                               ir.Constant(I64, s.nstates), ir.Constant(I64, s.grid),
-                              ir.Constant(I64, s.eig_method), out])
+                              ir.Constant(I64, s.eig_method), ir.Constant(I64, getattr(s, "tname", -1)),
+                              ir.Constant(I64, fmt), out])
     else:
         ext = mg.extern("fm_pde", I64, [I8P, I8P, F64P, F64, F64, F64, F64, F64, I64, I64, I64, I64, I64, I64, I64,
-                                         SOLP.as_pointer()])
+                                         I64, SOLP.as_pointer()])
         step = g.expr(s.step) if s.step is not None else ir.Constant(F64, float("nan"))
         xa, xb = g.expr(s.xa), g.expr(s.xb)
         status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, xa, xb, t0, t1, step,
                               ir.Constant(I64, s.grid), ir.Constant(I64, s.order), ir.Constant(I64, s.pmethod),
                               ir.Constant(I64, s.bc[0]), ir.Constant(I64, s.bc[1]),
-                              ir.Constant(I64, 1 if s.is_complex else 0), ir.Constant(I64, 1 if s.tdep else 0), out])
+                              ir.Constant(I64, 1 if s.is_complex else 0), ir.Constant(I64, 1 if s.tdep else 0),
+                              ir.Constant(I64, getattr(g, "line", 0) or 0), out])
     with b.if_then(b.icmp_signed("!=", status, ir.Constant(I64, 0)), likely=False):
         with b.if_then(b.icmp_signed("==", status, ir.Constant(I64, 2))):
             b.call(mg.externs["longjmp"], [b.bitcast(mg.jmpbuf, I8P), ir.Constant(ir.IntType(32), 1)])

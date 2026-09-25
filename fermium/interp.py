@@ -16,7 +16,7 @@ import time
 import numpy as np
 
 from . import ir as I
-from .errors import FermiumRuntimeError
+from .errors import FermiumError, FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
 from . import linalg
@@ -30,6 +30,8 @@ ERR_QUAD_NAN, ERR_QUAD_INF = 31, 32
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
 ERR_ROOT, ERR_POLE = 13, 14
 ERR_SINGULAR = 15
+ERR_STD_ONE = 24
+ERR_SAMPLE_COUNT, ERR_NEG_SIGMA = 25, 26     # red team round 2 #14
 ERR_NOT_SYMMETRIC, ERR_NOT_POSDEF = 21, 22
 ERR_ODE_NAN, ERR_ODE_RANGE, ERR_NO_EVENT = 16, 17, 18
 ERR_ODE_SINGULAR = 33
@@ -1651,10 +1653,12 @@ class Interpreter:
         xa, xb = self.eval(s.xa, fr), self.eval(s.xb, fr)
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
         step = self.eval(s.step, fr) if s.step is not None else None
+        line = self.line
         try:
             ts, ys, dys, ncomp, m = self.kernel(
                 lambda: pde_solve(f, xa, xb, t0, t1, grid=s.grid, order=s.order, method=PDE_METHOD_NAMES[s.pmethod],
-                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep), getattr(s, "tfmt", -1))
+                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep,
+                                  warn=lambda kind, est: self.rt.warn(kind, est, line, -1)), getattr(s, "tfmt", -1))
         except PdeFail as ex:
             raise FermiumRuntimeError(ex.message, self.line) from None
         sol = Sol(ncomp * (m + 1))
@@ -1684,7 +1688,7 @@ class Interpreter:
 
     def m3_eigen(self, s, fr):
         """solve … lowest N: the same Python solver the compiled code calls (runtime/eigen.py)."""
-        from .runtime.eigen import EigenFail, eigen_solve
+        from .runtime.eigen import EigenFail, eigen_solve, singular_text
         f = self.ode_rhs(s.rhs, fr)
         a, b = self.eval(s.t0, fr), self.eval(s.t1, fr)
         try:
@@ -1692,7 +1696,9 @@ class Interpreter:
                                                              "shooting" if s.eig_method == 1 else "matrix"),
                                          getattr(s, "tfmt", -1))
         except EigenFail as ex:
-            raise FermiumRuntimeError(ex.message, self.line) from None
+            msg = ex.message if ex.x is None else \
+                singular_text(self.rt.tname(getattr(s, "tname", -1)), self.rt.fmt_value(ex.x, getattr(s, "tfmt", -1)))
+            raise FermiumRuntimeError(msg, self.line) from None
         sol = Sol(3 * s.nstates)
         sol.t, sol.y, sol.dy = list(xs), list(ys), list(dys)
         fr.set(s.sol_sym, sol)
@@ -1731,6 +1737,8 @@ class Interpreter:
         if name == "randn":
             return rng.randn(st)
         if name == "randn2":
+            if args[1] < 0:
+                raise _Fail(ERR_NEG_SIGMA, args[1])
             return args[0] + args[1] * rng.randn(st)
         rng.seed(st, args[0])
         return 0.0
@@ -1835,6 +1843,8 @@ class Interpreter:
                     "argmin"):
             return self.m3_fourier(name, args)
         if name == "sample":
+            if args[0] < 0 or (args[0] == args[0] and abs(args[0]) < math.inf and args[0] != math.floor(args[0])):
+                raise _Fail(ERR_SAMPLE_COUNT, args[0])
             f = self.scalar_fn(e.lam, fr)
             return [f(float(k + 1)) for k in range(_count(args[0]))]
         if name == "clock":
@@ -1919,6 +1929,8 @@ class Interpreter:
         n = len(lst)
         if name in ("mean", "std", "min_list", "max_list", "first", "last") and n < 1:
             raise _Fail(ERR_EMPTY)
+        if name == "std" and n < 2:            # the N − 1 sample std of one value is 0/0 (red team round 2 #4)
+            raise _Fail(ERR_STD_ONE)
         if name == "first":
             return lst[0]
         if name == "last":
@@ -1941,7 +1953,7 @@ class Interpreter:
         for x in lst:
             d = x - mean
             acc = acc + d * d
-        return math.sqrt(acc / (n - 1 if n >= 2 else 1))
+        return math.sqrt(acc / (n - 1))
 
 
 MC_DEFAULT = 100_000          # samples when the block runs vectorized
@@ -1996,10 +2008,13 @@ def sum_seq(xs):
     return acc
 
 
-def run_interpreted(source, filename="<program>", out=None, base_dir=None, diags=None):
+def run_interpreted(source, filename="<program>", out=None, base_dir=None, diags=None, show_warnings=False,
+                    err=None):
     """Compile to IR and run it with the interpreter (no LLVM, so it also runs in Pyodide).
 
-    Pass a Diagnostics object as `diags` to see the warnings afterwards."""
+    Pass a Diagnostics object as `diags` to see the warnings afterwards, or show_warnings=True to have the
+    compile-time warnings written to `err` (stderr) before the program runs, as `driver.run_source` does for
+    the JIT (`fermium run --interp`, red team round 2 #6)."""
     import os
     import sys
     from .checker import Checker
@@ -2011,11 +2026,23 @@ def run_interpreted(source, filename="<program>", out=None, base_dir=None, diags
     base_dir = base_dir or (os.path.dirname(os.path.abspath(filename)) if not filename.startswith("<")
                             else os.getcwd())
     d = diags if diags is not None else Diagnostics()
-    prog = parse(source, d)
-    ck = Checker(d, base_dir)
-    mod = ck.check_program(prog)
+    err = err or sys.stderr
+
+    def show():
+        if show_warnings:
+            for w in d.warnings:
+                err.write(w.format(source, None) + "\n")
+    try:
+        prog = parse(source, d)
+        ck = Checker(d, base_dir)
+        mod = ck.check_program(prog)
+    except FermiumError:
+        show()                   # the warnings collected before the error often explain it
+        raise
+    show()
     finalize_tables(mod.tables, ck.U)
     rt = Runtime(out, base_dir)
+    rt.err = err
     rt.tables = mod.tables
     Interpreter(mod, rt).run()
     if rt.line:

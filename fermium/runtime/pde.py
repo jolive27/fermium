@@ -17,7 +17,10 @@ Methods (second-order differences in x; the grid has M intervals):
 - first order in t: the θ-method on the semi-discrete system u' = T u + b(t): Crank–Nicolson (θ = ½, the
   default: second order and unconditionally stable; unitary for Schrödinger, so ‖ψ‖ is conserved to rounding),
   implicit (backward Euler, θ = 1), explicit (forward Euler, θ = 0, stable only for dt ≤ h²/(2 max D)).
-  One sparse LU factorisation, then one solve per step.
+  One sparse LU factorisation, then one solve per step.  CN on real equations starts with 4 L-stable SDIRK2
+  steps (Rannacher-style smoothing of incompatible initial/boundary data, D131), and CN/implicit are checked by
+  step doubling: the default step is halved until the estimated error is under PDE_TOL, a step of your own
+  that is too coarse warns (D131).
 - second order in t: the explicit central-difference (leapfrog) scheme, stable for c dt ≤ h (Courant ≤ 1);
   by default dt is the largest step with Courant number ≤ 1 (at exactly 1, it is exact for constant c).
 Boundary conditions: u = g(t) (Dirichlet) or ∂u/∂x = g(t) (Neumann, by a ghost point).
@@ -38,6 +41,10 @@ class PdeFail(Exception):
 
 RHS, U0, PHASE0, V0, LEFT, RIGHT = range(6)
 MAX_SNAPSHOTS = 1000
+RANNACHER_STEPS = 4      # CN's first steps are done with L-stable SDIRK2 (D131)
+CHECKPOINTS = 8          # times at which step doubling compares two solutions (D130)
+PDE_TOL = 1e-3           # the estimated error allowed, relative to the solution's size (as RK4_WARN)
+PDE_MAX_STEPS = 32000    # the default step is halved at most until there are this many steps
 
 
 class _Probe:
@@ -125,7 +132,7 @@ def _average_jumps(P, xs, h, t, coefs):
 
 
 def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolson", step=None,
-              bc=(0, 0), is_complex=False, tdep=False):
+              bc=(0, 0), is_complex=False, tdep=False, warn=None):
     """Returns (ts, ys, dys, ncomp): snapshot times, flattened rows of u (and ∂u/∂t) at the M + 1 grid points."""
     import numpy as np
     if not (xb > xa):
@@ -271,31 +278,154 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
             rows.append(w.real.copy())
             drows.append(dw.real.copy())
 
-    if order == 1:
-        from scipy.sparse import diags
-        from scipy.sparse.linalg import splu
-        T = diags([lo[1:], di, up[:-1]], [-1, 0, 1], shape=(M + 1, M + 1), format="lil", dtype=complex)
-        I_ = diags([np.ones(M + 1)], [0], shape=(M + 1, M + 1), format="lil", dtype=complex)
-        L_ = (I_ - theta * dt * T).tolil()
-        for j in dirichlet:
-            L_[j, :] = 0
-            L_[j, j] = 1.0
-        lu = splu(L_.tocsc()) if theta > 0 else None
-        keep(t0, u, ut_of(u, t0))
-        b_old = bvec(t0)
-        for n in range(1, nt + 1):
-            t = t0 + n * dt
-            b_new = bvec(t)
-            rhs = u + (1 - theta) * dt * (apply_T(u) + b_old) + theta * dt * b_new
+    lus = {}
+
+    def _lu(tau):
+        """The factorisation of (I - tau T) with the Dirichlet rows replaced by identity rows (cached)."""
+        if tau not in lus:
+            from scipy.sparse import diags
+            from scipy.sparse.linalg import splu
+            T = diags([lo[1:], di, up[:-1]], [-1, 0, 1], shape=(M + 1, M + 1), format="lil", dtype=complex)
+            I_ = diags([np.ones(M + 1)], [0], shape=(M + 1, M + 1), format="lil", dtype=complex)
+            L_ = (I_ - tau * T).tolil()
+            for j in dirichlet:
+                L_[j, :] = 0
+                L_[j, j] = 1.0
+            lus[tau] = splu(L_.tocsc())
+        return lus[tau]
+
+    def _step(w, t_old, dt_, th, b_old):
+        """One θ-method step from t_old to t_old + dt_; returns (w_new, b_new)."""
+        t = t_old + dt_
+        b_new = bvec(t)
+        rhs = w + (1 - th) * dt_ * (apply_T(w) + b_old) + th * dt_ * b_new
+        gl, gr = bval(t)
+        if bc[0] == 0:
+            rhs[0] = gl
+        if bc[1] == 0:
+            rhs[M] = gr
+        return (_lu(th * dt_).solve(rhs) if th > 0 else rhs), b_new
+
+    G2 = 1.0 - 1.0 / math.sqrt(2.0)
+
+    def _sdirk2(w, t_old, dt_, b_old):
+        """One step of the two-stage, stiffly accurate SDIRK method (γ = 1 − 1/√2): second order and L-stable,
+        so the grid-scale modes are damped (by ~0.4/(γ² λ dt) per step) where CN only flips their sign."""
+        tau = G2 * dt_
+        lu_ = _lu(tau)
+
+        def solve(rhs, t):
             gl, gr = bval(t)
             if bc[0] == 0:
                 rhs[0] = gl
             if bc[1] == 0:
                 rhs[M] = gr
-            u = lu.solve(rhs) if lu is not None else rhs
-            b_old = b_new
-            if n % every == 0 or n == nt:
-                keep(t, u, ut_of(u, t))
+            return lu_.solve(rhs)
+        b1 = bvec(t_old + tau)
+        k1 = solve(w + tau * b1, t_old + tau)
+        b2 = bvec(t_old + dt_)
+        return solve(w + (1 - G2) * dt_ * (apply_T(k1) + b1) + tau * b2, t_old + dt_), b2
+
+    def _march(n_steps, record, checks=()):
+        """Solve with n_steps equal steps.  Crank–Nicolson on real equations starts with Rannacher-style
+        smoothing (D131): its first RANNACHER_STEPS steps use an L-stable method (SDIRK2), which damps the
+        grid-scale modes that a jump between the initial and boundary data excites (CN's factor for them is
+        ≈ −1, so they would never decay).  Returns (ts, rows, drows, {step: u at that step})."""
+        dt_ = span / n_steps
+        smooth = RANNACHER_STEPS if (theta == 0.5 and not is_complex) else 0
+        w = u.copy()
+        tss, rws, drws, at = [], [], [], {}
+        if record:
+            tss.append(t0), rws.append(None), drws.append(None)
+            _keep_into(tss, rws, drws, 0, t0, w)
+        b_old = bvec(t0)
+        want = set(checks)
+        for n in range(1, n_steps + 1):
+            t_old = t0 + (n - 1) * dt_
+            if n <= smooth:
+                w, b_old = _sdirk2(w, t_old, dt_, b_old)
+            else:
+                w, b_old = _step(w, t_old, dt_, theta, b_old)
+            t = t0 + n * dt_
+            if n in want:
+                at[n] = w.copy()
+            if record and (n % every_of(n_steps) == 0 or n == n_steps):
+                tss.append(t), rws.append(None), drws.append(None)
+                _keep_into(tss, rws, drws, len(tss) - 1, t, w)
+        return tss, rws, drws, at
+
+    def every_of(n_steps):
+        return max(1, int(math.ceil(n_steps / MAX_SNAPSHOTS)))
+
+    def _keep_into(tss, rws, drws, k, t, w):
+        if not (np.all(np.isfinite(w))):
+            raise PdeFail(f"the solution became NaN or infinite at t = {t:g} s (SI): the scheme is unstable or "
+                          f"the equation blows up")
+        dw = ut_of(w, t)
+        if is_complex:
+            rws[k] = np.concatenate([w.real, w.imag])
+            drws[k] = np.concatenate([dw.real, dw.imag])
+        else:
+            rws[k] = w.real.copy()
+            drws[k] = dw.real.copy()
+
+    def _estimate(fine, coarse_n, fine_n, scale):
+        """Step doubling: the largest difference between the solutions with coarse_n and fine_n = 2 coarse_n
+        steps, at CHECKPOINTS common times, relative to the solution's size."""
+        worst = 0.0
+        for k, wc in coarse.items():
+            wf = fine[2 * k] if fine_n == 2 * coarse_n else fine[k // 2]
+            worst = max(worst, float(np.max(np.abs(wf - wc))))
+        return worst / scale
+
+    def _checks(n_steps):
+        return sorted({max(1, (k * n_steps) // CHECKPOINTS) for k in range(1, CHECKPOINTS + 1)})
+
+    def _scale(rws):
+        m = max(float(np.max(np.abs(r))) for r in rws)
+        gl, gr = bval(t0)
+        return max(m, abs(gl), abs(gr))
+
+    def _controlled(n_steps):
+        """Crank–Nicolson / implicit with an accuracy check (D130).  With a step of your own: solve with it and
+        with half of it; if the estimated error is over PDE_TOL of the solution's size, warn.  With the
+        default step: halve it until the estimate is under PDE_TOL (up to PDE_MAX_STEPS steps), or warn."""
+        nonlocal coarse
+        p = 2 if theta == 0.5 else 1
+        if step is not None:
+            ck = _checks(n_steps)
+            tss, rws, drws, at = _march(n_steps, True, ck)
+            coarse = at
+            fine_at = _march(2 * n_steps, False, [2 * k for k in ck])[3]
+            scale = _scale(rws)
+            if scale > 0:
+                est = _estimate(fine_at, n_steps, 2 * n_steps, scale) * 2 ** p / (2 ** p - 1)
+                if est > PDE_TOL and warn is not None:
+                    warn(8, est)
+            return tss, rws, drws
+        half = max(1, n_steps // 2)
+        coarse = _march(half, False, _checks(half))[3]
+        while True:
+            ckh = _checks(half)
+            tss, rws, drws, at = _march(2 * half, True, sorted({2 * k for k in ckh} | set(_checks(2 * half))))
+            scale = _scale(rws)
+            est = _estimate(at, half, 2 * half, scale) / (2 ** p - 1) if scale > 0 else 0.0
+            if est <= PDE_TOL:
+                return tss, rws, drws
+            if 2 * half >= PDE_MAX_STEPS:
+                if warn is not None:
+                    warn(9, est)
+                return tss, rws, drws
+            half *= 2
+            coarse = {k: at[k] for k in _checks(half)}
+
+    coarse = {}
+
+    if order == 1:
+        if theta == 0.0:
+            ts, rows, drows = _march(nt, True)[:3]
+        else:
+            ts, rows, drows = _controlled(nt)
     else:
         def acc(w, vel, t):
             return apply_T(w) + D * vel + bvec(t)

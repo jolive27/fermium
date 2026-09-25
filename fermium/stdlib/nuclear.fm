@@ -41,7 +41,11 @@ remaining(N0, t_half [s], t [s]) = N0 exp(-ln(2) t / t_half)
 bateman_daughter(N0, t_half_parent [s], t_half_daughter [s], t [s]) =
     λp = ln(2) / t_half_parent
     λd = ln(2) / t_half_daughter
-    N0 λp / (λd - λp) * (exp(-λp t) - exp(-λd t))
+    δt = (λd - λp) t
+    # (e^(−λp t) − e^(−λd t)) / (λd − λp) = t e^(−λp t) (1 − e^(−δt)) / δt: written with expm1 when δt is
+    # small, so nearly equal half-lives don't cancel, and equal ones give the limit N0 λ t e^(−λt)
+    N0 λp * (if abs(δt) > 1 then (exp(-λp t) - exp(-λd t)) / (λd - λp)
+             else t exp(-λp t) * (if δt == 0 then 1 else -expm1(-δt) / δt))
 
 # Sommerfeld parameter η = Z1 Z2 α c / v of two nuclei with relative speed v
 sommerfeld_parameter(Z1 [1], Z2 [1], v [m/s]) = Z1 Z2 α c / v

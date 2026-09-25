@@ -42,7 +42,7 @@ Gravity, stars and cosmology. Masses in kg or M☉, distances in m, au, pc; the 
 
 ## em
 
-Electrostatics, circuits and charged particles in fields. Charges in C (or e), fields in V/m and T.  Frequencies ending in _frequency are in cycles per second (Hz); the _angular_ ones are ω in rad/s.
+Electrostatics, circuits and charged particles in fields. Charges in C (or e), fields in V/m and T.  Angles are plain numbers in Fermium, so Hz is the same unit as rad/s (D27): a turning rate ending in _frequency is shown in rev/s (turns per second: `in rev/s` and `in rpm` are right), and the _angular_ ones are ω in rad/s.  A frequency you pass in, like skin_depth's f, is the number of cycles per second written in Hz (60 Hz).
 
 - `coulomb_field(q [C], r [m])` → electric field [V/m]  
   Electric field of a point charge q at distance r: k_e q / r²
@@ -60,8 +60,8 @@ Electrostatics, circuits and charged particles in fields. Charges in C (or e), f
   Voltage on a charging capacitor after time t, supply V0, time constant τ: V0 (1 − e^(−t/τ))
 - `cyclotron_angular_frequency(q [C], B [T], mass [kg])` → frequency [1/s], shown in rad/s  
   Cyclotron angular frequency of a charge q, mass m in a field B: ω = |q| B / m
-- `cyclotron_frequency(q [C], B [T], mass [kg])` → frequency [1/s], shown in Hz  
-  Cyclotron frequency in turns per second: f = |q| B / (2π m)
+- `cyclotron_frequency(q [C], B [T], mass [kg])` → frequency [1/s], shown in rev/s  
+  Cyclotron frequency in turns per second: f = |q| B / (2π m), shown in rev/s (1 rev = 2π, so the value is ω)
 - `larmor_radius(mass [kg], v_perp [m/s], q [C], B [T])` → length [m]  
   Larmor (gyro) radius of a charge q, mass m with speed v_perp across a field B: r = m v_perp / (|q| B)
 - `skin_depth(ρ [Ω m], f [Hz], μ_r [1])` → length [m]  

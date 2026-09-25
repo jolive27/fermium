@@ -44,6 +44,7 @@ class Parser:
         self.i = 0
         self.diags = diags or Diagnostics()
         self.known = set(known or ())   # names assigned so far (for unit/variable collisions)
+        self.module_names = set()        # names bound by `import m [as a]` (for the hint on `m.x = …`)
         self.abs_depth = 0
         self.no_juxt_names = set()
         self.warned_units = set()
@@ -343,6 +344,15 @@ class Parser:
             names = [n.name for n in A.walk(lhs) if isinstance(n, A.Name)]
             unknown = [n for n in names if n not in self.known]
             var = (unknown or names or ["x"])[0]
+        if isinstance(lhs, A.Field) and isinstance(lhs.target, A.Name):
+            owner = lhs.target.name
+            if owner in self.module_names:          # nuclear.a_V = 16 MeV (red team round 2 #13)
+                return self.error(f"can't change {text}: a module's names can't be changed from outside it",
+                                  hint=f"make your own copy and use it instead:  {lhs.name} = …  (the module's own "
+                                       f"functions keep using {text})")
+            return self.error(f"can't store a value in {text}: the left side of = must be a variable name",
+                              hint=f"{text} is a part of {owner}, which can be read but not changed; store it in a "
+                                   f"name of its own:  {lhs.name} = …")
         if any(isinstance(n, (A.Prime, A.Deriv)) for n in A.walk(lhs)):
             hint = f"a differential equation is solved with solve:  solve {text} = … with (starting values) " \
                    f"for t from 0 s to 10 s"
@@ -652,6 +662,15 @@ class Parser:
                     self.next()
                     method = self.expect_name("a method name (matrix or shooting)").value
                 return True
+            # `using shooting` / `using explicit` on a line of its own, like `grid 400` (red team round 2 #11)
+            if self.tok.kind == "NAME" and self.tok.value in ("using", "method") and \
+                    self.tok.value not in self.known and self.peek().kind == "NAME":
+                if method is not None:
+                    raise self.error(f"'{self.tok.value}' is given twice in this solve")
+                self.next()
+                method = self.expect_name("a method name (rk4, rk45, radau, bdf, matrix, shooting, crank_nicolson, "
+                                          "implicit or explicit)").value
+                return True
             return False
 
         while clause():
@@ -741,6 +760,7 @@ class Parser:
             if self.at_op(","):
                 raise self.error("import one module per line", hint="write each on its own line:  import mechanics")
             self.known.add(alias or mt.value)
+            self.module_names.add(alias or mt.value)
             return self.span(A.Import(module, is_path, alias, None), t)
         if not (self.tok.kind == "NAME" and self.tok.value == "import"):
             raise self.error(f"expected 'import' after 'from {mt.raw}'" + self._found(),
@@ -1296,7 +1316,7 @@ class Parser:
         """The (quantity, factor) if e is `2 g` with a single bare unit that is also one of your variables."""
         if isinstance(e, A.Quantity) and not e.bracket and not e.paren and len(e.unit.factors) == 1:
             f = e.unit.factors[0]
-            if f.name in self.known and f.name != "c" and f.exp == 1:
+            if f.name in self.known and f.exp == 1:
                 return e, f
         return None
 
@@ -1325,10 +1345,10 @@ class Parser:
             q = q.right
         if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
-            if f.name in self.known and f.name != "c":
+            if f.name in self.known:
                 self._note_collision(q, f)
             then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
-            if f.name in self.known and f.name not in self.warned_units and f.name != "c" and not then_mul:
+            if f.name in self.known and f.name not in self.warned_units and not then_mul:
                 self.warned_units.add(f.name)
                 num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
                 self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not your variable {f.name}",

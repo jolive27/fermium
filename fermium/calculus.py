@@ -179,6 +179,10 @@ class DiffContext:
     def is_solution(self, fname):
         return False
 
+    def field_function(self, field):
+        """For `mod.f(…)`: a name under which the module's function f can be used here, or None."""
+        return None
+
     def is_builtin(self, fname):
         return fname in BUILTIN_DERIVS
 
@@ -397,6 +401,10 @@ def _d(e, var, ctx):
         return _d(inner, var, ctx)
     if isinstance(e, A.Call):
         f = e.func
+        if isinstance(f, A.Field):             # mod.f(…): a module's function (red team round 2 #7)
+            qn = ctx.field_function(f)
+            if qn is not None:
+                return _d(_copy(e, func=_copy(A.Name(qn), line=f.line, col=f.col)), var, ctx)
         if isinstance(f, A.Name):
             fname = f.name
             if len(e.args) == 1 and fname in BUILTIN_DERIVS:
@@ -405,7 +413,12 @@ def _d(e, var, ctx):
             if ctx.is_solution(fname) and len(e.args) == 1:
                 u = e.args[0]
                 return mul(A.Call(A.Prime(A.Name(fname), 1), [u]), _d(u, var, ctx))
-            uf = ctx.user_function(fname)
+            try:
+                uf = ctx.user_function(fname)
+            except FermiumError as ex:          # point at the call (red team round 2 #10)
+                if ex.line is None and getattr(e, "line", None):
+                    ex.line, ex.col, ex.length = e.line, e.col, len(fname)
+                raise
             if uf is not None:
                 params, _body = uf
                 terms = None

@@ -46,7 +46,7 @@ def cmd_run(args):
     try:
         if args.interp:
             from .interp import run_interpreted
-            run_interpreted(src, args.file)
+            run_interpreted(src, args.file, show_warnings=True)
             return 0
         if args.emit_llvm:
             p = Program(src, args.file)

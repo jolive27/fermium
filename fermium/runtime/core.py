@@ -16,6 +16,7 @@ except ImportError:            # the reference interpreter works without llvmlit
     llvm = None
 
 from ..errors import FermiumRuntimeError
+from .pde import PDE_MAX_STEPS
 from ..units import preferred_unit, format_number, format_default, format_default_seq, _whole, Unit
 from ..uncertain import UFloat, format_uncertain, format_uncertain_list
 
@@ -33,6 +34,8 @@ def init_llvm():
 CB = ctypes.CFUNCTYPE
 c_double, c_int64, c_void_p = ctypes.c_double, ctypes.c_int64, ctypes.c_void_p
 DPTR = ctypes.POINTER(ctypes.c_double)
+STD_ONE_TEXT = ("std needs at least 2 values: it is the sample standard deviation, which divides by N − 1, so one "
+                "value says nothing about the spread (quote the instrument's uncertainty for a single measurement)")
 ERR_PENDING = -1        # fm_error kind: stop with the message a callback already put in rt.error
 
 
@@ -291,17 +294,18 @@ class Runtime:
                 rt.error = f"the Fourier transform failed: {ex}"
                 return 1
 
-        def pde(guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out):
+        def pde(guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, line, out):
             from .m3rt import pde_cb
-            return pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out)
+            return pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out,
+                          line)
 
         def animate(aid, solp, xa, xb):
             from .m3rt import animate_cb
             return animate_cb(rt, aid, solp, xa, xb)
 
-        def eigen(guard, fn, env, a, b, nstates, grid, method, out):
+        def eigen(guard, fn, env, a, b, nstates, grid, method, tname, fmt, out):
             from .m3rt import eigen_cb
-            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out)
+            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname, fmt)
 
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
@@ -333,10 +337,11 @@ class Runtime:
             "fm_clock": CB(c_double)(time.perf_counter),
             "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
             "fm_pde": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_double, c_double, c_double,
-                         c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, ctypes.POINTER(c_void_p))(pde),
+                         c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64,
+                         ctypes.POINTER(c_void_p))(pde),
             "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
             "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
-                           ctypes.POINTER(c_void_p))(eigen),
+                           c_int64, c_int64, ctypes.POINTER(c_void_p))(eigen),
         }
         if llvm is not None:
             for name, cb in self.callbacks.items():
@@ -373,6 +378,14 @@ class Runtime:
             msg = (f"the step is too coarse for this equation: the estimated error is {format_number(a * 100, 2)}% "
                    f"of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or "
                    f"drop  step  to use the adaptive solver")
+        elif kind == 8:
+            msg = (f"the time step is too coarse for this PDE: the estimated error is {format_number(a * 100, 2)}% "
+                   f"of the solution's largest value (checked by step doubling); use a smaller step, or drop  step  to "
+                   f"let Fermium choose it")
+        elif kind == 9:
+            msg = (f"this PDE's time step could not be made fine enough: with {PDE_MAX_STEPS} steps the "
+                   f"estimated error is still {format_number(a * 100, 2)}% of the solution's largest value (checked by step "
+                   f"doubling); the result may be inaccurate")
         else:
             msg = "warning"
         text = "warning: " + (f"line {line}: " if line else "") + msg
@@ -419,6 +432,12 @@ class Runtime:
             return f"these two lists have different lengths ({int(a)} and {int(b)})"
         if kind == 6:
             return "this list is empty"
+        if kind == 24:
+            return STD_ONE_TEXT
+        if kind == 25:
+            return f"the number of samples must be a whole number, 0 or more, not {format_number(a)}"
+        if kind == 26:
+            return "randn(μ, σ): σ is a standard deviation, so it can't be negative"
         if kind == 7:
             return "the step must be a non-zero number that goes from the start towards the end"
         if kind == 8:
