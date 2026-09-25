@@ -279,7 +279,35 @@ def preferred_unit(d: Dim):
         return _PREFERRED[d]
     if d == DIMLESS / T:
         return Unit("1/s", d, 1.0)
+    c = _composite_unit(d)
+    if c is not None:
+        return c
     return Unit(format_dim(d), d, 1.0)
+
+
+_COMPOSITE_NAMED = ["V", "N", "J", "W", "T", "Pa", "C", "Ω", "F", "H", "Wb"]
+_COMPOSITE_BASE = ["m", "m²", "m³", "s", "s²", "kg", "K", "mol", "A", "kg²", "m s", "m² K", "m K", "kg K", "mol K"]
+_COMPOSITE = None
+
+
+def _composite_unit(d: Dim):
+    """A named unit times or over a simple one (V/m², T m, W/(m² K)...) for dimensions with no name of their
+    own, used when base SI would need three or more base units (gauntlet friction #29)."""
+    global _COMPOSITE
+    if sum(1 for e in d.e if e) < 3:
+        return None
+    if _COMPOSITE is None:
+        _COMPOSITE = {}
+        for n in _COMPOSITE_NAMED:
+            un = _u(n)
+            for bname in _COMPOSITE_BASE:
+                ub = _u(bname)
+                over = f"{n}/({bname})" if " " in bname else f"{n}/{bname}"
+                for name, dim in ((over, un.dim / ub.dim), (f"{n} {bname}", un.dim * ub.dim)):
+                    if name != "N/A":            # T m, not "N/A"
+                        _COMPOSITE.setdefault(dim, name)
+    name = _COMPOSITE.get(d)
+    return Unit(name, d, 1.0) if name is not None else None
 
 
 _DIM_NAMES = [

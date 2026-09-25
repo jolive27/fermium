@@ -434,12 +434,14 @@ class Lexer:
 
     def _check_lookalikes(self):
         seen = {}
+        warned = set()
         for t in self.tokens:
             if t.kind != "NAME":
                 continue
             sk = t.value.translate(SKELETON)
             other = seen.setdefault(sk, t.value)
-            if other != t.value:
+            if other != t.value and (other, t.value) not in warned:     # once per pair (gauntlet friction #17)
+                warned.add((other, t.value))
                 self.diags.warn(
                     f"'{t.value}' and '{other}' look almost identical but are different names",
                     tok=t, hint="rename one of them so they can't be confused (e.g. nu vs v)")
