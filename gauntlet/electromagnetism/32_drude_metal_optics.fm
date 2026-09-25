@@ -1,6 +1,6 @@
 # Electromagnetism 32 — Optics of a Drude metal: reflectivity, the plasma edge, skin depth
 #
-# (Jackson 3rd ed., §7.5 (eqs. 7.56–7.61) and Problem 7.?; Ashcroft & Mermin ch. 1,
+# (Jackson 3rd ed., §7.5 (eqs. 7.56–7.61); Ashcroft & Mermin ch. 1,
 #  Problems 1.2–1.4; Born & Wolf §14.2.)
 # The free electrons of aluminium are modelled by the Drude dielectric function
 #     ε(ω) = 1 − ω_p² / (ω² + i γ ω),   ħω_p = 15.0 eV,  ħγ = 0.100 eV.

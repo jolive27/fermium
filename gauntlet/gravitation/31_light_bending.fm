@@ -1,7 +1,7 @@
 # Gravitation 31 — Bending of light by the Sun and by a compact star
 #
 # (Weinberg, Gravitation and Cosmology, §8.5; Carroll, Spacetime and Geometry,
-#  §5.4 and Exercise 5.?; Misner, Thorne & Wheeler §25.6.)
+#  §5.4; Misner, Thorne & Wheeler §25.6.)
 # A light ray in the Schwarzschild geometry obeys, with u = 1/r and φ the angle,
 #     d²u/dφ² + u = 3 G M u² / c²   (the exact null geodesic equation).
 # A ray that passes closest to the mass at r₀ has u(0) = 1/r₀, u'(0) = 0; it leaves
