@@ -73,6 +73,36 @@ Honest caveats:
 - 81 problems in all: 31 in pass 1, 30 in pass 2 and 20 in pass 3 (graduate: Kapitza pendulum, Hulse–Taylor decay, hydrogen fine structure, deuteron, TOV, Gamow peak, …). Each is checked against closed forms, SciPy or published values.
 - Friction: 96 items logged, 86 fixed in the language (gauntlet/FRICTION.md). The rest are by design, partly fixed, or open: see "Still weak".
 
+### Gauntlet counts per topic
+| Topic | Pass 1 | Pass 2 | Pass 3 (graduate) |
+|---|---|---|---|
+| mechanics | 3 | 3 | 2 |
+| oscillations | 3 | 3 | 2 |
+| gravitation | 3 | 3 | 2 |
+| thermodynamics | 3 | 3 | 2 |
+| electromagnetism | 3 | 3 | 2 |
+| optics and waves | 3 | 3 | 2 |
+| special relativity | 3 | 3 | 2 |
+| quantum | 3 | 3 | 2 |
+| nuclear | 3 | 3 | 2 |
+| astrophysics | 4 | 3 | 2 |
+| **total** | **31** | **30** | **20** |
+
+### Top 10 frictions and what was done
+All ten were silent wrong answers (severity W in gauntlet/FRICTION.md), and all ten are fixed and tested.
+| # | Friction | Resolution |
+|---|---|---|
+| 43 | `2 g`, `3 V`, `3 b`, `2 l`: a unit name after a number that is also your variable | D7 revised: an error when combined with other factors, a warning when alone; extended by D130, D170, D171, D180, D231 and D232 |
+| 66 | `2 m c²` with a variable m read as the compound unit "m c²" | The collision rule also covers the first factor of a compound unit (D170) |
+| 67 | `2 ∫ x dx from 0 to 1 - π` took `- π` into the limit | Warns when both readings have consistent units; errors otherwise (D173, D205) |
+| 68 | `8 /m³` divided by a variable m | An error that asks for `[1/m³]` or `8/m³` (D171) |
+| 8, 61 | An integral's upper limit swallowed a following `/ x` or `/ (1 + z)` | A spaced `/` ends the limit, or gets a warning or error (D34, D112, D205) |
+| 5 | `ω in Hz` printed ω, not ω/2π | Warns, with the numbers for the case (D95, and D202 for the Python boundary) |
+| 6 | `(T - 20 °C) in °C` converted a difference as an absolute temperature | Temperature differences are tracked (`tdelta`), and °C in products warns (D12, D181) |
+| 40 | The adaptive solver's first step was accepted though far too big (w(1 s) = 6.17, not 1) | A dimensionally consistent Hairer–Wanner first step |
+| 39 | A nested integral inside a function read garbage for the function's parameter | Captures propagate through enclosing integrands |
+| 2 | Algebraic `solve` could return a later root when the ends already bracketed one | The 200-point scan always runs first, and poles are detected (D32, D95) |
+
 ## Phase 8: red team (REDTEAM.md)
 | Round | Findings | Silent wrong answers | Fixed |
 |---|---|---|---|
