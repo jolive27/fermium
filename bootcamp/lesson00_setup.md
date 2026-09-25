@@ -79,20 +79,20 @@ You should see names like `bootcamp`, `fermium`, `pyproject.toml` and `README.md
 
 ## Step 4: Install Fermium
 
-Still in the `fermium` folder, type this (all one line, including the dot and the quotes):
+Still in the `fermium` folder, type this (all one line, including the dot at the end):
 
 ```
-python3 -m pip install -e ".[full]"
+python3 -m pip install -e .
 ```
 
 What this means, piece by piece:
 - `python3 -m pip` runs **pip**, Python's tool for installing software.
 - `install -e .` installs the program in the current folder (`.` means "this folder"). The `-e` means "editable": if the folder is updated later, you don't need to reinstall.
-- `[full]` also installs the optional extras Fermium uses for fitting data, symbolic integrals and plots (SciPy, SymPy and Matplotlib).
+- It also installs everything Fermium uses, including the libraries for fitting data, symbolic integrals and plots (SciPy, SymPy and Matplotlib).
 
 You'll see a lot of text scroll by while it downloads things. That's normal. It should end with a line starting with `Successfully installed ...`.
 
-> **In the future:** once Fermium is published, the whole of Step 3 and Step 4 will be one line: `python3 -m pip install "fermium[full]"`.
+> **In the future:** once Fermium is published, the whole of Step 3 and Step 4 will be one line: `python3 -m pip install fermium`.
 
 ## Step 5: Check the installation with `fermium doctor`
 
@@ -213,7 +213,7 @@ The most common setup problems:
 | `ERROR: ... does not appear to be a Python project` | You ran the install from the wrong folder | `cd ~/fermium`, check with `ls` that you see `pyproject.toml`, and try again. |
 | `requires a different Python: 3.9.6 not in '>=3.10'` | `python3` is still the old Apple Python | Quit and reopen the Terminal after installing Python from python.org. `python3 --version` must say 3.10 or more. |
 | `can't find the file 'hello.fm'` | The Terminal is in a different folder from your file (or the name is spelled differently) | `cd` into the folder where you saved the file, and `ls` to check the file is there. |
-| `fermium doctor` shows `✗ matplotlib is not installed` | The optional extras are missing | `python3 -m pip install matplotlib` (or redo Step 4 with `".[full]"`). |
+| `fermium doctor` shows `✗ matplotlib is not installed` | The optional extras are missing | `python3 -m pip install matplotlib` (or redo Step 4). |
 
 If pip warns that a script was installed in a folder "which is not on PATH", your Terminal can't find the `fermium` command. The simplest fix is to reinstall Python from python.org (Step 2), quit the Terminal, reopen it, and redo Step 4.
 

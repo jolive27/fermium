@@ -2,6 +2,8 @@
 
 **Experimental prototype designed by me and built by me with help from Claude Code. Expect rough edges, feedback welcome.**
 
+See [PROGRESS.md](PROGRESS.md) for what works, what's partial and the known issues. MIT licensed ([LICENSE](LICENSE)).
+
 **Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
 
 ```fermium
@@ -39,14 +41,12 @@ Fermium is a small programming language for physicists.
 - **Research reproductions** in [research/](research/README.md): the SEMF fitted to AME2020, the neutron-star mass–radius relation (TOV), the Chandrasekhar mass, the U-238 chain, hydrogen levels, the age of the universe (Planck 2018), Rutherford scattering by Monte Carlo, the pp/CNO crossover. Each is compared with published numbers.
 - **Printing:** a result shows as many significant figures as its inputs justify, and 3 when that is unspecified (`print x to 6 digits` for more). This is display only.
 
-> Status: a first version built in one night. See [PROGRESS.md](PROGRESS.md) for what works, what's partial, and the known issues.
-
 ## Install
 
 ```
 git clone <this repository>
 cd fermium
-python3 -m pip install -e ".[full]"   # needs Python 3.10+; llvmlite, numpy, and scipy/sympy/matplotlib for fit, symbolic integrals and plot
+python3 -m pip install -e .   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
 fermium doctor                   # checks everything and explains fixes
 ```
 

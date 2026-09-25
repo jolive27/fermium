@@ -13,7 +13,7 @@ Live errors and hover come from the Fermium language server (`fermium lsp`). Wit
 ## Install (from this folder)
 
 1. Install Fermium, including the language server's library:
-   `python3 -m pip install -e "../..[full]" pygls` (check with `fermium doctor`).
+   `python3 -m pip install -e ../..` (check with `fermium doctor`).
 2. In this folder, run `npm install`. This fetches `vscode-languageclient`.
 3. Copy or symlink this folder into your VS Code extensions directory:
    - macOS/Linux: `ln -s "$(pwd)" ~/.vscode/extensions/fermium`
