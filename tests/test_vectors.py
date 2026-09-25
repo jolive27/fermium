@@ -39,7 +39,7 @@ def test_vector_functions():
     ("print <1, 2> m + <1, 2> s", "can't add vectors of length [m] and time [s]"),
     ("print <1, 2> m + 3 m", "can't add a vector and a single number"),
     ("print <1, 2> + <1, 2, 3>", "2-vector and a 3-vector"),
-    ("print <1 m, 2 s>", "all components of a vector need the same units"),
+    ("print |<1 m, 2 s>|", "needs all components of the vector in the same units"),
     ("print 3 m / <1, 2>", "can't divide by a vector"),
     ("v = <1, 2>\nprint v.z", "no component 3"),
     ("v = <1, 2>\nprint v.w", "components are .x, .y and .z"),

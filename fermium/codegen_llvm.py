@@ -13,7 +13,8 @@ from llvmlite import ir
 
 from .numerics import quintic_hermite
 from . import ir as I
-from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, TextListTy
+from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
+from . import linalg
 
 
 def odd_root_numerator(p):
@@ -52,6 +53,7 @@ ERR_QUAD = 9
 ERR_DEEP = 10
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
+ERR_SINGULAR = 13           # inverse / solve_linear of a singular matrix
 ERR_PENDING = -1            # a runtime callback (plot, load, fit) failed and already set the message
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
@@ -72,7 +74,7 @@ WG = [0.129484966168869693270611432679082, 0.279705391489276667901467771423780,
 def lltype(ty):
     if isinstance(ty, NumTy):
         return F64
-    if isinstance(ty, VecTy):
+    if isinstance(ty, (VecTy, MatTy)):
         return ir.VectorType(F64, ty.n)
     if isinstance(ty, BoolTy):
         return I1
@@ -91,8 +93,42 @@ def f64(v):
     return ir.Constant(F64, float(v))
 
 
+class LLOps:
+    """fermium.linalg's ops, building LLVM instructions."""
+
+    def __init__(self, gen):
+        self.b, self.gen = gen.b, gen
+
+    def add(self, x, y):
+        return self.b.fadd(x, y)
+
+    def sub(self, x, y):
+        return self.b.fsub(x, y)
+
+    def mul(self, x, y):
+        return self.b.fmul(x, y)
+
+    def div(self, x, y):
+        return self.b.fdiv(x, y)
+
+    def neg(self, x):
+        return self.b.fneg(x)
+
+    def gt_abs(self, x, y):
+        fabs = self.gen.mg.intrinsic("fabs")
+        return self.b.fcmp_ordered(">", self.b.call(fabs, [x]), self.b.call(fabs, [y]))
+
+    def select(self, c, x, y):
+        return self.b.select(c, x, y)
+
+
 def i64(v):
     return ir.Constant(I64, int(v))
+
+
+def env_slots(sym):
+    """Doubles a captured variable takes in a nested function's environment."""
+    return sym.ty.n if isinstance(sym.ty, (VecTy, MatTy)) else 1
 
 
 class ModuleGen:
@@ -149,6 +185,8 @@ class ModuleGen:
         e("fm_print_num", VOID, [I64, F64])
         e("fm_print_list", VOID, [I64, F64P, I64])
         e("fm_print_vec", VOID, [I64, F64P, I64])
+        e("fm_print_mvec", VOID, [I64, F64P, I64])
+        e("fm_print_mat", VOID, [I64, F64P, I64, I64])
         e("fm_print_textlist", VOID, [F64P, I64])
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
@@ -1000,9 +1038,14 @@ class FuncGen:
         return p
 
     def load(self, sym):
+        if sym.storage == "arena" and isinstance(sym.ty, (VecTy, MatTy)):
+            return self.b.load(self.slot(sym), align=8)     # REPL slots are only 8-byte aligned
         return self.b.load(self.slot(sym))
 
     def store(self, sym, v):
+        if sym.storage == "arena" and isinstance(sym.ty, (VecTy, MatTy)):
+            self.b.store(v, self.slot(sym), align=8)
+            return
         self.b.store(v, self.slot(sym))
 
     # ------------------------------------------------------------ statements
@@ -1184,13 +1227,17 @@ class FuncGen:
             elif kind == "list":
                 lst = self.expr(payload)
                 b.call(ex["fm_print_list"], [i64(fid), self.ldata(lst), self.llen(lst)])
-            elif kind == "vec":
+            elif kind in ("vec", "mvec", "mat"):
                 v = self.expr(payload)
                 n = payload.ty.n
                 arr = self.alloca(ir.ArrayType(F64, n))
                 for k in range(n):
                     b.store(b.extract_element(v, I32(k)), b.gep(arr, [I32(0), I32(k)]))
-                b.call(ex["fm_print_vec"], [i64(fid), b.gep(arr, [I32(0), I32(0)]), i64(n)])
+                p = b.gep(arr, [I32(0), I32(0)])
+                if kind == "mat":
+                    b.call(ex["fm_print_mat"], [i64(fid), p, i64(payload.ty.r), i64(payload.ty.c)])
+                else:
+                    b.call(ex["fm_print_" + kind], [i64(fid), p, i64(n)])
             elif kind == "bool":
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
@@ -1235,12 +1282,19 @@ class FuncGen:
         b = self.b
         if not lam.captures:
             return ir.Constant(F64P, None)
-        env = self.alloca(ir.ArrayType(F64, len(lam.captures)))
-        for i, sym in enumerate(lam.captures):
+        env = self.alloca(ir.ArrayType(F64, sum(env_slots(s) for s in lam.captures)))
+        i = 0
+        for sym in lam.captures:
             v = self.load(sym)
             if isinstance(sym.ty, BoolTy):
                 v = b.uitofp(v, F64)
+            if isinstance(sym.ty, (VecTy, MatTy)):       # a vector or matrix takes n slots
+                for k in range(sym.ty.n):
+                    b.store(b.extract_element(v, I32(k)), b.gep(env, [I32(0), I32(i)]))
+                    i += 1
+                continue
             b.store(v, b.gep(env, [I32(0), I32(i)]))
+            i += 1
         return b.gep(env, [I32(0), I32(0)])
 
     def s_SFit(self, s):
@@ -1357,6 +1411,48 @@ class FuncGen:
     def e_IVecElem(self, e):
         return self.b.extract_element(self.expr(e.v), I32(e.k))
 
+    # ------------------------------------------------------------ matrices (D29)
+    def unpack(self, v, n):
+        return [self.b.extract_element(v, I32(k)) for k in range(n)]
+
+    def pack(self, xs):
+        v = ir.Constant(ir.VectorType(F64, len(xs)), ir.Undefined)
+        for k, x in enumerate(xs):
+            v = self.b.insert_element(v, x, I32(k))
+        return v
+
+    def matrix_op(self, e, args):
+        """Matrix built-ins, unrolled into straight-line code by fermium.linalg (same ops as interp.py)."""
+        b = self.b
+        name = e.name
+        if name == "shuffle":
+            src = args[0]
+            mask = ir.Constant(ir.VectorType(I32, len(e.idx)), [ir.Constant(I32, k) for k in e.idx])
+            return b.shuffle_vector(src, ir.Constant(src.type, ir.Undefined), mask)
+        ops = LLOps(self)
+        m = e.args[0].ty
+        a = self.unpack(args[0], m.n)
+        if name == "matmul":
+            r, k, c = e.dims3
+            out = linalg.matmul(ops, a, r, k, self.unpack(args[1], k * c), c)
+            return out[0] if len(out) == 1 else self.pack(out)
+        if name == "det":
+            return linalg.det(ops, a, m.r)
+        if name == "inverse":
+            out, piv = linalg.inverse(ops, a, m.r, f64(1), f64(0))
+        else:
+            out, piv = linalg.solve(ops, a, m.r, self.unpack(args[1], m.r), 1)
+        bad = None
+        for p in piv:
+            z = b.fcmp_ordered("==", p, f64(0))
+            bad = z if bad is None else b.or_(bad, z)
+        saved = getattr(self, "line", 0)
+        self.line = e.line or saved
+        with b.if_then(bad, likely=False):
+            self.fail(ERR_SINGULAR)
+        self.line = saved
+        return self.pack(out)
+
     def hsum(self, v, n):
         b = self.b
         acc = b.extract_element(v, I32(0))
@@ -1369,11 +1465,11 @@ class FuncGen:
         a = self.expr(e.a)
         c = self.expr(e.b)
         op = {"+": b.fadd, "-": b.fsub, "*": b.fmul, "/": b.fdiv}[e.op]
-        if isinstance(e.ty, VecTy):
+        if isinstance(e.ty, (VecTy, MatTy)):
             n = e.ty.n
-            if not isinstance(e.a.ty, VecTy):
+            if not isinstance(e.a.ty, (VecTy, MatTy)):
                 a = self.splat(a, n)
-            if not isinstance(e.b.ty, VecTy):
+            if not isinstance(e.b.ty, (VecTy, MatTy)):
                 c = self.splat(c, n)
             return op(a, c)
         la = isinstance(e.a.ty, ListTy)
@@ -1623,6 +1719,8 @@ class FuncGen:
             r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
             return b.fmul(sg, r)
         args = [self.expr(a) for a in e.args]
+        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear"):
+            return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
             n = e.args[0].ty.n
             if name == "vdot":
@@ -1825,8 +1923,16 @@ class LambdaGen(FuncGen):
 
     def load_env(self, env):
         b = self.b
-        for i, sym in enumerate(self.lam.captures):
-            v = b.load(b.gep(env, [i64(i)]))
+        i = 0
+        for sym in self.lam.captures:
+            if isinstance(sym.ty, (VecTy, MatTy)):
+                v = ir.Constant(lltype(sym.ty), ir.Undefined)
+                for k in range(sym.ty.n):
+                    v = b.insert_element(v, b.load(b.gep(env, [i64(i + k)])), I32(k))
+                i += sym.ty.n
+            else:
+                v = b.load(b.gep(env, [i64(i)]))
+                i += 1
             if isinstance(sym.ty, BoolTy):
                 v = b.fcmp_ordered("!=", v, f64(0))
             p = self.alloca(lltype(sym.ty), sym.name)

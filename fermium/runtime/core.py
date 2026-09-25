@@ -110,16 +110,32 @@ class Runtime:
                 s += f"  ({n} values)"
             rt.line.append(s)
 
-        def print_vec(fid, p, n):
-            f = rt.tables.fmts[fid]
+        def seq_values(f, p, idx):
             u = display_unit(f["rdim"], f["hint"])
             sf = f["sf"]
             vals = [format_number(p[i] / u.factor, sf if f["direct"] and sf else max(sf or 6, 2) if sf else 6,
-                                  trim=sf is None) for i in range(n)]
-            s = "<" + ", ".join(vals) + ">"
-            if u.name not in ("", "1"):
-                s += " " + u.name
-            rt.line.append(s)
+                                  trim=sf is None) for i in idx]
+            return vals, ("" if u.name in ("", "1") else " " + u.name)
+
+        def print_vec(fid, p, n):
+            vals, unit = seq_values(rt.tables.fmts[fid], p, range(n))
+            rt.line.append("<" + ", ".join(vals) + ">" + unit)
+
+        def print_mvec(fid, p, n):
+            """A vector with a unit per component: <1 m, 2 m/s> (one format per component, D29)."""
+            parts = []
+            for i in range(n):
+                f = rt.tables.fmts[fid + i]
+                parts.append(format_quantity(p[i], f["rdim"], f["hint"], f["sf"], f["direct"]))
+            rt.line.append("<" + ", ".join(parts) + ">")
+
+        def print_mat(fid, p, r, c):
+            f = rt.tables.fmts[fid]
+            rows = []
+            for i in range(r):
+                vals, unit = seq_values(f, p, range(i * c, i * c + c))
+                rows.append("[" + ", ".join(vals) + "]")
+            rt.line.append("[" + ", ".join(rows) + "]" + unit)
 
         def print_textlist(p, n):
             rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
@@ -194,6 +210,7 @@ class Runtime:
 
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
+                   "print_mvec": print_mvec, "print_mat": print_mat,
                    "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
                    "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
@@ -201,6 +218,8 @@ class Runtime:
             "fm_print_list": CB(None, c_int64, DPTR, c_int64)(print_list),
             "fm_print_bool": CB(None, c_int64)(print_bool),
             "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
+            "fm_print_mvec": CB(None, c_int64, DPTR, c_int64)(print_mvec),
+            "fm_print_mat": CB(None, c_int64, DPTR, c_int64, c_int64)(print_mat),
             "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
@@ -268,6 +287,9 @@ class Runtime:
         if kind == 12:
             return (f"this for loop has no definite number of steps: it goes from {format_number(a)} to "
                     f"{format_number(b)} (NaN in the start, end or step)")
+        if kind == 13:
+            return "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no " \
+                   "unique solution"
         return "runtime error"
 
     # ------------------------------------------------------------ data

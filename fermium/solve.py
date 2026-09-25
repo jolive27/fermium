@@ -7,7 +7,7 @@ from . import ast as A
 from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
-from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy
+from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy
 
 
 # ============================================================ solve
@@ -107,6 +107,11 @@ def check_solve(ck, s: A.Solve, ctx):
         ck.need_numlike(v, ic.rhs, "an initial value", allow_vec=True)
         if isinstance(v.ty, ListTy):
             raise ck.err("an initial value must be a number or a vector like <1, 0> m, not a list", ic.rhs)
+        if isinstance(v.ty, MatTy):
+            raise ck.err("an initial value must be a number or a vector like <1, 0> m, not a matrix", ic.rhs)
+        if isinstance(v.ty, VecTy) and v.ty.mixed:
+            raise ck.err("a vector unknown needs the same units in every component (write separate unknowns "
+                         "for quantities in different units, like x and v)", ic.rhs)
         n_here = v.ty.n if isinstance(v.ty, VecTy) else 1
         if shape.setdefault(x, n_here) != n_here:
             raise ck.err(f"the initial values of {x} don't match: one is a {shape[x]}-vector, another a "

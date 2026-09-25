@@ -19,11 +19,13 @@ from .codegen_llvm import XGK, WGK, WG, odd_root_numerator
 from . import ir as I
 from .errors import FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite
-from .types import ListTy, VecTy, BoolTy
+from .types import ListTy, VecTy, MatTy, BoolTy
+from . import linalg
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
+ERR_SINGULAR = 13
 
 
 class _Break(Exception):
@@ -547,9 +549,11 @@ class Interpreter:
             elif kind == "list":
                 v = self.eval(payload, fr)
                 py["print_list"](fid, v, len(v))
-            elif kind == "vec":
+            elif kind in ("vec", "mvec"):
                 v = self.eval(payload, fr)
-                py["print_vec"](fid, list(v), len(v))
+                py["print_" + kind](fid, list(v), len(v))
+            elif kind == "mat":
+                py["print_mat"](fid, list(self.eval(payload, fr)), payload.ty.r, payload.ty.c)
             elif kind == "bool":
                 py["print_bool"](1 if self.eval(payload, fr) else 0)
             elif kind in ("text", "data"):
@@ -675,7 +679,7 @@ class Interpreter:
     def e_IBin(self, e, fr):
         a, b = self.eval(e.a, fr), self.eval(e.b, fr)
         op = {"+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": fmul, "/": fdiv}[e.op]
-        if isinstance(e.ty, VecTy):
+        if isinstance(e.ty, (VecTy, MatTy)):
             n = e.ty.n
             av = a if isinstance(a, tuple) else (a,) * n
             bv = b if isinstance(b, tuple) else (b,) * n
@@ -840,11 +844,37 @@ class Interpreter:
     def e_IColumn(self, e, fr):
         return [float(v) for v in self.rt.datasets[self.eval(e.data, fr)][e.col]]
 
+    def matrix_op(self, e, args):
+        """Mirrors CodeGen.matrix_op: the same fermium.linalg routines, on floats."""
+        name = e.name
+        if name == "shuffle":
+            return tuple(args[0][k] for k in e.idx)
+        ops = linalg.FloatOps
+        m = e.args[0].ty
+        a = list(args[0])
+        if name == "matmul":
+            r, k, c = e.dims3
+            out = linalg.matmul(ops, a, r, k, list(args[1]), c)
+            return out[0] if len(out) == 1 else tuple(out)
+        if name == "det":
+            return linalg.det(ops, a, m.r)
+        if name == "inverse":
+            out, piv = linalg.inverse(ops, a, m.r, 1.0, 0.0)
+        else:
+            out, piv = linalg.solve(ops, a, m.r, list(args[1]), 1)
+        if any(p == 0 for p in piv):
+            if e.line:
+                self.line = e.line
+            raise _Fail(ERR_SINGULAR)
+        return tuple(out)
+
     def e_IBuiltin(self, e, fr):
         name = e.name
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
             return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
         args = [self.eval(a, fr) for a in e.args]
+        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear"):
+            return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
             a = args[0]
             if name == "vdot":

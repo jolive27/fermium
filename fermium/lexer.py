@@ -73,7 +73,7 @@ VULGAR_ASCII = {"½": "(1/2)", "⅓": "(1/3)", "⅔": "(2/3)", "¼": "(1/4)", "�
 # multi-char operators, longest first
 OPERATORS = ["+-", "==", "!=", "<=", ">=", "+=", "-=", "*=", "/=", "~=",
              "+", "-", "*", "/", "^", "(", ")", "[", "]", "{", "}", ",", "=", "<", ">", ".", ":",
-             "·", "×", "≤", "≥", "≠", "±", "≈", "|", ";"]
+             "·", "×", "≤", "≥", "≠", "±", "≈", "|", ";", "ᵀ"]
 OP_CANON = {"·": "*", "≤": "<=", "≥": ">=", "≠": "!=", "±": "+-", "≈": "~="}
 IDENT_EXTRA = set("_°☉∞'")  # ' handled separately; kept out below
 SPECIAL_STANDALONE = {"π", "∞"}
@@ -150,11 +150,11 @@ def normalize_source(src: str, diags: Diagnostics | None = None) -> str:
 
 
 def _is_ident_start(ch):
-    return ch.isalpha() or ch in "_°%" or ch == "ħ"
+    return (ch.isalpha() and ch != "ᵀ") or ch in "_°%" or ch == "ħ"
 
 
 def _is_ident_char(ch):
-    return ch.isalnum() and ch not in SUPERS and ch not in VULGAR or ch in "_☉" or ch in SUBS
+    return ch.isalnum() and ch not in SUPERS and ch not in VULGAR and ch != "ᵀ" or ch in "_☉" or ch in SUBS
 
 
 class Lexer:
