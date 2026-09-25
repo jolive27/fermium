@@ -39,6 +39,59 @@ def _normalize_derivs(e, tvar):
     return e
 
 
+def _prime_uses(e, called, bare):
+    """Names under a prime or d/dt: `called` when the derivative is applied to an argument (I'(θ)),
+    `bare` otherwise (x' in an ODE)."""
+    if isinstance(e, A.Call) and isinstance(e.func, (A.Prime, A.Deriv)):
+        f = e.func
+        tgt = f.target if isinstance(f, A.Prime) else f.operand
+        if isinstance(tgt, A.Name):
+            called.add(tgt.name)
+            for a in e.args:
+                _prime_uses(a, called, bare)
+            return
+    if isinstance(e, A.Prime) and isinstance(e.target, A.Name):
+        bare.add(e.target.name)
+        return
+    if isinstance(e, A.Deriv) and isinstance(e.operand, A.Name):
+        bare.add(e.operand.name)
+        return
+    for c in A.children(e):
+        _prime_uses(c, called, bare)
+
+
+def _is_until(e):
+    """`until y = 0 m` written as a line of the solve: the parser reads it as the product `until · y`."""
+    while isinstance(e, A.BinOp):
+        if isinstance(e.left, A.Name) and e.left.name == "until" and e.op in ("*", "-") and \
+                (e.op == "-" or getattr(e, "implicit", False)):
+            return True
+        e = e.left
+    return False
+
+
+def _strip_until(e):
+    if isinstance(e.left, A.Name) and e.left.name == "until":
+        return e.right if e.op == "*" else A.Neg(e.right).at(e)
+    return A.BinOp(e.op, _strip_until(e.left), e.right, getattr(e, "implicit", False)).at(e)
+
+
+def _take_until(ck, s, ctx):
+    """Split the stop condition (D34) off a solve: returns (equations, initial conditions, until)."""
+    until = getattr(s, "until", None)
+    eqs, inits = list(s.equations), list(s.initial)
+    b, _ = ctx.scope.lookup("until")
+    if b is None:
+        for lst in (eqs, inits):
+            for q in list(lst):
+                if _is_until(q.lhs):
+                    if until is not None:
+                        raise ck.err("a solve can have only one stop condition (until ...)", q)
+                    lst.remove(q)
+                    until = A.Equation(_strip_until(q.lhs), q.rhs).at(q)
+    return eqs, inits, until
+
+
 def check_root(ck, s: A.Solve, ctx):
     """solve lhs = rhs for x from a to b: find the x in [a, b] where the two sides are equal (the first
     sign change of lhs - rhs, then Illinois regula falsi to full precision) and store it in x."""
@@ -71,7 +124,21 @@ def check_root(ck, s: A.Solve, ctx):
     lam.body = ck.arith("-", left, right, q)
     ck.new_lambdas.append(lam)
     ck.all_lambdas.append(lam)
+    # the size of the terms that are added up on the two sides (|A| + |B| + |C| for A - B = C), to notice
+    # a root in rounding noise (#36); it shares the equation's argument and env
+    slam = I.ILambda("scalar", ck.fresh_name("rootscale"))
+    slam.params, slam.locals, slam.captures = lam.params, lam.locals, lam.captures
+    sdim = NumTy(left.ty.dim)
+
+    def terms(e):
+        if isinstance(e, I.IBin) and e.op in ("+", "-") and isinstance(e.ty, NumTy):
+            return I.IBin("+", terms(e.a), terms(e.b), sdim)
+        if isinstance(e, I.INeg):
+            return terms(e.a)
+        return I.IBuiltin("abs", [e], e.ty)
+    slam.body = I.IBin("+", terms(left), terms(right), sdim)
     r = I.IRoot(lam, lo, hi, NumTy(lo.ty.dim))
+    r.scale = slam
     r.hint = lo.hint or hi.hint
     r.sf = None
     tf = I.IConst(0, NumTy(lo.ty.dim))
@@ -82,13 +149,23 @@ def check_root(ck, s: A.Solve, ctx):
 
 def check_solve(ck, s: A.Solve, ctx):
     t = s.var
-    eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in s.equations]
+    src_eqs, initial, until = _take_until(ck, s, ctx)
+    eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in src_eqs]
     orders = {}
     for q in eqs:
         _find_derivs(q.lhs, orders)
         _find_derivs(q.rhs, orders)
-    if not orders and not s.initial and len(eqs) == 1 and s.var is not None:
-        return check_root(ck, s, ctx)
+    if not initial and len(eqs) == 1 and s.var is not None and until is None and s.var not in orders:
+        # I'(θ) of a function or ODE solution that already exists is a value, not an unknown (#3)
+        called, bare = set(), set()
+        _prime_uses(eqs[0].lhs, called, bare)
+        _prime_uses(eqs[0].rhs, called, bare)
+        known = all(ctx.scope.lookup(x)[0] is not None for x in orders)
+        if not orders or (known and not bare):
+            return check_root(ck, A.Solve(src_eqs, [], s.var, s.lo, s.hi, s.step, s.method,
+                                          s.tolerance).at(s), ctx)
+    if until is not None and not orders:
+        raise ck.err("until (a stop condition) is for differential equations", until)
     if not orders:
         raise ck.err("this solve has no derivatives in it, so there's no differential equation to solve", s,
                      hint="write e.g.  solve x' = -x / τ  with x(0) = 1 for t from 0 s to 5 s,  or for an "
@@ -128,7 +205,7 @@ def check_solve(ck, s: A.Solve, ctx):
     # initial conditions
     y0 = {}
     shape = {}
-    for ic in s.initial:
+    for ic in initial:
         lhs = ic.lhs
         if isinstance(lhs, A.BinOp) and lhs.op == "/" and isinstance(lhs.right, A.Call) and \
                 isinstance(lhs.right.func, A.Name) and lhs.right.func.name == "d" + t and \
@@ -246,6 +323,9 @@ def check_solve(ck, s: A.Solve, ctx):
     lam.body = body
     ck.new_lambdas.append(lam)
     ck.all_lambdas.append(lam)
+    event = evtext = None
+    if until is not None:
+        event, evtext = _check_until(ck, until, orders, lam, lctx, t)
     info = {"names": names, "layout": layout, "t": t}
     sol_sym = ck.new_sym(ck.fresh_name("__sol"), SolTy(info), ctx)
     sol_sym.assigned = True
@@ -270,7 +350,40 @@ def check_solve(ck, s: A.Solve, ctx):
         if not isinstance(tv, I.IConst) or not (0 < tv.value < 1):
             raise ck.err("the tolerance must be a plain number like 1e-8", s.tolerance)
         rtol = tv.value
-    return I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
+    st = I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
+    st.event = event                      # the stop condition's g = lhs - rhs (D34), or None
+    st.evtext = evtext if evtext is not None else -1
+    st.tname = ck.text(t)                 # for runtime errors: "at ξ = 0"
+    tf = I.IConst(0, NumTy(tdim))
+    tf.hint = t0.hint or t1.hint
+    st.tfmt = ck.fmt(tf)
+    # does the right side depend on t itself (not only through the unknowns)?  Only then can it jump in t
+    # (`if t < 0.3 s`), so only then does the step control look for jumps (D35)
+    st.tdep = any(t in A.free_names(q.lhs) + A.free_names(q.rhs) for q in eqs)
+    return st
+
+
+def _check_until(ck, until, orders, lam, lctx, t):
+    """`until lhs = rhs`: the solve stops where lhs - rhs first changes sign (D34).  Returns the event
+    lambda (same arguments, state and env as the right-hand side) and the text of its 'never happened' error."""
+    used = {}
+    _find_derivs(until.lhs, used)
+    _find_derivs(until.rhs, used)
+    for x, k in used.items():
+        if x in orders and k >= orders[x]:
+            have = ", ".join(x + "'" * j for j in range(orders[x]))
+            raise ck.err(f"the stop condition can use {have} (not {x}{chr(39) * k})", until)
+    left = ck.expr(until.lhs, lctx)
+    right = ck.expr(until.rhs, lctx)
+    ck.need_num(left, until.lhs, "the left side of the stop condition")
+    ck.need_num(right, until.rhs, "the right side of the stop condition")
+    ck.unify_or(left.ty.dim, right.ty.dim, lambda: f"the two sides of the stop condition don't match: left is "
+                f"{ck.desc(left.ty.dim)}, right is {ck.desc(right.ty.dim)}", until)
+    ev = I.ILambda("ode", ck.fresh_name("until"))
+    ev.params, ev.state, ev.locals, ev.captures = lam.params, lam.state, lam.locals, lam.captures
+    ev.body = [ck.arith("-", left, right, until)]
+    text = f"the stop condition (until {C.to_source(until.lhs)} = {C.to_source(until.rhs)}) never happened up to {t} = "
+    return ev, ck.text(text)
 
 
 # ============================================================ fit

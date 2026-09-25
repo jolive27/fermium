@@ -81,6 +81,8 @@ class Runtime:
         self.plot_series = {}
         self.plots_saved = []
         self.engine_ref = None
+        self.err = sys.stderr
+        self.warnings = []
         self._make_callbacks()
 
     # ------------------------------------------------------------ callbacks
@@ -162,6 +164,9 @@ class Runtime:
                 rt.error = rt.describe_error(kind, a, b, fmt)
             rt.error_line = line or None
 
+        def warn(kind, a, line, fmt):
+            rt.warn(kind, a, line, fmt)
+
         def plot_series(pid, idx, xp, nx, yp, ny):
             if nx != ny:
                 rt.error = f"plot: the two lists have different lengths ({ny} and {nx} values)"
@@ -224,6 +229,7 @@ class Runtime:
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
             "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),
+            "fm_warn": CB(None, c_int64, c_double, c_int64, c_int64)(warn),
             "fm_plot_series": CB(c_int64, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
             "fm_plot_sol": CB(None, c_int64, c_int64, c_void_p, c_int64, c_int64, c_int64, c_int64)(plot_sol),
             "fm_plot_done": CB(None, c_int64)(plot_done),
@@ -245,6 +251,28 @@ class Runtime:
                 return format_quantity(v, f["rdim"], f["hint"], None, False)
         return f"{format_number(v)} (SI units)"
 
+    def tname(self, i):
+        """The name of a solve's independent variable (a text id), for ODE errors."""
+        i = int(i) if i == i else -1
+        return self.tables.texts[i] if self.tables and 0 <= i < len(self.tables.texts) else "t"
+
+    def warn(self, kind, a, line, fmt=-1):
+        """A warning found while the program runs (shown on stderr, and kept in self.warnings)."""
+        if kind == 1:
+            msg = (f"the two sides of this equation agree only to rounding error near {self.fmt_value(a, fmt)}, so "
+                   f"the solution found there may be meaningless (large terms cancelling?); rewrite the equation "
+                   f"so they cancel on paper")
+        else:
+            msg = "warning"
+        text = "warning: " + (f"line {line}: " if line else "") + msg
+        if text not in self.warnings:
+            self.warnings.append(text)
+            try:
+                self.err.write(text + "\n")
+                self.err.flush()
+            except (BrokenPipeError, ValueError):
+                pass
+
     def describe_error(self, kind, a, b, fmt=-1):
         if kind == 1:
             n = int(b)
@@ -261,7 +289,7 @@ class Runtime:
             return f"asked for the solution at {self.fmt_value(a, fmt)}, outside the range it was solved " \
                    f"for (it ends at {self.fmt_value(b, fmt)})"
         if kind == 3:
-            return f"the ODE solver needed too many steps (reached t = {format_number(a)} in SI units); " \
+            return f"the ODE solver needed too many steps (reached {self.tname(b)} = {self.fmt_value(a, fmt)}); " \
                    f"the equation may be stiff or blow up"
         if kind == 4:
             return self.tables.texts[int(a)]
@@ -272,8 +300,16 @@ class Runtime:
         if kind == 7:
             return "the step must be a non-zero number that goes from the start towards the end"
         if kind == 8:
-            return f"the ODE solver's step became too small near t = {format_number(a)} (SI units); " \
+            return f"the ODE solver's step became too small near {self.tname(b)} = {self.fmt_value(a, fmt)}; " \
                    f"the solution may blow up there"
+        if kind == 16:
+            v = self.fmt_value(a, fmt)
+            return f"the right side of the equation is NaN or infinite at {self.tname(b)} = {v} (0/0? 1/0?); " \
+                   f"if the equation is singular there, start slightly away from {v}"
+        if kind == 17:
+            return f"the range of {self.tname(b)} is empty: it starts and ends at {self.fmt_value(a, fmt)}"
+        if kind == 18:
+            return f"{self.tables.texts[int(b)]}{self.fmt_value(a, fmt)}; make the range longer"
         if kind == 10:
             name = self.tables.texts[int(a)] if a >= 0 else "a function"
             return (f"{name} called itself too many times (the program ran out of stack) -- is a base case "
@@ -444,7 +480,8 @@ def sample_solution(s: SolStruct, comp, use_dy, npts=600):
     if n >= npts or n < 2:
         return t, (dy if use_dy else y)
     tt = np.linspace(t[0], t[-1], npts)
-    i = np.clip(np.searchsorted(t, tt, side="right") - 1, 0, n - 2)
+    sg = 1.0 if t[-1] >= t[0] else -1.0       # times decrease for a solve towards smaller t (D34)
+    i = np.clip(np.searchsorted(sg * t, sg * tt, side="right") - 1, 0, n - 2)
     h = t[i + 1] - t[i]
     u = (tt - t[i]) / h
     h00 = 2 * u**3 - 3 * u**2 + 1

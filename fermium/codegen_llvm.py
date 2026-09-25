@@ -45,6 +45,9 @@ ERR_SINGULAR = 15           # inverse / solve_linear of a singular matrix
 ERR_PENDING = -1            # a runtime callback (plot, load, fit) failed and already set the message
 ERR_ROOT = 13               # solve lhs = rhs: no sign change in the search range
 ERR_POLE = 14               # solve lhs = rhs: the sign change is a jump (tan at 90°), not a root
+ERR_ODE_NAN = 16            # the right side of an ODE is NaN or infinite at the start (#32)
+ERR_ODE_RANGE = 17          # an ODE's range starts and ends at the same value
+ERR_NO_EVENT = 18           # solve ... until: the stop condition never happened (D34)
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
@@ -170,6 +173,7 @@ class ModuleGen:
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
         e("fm_error", VOID, [I64, F64, F64, I64, I64])
+        e("fm_warn", VOID, [I64, F64, I64, I64])
         e("fm_plot_series", I64, [I64, I64, F64P, I64, F64P, I64])
         e("fm_plot_sol", VOID, [I64, I64, I8P, I64, I64, I64, I64])
         e("fm_plot_done", VOID, [I64])
@@ -275,6 +279,8 @@ class ModuleGen:
             item, fn = self.pending.pop()
             if isinstance(item, I.IFunc):
                 g = FuncGen(self, fn, item)
+                if getattr(item, "def_line", None):
+                    g.line = item.def_line
                 self.stack_check(g, getattr(item, "name_text", -1), getattr(item, "def_line", None))
                 for p, a in zip(item.params, fn.args):
                     slot = g.slot(p)
@@ -607,13 +613,206 @@ class ModuleGen:
         b.ret_void()
         return fn
 
+    # ------------------------------------------------------------ ODE helpers (mirrored in interp.py)
+    D_DP = [-12715105075 / 11282082432, 0, 87487479700 / 32700410799, -10690763975 / 1880347072,
+            701980252875 / 199316789632, -1453857185 / 822651844, 69997945 / 29380423]
+
+    def _emit_dense(self, b, ya, yb, da, db, r5, h, th):
+        """interp._dense: a step's dense output at the fraction th (Hermite + DOPRI5's 4th-order term r5)."""
+        r2 = b.fsub(yb, ya)
+        r3 = b.fsub(b.fmul(h, da), r2)
+        r4 = b.fsub(b.fsub(r2, b.fmul(h, db)), r3)
+        th1 = b.fsub(f64(1.0), th)
+        return b.fadd(ya, b.fmul(th, b.fadd(r2, b.fmul(th1, b.fadd(r3, b.fmul(th, b.fadd(r4, b.fmul(th1, r5))))))))
+
+    def _emit_nan_check(self, b, lp, n, k, t, tname):
+        """interp._start: stop if the derivative at the start is NaN or infinite (#32)."""
+        ok = b.alloca(I1)
+        b.store(ir.Constant(I1, 1), ok)
+        with lp.range(i64(0), n) as j:
+            v = b.load(b.gep(k, [j]))
+            b.store(b.and_(b.load(ok), b.fcmp_ordered("==", b.fsub(v, v), f64(0))), ok)
+        with b.if_then(b.not_(b.load(ok)), likely=False):
+            self.raise_error(b, ERR_ODE_NAN, t, tname)
+
+    def _emit_sign(self, b, g):
+        return b.select(b.fcmp_ordered(">", g, f64(0)), f64(1),
+                        b.select(b.fcmp_ordered("<", g, f64(0)), f64(-1), f64(0)))
+
+    def _k_event_locate(self):
+        """interp._Event.check's location step: the time in (t, tn) where the stop condition's g crosses 0,
+        by Illinois on g(x, cubic Hermite of the step at x).  Leaves the state at the result in ys."""
+        fn = self._new_fn("fm_event_locate", F64, [ODE_FN.as_pointer(), F64P, I64, F64, F64P, F64P, F64, F64P,
+                                                   F64P, F64P, F64, F64, F64P, F64P], inline=False)
+        ev, env, n, t, y, k, tn, yn, kn, r5, ga0, gc0, ys, gbuf = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        fabs = self.intrinsic("fabs")
+        h = b.fsub(tn, t)
+
+        def g_at(x):
+            th = b.fdiv(b.fsub(x, t), h)
+            with lp.range(i64(0), n) as j:
+                v = self._emit_dense(b, b.load(b.gep(y, [j])), b.load(b.gep(yn, [j])), b.load(b.gep(k, [j])),
+                                     b.load(b.gep(kn, [j])), b.load(b.gep(r5, [j])), h, th)
+                b.store(v, b.gep(ys, [j]))
+            b.call(ev, [x, ys, gbuf, env])
+            return b.load(gbuf)
+        a, c, ga, gc, side = b.alloca(F64), b.alloca(F64), b.alloca(F64), b.alloca(F64), b.alloca(I64)
+        b.store(t, a)
+        b.store(ga0, ga)
+        b.store(tn, c)
+        b.store(gc0, gc)
+        b.store(i64(0), side)
+        done_bb = fn.append_basic_block("ev.done")
+        with lp.range(i64(0), i64(200)):
+            xa, xc, ya, yc = b.load(a), b.load(c), b.load(ga), b.load(gc)
+            big = b.call(self.intrinsic("maxnum"), [b.call(fabs, [xa]), b.call(fabs, [xc])])
+            with b.if_then(b.fcmp_ordered("<=", b.call(fabs, [b.fsub(xc, xa)]), b.fmul(f64(4e-16), big))):
+                b.branch(done_bb)
+            x = b.fsub(xc, b.fdiv(b.fmul(yc, b.fsub(xc, xa)), b.fsub(yc, ya)))
+            mid = b.fmul(f64(0.5), b.fadd(xa, xc))
+            lo_, hi_ = b.call(self.intrinsic("minnum"), [xa, xc]), b.call(self.intrinsic("maxnum"), [xa, xc])
+            inside = b.and_(b.fcmp_ordered(">", x, lo_), b.fcmp_ordered("<", x, hi_))
+            x = b.select(inside, x, mid)
+            gx = g_at(x)
+            with b.if_then(b.fcmp_unordered("==", gx, f64(0))):
+                b.ret(x)
+            with b.if_else(b.fcmp_ordered("<", b.fmul(gx, yc), f64(0))) as (then, other):
+                with then:
+                    b.store(xc, a)
+                    b.store(yc, ga)
+                    b.store(i64(0), side)
+                with other:
+                    with b.if_then(b.icmp_signed("==", b.load(side), i64(1))):
+                        b.store(b.fmul(f64(0.5), b.load(ga)), ga)
+                    b.store(i64(1), side)
+            b.store(x, c)
+            b.store(gx, gc)
+        b.branch(done_bb)
+        b.position_at_end(done_bb)
+        b.ret(b.load(c))
+        return fn
+
+    def _emit_event_check(self, b, lp, f, ev, env, n, sp, evsgn, gbuf, ys, kbuf, r5, t, y, k, tn, yn, kn,
+                          ks=None, before_push=None):
+        """interp._Event.check: after a step (t, y, k) -> (tn, yn, kn), return from the kernel with the
+        solution ended at the crossing if the stop condition's g changed sign."""
+        b.call(ev, [tn, yn, gbuf, env])
+        gn = b.load(gbuf)
+        with b.if_then(b.fcmp_ordered("==", gn, gn)):
+            sgn = b.load(evsgn)
+            with b.if_else(b.fcmp_ordered("==", sgn, f64(0))) as (unknown, known):
+                with unknown:
+                    b.store(self._emit_sign(b, gn), evsgn)
+                with known:
+                    crossed = b.or_(b.fcmp_ordered("==", gn, f64(0)), b.fcmp_ordered("<", b.fmul(gn, sgn), f64(0)))
+                    with b.if_then(crossed):
+                        h = b.fsub(tn, t)
+                        with lp.range(i64(0), n) as j:
+                            if ks is None:
+                                v = f64(0)
+                            else:
+                                acc = b.fmul(f64(self.D_DP[0]), b.load(b.gep(ks[0], [j])))
+                                for m in range(2, 7):
+                                    acc = b.fadd(acc, b.fmul(f64(self.D_DP[m]), b.load(b.gep(ks[m], [j]))))
+                                v = b.fmul(h, acc)
+                            b.store(v, b.gep(r5, [j]))
+                        te = b.alloca(F64)
+                        b.store(tn, te)
+                        with b.if_then(b.fcmp_unordered("!=", gn, f64(0))):
+                            b.store(b.call(self.kernel("fm_event_locate"),
+                                           [ev, env, n, t, y, k, tn, yn, kn, r5, sgn, gn, ys, gbuf]), te)
+                        tev = b.load(te)
+                        at_end = b.fcmp_ordered("==", tev, tn)
+                        th = b.fdiv(b.fsub(tev, t), h)
+                        with lp.range(i64(0), n) as j:
+                            yj = b.load(b.gep(y, [j]))
+                            ynj = b.load(b.gep(yn, [j]))
+                            v = self._emit_dense(b, yj, ynj, b.load(b.gep(k, [j])), b.load(b.gep(kn, [j])),
+                                                 b.load(b.gep(r5, [j])), h, th)
+                            b.store(b.select(at_end, ynj, v), b.gep(ys, [j]))
+                        b.call(f, [tev, ys, kbuf, env])
+                        if before_push is not None:
+                            before_push()
+                        b.call(self.kernel("fm_sol_push"), [sp, tev, ys, kbuf])
+                        b.ret(sp)
+
+    def _emit_jdist(self, b, lp, n, u, v, fa, fe, vfun=None):
+        """interp._jdist: sum over components of |u - v| / (|fa| + |fe|) (components with a zero scale skipped).
+        vfun(j) gives v's component when v isn't an array."""
+        fabs = self.intrinsic("fabs")
+        d = b.alloca(F64)
+        b.store(f64(0), d)
+        with lp.range(i64(0), n) as j:
+            w = b.fadd(b.call(fabs, [b.load(b.gep(fa, [j]))]), b.call(fabs, [b.load(b.gep(fe, [j]))]))
+            vj = vfun(j) if vfun is not None else b.load(b.gep(v, [j]))
+            q = b.fdiv(b.call(fabs, [b.fsub(b.load(b.gep(u, [j])), vj)]), w)
+            b.store(b.select(b.fcmp_ordered(">", w, f64(0)), b.fadd(b.load(d), q), b.load(d)), d)
+        return b.load(d)
+
+    def _k_find_jump(self):
+        """interp._find_jump: is there a jump in f(·, y), y held fixed, between t and tn (`if t < 0.3 s`)?
+        Returns 1 and out = (lo, hi), adjacent times on the near and far side of it, or 0 (D35)."""
+        fn = self._new_fn("fm_find_jump", I64, [ODE_FN.as_pointer(), F64P, I64, F64, F64, F64P, F64P, F64P,
+                                                F64P, F64P, F64P, F64P, F64P], inline=False)
+        f, env, n, t, tn, y, fa, fe, fm, fx, flo, fhi, out = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        b.call(f, [tn, y, fe, env])
+        b.call(f, [b.fadd(t, b.fmul(f64(0.5), b.fsub(tn, t))), y, fm, env])
+        dfe = self._emit_jdist(b, lp, n, fa, fe, fa, fe)
+        with b.if_then(b.not_(b.fcmp_ordered(">", dfe, f64(1e-12)))):
+            b.ret(i64(0))
+        dm = self._emit_jdist(b, lp, n, fm, None, fa, fe, vfun=lambda j: b.fmul(
+            f64(0.5), b.fadd(b.load(b.gep(fa, [j])), b.load(b.gep(fe, [j])))))
+        with b.if_then(b.not_(b.fcmp_ordered(">", dm, b.fmul(f64(0.4), dfe)))):
+            b.ret(i64(0))
+        lo, hi = b.alloca(F64), b.alloca(F64)
+        b.store(t, lo)
+        b.store(tn, hi)
+        with lp.range(i64(0), n) as j:
+            b.store(b.load(b.gep(fa, [j])), b.gep(flo, [j]))
+            b.store(b.load(b.gep(fe, [j])), b.gep(fhi, [j]))
+        done_bb = fn.append_basic_block("fj.done")
+        with lp.range(i64(0), i64(200)):
+            lv, hv = b.load(lo), b.load(hi)
+            m = b.fadd(lv, b.fmul(f64(0.5), b.fsub(hv, lv)))
+            with b.if_then(b.or_(b.fcmp_ordered("==", m, lv), b.fcmp_ordered("==", m, hv))):
+                b.branch(done_bb)
+            b.call(f, [m, y, fx, env])
+            near = b.fcmp_ordered("<=", self._emit_jdist(b, lp, n, fx, fa, fa, fe),
+                                  self._emit_jdist(b, lp, n, fx, fe, fa, fe))
+            with b.if_else(near) as (yes, no):
+                with yes:
+                    b.store(m, lo)
+                    with lp.range(i64(0), n) as j:
+                        b.store(b.load(b.gep(fx, [j])), b.gep(flo, [j]))
+                with no:
+                    b.store(m, hi)
+                    with lp.range(i64(0), n) as j:
+                        b.store(b.load(b.gep(fx, [j])), b.gep(fhi, [j]))
+        b.branch(done_bb)
+        b.position_at_end(done_bb)
+        with b.if_then(b.fcmp_ordered(">", self._emit_jdist(b, lp, n, flo, fhi, fa, fe), b.fmul(f64(0.5), dfe))):
+            b.store(b.load(lo), out)
+            b.store(b.load(hi), b.gep(out, [i64(1)]))
+            b.ret(i64(1))
+        b.ret(i64(0))
+        return fn
+
     def _k_rk4(self):
-        fn = self._new_fn("fm_rk4", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64])
-        f, env, n, y0, t0, t1, h0 = fn.args
+        self.kernel("fm_sol_push")          # used by the stop condition (until)
+        fn = self._new_fn("fm_rk4", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64,
+                                           ODE_FN.as_pointer(), F64, F64])
+        f, env, n, y0, t0, t1, h0, ev, tname, evtext = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         span = b.fsub(t1, t0)
-        ratio = b.fdiv(span, h0)
+        with b.if_then(b.not_(b.fcmp_unordered("!=", span, f64(0))), likely=False):
+            self.raise_error(b, ERR_ODE_RANGE, t0, tname)
+        # the range gives the direction (D34), the step its size
+        ratio = b.call(self.intrinsic("fabs"), [b.fdiv(span, h0)])
         with b.if_then(b.or_(b.or_(b.fcmp_unordered("uno", ratio, ratio), b.fcmp_ordered(">", ratio, f64(1e12))),
                              b.fcmp_ordered("<=", ratio, f64(0)))):
             self.raise_error(b, ERR_STEP, h0, span)
@@ -635,10 +834,19 @@ class ModuleGen:
 
         def arr():
             return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
-        y, k1, k2, k3, k4, tmp = arr(), arr(), arr(), arr(), arr(), arr()
+        y, k1, k2, k3, k4, tmp, yn, kn = arr(), arr(), arr(), arr(), arr(), arr(), arr(), arr()
         with lp.range(i64(0), n) as k:
             b.store(b.load(b.gep(y0, [k])), b.gep(y, [k]))
         half = b.fmul(h, f64(0.5))
+        has_ev = b.icmp_unsigned("!=", b.ptrtoint(ev, I64), i64(0))
+        evsgn = b.alloca(F64)
+        gbuf, ys, kbuf, r5 = arr(), arr(), arr(), arr()
+        b.call(f, [t0, y, k1, env])
+        self._emit_nan_check(b, lp, n, k1, t0, tname)
+        b.store(f64(0), evsgn)
+        with b.if_then(has_ev):
+            b.call(ev, [t0, y, gbuf, env])
+            b.store(self._emit_sign(b, b.load(gbuf)), evsgn)
 
         def record(idx, t, y, d):
             b.store(t, b.gep(tp, [idx]))
@@ -646,10 +854,8 @@ class ModuleGen:
             with lp.range(i64(0), n) as k:
                 b.store(b.load(b.gep(y, [k])), b.gep(yp, [b.add(base, k)]))
                 b.store(b.load(b.gep(d, [k])), b.gep(dp, [b.add(base, k)]))
-        with lp.range(i64(0), steps) as s:
-            t = b.fadd(t0, b.fmul(b.sitofp(s, F64), h))
-            b.call(f, [t, y, k1, env])
-            record(s, t, y, k1)
+        def stages(t, ydst):
+            """One RK4 step from (t, y) with k1 = f(t, y) already in k1; the new state goes to ydst."""
             with lp.range(i64(0), n) as k:
                 b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(half, b.load(b.gep(k1, [k])))), b.gep(tmp, [k]))
             th = b.fadd(t, half)
@@ -664,16 +870,40 @@ class ModuleGen:
             with lp.range(i64(0), n) as k:
                 s23 = b.fadd(b.load(b.gep(k2, [k])), b.load(b.gep(k3, [k])))
                 acc = b.fadd(b.fadd(b.load(b.gep(k1, [k])), b.fmul(f64(2), s23)), b.load(b.gep(k4, [k])))
-                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(h6, acc)), b.gep(y, [k]))
-        b.call(f, [t1, y, k1, env])
+                b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(h6, acc)), b.gep(ydst, [k]))
+        with b.if_else(has_ev) as (with_event, plain):
+            with with_event:
+                # keep the step's start for locating the crossing (interp.rk4 with an event)
+                with lp.range(i64(0), steps) as s:
+                    t = b.fadd(t0, b.fmul(b.sitofp(s, F64), h))
+                    record(s, t, y, k1)
+                    stages(t, yn)
+                    s1 = b.add(s, i64(1))
+                    tn = b.select(b.icmp_signed("==", s1, steps), t1, b.fadd(t0, b.fmul(b.sitofp(s1, F64), h)))
+                    b.call(f, [tn, yn, kn, env])
+                    self._emit_event_check(b, lp, f, ev, env, n, sp, evsgn, gbuf, ys, kbuf, r5, t, y, k1, tn, yn,
+                                           kn, before_push=lambda: b.store(s1, b.gep(sp, [I32(0), I32(0)])))
+                    with lp.range(i64(0), n) as k:
+                        b.store(b.load(b.gep(yn, [k])), b.gep(y, [k]))
+                        b.store(b.load(b.gep(kn, [k])), b.gep(k1, [k]))
+                self.raise_error(b, ERR_NO_EVENT, t1, evtext)
+            with plain:
+                # the same numbers in place, without copies (the fast path: this is the RK4 benchmark)
+                with lp.range(i64(0), steps) as s:
+                    t = b.fadd(t0, b.fmul(b.sitofp(s, F64), h))
+                    b.call(f, [t, y, k1, env])
+                    record(s, t, y, k1)
+                    stages(t, y)
+                b.call(f, [t1, y, k1, env])
         record(steps, t1, y, k1)
         b.ret(sp)
         return fn
 
     def _k_dp45(self):
         push = self.kernel("fm_sol_push")
-        fn = self._new_fn("fm_dp45", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64])
-        f, env, n, y0, t0, t1, rtol = fn.args
+        fn = self._new_fn("fm_dp45", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64,
+                                            ODE_FN.as_pointer(), F64, F64, I64])
+        f, env, n, y0, t0, t1, rtol, ev, tname, evtext, tdep = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         mal = self.externs["malloc"]
@@ -683,31 +913,45 @@ class ModuleGen:
 
         def arr():
             return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
-        y, ynew, tmp, ymax, _err = arr(), arr(), arr(), arr(), arr()
+        y, ynew, tmp = arr(), arr(), arr()
         k = [arr() for _ in range(7)]
         with lp.range(i64(0), n) as j:
-            v = b.load(b.gep(y0, [j]))
-            b.store(v, b.gep(y, [j]))
-            b.store(b.call(fabs, [v]), b.gep(ymax, [j]))
+            b.store(b.load(b.gep(y0, [j])), b.gep(y, [j]))
         sp = self._sol_alloc(b, n, i64(256))
         span = b.fsub(t1, t0)
-        with b.if_then(b.fcmp_ordered("<=", span, f64(0))):
-            self.raise_error(b, ERR_STEP, span, f64(0))
+        with b.if_then(b.not_(b.fcmp_unordered("!=", span, f64(0))), likely=False):
+            self.raise_error(b, ERR_ODE_RANGE, t0, tname)
+        dirn = b.select(b.fcmp_ordered(">", span, f64(0)), f64(1), f64(-1))   # towards smaller t (D34)
+        aspan = b.call(fabs, [span])
         tv = b.alloca(F64)
         hv = b.alloca(F64)
         nsteps = b.alloca(I64)
         rejcount = b.alloca(I64)
         firstrej = b.alloca(F64)
+        hastgt = b.alloca(I64)         # a located jump in f (D35): land exactly on it
+        tgtlo = b.alloca(F64)
+        tgthi = b.alloca(F64)
+        probed = b.alloca(I64)
         b.store(i64(0), rejcount)
         b.store(f64(0), firstrej)
+        b.store(i64(0), hastgt)
+        b.store(f64(0), tgtlo)
+        b.store(f64(0), tgthi)
+        b.store(i64(0), probed)
         b.store(t0, tv)
-        b.store(b.fmul(span, f64(1e-4)), hv)
+        b.store(b.fmul(aspan, f64(1e-4)), hv)
         b.store(i64(0), nsteps)
         b.call(f, [t0, y, k[0], env])
+        self._emit_nan_check(b, lp, n, k[0], t0, tname)
         b.call(push, [sp, t0, y, k[0]])
-        fmx = _err     # largest |dy/dt| seen so far, per component
-        with lp.range(i64(0), n) as j:
-            b.store(b.call(fabs, [b.load(b.gep(k[0], [j]))]), b.gep(fmx, [j]))
+        has_ev = b.icmp_unsigned("!=", b.ptrtoint(ev, I64), i64(0))
+        evsgn = b.alloca(F64)
+        gbuf, ys, kbuf, r5 = arr(), arr(), arr(), arr()
+        jfe, jfm, jfx, jflo, jfhi, jout = arr(), arr(), arr(), arr(), arr(), b.bitcast(b.call(mal, [i64(16)]), F64P)
+        b.store(f64(0), evsgn)
+        with b.if_then(has_ev):
+            b.call(ev, [t0, y, gbuf, env])
+            b.store(self._emit_sign(b, b.load(gbuf)), evsgn)
         # Dormand–Prince coefficients
         A = [[], [1 / 5], [3 / 40, 9 / 40], [44 / 45, -56 / 15, 32 / 9],
              [19372 / 6561, -25360 / 2187, 64448 / 6561, -212 / 729],
@@ -721,7 +965,7 @@ class ModuleGen:
         b.branch(cond_bb)
         b.position_at_end(cond_bb)
         t = b.load(tv)
-        remaining = b.fsub(t1, t)
+        remaining = b.fmul(dirn, b.fsub(t1, t))
         go = b.fcmp_ordered(">", remaining, b.fmul(f64(1e-14), b.call(fabs, [t1])))
         go = b.and_(go, b.fcmp_ordered(">", remaining, f64(0)))
         b.cbranch(go, body_bb, end_bb)
@@ -729,20 +973,26 @@ class ModuleGen:
         cnt = b.add(b.load(nsteps), i64(1))
         b.store(cnt, nsteps)
         with b.if_then(b.icmp_signed(">", cnt, i64(20_000_000))):
-            self.raise_error(b, ERR_ODE_STEPS, t, f64(0))
-        h = b.call(fmin, [b.load(hv), remaining])
-        with b.if_then(b.fcmp_ordered("<", h, b.fmul(f64(1e-15), b.fadd(b.call(fabs, [t]), b.call(fabs, [span]))))):
-            self.raise_error(b, ERR_ODE_H, t, h)
+            self.raise_error(b, ERR_ODE_STEPS, t, tname)
+        tgt = b.icmp_signed("!=", b.load(hastgt), i64(0))
+        stop = b.select(tgt, b.load(tgtlo), t1)
+        rstop = b.fmul(dirn, b.fsub(stop, t))
+        hvv = b.load(hv)
+        land = b.fcmp_ordered(">=", hvv, rstop)
+        h = b.select(land, rstop, hvv)
+        with b.if_then(b.fcmp_ordered("<", h, b.fmul(f64(1e-15), b.fadd(b.call(fabs, [t]), aspan)))):
+            self.raise_error(b, ERR_ODE_H, t, tname)
+        tn = b.select(land, stop, b.fadd(t, b.fmul(dirn, h)))
+        hs = b.select(land, b.fsub(stop, t), b.fmul(dirn, h))
         for s in range(1, 7):
             with lp.range(i64(0), n) as j:
                 acc = b.load(b.gep(y, [j]))
                 for m in range(s):
                     if A[s][m] != 0:
-                        acc = b.fadd(acc, b.fmul(b.fmul(h, f64(A[s][m])), b.load(b.gep(k[m], [j]))))
+                        acc = b.fadd(acc, b.fmul(b.fmul(hs, f64(A[s][m])), b.load(b.gep(k[m], [j]))))
                 b.store(acc, b.gep(ynew if s == 6 else tmp, [j]))
-            ts = b.fadd(t, b.fmul(h, f64(Cn[s])))
+            ts = tn if Cn[s] == 1 else b.fadd(t, b.fmul(hs, f64(Cn[s])))
             b.call(f, [ts, ynew if s == 6 else tmp, k[s], env])
-        # error estimate (scale-free: relative to the size each component has reached)
         errsum = b.alloca(F64)
         b.store(f64(0), errsum)
         with lp.range(i64(0), n) as j:
@@ -750,7 +1000,7 @@ class ModuleGen:
             for m in range(7):
                 if E[m] != 0:
                     e = b.fadd(e, b.fmul(f64(E[m]), b.load(b.gep(k[m], [j]))))
-            e = b.fmul(e, h)
+            e = b.fmul(e, hs)
             yo = b.call(fabs, [b.load(b.gep(y, [j]))])
             yn = b.call(fabs, [b.load(b.gep(ynew, [j]))])
             # relative error norm (scale-free, so it works in any units and keeps decays accurate):
@@ -762,7 +1012,6 @@ class ModuleGen:
             r = b.fdiv(e, sc)
             b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
         errn = b.call(self.intrinsic("sqrt"), [b.fdiv(b.load(errsum), b.sitofp(n, F64))])
-        # step size factor
         pw = self.intrinsic("pow")
         fac = b.fmul(f64(0.9), b.call(pw, [b.call(fmax, [errn, f64(1e-10)]), f64(-0.2)]))
         fac = b.call(fmin, [f64(5.0), b.call(fmax, [f64(0.2), fac])])
@@ -774,74 +1023,114 @@ class ModuleGen:
         accept = b.or_(b.fcmp_ordered("<=", errn, f64(1.0)), stalled)
         with b.if_else(accept) as (yes, no):
             with yes:
-                tn = b.fadd(t, h)
+                with b.if_then(has_ev):
+                    self._emit_event_check(b, lp, f, ev, env, n, sp, evsgn, gbuf, ys, kbuf, r5, t, y, k[0], tn,
+                                           ynew, k[6], ks=k)
                 b.store(tn, tv)
                 with lp.range(i64(0), n) as j:
-                    v = b.load(b.gep(ynew, [j]))
-                    b.store(v, b.gep(y, [j]))
-                    b.store(b.call(fmax, [b.load(b.gep(ymax, [j])), b.call(fabs, [v])]), b.gep(ymax, [j]))
+                    b.store(b.load(b.gep(ynew, [j])), b.gep(y, [j]))
                     b.store(b.load(b.gep(k[6], [j])), b.gep(k[0], [j]))   # FSAL
-                    b.store(b.call(fmax, [b.load(b.gep(fmx, [j])), b.call(fabs, [b.load(b.gep(k[6], [j]))])]),
-                            b.gep(fmx, [j]))
                 b.call(push, [sp, tn, y, k[0]])
                 b.store(b.select(stalled, b.fmul(h, f64(2.0)), b.fmul(h, fac)), hv)
+                with b.if_then(b.and_(land, tgt)):          # at the jump: restart on its far side
+                    b.store(i64(0), hastgt)
+                    th = b.load(tgthi)
+                    b.store(th, tv)
+                    b.call(f, [th, y, k[0], env])
+                    b.call(push, [sp, th, y, k[0]])
+                    b.store(h, hv)
                 b.store(i64(0), rejcount)
+                b.store(i64(0), probed)
             with no:
                 with b.if_then(b.icmp_signed("==", nrej, i64(0))):
                     b.store(errn, firstrej)
                 b.store(b.add(nrej, i64(1)), rejcount)
                 b.store(b.fmul(h, b.call(fmin, [fac, f64(1.0)])), hv)
+                probe = b.and_(b.icmp_signed("!=", tdep, i64(0)),
+                               b.and_(b.icmp_signed("==", b.load(probed), i64(0)), b.not_(tgt)))
+                with b.if_then(probe):
+                    b.store(i64(1), probed)
+                    found = b.call(self.kernel("fm_find_jump"), [f, env, n, t, tn, y, k[0], jfe, jfm, jfx, jflo,
+                                                                 jfhi, jout])
+                    with b.if_then(b.icmp_signed("!=", found, i64(0))):
+                        lo = b.load(jout)
+                        hi = b.load(b.gep(jout, [i64(1)]))
+                        b.store(h, hv)
+                        with b.if_else(b.fcmp_ordered("==", lo, t)) as (at_t, later):
+                            with at_t:             # the jump is right at t: k[0] is from the near side
+                                b.store(hi, tv)
+                                b.call(f, [hi, y, k[0], env])
+                                b.call(push, [sp, hi, y, k[0]])
+                                b.store(i64(0), rejcount)
+                                b.store(i64(0), probed)
+                            with later:
+                                b.store(i64(1), hastgt)
+                                b.store(lo, tgtlo)
+                                b.store(hi, tgthi)
         b.branch(cond_bb)
         b.position_at_end(end_bb)
+        with b.if_then(has_ev, likely=False):
+            self.raise_error(b, ERR_NO_EVENT, t1, evtext)
         b.ret(sp)
         return fn
 
     ROOT_SCAN = 200          # sub-intervals searched for the first sign change
+    NOISE = 1e-12            # |lhs - rhs| at most this times |lhs| + |rhs| near the root: rounding noise (#36)
 
     def _k_root(self):
-        """The first root of f in [a, b]: if f(a), f(b) have the same sign, scan ROOT_SCAN sub-intervals
-        for the first sign change; then Illinois (modified regula falsi), which keeps a bracket and
-        converges superlinearly, to full double precision."""
-        fn = self._new_fn("fm_root", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64], inline=False)
-        f, env, a0, b0 = fn.args
+        """The FIRST root of f in [a, b] (D32, #2): scan ROOT_SCAN sub-intervals from a for the first sign
+        change (or an exact zero), always; then Illinois (modified regula falsi), which keeps a bracket
+        and converges superlinearly, to full double precision.  g(x) = |lhs| + |rhs| (or null): a sign
+        change in rounding noise gets a warning (#36).  Mirrors interp.root."""
+        fn = self._new_fn("fm_root", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, SCALAR_FN.as_pointer()],
+                          inline=False)
+        f, env, a0, b0, g = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
+        has_g = b.icmp_unsigned("!=", b.ptrtoint(g, I64), i64(0))
+        ln0, fmt0 = b.load(self.curline), b.load(self.errfmt)
+
+        def noisy(fv, x):
+            return b.fcmp_ordered("<=", b.call(fabs, [fv]), b.fmul(f64(self.NOISE), b.call(g, [x, env])))
+
+        def warn(x):
+            b.call(self.externs["fm_warn"], [i64(1), x, ln0, fmt0])
         a, c, fa, fc = b.alloca(F64), b.alloca(F64), b.alloca(F64), b.alloca(F64)
-        b.store(a0, a)
-        b.store(b0, c)
         b.store(b.call(f, [a0, env]), fa)
-        b.store(b.call(f, [b0, env]), fc)
         with b.if_then(b.fcmp_ordered("==", b.load(fa), f64(0))):
             b.ret(a0)
-        with b.if_then(b.fcmp_ordered("==", b.load(fc), f64(0))):
-            b.ret(b0)
 
         def opposite(x, y):
             return b.fcmp_ordered("<", b.fmul(x, y), f64(0))
-        with b.if_then(b.not_(opposite(b.load(fa), b.load(fc)))):
-            # scan for the first sub-interval with a sign change (or an exact zero)
-            found = b.alloca(I64)
-            b.store(i64(0), found)
-            fprev = b.alloca(F64)
-            b.store(b.load(fa), fprev)
-            h = b.fdiv(b.fsub(b0, a0), f64(self.ROOT_SCAN))
-            with lp.range(i64(1), i64(self.ROOT_SCAN + 1)) as i:
-                with b.if_then(b.icmp_signed("==", b.load(found), i64(0))):
-                    xi = b.select(b.icmp_signed("==", i, i64(self.ROOT_SCAN)), b0,
-                                  b.fadd(a0, b.fmul(b.sitofp(i, F64), h)))
-                    fi = b.call(f, [xi, env])
-                    with b.if_then(b.fcmp_ordered("==", fi, f64(0))):
-                        b.ret(xi)
-                    with b.if_then(opposite(b.load(fprev), fi)):
-                        b.store(b.fsub(xi, h), a)
-                        b.store(b.load(fprev), fa)
-                        b.store(xi, c)
-                        b.store(fi, fc)
-                        b.store(i64(1), found)
-                    b.store(fi, fprev)
+        found = b.alloca(I64)
+        b.store(i64(0), found)
+        fprev = b.alloca(F64)
+        b.store(b.load(fa), fprev)
+        h = b.fdiv(b.fsub(b0, a0), f64(self.ROOT_SCAN))
+        with lp.range(i64(1), i64(self.ROOT_SCAN + 1)) as i:
             with b.if_then(b.icmp_signed("==", b.load(found), i64(0))):
-                self.raise_error(b, ERR_ROOT, a0, b0)
+                xi = b.select(b.icmp_signed("==", i, i64(self.ROOT_SCAN)), b0,
+                              b.fadd(a0, b.fmul(b.sitofp(i, F64), h)))
+                fi = b.call(f, [xi, env])
+                with b.if_then(b.fcmp_ordered("==", fi, f64(0))):
+                    with b.if_then(has_g):
+                        with b.if_then(noisy(b.load(fprev), b.fsub(xi, h))):
+                            warn(xi)
+                    b.ret(xi)
+                with b.if_then(opposite(b.load(fprev), fi)):
+                    b.store(b.fsub(xi, h), a)
+                    b.store(b.load(fprev), fa)
+                    b.store(xi, c)
+                    b.store(fi, fc)
+                    b.store(i64(1), found)
+                b.store(fi, fprev)
+        with b.if_then(b.icmp_signed("==", b.load(found), i64(0))):
+            self.raise_error(b, ERR_ROOT, a0, b0)
+        with b.if_then(has_g):
+            with b.if_then(noisy(b.load(fa), b.load(a))):
+                with b.if_then(noisy(b.load(fc), b.load(c))):
+                    warn(b.load(c))
         side = b.alloca(I64)          # which end was kept last time (Illinois halves the stale end)
         b.store(i64(0), side)
         m0 = b.call(self.intrinsic("maxnum"), [b.call(fabs, [b.load(fa)]), b.call(fabs, [b.load(fc)])])
@@ -946,8 +1235,11 @@ class ModuleGen:
         tlast = b.load(b.gep(tp, [b.sub(n, i64(1))]))
         span = b.fsub(tlast, tfirst)
         slack = b.fmul(f64(1e-9), b.call(self.intrinsic("fabs"), [span]))
-        bad = b.or_(b.fcmp_ordered("<", t, b.fsub(tfirst, slack)), b.fcmp_ordered(">", t, b.fadd(tlast, slack)))
+        lo_t = b.call(self.intrinsic("minnum"), [tfirst, tlast])
+        hi_t = b.call(self.intrinsic("maxnum"), [tfirst, tlast])
+        bad = b.or_(b.fcmp_ordered("<", t, b.fsub(lo_t, slack)), b.fcmp_ordered(">", t, b.fadd(hi_t, slack)))
         bad = b.or_(bad, b.fcmp_unordered("uno", t, t))
+        sg = b.select(b.fcmp_ordered(">=", tlast, tfirst), f64(1), f64(-1))
         with b.if_then(bad):
             self.raise_error(b, ERR_SOLRANGE, t, tlast)
         # binary search: largest i with t[i] <= t, 0 <= i <= n-2
@@ -964,7 +1256,7 @@ class ModuleGen:
         b.position_at_end(l_bb)
         mid = b.sdiv(b.add(b.load(lo), b.load(hi)), i64(2))
         tm = b.load(b.gep(tp, [mid]))
-        with b.if_else(b.fcmp_ordered("<=", tm, t)) as (yes, no):
+        with b.if_else(b.fcmp_ordered("<=", b.fmul(tm, sg), b.fmul(t, sg))) as (yes, no):
             with yes:
                 b.store(mid, lo)
             with no:
@@ -1327,14 +1619,21 @@ class FuncGen:
         env = self.make_env(s.rhs)
         t0 = self.expr(s.t0)
         t1 = self.expr(s.t1)
+        ev = self.mg.lambda_for(s.event) if getattr(s, "event", None) is not None else \
+            ir.Constant(ODE_FN.as_pointer(), None)
+        extra = [ev, f64(getattr(s, "tname", -1)), f64(getattr(s, "evtext", -1))]
         if s.method == "rk4":
+            h0 = self.expr(s.step)
+            self.b.store(i64(getattr(s, "tfmt", -1)), self.mg.errfmt)
             self.mark_line()
             k = self.mg.kernel("fm_rk4")
-            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, self.expr(s.step)])
+            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, h0] + extra)
         else:
+            self.b.store(i64(getattr(s, "tfmt", -1)), self.mg.errfmt)
             self.mark_line()
             k = self.mg.kernel("fm_dp45")
-            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)])
+            sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)] + extra +
+                         [i64(1 if getattr(s, "tdep", False) else 0)])
         self.store(s.sol_sym, sol)
 
     def make_env(self, lam):
@@ -1716,9 +2015,11 @@ class FuncGen:
         fn = self.mg.lambda_for(e.lam)
         env = self.make_env(e.lam)
         lo, hi = self.expr(e.lo), self.expr(e.hi)
+        scale = self.mg.lambda_for(e.scale) if getattr(e, "scale", None) is not None else \
+            ir.Constant(SCALAR_FN.as_pointer(), None)
         self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)
         self.mark_line()
-        return self.b.call(self.mg.kernel("fm_root"), [fn, env, lo, hi])
+        return self.b.call(self.mg.kernel("fm_root"), [fn, env, lo, hi, scale])
 
     def e_ISolEval(self, e):
         self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)
@@ -2011,15 +2312,26 @@ class LambdaGen(FuncGen):
             b.store(v, p)
             self.slots[sym.id] = p
 
+    def save_errctx(self):
+        return self.b.load(self.mg.curline), self.b.load(self.mg.errfmt)
+
+    def restore_errctx(self, saved):
+        self.b.store(saved[0], self.mg.curline)
+        self.b.store(saved[1], self.mg.errfmt)
+
     def emit(self):
         lam, b, fn = self.lam, self.b, self.fn
         if lam.kind == "scalar":
             x, env = fn.args
+            saved = self.save_errctx()
             self.load_env(env)
             self.store(lam.params[0], x)
-            b.ret(self.expr(lam.body))
+            v = self.expr(lam.body)
+            self.restore_errctx(saved)
+            b.ret(v)
         elif lam.kind == "ode":
             t, y, dy, env = fn.args
+            saved = self.save_errctx()
             self.load_env(env)
             self.store(lam.params[0], t)
             off = 0
@@ -2043,6 +2355,7 @@ class LambdaGen(FuncGen):
                 else:
                     b.store(v, b.gep(dy, [i64(off)]))
                     off += 1
+            self.restore_errctx(saved)
             b.ret_void()
         elif lam.kind == "model":
             p, cols, n, out = fn.args

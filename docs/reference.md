@@ -367,6 +367,29 @@ print y(1 s) to 10 digits
   - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative.
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
+- **Towards smaller t:** the range can go down, `for t from 5 s to 0 s`, with the initial conditions at the start (5 s). This works with both methods (a `step` is always written as a positive size). `times(x)` then decreases, `x[end]` is the value at the end of the range (0 s), and `x(t)` and `plot` work as usual.
+- **Stop condition, `until`:** `until lhs = rhs` on a line of its own stops the solve the first time the two sides cross (after the start), for example when a ball lands. The crossing is located to full precision on the solver's dense output (Dormand–Prince's 4th-order interpolant, or the cubic Hermite for RK4), and the solution ends there: `x[end]` is the value at the crossing and `times(x)[end]` the time. The range's end is then only a limit: if the condition never happens before it, that's an error (so a too-short range can't be mistaken for the answer). The condition can use `t`, the unknowns and their derivatives below the highest (`until y' = 0 m/s` for the top of a flight), in matching units. On one line, write it after the initial conditions: `solve y'' = -g with y(0) = 0 m, y'(0) = 5 m/s, until y = 0 m for t from 0 s to 10 s`.
+
+```fermium
+g = 9.81 m/s²
+θ = 40°
+k = 0.01 / (1 m)
+solve r'' = <0 m/s², -g> - k |r'| r'
+  with r(0 s) = <0, 0> m, r'(0 s) = 30 m/s * <cos(θ), sin(θ)>
+  for t from 0 s to 60 s
+  until r.y = 0 m
+print "flight time", times(r)[end]
+print "range", r.x[end]
+
+solve u' = u / (1 s)
+  with u(0 s) = 1 m
+  for t from 0 s to -5 s
+  until u = 0.5 m
+print "u halves at", times(u)[end]
+```
+
+- **An `if` on t** (a force that switches on at 0.3 s, a potential step in x): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it. A jump that depends on the unknowns instead (`if x > 0 m`) is not located this way.
+- **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
 
 ### Equations: solve … for x from a to b
 
@@ -381,10 +404,21 @@ solve g t²/2 = 20 m for t from 0 s to 10 s
 print t
 ```
 
-- It finds the **first** solution after `a`. If the two sides differ with the same sign at both ends, it looks for the first crossing at 200 points in between, then refines it to full double precision (Illinois regula falsi, which keeps the solution bracketed).
+- It finds the **first** solution after `a`, even when the two ends already bracket a later one: it looks for the first crossing at 200 points from `a`, then refines it to full double precision (Illinois regula falsi, which keeps the solution bracketed). `solve sin(x) = 0 for x from 1 to 10` gives π. Two solutions closer together than (b − a)/200 can hide each other; narrow the range to separate them.
 - The answer has the units of the range. Inside a loop, each `solve` overwrites the variable.
+- **Derivatives of known functions** are values: with `I(θ)` defined, `solve I'(θm) = 0 for θm from a to b` finds a maximum of I, and with `r` an ODE solution, `solve r(t2) · r'(t2) = 0 km²/s for t2 from …` finds where the radial velocity is zero. Only names that aren't defined yet make a `solve` a differential equation.
 - If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range.
+- **Rounding-noise warning:** if large terms cancel so badly that the two sides differ only by rounding error near the crossing (`(E + ε)² − (pc − ε)²` with E ~ 10²⁰ eV), the answer is printed with a warning; expand the expression on paper so the big terms cancel exactly.
 - `step`, `tolerance` and `using` are only for differential equations.
+
+```fermium
+f(x) = x³ - 3x
+solve f'(x) = 0 for x from 0 to 3
+print x
+
+solve sin(x) = 0 for x from 1 to 10
+print x
+```
 
 ## 11. Data: load, fit, plot
 
@@ -542,6 +576,7 @@ These are known and not yet fixed. None of them is silent about units.
 - **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
+- **`until` right after the range** (`for t from 0 s to 9 s until y = 0 m` on one line) doesn't parse yet: put `until` on its own line, or after the initial conditions (§10). A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Matrices** and lists of vectors don't exist yet.
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).

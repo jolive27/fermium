@@ -648,11 +648,12 @@ static void sample_solution(const fm_sol *s, int64_t comp, int use_dy, double **
     *tt = xmalloc(sizeof(double) * (size_t)npts);
     *yy = xmalloc(sizeof(double) * (size_t)npts);
     double t0 = s->t[0], t1 = s->t[n - 1];
+    double sg = t1 >= t0 ? 1.0 : -1.0;     /* times decrease for a solve towards smaller t (D34) */
     int64_t i = 0;
     for (int64_t j = 0; j < npts; j++) {
         double t = t0 + (t1 - t0) * (double)j / (double)(npts - 1);
         if (j == npts - 1) t = t1;
-        while (i < n - 2 && s->t[i + 1] <= t) i++;
+        while (i < n - 2 && sg * s->t[i + 1] <= sg * t) i++;
         double h = s->t[i + 1] - s->t[i], u = (t - s->t[i]) / h;
         double y0 = s->y[i * dim + comp], y1 = s->y[(i + 1) * dim + comp];
         double d0 = s->dy[i * dim + comp], d1 = s->dy[(i + 1) * dim + comp];
