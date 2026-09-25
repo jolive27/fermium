@@ -416,7 +416,7 @@ class Lexer:
         while self.pos < len(self.src):
             c = self.peek()
             if c in SPECIAL_STANDALONE:
-                if c == "∞" and self.src[self.pos - 1] == "_":   # R_∞
+                if self.src[self.pos - 1] == "_":   # R_∞, m_π: a symbol as a subscript is part of the name
                     self.adv()
                     continue
                 break

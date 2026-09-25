@@ -58,7 +58,8 @@ Rules (see DECISIONS.md D7):
 - Anywhere else, a name is a variable. `m v` is m times v.
 - A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
 - **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
-- If a unit name after a number is also one of your variables (for example `0.2 m` when you have a mass `m`), Fermium warns you once and explains how to write the other meaning (`2*m`).
+- If a unit name after a number is also one of your variables (for example `0.2 m` when you have a mass `m`), Fermium warns you once and explains how to write the other meaning (`2*m`). It is still the unit: `2 L` is 2 litres even when you have an inductance `L`. If that line then fails its unit check, the error adds a note naming the cause: `'2 L' here is 2 L, volume [m³] (a unit right after a number); for 2 × your variable L write 2*L` (DECISIONS D34).
+- **Per minute:** right after a number, `/ min` is the minute even with spaces, so `15.3 / min / g` is 15.3 per minute per gram. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
 
@@ -85,6 +86,7 @@ print E, p
   7. `not`, `and`, `or`
 
   So `h c / λ k_B T` means (h c)/(λ k_B T). Also, `1/2 x` means 1/(2x), and Fermium warns you. Write `½ m v²` or `(1/2) m v²` for one half. Careful: in `1/2 m`, the `m` right after the number is the unit (§2), so it is 0.5 per metre (DECISIONS D8).
+- **`a/b (c)` is a/(b c).** Fermium warns when the way a division is written suggests (a/b)·c: a tight `/` followed by factors with spaces between them (`c²/g (√(1 + x) − 1)`, `n R/(γ − 1) (T3 − T2)`, `μ₀ I/(4π) dl`), a bracket next to another factor after a space (`a / (b) c`), or dividing by the unknown of a `solve` (`ψ'' = -2 m E / ħ² ψ`). Write `(c²/g) (…)` or `c²/g * (…)` for the first meaning and `c²/(g (…))` for the second. `h c / λ k_B T`, `a/(b c)`, `x/2π` and `G M m / r²` are not warned about (DECISIONS D34).
 - **A variable keeps its units:** assigning a time to a variable that held a length is an error.
 - **Update in place:** `x += 1 m`, `x -= ...`, `x *= 2`, `x /= 2`.
 - **`where`:** gives names to values used in just one line:
@@ -220,6 +222,7 @@ print 2 v + <1, 1> m/s
 ```
 
 - **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2, 3 or 4 components). `vec(3, 4)` is the same as `<3, 4>`.
+- **A number times a vector** can be written side by side: `R <cos(φ), sin(φ), 0>`, `v0 <cos(θ), sin(θ)>`. This needs a space before `<` and none after it, and the `>` right after the last component; otherwise `<` is less-than (`a < b`, `x <y`). `R * <…>` always works.
 - **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D; not defined in 4-D).
 - **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
@@ -325,6 +328,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 ```
 
 - **Units:** the result's units are the integrand's units times the variable's units.
+- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number or name (`to L / 2`), Fermium warns that it divides the whole integral (DECISIONS D34).
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
 
 ## 10. Differential equations: solve
@@ -432,7 +436,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | ε₀ | `epsilon_0` | `\epsilon\_0` |
 | Å, μm, M☉ | `angstrom`, `um`, `Msun` | `\AA`, `\mu`, `\Msun` |
 
-- **Greek names:** Greek letter names are converted segment by segment, so `omega_0` is the same name as `ω₀`.
+- **Greek names:** Greek letter names are converted segment by segment, so `omega_0` is the same name as `ω₀`, and `m_pi` is the same name as `m_π` (a `π` after `_` is part of the name; on its own `π` is the constant).
 - **Look-alike characters:** the micro sign µ becomes μ. Using two names that look the same (such as `v` and Greek `ν`) gives a warning.
 
 ## 13. Built-in functions
