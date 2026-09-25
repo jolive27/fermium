@@ -85,13 +85,26 @@ plot data.T vs data.L to "p.png"    # plot x vs t, plot y in AU vs x in AU
 
 r = <1, 0> AU                   # a vector; v = <0, 30> km/s
 print |r|, r.x, a · b, a × b    # length, component, dot, cross
+xs[2:4], xs[3:end]              # slices (both ends included)
+
+L = 1.000 +- 0.002 m            # uncertainty (±): propagates, keeps correlations
+propagate montecarlo            # re-run the indented formulas with random samples
+z = 3 + 4i                      # complex numbers; also polar(r, θ), conj(z), abs(z)
+import mechanics                # the standard library: mechanics em nuclear astro quantum stats
+use python numpy as np          # call Python (plain numbers only, unless you declare units)
+units natural(hbar = c = 1)     # natural units, still unit-checked; also units nuclear, units astro
+analyze pend: T [s] depends on L [m], g [m/s^2]   # dimensional analysis
+solve -hbar^2/(2 m_e) * psi'' + V(x) psi = E psi with psi(0 nm) = 0, psi(1 nm) = 0 for x from 0 nm to 1 nm lowest 3
+seed(42)                        # reproducible rand(), randn(μ, σ)
 ```
+
+**Printing:** a result shows as many significant figures as its least precise input (`1.20 m` has 3). If that is unknown (whole numbers, π, constants) it shows **3**: `1/2` prints `0.500`. `print x to 6 digits` for more. Calculations always use full precision.
 
 **Constants:** `c h hbar e k_B N_A G g_n m_e m_p m_n m_u epsilon_0 mu_0 sigma alpha a_0 b_W M_sun R_sun L_sun M_earth R_earth AU`
 **Units:** `m g s A K mol` + prefixes · `N J W Pa C V ohm Hz` · `min hr day yr` · `eV MeV fm u barn` · `AU ly pc Msun` · `inch ft mi mph lb` · `deg rad` · `degC`
 
 ### ⚠️ Gotchas
-1. **A unit name right after a number is a unit.** `2 g h` = 2 *grams* × Planck's h. `0.5 m v^2` = half a *metre*. Write `2 * g * h`, `½ m v^2`, `0.5 * m * v^2`.
+1. **A unit name right after a number is a unit.** If you also have a variable with that name, Fermium stops you: `2 g h` with your `g` is an error (`'2 g' is ambiguous`); `x = 2 g` alone is 2 grams, with a warning. Write `2 * g * h`, `½ m v^2`, `0.5 * m * v^2`.
 2. **`/` right after a unit (no space) continues the unit:** `50 N/m`, `3 m/s`. With a space before the `/`, one of *your* variables wins: `20 m/s / g` divides by your `g`. If in doubt, use parentheses: `(20 m/s) / g`.
 3. `1/2 m v^2` means 1/(2mv²). Write `½ m v^2` or `(1/2) m v^2`.
 4. `LT` is one name; `L T` is L × T. `ωt` is one name; write `ω t`.
