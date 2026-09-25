@@ -1,6 +1,6 @@
 # PROGRESS
 
-_Last updated: 2026-09-25 02:00 UTC_
+_Last updated: 2026-09-25 03:05 UTC_
 
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
 
@@ -20,8 +20,8 @@ _Last updated: 2026-09-25 02:00 UTC_
 Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 
 ## Gauntlet (Phase 3)
-- First pass done: 31 problems in 10 topics, each checked against closed forms or SciPy (`tests/test_gauntlet_*.py`).
-- 38 friction items logged in gauntlet/FRICTION.md; 7 fixed so far, three agents fixing the parser, `solve` and calculus clusters.
+- First pass done: 31 problems in 10 topics; second, harder pass done: 30 problems (`tests/test_gauntlet*.py`, all checked against closed forms or SciPy).
+- 59 friction items in gauntlet/FRICTION.md, 35 fixed in the language (root finding, `until`, backwards solve, ∇ of integrals, vector integrals, eigenvalues, higher-order functions, err(g), °C steps, parser warnings, …). Two agents are on the numerics and built-ins clusters; a stiff solver agent is running.
 
 ## What works
 - **Units:** checked at compile time and erased before codegen. 7 base dimensions with rational exponents, SI prefixes, physics and astronomy units, °C/°F as absolute temperatures, `in` conversions, CODATA 2022 constants.
@@ -107,3 +107,4 @@ Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A55 ar
   - Next: the remaining AUDIT items (docs claims, bootcamp output boxes, stale PROGRESS/BACKLOG) and the rest of the adversarial list. Then Phase 2 (Jupyter kernel).
 - 01:00 UTC — Phase 1 audit fixes: quadrature rewritten (A3/A44/A51/A56), A33/A34/A37/A41/A43/A55 fixed by me; checker + calculus agents fixed A16–A19, A26, A31–A32, A35, A38, A40, A42, A45–A49, A52 (merged). 1561 tests pass, 3 xfail. Agents now on A23/A24/A54 and AUDIT §2 docs.
 - 02:00 UTC — Phase 1 closed (all audit items fixed or documented; A56 off-zero singularities and the mid-range half-peak are documented limitations). Phase 2 items 1–6 all done and merged. Gauntlet first pass: 31 problems, 38 friction items, 7 fixed; parser/solve/calculus friction agents running. 2051 tests pass.
+- 03:05 UTC — Gauntlet second pass merged (30 harder problems; 61 total). Friction: 59 logged, 35 fixed. Fixed E9 (nested-integral capture, wrong answer) and A5 (ODE first step, wrong answer) myself. Higher-order functions merged. 2254 tests pass.
