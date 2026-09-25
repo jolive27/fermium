@@ -251,6 +251,7 @@ class Checker(C.DiffContext):
         self.new_funcs = []
         self.new_lambdas = []
         self._prescan_functions(prog.body, ctx)
+        self.unit_collisions = getattr(prog, "unit_collisions", {})
         main.body = self.block(prog.body, ctx, new_scope=False)
         self.check_uncalled()
         return CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
@@ -310,7 +311,32 @@ class Checker(C.DiffContext):
         m = getattr(self, "s_" + type(s).__name__, None)
         if m is None:
             raise self.err(f"this kind of statement ({type(s).__name__}) isn't supported here", s)
-        return m(s, ctx)
+        try:
+            return m(s, ctx)
+        except FermiumError as e:
+            self._explain_unit_collision(e)
+            raise
+
+    def _explain_unit_collision(self, e):
+        """A unit error on a line where `2 L` was read as 2 litres though L is also a variable: say so
+        (FRICTION #10; the reading itself is the spec §3.4.2 rule and doesn't change)."""
+        found = getattr(self, "unit_collisions", {}).get(e.line)
+        if not found or getattr(e, "collision_noted", False):
+            return
+        msg = str(e.message)
+        if "[" not in msg and "unit" not in msg:
+            return
+        e.collision_noted = True
+        notes = []
+        for num, name in found:
+            u = lookup_unit(name)
+            what = f", {self.desc(u.dim)}" if u is not None else ""
+            notes.append(f"note: '{num} {name}' here is {num} {name}{what} (a unit right after a number); "
+                         f"for {num} × your variable {name} write {num}*{name}")
+        if e.hint:
+            e.hint = "\n  ".join([e.hint] + notes)
+        else:
+            e.hint = "\n  ".join([notes[0].removeprefix("note: ")] + notes[1:])
 
     def s_ExprStmt(self, s, ctx):
         e = s.value

@@ -32,7 +32,10 @@ CMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "~="}
 AUG_OPS = {"+=", "-=", "*=", "/="}
 
 
-VEC_CALC_WORDS = {"grad": "grad", "div": "div", "curl": "curl", "laplacian": "lap"}
+# Unit names that are also built-in functions: after a number (`15.3 / min`) they are the unit.
+UNITS_NAMED_LIKE_BUILTINS = {"min"}
+
+VEC_CALC_WORDS ={"grad": "grad", "div": "div", "curl": "curl", "laplacian": "lap"}
 
 
 class Parser:
@@ -44,6 +47,9 @@ class Parser:
         self.abs_depth = 0
         self.no_juxt_names = set()
         self.warned_units = set()
+        self.collisions = {}         # line -> [(number, name)]: `2 L` read as a unit though L is a variable
+        self.in_integrand = 0
+        self.limit_start = None      # token index where an integral's upper limit starts (FRICTION #8)
 
     # ------------------------------------------------------------ helpers
     @property
@@ -132,7 +138,9 @@ class Parser:
                 continue
             body.append(self.statement())
             self.skip_newlines()
-        return A.Program(body)
+        prog = A.Program(body)
+        prog.unit_collisions = self.collisions
+        return prog
 
     def block(self):
         """NEWLINE INDENT stmt* DEDENT, or a single statement on the same line after ':'."""
@@ -245,12 +253,39 @@ class Parser:
                     return s
         e = self.expr_where()
         if self.at_op("="):
-            raise self.error("can't store a value here: the left side of = must be a variable name",
-                             hint="use == to compare two values")
+            raise self._assign_to_non_name(t, e)
         s = self.span(A.ExprStmt(e), t)
         if end_line:
             self.end_statement()
         return s
+
+    def _assign_to_non_name(self, start, lhs):
+        """`h² = GM a (1 − e²)`: only a name can be stored to; point to `solve` (FRICTION #28)."""
+        parts = []
+        for j in range(self.toks.index(start), self.i):
+            tk = self.toks[j]
+            if parts and tk.ws_before:
+                parts.append(" ")
+            parts.append(tk.raw)
+        text = "".join(parts)
+        var = None
+        if isinstance(lhs, A.BinOp) and lhs.op == "^" and isinstance(lhs.left, A.Name):
+            var = lhs.left.name
+        else:
+            names = [n.name for n in A.walk(lhs) if isinstance(n, A.Name)]
+            unknown = [n for n in names if n not in self.known]
+            var = (unknown or names or ["x"])[0]
+        if any(isinstance(n, (A.Prime, A.Deriv)) for n in A.walk(lhs)):
+            hint = f"a differential equation is solved with solve:  solve {text} = … with (starting values) " \
+                   f"for t from 0 s to 10 s"
+        else:
+            hint = f"you can only assign to a name; to solve {text} = … for {var}, write  " \
+                   f"solve {text} = … for {var} from {var}_min to {var}_max"
+            if isinstance(lhs, A.BinOp) and lhs.op == "^" and isinstance(lhs.left, A.Name):
+                hint += f", or store {var} = √(…) and write {text} where you need it"
+            else:
+                hint += "; to compare two values use =="
+        return self.error(f"can't store a value in {text}: the left side of = must be a variable name", hint=hint)
 
     def _match(self, j):
         """Index of the bracket matching the one at j."""
@@ -482,6 +517,7 @@ class Parser:
         if var is None:
             raise FermiumError("solve needs a range for the independent variable", t.line, t.col, 5,
                                hint="add e.g.  for t from 0 s to 10 s")
+        self._warn_divide_by_unknown(eqs)
         s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
@@ -489,6 +525,29 @@ class Parser:
                 if isinstance(n, A.Name):
                     self.known.add(n.name)
         return s
+
+    def _warn_divide_by_unknown(self, eqs):
+        """`ψ'' = -2 m_e E / ħ² ψ` divides by ψ (D8); dividing by the unknown of an ODE is rare and
+        usually a precedence slip, so warn (FRICTION #9)."""
+        unknowns = set()
+        for eq in eqs:
+            for n in A.walk(eq.lhs):
+                if isinstance(n, (A.Prime, A.Deriv)):
+                    base = n.target if isinstance(n, A.Prime) else n.operand
+                    if isinstance(base, A.Call):
+                        base = base.func
+                    if isinstance(base, A.Name):
+                        unknowns.add(base.name)
+        for eq in eqs:
+            for n in A.walk(eq.rhs):
+                info = getattr(n, "div_info", None)
+                if info is None or info["warned"]:
+                    continue
+                for k, (f, _, ws) in enumerate(info["factors"]):
+                    g = f.func if isinstance(f, A.Call) else f
+                    if k > 0 and isinstance(g, A.Name) and g.name in unknowns:
+                        self._warn_juxt_denominator(info, k, why=f", including the unknown {g.name}")
+                        break
 
     def fit_stmt(self):
         t = self.next()
@@ -617,6 +676,7 @@ class Parser:
                         not n.left.bracket and len(n.left.unit.factors) == 1:
                     f = n.left.unit.factors[0]
                     if f.name in names:
+                        self._note_collision(n.left, f)
                         self.diags.warn(f"'{f.name}' after the number means the unit {f.name}, not the "
                                         f"{f.name} from 'where'", line=f.line, col=f.col, length=len(f.name),
                                         hint=f"write *{f.name} (e.g. 0.5*{f.name}) or ½ {f.name}")
@@ -726,12 +786,81 @@ class Parser:
         t = self.tok
         e = self.unary()
         while self.tok.kind == "OP" and self.tok.value in ("*", "/", "×"):
+            if self.tok.value == "/" and self._ends_upper_limit():
+                break
             op = self.next()
+            den_start = self.i
+            tight = not op.ws_before and not self.tok.ws_before
             r = self.unary()
+            info = None
             if op.value == "/":
-                self._check_ambiguous_division(e, r, op)
+                warned = self._check_ambiguous_division(e, r, op)
+                info = self._juxt_denominator(r, op, den_start, tight, warned)
             e = self.span(A.BinOp(op.value, e, r), t)
+            if info is not None:
+                e.div_info = info
         return e
+
+    def _text(self, i, j):
+        """Source text of tokens i..j-1."""
+        parts = []
+        for k in range(i, j):
+            tk = self.toks[k]
+            if parts and tk.ws_before:
+                parts.append(" ")
+            parts.append(tk.raw)
+        return "".join(parts)
+
+    def _juxt_denominator(self, den, op, den_start, tight, warned):
+        """`c²/g (√(1 + x) − 1)` is c²/(g (…)): implicit multiplication binds tighter than '/' (D8).
+        Warn when the way it's written suggests (a/b) c (FRICTION #9, D34):
+          - a tight '/' (no spaces around it) followed by factors separated by spaces:
+            `n R/(γ−1) (T3−T2)`, `μ₀ I/(4π) dl`;
+          - a bracketed factor next to another factor with a space between: `/ g (…)`, `/ (4π) dl`.
+        `h c / λ k_B T`, `a/(b c)`, `1/2π` and `G M m / r²` are not warned about.
+        Returns the denominator's factors, for the solve-unknown check in solve_stmt."""
+        if not (isinstance(den, A.BinOp) and den.implicit and not den.paren):
+            return None
+        factors = []      # (node, first token index, space before it)
+        n = den
+        while isinstance(n, A.BinOp) and n.implicit and not n.paren:
+            factors.append((n.right, n.juxt_i, n.juxt_ws))
+            n = n.left
+        factors.append((n, den_start, False))
+        factors.reverse()
+        end = self.i
+        if self.limit_start is None and self.in_integrand:
+            # `∫ 1/u du`: the trailing differential isn't part of the denominator
+            while len(factors) > 1 and isinstance(factors[-1][0], A.Name) and factors[-1][0].name.startswith("d") \
+                    and len(factors[-1][0].name) > 1:
+                end = factors.pop()[1]
+            if len(factors) == 1:
+                return None
+        info = {"op": op, "start": den_start, "end": end, "factors": factors, "warned": warned}
+        if warned:
+            return info
+        spaced = [k for k in range(1, len(factors)) if factors[k][2]]
+        bracketed = [k for k in spaced if factors[k][0].paren or factors[k - 1][0].paren]
+        if (tight and spaced) or bracketed:
+            k = spaced[0] if tight and spaced else bracketed[0]
+            self._warn_juxt_denominator(info, k)
+        return info
+
+    def _warn_juxt_denominator(self, info, k, why=""):
+        factors, op = info["factors"], info["op"]
+        bounds = [f[1] for f in factors] + [info["end"]]
+        texts = []
+        for j, (f, _, ws) in enumerate(factors):
+            tx = self._text(bounds[j], bounds[j + 1])
+            if f.paren and len(tx) > 12:
+                tx = "(…)"
+            texts.append((" " if ws and j else "") + tx)
+        head, rest = "".join(texts[:k]), "".join(texts[k:]).lstrip()
+        den = "".join(texts)
+        info["warned"] = True
+        self.diags.warn(f"this divides by all of '{den}'{why}: implicit multiplication binds tighter than '/'",
+                        tok=op, hint=f"write …/{head} * {rest} if only {head} is below the line, "
+                                     f"or …/({den}) if all of it is")
 
     def _check_ambiguous_division(self, left, right, op):
         """Warn about `1/2 m v²` which Fermium reads as 1/(2 m v²)."""
@@ -747,6 +876,8 @@ class Parser:
                     f"this is read as a/(b c), i.e. {a}/({b} ...): implicit multiplication binds tighter than '/'",
                     tok=op, hint=f"if you meant ({a}/{b}) times the rest, write ({a}/{b}) with parentheses "
                                  f"(or ½ for one half)")
+                return True
+        return False
 
     def unary(self):
         if self.at_op("-"):
@@ -785,6 +916,37 @@ class Parser:
                 return True
             if t.value == "|" and self.abs_depth == 0:
                 return True
+            if t.value == "<" and self._vector_after_space():
+                return True
+        return False
+
+    def _vector_after_space(self):
+        """At '<': is this `R <cos φ, sin φ, 0>`, a vector literal multiplied by what came before?
+
+        Only when `<` has a space before it and none after, and a matching `>` (with no space before
+        it) follows on the same line with a comma between them at the top level (FRICTION #7). `a < b` and `if x <y` stay
+        comparisons.
+        """
+        t = self.tok
+        if not t.ws_before or self.peek().ws_before:
+            return False
+        depth, comma, j = 0, False, self.i + 1
+        while j < len(self.toks):
+            tk = self.toks[j]
+            if tk.kind in ("NEWLINE", "EOF", "INDENT", "DEDENT") or (tk.kind == "OP" and tk.value in ("=", "<")
+                                                                     and depth == 0):
+                return False
+            if tk.kind == "OP" and tk.value in "([{":
+                depth += 1
+            elif tk.kind == "OP" and tk.value in ")]}":
+                if depth == 0:
+                    return False
+                depth -= 1
+            elif depth == 0 and tk.kind == "OP" and tk.value == ",":
+                comma = True
+            elif depth == 0 and tk.kind == "OP" and tk.value == ">":
+                return comma and not tk.ws_before
+            j += 1
         return False
 
     def juxt(self):
@@ -798,10 +960,21 @@ class Parser:
             if not self._starts_term():
                 break
             self._warn_unit_then_term(e)
+            ws, ri = self.tok.ws_before, self.i
             r = self.power()
             e = self.span(A.BinOp("*", e, r, implicit=True), t)
+            e.juxt_ws, e.juxt_i = ws, ri
         self._warn_bare_unit(e)
         return e
+
+    def _note_collision(self, q, f):
+        """Remember `2 L` (a unit after a number, while L is also a variable), so that a unit error on
+        the same line can say why (FRICTION #10)."""
+        num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else None
+        if num is not None:
+            lst = self.collisions.setdefault(f.line, [])
+            if (num, f.name) not in lst:
+                lst.append((num, f.name))
 
     def _warn_bare_unit(self, e):
         """Spec §3.4.2: a bare unit after a number that is also a variable name gets a warning (once per name)."""
@@ -810,6 +983,8 @@ class Parser:
             q = q.right
         if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
+            if f.name in self.known and f.name != "c":
+                self._note_collision(q, f)
             if f.name in self.known and f.name not in self.warned_units and f.name != "c":
                 self.warned_units.add(f.name)
                 num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
@@ -826,6 +1001,7 @@ class Parser:
         if isinstance(q, A.Quantity) and not q.bracket and not q.paren and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
             if f.name in self.known and f.exp == 1:
+                self._note_collision(q, f)
                 self.diags.warn(
                     f"'{f.name}' after the number means the unit {f.name}, not your "
                     f"variable {f.name}", line=f.line, col=f.col, length=len(f.name),
@@ -1089,7 +1265,11 @@ class Parser:
             nx = self.peek(2)
             return nx.kind == "NAME" and is_unit_name(nx.raw)
         if t.kind == "OP" and t.value == "/" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
-                self.peek().value not in self.known and not self.peek().ws_before:
+                self.peek().value not in self.known and \
+                (not self.peek().ws_before or self.peek().value in UNITS_NAMED_LIKE_BUILTINS) and \
+                not (self.peek(2).kind == "OP" and self.peek(2).value == "(" and not self.peek(2).ws_before):
+            # `15.3 / min / g`: after a number, `min` can only be the minute (min the function is never
+            # divided by), so the spaced form is a unit too (FRICTION #15)
             return True
         return False
 
@@ -1233,10 +1413,14 @@ class Parser:
         # "per atomic mass unit" (A54). Look ahead for the trailing `du` before reading the integrand.
         new = self._integration_vars() - self.known
         self.known |= new
+        saved_limit, self.limit_start = self.limit_start, None
+        self.in_integrand += 1
         try:
             body = self.sum()
         finally:
             self.known -= new
+            self.limit_start = saved_limit
+            self.in_integrand -= 1
         integrand, var = self._split_dvar(body)
         if var is None:
             raise self.error("this integral is missing its 'dx' (the variable to integrate over)", tok=t,
@@ -1246,8 +1430,33 @@ class Parser:
             self.next()
             lo = self.sum()
             self.expect_kw("to")
-            hi = self.sum()
+            saved, self.limit_start = self.limit_start, self.i
+            try:
+                hi = self.sum()
+            finally:
+                self.limit_start = saved
+            if self.at_op("/") and self.tok.ws_before and self.peek().kind in ("NUM", "NAME"):
+                self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
+                                tok=self.tok, hint="to divide the limit, write it without spaces (to L/2) or in "
+                                                   "parentheses (to (L / 2))")
         return self.span(A.Integral(integrand, var, lo, hi), t)
+
+    def _ends_upper_limit(self):
+        """At '/': does it end an integral's upper limit? A '/' with a space before it, outside any
+        brackets opened in the limit, ends it: `∫ f dx from 0 to ∞ / (μ₀ I)` divides the integral,
+        while `from 0 to 1/2` has the limit ½ (FRICTION #8, D34)."""
+        if self.limit_start is None or not self.tok.ws_before:
+            return False
+        depth = bars = 0
+        for j in range(self.limit_start, self.i):
+            tk = self.toks[j]
+            if tk.kind == "OP" and tk.value in "([{":
+                depth += 1
+            elif tk.kind == "OP" and tk.value in ")]}":
+                depth -= 1
+            elif tk.kind == "OP" and tk.value == "|":
+                bars += 1
+        return depth == 0 and bars % 2 == 0
 
     def _integration_vars(self):
         """Names v of the `dv` tokens that end the integrand starting at the current token."""

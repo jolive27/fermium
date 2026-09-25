@@ -12,15 +12,15 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 4 | B | mechanics (M2) | "might not have a value" wrongly reported for a variable set again in a second loop | Open |
 | 5 | W | oscillations (O1) | `ω in Hz` silently prints ω, not ω/2π | Open |
 | 6 | W | thermodynamics (T1) | `(T - 20 °C) in °C` converts a temperature difference as an absolute temperature | Open |
-| 7 | A | electromagnetism, mechanics (E3, M3) | `R <cos φ, sin φ, 0>` doesn't parse (`<` is read as less-than) | Open |
-| 8 | W | electromagnetism (E5) | An integral's upper limit swallows a following `/ x` | Open |
-| 9 | W | special relativity, thermodynamics, electromagnetism, quantum (S1, T4, E4, Q8) | `a/b (c)` silently means a/(b (c)) | Open |
-| 10 | A | all (E6, O2, G1, Q9) | `2 L`, `2 m E`, `1.2 T` read as units even when a variable has that name (spec §3.4.2 rule) | Open |
+| 7 | A | electromagnetism, mechanics (E3, M3) | `R <cos φ, sin φ, 0>` doesn't parse (`<` is read as less-than) | Fixed: `R <…>` with a space before `<` and a closing `>` on the line multiplies by a vector (D34) |
+| 8 | W | electromagnetism (E5) | An integral's upper limit swallows a following `/ x` | Fixed: a `/` with a space before it ends the upper limit; `to 1/2` still means ½ (D34) |
+| 9 | W | special relativity, thermodynamics, electromagnetism, quantum (S1, T4, E4, Q8) | `a/b (c)` silently means a/(b (c)) | Fixed: warning when the writing suggests (a/b) c, or when dividing by an ODE unknown (D34) |
+| 10 | A | all (E6, O2, G1, Q9) | `2 L`, `2 m E`, `1.2 T` read as units even when a variable has that name (spec §3.4.2 rule) | Fixed: the reading stays (spec §3.4.2), but a unit error on that line now names the cause and suggests `2*L` (D34) |
 | 11 | W | quantum (Q2) | An `if` on the independent variable in an ODE loses accuracy | Open |
 | 12 | A | quantum (Q7) | `solve` can't integrate towards smaller t; the error mentions a `step` never given | Open |
 | 13 | B | quantum, oscillations (Q4, O9) | Errors inside functions or integrals report the wrong line, or none | Open |
-| 14 | A | special relativity (S3) | `m_π` can't be a variable name | Open |
-| 15 | B | nuclear (N3) | `15.3 / min / g` fails with "min is a built-in function" | Open |
+| 14 | A | special relativity (S3) | `m_π` can't be a variable name | Fixed: `π` after `_` is part of the name (`m_π` = `m_pi`) |
+| 15 | B | nuclear (N3) | `15.3 / min / g` fails with "min is a built-in function" | Fixed: after a number, `/ min` is the minute even with spaces (D34) |
 | 16 | A | astrophysics (A2) | No `mas`/`μas`; `arcsec` takes no prefixes | Open |
 | 17 | C | oscillations, quantum (O3, Q12) | The look-alike-names warning repeats many times, across unrelated functions | Open |
 | 18 | A | electromagnetism (E1) | ∇ or d/dx of a function defined by an integral isn't supported | Open |
@@ -33,7 +33,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 25 | A | nuclear (N1) | Stiff decay chains need millions of RK45 steps: no implicit solver | Open |
 | 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Open |
 | 27 | A | gravitation (G5) | No `GM_sun` / `GM_earth` constants | Open |
-| 28 | C | gravitation (G3) | `h² = …` gets the hint "use == to compare" | Open |
+| 28 | C | gravitation (G3) | `h² = …` gets the hint "use == to compare" | Fixed: the error says only a name can be assigned and suggests `solve h² = … for h from … to …` (D34) |
 | 29 | C | several (E8, T6, O3, M6, O2) | Derived units print in base SI (`kg/(s³ A)` for V/m²), `1/s` for rad/s | Open |
 | 30 | C | quantum (Q14) | List elements lose their significant figures | Open |
 | 31 | C | special relativity (S5) | The "(= … SI)" echo appears after an explicit `in` | Open |
