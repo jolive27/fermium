@@ -46,13 +46,13 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 38 | C | oscillations (O8) | `print` always puts a space between items | By design |
 | 39 | W | electromagnetism (E9) | A nested integral inside a function read garbage for the function's parameter | Fixed: captures propagate through enclosing integrands |
 | 40 | W | astrophysics (A5) | The adaptive solver's first step (10⁻⁴ of the range) was accepted though far too big: w(1 s) = 6.17, not 1 | Fixed: dimensionally consistent Hairer–Wanner first step |
-| 41 | W | optics (O5) | A plain-number function result is shown in degrees when the argument was in degrees (`2 cos(θ)` prints 57.3°) | Open |
+| 41 | W | optics (O5) | A plain-number function result is shown in degrees when the argument was in degrees (`2 cos(θ)` prints 57.3°) | Fixed: a plain-number result no longer takes an argument's angle unit |
 | 42 | W | special relativity (S9) | `r'(t)` of a first-order unknown is only as accurate as the interpolant's derivative (~1e-6) | Open |
-| 43 | W | mechanics, oscillations, thermodynamics, nuclear (M10, O11, T11, T7, N12) | `2 g`, `2 m m2`, `3 V`, `3 b`, `2 l`: the unit-after-number rule keeps biting; the #10 note is missing when the error lands on a later line | Open |
+| 43 | W | mechanics, oscillations, thermodynamics, nuclear (M10, O11, T11, T7, N12) | `2 g`, `2 m m2`, `3 V`, `3 b`, `2 l`: the unit-after-number rule keeps biting; the #10 note is missing when the error lands on a later line | Fixed: a unit error on a later line notes the earlier line where `2 g` was read as a unit |
 | 44 | B | mechanics (M9) | Two second derivatives in one equation (Lagrange's mass-matrix form) are refused with a misleading error | Open |
 | 45 | B | mechanics, thermodynamics, optics (M11, T10, O6) | An integrand that is 0/0 or overflows at a node gives "doesn't converge … NaN" | Open |
 | 46 | B | electromagnetism (E10) | An integral that is 0 by symmetry (a zero vector component) is reported as not converging | Open |
-| 47 | B | electromagnetism (E11) | `∇²term` for `term(n, x, y)` treats n as a coordinate and never finishes compiling | Open |
+| 47 | B | electromagnetism (E11) | `∇²term` for `term(n, x, y)` treats n as a coordinate and never finishes compiling | Fixed: parameters named x, y, z are the coordinates; others (like n) are held fixed |
 | 48 | B | quantum, astrophysics (Q16, A7, Q17) | An ODE solution made inside a function can't be used in `∫` or an algebraic `solve`, or returned; the error names `__sol.3` | Open |
 | 49 | A | electromagnetism (E12) | No one-line sum (Σ), so a Fourier series can't be written as a one-line function and differentiated | Open |
 | 50 | A | electromagnetism, optics (E16, O4) | No Bessel functions or elliptic integrals | Open |
@@ -63,5 +63,5 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 55 | A | nuclear, mechanics (N8, M12) | A unit after a name or a vector needs brackets (`A_d u`, `<0, 0> /s`) | Open |
 | 56 | A | nuclear (N9, N10, N11) | Lists: no mapping over two lists, `fit` only takes loaded data, unknowns can't be lists, no unit after `[…]` | Open |
 | 57 | A | nuclear (N13) | No chained comparisons (`a < x < b`) | Open |
-| 58 | W | astrophysics (A9) | `2/(3H₀√Ω) asinh(…)` is warned about (#9) but still runs with the other meaning | Open |
+| 58 | W | astrophysics (A9) | `2/(3H₀√Ω) asinh(…)` is warned about (#9) but still runs with the other meaning | Fixed: `a/(b) c` with a bracketed denominator followed by a spaced factor is an error showing both readings |
 | 59 | C | several (E14, M13, E15, O12, S13, T12, O14, Q19, Q20, N14, A10) | Cosmetics: `∂2f/∂x2`, printed formulas with `2 g·`, rounding noise in matrices, J/(m³ K⁴) shown in base SI, mixed 1/s and rad/s, unit-free error texts | Open |

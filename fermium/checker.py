@@ -319,15 +319,61 @@ class Checker(C.DiffContext):
         if m is None:
             raise self.err(f"this kind of statement ({type(s).__name__}) isn't supported here", s)
         try:
-            return m(s, ctx)
+            r = m(s, ctx)
         except FermiumError as e:
-            self._explain_unit_collision(e)
+            self._explain_unit_collision(e, s)
             raise
+        self._track_collision_taint(s)
+        return r
 
-    def _explain_unit_collision(self, e):
+    @staticmethod
+    def _stmt_names(s):
+        """Every Name used anywhere in a statement (A.walk only follows expressions)."""
+        import dataclasses
+        out, todo = set(), [s]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, A.Name):
+                out.add(n.name)
+            if isinstance(n, (list, tuple)):
+                todo.extend(n)
+            elif dataclasses.is_dataclass(n):
+                todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
+        return out
+
+    def _track_collision_taint(self, s):
+        """Remember names computed on a line where `2 g` was read as a unit though g is a variable, so a unit
+        error on a later line can point back to it (gauntlet #43)."""
+        tainted = self.__dict__.setdefault("collision_taint", {})
+        target = getattr(s, "name", None) if isinstance(s, (A.Assign, A.FuncDef)) else None
+        if not target:
+            return
+        coll = getattr(self, "unit_collisions", {})
+        if s.line in coll:
+            tainted[target] = s.line
+            return
+        for nm in self._stmt_names(s):
+            if nm in tainted and nm != target:
+                tainted[target] = tainted[nm]
+                return
+
+    def _explain_unit_collision(self, e, stmt=None):
         """A unit error on a line where `2 L` was read as 2 litres though L is also a variable: say so
-        (FRICTION #10; the reading itself is the spec §3.4.2 rule and doesn't change)."""
+        (FRICTION #10; the reading itself is the spec §3.4.2 rule and doesn't change).  For a later line,
+        name the variable computed from such a line (gauntlet #43)."""
         found = getattr(self, "unit_collisions", {}).get(e.line)
+        if not found and stmt is not None and not getattr(e, "collision_noted", False):
+            tainted = getattr(self, "collision_taint", {})
+            names = sorted(nm for nm in self._stmt_names(stmt) if nm in tainted)
+            msg = str(e.message)
+            if names and ("[" in msg or "unit" in msg):
+                e.collision_noted = True
+                ln = tainted[names[0]]
+                nums = ", ".join(f"'{num} {nm}'" for num, nm in self.unit_collisions.get(ln, []))
+                note = (f"note: {names[0]} depends on line {ln}, where {nums} was read as a unit (a unit right after "
+                        f"a number); if you meant your variable there, write the * (like 2*g)")
+                e.hint = f"{e.hint}\n  {note}" if e.hint else note
+            return
         if not found or getattr(e, "collision_noted", False):
             return
         msg = str(e.message)
@@ -1421,8 +1467,8 @@ class Checker(C.DiffContext):
         if r.hint is not None or not isinstance(r.ty, NumTy):
             return
         d = self.U.norm(r.ty.dim)
-        if not d.concrete:
-            return
+        if not d.concrete or d.const.dimensionless:
+            return          # 2 cos(θ) with θ in degrees is a plain number, not an angle (gauntlet O5)
         for a in args:
             if isinstance(a.ty, NumTy) and a.hint is not None and not a.hint.affine:
                 da = self.U.norm(a.ty.dim)
@@ -2583,10 +2629,16 @@ class Checker(C.DiffContext):
         if not b.one_liner:
             raise self.err(f"{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and {name} is "
                            f"defined over several lines", e.func)
-        params = [p.name for p in b.fdef.params]
+        allp = [p.name for p in b.fdef.params]
+        # with parameters named x, y, z those are the coordinates, and the others (like a mode number n)
+        # are held fixed: ∇²term for term(n, x, y) (gauntlet #47)
+        xyz = [p for p in allp if p in ("x", "y", "z")]
+        params = xyz if len(xyz) >= 2 else allp
         if not 2 <= len(params) <= 3 or (e.kind == "curl" and len(params) != 3):
             need = "3 coordinates, like B(x, y, z)" if e.kind == "curl" else "2 or 3 coordinates, like φ(x, y, z)"
-            raise self.err(f"{sym}{name} needs a function of {need}; {name} has {len(params)}", e.func)
+            raise self.err(f"{sym}{name} needs a function of {need}; {name} has {len(params)}", e.func,
+                           hint="name the coordinate parameters x, y (and z); other parameters are then held fixed"
+                           if len(allp) > 3 else None)
         dc = self._diffctx(b.scope)
         body = b.body_expr()
 

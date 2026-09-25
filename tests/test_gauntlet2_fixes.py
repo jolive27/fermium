@@ -23,3 +23,18 @@ def test_A5_first_step_follows_the_solution_scale():
     # w = √(t/t0) w0 grows by 10⁵ from t0 = 1e-10 s; the old first step (10⁻⁴ of the range) gave 6.17
     out = both("solve w' = w/(2t) with w(1e-10 s) = 1e-5 for t from 1e-10 s to 1 s\nprint w(1 s) to 8 digits")
     assert abs(float(out) - 1) < 1e-6
+
+
+def test_43_unit_collision_note_reaches_later_lines():
+    from conftest import error_of
+    e = error_of("g = 9.81 m/s²\nh = 2 m\nv = √(2 g h)\nt = v / g\nprint t in s")
+    assert "t depends on line 3, where '2 g' was read as a unit" in (e.hint or "")
+
+
+def test_41_dimensionless_result_isnt_shown_in_degrees():
+    assert both("θ = 60°\nf(θ) = 2 cos(θ)\nprint f(θ)") == "1"
+
+
+def test_47_nabla_holds_non_coordinate_parameters_fixed():
+    out = both("term(n, x, y) = sin(n π x) sinh(n π y) / sinh(n π)\nprint abs(∇²term(3, 0.2, 0.7)) < 1e-9")
+    assert out == "true"

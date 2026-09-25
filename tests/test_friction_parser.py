@@ -76,13 +76,21 @@ def test_spaced_division_by_a_number_after_a_limit_warns():
 @pytest.mark.parametrize("src", [
     "g = 9.81 m/s²\nT = 1 yr\nprint c²/g (√(1 + (g T / c)²) - 1) in ly",
     "g = 9.81 m/s²\nT = 1 yr\nprint c² / g (√(1 + (g T / c)²) - 1) in ly",
-    "n = 1.0 mol\nγ = 1.4\nT3 = 300 K\nT2 = 200 K\nprint n R_gas/(γ - 1) (T3 - T2)",
-    "I = 1.0 A\ndl = 1 m\nprint μ₀ I/(4π) dl",
-    "a = 1.0\nb = 2.0\nx = 3.0\nprint a / (b) x",
     "a = 1.0\nb = 2.0\nx = 3.0\nprint a/b x",
 ])
 def test_ambiguous_juxtaposed_denominator_warns(src):
     assert warns(src, PRECEDENCE)
+
+
+@pytest.mark.parametrize("src", [
+    "n = 1.0 mol\nγ = 1.4\nT3 = 300 K\nT2 = 200 K\nprint n R_gas/(γ - 1) (T3 - T2)",
+    "I = 1.0 A\ndl = 1 m\nprint μ₀ I/(4π) dl",
+    "a = 1.0\nb = 2.0\nx = 3.0\nprint a / (b) x",
+    "H = 2\nΩ = 0.7\nprint 2/(3 H √Ω) asinh(√(Ω/0.3))",
+])
+def test_bracketed_denominator_then_a_factor_is_an_error(src):
+    # gauntlet #58: the brackets say the denominator ends, the precedence rule says it doesn't
+    assert "is ambiguous" in str(error_of(src))
 
 
 def test_divide_by_ode_unknown_warns():
@@ -96,10 +104,8 @@ def test_divide_by_ode_unknown_warns():
 
 
 def test_ambiguous_denominator_hint_suggests_both_readings():
-    d = Diagnostics()
-    parse("I = 1.0 A\ndl = 1 m\nprint μ₀ I/(4π) dl", d)
-    hints = [w.hint for w in d.warnings if PRECEDENCE in w.message]
-    assert hints and "…/(4π) * dl" in hints[0] and "…/((4π) dl)" in hints[0]
+    e = error_of("I = 1.0 A\ndl = 1 m\nprint μ₀ I/(4π) dl")
+    assert "/(4π) * dl" in e.hint and "/((4π) dl)" in e.hint
 
 
 @pytest.mark.parametrize("src", [

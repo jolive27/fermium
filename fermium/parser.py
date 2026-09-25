@@ -847,6 +847,16 @@ class Parser:
             return info
         spaced = [k for k in range(1, len(factors)) if factors[k][2]]
         bracketed = [k for k in spaced if factors[k][0].paren or factors[k - 1][0].paren]
+        if factors[0][0].paren and 1 in spaced:
+            # `2/(3H₀√Ω) asinh(…)`: the brackets say the denominator ends there, the rule says it doesn't.
+            # Too likely to be a slip to guess either way (gauntlet #58): make the writer choose.
+            bounds = [f[1] for f in factors] + [info["end"]]
+            first = self._text(bounds[0], bounds[1])
+            rest = self._text(bounds[1], bounds[-1]).strip()
+            raise self.error(f"'/{first} {rest}' is ambiguous: implicit multiplication binds tighter than '/', so "
+                             f"this would divide by all of '{first} {rest}'", tok=self.toks[bounds[0]],
+                             hint=f"write  /{first} * {rest}  to multiply by {rest}, or  /({first} {rest})  to "
+                                  f"divide by both")
         if (tight and spaced) or bracketed:
             k = spaced[0] if tight and spaced else bracketed[0]
             self._warn_juxt_denominator(info, k)
