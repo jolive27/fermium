@@ -39,6 +39,47 @@ def _normalize_derivs(e, tvar):
     return e
 
 
+def check_root(ck, s: A.Solve, ctx):
+    """solve lhs = rhs for x from a to b: find the x in [a, b] where the two sides are equal (the first
+    sign change of lhs - rhs, then Illinois regula falsi to full precision) and store it in x."""
+    if s.step is not None or s.method is not None or s.tolerance is not None:
+        raise ck.err("step, tolerance and using are for differential equations; an equation is solved to full "
+                     "precision", s)
+    x = s.var
+    lo = ck.expr(s.lo, ctx)
+    hi = ck.expr(s.hi, ctx)
+    ck.need_num(lo, s.lo, "the start of the search range")
+    ck.need_num(hi, s.hi, "the end of the search range")
+    ck.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the search range goes from {ck.desc(lo.ty.dim)} to "
+                f"{ck.desc(hi.ty.dim)}; both ends need the same units", s.lo)
+    lam = I.ILambda("scalar", ck.fresh_name("root"))
+    lam.locals = []
+    scope = Scope(ctx.scope)
+    lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+    lctx.enclosing = ctx.func
+    xs = I.Sym(x, NumTy(lo.ty.dim), "local", lam)
+    xs.assigned = True
+    lam.params = [xs]
+    scope.names[x] = xs
+    q = s.equations[0]
+    left = ck.expr(q.lhs, lctx)
+    right = ck.expr(q.rhs, lctx)
+    ck.need_num(left, q.lhs, "the left side")
+    ck.need_num(right, q.rhs, "the right side")
+    ck.unify_or(left.ty.dim, right.ty.dim, lambda: f"the two sides of this equation don't match: left is "
+                f"{ck.desc(left.ty.dim)}, right is {ck.desc(right.ty.dim)}", q)
+    lam.body = ck.arith("-", left, right, q)
+    ck.new_lambdas.append(lam)
+    ck.all_lambdas.append(lam)
+    r = I.IRoot(lam, lo, hi, NumTy(lo.ty.dim))
+    r.hint = lo.hint or hi.hint
+    r.sf = None
+    tf = I.IConst(0, NumTy(lo.ty.dim))
+    tf.hint = r.hint
+    r.tfmt = ck.fmt(tf)
+    return ck.assign_to(x, r, s, ctx)
+
+
 def check_solve(ck, s: A.Solve, ctx):
     t = s.var
     eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in s.equations]
@@ -46,9 +87,12 @@ def check_solve(ck, s: A.Solve, ctx):
     for q in eqs:
         _find_derivs(q.lhs, orders)
         _find_derivs(q.rhs, orders)
+    if not orders and not s.initial and len(eqs) == 1 and s.var is not None:
+        return check_root(ck, s, ctx)
     if not orders:
         raise ck.err("this solve has no derivatives in it, so there's no differential equation to solve", s,
-                     hint="write e.g.  solve x' = -x / τ  with x(0) = 1 for t from 0 s to 5 s")
+                     hint="write e.g.  solve x' = -x / τ  with x(0) = 1 for t from 0 s to 5 s,  or for an "
+                          "equation:  solve x² = 2 for x from 0 to 2")
     if len(eqs) != len(orders):
         names = ", ".join(orders)
         raise ck.err(f"this solve has {len(eqs)} equation{'s' if len(eqs) != 1 else ''} for {len(orders)} "

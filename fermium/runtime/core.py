@@ -265,6 +265,12 @@ class Runtime:
             if a != a:
                 return "the length of a list must be a number, not NaN"
             return f"not enough memory for a list of {format_number(a)} numbers (the most is 10⁹)"
+        if kind == 13:
+            return (f"this equation has no solution between {self.fmt_value(a, fmt)} and {self.fmt_value(b, fmt)}: "
+                    f"the two sides never cross there (checked at 200 points)")
+        if kind == 14:
+            return (f"the two sides of this equation jump past each other near {self.fmt_value(a, fmt)} (like tan "
+                    f"at 90°) instead of crossing: that's not a solution; narrow the range")
         if kind == 12:
             return (f"this for loop has no definite number of steps: it goes from {format_number(a)} to "
                     f"{format_number(b)} (NaN in the start, end or step)")
