@@ -513,16 +513,31 @@ class Parser:
                 if self.at_kw("step"):
                     self.next()
                     step = self.expr()
+                # `tolerance`, `using`/`method` and `until` may follow in any order; the tolerance
+                # expression is parsed with the option words still excluded from juxtaposition, so
+                # `tolerance 1e-11 using radau` does not read `1e-11 using` as a product (D111).
+                seen = set()
+                while self.tok.kind == "NAME":
+                    word = self.tok.value
+                    if word == "tolerance":
+                        key = "tolerance"
+                    elif word in ("using", "method"):
+                        key = "using"
+                    elif word == "until" and "until" not in self.known:
+                        key = "until"
+                    else:
+                        break
+                    if key in seen:
+                        raise self.error(f"'{word}' is given twice in this solve")
+                    seen.add(key)
+                    self.next()
+                    if key == "tolerance":
+                        tol_node[0] = self.expr()
+                    elif key == "using":
+                        method = self.expect_name("a method name (rk4, rk45, radau or bdf)").value
+                    else:
+                        until[0] = self.equation()   # for t from 0 s to 9 s until y = 0 m  (D39)
                 self.no_juxt_names = saved
-                if self.tok.kind == "NAME" and self.tok.value == "tolerance":
-                    self.next()
-                    tol_node[0] = self.expr()
-                if self.tok.kind == "NAME" and self.tok.value in ("using", "method"):
-                    self.next()
-                    method = self.expect_name("a method name (rk4 or rk45)").value
-                if self.tok.kind == "NAME" and self.tok.value == "until" and "until" not in self.known:
-                    self.next()              # for t from 0 s to 9 s until y = 0 m  (D39)
-                    until[0] = self.equation()
                 return True
             return False
 
@@ -1637,15 +1652,32 @@ class Parser:
             lo = self.sum()
             self.expect_kw("to")
             saved, self.limit_start = self.limit_start, self.i
+            hi_start = self.i
             try:
                 hi = self.sum()
             finally:
                 self.limit_start = saved
-            if self.at_op("/") and self.tok.ws_before and self.peek().kind in ("NUM", "NAME"):
+            if self.at_op("/") and self.tok.ws_before and self._divisor_follows() and \
+                    not self._limit_is_infinite(hi_start):
                 self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
                                 tok=self.tok, hint="to divide the limit, write it without spaces (to L/2) or in "
                                                    "parentheses (to (L / 2))")
         return self.span(A.Integral(integrand, var, lo, hi), t)
+
+    def _divisor_follows(self):
+        """After a spaced '/' that ended an upper limit: is a divisor next (a number, a name, or a
+        bracketed expression like `/ (1 + z)`)? (FRICTION #8, and research: #61)"""
+        nx = self.peek()
+        return nx.kind in ("NUM", "NAME") or (nx.kind == "OP" and nx.value in ("(", "[", "|")) or \
+            (nx.kind == "KW" and nx.value in ("sqrt", "cbrt"))
+
+    def _limit_is_infinite(self, start):
+        """Is the upper limit starting at token `start` ±∞ (possibly with a unit)? Then ∞ / x is ∞
+        and both readings of `to ∞ / (μ₀ I)` agree, so the '/' dividing the integral needs no warning."""
+        j = start
+        while j < self.i and self.toks[j].kind == "OP" and self.toks[j].value in "+-":
+            j += 1
+        return j < self.i and self.toks[j].kind == "NAME" and self.toks[j].value == "∞"
 
     def _ends_upper_limit(self):
         """At '/': does it end an integral's upper limit? A '/' with a space before it, outside any

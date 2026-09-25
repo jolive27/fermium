@@ -408,7 +408,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 ```
 
 - **Units:** the result's units are the integrand's units times the variable's units.
-- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number or name (`to L / 2`), Fermium warns that it divides the whole integral (DECISIONS D34).
+- **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a number, a name or a bracketed expression (`to L / 2`, `to 1 / (1 + z)`), Fermium warns that it divides the whole integral (DECISIONS D34, D112); there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it.
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
 - **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
 
@@ -485,7 +485,7 @@ print θ1(5 s), θ2(5 s)
   - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
   - A long RK45 solve that is held back by stiffness warns: `this equation looks stiff: rk45 has taken 526031 steps, held small by stability rather than accuracy …; add using radau after the range`. The "too many steps" error suggests it too.
   - `radau` and `bdf` run SciPy's solvers (they call the compiled right-hand side), so they need SciPy, and `fermium build` refuses them for now (use `fermium run`).
-  - The order is `for t from a to b [step h] [tolerance r] [using method]`:
+  - The range comes first, then `step h`; after that `tolerance r`, `using method` and `until …` may come in any order (`tolerance 1e-11 using radau` and `using radau tolerance 1e-11` are the same):
 
 ```fermium
 solve x' = -x / (1 s)

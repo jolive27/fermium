@@ -45,7 +45,7 @@ lap(n, x, y) = (∂²/∂x² term)(n, x, y) + (∂²/∂y² term)(n, x, y)
 print "    Laplacian of term 3 at (a/7, a/5) =", lap(3, a/7, a/5) in V/m² to 3 digits,
       "  vs ∂²/∂x² alone", (∂²/∂x² term)(3, a/7, a/5) in V/m² to 3 digits
 r0 = a/4
-circle_avg = ∫ φ(a/2 + r0 cos(θ), a/2 + r0 sin(θ)) dθ from 0 to 2π / (2π)
+circle_avg = (∫ φ(a/2 + r0 cos(θ), a/2 + r0 sin(θ)) dθ from 0 to 2π) / (2π)
 print "    average of φ on a circle about the centre =", circle_avg in V to 10 digits
 
 # (c) the walls
