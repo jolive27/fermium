@@ -1027,6 +1027,9 @@ class Interpreter:
         i = self.index(self.eval(s.idx, fr), len(lst))
         lst[i] = self.eval(s.value, fr)
 
+    def s_SClear(self, s, fr):
+        fr.get(s.sym).clear()
+
     def s_SPush(self, s, fr):
         v = self.eval(s.value, fr)
         fr.get(s.sym).append(v)
@@ -1885,6 +1888,10 @@ class Interpreter:
             saved, _QZERO[0] = _QZERO[0], 0.0
             return saved
         args = [self.eval(a, fr) for a in e.args]
+        if name == "text_concat":         # D216
+            return self.rt.text_concat(int(args[0]), int(args[1]))
+        if name == "text_num":
+            return self.rt.text_num(int(args[0]), args[1])
         if name == "qzero_check":
             cnt, _QZERO[0] = _QZERO[0], args[0]
             if cnt == args[1]:

@@ -253,6 +253,12 @@ class SPush(Stmt):
         self.sym, self.value = sym, value
 
 
+class SClear(Stmt):
+    """clear(xs): empty a list in place, so a function can empty a list of the program (D216)."""
+    def __init__(self, sym):
+        self.sym = sym
+
+
 class SIf(Stmt):
     def __init__(self, cond, then, other):
         self.cond, self.then, self.other = cond, then, other

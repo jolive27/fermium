@@ -272,6 +272,8 @@ class ModuleGen:
         e("fm_print_textlist", VOID, [F64P, I64])
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
+        e("fm_text_concat", I64, [I64, I64])
+        e("fm_text_num", I64, [I64, F64])
         e("fm_print_end", VOID, [])
         e("fm_error", VOID, [I64, F64, F64, I64, I64])
         e("fm_warn", VOID, [I64, F64, I64, I64])
@@ -2113,6 +2115,10 @@ class FuncGen:
         p = self.index_ptr(lst, s.idx)
         self.b.store(self.expr(s.value), p)
 
+    def s_SClear(self, s):
+        hdr = self.b.load(self.slot(s.sym))
+        self.b.store(i64(0), self.b.gep(hdr, [I32(0), I32(1)]))      # length 0, the block is kept (D216)
+
     def s_SPush(self, s):
         b = self.b
         v = self.expr(s.value)
@@ -3175,6 +3181,10 @@ class FuncGen:
             with b.if_then(b.fcmp_ordered("==", cnt, args[1])):
                 b.call(self.mg.externs["fm_warn"], [i64(3), f64(0), b.load(self.mg.curline), i64(-1)])
             return f64(0)
+        if name == "text_concat":         # "3p" + label (D216): a new text, made by the runtime
+            return b.call(self.mg.externs["fm_text_concat"], args)
+        if name == "text_num":            # str(x) (D216)
+            return b.call(self.mg.externs["fm_text_num"], [i64(int(e.args[0].value)), args[1]])
         if name in codegen_m3.M3_BUILTINS:
             return codegen_m3.builtin(self, name, e, args)
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py

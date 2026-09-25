@@ -239,6 +239,12 @@ class Runtime:
         def print_text(i):
             rt.line.append(rt.tables.texts[i])
 
+        def text_concat(i, j):
+            return rt.text_concat(i, j)
+
+        def text_num(fid, v):
+            return rt.text_num(fid, v)
+
         def print_end():
             try:
                 rt.out.write(" ".join(rt.line) + "\n")
@@ -361,6 +367,8 @@ class Runtime:
             "fm_print_cplx": CB(None, c_int64, c_double, c_double)(print_cplx),
             "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
+            "fm_text_concat": CB(c_int64, c_int64, c_int64)(text_concat),
+            "fm_text_num": CB(c_int64, c_int64, c_double)(text_num),
             "fm_print_end": CB(None)(print_end),
             "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),
             "fm_warn": CB(None, c_int64, c_double, c_int64, c_int64)(warn),
@@ -449,6 +457,25 @@ class Runtime:
                 self.err.flush()
             except (BrokenPipeError, ValueError):
                 pass
+
+    def add_text(self, s):
+        """A text made while the program runs ("3p" + "1/2", str(x)): its id in the text table, one id per
+        distinct text so a loop doesn't grow the table (D216)."""
+        made = self.__dict__.setdefault("_made_texts", {})
+        i = made.get(s)
+        if i is None:
+            self.tables.texts.append(s)
+            i = made[s] = len(self.tables.texts) - 1
+        return i
+
+    def text_concat(self, i, j):
+        return self.add_text(self.tables.texts[int(i)] + self.tables.texts[int(j)])
+
+    def text_num(self, fid, v):
+        f = self.tables.fmts[int(fid)]
+        if type(v) is UFloat:
+            return self.add_text(format_uncertain(v, f["rdim"], f["hint"], display_unit))
+        return self.add_text(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"], f.get("echo", True)))
 
     def fmt_apart(self, a, b, fmt):
         """Two values of one quantity with enough digits to tell them apart (2499.4 s, not 2500 s next to a

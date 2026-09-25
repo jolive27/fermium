@@ -520,67 +520,95 @@ class Parser:
 
         def animate_next():
             return self.tok.kind == "NAME" and self.tok.value == "animate" and "animate" not in self.known
-        while bare_opts or self.at_kw("to") or self.at_kw("with") or animate_next():
-            if not bare_opts and self.at_kw("to"):
-                self.next()
-                if self.tok.kind != "STR":
-                    raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
-                out = self.next().value
-                continue
-            if not bare_opts and not animate_next():
-                self.next()      # with log y / with log / with title "..."   (`animate over t` needs no `with`)
-            bare_opts = False
-            while True:
-                w = self.tok
-                if w.kind == "NAME" and w.value == "log":
-                    self.next()
-                    axes = "xy"
-                    if self.tok.kind == "NAME" and self.tok.value in ("x", "y"):
-                        axes = self.next().value
-                    for a in axes:
-                        opts["log" + a] = True
-                elif w.kind == "NAME" and w.value in ("points", "dots", "markers"):
-                    self.next()
-                    opts["points"] = True        # scatter: markers, no lines (research/semf_ame2020)
-                elif w.kind == "NAME" and w.value == "animate":
-                    self.next()             # with animate over t [frames 60]  (D83)
-                    if not (self.tok.kind == "NAME" and self.tok.value == "over"):
-                        raise self.error("write  with animate over t  (the variable that changes from frame to frame)")
-                    self.next()
-                    opts["animate"] = self.expect_name("the variable to animate over, like t").value
-                    if self.tok.kind == "NAME" and self.tok.value == "frames" and self.peek().kind == "NUM":
-                        self.next()
-                        opts["frames"] = self.next().value
-                elif w.kind == "NAME" and w.value == "title":
+
+        def options(bare_opts):
+            nonlocal out
+            while bare_opts or self.at_kw("to") or self.at_kw("with") or animate_next():
+                if not bare_opts and self.at_kw("to"):
                     self.next()
                     if self.tok.kind != "STR":
-                        raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
-                    opts["title"] = self.next().value
-                elif w.kind == "NAME" and w.value in ("xlabel", "ylabel"):
-                    self.next()             # with xlabel "T [MeV]", ylabel "mass fraction"  (D161)
-                    if self.tok.kind != "STR":
-                        raise self.error(f"expected the axis label in quotes, like  {w.value} \"mass fraction\"")
-                    opts[w.value] = self.next().value
-                elif w.kind == "NAME" and w.value in ("x", "y") and self.peek().kind == "KW" and \
-                        self.peek().value == "from":
-                    self.next()             # with y from 1e-12 to 1  (D161)
-                    self.next()
-                    lo = self.expr()
-                    self.expect_kw("to", f"(write:  {w.value} from 1e-12 to 1)")
-                    opts[w.value + "range"] = (lo, self.expr())
-                elif w.kind == "NAME" and w.value == "reversed":
-                    self.next()             # with reversed x  (D161)
-                    if not (self.tok.kind == "NAME" and self.tok.value in ("x", "y")):
-                        raise self.error("write  with reversed x  (or  reversed y)")
-                    opts["rev" + self.next().value] = True
-                else:
-                    raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\",  "
-                                     "with xlabel \"...\",  with ylabel \"...\",  with y from a to b,  with x from a to b,  "
-                                     "with reversed x,  with animate over t")
-                if self.at_op(","):
-                    self.next()
+                        raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
+                    out = self.next().value
                     continue
-                break
+                if not bare_opts and not animate_next():
+                    self.next()      # with log y / with log / with title "..."   (`animate over t` needs no `with`)
+                bare_opts = False
+                while True:
+                    w = self.tok
+                    if w.kind == "NAME" and w.value == "log":
+                        self.next()
+                        axes = "xy"
+                        if self.tok.kind == "NAME" and self.tok.value in ("x", "y"):
+                            axes = self.next().value
+                        for a in axes:
+                            opts["log" + a] = True
+                    elif w.kind == "NAME" and w.value in ("points", "dots", "markers"):
+                        self.next()
+                        opts["points"] = True        # scatter: markers, no lines (research/semf_ame2020)
+                    elif w.kind == "NAME" and w.value == "animate":
+                        self.next()             # with animate over t [frames 60]  (D83)
+                        if not (self.tok.kind == "NAME" and self.tok.value == "over"):
+                            raise self.error("write  with animate over t  (the variable that changes from frame to frame)")
+                        self.next()
+                        opts["animate"] = self.expect_name("the variable to animate over, like t").value
+                        if self.tok.kind == "NAME" and self.tok.value == "frames" and self.peek().kind == "NUM":
+                            self.next()
+                            opts["frames"] = self.next().value
+                    elif w.kind == "NAME" and w.value == "title":
+                        self.next()
+                        if self.tok.kind != "STR":
+                            raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
+                        opts["title"] = self.next().value
+                    elif w.kind == "NAME" and w.value in ("xlabel", "ylabel"):
+                        self.next()             # with xlabel "T [MeV]", ylabel "mass fraction"  (D161)
+                        if self.tok.kind != "STR":
+                            raise self.error(f"expected the axis label in quotes, like  {w.value} \"mass fraction\"")
+                        opts[w.value] = self.next().value
+                    elif w.kind == "NAME" and w.value in ("x", "y") and self.peek().kind == "KW" and \
+                            self.peek().value == "from":
+                        self.next()             # with y from 1e-12 to 1  (D161)
+                        self.next()
+                        lo = self.expr()
+                        self.expect_kw("to", f"(write:  {w.value} from 1e-12 to 1)")
+                        opts[w.value + "range"] = (lo, self.expr())
+                    elif w.kind == "NAME" and w.value == "reversed":
+                        self.next()             # with reversed x  (D161)
+                        if not (self.tok.kind == "NAME" and self.tok.value in ("x", "y")):
+                            raise self.error("write  with reversed x  (or  reversed y)")
+                        opts["rev" + self.next().value] = True
+                    else:
+                        raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\",  "
+                                         "with xlabel \"...\",  with ylabel \"...\",  with y from a to b,  with x from a to b,  "
+                                         "with reversed x,  with animate over t")
+                    if self.at_op(","):
+                        self.next()
+                        continue
+                    break
+
+        options(bare_opts)
+        if self.tok.kind == "NEWLINE" and self.peek().kind == "INDENT":
+            # plot … continued on indented lines: more series, `with …` options, `to "f.png"` (D216)
+            self.next()
+            self.next()
+            while self.tok.kind not in ("DEDENT", "EOF"):
+                if self.at_op(",") or self.at_kw("and"):
+                    self.next()
+                if self.at_kw("with") or self.at_kw("to") or animate_next():
+                    options(False)
+                elif self._plot_option_ahead():
+                    options(True)
+                else:
+                    self.no_juxt_names = saved_nj | {w for w in ("title", "animate") if w not in self.known}
+                    try:
+                        options(self._plot_series(series))
+                    finally:
+                        self.no_juxt_names = saved_nj
+                if self.tok.kind not in ("DEDENT", "EOF"):
+                    self.end_statement()
+                self.skip_newlines()
+            if self.tok.kind == "DEDENT":
+                self.next()
+            self._stmt_done = True
         p = self.span(A.Plot(series, out), t)
         p.options = opts
         return p

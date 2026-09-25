@@ -38,7 +38,7 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
-    "trace", "angle", "row", "column",
+    "trace", "angle", "row", "column", "str",
 } | SPECIAL2 | SPECIAL1
 UNC_FUNCS = {"value", "uncertainty", "rel"}         # parts of an uncertain value (D121)
 BUILTINS |= UNC_FUNCS
@@ -569,6 +569,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         e = s.value
         if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name in ("push", "append"):
             return self.push_stmt(e, ctx)
+        if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == "clear" and \
+                ctx.scope.lookup("clear")[0] is None:
+            if len(e.args) != 1 or not isinstance(e.args[0], A.Name):
+                raise self.err("clear needs a list variable: clear(xs)", e)
+            lst = self.expr(e.args[0], ctx)
+            if not isinstance(lst, I.IVar) or not isinstance(lst.ty, (ListTy, TextListTy)):
+                raise self.err(f"clear empties a list, and {e.args[0].name} is {type_desc(lst.ty, self.U)}", e.args[0])
+            return I.SClear(lst.sym)
         if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == "seed" and \
                 ctx.scope.lookup("seed")[0] is None:
             return self.seed_stmt(e, ctx)
@@ -613,6 +621,15 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if not isinstance(b, I.Sym):
                 raise self.err(f"{s.name} needs a value before you can use {s.op} on it", s)
             return self.assign_to(s.name, v, s, ctx)
+        if not ctx.is_main and isinstance(s.value, A.ListLit) and not s.value.items:
+            b, _ = ctx.scope.lookup(s.name)
+            if isinstance(b, I.Sym) and isinstance(b.ty, (ListTy, TextListTy)) and b.func is not ctx.func and \
+                    s.name not in self.__dict__.setdefault("warned_local_lists", set()):
+                # `xs = []` in a function makes a new list there; the program's xs is unchanged (D216)
+                self.warned_local_lists.add(s.name)
+                self.diags.warn(f"{s.name} = [] here makes a new list {s.name} inside this function; the "
+                                f"program's list {s.name} is unchanged", line=s.line, col=s.col,
+                                hint=f"to empty the program's list from here, write  clear({s.name})")
         v = self.expr(s.value, ctx, allow_func=True)
         if isinstance(v, FuncRef):
             ctx.scope.names[s.name] = v.info
@@ -1215,7 +1232,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     # ------------------------------------------------------------ parallel for (M5, D152)
     PAR_NO_STMT = ((I.SPrint, "print"), (I.SPlot, "plot"), (I.SSolve, "solve"), (I.SFit, "fit"),
-                   (I.SPush, "push"), (I.SAnimate, "plot ... animate"), (I.SReturn, "return"), (I.SBreak, "break"))
+                   (I.SPush, "push"), (I.SClear, "clear"), (I.SAnimate, "plot ... animate"), (I.SReturn, "return"), (I.SBreak, "break"))
     PAR_NO_BUILTIN = {"rand", "rand2", "randn", "randn2", "seed", "sample"}
 
     def parallel_for(self, s, lo, hi, st, ctx):
@@ -1885,9 +1902,26 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             n = format_number(e.left.value)
             self.diags.warn(f"{n} {e.right.name} means {n} × {what}; for {unit[0]} write {n} {unit[1]}",
                             line=e.line, col=e.col)
+        if isinstance(a.ty, StrTy) or isinstance(b.ty, StrTy):
+            return self.text_op(e, a, b)
         self.need_numlike(a, e.left, allow_vec=True)
         self.need_numlike(b, e.right, allow_vec=True)
         return self.arith(e.op, a, b, e)
+
+    def text_op(self, e, a, b):
+        """"3p" + "1/2" joins two texts (D216); two written texts are joined here, others when the program
+        runs.  A number must be turned into text first: str(x)."""
+        if e.op != "+" or e.implicit:
+            raise self.err("text can only be joined with +, like  \"3p\" + \"1/2\"", e)
+        if not (isinstance(a.ty, StrTy) and isinstance(b.ty, StrTy)):
+            num = e.right if isinstance(a.ty, StrTy) else e.left
+            raise self.err("can't add text and a number", num,
+                           hint=f"turn the number into text first:  str({C.to_source(num)})")
+        if isinstance(a, I.IStr) and isinstance(b, I.IStr):
+            r = I.IStr(a.value + b.value, STR)
+            r.text_id = self.text(r.value)
+            return r
+        return I.IBuiltin("text_concat", [a, b], STR)
 
     # constants whose names look like units: `2 h` is 2 × Planck's constant, not 2 hours
     UNIT_LOOKALIKE_CONSTANTS = {"h": ("Planck's constant h", ("hours", "hr")),
@@ -3505,6 +3539,17 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err(f"{v.info.display_name} is a function; give it an argument", a)
             args.append(v)
         n = len(args)
+        if name == "str":
+            # str(x): a number as text, as print shows it (its unit and digits), for labels (D216)
+            if n != 1:
+                raise self.err(f"str takes 1 argument but was given {n}", e)
+            v = args[0]
+            if isinstance(v.ty, StrTy):
+                return v
+            if not isinstance(v.ty, NumTy):
+                raise self.err(f"str(x) turns a single number into text, not {type_desc(v.ty, self.U)}", e.args[0])
+            fid = self.fmt(v)
+            return I.IBuiltin("text_num", [I.IConst(float(fid), NumTy(DIMLESS)), v], STR)
         if name in cplx.COMPLEX_FUNCS or any(cplx.is_c(a) for a in args):
             return cplx.builtin(self, name, args, e)
 

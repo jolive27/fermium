@@ -290,3 +290,73 @@ def test_92_built_executable_matches(tmp_path):
     p = built(src, tmp_path)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == both(src)
+
+
+# ---------------------------------------------------------------- #93-#95: text, clear, plot lines (D216)
+LABELS = ('print "3p" + "1/2"\nnames = ["s", "p", "d"]\njs = ["1/2", "3/2"]\nfor l from 1 to 3\n'
+          '    for k from 1 to 2\n        label = str(l) + names[l] + js[k]\n        print label\n'
+          'E = 2.5 MeV\nprint "E = " + str(E)\nt = "a"\nt = t + "b"\nt = t + "b"\nprint t\n'
+          'r = 0.5 m / (3 s)\nprint "v = " + str(r)')
+
+
+def test_93_text_concatenation_and_str():
+    assert both(LABELS).splitlines() == ["3p1/2", "1s1/2", "1s3/2", "2p1/2", "2p3/2", "3d1/2", "3d3/2",
+                                         "E = 2.5 MeV", "abb", "v = " + both("print 0.5 m / (3 s)")]
+
+
+def test_93_text_and_a_number_need_str():
+    err = both_error('E = 2 MeV\nprint "E = " + E')
+    assert err.message.endswith("can't add text and a number") and "str(E)" in err.hint
+    with pytest.raises(FermiumError, match="joined with \\+"):
+        run('print "a" - "b"')
+
+
+def test_93_built_executable_matches(tmp_path):
+    p = built(LABELS, tmp_path)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout.strip() == both(LABELS)
+
+
+CLEAR = ("xs = [1 m]\nnames = [\"a\"]\nreset(a) =\n    clear(xs)\n    clear(names)\n    push(xs, a)\n"
+         "    push(names, \"b\")\n    return len(xs)\nprint reset(5 m)\nprint xs, names\nclear(xs)\nprint len(xs)\n"
+         "push(xs, 7 m)\npush(xs, 8 m)\nprint xs")
+
+
+def test_94_clear_empties_the_programs_list_from_a_function():
+    assert both(CLEAR).splitlines() == ["1", "[5] m [b]", "0", "[7, 8] m"]
+
+
+def test_94_a_local_empty_list_that_shadows_the_programs_list_warns():
+    src = "xs = [1 m]\ng(a) =\n    xs = []\n    push(xs, a)\n    return len(xs)\nprint g(3 m)\nprint xs"
+    assert both(src) == "1\n[1] m"
+    ws = warnings_of(src)
+    assert any("xs = [] here makes a new list xs inside this function; the program's list xs is unchanged" in w
+               for w in ws)
+    assert not any("new list" in w for w in warnings_of("xs = [1 m]\nxs = []\nprint len(xs)"))
+
+
+def test_94_clear_needs_a_list():
+    with pytest.raises(FermiumError, match="clear empties a list"):
+        run("x = 3\nclear(x)")
+
+
+def test_94_built_executable_matches(tmp_path):
+    p = built(CLEAR, tmp_path)
+    assert p.returncode == 0, p.stderr
+    assert p.stdout.strip() == both(CLEAR)
+
+
+def test_95_a_plot_continued_on_indented_lines():
+    from fermium.parser import parse
+    prog = parse('xs = [1, 2, 3]\nys = [1, 4, 9]\nzs = [1, 8, 27]\nplot ys vs xs\n    zs vs xs\n'
+                 '    with log y, title "powers"\n    to "p.png"\nprint 1\n')
+    p = prog.body[3]
+    assert len(p.series) == 2 and p.options == {"logy": True, "title": "powers"} and p.out == "p.png"
+    assert type(prog.body[4]).__name__ == "Print"
+
+
+def test_95_plot_lines_run(tmp_path):
+    src = ('xs = [1, 2, 3]\nys = [1, 4, 9]\nplot ys vs xs\n    with title "squares", xlabel "n"\n'
+           '    to "sq.png"\nprint 1')
+    assert both(src, base_dir=str(tmp_path)).splitlines()[-1] == "1"
+    assert (tmp_path / "sq.png").exists()
