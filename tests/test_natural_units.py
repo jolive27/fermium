@@ -309,3 +309,32 @@ def test_fermium_build_matches_run(src, tmp_path):
     got = subprocess.run([exe], capture_output=True, text=True, timeout=120, cwd=str(tmp_path))
     assert got.returncode == 0, got.stderr
     assert got.stdout.strip() == run(src)
+
+
+def test_fine_structure_constant_emerges_in_natural_units():
+    out = run("units natural\nprint e^2/(4π ε_0) to 9 digits, α to 9 digits\n"
+              "print e^2/(4π ε_0 * 1 fm) in MeV").splitlines()
+    assert out[0] == "0.00729735256 0.00729735256"
+    assert out[1] == "1.43996 MeV"            # e²/(4πε₀) = 1.44 MeV fm
+
+
+def test_heaviside_lorentz_charge():
+    # ħ = c = ε₀ = 1: charge is a plain number and e = √(4πα)
+    assert run("units natural(ħ = c = ε_0 = 1)\nprint e to 6 digits, sqrt(4π α) to 6 digits") == "0.302822 0.302822"
+
+
+def test_celsius_with_boltzmann_constant_set_to_one():
+    assert run("units natural(ħ = c = k_B = 1)\nT = 25 °C\nprint T, T in K, T in meV") == "25 °C 298.15 K 25.6926 meV"
+
+
+def test_SI_function_uses_SI_global_inside_natural_units():
+    out = run("L0 = 1 fm\nf(x) = x + L0\nprint f(1 m)\nunits natural\nprint f(1 fm) in fm")
+    assert out == "1×10¹⁵ fm\n2 fm"
+    assert "can't add energy or mass [MeV] to length or time" in error_of(
+        "L0 = 1 fm\nf(x) = x + L0\nunits natural\nprint f(1 MeV)").message
+
+
+def test_export_of_an_expression_and_mixed_systems():
+    assert run("units natural:\n    a = 2 fm\n    b = 3 MeV\nprint 2 a b in 1 to 6 digits") == "0.0608128"
+    e = error_of("units natural:\n    a = 2 fm\nunits natural(ħ = c = k_B = 1):\n    b = 1 K\nprint a b in 1")
+    assert "mixes values from different unit systems" in e.message
