@@ -45,6 +45,9 @@ CONSTANTS = {
     "R_sun": (6.957e8, "m", "nominal solar radius (IAU 2015)", ["R☉"]),
     "L_sun": (3.828e26, "W", "nominal solar luminosity (IAU 2015)", ["L☉"]),
     "M_earth": (5.9722e24, "kg", "Earth mass", []),
+    # GM is known far better than G or M separately (IAU 2015 B3 nominal solar value; IERS/WGS84 for Earth)
+    "GM_sun": (1.3271244e20, "m³/s²", "solar mass parameter GM☉ (IAU 2015 nominal, exact)", ["GM☉"]),
+    "GM_earth": (3.986004418e14, "m³/s²", "geocentric gravitational constant GM⊕ (IERS 2010)", []),
     "R_earth": (6.3781e6, "m", "nominal Earth equatorial radius (IAU 2015)", []),
     "AU": (149597870700.0, "m", "astronomical unit (exact, IAU 2012)", []),
     "π": (math.pi, "1", "pi", []),

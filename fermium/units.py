@@ -156,7 +156,10 @@ _UNITS = {
     # dimensionless / angles
     "rad": (1.0, DIMLESS, False), "sr": (1.0, DIMLESS, False),
     "°": (_PI / 180, DIMLESS, False), "deg": (_PI / 180, DIMLESS, False),
-    "arcmin": (_PI / 10800, DIMLESS, False), "arcsec": (_PI / 648000, DIMLESS, False),
+    "arcmin": (_PI / 10800, DIMLESS, False), "arcsec": (_PI / 648000, DIMLESS, True),
+    # milli- and micro-arcseconds, as astronomers write them
+    "mas": (_PI / 648000e3, DIMLESS, False), "μas": (_PI / 648000e6, DIMLESS, False),
+    "uas": (_PI / 648000e6, DIMLESS, False),
     "rev": (2 * _PI, DIMLESS, False), "rpm": (2 * _PI / 60, DIMLESS / T, False), "percent": (0.01, DIMLESS, False), "%": (0.01, DIMLESS, False),
     # SI derived
     "Hz": (1.0, DIMLESS / T, True), "N": (1.0, N_, True), "Pa": (1.0, Pa_, True),

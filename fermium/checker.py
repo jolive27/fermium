@@ -412,12 +412,18 @@ class Checker(C.DiffContext):
         else:
             if isinstance(v.ty, SolTy):
                 raise self.err("can't store an ODE solution in a variable this way", node)
+            if isinstance(b, ConstInfo) and not self.repl and name in getattr(self, "used_consts", ()):
+                # redefining a constant the program already used as the constant (gauntlet friction #34)
+                self.diags.warn(f"{name} is the built-in {b.desc}; from here on, {name} means your value",
+                                line=getattr(node, "line", None), col=getattr(node, "col", None),
+                                hint=f"pick another name if you still need the constant {name}")
             ty = v.ty
             sym = self.new_sym(name, ty, ctx)
             ctx.scope.names[name] = sym
             sym.sf = v.sf
             sym.hint = v.hint
             sym.direct = v.direct
+            sym.tdelta = getattr(v, "tdelta", False)
         sym.assigned = True
         self._note_assign(ctx, sym, not owned)
         return I.SAssign(sym, v)
@@ -894,6 +900,7 @@ class Checker(C.DiffContext):
         if isinstance(b, I.Sym):
             return self.var_ref(b, ctx, e)
         if isinstance(b, ConstInfo):
+            self.__dict__.setdefault("used_consts", set()).add(name)
             if name == "∞":
                 r = I.IConst(math.inf, NumTy(DExpr.fresh("∞")))
             else:
@@ -910,6 +917,8 @@ class Checker(C.DiffContext):
     def var_ref(self, sym, ctx, node):
         """Reference a variable, marking it global or captured when used from another function."""
         msg = getattr(sym, "unset_msg", None)
+        if msg and any(sym.id in reg["assigned"][-1] for reg in getattr(ctx, "regions", [])):
+            msg = None          # set earlier in this same loop body / branch (gauntlet friction #4)
         if msg and ctx.lam is None and (sym.func is ctx.func):
             where = msg.split("inside ")[1].split(",")[0]
             raise self.err(msg, node, hint=f"give {sym.name} a value before {where}, e.g.  {sym.name} = 0")
@@ -942,6 +951,7 @@ class Checker(C.DiffContext):
         r.sf = sym.sf
         r.hint = sym.hint
         r.direct = sym.direct
+        r.tdelta = getattr(sym, "tdelta", False)
         return r
 
     def _is_main_sym(self, sym):
@@ -1060,11 +1070,16 @@ class Checker(C.DiffContext):
                 # the difference of two temperatures is a difference: shown in K. The left side may be
                 # in K (300 K - 20 °C, or T - Ta in Newton's law of cooling), since K is absolute too (A47)
                 r.hint = None
+                r.tdelta = True
             else:
                 r.hint = a.hint if a.hint is not None else b.hint
         elif op == "*":
             r = I.IBin("*", a, b, mk(a.ty.dim * b.ty.dim))
             r.hint = self._keep_hint(a, b)
+            if r.hint is not None and r.hint.affine:
+                self.diags.warn(f"this scales an absolute temperature: {r.hint.name} values are multiplied as kelvins "
+                                f"(20 °C is 293.15 K, so 2 × 20 °C is 313.15 °C)", line=e.line, col=e.col,
+                                hint="to scale a temperature change, write it in K")
         elif op == "/":
             r = I.IBin("/", a, b, mk(a.ty.dim / b.ty.dim))
             r.hint = a.hint if self._dimless(b) and a.hint is not None and b.hint is None else None
@@ -1482,7 +1497,14 @@ class Checker(C.DiffContext):
         if not self.U.unify(v.ty.dim, u.dim):
             raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e,
                            hint="the units you convert to must measure the same kind of quantity")
-        self._warn_angle_in_hz(v, u, e)
+        if not self._warn_angle_in_hz(v, u, e):
+            self._warn_omega_in_hz(e.value, v, u, e)
+        if u.affine and getattr(v, "tdelta", False):
+            # a difference of temperatures shown in °C/°F: no offset (gauntlet friction #6)
+            u = Unit(u.name, u.dim, u.factor, 0.0)
+            self.diags.warn(f"this is a difference of two temperatures, so it is shown in {u.name} without the "
+                            f"offset (a change of 1 °C is 1 K)", line=e.line, col=e.col,
+                            hint="write it  in K  to make that clear")
         v.hint = u
         v.direct = False
         return v
@@ -1497,6 +1519,23 @@ class Checker(C.DiffContext):
             self.diags.warn(f"angles are plain numbers (1 rev = 2π), so a rate in {a} converted to Hz is "
                             f"an angular frequency: 1 rev/min is 2π/60 = 0.105 Hz", line=e.line, col=e.col,
                             hint="to count turns per second write  in rev/s  (1 rev/min = 1/60 rev/s)")
+            return True
+        return False
+
+    OMEGA_NAMES = re.compile(r"^(ω|Ω|omega|Omega)")
+
+    def _warn_omega_in_hz(self, node, v, u, e):
+        """`ω in Hz` shows ω itself (rad/s and Hz are both 1/s), not ω/2π: warn (gauntlet friction #5)."""
+        if not re.search(r"(^|[^A-Za-z])[kMGT]?Hz\b", u.name):
+            return
+        name = node.name if isinstance(node, A.Name) else None
+        hname = getattr(v.hint, "name", "") or ""
+        if (name and self.OMEGA_NAMES.match(name)) or "rad" in hname:
+            what = name or "this angular frequency"
+            self.diags.warn(f"{what} in {u.name} shows the angular frequency itself (Fermium treats rad as 1, so "
+                            f"rad/s and Hz are the same unit), not the frequency {what}/2π", line=e.line, col=e.col,
+                            hint=f"for the frequency in cycles per second write  {what}/(2π) in {u.name}  "
+                                 f"(or  {what} in rad/s  to keep it angular)")
 
     def e_Digits(self, e, ctx):
         v = self.expr(e.value, ctx)

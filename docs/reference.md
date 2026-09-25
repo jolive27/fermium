@@ -476,7 +476,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 | `a_0`, `R_∞`, `r_e` | Bohr radius, Rydberg constant, classical electron radius |
 | `b_W` | Wien displacement constant |
 | `μ_B`, `μ_N` | Bohr and nuclear magnetons |
-| `M_sun`, `R_sun`, `L_sun`, `M_earth`, `R_earth`, `AU` | astronomy |
+| `M_sun`, `R_sun`, `L_sun`, `M_earth`, `R_earth`, `AU`, `GM_sun` (`GM☉`), `GM_earth` | astronomy (GM is known more precisely than G or M) |
 | `π` | pi |
 | `∞` | infinity |
 
