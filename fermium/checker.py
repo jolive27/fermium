@@ -198,6 +198,16 @@ class Ctx:
         return c
 
 
+class LocalFunc:
+    """A one-line function defined inside a function body (gauntlet #75, D194): each call is expanded in place,
+    like `body where s = arg`, with the other names resolved where the helper was defined (so it sees the
+    enclosing function's parameters and variables, and each call is unit-checked with its own arguments)."""
+
+    def __init__(self, fdef, scope, owner):
+        self.fdef, self.scope, self.owner = fdef, scope, owner
+        self.expanding = False
+
+
 class Tables:
     """Runtime tables shared with the Python side of the runtime (printing, plots, data, fits)."""
 
@@ -651,6 +661,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         return I.SIndexAssign(tgt.sym, idx, v, s.line)
 
     def s_FuncDef(self, s, ctx):
+        if not ctx.is_main and ctx.lam is None and getattr(ctx.func, "name", None) is not None:
+            return self.local_funcdef(s, ctx)
         if not ctx.is_main or ctx.lam is not None:
             raise self.err("functions must be defined at the top level of the program (not inside a block)", s)
         info = FuncInfo(s.name, s, ctx.scope)
@@ -671,6 +683,67 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                 f"argument is ignored", line=val.line or s.line, col=val.col,
                                 hint=f"rename the where-variable, or drop {name} from {s.name}(...)")
         return None
+
+    def local_funcdef(self, s, ctx):
+        """g(s) = … inside a function (D194): a helper that sees the enclosing function's names."""
+        owner = re.sub(r"\.\d+$", "", str(getattr(ctx.func, "name", "this function")))
+        if isinstance(s.body, list):
+            raise self.err(f"a function defined inside another function must fit on one line, like  "
+                           f"{s.name}(x) = …  (define a longer one at the top level)", s)
+        if s.where:
+            raise self.err(f"'where' isn't supported on a function defined inside another function; define "
+                           f"the helper value first, then {s.name}(…) = …", s)
+        for p in s.params:
+            if getattr(p, "unit", None) is not None:
+                raise self.err("a function defined inside another function takes its parameters' units from "
+                               "each call; leave out the [unit]", s)
+        b, _ = ctx.scope.lookup(s.name)
+        if b is not None and ctx.scope.names.get(s.name) is b:
+            raise self.err(f"{s.name} is already defined here", s)
+        ctx.scope.names[s.name] = LocalFunc(s, ctx.scope, owner)
+        return None
+
+    def call_local(self, lf, e, ctx):
+        """g(a, b) of a LocalFunc: `body where s = a, t = b`, the body's other names seen from g's definition."""
+        fd = lf.fdef
+        if len(e.args) != len(fd.params):
+            n = len(fd.params)
+            raise self.err(f"{fd.name} takes {n} argument{'s' if n != 1 else ''} but was given {len(e.args)}", e)
+        if lf.expanding:
+            raise self.err(f"{fd.name} calls itself; a function defined inside another function can't be "
+                           f"recursive (define it at the top level)", e)
+        args = []
+        for a in e.args:
+            v = self.expr(a, ctx)
+            if not isinstance(v, I.Expr):
+                raise self.err(f"the arguments of {fd.name} must be values (a function defined inside another "
+                               f"function can't take a function)", a)
+            args.append(v)
+        scope = Scope(lf.scope)
+        c2 = ctx.child(scope)
+        binds = []
+        for p, v in zip(fd.params, args):
+            sym = self.new_sym(self.fresh_name(p.name), v.ty, c2)
+            sym.sf, sym.hint, sym.direct = getattr(v, "sf", None), getattr(v, "hint", None), getattr(v, "direct", False)
+            sym.assigned = True
+            scope.names[p.name] = sym
+            binds.append((sym, v))
+        lf.expanding = True
+        try:
+            body = self.expr(fd.body, c2)
+        except FermiumError as ex:
+            if e.line and ex.line and ex.line != e.line and not getattr(ex, "local_noted", False):
+                desc = ", ".join(f"{p.name} = {type_desc(v.ty, self.U)}" for p, v in zip(fd.params, args))
+                note = f"this happened when calling {fd.name} on line {e.line} (with {desc})"
+                ex.hint = f"{ex.hint}; {note}" if ex.hint else note
+                ex.local_noted = True
+            raise
+        finally:
+            lf.expanding = False
+        r = I.ILet(binds, body)
+        r.ty = body.ty
+        r.hint, r.sf, r.direct = getattr(body, "hint", None), getattr(body, "sf", None), False
+        return r
 
     def s_Analyze(self, s, ctx):
         """`analyze pendulum: T depends on L, m, g`: Buckingham Π groups, printed; defines pendulum(L, g) (D70)."""
@@ -1248,6 +1321,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                f"here", e, hint=f"solve the equation inside the region (or outside, and use it there)")
             self.var_ref(b.sol_sym, ctx, e)   # marks capture/global as needed
             return SolRef(b)
+        if isinstance(b, LocalFunc):
+            raise self.err(f"{name} is a function defined inside {b.owner}; it can only be called, like "
+                           f"{name}({', '.join(p.name for p in b.fdef.params)})", e,
+                           hint=f"to pass it to another function, or to differentiate or integrate it by name, "
+                                f"define {name} at the top level")
         if isinstance(b, ModuleRef):
             raise self.module_as_value(b, name, e)
         if isinstance(b, PyModRef):
@@ -2318,6 +2396,34 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         self.tables.loads.append(info)
         return I.ILoad(len(self.tables.loads) - 1, DataTy(info))
 
+    def e_Table(self, e, ctx):
+        """table(x = xs, y = ys): lists of the same length as the named columns of a data set, for fit,
+        data.x and print (D193).  The values are already SI, so each column's unit is only its display unit."""
+        from .units import preferred_unit
+        if not e.items:
+            raise self.err("a table needs at least one column, like  table(x = xs, y = ys)", e)
+        items, cols = [], []
+        for nm, node in zip(e.names, e.items):
+            v = self.expr(node, ctx)
+            if not isinstance(v, I.Expr) or not isinstance(v.ty, ListTy):
+                raise self.err(f"the column {nm} of a table must be a list of numbers, like  {nm} = [1, 2, 3] m",
+                               node)
+            d = self.U.norm(v.ty.dim)
+            if not d.concrete:
+                raise self.err(f"the units of the column {nm} aren't known here", node,
+                               hint=f"give the list its unit, like  {nm} = [1, 2, 3] m")
+            hint = getattr(v, "hint", None)
+            if isinstance(hint, Unit) and hint.dim == d.const and not hint.offset:
+                u = hint
+            elif d.const.dimensionless:
+                u = Unit("1", d.const, 1.0)
+            else:
+                u = preferred_unit(d.const)
+            cols.append({"name": nm, "unit": u})
+            items.append(v)
+        info = {"path": C.to_source(e), "columns": cols, "table": True}
+        return I.ITable(items, DataTy(info))
+
     def e_Field(self, e, ctx):
         pref = self.py_ref_of(e.target, ctx)
         if pref is not None:                          # np.pi (D140)
@@ -2598,6 +2704,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     self._calling = False
             if isinstance(b, FuncInfo):
                 return self.call_user(b, self.call_args(e.args, ctx), e)
+            if isinstance(b, LocalFunc):
+                return self.call_local(b, e, ctx)
             if isinstance(b, SolView):
                 return self.sol_eval(b, e, ctx)
             later = self.future_funcs.get(f.name)
@@ -2748,11 +2856,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                            f"but was given {len(args)}", node)
         list_args = [i for i, a in enumerate(args) if isinstance(a, I.Expr) and isinstance(a.ty, ListTy)]
         if list_args and not self._takes_lists(info):
-            if len(list_args) > 1:
-                raise self.err("can't apply a function element-wise over two lists at once", node)
-            i = list_args[0]
             scalar_args = list(args)
-            scalar_args[i] = I.IConst(0, NumTy(args[i].ty.dim))
+            for j in list_args:          # f(xs, ys): element by element, lists of the same length (D191)
+                scalar_args[j] = I.IConst(0, NumTy(args[j].ty.dim))
             call = self.instantiate(info, scalar_args, node)
             if not isinstance(call.ty, NumTy):       # f(x) = <x, 2x>; f([1, 2]) (A48)
                 what = "a vector" if isinstance(call.ty, VecTy) else "something other than a number"
@@ -2760,7 +2866,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                f"of a list (lists of vectors aren't supported yet)", node,
                                hint="loop over the list and push the components into separate lists")
             rt_args = [a for a in args if isinstance(a, I.Expr)]
-            r = I.IMap(call.func, rt_args, rt_args.index(args[i]), ListTy(call.ty.dim))
+            pos = [sum(1 for a in args[:j] if isinstance(a, I.Expr)) for j in list_args]
+            r = I.IMap(call.func, rt_args, pos[0] if len(pos) == 1 else pos, ListTy(call.ty.dim))
             r.sf = call.sf
             return r
         return self.instantiate(info, args, node)

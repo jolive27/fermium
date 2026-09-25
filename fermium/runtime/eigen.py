@@ -141,6 +141,26 @@ def _matrix(alpha, w, h, nstates, vectors):
     return eigh_tridiagonal(d, e, eigvals_only=True, select="i", select_range=(0, nstates - 1), tol=4e-308), None
 
 
+def _numerov_extrapolate(raw_alpha, raw_w, xs, h, E, psi, lam_fine):
+    """Numerov's eigenvalue on the grids of 2h and 4h too, extrapolated to h → 0 where the differences
+    shrink by a steady factor r of 12–40 per halving (Aitken: λ_h + (λ_h - λ_2h)/(r - 1)).  r is 16 for a
+    smooth potential (O(h⁴), and this is Richardson's (16 λ_h - λ_2h)/15); the Coulomb s states show r ≈ 32
+    to 36.  None otherwise (the finite-difference value is kept)."""
+    lams = [lam_fine]
+    for stride in (2, 4):
+        a, q = _on_grid(raw_alpha, raw_w, xs, [], stride)
+        r = _numerov_vector(a, q, stride * h, E, psi[stride:-stride:stride])
+        if r is None:
+            return None
+        lams.append(r[1])
+    lf, lm, lc = (float(v) for v in lams)
+    d1, d2 = lm - lc, lf - lm
+    if d2 == 0:
+        return lf
+    ratio = d1 / d2
+    return lf + d2 / (ratio - 1.0) if 12.0 < ratio < 40.0 else None
+
+
 def _start_limit(f1, f2, h):
     """f·ψ at the starting end, where ψ = 0 and ψ' = 1: zero for a regular equation, but finite for a
     Coulomb-like f ~ 1/x (the hydrogen radial equation at r = 0, #69), where y_0 = (1 - h²f/12) ψ at the
@@ -293,16 +313,113 @@ def _shoot_vector(alpha, w, h, E):
 
 
 def _finish(xs, h, psi, f):
-    """Normalise (Simpson/trapezoid, ∫ψ² dx = 1), make the first lobe positive, and derivatives."""
+    """Normalise (∫ψ² dx = 1 for the cubic Hermite interpolant that ψ(x) evaluates, integrated exactly by
+    4-point Gauss–Legendre per cell), make the first lobe positive, and derivatives."""
     import numpy as np
-    nrm = math.sqrt(float(np.trapezoid(psi * psi, dx=h)) if hasattr(np, "trapezoid")
-                    else float(np.trapz(psi * psi, dx=h)))
-    psi = psi / nrm
+    psi = np.asarray(psi, dtype=float)
+    dpsi = _derivative4(psi, h)
+    nrm = math.sqrt(_hermite_norm2(psi, dpsi, h))
+    psi, dpsi = psi / nrm, dpsi / nrm
     big = np.nonzero(np.abs(psi) > 1e-3 * np.max(np.abs(psi)))[0]
     if len(big) and psi[big[0]] < 0:
-        psi = -psi
-    dpsi = np.gradient(psi, h, edge_order=2)
+        psi, dpsi = -psi, -dpsi
     return psi, dpsi, f * psi
+
+
+def _hermite_norm2(p, d, h):
+    """∫ p(x)² dx for the piecewise cubic Hermite interpolant of values p and slopes d (exact: degree 6)."""
+    import numpy as np
+    g = np.array([-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526])
+    gw = np.array([0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538])
+    t = 0.5 * (g + 1.0)
+    h00, h10 = 2 * t ** 3 - 3 * t ** 2 + 1, t ** 3 - 2 * t ** 2 + t
+    h01, h11 = -2 * t ** 3 + 3 * t ** 2, t ** 3 - t ** 2
+    v = (np.outer(p[:-1], h00) + np.outer(h * d[:-1], h10) + np.outer(p[1:], h01) + np.outer(h * d[1:], h11))
+    return float(0.5 * h * np.sum((v * v) @ gw))
+
+
+def _derivative4(psi, h):
+    """ψ' at the grid points by fourth-order differences (central inside, one-sided at the two points next
+    to each end), so the Hermite interpolation between grid points keeps the O(h⁴) accuracy of the Numerov
+    values (np.gradient's second-order differences had cost ~10⁻⁵ in ⟨1/r⟩, FRICTION #70)."""
+    import numpy as np
+    n = len(psi)
+    if n < 7:
+        return np.gradient(psi, h, edge_order=2)
+    d = np.empty(n)
+    d[2:-2] = (psi[:-4] - 8.0 * psi[1:-3] + 8.0 * psi[3:-1] - psi[4:]) / (12.0 * h)
+    p = psi
+    d[0] = (-25 * p[0] + 48 * p[1] - 36 * p[2] + 16 * p[3] - 3 * p[4]) / (12.0 * h)
+    d[1] = (-3 * p[0] - 10 * p[1] + 18 * p[2] - 6 * p[3] + p[4]) / (12.0 * h)
+    d[-1] = (25 * p[-1] - 48 * p[-2] + 36 * p[-3] - 16 * p[-4] + 3 * p[-5]) / (12.0 * h)
+    d[-2] = (3 * p[-1] + 10 * p[-2] - 18 * p[-3] + 6 * p[-4] - p[-5]) / (12.0 * h)
+    return d
+
+
+def _numerov_vector(alpha, w, h, E, start):
+    """The eigenvector of Numerov's discretisation (O(h⁴)) nearest the eigenvalue E, by inverse iteration
+    from the finite-difference vector `start` (FRICTION #70, D190).
+
+    Numerov's rows, for ψ'' = f ψ with f = α - w E and ψ = 0 at both ends, are
+        (ψ_{i-1} - 2ψ_i + ψ_{i+1})/h² - (f_{i-1}ψ_{i-1} + 10 f_i ψ_i + f_{i+1}ψ_{i+1})/12 = 0,
+    i.e. the pencil (K - E G) ψ = 0 with K = -D² + B diag α and G = B diag w (B = [1 10 1]/12), both
+    tridiagonal.  f·ψ at an end is not 0 for a Coulomb-like f ~ 1/x (it is taken from the quadratic
+    extrapolation 3 f₁ψ₁ - 3 f₂ψ₂ + f₃ψ₃), so the end is never evaluated (#69).  E comes
+    from the Richardson-extrapolated finite-difference eigenvalue, within ~10⁻⁹ of Numerov's own, so two
+    or three solves converge to rounding.  Returns (the vector, Numerov's eigenvalue), or None if the
+    iteration doesn't settle."""
+    import numpy as np
+    from scipy.linalg import solve_banded
+    ai, wi = alpha[1:-1], w[1:-1]
+    m = len(ai)
+    if m < 6:
+        return None
+    hh = 1.0 / (h * h)
+    # banded storage for solve_banded((2, 2)): A[i, j] is ab[2 + i - j, j]
+
+    def bands(coef):
+        ab = np.zeros((5, m))
+        ab[2] = 2.0 * hh + 10.0 * coef / 12.0
+        ab[1, 1:] = -hh + coef[1:] / 12.0            # A[i, i+1]
+        ab[3, :-1] = -hh + coef[:-1] / 12.0          # A[i, i-1]
+        # the ends: f₀ψ₀ ≈ 3 f₁ψ₁ - 3 f₂ψ₂ + f₃ψ₃ (quadratic extrapolation; the same at the far end)
+        ab[2, 0] += 3.0 * coef[0] / 12.0
+        ab[1, 1] += -3.0 * coef[1] / 12.0
+        ab[0, 2] += coef[2] / 12.0
+        ab[2, -1] += 3.0 * coef[-1] / 12.0
+        ab[3, -2] += -3.0 * coef[-2] / 12.0
+        ab[4, -3] += coef[-3] / 12.0
+        return ab
+
+    def times(coef, x):
+        y = 10.0 * coef * x / 12.0
+        y[:-1] += coef[1:] * x[1:] / 12.0
+        y[1:] += coef[:-1] * x[:-1] / 12.0
+        y[0] += (3.0 * coef[0] * x[0] - 3.0 * coef[1] * x[1] + coef[2] * x[2]) / 12.0
+        y[-1] += (3.0 * coef[-1] * x[-1] - 3.0 * coef[-2] * x[-2] + coef[-3] * x[-3]) / 12.0
+        return y
+
+    A = bands(ai - E * wi)
+    x = np.asarray(start, dtype=float).copy()
+    x /= np.linalg.norm(x)
+    for _ in range(6):
+        try:
+            y = solve_banded((2, 2), A, times(wi, x), check_finite=False)
+        except (np.linalg.LinAlgError, ValueError):
+            return None
+        if not np.all(np.isfinite(y)):
+            return None
+        lam = E + 1.0 / float(np.dot(x, y))
+        y /= np.linalg.norm(y)
+        if np.dot(y, x) < 0:
+            y = -y
+        change = float(np.max(np.abs(y - x)))
+        x = y
+        if change < 1e-14:
+            break
+    if change > 1e-10 or abs(float(np.dot(x, np.asarray(start) / np.linalg.norm(start)))) < 0.9:
+        return None
+    return x, lam
 
 
 def eigen_solve(rhs, a, b, nstates, grid=2000, method="matrix"):
@@ -338,7 +455,16 @@ def eigen_solve(rhs, a, b, nstates, grid=2000, method="matrix"):
         vecs = []
         for k in range(nstates):
             psi = np.zeros(len(xs))
-            psi[1:-1] = v[:, k]
+            # the eigenvector of Numerov's O(h⁴) discretisation (the finite-difference one is O(h²): #70);
+            # where the coefficients jump (a finite well) neither is better than O(h²), so it stays
+            num = None if jumps else _numerov_vector(alpha, w, h2, energies[k], v[:, k] * np.sqrt(w[1:-1]))
+            if num is None:
+                psi[1:-1] = v[:, k]
+            else:
+                psi[1:-1] = num[0]
+                better = _numerov_extrapolate(raw_alpha, raw_w, xs, h2, energies[k], psi, num[1])
+                if better is not None:
+                    energies[k] = better
             vecs.append(psi)
     cols, dcols = [], []
     for E, psi in zip(energies, vecs):

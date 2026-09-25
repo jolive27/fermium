@@ -268,6 +268,9 @@ class Runtime:
         def load(i):
             return rt.load(i)
 
+        def table(n, ptrs, lens):
+            return rt.table([ptrs[k][:lens[k]] for k in range(n)])
+
         def column(h, col, outp):
             arr = rt.datasets[h][col]
             outp[0] = arr.ctypes.data_as(DPTR)
@@ -348,6 +351,7 @@ class Runtime:
             "fm_plot_done": CB(None, c_int64)(plot_done),
             "fm_load": CB(c_int64, c_int64)(load),
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
+            "fm_table": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64))(table),
             "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
@@ -603,6 +607,19 @@ class Runtime:
             data.append(np.ascontiguousarray(arr[:, k] * u.factor + u.offset))
         h = len(self.datasets) + 1
         self.datasets[h] = data
+        return h
+
+    def table(self, columns):
+        """table(x = xs, y = ys) (D193): the lists (already SI) as a new data set; 0 and a message if their
+        lengths differ."""
+        import numpy as np
+        n = len(columns[0]) if columns else 0
+        for c in columns[1:]:
+            if len(c) != n:
+                self.error = f"the columns of this table have different lengths ({n} and {len(c)})"
+                return 0
+        h = len(self.datasets) + 1
+        self.datasets[h] = [np.ascontiguousarray(np.array(c, dtype=float)) for c in columns]
         return h
 
     # ------------------------------------------------------------ fit

@@ -108,10 +108,15 @@ class ICall(Expr):
 
 
 class IMap(Expr):
-    """Apply a scalar user function element-wise over one list argument."""
+    """Apply a scalar user function element-wise over one or more list arguments (list_pos: an index, or a
+    list of indexes for f(xs, ys) over lists of the same length, D191)."""
 
     def __init__(self, func, args, list_pos, ty):
         self.func, self.args, self.list_pos, self.ty = func, args, list_pos, ty
+
+    @property
+    def positions(self):
+        return list(self.list_pos) if isinstance(self.list_pos, (list, tuple)) else [self.list_pos]
 
 
 class IPyCall(Expr):
@@ -206,6 +211,13 @@ class ISolList(Expr):
 class ILoad(Expr):
     def __init__(self, load_id, ty):
         self.load_id, self.ty = load_id, ty
+
+
+class ITable(Expr):
+    """table(x = xs, y = ys): lists registered as the columns of a data set (a handle, like ILoad; D193)."""
+
+    def __init__(self, items, ty):
+        self.items, self.ty = items, ty
 
 
 class IColumn(Expr):

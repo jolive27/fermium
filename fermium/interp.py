@@ -1470,10 +1470,16 @@ class Interpreter:
 
     def e_IMap(self, e, fr):
         args = [self.eval(a, fr) for a in e.args]
+        pos = e.positions
+        n = len(args[pos[0]])
+        for p in pos[1:]:
+            if len(args[p]) != n:
+                raise _Fail(ERR_LEN, float(n), float(len(args[p])))
         out = []
-        for x in args[e.list_pos]:
+        for i in range(n):
             a2 = list(args)
-            a2[e.list_pos] = x
+            for p in pos:
+                a2[p] = args[p][i]
             out.append(self.call(e.func, a2))
         return out
 
@@ -1596,6 +1602,12 @@ class Interpreter:
 
     def e_ILoad(self, e, fr):
         h = self.rt.load(e.load_id)
+        if self.rt.error:
+            raise FermiumRuntimeError(self.rt.error, self.line)
+        return h
+
+    def e_ITable(self, e, fr):
+        h = self.rt.table([self.eval(it, fr) for it in e.items])
         if self.rt.error:
             raise FermiumRuntimeError(self.rt.error, self.line)
         return h

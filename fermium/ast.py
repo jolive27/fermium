@@ -181,6 +181,13 @@ class ListLit(Node):
 
 
 @dataclass(eq=False)
+class Table(Node):
+    """table(x = xs, y = ys): lists as the named columns of a data set, like a loaded file (D193)."""
+    names: list
+    items: list
+
+
+@dataclass(eq=False)
 class VecCalc(Node):
     """∇f (grad), ∇·F (div), ∇×F (curl), ∇²f (lap) of a one-line function; a function itself."""
     kind: str
@@ -431,7 +438,7 @@ def children(n):
         return [x for x in (n.integrand, n.lo, n.hi) if x is not None]
     if isinstance(n, Sum):
         return [x for x in (n.body, n.lo, n.hi, n.step) if x is not None]
-    if isinstance(n, (ListLit, VecLit)):
+    if isinstance(n, (ListLit, VecLit, Table)):
         return list(n.items)
     if isinstance(n, IfExpr):
         return [n.cond, n.then, n.other]

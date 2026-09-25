@@ -1600,6 +1600,10 @@ class Parser:
             # (x+1)(x-1) is a product, but (∂/∂x f)(1, 2) and (f')(3) are calls (A42)
             if self.at_op("(") and not self.tok.ws_before and not isinstance(e, (A.Num, A.Quantity)) and \
                     (not e.paren or isinstance(e, (A.Deriv, A.Prime))):
+                if isinstance(e, A.Name) and e.name == "table" and "table" not in self.known and \
+                        self.peek().kind == "NAME" and self.at_op_at(self.i + 2, "="):
+                    e = self.table_args(e, t)
+                    continue
                 self.next()
                 args = []
                 self.skip_newlines()
@@ -1648,6 +1652,27 @@ class Parser:
                 e = self.span(A.Prime(e, p.value), t)
             else:
                 return e
+
+    def table_args(self, e, t):
+        """table(x = xs, y = ys): named columns (D193)."""
+        self.next()
+        names, items = [], []
+        self.skip_newlines()
+        while not self.at_op(")"):
+            nt = self.expect_name("a column name, like  table(x = xs, y = ys)")
+            if nt.value in names:
+                raise self.error(f"the column {nt.value} appears twice in this table", tok=nt)
+            self.expect_op("=", "after the column name (write: table(x = xs, y = ys))")
+            names.append(nt.value)
+            items.append(self.expr_full())
+            self.skip_newlines()
+            if self.at_op(","):
+                self.next()
+                self.skip_newlines()
+            elif not self.at_op(")"):
+                raise self.error("expected ',' or ')' in this table" + self._found())
+        self.next()
+        return self.span(A.Table(names, items), t)
 
     def atom(self):
         t = self.tok
@@ -1770,9 +1795,10 @@ class Parser:
                         raise self.error("expected ',' or ']' in this list" + self._found())
                 self.next()
                 lst = self.span(A.ListLit(items), t)
-                if items and all(isinstance(x, A.ListLit) for x in items) and self.tok.kind == "NAME" and \
+                if items and self.tok.kind == "NAME" and \
                         is_unit_name(self.tok.raw) and self.tok.value not in self.known and not self._is_call_like():
-                    u = self.unit_expr(explicit=False)          # [[1, 2], [3, 4]] N/m  (a matrix, D29)
+                    # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
+                    u = self.unit_expr(explicit=False)
                     lst = self.span(A.Quantity(lst, u), t)
                 return lst
             if t.value == "<":

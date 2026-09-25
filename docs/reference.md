@@ -145,8 +145,9 @@ print speed(10 m)
 
 - **You don't write types or units:** each call is checked with the units of its arguments.
 - **Optional unit annotations:** `f(x [m]) = ...` requires x to be a length.
-- **Calling with a list** applies the function to each element: `F(xs)`.
+- **Calling with a list** applies the function to each element: `F(xs)`. With several lists, `f(xs, ys)` pairs them element by element (the lists must have the same length; a number argument is used for every pair).
 - **Functions can call each other and themselves.**
+- **Helpers inside a function:** a one-line function defined inside a function body, `envelope(u) = Ω0 exp(-(u/τ)²)`, can use the enclosing function's parameters and variables (here Ω0 and τ). Each call is checked with its own arguments' units. It can only be called there (not passed to another function, differentiated with `'` or given a `[unit]`), and it can't call itself; define a longer or recursive helper at the top level (DECISIONS D194).
 
 **Passing a function to a function.** A parameter can be a function: pass the function's name and
 call it inside, like `V(x)`. A derivative (`g'`, `d/dt (3 t²)`, `∇φ`) or a one-argument built-in
@@ -251,7 +252,7 @@ ts = linspace(0 s, 1 s, 5)
 print ts
 ```
 
-- **Elements share units:** all elements of a list have the same units.
+- **Elements share units:** all elements of a list have the same units. A unit after the list applies to every element: `[1, 2, 3] m` is `[1 m, 2 m, 3 m]` (unless m is one of your variables: then it is `[1, 2, 3] × m`; `[1, 2, 3] [m]` is always the unit).
 - **Indexing starts at 1:** `xs[1]` is the first element and `xs[end]` the last. An index out of range stops the program with a clear message.
 - **Arithmetic works element by element:** `xs + ys`, `2 xs` and `xs^2`. Functions such as `sin(xs)` work on each element.
 - **`max` and `min` with a list and numbers** work element by element: `max(Ys, 1e-12)` floors every element at 10⁻¹² (for a log plot), `min(xs, 1 m)` clamps at 1 m; lists given together must have the same length, and all arguments the same units (DECISIONS D162). `max(xs)` with one list is still its largest element.
@@ -643,6 +644,7 @@ plot data.T vs data.L to "pendulum.png"
 ```
 
 - **`load "file.csv"`:** reads a CSV whose header gives names and units, like `T [s]`. The header is read when the program is compiled, so the units are checked. Paths are relative to the program's folder.
+- **`table(L = Ls, T = Ts)`:** lists in memory as the named columns of a data set, for `fit` (`fit T = 2π √(L / g) to table(L = Ls, T = Ts)`), `data.T` and `print` (the lists must have the same length; DECISIONS D193).
 - **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
@@ -1182,7 +1184,7 @@ print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
 - **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
 - **Only interior points are used:** the equation is never evaluated at the two ends (ψ = 0 there), so a potential that is singular at an end works: the hydrogen radial equation with `V(r) = -k / r`, `solve -ħ²/(2*m_e) * u'' + V(r) u = E u with u(0 nm) = 0, u(5 nm) = 0 for r from 0 nm to 5 nm lowest 3`, gives −m k²/(2ħ² n²) (D172). A singular point inside the range is still an error.
 - **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
-  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
+  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. Each state is then refined to Numerov's fourth-order discretisation (inverse iteration), solved at three spacings and extrapolated, so smooth potentials give ~10⁻¹² relative accuracy in E and ~10⁻¹⁰ in expectation values like ⟨x²⟩; the Coulomb potential gives ~10⁻⁹ in both (hydrogen's ⟨1/r⟩ for 2s and 2p, D190). A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶ and the states are the finite-difference ones (second order).
   - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).
 - The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
 - These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.

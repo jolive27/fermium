@@ -109,7 +109,7 @@ def map_children(e, f):
                      hi=f(e.hi) if e.hi is not None else None)
     if isinstance(e, A.Sum):
         return _copy(e, body=f(e.body), lo=f(e.lo), hi=f(e.hi), step=f(e.step) if e.step is not None else None)
-    if isinstance(e, (A.ListLit, A.VecLit)):
+    if isinstance(e, (A.ListLit, A.VecLit, A.Table)):
         return _copy(e, items=[f(x) for x in e.items])
     if isinstance(e, A.IfExpr):
         return _copy(e, cond=f(e.cond), then=f(e.then), other=f(e.other))
@@ -835,6 +835,9 @@ def _src(e, pretty):
         return f"{lo}:{hi}", PREC_ATOM
     if isinstance(e, A.Load):
         return f'load "{e.path}"', PREC_ATOM
+    if isinstance(e, A.Table):
+        cols = ", ".join(f"{n} = {_src(v, pretty)[0]}" for n, v in zip(e.names, e.items))
+        return f"table({cols})", PREC_ATOM
     return f"<{type(e).__name__}>", PREC_ATOM
 
 

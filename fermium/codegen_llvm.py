@@ -207,6 +207,7 @@ class ModuleGen:
         e("fm_plot_done", VOID, [I64])
         e("fm_load", I64, [I64])
         e("fm_column", I64, [I64, I64, F64PP])
+        e("fm_table", I64, [I64, F64PP, I64.as_pointer()])
         e("fm_fit", I64, [I64, I64, F64P])
         e("fm_sort", VOID, [F64P, I64])
         e("fm_clock", F64, [])
@@ -2535,11 +2536,20 @@ class FuncGen:
         b = self.b
         fn = self.mg.func_for(e.func)
         args = [self.expr(a) for a in e.args]
-        lst = args[e.list_pos]
+        pos = e.positions
+        lst = args[pos[0]]
+        n0 = self.llen(lst)
+        for p in pos[1:]:                   # f(xs, ys): the lists must have the same length (D191)
+            ni = self.llen(args[p])
+            with b.if_then(b.icmp_signed("!=", n0, ni)):
+                self.fail(ERR_LEN, b.sitofp(n0, F64), b.sitofp(ni, F64))
+        datas = {p: self.ldata(args[p]) for p in pos[1:]}
 
         def elem(x, i):
             a2 = list(args)
-            a2[e.list_pos] = x
+            a2[pos[0]] = x
+            for p in pos[1:]:
+                a2[p] = b.load(b.gep(datas[p], [i]))
             return b.call(fn, a2)
         return self.map_list(lst, elem)
 
@@ -2657,6 +2667,23 @@ class FuncGen:
         h = self.b.call(self.mg.externs["fm_load"], [i64(e.load_id)])
         with self.b.if_then(self.b.icmp_signed("==", h, i64(0)), likely=False):
             self.fail(ERR_PENDING)          # a bad file: the loader set the message (A24)
+        return h
+
+    def e_ITable(self, e):
+        """table(x = xs, y = ys) (D193): the lists' data and lengths go to fm_table, which copies them into a
+        new data set and returns its handle (0, with the message set, when the lengths differ)."""
+        b = self.b
+        n = len(e.items)
+        ptrs = self.alloca(ir.ArrayType(F64P, n))
+        lens = self.alloca(ir.ArrayType(I64, n))
+        for k, it in enumerate(e.items):
+            lst = self.expr(it)
+            b.store(self.ldata(lst), b.gep(ptrs, [I32(0), I32(k)]))
+            b.store(self.llen(lst), b.gep(lens, [I32(0), I32(k)]))
+        h = b.call(self.mg.externs["fm_table"], [i64(n), b.gep(ptrs, [I32(0), I32(0)]),
+                                                  b.gep(lens, [I32(0), I32(0)])])
+        with b.if_then(b.icmp_signed("==", h, i64(0)), likely=False):
+            self.fail(ERR_PENDING)
         return h
 
     def e_IColumn(self, e):

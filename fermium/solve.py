@@ -607,7 +607,7 @@ def check_fit(ck, s: A.Fit, ctx):
         raise ck.err("fit can only be used at the top level of a program", s)
     data = ck.expr(s.data, ctx)
     if not isinstance(data, I.Expr) or not isinstance(data.ty, DataTy):
-        raise ck.err("fit ... to <data>: the data must come from load \"file.csv\"", s.data)
+        raise ck.err("fit ... to <data>: the data must come from load \"file.csv\" or table(x = xs, y = ys)", s.data)
     cols = data.ty.info["columns"]
     colnames = [c["name"] for c in cols]
     lhs, rhs = s.model.lhs, s.model.rhs
