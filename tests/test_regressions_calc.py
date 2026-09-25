@@ -108,3 +108,16 @@ def test_fmt_ascii_second_partial_round_trips():
 
 def test_second_partial_orders_must_match():
     assert "orders don't match" in str(error_of("f(x, y) = x^2 y^2\ng = ∂/∂x² f\nprint g(1, 2)"))
+
+
+# ---------------------------------------------------------------- A17: `2 dm` as the differential
+def test_constant_integrand_with_unit_like_differential():
+    assert run("print ∫ 2 dm from 0 kg to 1 kg") == "2 kg"
+    assert run("print ∫ 1 dV from 0 m^3 to 2 m^3") == "2 m³"
+    assert run("print ∫ 3 dT from 0 K to 2 K") == "6 K"
+
+
+def test_unit_like_names_still_units_outside_integrals():
+    assert run("x = 2 dm\nprint x in m") == "0.2 m"
+    assert run("print ∫ 2 dm dx from 0 to 1") == "0.2 m"
+    assert run("print ∫ 2 m dm from 0 kg to 1 kg") == "2 kg m"

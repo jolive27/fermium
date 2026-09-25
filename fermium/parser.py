@@ -1187,6 +1187,17 @@ class Parser:
         """Pull a trailing `dx` out of the integrand: `F(x) dx` -> (F(x), 'x')."""
         if isinstance(e, A.Name) and e.name.startswith("d") and len(e.name) > 1 and not e.paren:
             return A.Num(1.0, None, False).at(e), canonical_name(e.name[1:])
+        if isinstance(e, A.Quantity) and not e.bracket and not e.paren and e.unit.factors:
+            # `∫ 2 dm from 0 kg to 1 kg`: after a number `dm` lexes as decimetres, but at the end of an
+            # integral that has no other differential, d + a unit name is the differential (D27)
+            f = e.unit.factors[-1]
+            if f.exp == 1 and len(f.name) > 1 and f.name.startswith("d") and is_unit_name(f.name[1:]) \
+                    and e.unit.text.endswith(f.name):
+                var = canonical_name(f.name[1:])
+                if len(e.unit.factors) == 1:
+                    return e.value, var
+                u = A.UnitExpr(e.unit.factors[:-1], e.unit.text[:-len(f.name)].rstrip()).at(e.unit)
+                return A.Quantity(e.value, u, e.bracket).at(e), var
         if isinstance(e, A.BinOp) and not e.paren:
             if e.implicit and isinstance(e.right, A.Name) and e.right.name.startswith("d") \
                     and len(e.right.name) > 1:
