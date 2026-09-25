@@ -23,7 +23,7 @@ import sys
 import numpy as np
 
 from . import ir as I
-from .checker import _delta_name
+from .checker import _delta_name, hz_angle_mixup
 from .errors import FermiumError
 from .types import BoolTy, ComplexTy, ListTy, MatTy, NumTy, VecTy
 from .units import DIMLESS, Unit, format_number, parse_unit_string, preferred_unit
@@ -297,6 +297,7 @@ class Module:
         except RecursionError:
             raise _FE("this program is nested too deeply for Fermium to compile") from None
         self.warnings = [w.format(source, None) for w in self._s.diags.warnings]
+        self._show_warnings = warnings
         if warnings:
             for w in self.warnings:
                 sys.stderr.write(w + "\n")
@@ -454,7 +455,18 @@ class Function:
                 raise FermiumError(f"calling {self.name} from Python: {p.name} looks like a temperature change, "
                                    f"but a value in {shown.name} is an absolute temperature ({what})",
                                    hint="pass a change of temperature in K, like Q(10, \"K\")")
-            dd = s.checker.resolve_unit(p.unit).dim if p.unit is not None else None
+            pu = s.checker.resolve_unit(p.unit) if p.unit is not None else None
+            dd = pu.dim if pu is not None else None
+            if pu is not None and shown is not None:
+                # Q(60, "rpm") for a parameter declared [Hz] arrives as 2π Hz (rad = 1): say so, as `in Hz`
+                # does in Fermium (D95; red team round 4 #2, D202)
+                got = hz_angle_mixup(s.checker, shown, pu)
+                if got is not None:
+                    w = (f"warning: calling {self.name} from Python: {p.name} is declared [{pu.name}]: "
+                         f"{got[0]}\n  hint: {got[1]}")
+                    m.warnings.append(w)
+                    if m._show_warnings:
+                        sys.stderr.write(w + "\n")
             kinds.append(_arg_kind(x, dd, self.name, p.name))
         key = (self.name,) + tuple((k, d) for k, d, _ in kinds)
         entry = m._calls.get(key)

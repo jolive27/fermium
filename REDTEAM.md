@@ -496,7 +496,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   stationary state's phase `exp(-i E₁ t/ħ)`; the zero-integral warning doesn't fire on vectors with one zero component.
 - `absolute` with units, with the wrong units (a clear error), and negative (an error); the RLC impedance with `1i`.
 
-### 1. `absolute 1e-6 °C` is read as the absolute temperature 274.15 K (wrong-answer). Status: open
+### 1. `absolute 1e-6 °C` is read as the absolute temperature 274.15 K (wrong-answer). Status: fixed (D200): an absolute tolerance in °C/°F is a temperature step; `absolute 1e-6 °C` gives 23.4851 °C, as K does.
 - **Repro:** `k = 0.1 1/min`, then
   `solve T' = -k (T - 20 °C) with T(0 min) = 90 °C for t from 0 min to 30 min tolerance 1e-10 absolute 1e-6 °C`,
   `print T(30 min) in °C to 6 digits`.
@@ -508,7 +508,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   with the °C offset). `± 0.5 °C` already reads °C as a difference (D120); `absolute` should do the same, or refuse
   °C/°F.
 
-### 2. Hz ↔ rpm at the Python boundary converts silently (wrong-answer). Status: open
+### 2. Hz ↔ rpm at the Python boundary converts silently (wrong-answer). Status: fixed (D202): `use python` and `fermium.compile` calls give the D95 Hz ↔ rev/rpm warning when the argument and the declared unit are in different families (the value is converted by the rad = 1 rule, as `in` does).
 - **Repro:** `use python numpy as np:` / `    positive(f [Hz]) -> [Hz]` / `print np.positive(60 rpm)`.
   Also `fermium.compile("f(freq [Hz]) = freq").f(Q(60, "rpm"))` → `6.28319 Hz`, and a function declared
   `(w [rpm]) -> [rpm]` given `1 Hz` → `9.55 rpm`.
@@ -519,7 +519,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** fermium/pyinterop.py (argument and result conversion to the declared unit) and
   fermium/api.py (`Q(…)` arguments to `fermium.compile` functions); neither consults the D95 cycles/angular tags.
 
-### 3. `1.5 kT` with your own k and T is 1.5 kilotesla, printed as "1.5 kT" (wrong-answer, silent). Status: open
+### 3. `1.5 kT` with your own k and T is 1.5 kilotesla, printed as "1.5 kT" (wrong-answer, silent). Status: fixed (D203): a prefixed unit that spells two of your variables (`1.5 kT`) warns and suggests `1.5 k T`; units every course uses (`nm`, `kg`, `mV`, …) are exempt.
 - **Repro:** `k = 1.38e-23 J/K`, `T = 300 K`, `E = 1.5 kT`, `print E`.
 - **Expected:** a warning or an error: `kT` is the unit kilotesla, but k and T are both your variables (write `k T`).
 - **Actual:** prints `1.5 kT` with no diagnostic. The output looks exactly like the intended formula. D7 only checks
@@ -528,7 +528,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** the unit-after-number rule in fermium/parser.py (`unit_expr`): a check "prefix and base are
   both your variables" next to the D7 collision check.
 
-### 4. `60 s / (m c_w)` with your own m is a parse error (false-positive). Status: open
+### 4. `60 s / (m c_w)` with your own m is a parse error (false-positive). Status: fixed (D204): `/ (…)` after a unit continues it only if every name in the bracket is a unit and (with a spaced `/`) none is your variable; `P 60 s / (m c_w)` is 14.3 K.
 - **Repro:** `P = 1000 W`, `m = 1 kg`, `c_w = 4186 J/(kg K)`, `print P 60 s / (m c_w)` (ΔT = P t / (m c)).
 - **Expected:** 14.3 K (60 000 J / 4186 J/K).
 - **Actual:** `expected ')' but found 'c_w'`. Also `10 m / (s τ)`, `1000 J / (kg cw)` and `5 s / (ohm Cv)` give
@@ -537,14 +537,14 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** fermium/parser.py, the D171 `/(units)` look-ahead (`_bracket_is_unit` or the `unit_expr`
   continuation after `/`): it should look at every name in the bracket, and otherwise leave the `/` as a division.
 
-### 5. `∫ x * -2 dx from 0 to 1` says the dx is missing (false-positive). Status: open
+### 5. `∫ x * -2 dx from 0 to 1` says the dx is missing (false-positive). Status: fixed: the `dx` is found inside a negated factor (`∫ x * -2 dx` is −1).
 - **Repro:** `print ∫ x * -2 dx from 0 to 1`.
 - **Expected:** `-1`.
 - **Actual:** `this integral is missing its 'dx' (the variable to integrate over)`. `∫ (-2) * x dx` works.
 - **Likely location:** fermium/parser.py (~line 2155, the integral's `dx` search): the unary minus's operand is
   parsed so that `dx` is consumed, or the integrand stops before it.
 
-### 6. The D173 limit warning fires when the other reading is a unit error (false-positive warning). Status: open
+### 6. The D173 limit warning fires when the other reading is a unit error (false-positive warning). Status: fixed (D205): the limit warnings are decided in the checker; `to T - t0` with an integrand in m/s is quiet, and a limit that is a unit error suggests `(… to T) - x0`.
 - **Repro:** `v = 3 m/s`, `T = 10 s`, `t0 = 2 s`, `print ∫ v dt from 0 s to T - t0`.
 - **Expected:** `24 m` with no warning. The alternative reading `(∫ … to T) - t0` is metres minus seconds, so only
   the limit reading is possible. The same holds for `∫ k λ / x dx from a to L - a` (volts minus metres).
@@ -553,7 +553,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** the D173 warning is emitted in the parser. It should be decided in the checker, and only
   when the integral and the added term have the same dimension.
 
-### 7. A spaced `/` after the upper limit is refused even when only the limit reading has the right units, and the hint points the wrong way (false-positive/message). Status: open
+### 7. A spaced `/` after the upper limit is refused even when only the limit reading has the right units, and the hint points the wrong way (false-positive/message). Status: fixed (D205): the error now says the ' / ' divides the whole integral, with the hint `to (E / (2 P0))`; the D112 warning fires only when the divisor is a plain number.
 - **Repro:** `E = 3600 J`, `P0 = 2 W`, `print ∫ P0 dt from 0 s to E / (2 P0)` (also `to E / P0`).
 - **Expected:** 3600 J (the limit is E/(2 P0) = 900 s, a time), or an error that suggests `to (E / (2 P0))`.
 - **Actual:** the D112 warning, then the error "the limits of this integral are time [s] and energy [J]" with the
@@ -561,7 +561,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** D34/D112 in the parser, and the limit-units error at fermium/checker.py:288. When the
   whole-integral reading fails on the limit's units and `(limit / divisor)` has the variable's units, say so.
 
-### 8. PDE step control warns on the textbook step-change problem although the answer is accurate (false-positive warning). Status: open
+### 8. PDE step control warns on the textbook step-change problem although the answer is accurate (false-positive warning). Status: fixed (D206): step doubling measures the error against the solution's range and skips the sub-grid layer of an initial/boundary jump; 65.8435 K with no warning.
 - **Repro:** `L = 1 m`, `D = 1e-4 m^2/s`,
   `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(L, t) = 0 K for x from 0 m to L, t from 0 s to 1000 s`,
   `print u(0.1 m, 1000 s) to 6 digits`. The same happens with 20 °C / 100 °C, or 293.15 K / 373.15 K.
@@ -574,7 +574,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   and a boundary value is a non-smooth start that step doubling can't resolve in the first steps, and it doesn't
   affect later times. D131's SDIRK2 start-up already handles it.
 
-### 9. The hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` (message). Status: open
+### 9. The hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` (message). Status: fixed (D207): the warning quotes `8.5e28 m^-3` as written, hint `8.5e28 [m^-3] (or [1/m³])`.
 - **Repro:** `m = 9.11e-31 kg`, `n = 8.5e28 m^-3`, `print n` (an electron density next to the electron mass).
 - **Expected:** the hint `write 8.5e28 [m^-3] (or [1/m³]) to say so`, with the number as written.
 - **Actual:** "'8.5e+28 m' is the unit m, not your variable m", with the hint "write 8.5e+28 [m] to say so".
@@ -582,7 +582,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** the D7 lone-unit warning in fermium/parser.py. It quotes only the first unit factor and
   formats the number with `repr`.
 
-### 10. One token gets a warning ("is the unit") and then an error ("is ambiguous") (message). Status: open
+### 10. One token gets a warning ("is the unit") and then an error ("is ambiguous") (message). Status: fixed (D207): the ambiguity error drops the parser's earlier warnings for the same quantity.
 - **Repro:** `m = 1.2 kg`, `print 2.2 * 5000 m`. Also `E1 = π^2 ħ^2 / (2 m L^2)` with your own m and L: a warning
   "reading 'L' as your variable L, not the unit L … write [m L]", then the error "'2 m' is ambiguous".
 - **Expected:** the error alone.
@@ -591,7 +591,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** fermium/parser.py. The lone-unit warning is emitted before the enclosing product is seen; it
   should be deferred (or dropped) when the D7 rule 5 error follows.
 
-### 11. An uncertainty that is only rounding noise sets the printed digits (misleading display). Status: open
+### 11. An uncertainty that is only rounding noise sets the printed digits (misleading display). Status: fixed (D208): a cancellation to rounding noise leaves σ = 0, and σ = 0 prints the value by D11: `2.01 ± 0 s/m^(1/2)`, `0 ± 0 m`.
 - **Repro:** `L = 1.000 ± 0.010 m`, `g = 9.81 m/s^2`, `T = 2 π sqrt(L / g)`, `print T / sqrt(L)`; and
   `y = 1.000 ± 0.010 m`, `print (y / 3) * 3 - y`.
 - **Expected:** `2.01 ± 0 s/m^(1/2)` (or `2.006 ± 0`), and `0 ± 0 m`, as `x - x` already prints.
@@ -634,7 +634,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** the list "as written" branch of `format_default` in fermium/units.py (and `fmt_default` in
   aot_rt.c), and the literal-as-written path for a whole number ≥ 10⁷.
 
-### 15. The bootcamp still says `0.5 m v^2` means metres with a warning, and that `1/2 m v^2` warns (docs). Status: open
+### 15. The bootcamp still says `0.5 m v^2` means metres with a warning, and that `1/2 m v^2` warns (docs). Status: fixed: lesson02 (lines 183, 215, 244), CHEATSHEET gotcha 3 and TROUBLESHOOTING's contents now describe the error.
 - **Where:**
   - bootcamp/lesson02_variables_formulas.md:215: "`0.5 m v^2 where m = 2 kg` means 0.5 *metres* (Fermium warns
     you)". It is the error "'0.5 m' is ambiguous: … also the m from 'where'".
@@ -653,7 +653,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   last digit.
 - **Likely location:** `format_number` in fermium/units.py, `fmt_default` in aot_rt.c, and docs/reference.md §4.
 
-### 17. Slicing a data table: the error calls it "not a list" and suggests vector components (message). Status: open
+### 17. Slicing a data table: the error calls it "not a list" and suggests vector components (message). Status: fixed (D209): slicing a table is an error about tables, with a hint to slice a column or load a smaller CSV.
 - **Repro:** `data = load "pendulum.csv"`, `fit T = 2 π sqrt(L / g) to data[2:5]`.
 - **Expected:** a message about tables (fit a subset by slicing the columns, or "fitting part of a table isn't
   supported yet").
@@ -661,7 +661,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   with v[1], v[2], ...", which is the hint for a vector.
 - **Likely location:** the slice check in fermium/checker.py (its hint assumes `VecTy`).
 
-### 18. An absolute tolerance larger than the solution is accepted silently (wrong-answer, user-set). Status: open
+### 18. An absolute tolerance larger than the solution is accepted silently (wrong-answer, user-set). Status: fixed (D201): an absolute tolerance at least as large as the largest starting value in its units warns.
 - **Repro:** `solve x'' = -x / (1 s)^2 with x(0 s) = 1 m, x'(0 s) = 0 m/s for t from 0 s to 10 s absolute 1 km`,
   `print x(10 s)`.
 - **Expected:** a warning: the absolute tolerance is 1000× the largest initial value, so the error control is off.

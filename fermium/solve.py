@@ -9,7 +9,7 @@ from . import calculus as C
 from . import ir as I
 from .checker import FuncInfo, SolView, SolRef, FuncRef, ConstInfo, Scope, Ctx, BUILTINS
 from .types import DExpr, NumTy, ListTy, SolTy, DataTy, VecTy, MatTy, ComplexTy
-from .units import DIMLESS, preferred_unit
+from .units import DIMLESS, preferred_unit, format_number
 from . import cplx
 
 
@@ -453,7 +453,7 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
             raise ck.err(f"the tolerance is relative, so it must be between 0 and 1 (like 1e-8), but it is "
                          f"{tv.value:g}", s.tolerance)
         rtol = tv.value
-    atol = _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step) if s.absolute else None
+    atol = _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step, y0) if s.absolute else None
     if method in ("radau", "bdf"):
         ck.tables.stiff.append((s.line, method))
     st = I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
@@ -477,7 +477,7 @@ def _same_dim(ck, a, b):
     return not d.terms and d.const.dimensionless
 
 
-def _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step):
+def _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step, y0=None):
     """`absolute a[, b …]`: absolute tolerances (D160).  Each value is a constant with a unit; each unknown
     takes the one in its units, and a derivative slot x' (of a second-order x) takes the one in x's units
     per unit of time when given, else x's divided by |t1 - t0|.  An unknown with no value in its units, two
@@ -489,7 +489,16 @@ def _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step):
     vals = []
     for node in s.absolute:
         v = ck.expr(node, ctx)
-        if not isinstance(v, I.IConst) or not isinstance(v.ty, NumTy) or not (0 < v.value < math.inf):
+        if not isinstance(v, I.IConst) or not isinstance(v.ty, NumTy):
+            raise ck.err("an absolute tolerance must be a positive constant, like 1e-16 or 1e-9 m", node)
+        u = getattr(v, "hint", None)
+        if u is not None and getattr(u, "affine", False):
+            # a tolerance is a size of error, so `absolute 1e-6 °C` is a temperature step of 10⁻⁶ K, not the
+            # absolute temperature 273.15 K + 10⁻⁶ K (D12 reads a °C value that way), which would switch the
+            # error control off (red team round 4 #1, D200); like `± 0.5 °C` (D120)
+            v = I.IConst(v.value - u.offset, v.ty)
+            v.hint = u
+        if not (0 < v.value < math.inf):
             raise ck.err("an absolute tolerance must be a positive constant, like 1e-16 or 1e-9 m", node)
         for w, _ in vals:
             if _same_dim(ck, w.ty.dim, v.ty.dim):
@@ -520,7 +529,35 @@ def _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step):
         if i not in used:
             raise ck.err(f"no unknown of this solve is in {ck.desc(v.ty.dim)}, so this absolute tolerance isn't "
                          f"used", node)
+    if y0 is not None:
+        _warn_large_absolute(ck, vals, layout, dims, y0)
     return out
+
+
+def _warn_large_absolute(ck, vals, layout, dims, y0):
+    """An absolute tolerance at least as large as the largest initial value in its units switches the error
+    control off for those unknowns (`absolute 1 km` for a 1 m oscillator, a mistyped km for mm), so the
+    answer can be silently wrong: warn (red team round 4 #18, D201).  Only initial values written as
+    constants count; unknowns that all start at 0 give no scale, so nothing is said."""
+    for v, node in vals:
+        scale = 0.0
+        for (x, k) in layout:
+            if k != 0 or not _same_dim(ck, v.ty.dim, dims[x]):
+                continue
+            c = y0.get((x, 0))
+            if isinstance(c, I.IConst) and isinstance(c.value, (int, float)) and math.isfinite(c.value):
+                scale = max(scale, abs(float(c.value)))
+        if scale > 0 and v.value >= scale:
+            ratio = v.value / scale
+            times = f"{format_number(ratio, 3)}×" if ratio >= 1.995 else "as large as"
+            u = preferred_unit(ck.U.resolve(v.ty.dim))
+            sym = f" {u.name}" if u.name not in ("", "1") else ""
+            shown = format_number(scale / u.factor, 3) + sym
+            ck.diags.warn(f"this absolute tolerance is {times} the largest starting value in its units ({shown}), "
+                          f"so the error control is effectively off and the result may be far off",
+                          line=node.line, col=node.col,
+                          hint="an absolute tolerance is the size of error you accept; make it much smaller than "
+                               "the values, e.g. 10⁻⁶ of them (check the unit: mm, not km?)")
 
 
 def _mass_matrix(ck, eqs, tops_in, names, orders, shape, t):

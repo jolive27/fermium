@@ -43,6 +43,7 @@ RHS, U0, PHASE0, V0, LEFT, RIGHT = range(6)
 MAX_SNAPSHOTS = 1000
 RANNACHER_STEPS = 4      # CN's first steps are done with L-stable SDIRK2 (D131)
 CHECKPOINTS = 8          # times at which step doubling compares two solutions (D130)
+JUMP_LAYER = 10.0         # with a jump between initial and boundary data, skip checks before t0 + this × h²/D (D206)
 PDE_TOL = 1e-3           # the estimated error allowed, relative to the solution's size (as RK4_WARN)
 PDE_MAX_STEPS = 32000    # the default step is halved at most until there are this many steps
 
@@ -220,9 +221,21 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
         if bc[1] == 0:
             w[M] = gr
 
+    # A jump between the initial value and a Dirichlet boundary value (a rod at 0 K whose end is held at
+    # 80 K from t0) is a layer thinner than the grid for t - t0 ≲ h²/D: no time step resolves it there, and
+    # step doubling saw it as a 0.8 % error although the answer later is right to 10⁻⁶ (red team round 4 #8,
+    # D206).  The accuracy check then starts once the layer has spread over a few cells.
+    gl0, gr0 = bval(t0)
+    jump = False
+    for j, g in ((0, gl0), (M, gr0)):
+        if (j == 0 and bc[0] == 0) or (j == M and bc[1] == 0):
+            lvl = max(float(np.max(np.abs(u))), abs(g), 1e-300)
+            if abs(u[j] - g) > 1e-9 * lvl:
+                jump = True
     set_dirichlet(u, t0)
     span = t1 - t0
     amax = float(np.max(np.abs(A))) if M > 0 else 0.0
+    skip_t = JUMP_LAYER * h * h / amax if jump and amax > 0 else 0.0
     if order == 1:
         theta = {"crank_nicolson": 0.5, "implicit": 1.0, "explicit": 0.0}[method]
         if step is None:
@@ -376,6 +389,8 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
         steps, at CHECKPOINTS common times, relative to the solution's size."""
         worst = 0.0
         for k, wc in coarse.items():
+            if k * (span / coarse_n) < skip_t:
+                continue                         # still inside the start-up layer of a jump (D206)
             wf = fine[2 * k] if fine_n == 2 * coarse_n else fine[k // 2]
             worst = max(worst, float(np.max(np.abs(wf - wc))))
         return worst / scale
@@ -391,8 +406,17 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
         return sorted(regular | early | first)
 
     def _scale(rws):
-        m = max(float(np.max(np.abs(r))) for r in rws)
+        """The solution's range (largest − smallest value, boundary values included): a size that doesn't
+        depend on where zero is, so 20 °C → 100 °C is judged like 0 K → 80 K (red team round 4 #8, D206).
+        A solution that is constant everywhere falls back to its size."""
         gl, gr = bval(t0)
+        hi = max(max(float(np.max(r)) for r in rws), gl.real if isinstance(gl, complex) else gl,
+                 gr.real if isinstance(gr, complex) else gr)
+        lo_ = min(min(float(np.min(r)) for r in rws), gl.real if isinstance(gl, complex) else gl,
+                  gr.real if isinstance(gr, complex) else gr)
+        if hi - lo_ > 0:
+            return hi - lo_
+        m = max(float(np.max(np.abs(r))) for r in rws)
         return max(m, abs(gl), abs(gr))
 
     def _controlled(n_steps):

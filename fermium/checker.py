@@ -1709,6 +1709,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             b = self.expr(e.right, ctx)
         finally:
             self._after_number = False
+        self._warn_limit_division(e, b)
         if e.implicit and isinstance(e.left, A.Num) and isinstance(e.right, A.Name) \
                 and not getattr(e, "in_product", False) \
                 and e.right.name in self.UNIT_LOOKALIKE_CONSTANTS \
@@ -2420,33 +2421,15 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             return "torque"
         return None
 
-    def _warn_angle_in_hz(self, v, u, e):
+    def _warn_angle_in_hz(self, v, u, e, where=""):
         """Converting between Hz and rev, rpm, rad/s or °/s (either way): angles are plain numbers, so Hz is
-        rad/s, and 1 Hz is 9.55 rpm, not 60 (D6, D27, D95; A46, redteam #2)."""
-        src, dst = self._unit_kind(v.hint), self._unit_kind(u)
-        if {src, dst} != {"cycles", "angular"} or v.hint.dim is None:
+        rad/s, and 1 Hz is 9.55 rpm, not 60 (D6, D27, D95; A46, redteam #2).  `where` prefixes the message
+        (a Python boundary, red team round 4 #2)."""
+        got = hz_angle_mixup(self, v.hint, u)
+        if got is None:
             return False
-        try:
-            actual = v.hint.factor / u.factor
-        except ZeroDivisionError:
-            return False
-        s, t = v.hint.name, u.name
-        if src == "angular" and not (self._unit_words(v.hint) & (self.ANGLE_WORDS - {"rad"})):
-            return False      # rad/s in Hz: _warn_omega_in_hz says it
-        if src == "cycles":
-            expected = actual * 2 * math.pi
-            msg = (f"Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 {s} is "
-                   f"{format_number(actual)} {t}, not {format_number(expected)} {t}"
-                   + ("" if t == "rev/s" else "; 1 Hz = 1/(2π) rev/s"))
-            hint = (f"if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is "
-                    f"3000 rpm), or multiply it by 2π:  2π f in {t}")
-        else:
-            expected = actual / (2 * math.pi)
-            msg = (f"angles are plain numbers (1 rev = 2π), so a rate in {s} shown in {t} is an angular "
-                   f"frequency: 1 {s} is {format_number(actual)} {t} here, not {format_number(expected)} {t}")
-            hint = (f"to count turns per second write  in rev/s ; for the frequency in cycles per second "
-                    f"divide by 2π:  ω/(2π) in {t}")
-        self.diags.warn(msg, line=e.line, col=e.col, hint=hint)
+        msg, hint = got
+        self.diags.warn(where + msg, line=e.line, col=e.col, hint=hint)
         return True
 
     CONFUSABLE = {
@@ -2743,6 +2726,12 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, SolRef) and t.view.n == 1:
             t = self.sol_values(t.view, e)
+        if isinstance(t, I.Expr) and isinstance(t.ty, DataTy):
+            # `fit … to data[2:5]` (red team round 4 #17, D209)
+            raise self.err("a data table can't be sliced with [a:b] (fitting or plotting part of a table isn't "
+                           "supported yet); its columns are lists, and a column can be sliced", e.target,
+                           hint="slice a column, like  data.L[2:5],  or put the rows you want in a CSV file of "
+                                "their own and load that")
         if not isinstance(t, I.Expr) or not isinstance(t.ty, ListTy):
             what = "a vector" if isinstance(t, I.Expr) and isinstance(t.ty, (VecTy, MatTy)) else "this"
             raise self.err(f"only lists can be sliced with [a:b], and {what} isn't a list", e.target,
@@ -4068,9 +4057,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if e.lo is None:
             return self.indefinite_integral(e, ctx)
         lo = self.expr(e.lo, ctx)
-        hi = self.expr(e.hi, ctx)
+        try:
+            hi = self.expr(e.hi, ctx)
+        except FermiumError as ex:
+            self._hint_sum_after_integral(e, lo, ex, ctx)
+            raise
         self.need_num(lo, e.lo, "the lower limit")
         self.need_num(hi, e.hi, "the upper limit")
+        self._limit_division_error(e, lo, hi, ctx)
         self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the limits of this integral are {self.desc(lo.ty.dim)} and "
                       f"{self.desc(hi.ty.dim)}; they need the same units", e,
                       hint=("e is the elementary charge in Fermium; for Euler's number write exp(1)"
@@ -4105,12 +4099,83 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         self.all_lambdas.append(lam)
         r = I.IIntegral(lam, lo, hi, NumTy(body.ty.dim * lo.ty.dim))
         r.sf = self._minsf(lo, hi, body)
+        self._warn_sum_in_limit(e, body)
         # for "the integrand is NaN or infinite at x = …" (D45): the variable's name and display format
         r.xname = self.text(e.var)
         xf = I.IConst(0, NumTy(lo.ty.dim))
         xf.hint = lo.hint or hi.hint
         r.xfmt = self.fmt(xf)
         return r
+
+    def _same_dim(self, a, b):
+        d = self.U.norm(DExpr.of(a) / DExpr.of(b))
+        return not d.terms and d.const.dimensionless
+
+    def _warn_sum_in_limit(self, e, body):
+        """`2 ∫ x dx from 0 to 1 - π` goes up to 1 - π (D173).  Warn only when the other reading,
+        (2 ∫ … to 1) - π, has consistent units too: the term after the +/- has the limit's units, so that is
+        when the integral has the integration variable's units, i.e. a dimensionless integrand.  With
+        `∫ v dt from 0 s to T - t0` the other reading is metres minus seconds, so no warning
+        (red team round 4 #6, D205)."""
+        info = getattr(e, "sum_info", None)
+        if info is None or not self._same_dim(body.ty.dim, DIMLESS):
+            return
+        tk = info["tok"]
+        verb = "add" if info["op"] == "+" else "subtract"
+        self.diags.warn(f"the ' {info['rest']}' is part of the upper limit: this integral goes up to {info['limit']}",
+                        line=tk.line, col=tk.col,
+                        hint=f"if that's what you meant, write  to ({info['limit']});  to {verb} it after "
+                             f"integrating, write  (… to {info['head']}) {info['rest']}")
+
+    def _hint_sum_after_integral(self, e, lo, ex, ctx):
+        """The upper limit `T - x0` is a unit error, but `(∫ … to T) - x0` might be meant: say so (D205)."""
+        info = getattr(e, "sum_info", None)
+        if info is None or info.get("head_node") is None:
+            return
+        try:
+            head = self.expr(info["head_node"], ctx)
+            rest = self.expr(info["rest_node"], ctx)
+        except FermiumError:
+            return
+        if not isinstance(getattr(head, "ty", None), NumTy) or not isinstance(getattr(rest, "ty", None), NumTy):
+            return
+        if self._same_dim(head.ty.dim, lo.ty.dim) and not self._same_dim(rest.ty.dim, lo.ty.dim):
+            verb = "add" if info["op"] == "+" else "subtract"
+            ex.hint = (f"the ' {info['rest']}' is part of the upper limit here; to {verb} it after integrating, "
+                       f"write  (… to {info['head']}) {info['rest']}")
+
+    def _limit_division_error(self, e, lo, hi, ctx):
+        """`∫ P0 dt from 0 s to E / (2 P0)`: a spaced '/' after the upper limit divides the whole integral
+        (D34), so the limits are s and J.  When dividing the limit instead has the right units, the error
+        says how to write that (red team round 4 #7, D205)."""
+        info = getattr(e, "div_info", None)
+        if info is None or "divisor" not in info or self._same_dim(lo.ty.dim, hi.ty.dim):
+            return
+        try:
+            dv = self.expr(info["divisor"], ctx)
+        except FermiumError:
+            return
+        if not isinstance(getattr(dv, "ty", None), NumTy):
+            return
+        if self._same_dim(DExpr.of(hi.ty.dim) / DExpr.of(dv.ty.dim), lo.ty.dim):
+            limit = f"{info['hi_text']} / {info['div_text']}"
+            raise self.err(f"the limits of this integral are {self.desc(lo.ty.dim)} and {self.desc(hi.ty.dim)}: "
+                           f"the ' / ' after the upper limit divides the whole integral, not the limit", e,
+                           hint=f"to divide the limit, write  to ({limit})")
+
+    def _warn_limit_division(self, e, b):
+        """D34/D112: a spaced '/' right after an integral's upper limit divides the whole integral.  Both
+        readings have consistent units only when the divisor is a plain number, so only then warn (red team
+        round 4 #7, D205); otherwise the units already decided, and a wrong reading is an error."""
+        integral = getattr(e.right, "limit_div_of", None)
+        if integral is None or e.op != "/" or not isinstance(getattr(b, "ty", None), (NumTy, ListTy)):
+            return
+        if not self._dimless(b):
+            return
+        tk = integral.div_info["tok"]
+        self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
+                        line=tk.line, col=tk.col, length=1,
+                        hint="to divide the limit, write it without spaces (to L/2) or in parentheses (to (L / 2))")
 
     def e_Sum(self, e, ctx):
         """Σ(body for k from a to b step s) (#49, D51): the body is a scalar lambda of k (like an integrand),
@@ -4452,3 +4517,35 @@ def check(source_ast, diags=None, base_dir=".", repl=False):
 
 
 Ty  # re-export for type hints
+
+
+def hz_angle_mixup(ck, src_unit, dst_unit):
+    """(message, hint) when a value in src_unit is converted to dst_unit across Hz and rev/rpm/°/s (either
+    way), which is where `rad = 1` makes 1 Hz 9.55 rpm instead of 60 (D95, round 1 #2); else None.  Used by
+    the `in` conversion and by the Python boundaries (use python, fermium.compile; round 4 #2, D202).  `ck`
+    may be None (any object with the Checker's _unit_kind is fine)."""
+    kind = Checker._unit_kind
+    src, dst = kind(ck or Checker, src_unit), kind(ck or Checker, dst_unit)
+    if {src, dst} != {"cycles", "angular"} or getattr(src_unit, "dim", None) is None:
+        return None
+    try:
+        actual = src_unit.factor / dst_unit.factor
+    except ZeroDivisionError:
+        return None
+    s, t = src_unit.name, dst_unit.name
+    if src == "angular" and not (Checker._unit_words(src_unit) & (Checker.ANGLE_WORDS - {"rad"})):
+        return None      # rad/s in Hz: _warn_omega_in_hz says it
+    if src == "cycles":
+        expected = actual * 2 * math.pi
+        msg = (f"Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 {s} is "
+               f"{format_number(actual)} {t}, not {format_number(expected)} {t}"
+               + ("" if t == "rev/s" else "; 1 Hz = 1/(2π) rev/s"))
+        hint = (f"if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is "
+                f"3000 rpm), or multiply it by 2π:  2π f in {t}")
+    else:
+        expected = actual / (2 * math.pi)
+        msg = (f"angles are plain numbers (1 rev = 2π), so a rate in {s} shown in {t} is an angular "
+               f"frequency: 1 {s} is {format_number(actual)} {t} here, not {format_number(expected)} {t}")
+        hint = (f"to count turns per second write  in rev/s ; for the frequency in cycles per second "
+                f"divide by 2π:  ω/(2π) in {t}")
+    return msg, hint

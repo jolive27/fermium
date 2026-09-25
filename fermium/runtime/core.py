@@ -409,11 +409,11 @@ class Runtime:
                    f"drop  step  to use the adaptive solver")
         elif kind == 8:
             msg = (f"the time step is too coarse for this PDE: the estimated error is {format_number(a * 100, 2)}% "
-                   f"of the solution's largest value (checked by step doubling); use a smaller step, or drop  step  to "
+                   f"of the solution's range (checked by step doubling); use a smaller step, or drop  step  to "
                    f"let Fermium choose it")
         elif kind == 9:
             msg = (f"this PDE's time step could not be made fine enough: with {PDE_MAX_STEPS} steps the "
-                   f"estimated error is still {format_number(a * 100, 2)}% of the solution's largest value (checked by step "
+                   f"estimated error is still {format_number(a * 100, 2)}% of the solution's range (checked by step "
                    f"doubling); the result may be inaccurate")
         else:
             msg = "warning"

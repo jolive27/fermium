@@ -33,7 +33,6 @@ NEWTON = ("k = 0.1 1/min\n"
 
 # ---- #1: `absolute 0.001 °C` is read as an absolute temperature (274.15 K), so the solve is sloppy --------------
 
-@rt4(1)
 def test_1_absolute_tolerance_in_celsius_is_a_temperature_step():
     exact = 20 + 70 * 2.718281828459045 ** -3                    # 23.4851 °C
     assert num(run(NEWTON.format(tol="1e-6 K"))) == pytest.approx(exact, abs=1e-3)      # K: fine today
@@ -47,7 +46,6 @@ def test_1_absolute_tolerance_in_celsius_is_a_temperature_step():
 
 # ---- #2: Hz <-> rpm conversions at the Python boundary are silent -----------------------------------------------
 
-@rt4(2)
 def test_2_python_function_declared_in_hz_given_rpm_warns():
     src = ("use python numpy as np:\n"
            "    positive(f [Hz]) -> [Hz]\n"
@@ -59,7 +57,6 @@ def test_2_python_function_declared_in_hz_given_rpm_warns():
 
 # ---- #3: `1.5 kT` with your own k and T is 1.5 kilotesla, printed as "1.5 kT" ----------------------------------
 
-@rt4(3)
 def test_3_kT_with_own_k_and_T_is_not_silently_kilotesla():
     src = "k = 1.38e-23 J/K\nT = 300 K\nE = 1.5 kT\nprint E\n"
     try:
@@ -72,17 +69,15 @@ def test_3_kT_with_own_k_and_T_is_not_silently_kilotesla():
 
 # ---- #4: `60 s / (m c_w)` with your own m is a parse error -------------------------------------------------------
 
-@rt4(4)
 def test_4_divisor_bracket_starting_with_your_variable_parses():
     src = ("P = 1000 W\nm = 1 kg\nc_w = 4186 J/(kg K)\n"
-           "print P 60 s / (m c_w)\n")
+           "print P 60 s / (m c_w) to 6 digits\n")
     # today: "expected ')' but found 'c_w'"
     assert num(run(src)) == pytest.approx(60000 / 4186, rel=1e-3)
 
 
 # ---- #5: `∫ x * -2 dx` says the dx is missing ------------------------------------------------------------------
 
-@rt4(5)
 def test_5_negative_factor_in_integrand():
     # today: "this integral is missing its 'dx'"
     assert num(run("print ∫ x * -2 dx from 0 to 1")) == pytest.approx(-1.0)
@@ -90,7 +85,6 @@ def test_5_negative_factor_in_integrand():
 
 # ---- #6: the D173 warning fires when the other reading is a unit error -------------------------------------------
 
-@rt4(6)
 def test_6_no_limit_warning_when_subtracting_after_is_a_unit_error():
     src = "v = 3 m/s\nT = 10 s\nt0 = 2 s\nprint ∫ v dt from 0 s to T - t0\n"
     out, err = run_err(src)
@@ -101,7 +95,6 @@ def test_6_no_limit_warning_when_subtracting_after_is_a_unit_error():
 
 # ---- #7: a spaced `/` after the upper limit: refused even when only the limit reading is well-typed ----------------
 
-@rt4(7)
 def test_7_division_in_limit_when_only_that_reading_has_the_right_units():
     src = "E = 3600 J\nP0 = 2 W\nprint ∫ P0 dt from 0 s to E / (2 P0)\n"
     try:
@@ -115,7 +108,6 @@ def test_7_division_in_limit_when_only_that_reading_has_the_right_units():
 
 # ---- #8: PDE step control warns on the textbook step-change problem although the answer is accurate -------------
 
-@rt4(8)
 def test_8_heat_step_change_is_accurate_and_quiet():
     src = ("L = 1 m\nD = 1e-4 m^2/s\n"
            "solve ∂u/∂t = D * ∂²u/∂x²\n"
@@ -130,7 +122,6 @@ def test_8_heat_step_change_is_accurate_and_quiet():
 
 # ---- #9: the hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` --------------------------------------
 
-@rt4(9)
 def test_9_lone_unit_hint_keeps_the_whole_unit_and_the_number_as_written():
     out, err = run_err("m = 9.11e-31 kg\nn = 8.5e28 m^-3\nprint n\n")
     assert out == "8.5×10²⁸ 1/m³"
@@ -141,7 +132,6 @@ def test_9_lone_unit_hint_keeps_the_whole_unit_and_the_number_as_written():
 
 # ---- #10: one token gets a warning ("is the unit") and then an error ("is ambiguous") ------------------------------
 
-@rt4(10)
 def test_10_no_contradictory_warning_before_the_ambiguity_error():
     out, err = io.StringIO(), io.StringIO()
     with pytest.raises(FermiumError):
@@ -152,7 +142,6 @@ def test_10_no_contradictory_warning_before_the_ambiguity_error():
 
 # ---- #11: an uncertainty that is only rounding noise sets the printed digits --------------------------------------
 
-@rt4(11)
 @pytest.mark.parametrize("src, bad", [
     ("L = 1.000 ± 0.010 m\ng = 9.81 m/s^2\nT = 2 π sqrt(L / g)\nprint T / sqrt(L)", "2.0060666807106475318"),
     ("y = 1.000 ± 0.010 m\nprint (y / 3) * 3 - y", "×10⁻¹⁸"),
@@ -202,7 +191,6 @@ def test_14_list_and_literal_printing(src, good):
 
 # ---- #15: the bootcamp still says `0.5 m v^2` means metres with a warning, and that `1/2 m v^2` warns ------------
 
-@rt4(15)
 def test_15_bootcamp_prose_matches_the_error():
     import os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -228,7 +216,6 @@ def test_16_exact_ties_round_half_up_or_are_documented():
 
 # ---- #17: slicing a data table: the hint talks about vector components --------------------------------------------
 
-@rt4(17)
 def test_17_slicing_a_table_message(tmp_path):
     (tmp_path / "p.csv").write_text("L [m], T [s]\n0.2, 0.9\n0.4, 1.28\n0.6, 1.55\n0.8, 1.79\n")
     src = 'data = load "p.csv"\nfit T = 2 π sqrt(L / g) to data[2:4]\nprint g\n'
@@ -243,7 +230,6 @@ def test_17_slicing_a_table_message(tmp_path):
 
 # ---- #18: an absolute tolerance larger than the solution is accepted silently -------------------------------------
 
-@rt4(18)
 def test_18_absolute_tolerance_larger_than_the_solution_warns():
     src = ("solve x'' = -x / (1 s)^2 with x(0 s) = 1 m, x'(0 s) = 0 m/s for t from 0 s to 10 s absolute 1 km\n"
            "print x(10 s)\n")
@@ -253,3 +239,52 @@ def test_18_absolute_tolerance_larger_than_the_solution_warns():
         return
     # today: 89.2 m (exact -0.839 m) with no warning
     assert "warning" in err or num(out) == pytest.approx(-0.839, abs=0.01)
+
+
+# ---- companions of the fixes (D200–D209): the other boundary, and the cases that must stay quiet ------------------
+
+def test_2_fermium_compile_hz_parameter_given_rpm_warns():
+    import fermium
+    m = fermium.compile("f(freq [Hz]) = freq\ng(w [rpm]) = w\n", warnings=False)
+    assert num(str(m.f(fermium.Q(60, "rpm")))) == pytest.approx(6.28319, rel=1e-5)
+    assert any("Hz" in w and "rpm" in w for w in m.warnings)
+    n = len(m.warnings)
+    m.f(fermium.Q(60, "Hz"))                                       # Hz for Hz: nothing to say
+    assert len(m.warnings) == n
+    m.g(fermium.Q(1, "Hz"))
+    assert any("9.5493 rpm, not 60 rpm" in w for w in m.warnings[n:])
+
+
+def test_3_common_prefixed_units_next_to_your_variables_stay_quiet():
+    out, err = run_err("n = 1.5\nm = 2\nk = 3 N/m\ng = 9.81 m/s^2\nlam = 500 nm\nM = 2 kg\nprint lam, M\n")
+    assert out == "500 nm 2 kg"
+    assert "warning" not in err
+    out, err = run_err("k = 1.38e-23 J/K\nT = 300 K\nprint 1.5 k T\n")
+    assert out == "6.2×10⁻²¹ J" and "warning" not in err
+
+
+def test_4_bracket_of_units_after_a_spaced_slash_is_still_a_unit():
+    assert run("print 9.81 kg / (m s^2)") == "9.81 kg/(m s²)"
+    assert run("print 3 J / (kg K)") == "3 J/(kg K)"
+
+
+def test_6_subtracting_after_the_integral_when_the_limit_is_a_unit_error_is_suggested():
+    src = "v = 3 m/s\nT = 10 s\nx0 = 2 m\nprint ∫ v dt from 0 s to T - x0\n"
+    with pytest.raises(FermiumError) as ei:
+        run(src)
+    assert "(… to T) - x0" in str(ei.value.hint)
+
+
+def test_10_no_contradictory_warning_before_the_error_on_the_next_name():
+    out, err = io.StringIO(), io.StringIO()
+    with pytest.raises(FermiumError):
+        run_source("m = 1 kg\nL = 2 [m]\nħ = 1 J s\nE1 = π^2 ħ^2 / (2 m L^2)\n", "<t>", out=out, err=err)
+    assert "reading 'L' as your variable" not in err.getvalue()
+
+
+def test_18_ordinary_absolute_tolerances_dont_warn():
+    src = ("solve x'' = -x / (1 s)^2 with x(0 s) = 1 m, x'(0 s) = 0 m/s for t from 0 s to 10 s absolute 1e-9 m\n"
+           "print x(10 s) to 4 digits\n")
+    out, err = run_err(src)
+    assert num(out) == pytest.approx(-0.8391, abs=2e-4)
+    assert "warning" not in err
