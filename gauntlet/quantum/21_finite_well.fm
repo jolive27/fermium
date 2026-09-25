@@ -1,0 +1,64 @@
+# Quantum 21 — Bound states of a finite square well
+#
+# (Griffiths §2.6 and Problem 2.29.)  An electron sits in a finite square well
+# V = −V₀ for |x| < a, 0 outside, with V₀ = 20.0 eV and half-width a = 0.500 nm.
+# With k = √(2m(E + V₀))/ħ inside and κ = √(−2mE)/ħ outside, matching ψ and ψ'
+# at x = a gives the transcendental equations
+#
+#     even states:  κ = k tan(ka)        odd states:  κ = −k cot(ka).
+#
+# In terms of z = ka and z₀ = a√(2mV₀)/ħ these read
+#     even:  tan z = √(z₀²/z² − 1)      odd:  −cot z = √(z₀²/z² − 1).
+#
+#  (a) Find z₀ and the number of bound states, N = ⌈2z₀/π⌉ (Griffiths 2.29).
+#  (b) Find every bound-state energy by solving the matching conditions
+#      (each even root lies in (jπ, jπ + π/2), each odd one in (jπ + π/2, (j+1)π)).
+#  (c) Check the ground state against the infinite well of the same width
+#      (it must lie below it) and check that the number of roots found is N.
+#  (d) Normalise the ground state and find the probability of finding the
+#      electron outside the well (classically forbidden).
+
+V0 = 20.0 eV
+a = 0.500 nm
+
+z0 = a √(2 m_e V0) / ħ
+N_formula = ceil(2 z0 / π)
+print "(a) z0 =", z0 to 10 digits, "  N = ceil(2 z0/π) =", N_formula
+
+energy(z) = ħ² (z / a)² / (2 m_e) - V0
+
+# (b) walk through the quarter-period windows; the window ends where z₀ is reached
+found = 0
+E_ground = 0 eV
+z_ground = 1.0
+j = 0
+while j π < z0
+    # even state in (jπ, jπ + π/2)
+    lo = j π + 1e-9
+    hi = min(j π + π/2 - 1e-9, z0)
+    if lo < hi
+        solve tan(z) = √(z0²/z² - 1) for z from lo to hi
+        found += 1
+        if found == 1
+            E_ground = energy(z)
+            z_ground = z
+        print "even  z =", z to 10 digits, "  E =", energy(z) in eV to 10 digits
+    # odd state in (jπ + π/2, (j+1)π)
+    lo = j π + π/2 + 1e-9
+    hi = min((j + 1) π - 1e-9, z0)
+    if lo < hi
+        solve -1 / tan(z) = √(z0²/z² - 1) for z from lo to hi
+        found += 1
+        print "odd   z =", z to 10 digits, "  E =", energy(z) in eV to 10 digits
+    j += 1
+
+# (c)
+E_inf = π² ħ² / (2 m_e (2*a)²) - V0
+print "(c) states found =", found, "  ground state below infinite-well value", E_inf in eV to 10 digits, ":", E_ground < E_inf
+
+# (d) even ground state: ψ = cos(kx) inside, cos(ka) e^{−κ(|x|−a)} outside
+k0 = z_ground / a
+κ0 = √(-2 m_e E_ground) / ħ
+inside = ∫ cos(k0 x)² dx from -a to a
+outside = 2 ∫ cos(k0 a)² exp(-2 κ0 (x - a)) dx from a to ∞
+print "(d) P(outside) =", outside / (inside + outside) to 10 digits
