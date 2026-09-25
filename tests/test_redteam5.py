@@ -325,3 +325,33 @@ def test_19_lesson2_says_the_repl_allows_redefinition():
     text = _read("bootcamp/lesson02_variables_formulas.md")
     section = text[text.index("## Variables keep their units"):text.index("## ⚠️ Gotcha: the mass")]
     assert "REPL" in section
+
+
+# ---- nits (no finding number) ---------------------------------------------------------------------------------
+
+def test_nit_fmt_ascii_writes_2i_for_2_imaginary():
+    from fermium.fmt import format_source
+    src = "z = 2 + 1𝑖\nw = 2𝑖\nq = 2^3𝑖\nprint z, w, q\n"
+    out = format_source(src, "ascii")
+    assert "w = 2i\n" in out and "2 + 1i" in out and "2 1i" not in out.replace("2^3 1i", "")
+    assert run(out) == run(src)
+
+
+def test_nit_failed_from_import_leaves_nothing_in_the_repl():
+    out = repl("from mechanics import spring_period, nothere\nprint spring_period(1 kg, 4 N/m)\n")
+    assert "mechanics has no nothere" in out
+    assert "spring_period isn't defined" in out
+
+
+def test_nit_selfhost_is_packaged():
+    text = _read("pyproject.toml")
+    for d in sorted(os.listdir(os.path.join(ROOT, "fermium"))):
+        if os.path.exists(os.path.join(ROOT, "fermium", d, "__init__.py")):
+            assert f'"fermium.{d}"' in text
+
+
+def test_nit_hover_on_a_table_lists_its_columns():
+    from fermium.lsp import analyze, hover_text
+    src = "Ls = [1, 2] m\nTs = [2, 2.8] s\nd = table(L = Ls, T = Ts)\nprint d.L\n"
+    h = hover_text(analyze(src), src, 2, 0)
+    assert "L [m]" in h and "T [s]" in h

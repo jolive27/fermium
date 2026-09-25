@@ -118,6 +118,13 @@ def _type_text(ck: Checker, ty, hint=None):
         return "true or false"
     if isinstance(ty, SolTy):
         return "the solution of an ODE"
+    info = getattr(ty, "info", None)
+    if getattr(ty, "kind", None) == "data" and isinstance(info, dict):
+        # a data table: its columns and their units (red team 5 nit)
+        cols = ", ".join(f"{c['name']} [{c['unit'].name}]" if c["unit"].name not in ("", "1") else c["name"]
+                         for c in info.get("columns", []))
+        where = "" if info.get("table") else f" from {info.get('path')}"
+        return f"a data table{where} with the columns {cols}"
     return getattr(ty, "kind", "a value")
 
 
