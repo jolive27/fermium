@@ -97,3 +97,44 @@ def test_tov_ideal_neutron_gas_matches_scipy():
     mr3 = 4 * pi * 2.71406 * 3.65375 ** 3 * (2.5 * Kp / (4 * pi * G)) ** 3 / (msun * 1e9)
     lo = floats(line_of(out, "M R³").split(":")[1])
     assert lo[0] == pytest.approx(mr3, rel=0.03) and lo[1] == pytest.approx(mr3, rel=0.03)
+
+
+def test_lane_emden_and_chandrasekhar_mass():
+    """Lane–Emden constants vs SciPy and Chandrasekhar's 1939 table; M_Ch = 4π ω₃ (K/πG)^(3/2)."""
+    from scipy.constants import G, c, hbar, m_e, m_p, m_u, pi
+    from scipy.integrate import solve_ivp
+    out = run_prog("lane_emden_chandrasekhar", "lane_emden.fm")
+    table = {"1": (np.pi, np.pi), "1.5": (3.65375, 2.71406), "3": (6.89685, 2.01824)}   # Chandrasekhar (1939)
+    omega = {}
+    for n, (xi_tab, om_tab) in table.items():
+        nn = float(n)
+
+        def rhs(x, s):
+            return [s[1], -2 * s[1] / x - np.sign(s[0]) * abs(s[0]) ** nn]
+
+        def zero(x, s):
+            return s[0]
+        zero.terminal = True
+        x0 = 1e-5
+        sol = solve_ivp(rhs, [x0, 10], [1 - x0 ** 2 / 6, -x0 / 3], events=zero, rtol=1e-12, atol=1e-14)
+        xi1, dth = sol.t_events[0][0], sol.y_events[0][0][1]
+        xi_fm, om_fm, ratio = floats(line_of(out, f"n = {n}:").split(":", 1)[1].replace("²", ""))[-3:]
+        assert xi_fm == pytest.approx(xi1, rel=1e-6) and om_fm == pytest.approx(-xi1 ** 2 * dth, rel=1e-6), n
+        assert xi_fm == pytest.approx(xi_tab, abs=2e-5) and om_fm == pytest.approx(om_tab, abs=2e-5), n
+        assert ratio == pytest.approx(xi1 ** 3 / (3 * -xi1 ** 2 * dth), rel=1e-4)
+        omega[n] = -xi1 ** 2 * dth
+    msun = 1.98841e30
+    mch1 = 4 * pi * omega["3"] * ((hbar * c / 4) * (3 * pi ** 2) ** (1 / 3) / (m_u ** (4 / 3) * pi * G)) ** 1.5 / msun
+    assert num(out, "M_Ch μ_e² =") == pytest.approx(mch1, rel=1e-3)
+    assert mch1 == pytest.approx(np.sqrt(3 * pi) / 2 * omega["3"] * (hbar * c / G) ** 1.5 / m_u ** 2 / msun, rel=1e-9)
+    assert abs(mch1 - 5.83) < 0.01                                          # the textbook 5.83/μ_e² M☉
+    assert num(out, "white dwarf) =") == pytest.approx(mch1 / 4, rel=1e-3)
+    mch_h = mch1 / 4 * (m_u / (m_p + m_e)) ** 2
+    assert floats(line_of(out, "with m_H").split("μ_e = 2:")[1])[0] == pytest.approx(mch_h, rel=1e-3)
+    assert abs(mch_h - 1.44) < 0.01                                         # Chandrasekhar's 1.44 M☉
+    # n = 3/2 white dwarf, closed form
+    K = (3 * pi ** 2) ** (2 / 3) * hbar ** 2 / (5 * m_e * (2 * m_u) ** (5 / 3))
+    b = 5 * K / (8 * pi * G)
+    rho_c = (0.6 * msun / (4 * pi * b ** 1.5 * omega["1.5"])) ** 2
+    R = table["1.5"][0] * np.sqrt(b) * rho_c ** (-1 / 6)
+    assert floats(line_of(out, "n = 3/2 white dwarf").split("R =")[1])[0] == pytest.approx(R / 1e3, rel=5e-3)
