@@ -1,0 +1,38 @@
+# astro: gravity, stars and cosmology
+# Masses in kg or M☉, distances in m, au, pc; the Hubble constant like 70 km/s/Mpc.
+
+# Thomson scattering cross-section of the electron: (8π/3) r_e²
+σ_T = 8π/3 * r_e²
+
+# Schwarzschild radius of a mass M: 2 G M / c²
+schwarzschild_radius(M [kg]) = 2 G M / c² in km
+
+# Eddington luminosity of a mass M (ionised hydrogen): 4π G M m_p c / σ_T
+eddington_luminosity(M [kg]) = 4π G M m_p c / σ_T in W
+
+# Kepler's third law: period of an orbit with semi-major axis a around total mass M: 2π √(a³ / (G M))
+kepler_period(a [m], M [kg]) = 2π √(a³ / (G M))
+
+# circular orbital speed at distance r from a mass M: √(G M / r)
+orbital_velocity(M [kg], r [m]) = √(G M / r)
+
+# escape velocity from distance r of a mass M: √(2 G M / r)
+escape_velocity(M [kg], r [m]) = √(2 G M / r)
+
+# Wien's law: wavelength where a blackbody at temperature T is brightest: b / T
+wien_peak(T [K]) = b_W / T in nm
+
+# luminosity of a spherical blackbody star with radius R and surface temperature T: 4π R² σ T⁴
+stellar_luminosity(R [m], T [K]) = 4π R² σ T⁴ in W
+
+# distance modulus m − M = 5 log10(d / 10 pc) of an object at distance d
+distance_modulus(d [m]) = 5 log10(d / (10 pc))
+
+# Hubble distance c / H0
+hubble_distance(H0 [1/s]) = c / H0 in Mpc
+
+# comoving distance to redshift z in a flat ΛCDM universe (radiation neglected): c/H0 ∫₀^z dz' / E(z')
+comoving_distance(z [1], H0 [1/s], Ω_m [1]) = c / H0 * ∫ 1 / √(Ω_m (1 + x)³ + 1 - Ω_m) dx from 0 to z in Mpc
+
+# luminosity distance to redshift z in a flat ΛCDM universe: (1 + z) times the comoving distance
+luminosity_distance(z [1], H0 [1/s], Ω_m [1]) = (1 + z) comoving_distance(z, H0, Ω_m)

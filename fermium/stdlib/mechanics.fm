@@ -1,0 +1,35 @@
+# mechanics: projectiles, pendulums, energy and rockets
+# Angles are plain numbers: write 30° or 0.5 (radians).  Pass the local gravity as g, e.g. g_n.
+
+# horizontal range of a projectile launched at speed v and angle θ above level ground, no air: v² sin 2θ / g
+projectile_range(v [m/s], θ [rad], g [m/s²]) = v² sin(2 θ) / g
+
+# greatest height above the launch point: (v sin θ)² / 2g
+projectile_apex(v [m/s], θ [rad], g [m/s²]) = (v sin(θ))² / (2*g)
+
+# time until the projectile lands back at launch height: 2 v sin θ / g
+projectile_flight_time(v [m/s], θ [rad], g [m/s²]) = 2*v sin(θ) / g
+
+# small-amplitude period of a simple pendulum of length L: 2π √(L/g)
+pendulum_period(L [m], g [m/s²]) = 2π √(L/g)
+
+# exact period for amplitude θ0 (any angle below π): 4 √(L/g) K(sin²(θ0/2)), K the complete elliptic integral
+pendulum_period_large(L [m], g [m/s²], θ0 [rad]) = 4 √(L/g) ellipk(sin(θ0/2)²)
+
+# period of a mass on a spring with constant k: 2π √(mass/k)
+spring_period(mass [kg], k [N/m]) = 2π √(mass/k)
+
+# kinetic energy ½ m v²
+kinetic_energy(mass [kg], v [m/s]) = mass v² / 2
+
+# relativistic kinetic energy (γ − 1) m c², written so it stays accurate for small v
+relativistic_kinetic_energy(mass [kg], v [m/s]) = mass v² / (√(1 - v²/c²) * (1 + √(1 - v²/c²)))
+
+# gravitational potential energy m g h near a planet's surface
+potential_energy(mass [kg], g [m/s²], height [m]) = mass * g * height
+
+# Tsiolkovsky rocket equation, the speed gained: Δv = v_e ln(m0 / m_f), exhaust speed v_e, start and final masses
+rocket_equation(v_e [m/s], m0 [kg], m_f [kg]) = v_e ln(m0 / m_f)
+
+# the mass ratio m0 / m_f a rocket needs to gain Δv: exp(Δv / v_e)
+rocket_mass_ratio(Δv [m/s], v_e [m/s]) = exp(Δv / v_e)

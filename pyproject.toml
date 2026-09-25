@@ -23,6 +23,7 @@ packages = ["fermium", "fermium.runtime", "fermium.jupyter"]
 
 [tool.setuptools.package-data]
 "fermium.runtime" = ["*.c"]
+"fermium" = ["stdlib/*.fm"]
 
 [tool.ruff]
 line-length = 120

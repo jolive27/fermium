@@ -217,6 +217,12 @@ class Parser:
                 if end_line and not isinstance(s, (A.If, A.For, A.ForIn, A.While, A.Solve)):
                     self.end_statement()
                 return s
+        if (t.kind == "NAME" and t.value == "import" or t.kind == "KW" and t.value == "from") and \
+                self.peek().kind in ("NAME", "STR"):
+            s = self.import_stmt()
+            if end_line:
+                self.end_statement()
+            return s
         if t.kind == "NAME" and t.value == "analyze" and self._is_analyze():
             s = self.analyze_stmt()
             if end_line:
@@ -595,6 +601,39 @@ class Parser:
                     if k > 0 and isinstance(g, A.Name) and g.name in unknowns:
                         self._warn_juxt_denominator(info, k, why=f", including the unknown {g.name}")
                         break
+
+    def import_stmt(self):
+        """import mechanics [as m] | import "path/file.fm" [as m] | from mechanics import a [as b], c  (D100)"""
+        t = self.next()
+        frm = t.value == "from"
+        mt = self.next()
+        module, is_path = (mt.value, True) if mt.kind == "STR" else (mt.raw, False)
+        if not frm:
+            alias = None
+            if self.tok.kind == "NAME" and self.tok.value == "as":
+                self.next()
+                alias = self.expect_name("a name after 'as' (like  import astro as a)").value
+            if self.at_op(","):
+                raise self.error("import one module per line", hint="write each on its own line:  import mechanics")
+            self.known.add(alias or mt.value)
+            return self.span(A.Import(module, is_path, alias, None), t)
+        if not (self.tok.kind == "NAME" and self.tok.value == "import"):
+            raise self.error(f"expected 'import' after 'from {mt.raw}'" + self._found(),
+                             hint=f"write  from {mt.raw} import name1, name2")
+        self.next()
+        names = []
+        while True:
+            nt = self.expect_name(f"a name to import from {mt.raw} (like  from nuclear import semf_binding)")
+            alias = None
+            if self.tok.kind == "NAME" and self.tok.value == "as":
+                self.next()
+                alias = self.expect_name("a name after 'as'").value
+            names.append((nt.value, alias))
+            self.known.add(alias or nt.value)
+            if not self.at_op(","):
+                break
+            self.next()
+        return self.span(A.Import(module, is_path, None, names), t)
 
     def _is_analyze(self):
         """`analyze [title:] T depends on ...`: 'depends' follows on the same line (so `analyze` stays a name)."""
