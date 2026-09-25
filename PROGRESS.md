@@ -58,3 +58,4 @@ _Last updated: 2026-09-24 23:40 UTC_
   - Done: the clean-clone install, `make check`, all examples and the benchmark re-run; AUDIT.md written.
   - Fixed so far: A5–A11, A15, A20–A22, A25, A27–A30 and most of the AUDIT §4 items.
   - Next: the remaining AUDIT items (docs claims, bootcamp output boxes, stale PROGRESS/BACKLOG) and the rest of the adversarial list. Then Phase 2 (Jupyter kernel).
+- 01:00 UTC — Phase 1 audit fixes: quadrature rewritten (A3/A44/A51/A56), A33/A34/A37/A41/A43/A55 fixed by me; checker + calculus agents fixed A16–A19, A26, A31–A32, A35, A38, A40, A42, A45–A49, A52 (merged). 1561 tests pass, 3 xfail. Agents now on A23/A24/A54 and AUDIT §2 docs.
