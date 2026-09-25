@@ -356,6 +356,10 @@ class Runtime:
             msg = (f"this equation looks stiff: rk45 has taken {int(a)} steps, held small by stability rather than "
                    f"accuracy (time scales far apart); add  using radau  after the range for an implicit solver "
                    f"made for this")
+        elif kind == 3:
+            msg = ("this integral came out as exactly 0 because the integrand wa"
+                   "s 0 at every point where it was sampled; if it is non-zero s"
+                   "omewhere narrow (a peak in a wide range), integrate over a range that fits it")
         elif kind == 7:
             msg = (f"the step is too coarse for this equation: the estimated error is {format_number(a * 100, 2)}% "
                    f"of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or "

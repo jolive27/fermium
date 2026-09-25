@@ -748,6 +748,7 @@ def _quadcore(f, mode, p, q, rtol, atol, split=False, name=-1):
         finite = abs(total) < math.inf
         goal = max(atol, rtol * abs(total)) if atol == atol else rtol * abs(total)
         if finite and (toterr <= goal or toterr <= 1e-14 * abs(total) or toterr <= QUAD_ROUND * totabs):
+            _QABS[0] += totabs
             return total
         wl, wh, wbad = panels[w][0], panels[w][1], panels[w][5]
         if wbad == wbad and panels[w][6] >= 0 and tiny_x(wl, wh) and exclude_run(wl, wh):
@@ -855,10 +856,27 @@ def _count(nf):
     return max(0, int(nf))
 
 
-def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1):
-    """Mirrors fm_quad / fm_quadcore / fm_qscan in codegen_llvm.py."""
+_QABS = [0.0]       # fm.qabs (D110)
+
+
+def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1, warn=None):
+    """Mirrors fm_quad: warn() if the result is exactly 0 because the integrand was 0 at every node (D110)."""
+    saved = _QABS[0]
+    _QABS[0] = 0.0
+    try:
+        r = _quad_in(f, a, b, rtol, atol, name)
+        mine = _QABS[0]
+    finally:
+        _QABS[0] = saved
+    if r == 0 and mine == 0 and a != b and not (atol < 0) and warn is not None:
+        warn()
+    return r
+
+
+def _quad_in(f, a, b, rtol=1e-10, atol=0.0, name=-1):
+    """Mirrors fm_quadin / fm_quadcore / fm_qscan in codegen_llvm.py."""
     if a > b:
-        return -quad(f, b, a, rtol, atol, name)
+        return -_quad_in(f, b, a, rtol, atol, name)
     if a == b:
         return 0.0
     a_inf, b_inf = abs(a) == math.inf, abs(b) == math.inf
@@ -1320,7 +1338,9 @@ class Interpreter:
         name = getattr(e, "xname", -1)
         atol = -1.0 if getattr(e, "soft", False) else \
             self.eval(e.atol, fr) if getattr(e, "atol", None) is not None else 0.0
-        return self.kernel(lambda: quad(f, lo, hi, atol=atol, name=name), getattr(e, "xfmt", -1))
+        line = self.line
+        return self.kernel(lambda: quad(f, lo, hi, atol=atol, name=name, warn=lambda: self.rt.warn(3, 0.0, line)),
+                           getattr(e, "xfmt", -1))
 
     def e_ISum(self, e, fr):
         f = self.scalar_fn(e.lam, fr)

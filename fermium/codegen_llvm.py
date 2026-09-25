@@ -458,14 +458,45 @@ class ModuleGen:
     QUAD_ULPS = 8 * 2.220446049250313e-16    # a NaN panel this narrow (relative) is one point (D45)
     QUAD_ROUND = 50 * 2.220446049250313e-16   # an error below this × ∫|f| is rounding (QUADPACK's 50 ε, D44)
 
+    def _qabs(self):
+        """fm.qabs: the ∫|g| estimates of the fm_quadcore calls of the current fm_quad call, added up."""
+        g = self.module.globals.get("fm.qabs")
+        if g is None:
+            g = ir.GlobalVariable(self.module, F64, "fm.qabs")
+            g.initializer = f64(0)
+            g.linkage = "internal"
+        return g
+
     def _k_quad(self):
+        """∫ f from a to b (fm_quadin), with a warning when the result is exactly 0 because the integrand was
+        0 at every node: a narrow peak in a wide range can hide between the nodes (D110).  fm.qabs is saved
+        and restored around the call, so an integral inside the integrand doesn't count."""
+        inner = self.kernel("fm_quadin")
+        g = self._qabs()
+        fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
+        f, env, a, bb, rtol, atol = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        saved = b.load(g)
+        b.store(f64(0), g)
+        r = b.call(inner, [f, env, a, bb, rtol, atol])
+        mine = b.load(g)
+        b.store(saved, g)
+        zero = b.and_(b.fcmp_ordered("==", r, f64(0)), b.fcmp_ordered("==", mine, f64(0)))
+        zero = b.and_(zero, b.fcmp_ordered("!=", a, bb))
+        zero = b.and_(zero, b.fcmp_unordered(">=", atol, f64(0)))     # not the quiet first try (D44)
+        with b.if_then(zero):
+            b.call(self.externs["fm_warn"], [i64(3), f64(0), b.load(self.curline), i64(-1)])
+        b.ret(r)
+        return fn
+
+    def _k_quadin(self):
         """∫ f from a to b.  Finite ranges go straight to fm_quadcore; a half-line [a, ∞) is split at
         a + L, with L the integrand's length scale (fm_qscan), into a finite piece and a tail; (-∞, ∞)
         is split at the scan's peak into two tails."""
         corek = self.kernel("fm_quadcore")
         fin = self.kernel("fm_quadfin")
         scan = self.kernel("fm_qscan")
-        fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
+        fn = self._new_fn("fm_quadin", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
         f, env, a, bb, rtol, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         nosplit = b.alloca(F64, size=2)
@@ -625,6 +656,8 @@ class ModuleGen:
         done = b.and_(finite, done)
         with b.if_then(done):
             b.call(free, [raw])
+            qabs = self._qabs()
+            b.store(b.fadd(b.load(qabs), totabs), qabs)
             b.ret(total)
         # not converged: give up with an error when out of budget, the result is not finite,
         # or the worst panel can't be split any more

@@ -344,6 +344,8 @@ void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
         fprintf(stderr, "warning: line %lld: the two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n", (long long)ln, x);
     else if (kind == 2)
         fprintf(stderr, "warning: line %lld: this equation looks stiff: rk45 has taken %lld steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n", (long long)ln, (long long)a);
+    else if (kind == 3)
+        fprintf(stderr, "warning: line %lld: this integral came out as exactly 0 because the integrand was 0 at every point where it was sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range that fits it\n", (long long)ln);
     else if (kind == 7) {
         static int64_t warned_line = -1;       /* once per solve, not once per loop pass */
         char pc[64];
