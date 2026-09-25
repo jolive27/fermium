@@ -40,6 +40,19 @@ class SolStruct(ctypes.Structure):
                 ("t", DPTR), ("y", DPTR), ("dy", DPTR)]
 
 
+_LIBC = None
+
+
+def _libc():
+    """The C library's malloc, for solutions the compiled code owns (it may realloc them like its own)."""
+    global _LIBC
+    if _LIBC is None:
+        _LIBC = ctypes.CDLL(None)
+        _LIBC.malloc.restype = c_void_p
+        _LIBC.malloc.argtypes = [ctypes.c_size_t]
+    return _LIBC
+
+
 def display_unit(dim, hint):
     if hint is not None and hint.dim == dim:
         return hint
@@ -221,6 +234,13 @@ class Runtime:
             for i, v in enumerate(vals):
                 p[i] = v
 
+        def stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out):
+            try:
+                return rt.stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out)
+            except BaseException as ex:          # nothing may escape into the compiled code
+                rt.error = getattr(ex, "message", None) or f"the stiff ODE solver failed: {ex}"
+                return 1
+
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat,
@@ -245,6 +265,8 @@ class Runtime:
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
             "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
+            "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
+                           c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
         }
         if llvm is not None:
@@ -270,6 +292,10 @@ class Runtime:
             msg = (f"the two sides of this equation agree only to rounding error near {self.fmt_value(a, fmt)}, so "
                    f"the solution found there may be meaningless (large terms cancelling?); rewrite the equation "
                    f"so they cancel on paper")
+        elif kind == 2:
+            msg = (f"this equation looks stiff: rk45 has taken {int(a)} steps, held small by stability rather than "
+                   f"accuracy (time scales far apart); add  using radau  after the range for an implicit solver "
+                   f"made for this")
         else:
             msg = "warning"
         text = "warning: " + (f"line {line}: " if line else "") + msg
@@ -298,7 +324,11 @@ class Runtime:
                    f"for (it ends at {self.fmt_value(b, fmt)})"
         if kind == 3:
             return f"the ODE solver needed too many steps (reached {self.tname(b)} = {self.fmt_value(a, fmt)}); " \
-                   f"the equation may be stiff or blow up"
+                   f"if the equation is stiff (time scales far apart, like a 164 μs half-life in a chain " \
+                   f"followed for hours), add  using radau  after the range; otherwise the solution may blow up"
+        if kind == 23:
+            return f"the stiff ODE solver needed too many steps (reached {self.tname(b)} = " \
+                   f"{self.fmt_value(a, fmt)}); the solution may blow up or oscillate very fast there"
         if kind == 4:
             return self.tables.texts[int(a)]
         if kind == 5:
@@ -348,6 +378,57 @@ class Runtime:
             return ("in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix "
                     "(positive masses on the diagonal)")
         return "runtime error"
+
+    # ------------------------------------------------------------ stiff ODEs (D42)
+    def stiff(self, guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out):
+        """`solve ... using radau` in compiled code: SciPy steps, calling the compiled right-hand side (and
+        stop condition) through fm_ode_guard; the solution goes into a malloc'ed SolStruct at *out.
+        Returns 0, 1 (a solver error: rt.error set here) or 2 (the right side stopped with its own error)."""
+        from .stiff import StiffFail, stiff_solve
+        call = ctypes.CFUNCTYPE(ctypes.c_int32, c_void_p, DPTR, c_double, DPTR, DPTR)(guard)
+        yb = (c_double * n)()
+        ob = (c_double * n)()
+
+        class _Inner(Exception):
+            pass
+
+        def rhs(f):
+            def g(t, y):
+                for j in range(n):
+                    yb[j] = y[j]
+                if call(f, env, t, yb, ob):
+                    raise _Inner()
+                return ob[:n]
+            return g
+        f = rhs(fn)
+        g = None
+        if ev:
+            gf = rhs(ev)
+
+            def g(t, y):
+                return gf(t, y)[:1]
+        try:
+            ts, ys, dys = stiff_solve(f, y0[:n], t0, t1, rtol, "bdf" if method == 1 else "radau", g, tname,
+                                      evtext)
+        except _Inner:
+            return 2
+        except StiffFail as fl:
+            self.error = self.describe_error(fl.kind, fl.a, fl.b, fmt)
+            return 1
+        except FermiumRuntimeError as ex:
+            self.error = ex.message
+            return 1
+        libc = _libc()
+        m = len(ts)
+        sp = ctypes.cast(libc.malloc(ctypes.sizeof(SolStruct)), ctypes.POINTER(SolStruct))
+        s = sp.contents
+        s.n, s.dim, s.cap = m, n, m
+        for name, vals in (("t", ts), ("y", ys), ("dy", dys)):
+            buf = libc.malloc(max(1, len(vals)) * 8)
+            ctypes.memmove(buf, (c_double * len(vals))(*vals), len(vals) * 8)
+            setattr(s, name, ctypes.cast(buf, DPTR))
+        out[0] = ctypes.cast(sp, c_void_p).value
+        return 0
 
     # ------------------------------------------------------------ data
     def load(self, i):

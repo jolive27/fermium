@@ -405,7 +405,34 @@ def _find_jump(f, t, tn, y, fa):
     return None
 
 
-def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
+STIFF_AFTER = 100_000
+
+
+def _stiff_test(state, count, h, k6, k7, y6, y7, warn):
+    """Hairer's stiffness detection for DOPRI5 (mirrors ModuleGen._emit_stiff_test): warn once, via
+    warn(count), when 15 checks in a row find h·|λ| ≈ |h|‖k7 − k6‖/‖y7 − y6‖ above 1.8."""
+    if count < STIFF_AFTER or not (count % 1000 == 0 or state[0] > 0):
+        return
+    num = den = 0.0
+    for j in range(len(y7)):
+        dk = k7[j] - k6[j]
+        dy = y7[j] - y6[j]
+        num = num + dk * dk
+        den = den + dy * dy
+    if den > 0 and h * h * num > 1.8 * 1.8 * den:
+        state[1] = 0
+        state[0] += 1
+        if state[0] >= 15:
+            state[0] = -1
+            if warn is not None:
+                warn(float(count))
+    else:
+        state[1] += 1
+        if state[1] >= 6:
+            state[0] = 0
+
+
+def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=None):
     n = len(y0)
     y = list(y0)
     sol = Sol(n)
@@ -424,6 +451,8 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
     rej, first_rej = 0, 0.0
     has_tgt, tgt_lo, tgt_hi = False, 0.0, 0.0     # a located jump in f (D40): land exactly on it
     probed = False
+    stiff = [0, 0]                         # stiff-looking steps in a row (-1: warned), then non-stiff ones
+    tmp6 = None
     while True:
         remaining = dirn * (t1 - t)
         if not (remaining > 1e-14 * abs(t1) and remaining > 0):
@@ -450,6 +479,8 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
                 tmp.append(acc)
             if s == 6:
                 ynew = tmp
+            elif s == 5:
+                tmp6 = tmp
             k[s] = f(tn if C_DP[s] == 1 else t + hs * C_DP[s], tmp)
         errsum = 0.0
         for j in range(n):
@@ -466,6 +497,8 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
         fac = min(5.0, max(0.2, fac))
         stalled = rej >= 4 and errn >= 0.5 * first_rej
         if errn <= 1.0 or stalled:
+            if stiff[0] >= 0:
+                _stiff_test(stiff, count, hs, k[5], k[6], tmp6, ynew, warn)
             if event is not None and event.check(f, sol, t, y, k[0], tn, ynew, k[6], k):
                 return sol
             t = tn
@@ -502,6 +535,18 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
                         has_tgt, tgt_lo, tgt_hi = True, lo, hi
     if event is not None:
         raise _Fail(ERR_NO_EVENT, t1, float(evtext))
+    return sol
+
+
+def _stiff(f, y0, t0, t1, rtol, method, ev, tname, evtext):
+    """`solve ... using radau` / `using bdf`: the same SciPy stepping as the compiled code (D42)."""
+    from .runtime.stiff import StiffFail, stiff_solve
+    try:
+        ts, ys, dys = stiff_solve(f, y0, t0, t1, rtol, method, ev, float(tname), float(evtext))
+    except StiffFail as fl:
+        raise _Fail(fl.kind, fl.a, fl.b) from None
+    sol = Sol(len(y0))
+    sol.t, sol.y, sol.dy = list(ts), list(ys), list(dys)
     return sol
 
 
@@ -887,12 +932,15 @@ class Interpreter:
         ev = self.ode_rhs(s.event, fr) if getattr(s, "event", None) is not None else None
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
         tname, evtext, fmt = getattr(s, "tname", -1), getattr(s, "evtext", -1), getattr(s, "tfmt", -1)
-        if s.method == "rk4":
+        if s.method in ("radau", "bdf"):
+            sol = self.kernel(lambda: _stiff(f, y0, t0, t1, s.rtol, s.method, ev, tname, evtext), fmt)
+        elif s.method == "rk4":
             h0 = self.eval(s.step, fr)
             sol = self.kernel(lambda: rk4(f, y0, t0, t1, h0, ev, tname, evtext), fmt)
         else:
-            sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False)),
-                              fmt)
+            line = self.line
+            sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False),
+                                           lambda c: self.rt.warn(2, c, line, -1)), fmt)
         fr.set(s.sol_sym, sol)
 
     def s_SFit(self, s, fr):

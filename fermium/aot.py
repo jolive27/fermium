@@ -158,6 +158,11 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
     ck = Checker(diags, base_dir)
     mod = ck.check_program(prog)
     t = mod.tables
+    if t.stiff:          # the implicit solvers are SciPy's, and executables don't carry Python (D42)
+        line, method = t.stiff[0]
+        raise FermiumError(f"fermium build can't compile  using {method}  yet: the stiff solvers run in Python "
+                           f"(SciPy); use  fermium run  for this program", line,
+                           hint="or, if the equation isn't stiff, leave out  using …  to use rk45")
     finalize_tables(t, ck.U)
     mg = ModuleGen()
     mg.emit_main(mod.main, "fm_run")

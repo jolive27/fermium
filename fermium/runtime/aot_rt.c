@@ -220,7 +220,7 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
                      x, (long long)b, (long long)b == 1 ? "" : "s", (long long)b);
         break;
     case 2: snprintf(err_msg, sizeof err_msg, "asked for the solution at %s%s, outside the range it was solved for (it ends at %s)", x, fmt >= 0 ? "" : " (SI units)", y); break;
-    case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached %s = %s%s); the equation may be stiff or blow up", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
+    case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached %s = %s%s); if the equation is stiff (time scales far apart, like a 164 \xce\xbcs half-life in a chain followed for hours), add  using radau  after the range; otherwise the solution may blow up", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
     case 4: snprintf(err_msg, sizeof err_msg, "%s", fm_texts[(int64_t)a]); break;
     case 5: snprintf(err_msg, sizeof err_msg, "these two lists have different lengths (%s and %s)", x, y); break;
     case 6: snprintf(err_msg, sizeof err_msg, "this list is empty"); break;
@@ -258,6 +258,8 @@ void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
     }
     if (kind == 1)
         fprintf(stderr, "warning: line %lld: the two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n", (long long)ln, x);
+    else if (kind == 2)
+        fprintf(stderr, "warning: line %lld: this equation looks stiff: rk45 has taken %lld steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n", (long long)ln, (long long)a);
 }
 
 static int cmp_double(const void *a, const void *b) {

@@ -600,6 +600,31 @@ class ModuleGen:
         b.store(dp, b.gep(sp, [I32(0), I32(5)]))
         return sp
 
+    def _k_ode_guard(self):
+        """int fm_ode_guard(f, env, t, y, out): call a compiled right-hand side from Python (the stiff solver,
+        D42).  A run-time error inside it (fm_error + longjmp) must not unwind through Python's frames, so
+        the guard saves the program's jump buffer, sets its own, and restores it: 0 = ok, 1 = the right
+        side stopped with an error (fm_error has already set the message and its line)."""
+        fn = self._new_fn("fm_ode_guard", I32, [I8P, F64P, F64, F64P, F64P], inline=False)
+        fn.attributes.add("noinline")
+        f, env, t, y, out = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        words = 1024 // 8
+        saved = b.alloca(ir.ArrayType(I64, words))
+        buf = b.bitcast(self.jmpbuf, I64.as_pointer())
+        sv = b.gep(saved, [I32(0), I32(0)])
+        with lp.range(i64(0), i64(words)) as k:
+            b.store(b.load(b.gep(buf, [k])), b.gep(sv, [k]))
+        r = b.call(self.externs["_setjmp"], [b.bitcast(self.jmpbuf, I8P)])
+        ok = b.icmp_signed("==", r, ir.Constant(I32, 0))
+        with b.if_then(ok):
+            b.call(b.bitcast(f, ODE_FN.as_pointer()), [t, y, out, env])
+        with lp.range(i64(0), i64(words)) as k:
+            b.store(b.load(b.gep(sv, [k])), b.gep(buf, [k]))
+        b.ret(b.select(ok, ir.Constant(I32, 0), ir.Constant(I32, 1)))
+        return fn
+
     def _k_sol_push(self):
         # append (t, y[0..n), dy[0..n)) to a solution, growing its arrays
         fn = self._new_fn("fm_sol_push", VOID, [SOLP, F64, F64P, F64P], inline=True)
@@ -641,6 +666,45 @@ class ModuleGen:
         r4 = b.fsub(b.fsub(r2, b.fmul(h, db)), r3)
         th1 = b.fsub(f64(1.0), th)
         return b.fadd(ya, b.fmul(th, b.fadd(r2, b.fmul(th1, b.fadd(r3, b.fmul(th, b.fadd(r4, b.fmul(th1, r5))))))))
+
+    STIFF_AFTER = 100_000     # the stiffness test starts after this many steps (a slow solve)
+
+    def _emit_stiff_test(self, b, lp, n, cnt, h, k6, k7, y6, y7, stiffn, nonstiff):
+        """interp._stiff_test: Hairer's stiffness detection for DOPRI5, h·|λ| ≈ h‖k7 − k6‖/‖y7 − y6‖ (stages 6
+        and 7 are both at t + h).  Every 1000th step of a long solve, and each step while a run of stiff-looking
+        steps lasts; after 15 in a row with h·|λ| > 1.8, warn once that `using radau` fits (D42).  RK45's
+        stability limit is 3.3, and this controller settles between 2 and 3.22 on a stiff problem (Hairer's 3.25
+        is for DOPRI5's own controller); accuracy-limited steps give under 0.4 at 10⁻⁶ (single steps up to 2.4
+        at 10⁻³).  stiffn = -1 once warned."""
+        run = b.load(stiffn)
+        due = b.and_(b.icmp_signed(">=", cnt, i64(self.STIFF_AFTER)),
+                     b.or_(b.icmp_signed("==", b.srem(cnt, i64(1000)), i64(0)), b.icmp_signed(">", run, i64(0))))
+        with b.if_then(b.and_(due, b.icmp_signed(">=", run, i64(0))), likely=False):
+            num = b.alloca(F64)
+            den = b.alloca(F64)
+            b.store(f64(0), num)
+            b.store(f64(0), den)
+            with lp.range(i64(0), n) as j:
+                dk = b.fsub(b.load(b.gep(k7, [j])), b.load(b.gep(k6, [j])))
+                dy = b.fsub(b.load(b.gep(y7, [j])), b.load(b.gep(y6, [j])))
+                b.store(b.fadd(b.load(num), b.fmul(dk, dk)), num)
+                b.store(b.fadd(b.load(den), b.fmul(dy, dy)), den)
+            hl2 = b.fmul(b.fmul(h, h), b.load(num))
+            stiff = b.and_(b.fcmp_ordered(">", b.load(den), f64(0)),
+                           b.fcmp_ordered(">", hl2, b.fmul(f64(1.8 * 1.8), b.load(den))))
+            with b.if_else(stiff) as (yes, no):
+                with yes:
+                    b.store(i64(0), nonstiff)
+                    r = b.add(b.load(stiffn), i64(1))
+                    b.store(r, stiffn)
+                    with b.if_then(b.icmp_signed(">=", r, i64(15))):
+                        b.call(self.externs["fm_warn"], [i64(2), b.sitofp(cnt, F64), b.load(self.curline), i64(-1)])
+                        b.store(i64(-1), stiffn)
+                with no:
+                    nn = b.add(b.load(nonstiff), i64(1))
+                    b.store(nn, nonstiff)
+                    with b.if_then(b.icmp_signed(">=", nn, i64(6))):
+                        b.store(i64(0), stiffn)
 
     def _emit_nan_check(self, b, lp, n, k, t, tname):
         """interp._start: stop if the derivative at the start is NaN or infinite (#32)."""
@@ -1006,6 +1070,10 @@ class ModuleGen:
         b.store(t0, tv)
         b.store(b.fmul(aspan, f64(1e-4)), hv)
         b.store(i64(0), nsteps)
+        stiffn = b.alloca(I64)         # stiffness test (Hairer's DOPRI5): stiff-looking steps in a row
+        nonstiff = b.alloca(I64)
+        b.store(i64(0), stiffn)
+        b.store(i64(0), nonstiff)
         b.call(f, [t0, y, k[0], env])
         self._emit_nan_check(b, lp, n, k[0], t0, tname)
         self._emit_first_step(b, lp, f, env, n, y, k, tmp, t0, dirn, aspan, rtol, hv)
@@ -1089,6 +1157,7 @@ class ModuleGen:
         accept = b.or_(b.fcmp_ordered("<=", errn, f64(1.0)), stalled)
         with b.if_else(accept) as (yes, no):
             with yes:
+                self._emit_stiff_test(b, lp, n, cnt, h, k[5], k[6], tmp, ynew, stiffn, nonstiff)
                 with b.if_then(has_ev):
                     self._emit_event_check(b, lp, f, ev, env, n, sp, evsgn, gbuf, ys, kbuf, r5, t, y, k[0], tn,
                                            ynew, k[6], ks=k)
@@ -1688,7 +1757,27 @@ class FuncGen:
         ev = self.mg.lambda_for(s.event) if getattr(s, "event", None) is not None else \
             ir.Constant(ODE_FN.as_pointer(), None)
         extra = [ev, f64(getattr(s, "tname", -1)), f64(getattr(s, "evtext", -1))]
-        if s.method == "rk4":
+        if s.method in ("radau", "bdf"):
+            # implicit methods for stiff equations run in Python (SciPy, D42) and call the right-hand side
+            # back through fm_ode_guard; status 1: the solver stopped (message set), 2: the right side did
+            fmt = getattr(s, "tfmt", -1)
+            self.b.store(i64(fmt), self.mg.errfmt)
+            self.mark_line()
+            guard = self.mg.kernel("fm_ode_guard")
+            stiff = self.mg.extern("fm_stiff", I64, [I8P, I8P, F64P, I64, F64P, F64, F64, F64, I8P, I64, F64, F64,
+                                                     I64, SOLP.as_pointer()])
+            out = self.alloca(SOLP)
+            evp = b.bitcast(ev, I8P)
+            status = b.call(stiff, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, i64(n), y0p, t0, t1,
+                                    f64(s.rtol), evp, i64(1 if s.method == "bdf" else 0), extra[1], extra[2],
+                                    i64(fmt), out])
+            with b.if_then(b.icmp_signed("!=", status, i64(0)), likely=False):
+                with b.if_then(b.icmp_signed("==", status, i64(2))):
+                    b.call(self.mg.externs["longjmp"], [b.bitcast(self.mg.jmpbuf, I8P), ir.Constant(I32, 1)])
+                    b.unreachable()
+                self.fail(ERR_PENDING)
+            sol = b.load(out)
+        elif s.method == "rk4":
             h0 = self.expr(s.step)
             self.b.store(i64(getattr(s, "tfmt", -1)), self.mg.errfmt)
             self.mark_line()

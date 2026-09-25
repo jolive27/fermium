@@ -23,7 +23,7 @@ def packages_needed(code):
     pkgs = []
     if re.search(r"\bplot\b", code):
         pkgs.append("matplotlib")
-    if re.search(r"\bfit\b", code):
+    if re.search(r"\bfit\b|\busing\s+(radau|bdf)\b", code):
         pkgs.append("scipy")
     return pkgs
 
