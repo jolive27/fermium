@@ -32,7 +32,8 @@ def reference_programs():
         # `using radau` runs SciPy, so fermium build refuses it (D42; tests/test_stiff.py checks the error)
         # eigenvalue problems (lowest N) and PDEs run in Python too (D82, D83; test_m3_*.py check the error)
         if not re.search(r"\b(plot|fit|load)\b", m) and not re.search(r"\busing\s+(radau|bdf)\b", m) and \
-                not re.search(r"\blowest\s+\d", m) and not re.search(r"solve\s+[^\n]*∂", m):
+                not re.search(r"\blowest\s+\d", m) and not re.search(r"solve\s+[^\n]*∂", m) and \
+                "±" not in m:        # uncertainties: fermium build refuses them (D122; test_uncertainty.py)
             progs.append(pytest.param(m, id=f"reference#{i + 1}"))
     return progs
 

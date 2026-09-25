@@ -59,6 +59,8 @@ def compile_only(src, base_dir):
     ck = Checker(d, base_dir)
     mod = ck.check_program(prog)
     finalize_tables(mod.tables, ck.U)
+    if mod.uses_unc:          # uncertainties (±) run in the interpreter, never in LLVM (D122)
+        return ""
     mg = ModuleGen()
     mg.emit_main(mod.main, "fm_run")
     text = str(mg.module)
