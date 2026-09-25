@@ -1,0 +1,40 @@
+# Special relativity 03 — Threshold energies from E² = (pc)² + (mc²)²
+#
+# (Taylor & Wheeler, "Spacetime Physics", Ch. 7 (momenergy); Griffiths,
+# "Introduction to Elementary Particles", Problem 3.?.)  The invariant mass of a
+# system, M c² = √(E_tot² − (p_tot c)²), is the same in every frame.  At
+# threshold the products are made at rest in the centre-of-momentum frame, so
+# M equals the sum of the product masses.
+#
+#  (a) The Bevatron (1955) made antiprotons by  p + p → p + p + p + p̄  with a
+#      proton beam on a fixed hydrogen target.  What beam kinetic energy is
+#      needed?  (Exact: K = 6 m_p c².)  Find it by solving the invariant-mass
+#      condition for the beam energy, using E² = (pc)² + (mc²)² for the beam.
+#  (b) Pion photoproduction γ + p → p + π⁰ on protons at rest.
+#      (Exact: E_γ = ((m_p + m_π)² − m_p²) c² / 2 m_p.)
+#  (c) The GZK cutoff: a cosmic-ray proton meets a head-on CMB photon of
+#      energy 6.4×10⁻⁴ eV and makes a Δ⁺(1232).  Minimum proton energy?
+#      (Exact for E_p ≫ m_p c²: E_p = (m_Δ² − m_p²) c⁴ / 4 E_γ.)
+
+m_pi = 134.9768 MeV/c²       # (m_π can't be used as a name: see FRICTION.md)
+m_Δ = 1232 MeV/c²
+mp = m_p c²                   # proton rest energy
+
+# (a) beam of total energy E on a proton at rest
+p_beam(E) = √(E² - mp²) / c
+M_inv(E) = √((E + mp)² - (p_beam(E) c)²) / c²
+solve M_inv(E) = 4 m_p for E from mp to 100 GeV
+print "(a) beam kinetic energy =", E - mp in GeV to 10 digits, "  6 m_p c² =", 6 mp in GeV to 10 digits
+print "    beam momentum =", p_beam(E) in GeV/c to 10 digits
+
+# (b) photon (E = pc) on a proton at rest
+solve √((Eγ + mp)² - Eγ²) = (m_p + m_pi) c² for Eγ from 0 MeV to 1 GeV
+print "(b) photon threshold =", Eγ in MeV to 10 digits, "  formula", ((m_p + m_pi)² - m_p²) c² / (2 m_p) in MeV to 10 digits
+
+# (c) head-on collision: the momenta subtract.  Written as
+# (E + E_γ)² − (pc − E_γ)² the two squares (~10⁴⁰ eV²) cancel to 1 part in 10²²
+# and the answer is noise, so expand it first:  s = (m_p c²)² + 2 E_γ (E + pc).
+E_cmb = 6.4e-4 eV
+p_p(E) = √(E² - mp²) / c
+solve mp² + 2 E_cmb (E_p + p_p(E_p) c) = (m_Δ c²)² for E_p from mp to 1e22 eV
+print "(c) GZK threshold =", E_p in eV to 6 digits, "  approx", (m_Δ² - m_p²) c⁴ / (4 E_cmb) in eV to 6 digits
