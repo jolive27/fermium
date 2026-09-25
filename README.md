@@ -26,6 +26,17 @@ Fermium is a small programming language for physicists.
 - **Errors are one line in physics terms**, with a caret and a hint.
 - **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
 
+**What else is in the box** (each item is tested; details in the [reference](docs/reference.md)):
+- **Vectors, matrices and ∇:** `<1 m, 2 m, 0 m>`, `r × v`, `grad(φ)`, `div`, `curl`, `laplacian`, eigenvalues, and 3-D vector ODEs.
+- **Complex numbers:** `(3 + 4i) Ω`, `exp(𝑖 π)`, complex ODEs such as `1i ħ ψ' = E ψ`.
+- **Uncertainties:** `L = 1.000 ± 0.002 m` propagates with correlations (`x - x` is `0 ± 0`), plus `propagate montecarlo`, uncertain fit parameters and error bars.
+- **Serious numerics:** stiff solvers (`using radau`), eigenvalue problems (`solve -ħ²/(2 m_e) * ψ'' + V(x) ψ = E ψ … lowest 3`), 1-D PDEs (heat, wave, Schrödinger; animated GIFs), FFT, seeded random numbers and Monte Carlo, root finding.
+- **Natural units:** `units natural(ħ = c = 1)`, `units nuclear`, `units astro`. **Dimensional analysis:** `analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]` gives T ∝ √(L/g).
+- **Modules and a standard library:** `import mechanics`, `from nuclear import semf_binding`, with `fermium.toml` ([stdlib](docs/stdlib.md)).
+- **Tools:** REPL, Jupyter kernel, language server (hover shows units), VS Code extension, browser playground, and `fermium build` for standalone executables.
+- **Research reproductions** in [research/](research/README.md): the SEMF fitted to AME2020, the neutron-star mass–radius relation (TOV), the Chandrasekhar mass, the U-238 chain, hydrogen levels, the age of the universe (Planck 2018), Rutherford scattering by Monte Carlo, the pp/CNO crossover. Each is compared with published numbers.
+- **Printing:** a result shows as many significant figures as its inputs justify, and 3 when that is unspecified (`print x to 6 digits` for more). This is display only.
+
 > Status: a first version built in one night. See [PROGRESS.md](PROGRESS.md) for what works, what's partial, and the known issues.
 
 ## Install
@@ -166,6 +177,8 @@ Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` down
 - [Design decisions](DECISIONS.md): why the language is the way it is
 - [Bootcamp](bootcamp/README.md): a course for people who have never programmed
 - [Cheat sheet](bootcamp/CHEATSHEET.md)
+- [Standard library](docs/stdlib.md) and [uncertainties](docs/uncertainties.md)
+- [Research reproductions](research/README.md), [textbook gauntlet](gauntlet/FRICTION.md), [red team log](REDTEAM.md)
 - [VS Code extension](editors/vscode/README.md)
 
 ## Development
