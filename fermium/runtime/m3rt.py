@@ -37,6 +37,7 @@ def solstruct(ts, ys, dys, dim):
     sp = ctypes.cast(libc.malloc(ctypes.sizeof(SolStruct)), ctypes.POINTER(SolStruct))
     s = sp.contents
     s.n, s.dim, s.cap = m, dim, m
+    s.rhs, s.env = None, None          # no right-hand side: x'(t) comes from the stored dy (D46)
     for name, vals in (("t", ts), ("y", ys), ("dy", dys)):
         buf = libc.malloc(max(1, len(vals)) * 8)
         ctypes.memmove(buf, (c_double * len(vals))(*vals), len(vals) * 8)
