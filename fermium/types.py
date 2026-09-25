@@ -233,6 +233,23 @@ class MatTy(Ty):
         return f"Mat{self.r}x{self.c}[{self.dim}]"
 
 
+class ComplexTy(VecTy):
+    """A complex quantity z = x + iy whose two parts share one dimension: (3 + 4i) Ω (D90).
+
+    Stored like a 2-vector (an LLVM <2 x double>: real part, imaginary part), so storage, captures,
+    ODE state slots and printing reuse the vector machinery; the checker gives it complex arithmetic."""
+    kind = "cplx"
+
+    def __init__(self, dim):
+        super().__init__(dim, 2)
+
+    def key(self):
+        return NumTy(self.dim).key() + ("cplx",)
+
+    def __repr__(self):
+        return f"Complex[{self.dim}]"
+
+
 class TextListTy(Ty):
     """A list of text values, like ["H-1", "He-4"] (stored as text ids)."""
     kind = "textlist"
@@ -280,6 +297,8 @@ def type_desc(t: Ty, U: Unifier) -> str:
         return U.describe(t.dim)
     if isinstance(t, ListTy):
         return f"a list of {U.describe(t.dim)}"
+    if isinstance(t, ComplexTy):
+        return f"a complex number of {U.describe(t.dim)}"
     if isinstance(t, VecTy):
         if t.mixed:
             return f"a {t.n}-vector of ({', '.join(U.describe(d) for d in t.dims)})"

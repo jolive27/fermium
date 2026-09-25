@@ -14,11 +14,12 @@ from fractions import Fraction
 
 from . import ast as A
 from . import calculus as C
+from . import cplx
 from . import ir as I
 from .constants import all_constants
 from .errors import FermiumError, Diagnostics
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
-                    VOID, Ty,
+                    VOID, Ty, ComplexTy,
                     type_desc)
 from .linalg import transpose_index
 from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
@@ -35,6 +36,7 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
     "trace", "angle", "row", "column",
 } | SPECIAL2 | SPECIAL1
+BUILTINS.update(cplx.COMPLEX_FUNCS)       # re, im, conj, arg, complex, polar, cis (D90)
 
 
 class MixedHint(tuple):
@@ -195,6 +197,8 @@ class Checker(C.DiffContext):
         self.root = Scope(kind="root")
         for name, (val, unit, desc) in all_constants().items():
             self.root.names[name] = ConstInfo(name, val, unit, desc)
+        # the imaginary unit 𝑖 (also written as the literal 1i); use_binding gives it its complex value (D90)
+        self.root.names["𝑖"] = ConstInfo("𝑖", math.nan, parse_unit_string("1"), "the imaginary unit, 𝑖² = -1")
         self.globals = Scope(self.root, kind="global")
         self.all_funcs = []
         self.all_lambdas = []
@@ -462,8 +466,11 @@ class Checker(C.DiffContext):
         if owned:
             sym = b
             if type(sym.ty) is not type(v.ty):
+                hint = "use a different name for the new value"
+                if isinstance(sym.ty, NumTy) and isinstance(v.ty, ComplexTy):
+                    hint = f"to let {name} become complex, start it as a complex number, e.g.  {name} = 0i"
                 raise self.err(f"{name} holds {type_desc(sym.ty, self.U)}; it can't now hold "
-                               f"{type_desc(v.ty, self.U)}", node, hint="use a different name for the new value")
+                               f"{type_desc(v.ty, self.U)}", node, hint=hint)
             if isinstance(sym.ty, VecTy) and sym.ty.n != v.ty.n:
                 raise self.err(f"{name} holds a {sym.ty.n}-vector; it can't now hold a {v.ty.n}-vector", node)
             if isinstance(sym.ty, MatTy) and (sym.ty.r, sym.ty.c) != (v.ty.r, v.ty.c):
@@ -570,6 +577,8 @@ class Checker(C.DiffContext):
                 items.append(("num", v, self.fmt(v)))
             elif isinstance(v.ty, ListTy):
                 items.append(("list", v, self.fmt(v)))
+            elif isinstance(v.ty, ComplexTy):
+                items.append(("cplx", v, self.fmt(v)))
             elif isinstance(v.ty, VecTy) and v.ty.mixed:
                 items.append(("mvec", v, self.fmt_components(v)))
             elif isinstance(v.ty, VecTy):
@@ -927,6 +936,8 @@ class Checker(C.DiffContext):
         u = self.resolve_unit(e.unit)
         v = self.expr(e.value, ctx)
         self.need_numlike(v, e.value, allow_vec=True)
+        if isinstance(v.ty, ComplexTy):
+            return cplx.quantity(self, v, u, e)
         if isinstance(v.ty, VecTy) and v.ty.mixed:
             raise self.err("this vector already has units (a different unit on each component)", e,
                            hint="write the unit on each component, like <1 m, 2 m/s>")
@@ -996,6 +1007,8 @@ class Checker(C.DiffContext):
             self.__dict__.setdefault("used_consts", set()).add(name)
             if name == "∞":
                 r = I.IConst(math.inf, NumTy(DExpr.fresh("∞")))
+            elif name == "𝑖" and b.desc.startswith("the imaginary unit"):
+                r = I.IVec([I.IConst(0, NumTy(DIMLESS)), I.IConst(1, NumTy(DIMLESS))], ComplexTy(DIMLESS))
             else:
                 r = I.IConst(b.value, NumTy(b.unit.dim))
                 r.hint = b.unit if b.unit.name not in ("1",) else None
@@ -1154,6 +1167,8 @@ class Checker(C.DiffContext):
                                 "G": ("the gravitational constant G", ("gauss", "gauss"))}
 
     def arith(self, op, a, b, e):
+        if isinstance(a.ty, ComplexTy) or isinstance(b.ty, ComplexTy):
+            return cplx.arith(self, op, a, b, e)
         if isinstance(a.ty, MatTy) or isinstance(b.ty, MatTy):
             return self.mat_arith(op, a, b, e)
         if isinstance(a.ty, VecTy) or isinstance(b.ty, VecTy):
@@ -1524,6 +1539,8 @@ class Checker(C.DiffContext):
                 raise self.err("e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium", e.left,
                                hint="for the exponential function write exp(x)")
         a = self.expr(e.left, ctx)
+        if cplx.is_c(a):
+            return cplx.power(self, e, a, ctx)
         self.need_numlike(a, e.left, "the base of a power")
         p = self.const_value(e.right)
         mk = ListTy if isinstance(a.ty, ListTy) else NumTy
@@ -1534,6 +1551,8 @@ class Checker(C.DiffContext):
                 r.hint = a.hint
             return r
         b = self.expr(e.right, ctx)
+        if cplx.is_c(b):
+            return cplx.power(self, e, a, ctx, b)       # 2^(1i): a complex exponent
         self.need_num(b, e.right, "the exponent")
         if not self.U.unify(b.ty.dim, DIMLESS):
             raise self.err(f"an exponent must be a plain number, but this is {self.desc(b.ty.dim)}", e.right)
@@ -1566,6 +1585,8 @@ class Checker(C.DiffContext):
         b = self.expr(e.right, ctx)
         if isinstance(a.ty, BoolTy) and isinstance(b.ty, BoolTy) and e.op in ("==", "!="):
             return I.ICmp(e.op, a, b, BOOL)
+        if cplx.is_c(a) or cplx.is_c(b):
+            return cplx.compare(self, e.op, a, b, e)
         self.need_num(a, e.left, "each side of a comparison")
         self.need_num(b, e.right, "each side of a comparison")
         if not self.U.unify(a.ty.dim, b.ty.dim):
@@ -1582,6 +1603,10 @@ class Checker(C.DiffContext):
 
     def e_Sqrt(self, e, ctx):
         a = self.expr(e.operand, ctx)
+        if cplx.is_c(a):
+            if e.root != 2:
+                raise self.err("∛ of a complex number isn't supported; write z^(1/3) for the principal root", e)
+            return cplx.builtin(self, "sqrt", [a], A.Call(A.Name("sqrt"), [e.operand]).at(e))
         self.need_numlike(a, e.operand, "the value under the root")
         mk = ListTy if isinstance(a.ty, ListTy) else NumTy
         r = I.IPowC(a, 0.5 if e.root == 2 else 1 / 3, mk(a.ty.dim ** Fraction(1, e.root)))
@@ -1590,6 +1615,8 @@ class Checker(C.DiffContext):
 
     def e_Abs(self, e, ctx):
         a = self.expr(e.operand, ctx)
+        if cplx.is_c(a):
+            return cplx.builtin(self, "abs", [a], A.Call(A.Name("abs"), [e.operand]).at(e))
         self.need_numlike(a, e.operand, allow_vec=True)
         if isinstance(a.ty, VecTy):
             r = I.IBuiltin("norm", [a], NumTy(self.shared_dim(a, "|v|", e)))
@@ -1756,6 +1783,11 @@ class Checker(C.DiffContext):
                 return I.ISolList(v.sol_sym and self.var_ref(v.sol_sym, ctx, e), v.comp, "t", ListTy(v.tdim))
             if e.name in ("values", "v"):
                 return self.sol_values(v, e)
+        if cplx.is_c(t) or (isinstance(t, I.Expr) and isinstance(t.ty, NumTy) and e.name in ("re", "im")):
+            if e.name not in ("re", "im"):
+                raise self.err(f"a complex number's parts are .re and .im (not .{e.name})", e,
+                               hint="or write re(z) and im(z)")
+            return cplx.builtin(self, e.name, [t], A.Call(A.Name(e.name), [e.target]).at(e))
         if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
             if e.name not in ("x", "y", "z"):
                 raise self.err(f"a vector's components are .x, .y and .z (not .{e.name})", e)
@@ -1775,6 +1807,9 @@ class Checker(C.DiffContext):
         raise self.err(f"the data has no column called {e.name} (columns: {names})", e)
 
     def sol_values(self, v: SolView, node=None):
+        if getattr(v, "cplx", False):
+            raise self.err(f"{v.name} is complex, and lists of complex numbers aren't supported yet", node,
+                           hint=f"use values at single times, like re({v.name}(t)) or |{v.name}(t)|")
         if v.n > 1:
             raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", node)
         s = self._ivar(v.sol_sym)
@@ -1881,6 +1916,9 @@ class Checker(C.DiffContext):
                 r.hint, r.sf = inner.hint, inner.sf
                 return r
         t = self.expr(e.target, ctx, allow_func=True)
+        if cplx.is_c(t):
+            raise self.err("a complex number can't be indexed with [...]", e,
+                           hint="its parts are re(z) and im(z) (or z.re and z.im)")
         if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
             if not 2 <= t.ty.c <= 4:
                 raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
@@ -1913,7 +1951,7 @@ class Checker(C.DiffContext):
                 r = I.IIndex(vals, self.index_expr(e.index, vals, ctx), NumTy(v.dim), e.line)
                 r.hint = getattr(v, "hint", None)
                 comps.append(r)
-            r = I.IVec(comps, VecTy(v.dim, v.n))
+            r = I.IVec(comps, ComplexTy(v.dim) if getattr(v, "cplx", False) else VecTy(v.dim, v.n))
             r.hint = getattr(v, "hint", None)
             return r
         if isinstance(t, SolRef):
@@ -2025,6 +2063,8 @@ class Checker(C.DiffContext):
                 sub = SolView(view.sol_sym, view.comp + k, view.top + k, view.dim, view.tdim, view.tname, view.name)
                 sub.stride = view.stride      # so r''(t) of a vector solution uses the ODE's right side (A19)
                 comps.append(self._sol_eval_node(sub, sol, t, e))
+            if getattr(view, "cplx", False):
+                return I.IVec(comps, ComplexTy(view.dim))
             return I.IVec(comps, VecTy(view.dim, view.n))
         if view.comp <= view.top:
             r = I.ISolEval(sol, view.comp, t, False, NumTy(view.dim))
@@ -2170,7 +2210,7 @@ class Checker(C.DiffContext):
         for a in args:
             if isinstance(a, FuncRef):
                 keyparts.append(("fn", a.info))       # one instance per passed function (D43)
-            elif isinstance(a.ty, (NumTy, ListTy)):
+            elif isinstance(a.ty, (NumTy, ListTy, ComplexTy)):
                 d = self.U.norm(a.ty.dim)
                 if not d.concrete:
                     concrete = False
@@ -2344,6 +2384,8 @@ class Checker(C.DiffContext):
                 raise self.err(f"{v.info.display_name} is a function; give it an argument", a)
             args.append(v)
         n = len(args)
+        if name in cplx.COMPLEX_FUNCS or any(cplx.is_c(a) for a in args):
+            return cplx.builtin(self, name, args, e)
 
         def need(k):
             if n != k:
@@ -2664,6 +2706,7 @@ class Checker(C.DiffContext):
             nv = SolView(v.sol_sym, v.comp + e.order * v.stride, v.top, v.dim / (DExpr.of(v.tdim) ** e.order),
                          v.tdim, v.tname, v.name + "'" * e.order)
             nv.n, nv.stride = v.n, v.stride
+            nv.cplx = getattr(v, "cplx", False)
             nv.sf = getattr(v, "sf", None)
             nv.thint = getattr(v, "thint", None)
             k = (v.comp - v.top) // v.stride + e.order + (v.top // v.stride if False else 0)
@@ -2907,6 +2950,12 @@ class Checker(C.DiffContext):
         scope.names[e.var] = xs
         marks = (len(self.new_lambdas), len(self.all_lambdas))
         body = self.expr(e.integrand, lctx)
+        if isinstance(body.ty, ComplexTy) and not getattr(e, "_component", False):
+            # a complex integrand: one integral for each part (D93); drop the lambdas made on the way
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return cplx.component_integral(self, e.integrand, ctx,
+                                           lambda part: A.Integral(part, e.var, e.lo, e.hi).at(e))
         if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
             # a vector integrand: one integral per component (D35); drop the lambdas made on the way
             del self.new_lambdas[marks[0]:]
@@ -2953,6 +3002,10 @@ class Checker(C.DiffContext):
         scope.names[e.var] = ks
         marks = (len(self.new_lambdas), len(self.all_lambdas))
         body = self.expr(e.body, lctx)
+        if isinstance(body.ty, ComplexTy) and not getattr(e, "_component", False):
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return cplx.component_integral(self, e.body, ctx, lambda part: A.Sum(part, e.var, e.lo, e.hi, e.step).at(e))
         if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
             del self.new_lambdas[marks[0]:]
             del self.all_lambdas[marks[1]:]

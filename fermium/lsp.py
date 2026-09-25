@@ -21,7 +21,7 @@ from .lexer import KEYWORDS
 from .parser import parse
 from .symbols import LATEX
 from . import ir as I
-from .types import BoolTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
+from .types import BoolTy, ComplexTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
 from .units import lookup_unit, preferred_unit
 
 WORD = re.compile(r"[A-Za-z_\u0370-\u03ff\u1f00-\u1fffħ][A-Za-z0-9_\u0370-\u03ff\u1f00-\u1fffħ₀-₉]*")
@@ -100,6 +100,9 @@ def _type_text(ck: Checker, ty, hint=None):
         return s
     if isinstance(ty, ListTy):
         return "a list of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
+    if isinstance(ty, ComplexTy):
+        return "a complex number of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number (no units)",
+                                                                                   "plain numbers")
     if isinstance(ty, VecTy) and getattr(ty, "mixed", False):
         return f"a {ty.n}-D vector of (" + ", ".join(ck.desc(ck.U.resolve(d)) for d in ty.dims) + ")"
     if isinstance(ty, VecTy):

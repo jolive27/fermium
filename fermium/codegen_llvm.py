@@ -1727,6 +1727,10 @@ class FuncGen:
                     b.call(ex["fm_print_mat"], [i64(fid), p, i64(payload.ty.r), i64(payload.ty.c)])
                 else:
                     b.call(ex["fm_print_" + kind], [i64(fid), p, i64(n)])
+            elif kind == "cplx":
+                v = self.expr(payload)
+                f = self.mg.extern("fm_print_cplx", VOID, [I64, F64, F64])
+                b.call(f, [i64(fid), b.extract_element(v, I32(0)), b.extract_element(v, I32(1))])
             elif kind == "bool":
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
@@ -2325,6 +2329,9 @@ class FuncGen:
             r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
             return b.fmul(sg, r)
         args = [self.expr(a) for a in e.args]
+        if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
+            from . import cplx
+            return cplx.ll_builtin(self, e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):

@@ -860,6 +860,8 @@ class Interpreter:
                 py["print_" + kind](fid, list(v), len(v))
             elif kind == "mat":
                 py["print_mat"](fid, list(self.eval(payload, fr)), payload.ty.r, payload.ty.c)
+            elif kind == "cplx":
+                py["print_cplx"](fid, *self.eval(payload, fr))
             elif kind == "bool":
                 py["print_bool"](1 if self.eval(payload, fr) else 0)
             elif kind in ("text", "data"):
@@ -1272,6 +1274,9 @@ class Interpreter:
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
             return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
         args = [self.eval(a, fr) for a in e.args]
+        if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
+            from . import cplx
+            return cplx.py_builtin(e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
