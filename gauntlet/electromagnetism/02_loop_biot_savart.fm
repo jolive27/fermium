@@ -1,0 +1,40 @@
+# Electromagnetism 02 — The magnetic field on the axis of a current loop
+#
+# A circular loop of radius R = 5.00 cm in the xy plane, centred on the origin,
+# carries a current I = 2.00 A (counter-clockwise seen from +z).
+#
+# (a) Use the Biot–Savart law, dB = (μ₀ I / 4π) dl × r̂ / r², to find the field
+#     at z = 3.00 cm on the axis. Compare with B = μ₀ I R² / (2 (R² + z²)^(3/2)).
+#     Check that the components perpendicular to the axis cancel.
+# (b) Find the field at the centre, μ₀ I / 2R.
+# (c) Check Ampère's law along the axis: ∫ B_z dz from −∞ to ∞ = μ₀ I
+#     (the axis closes through infinity, so it links the current once).
+# (Griffiths Ex. 5.6, Halliday/Resnick ch. 29)
+
+R = 5.00 cm
+I = 2.00 A
+
+# a point on the loop, and the current element dl = (dl/dφ) dφ
+ring(φ) = R * <cos(φ), sin(φ), 0>
+dl(φ) = R * <-sin(φ), cos(φ), 0>
+
+# dB/dφ at the field point P
+dB(φ, P) = μ₀ I / (4π) * dl(φ) × (P - ring(φ)) / |P - ring(φ)|³
+
+# (a) at z = 3 cm; ∫ of a vector isn't supported, so one component at a time
+z0 = 3.00 cm
+P = <0 m, 0 m, z0>
+Bx = ∫ dB(φ, P).x dφ from 0 to 2π
+By = ∫ dB(φ, P).y dφ from 0 to 2π
+Bz = ∫ dB(φ, P).z dφ from 0 to 2π
+print "B_z (Biot–Savart) =", Bz in μT to 8 digits
+print "B_z (formula)     =", μ₀ I R² / (2 (R² + z0²)^(3/2)) in μT to 8 digits
+print "|B_x| + |B_y| =", abs(Bx) + abs(By) in μT to 3 digits
+
+# (b) at the centre
+B0 = ∫ dB(φ, <0 m, 0 m, 0 m>).z dφ from 0 to 2π
+print "B at the centre =", B0 in μT to 8 digits, "  μ₀ I / 2R =", μ₀ I / (2R) in μT to 8 digits
+
+# (c) Ampère along the axis, with the on-axis formula
+B_axis(z) = μ₀ I R² / (2 (R² + z²)^(3/2))
+print "∫ B_z dz / μ₀ I =", (∫ B_axis(z) dz from -∞ to ∞) / (μ₀ I) to 8 digits

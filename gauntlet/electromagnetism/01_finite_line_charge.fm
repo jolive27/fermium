@@ -1,0 +1,41 @@
+# Electromagnetism 01 — The field of a finite line charge
+#
+# A thin rod of length L = 2.00 m lies on the x axis from x = −L/2 to +L/2 and
+# carries a uniform charge density λ = 5.00 nC/m.
+#
+# (a) Find the electric field at a point on the perpendicular bisector, a
+#     distance y = 0.500 m from the rod, by integrating Coulomb's law, and
+#     compare with the textbook result E = λ L / (4π ε₀ y √(y² + L²/4)).
+# (b) Find the field at the off-axis point P = (0.300 m, 0.500 m, 0) by
+#     integrating Coulomb's law component by component.
+# (c) The potential of the rod is
+#       V = λ/(4π ε₀) ln[(x + L/2 + r₊)/(x − L/2 + r₋)],  r± = √((x ± L/2)² + y² + z²).
+#     Check (b) against E = −∇V.
+# (Griffiths, Introduction to Electrodynamics, Ex. 2.2 and Prob. 2.25)
+
+λ = 5.00 nC/m
+L = 2.00 m
+k = 1 / (4π ε₀)
+
+# (a) on the bisector: only E_y survives; dE_y = k λ y ds / (s² + y²)^(3/2)
+y0 = 0.500 m
+E_bisector = ∫ k λ y0 / (s² + y0²)^(3/2) ds from -L/2 to L/2
+print "E on the bisector (integral) =", E_bisector in V/m to 8 digits
+print "E on the bisector (formula)  =", λ L / (4π ε₀ y0 √(y0² + L²/4)) in V/m to 8 digits
+
+# (b) off-axis: Coulomb's law for the charge λ ds at (s, 0, 0)
+P = <0.300, 0.500, 0> m
+dE(s) = k λ (P - <s, 0 m, 0 m>) / |P - <s, 0 m, 0 m>|³
+# ∫ of a vector isn't supported, so integrate each component
+Ex = ∫ dE(s).x ds from -L/2 to L/2
+Ey = ∫ dE(s).y ds from -L/2 to L/2
+print "E_x at P (integral) =", Ex in V/m to 8 digits
+print "E_y at P (integral) =", Ey in V/m to 8 digits
+
+# (c) from the potential
+V(x, y, z) = k λ ln((x + L/2 + √((x + L/2)² + y² + z²)) / (x - L/2 + √((x - L/2)² + y² + z²)))
+E = -∇V(0.300 m, 0.500 m, 0 m)
+print "V at P =", V(0.300 m, 0.500 m, 0 m) in V to 8 digits
+print "E_x at P (-∇V) =", E.x in V/m to 8 digits
+print "E_y at P (-∇V) =", E.y in V/m to 8 digits
+print "E_z at P (-∇V) =", E.z in V/m to 3 digits
