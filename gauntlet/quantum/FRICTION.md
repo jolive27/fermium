@@ -141,3 +141,99 @@ Severity scale: blocker / wrong answer / awkward / cosmetic.
 ### Q14. Significant figures lost in list loops
 - `for E in [0.50 eV, 1.00 eV, ...]` then `print E` shows `0.5 eV`, `1 eV`: the list elements
   forget their significant figures.
+
+## Second pass
+
+Problems: `21_finite_well.fm` (even/odd transcendental equations, state count, leakage),
+`22_quartic_oscillator.fm` (V = βx⁴ by shooting, WKB, a Gaussian variational bound and a 4×4
+oscillator-basis matrix), `23_hydrogen_radial.fm` (radial shooting for l = 0, 1 against −Ry/n²,
+and ⟨r⟩ for 1s and 2p). Tests: `tests/test_gauntlet2_quantum.py`.
+Severity: wrong answer / bug / awkward / cosmetic.
+
+### Wrong answer
+
+#### Q15. `solve` over a range that brackets several roots still returns a later one (Q1, still open)
+- **Wanted:** the finite-well ground state straight from the matching condition in energy:
+  ```
+  V0 = 20.0 eV
+  a = 0.500 nm
+  k(E) = √(2 m_e (E + V0)) / ħ
+  κ(E) = √(-2 m_e E) / ħ
+  solve k(E) tan(k(E) a) = κ(E) for E from -19.99 eV to -0.001 eV
+  print E in eV       # -17.149 eV: the third level (2nd even state); the ground state is -19.682 eV
+  ```
+- The reference (§10) still says "It finds the **first** solution after `a`". This is the most
+  natural way to write a bound-state problem, and it gives a real eigenvalue, just the wrong one,
+  silently.
+- **Had to write:** the dimensionless form with one window per branch of tan, (jπ, jπ + π/2) and
+  (jπ + π/2, (j+1)π), in a `while` loop. The shooting problems (22, 23) still need the hand-written
+  bracket scan of Q1.
+- **Fix:** always run the 200-point scan from `a` (it exists for the same-sign case) and refine the
+  first sign change that is not a pole; at minimum, change the docs to "a solution".
+
+### Bug
+
+#### Q16. An ODE solution made inside a function can't be used in `∫` or an algebraic `solve`, and the error names an internal variable
+- **Repro:**
+  ```
+  f(k) =
+      solve y' = k y
+        with y(0 s) = 1
+        for t from 0 s to 1 s
+      solve y(T) = 2 for T from 0 s to 1 s
+      return T
+  print f(1 / (1 s))
+  # line 5: __sol.3 can't be used inside this integral/equation (only numbers, vectors and
+  #   matrices can be captured from a function)
+  ```
+  The same happens with `return ∫ r u(r)² dr from r0 to r_cut / ∫ u(r)² dr from r0 to r_cut` in
+  `23`. At top level both work.
+- **Had to write (23):** carry the integrals along as extra unknowns, `N' = u²`, `M' = r u²`, and
+  return `M(r_cut)/N(r_cut)`.
+- **Fix:** let the quadrature and root-finder closures capture the solution (it is a pointer, like a
+  list); at least never show `__sol.N`: "the solution y can't be used inside ∫ or solve within a
+  function yet".
+
+### Awkward
+
+#### Q17. A solved ODE can't be returned from a function, so one function does two jobs via a flag
+- For ⟨r⟩ the wavefunction must come from *the very same* integration the energy was tuned on: the
+  outward 1s solution grows like e^{r/a₀} away from the eigenvalue, and a second function with the
+  same equation, E and initial values but two extra unknowns (so a different step sequence) gave
+  ⟨r⟩_1s = 2.59 a₀ instead of 1.5 a₀. So `radial(E, l, want)` returns u(r_max) when `want == 0` and
+  ⟨r⟩ otherwise.
+- Both `return`s must have the same units, so ⟨r⟩ is returned divided by a₀.
+- **Fix:** allow a function to return a solution, or let `solve` be named (`sol = solve …`) so that
+  `sol.u`, `sol.N` can be read later.
+
+#### Q18. Matrices stop at 4×4 and can't be filled in a loop
+- `identity(5)` → "matrices are at most 4×4"; `M[i, j] = -1 eV` in a loop → "the entries of a
+  matrix can't be changed one at a time". So a tight-binding chain of more than four sites, or a
+  basis of more than four oscillator states in `22`, is impossible, and the 4×4 in `22` is written
+  out entry by entry as `H(0, 0)`, `H(0, 2)`, ….
+- **Fix:** larger matrices (Jacobi is fine up to ~50), a constructor from a function of (i, j), or
+  element assignment on a local matrix.
+
+### Cosmetic
+
+#### Q19. "f returns different kinds of values in different places" doesn't say which kinds
+- **Repro:** `f(x) =` / `if x > 0` / `return 1 m` / `return 2` → the error points at `f(x) =` only.
+  Hit when `radial` returned u (a plain number) in one branch and ⟨r⟩ (a length) in the other.
+- **Fix:** name both units and both `return` lines ("line 3 returns a length [m], line 4 a plain
+  number").
+
+#### Q20. `κ` and `k` in the same function still warn
+- `k0 = z/a` and `κ0 = √(−2mE)/ħ` in `21` (and `k(E)`, `κ(E)`): "look almost identical". In a
+  square-well problem k and κ *are* the notation. The warning now comes once (fix #17), which is
+  much better; consider exempting a pair whose two names have different units.
+
+### What the first-pass fixes bought
+- **Algebraic `solve` (#1)** carried all three problems: every eigenvalue, the WKB quantisation
+  `solve action(E) = 2π ħ (n + ½) for E …` with an `∫` whose limits depend on E, and dE/dα = 0.
+- **Leibniz rule (#18):** `E_var(α) = ∫ (ħ²/2m) dtrial(x, α)² + V(x) trial(x, α)² dx from -∞ to ∞`,
+  then `dE = d/dα E_var` and `solve dE(α) = 0 …`, worked first time and agrees with the closed form
+  to 10 digits. This is the variational method as written in Griffiths.
+- **`eigenvalues` (#22):** the 4×4 Hamiltonian in the oscillator basis is diagonalised to machine
+  precision; its lowest eigenvalue sits between E₀ and E_var, as it must.
+- List element assignment (`E_shoot[2 found + p + 1] = E`), and 10-digit agreement of shooting with
+  finite differences and with SciPy.
