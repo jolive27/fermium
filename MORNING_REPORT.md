@@ -11,7 +11,7 @@ Fermium is a physics programming language:
 - programs compile to native code through LLVM.
 
 Overnight it went from a spec to:
-- 3597 passing tests;
+- 3609 passing tests;
 - 61 + 20 textbook problems;
 - 11 research reproductions compared with published numbers;
 - 6 red-team rounds;
@@ -81,7 +81,8 @@ Honest caveats:
 | 3 (06:30) | 15 | `36 km/h` read as km / Planck's h, °C in products, `°C ± %`, early PDE transients, vector zero integrals | all 15 |
 | 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
 | 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | all 19 (+3 of 4 nits) |
-| 6 (10:00) | 7, all silent wrong answers in the newest code | matrix/vector noise-zeroing hid real entries (a Minkowski metric), the integral noise snap zeroed real small integrals, the PDE start-up skip hid a 20 % error, a near-degenerate eigenpair mixed, `d/ds h(2 s)`, `∫ 3 s^2 ds` | #1–#4 reverted (D230); #5–#7 being fixed |
+| 6 (10:00) | 7, all silent wrong answers in the newest code | matrix/vector noise-zeroing hid real entries (a Minkowski metric), the integral noise snap zeroed real small integrals, the PDE start-up skip hid a 20 % error, a near-degenerate eigenpair mixed, `d/ds h(2 s)`, `∫ 3 s^2 ds` | all 7: #1–#4 reverted (D230), #5–#7 fixed (D231–D233) |
+| 7 (11:15) | TBD | TBD | TBD |
 
 ## Benchmarks
 The final table was measured at 10:21 UTC with nothing else running. Earlier runs had a stray process of mine using one of the 4 cores since 00:27; it was found and killed. The numbers are medians of 7 interleaved runs, with the same algorithms, tolerances and problem sizes in every language. Full table: benchmarks/RESULTS.md; reproduce with `python3 benchmarks/run.py --interleave -r 7 --langs fermium,fermium-base,julia,python,numpy`.
@@ -107,3 +108,20 @@ The final table was measured at 10:21 UTC with nothing else running. Earlier run
 - **The unit-after-number rule is still the sharpest edge:** `2 g`, `8 K`, `2 b` and `0.25 T` collide with common variable names. They are caught (errors or warnings), but they cost time: 7 of 20 graduate problems hit one.
 - **Matrices go up to 16×16,** with one unit per matrix. There are no lists of vectors, and `solve` can't take a list of unknowns.
 - **The machine was heavily loaded all night,** so benchmark numbers need the quiet-machine re-run.
+
+## How to check this report yourself
+```
+pip install -e .
+make check                                   # lint + the whole test suite (~15 min on 4 cores)
+fermium run examples/28_natural_units.fm     # or any of the 31 examples
+python3 benchmarks/run.py --interleave -r 7  # the benchmark table (needs Julia in .tools/)
+python3 -m pytest -q tests/test_research.py  # the 11 research reproductions against SciPy/NumPy
+python3 -m pytest -q tests/test_showcase.py  # every SHOWCASE.md snippet prints what the page says
+```
+
+## What I would do next
+1. **Native uncertainties:** carry the partial derivatives in LLVM code, so `±` programs aren't limited to the interpreter.
+2. **A second, independent quadrature check for integrals:** Gauss–Kronrod on a shifted grid. It would catch narrow features that are only partly sampled, the last known way an integral can be silently wrong.
+3. **One consistent rule for unit names that are also variables:** the D7 family grew case by case tonight (D130, D170, D171, D180, D203, D222, D231, D232). A single documented rule in the checker would be simpler to learn.
+4. **Per-element significant figures for written lists and vectors.**
+5. **Lists of vectors, and `solve` with a list of unknowns:** reaction networks and N-body problems written as loops.
