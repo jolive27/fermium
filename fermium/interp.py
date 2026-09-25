@@ -16,7 +16,7 @@ import time
 import numpy as np
 
 from . import ir as I
-from .errors import FermiumError, FermiumRuntimeError
+from .errors import MODLINE_MAX, FermiumError, FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
 from . import linalg
@@ -890,6 +890,7 @@ def _count(nf):
 
 
 _QABS = [0.0]       # fm.qabs (D110)
+_QZERO = [0.0]      # fm.qzero: quiet first tries that were 0 at every sample (red team round 3 #5)
 
 
 def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1, warn=None):
@@ -901,8 +902,11 @@ def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1, warn=None):
         mine = _QABS[0]
     finally:
         _QABS[0] = saved
-    if r == 0 and mine == 0 and a != b and not (atol < 0) and warn is not None:
-        warn()
+    if r == 0 and mine == 0 and a != b:
+        if atol < 0:
+            _QZERO[0] += 1.0
+        elif warn is not None:
+            warn()
     return r
 
 
@@ -956,8 +960,23 @@ class Interpreter:
         self.mod = module
         self.rt = runtime
         self.globals = globals_frame or Frame()
+        self._userline = 0
         self.line = 0
         self.mc = None          # the sampler inside propagate montecarlo (D123)
+
+    @property
+    def line(self):
+        return self._line
+
+    @line.setter
+    def line(self, v):
+        """A program line is remembered as the calling line; a module's line code gets it added (D185), as
+        codegen's line_code does."""
+        if v and 0 < v <= MODLINE_MAX:
+            self._userline = v
+        elif v and v < (1 << 32):
+            v = (self._userline << 32) | v
+        self._line = v
 
     def run(self):
         rt = self.rt
@@ -966,13 +985,22 @@ class Interpreter:
                 self.block(self.mod.main.body, self.globals)
         except _Fail as f:
             rt.error = rt.describe_error(f.kind, f.a, f.b, getattr(f, "fmt", -1))
-            rt.error_line = getattr(f, "line", None) or self.line or None
+            rt.error_line = rt.locate(getattr(f, "line", None) or self.line or None)
             raise FermiumRuntimeError(rt.error, rt.error_line)
         except RecursionError:
-            raise FermiumRuntimeError("the program recursed too deeply", self.line or None)
+            rt.error = "the program recursed too deeply"
+            ln = rt.locate(self.line or None)
+            raise FermiumRuntimeError(rt.error, ln)
         except UncertainUse as u:
-            rt.error, rt.error_line = u.message, self.line or None
-            raise FermiumRuntimeError(u.message, self.line or None)
+            rt.error = u.message
+            rt.error_line = rt.locate(self.line or None)
+            raise FermiumRuntimeError(rt.error, rt.error_line)
+        except FermiumRuntimeError as ex:
+            if isinstance(ex.line, int) and ex.line > MODLINE_MAX:     # raised inside a module's code (D185)
+                rt.error = ex.message
+                ex.line = rt.locate(ex.line)
+                ex.message = rt.error
+            raise
 
     # ------------------------------------------------------------ statements
     def block(self, stmts, fr):
@@ -1751,13 +1779,14 @@ class Interpreter:
         name = e.name
         args = [self.eval(a, fr) for a in e.args]
         if name in ("pm", "pm_rel"):
-            v, sg = args
+            v, sg = args[:2]
+            off = args[2] if len(args) > 2 else 0.0      # °C ± 3%: relative to the reading (D182)
             if isinstance(v, list):
                 sgs = sg if isinstance(sg, list) else [sg] * len(v)
                 if len(sgs) != len(v):
                     raise _Fail(ERR_LEN, float(len(v)), float(len(sgs)))
-                return [self.pm(e, x, y, name == "pm_rel", i) for i, (x, y) in enumerate(zip(v, sgs))]
-            return self.pm(e, v, sg, name == "pm_rel", 0)
+                return [self.pm(e, x, y, name == "pm_rel", i, off) for i, (x, y) in enumerate(zip(v, sgs))]
+            return self.pm(e, v, sg, name == "pm_rel", 0, off)
         a = args[0]
         f = {"unc_value": U.nominal, "unc_uncertainty": U.sigma,
              "unc_rel": lambda x: fdiv(U.sigma(x), abs(U.nominal(x)))}[name]
@@ -1767,11 +1796,11 @@ class Interpreter:
             raise TypeError("value/uncertainty of a Monte Carlo sample")
         return f(a)
 
-    def pm(self, e, v, sg, rel, i):
+    def pm(self, e, v, sg, rel, i, off=0.0):
         if isinstance(sg, UFloat):
             sg = sg.v          # the uncertainty of an uncertainty isn't propagated
         if rel:
-            sg = abs(U.nominal(v)) * sg
+            sg = abs(U.nominal(v) - off) * sg
         if type(sg) is np.ndarray:
             raise TypeError("a sampled uncertainty")
         if sg < 0 or sg != sg:
@@ -1796,7 +1825,15 @@ class Interpreter:
             return self.unc_builtin(e, fr)
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
             return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
+        if name == "qzero_mark":            # mirrors codegen: a vector integral's all-zero check (#5)
+            saved, _QZERO[0] = _QZERO[0], 0.0
+            return saved
         args = [self.eval(a, fr) for a in e.args]
+        if name == "qzero_check":
+            cnt, _QZERO[0] = _QZERO[0], args[0]
+            if cnt == args[1]:
+                self.rt.warn(3, 0.0, self.line)
+            return 0.0
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
             from . import cplx
             return cplx.py_builtin(e, args)

@@ -19,7 +19,7 @@ from difflib import get_close_matches
 
 from . import ast as A
 from . import ir as I
-from .types import DIMLESS, ListTy, NumTy, VecTy, MatTy
+from .types import DIMLESS, ComplexTy, ListTy, NumTy, VecTy, MatTy
 from .units import preferred_unit
 
 
@@ -139,7 +139,7 @@ class PythonMixin:
         attr = getattr(f, "raw", f.name)
         self._py_attr(ref.pymod, ref.module, ref.alias, attr, f, want_callable=True)
         if self.nat.natural:
-            raise self.err(f"{ref.alias}.{attr}: Python functions can't be called inside  units {self.nat.label()}  "
+            raise self.err(f"{ref.alias}.{attr}: Python functions can't be called inside  {self.nat.label()}  "
                            f"yet", e, hint="call it outside the region and bring the value in")
         display = f"{ref.alias}.{attr}"
         sig = ref.sigs.get(_ascii(attr))
@@ -155,12 +155,15 @@ class PythonMixin:
         for k, (a, node) in enumerate(zip(args, e.args)):
             pname, unit, is_int = sig["params"][k] if sig is not None else (f"argument {k + 1}", None, False)
             if not isinstance(a, I.Expr) or not isinstance(a.ty, (NumTy, ListTy)):
-                what = "a vector" if isinstance(getattr(a, "ty", None), VecTy) else \
+                what = "a complex number" if isinstance(getattr(a, "ty", None), ComplexTy) else \
+                    "a vector" if isinstance(getattr(a, "ty", None), VecTy) else \
                     "a matrix" if isinstance(getattr(a, "ty", None), MatTy) else \
                     "a function" if not isinstance(a, I.Expr) else "not a number"
                 raise self.err(f"{display}: a Python function takes numbers and lists of numbers, but "
                                f"{pname} is {what}", node,
-                               hint="pass the components one at a time, like v.x" if what == "a vector" else None)
+                               hint="pass the components one at a time, like v.x" if what == "a vector" else
+                               "pass the real and imaginary parts one at a time, like re(z) and im(z)"
+                               if what == "a complex number" else None)
             any_list = any_list or isinstance(a.ty, ListTy)
             if unit is None:
                 self.unify_or(a.ty.dim, DIMLESS, lambda: self._py_unit_msg(display, pname, a, sig), node,

@@ -15,7 +15,7 @@ try:
 except ImportError:            # the reference interpreter works without llvmlite
     llvm = None
 
-from ..errors import FermiumRuntimeError
+from ..errors import FermiumRuntimeError, decode_line
 from .pde import PDE_MAX_STEPS
 from ..units import preferred_unit, format_number, format_default, format_default_seq, _whole, Unit
 from ..uncertain import UFloat, format_uncertain, format_uncertain_list
@@ -235,7 +235,7 @@ class Runtime:
         def error(kind, a, b, line, fmt=-1):
             if kind != ERR_PENDING:          # ERR_PENDING: a callback already set rt.error
                 rt.error = rt.describe_error(kind, a, b, fmt)
-            rt.error_line = line or None
+            rt.error_line = rt.locate(line)
 
         def warn(kind, a, line, fmt):
             rt.warn(kind, a, line, fmt)
@@ -380,8 +380,17 @@ class Runtime:
         i = int(i) if i == i else -1
         return self.tables.texts[i] if self.tables and 0 <= i < len(self.tables.texts) else "t"
 
+    def locate(self, code):
+        """The program line of a run-time line code; for code in a module, the error message also says where
+        in the module (D185)."""
+        line, suf = decode_line(code, self.tables.texts if self.tables is not None else None)
+        if suf and self.error and not self.error.endswith(suf):
+            self.error += suf
+        return line
+
     def warn(self, kind, a, line, fmt=-1):
         """A warning found while the program runs (shown on stderr, and kept in self.warnings)."""
+        line, suf = decode_line(line, self.tables.texts if self.tables is not None else None)
         if kind == 1:
             msg = (f"the two sides of this equation agree only to rounding error near {self.fmt_value(a, fmt)}, so "
                    f"the solution found there may be meaningless (large terms cancelling?); rewrite the equation "
@@ -408,7 +417,7 @@ class Runtime:
                    f"doubling); the result may be inaccurate")
         else:
             msg = "warning"
-        text = "warning: " + (f"line {line}: " if line else "") + msg
+        text = "warning: " + (f"line {line}: " if line else "") + msg + suf
         if kind == 7 and any(w.startswith(text.split(" is ")[0]) for w in self.warnings):
             return            # once per solve, not once per loop pass
         if text not in self.warnings:

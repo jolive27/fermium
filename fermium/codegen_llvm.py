@@ -13,6 +13,7 @@ from llvmlite import ir
 
 from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
+from .errors import MODLINE_MAX
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
 from . import linalg
 from . import special
@@ -153,6 +154,10 @@ class ModuleGen:
         self.curline = ir.GlobalVariable(self.module, I64, "fm.line")
         self.curline.initializer = i64(0)
         self.curline.linkage = "internal"
+        # the program line that called into a module function (red team round 3 #11, D185)
+        self.callline = ir.GlobalVariable(self.module, I64, "fm.callline")
+        self.callline.initializer = i64(0)
+        self.callline.linkage = "internal"
         self.stackbase = ir.GlobalVariable(self.module, I64, "fm.stackbase")   # stack address at start
         self.stackbase.initializer = i64(0)
         self.stackbase.linkage = "internal"
@@ -329,8 +334,14 @@ class ModuleGen:
             return special.KERNELS[name](self)
         return getattr(self, "_k_" + name.replace("fm_", ""))()
 
+    def line_code(self, b, line):
+        """The run-time line code for a source line: module code also carries the calling line (D185)."""
+        if line > MODLINE_MAX:
+            return b.or_(b.shl(b.load(self.callline), i64(32)), i64(line))
+        return i64(line)
+
     def raise_error(self, b, kind, a=None, c=None, line=None):
-        ln = i64(line) if line else b.load(self.curline)
+        ln = self.line_code(b, line) if line else b.load(self.curline)
         kind = kind if isinstance(kind, ir.Value) else i64(kind)
         b.call(self.externs["fm_error"], [kind, a if a is not None else f64(0), c if c is not None else f64(0),
                                           ln, b.load(self.errfmt)])
@@ -469,6 +480,16 @@ class ModuleGen:
             g.linkage = "internal"
         return g
 
+    def _qzero(self):
+        """fm.qzero: how many quiet first tries of a vector integral's components came out as exactly 0 because
+        every sample was 0 (red team round 3 #5); the vector warns when all of its components did."""
+        g = self.module.globals.get("fm.qzero")
+        if g is None:
+            g = ir.GlobalVariable(self.module, F64, "fm.qzero")
+            g.initializer = f64(0)
+            g.linkage = "internal"
+        return g
+
     def _k_quad(self):
         """∫ f from a to b (fm_quadin), with a warning when the result is exactly 0 because the integrand was
         0 at every node: a narrow peak in a wide range can hide between the nodes (D110).  fm.qabs is saved
@@ -485,7 +506,11 @@ class ModuleGen:
         b.store(saved, g)
         zero = b.and_(b.fcmp_ordered("==", r, f64(0)), b.fcmp_ordered("==", mine, f64(0)))
         zero = b.and_(zero, b.fcmp_ordered("!=", a, bb))
-        zero = b.and_(zero, b.fcmp_unordered(">=", atol, f64(0)))     # not the quiet first try (D44)
+        soft = b.fcmp_ordered("<", atol, f64(0))          # the quiet first try (D44): counted, not warned
+        with b.if_then(b.and_(zero, soft)):
+            qz = self._qzero()
+            b.store(b.fadd(b.load(qz), f64(1)), qz)
+        zero = b.and_(zero, b.fcmp_unordered(">=", atol, f64(0)))
         with b.if_then(zero):
             b.call(self.externs["fm_warn"], [i64(3), f64(0), b.load(self.curline), i64(-1)])
         b.ret(r)
@@ -1852,7 +1877,7 @@ class FuncGen:
     def mark_line(self):
         """Record the current source line for errors raised inside kernels."""
         if getattr(self, "line", 0):
-            self.b.store(i64(self.line), self.mg.curline)
+            self.b.store(self.mg.line_code(self.b, self.line), self.mg.curline)
 
     def fail(self, kind, a=None, c=None):
         self.mg.raise_error(self.b, kind, a, c, getattr(self, "line", 0) or None)
@@ -2527,14 +2552,22 @@ class FuncGen:
             self.store(sym, self.expr(v))
         return self.expr(e.value)
 
+    def note_module_call(self, func):
+        """Calling a module's function from the program: remember the calling line (D185)."""
+        if getattr(func, "module_code", False) and 0 < getattr(self, "line", 0) <= MODLINE_MAX:
+            self.b.store(i64(self.line), self.mg.callline)
+
     def e_ICall(self, e):
         fn = self.mg.func_for(e.func)
-        return self.b.call(fn, [self.expr(a) for a in e.args])
+        args = [self.expr(a) for a in e.args]
+        self.note_module_call(e.func)
+        return self.b.call(fn, args)
 
     def e_IMap(self, e):
         b = self.b
         fn = self.mg.func_for(e.func)
         args = [self.expr(a) for a in e.args]
+        self.note_module_call(e.func)
         lst = args[e.list_pos]
 
         def elem(x, i):
@@ -2732,7 +2765,20 @@ class FuncGen:
             sg = f64(1 if name == "max_list" else -1)      # refined between step points (A55)
             r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
             return b.fmul(sg, r)
+        if name == "qzero_mark":          # before a vector integral's first tries: save and clear the count
+            qz = self.mg._qzero()
+            saved = b.load(qz)
+            b.store(f64(0), qz)
+            return saved
         args = [self.expr(a) for a in e.args]
+        if name == "qzero_check":         # after them: every component was 0 at every sample -> warn once
+            qz = self.mg._qzero()
+            cnt = b.load(qz)
+            b.store(args[0], qz)
+            self.mark_line()
+            with b.if_then(b.fcmp_ordered("==", cnt, args[1])):
+                b.call(self.mg.externs["fm_warn"], [i64(3), f64(0), b.load(self.mg.curline), i64(-1)])
+            return f64(0)
         if name in codegen_m3.M3_BUILTINS:
             return codegen_m3.builtin(self, name, e, args)
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py

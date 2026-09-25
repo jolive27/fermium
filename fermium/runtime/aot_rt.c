@@ -334,8 +334,35 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
 }
 
 /* a warning found while the program runs (#36) */
+/* A run-time line code (errors.py, D185): code from a module carries (k << 20) | line and the calling program
+   line << 32, with k - 1 the text id of the module's file name.  Sets *line to the program line (0: none) and
+   suf to " (in stats.fm, line 6)" or "". */
+static void fm_where(int64_t code, int64_t *line, char *suf, size_t n) {
+    suf[0] = 0;
+    if (code <= 0xFFFFF) { *line = code; return; }
+    int64_t low = code & 0xFFFFFFFFLL, k = low >> 20, ml = low & 0xFFFFF;
+    *line = code >> 32;
+    snprintf(suf, n, " (in %s, line %lld)", k > 0 ? fm_texts[k - 1] : "a module", (long long)ml);
+}
+
+/* A warning is printed once per text, as the JIT's Runtime.warn does (it keeps the texts it has shown): the
+   zero-integral warning of a function called in a loop comes once, not once per call (red team round 3 #12). */
+static int fm_warn_seen(const char *text) {
+    static uint64_t seen[1024];
+    static int nseen = 0;
+    uint64_t h = 1469598103934665603ULL;
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++) { h ^= *p; h *= 1099511628211ULL; }
+    for (int i = 0; i < nseen; i++)
+        if (seen[i] == h) return 1;
+    if (nseen < 1024) seen[nseen++] = h;
+    return 0;
+}
+
 void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
-    char x[160];
+    char x[160], msg[800], where[200], suf[200];
+    int64_t pl;
+    fm_where(ln, &pl, suf, sizeof suf);
+    if (pl > 0) snprintf(where, sizeof where, "line %lld: ", (long long)pl); else where[0] = 0;
     if (fmt >= 0) {
         const fm_fmt *f = &fm_fmts[fmt];
         char bx[128];
@@ -344,20 +371,24 @@ void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
     } else {
         fmt_num(a, 6, 1, x, sizeof x);
     }
+    msg[0] = 0;
     if (kind == 1)
-        fprintf(stderr, "warning: line %lld: the two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n", (long long)ln, x);
+        snprintf(msg, sizeof msg, "warning: %sthe two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper%s\n", where, x, suf);
     else if (kind == 2)
-        fprintf(stderr, "warning: line %lld: this equation looks stiff: rk45 has taken %lld steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n", (long long)ln, (long long)a);
+        snprintf(msg, sizeof msg, "warning: %sthis equation looks stiff: rk45 has taken %lld steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this%s\n", where, (long long)a, suf);
     else if (kind == 3)
-        fprintf(stderr, "warning: line %lld: this integral came out as exactly 0 because the integrand was 0 at every point where it was sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range that fits it\n", (long long)ln);
+        snprintf(msg, sizeof msg, "warning: %sthis integral came out as exactly 0 because the integrand was 0 at every point where it was sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range that fits it%s\n", where, suf);
     else if (kind == 7) {
         static int64_t warned_line = -1;       /* once per solve, not once per loop pass */
         char pc[64];
         if (ln == warned_line) return;
         warned_line = ln;
         fmt_num(a * 100, 2, 1, pc, sizeof pc);
-        fprintf(stderr, "warning: line %lld: the step is too coarse for this equation: the estimated error is %s%% of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or drop  step  to use the adaptive solver\n", (long long)ln, pc);
+        fprintf(stderr, "warning: %sthe step is too coarse for this equation: the estimated error is %s%% of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or drop  step  to use the adaptive solver%s\n", where, pc, suf);
+        return;
     }
+    if (msg[0] && !fm_warn_seen(msg))
+        fputs(msg, stderr);
 }
 
 static int cmp_double(const void *a, const void *b) {
@@ -392,8 +423,11 @@ int main(void) {
     if (line_len) fm_print_end();
     fflush(stdout);
     if (r != 0) {
-        if (err_line > 0) fprintf(stderr, "line %lld: %s\n", (long long)err_line, err_msg);
-        else fprintf(stderr, "%s\n", err_msg);
+        int64_t pl;
+        char suf[200];
+        fm_where(err_line, &pl, suf, sizeof suf);
+        if (pl > 0) fprintf(stderr, "line %lld: %s%s\n", (long long)pl, err_msg, suf);
+        else fprintf(stderr, "%s%s\n", err_msg, suf);
         return 1;
     }
     return 0;

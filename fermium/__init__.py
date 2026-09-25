@@ -1,7 +1,7 @@
 __version__ = "0.1.0"
 
 # The Python API (DECISIONS D142) is imported lazily, so `import fermium` (and the CLI) stay light.
-_API = ("Module", "Quantity", "Q", "QuantityArray")
+_API = ("Module", "Quantity", "Q", "QuantityArray", "ComplexQuantity")
 
 
 def compile(source, filename="<python>", base_dir=None, out=None, warnings=True):  # noqa: A001

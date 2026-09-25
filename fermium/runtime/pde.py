@@ -349,7 +349,9 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
             t = t0 + n * dt_
             if n in want:
                 at[n] = w.copy()
-            if record and (n % every_of(n_steps) == 0 or n == n_steps):
+            # every step of the first CHECKPOINTS snapshot intervals is kept: a fast mode decays there, and
+            # interpolating across it in time was 10 % off (red team round 3 #4, D183)
+            if record and (n % every_of(n_steps) == 0 or n == n_steps or n < CHECKPOINTS * every_of(n_steps)):
                 tss.append(t), rws.append(None), drws.append(None)
                 _keep_into(tss, rws, drws, len(tss) - 1, t, w)
         return tss, rws, drws, at
@@ -379,7 +381,14 @@ def pde_solve(probe, xa, xb, t0, t1, *, grid=400, order=1, method="crank_nicolso
         return worst / scale
 
     def _checks(n_steps):
-        return sorted({max(1, (k * n_steps) // CHECKPOINTS) for k in range(1, CHECKPOINTS + 1)})
+        """The steps at which step doubling compares: CHECKPOINTS evenly spread, plus the start of the run
+        (red team round 3 #4, D183): its first steps (the SDIRK2 start-up and the first CN steps) and the first
+        1/8 in CHECKPOINTS finer samples, where a fast mode is still alive: by step n/8 it has decayed in both
+        runs, and an early error of 25 % went unnoticed."""
+        regular = {max(1, (k * n_steps) // CHECKPOINTS) for k in range(1, CHECKPOINTS + 1)}
+        early = {max(1, (k * n_steps) // (CHECKPOINTS * CHECKPOINTS)) for k in range(1, CHECKPOINTS + 1)}
+        first = set(range(1, min(n_steps, RANNACHER_STEPS + 2) + 1))
+        return sorted(regular | early | first)
 
     def _scale(rws):
         m = max(float(np.max(np.abs(r))) for r in rws)

@@ -309,7 +309,32 @@ def _pde_conditions(ck, s, ctx, u, xv, tv, xa, xb, t0, t1, tdim, xdim):
     return ic, v0, bcs
 
 
+def _pde_imaginary_unit(ck, s: A.Solve, ctx):
+    """The imaginary unit of a Schrödinger PDE is 𝑖 (D90; `1i`, Tab \\imag), or a bare `i` when the program has no
+    `i` of its own (the older spelling, kept). A bare `i` that is also your variable is an error instead of being
+    silently read as √-1 (red team round 3 #10, D184). Returns s with 𝑖 written as the solver's internal `i`."""
+    names = []
+    for q in list(s.equations) + list(s.initial):
+        names += A.free_names(q.lhs) + A.free_names(q.rhs)
+    uses_imag, uses_i = "𝑖" in names, "i" in names
+    if uses_i:
+        b, _ = ctx.scope.lookup("i")
+        if b is not None:
+            raise ck.err("in this PDE, i is your own variable i, not the imaginary unit", s.equations[0],
+                         hint="write the imaginary unit as 𝑖 (Tab \\imag) or 1i, like  𝑖 ħ ∂ψ/∂t = …; or rename "
+                              "your variable")
+    if not uses_imag:
+        return s
+    m = {"𝑖": A.Name("i")}
+    import copy
+    s2 = copy.copy(s)
+    s2.equations = [A.Equation(C.subst(q.lhs, m), C.subst(q.rhs, m)).at(q) for q in s.equations]
+    s2.initial = [A.Equation(C.subst(q.lhs, m), C.subst(q.rhs, m)).at(q) for q in s.initial]
+    return s2
+
+
 def check_pde(ck, s: A.Solve, ctx):
+    s = _pde_imaginary_unit(ck, s, ctx)
     xv, tv = s.var, s.var2
     if s.step is not None:
         raise ck.err(f"in a PDE the time step goes after the time range:  {tv} from … to … step …", s.step)
@@ -505,8 +530,8 @@ def check_pde(ck, s: A.Solve, ctx):
 
 
 def pde_call(ck, view, e, ctx, deriv=None):
-    """u(x, t), ∂u/∂x(x, t), ∂u/∂t(x, t) of a PDE solution; a complex one gives <Re, Im> (a 2-vector)."""
-    from .types import VecTy
+    """u(x, t), ∂u/∂x(x, t), ∂u/∂t(x, t) of a PDE solution; a complex one gives a complex number."""
+    from .types import ComplexTy
     nm = view.name
     which = 0
     d = view.udim
@@ -541,7 +566,7 @@ def pde_call(ck, view, e, ctx, deriv=None):
         parts.append(n)
     if view.ncomp == 1:
         return parts[0]
-    r = I.IVec(parts, VecTy(d, 2))
+    r = I.IVec(parts, ComplexTy(d))      # a complex number (D91), read with .re / .im (red team round 3 #10)
     r.sf = None
     r.hint = parts[0].hint
     return r

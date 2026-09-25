@@ -443,8 +443,15 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     rtol = 1e-9
     if s.tolerance is not None:
         tv = ck.expr(s.tolerance, ctx)
-        if not isinstance(tv, I.IConst) or not (0 < tv.value < 1):
-            raise ck.err("the tolerance must be a plain number like 1e-8", s.tolerance)
+        # a relative tolerance: a plain number between 0 and 1 (red team round 3 #13: units were accepted)
+        if isinstance(tv, I.Expr) and isinstance(tv.ty, NumTy) and not ck.U.unify(tv.ty.dim, DIMLESS):
+            raise ck.err(f"the tolerance is relative, so it must be a plain number (no units) like 1e-8, but it "
+                         f"is {ck.desc(tv.ty.dim)}", s.tolerance)
+        if not isinstance(tv, I.IConst) or not isinstance(tv.ty, NumTy):
+            raise ck.err("the tolerance must be a plain number written out, like 1e-8", s.tolerance)
+        if not (0 < tv.value < 1):
+            raise ck.err(f"the tolerance is relative, so it must be between 0 and 1 (like 1e-8), but it is "
+                         f"{tv.value:g}", s.tolerance)
         rtol = tv.value
     atol = _check_absolute(ck, s, ctx, layout, dims, shape, tdim, t, step) if s.absolute else None
     if method in ("radau", "bdf"):
