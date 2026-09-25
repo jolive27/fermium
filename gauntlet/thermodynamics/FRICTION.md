@@ -143,3 +143,12 @@ composite display units (J/(m³ K⁴), or prefer J/m³ over kg/(m s²) when furt
   (`T(1.00 L) = 3000 K`).
 - Integrals of functions defined by integrals (∫C_D/T dT), including the 0 K end, once T10 is avoided.
 - `4σ / c`, `R_gas`, and `in μJ`, `in kPa/K`, `in cm³/mol` all as expected.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#68 (W)** With a variable `m` (a mass), `n = 2.50e19 /m³` is 2.5×10¹⁹ divided by the variable m, cubed (1/kg³), with no warning (the §2 rule for `/` + space + a variable, but written with no space after `/`, as a unit). The unit error surfaces lines later, at an unrelated `in nK`. Workaround: `2.50e19 m⁻³`, or rename the mass
+- **#73 (A)** Textbook coefficients `73/24 e²`, `37/96 e⁴`, `121/304 e²`, `π²/12 t²`, `π⁴/80 t⁴` read as a/(b x) (D8): 9 warnings in two problems, each fixed with brackets. The warning works, but Peters' and Sommerfeld's formulas are written this way on paper
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#81 (C)** The warning for `2.50e19 m⁻³` (m also a variable) quotes the number as `2.5e+19`, not as written

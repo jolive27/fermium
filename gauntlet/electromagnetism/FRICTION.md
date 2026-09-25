@@ -200,3 +200,10 @@ where multiplying a vector by a mass would be written `m <…>` anyway.
 The off-axis ring is Jackson's textbook example of K(m) and E(m); Fermium has neither, so the closed
 form lives only in the test (SciPy) and the program checks the integral against −∇ of another
 integral. Fix: `ellipk`, `ellipe`, `besselj(n, x)` (see optics O4).
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#80 (C)** Display units: a conductivity ε₀ω_p²/γ prints as F/(m s), not S/m; a speed squared a²ω² as J/kg

@@ -220,3 +220,11 @@ also a unit.
   to 1e-9, and the separation of neighbouring trajectories matches SciPy to 3 %.
 - `eigenvalues(K, M)` / `eigenvectors(K, M)` (#22) give the double pendulum's (2 ∓ √2) g/l at once.
 - Still open and still felt: M1/#33 (no "stop when"; every event needed a hand-picked bracket).
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#76 (C)** `Ωπ = …` (Ω for the pendulum about θ = π) is Ω × π, and the error "can't store a value in Ωπ" suggests `solve Ωπ = … for Ω`; it could say that `Ωπ` is read as Ω times π and suggest `Ω_π`
+- **#80 (C)** Display units: a conductivity ε₀ω_p²/γ prints as F/(m s), not S/m; a speed squared a²ω² as J/kg

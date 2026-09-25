@@ -161,3 +161,9 @@ order ε³.
 - The integrable 1/√ end-point blow-up of the exact Duffing period integral: right to 7 digits.
 - Bare `0` in a matrix literal whose other entries have units (`[[2k, -k, 0], …]`), `identity(3) m`.
 - The #10 warning at least fired for O11; the M8 fix ("`2 m` next to your variable m") is visible.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#72 (A)** `α = 0.300 /(m s²)` is refused with "m isn't defined", though `0 /s` and `<0, 0> /s` take the unit. Workaround: `0.300 [1/(m s²)]` or `0.300 m⁻¹ s⁻²`

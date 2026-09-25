@@ -132,3 +132,11 @@ Severity: wrong answer / bug / awkward / cosmetic.
 - **The #10 note** explained `4 s` (four seconds) in `(−s + √(s² + 4 s))/2` at once.
 - **The #9 warning** (A9) caught a real precedence slip.
 - Symbolic `d/dT` of a Saha fraction built from two user functions gave dx/dT to 8 digits.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#78 (C)** A function named `integral(b, T) = …` fails with "expected ')' to close '(' but found ','": `integral` is the ASCII spelling of ∫, and the error could say so
+- **#79 (C)** `M in M_sun` is "'M_sun' is not a unit Fermium knows" with a generic hint: the constant is `M_sun`, the unit is `M☉`/`Msun`, and the hint could say so (and `m_sun` suggests `R_sun`, not `M_sun`)
