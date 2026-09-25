@@ -410,3 +410,45 @@ solve x' = y, y' = -x with x(0) = 0, y(0) = 1 for t from 0 to 20
 cubic (O(h³)), or better, evaluate the right-hand side at the interpolated state (exact to
 solver accuracy for first-order unknowns); consider DP45's own 4th/5th-order dense output for
 `x(t)` too (midpoint errors are ~1000× the node errors now).
+
+## A31. (low) A `where` binding silently shadows a function parameter
+```
+f(x) = 2 x where x = 5 s
+print f(1 s)        # 10 s -- the argument is ignored, no warning
+```
+
+## A32. Python crash (OverflowError) for an infinite constant index
+```
+xs = [1, 2, 3]
+print xs[inf]
+```
+Traceback from `checker.index_expr`: `int(idx.value)` → `OverflowError: cannot convert float
+infinity to integer`. Expected the usual "index ∞ is out of range" error. (`xs[0/0]`, `xs[1e19]`
+don't crash the checker but see A33.)
+
+## A33. Runtime errors with no message: "runtime error"
+All of these stop with just `runtime error` (no line, no explanation):
+```
+xs = [1, 2, 3]
+print xs[1e19]              # (also i = 18446744073709551617; xs[i], and xs[1e19] = 5)
+print xs[0/0]
+n = 0
+for i from 1 to inf         # (with a break inside -- arguably should just loop)
+    n += 1
+    if n > 5
+        break
+for i from 1 to 0/0
+    n += 1
+print len(zeros(inf))
+```
+Also after A27: reading a list/solution that was never assigned gives the same bare message.
+
+## A34. Huge list sizes segfault (malloc failure not checked)
+```
+xs = zeros(3e9)
+xs[1] = 2
+print sum(xs)               # Segmentation fault (exit 139)
+```
+`zeros(1e12)` then `print xs[5]` prints `0`, and `print len(linspace(0, 1, 1e12))` prints
+`1×10¹²`, so the allocation result is never checked. Expected: "not enough memory for a list of
+3×10⁹ numbers". (Minor: `sort([3, 0/0, 1, 2])` returns `[3, NaN, 1, 2]` unsorted.)

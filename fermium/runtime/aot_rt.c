@@ -119,6 +119,17 @@ static void print_seq(int64_t fid, const double *p, int64_t n, const char *open,
 
 void fm_print_list(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "[", "]"); }
 void fm_print_vec(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "<", ">"); }
+void fm_print_textlist(double *p, int64_t n) {
+    static char out[1 << 15];
+    strcpy(out, "[");
+    for (int64_t i = 0; i < n; i++) {
+        strcat(out, fm_texts[(int64_t)p[i]]);
+        if (i + 1 < n) strcat(out, ", ");
+    }
+    strcat(out, "]");
+    emit(out);
+}
+
 void fm_print_bool(int64_t b) { emit(b ? "true" : "false"); }
 void fm_print_text(int64_t i) { emit(fm_texts[i]); }
 

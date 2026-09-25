@@ -16,7 +16,8 @@ from . import calculus as C
 from . import ir as I
 from .constants import all_constants
 from .errors import FermiumError, Diagnostics
-from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, BOOL, STR, VOID, Ty,
+from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, TextListTy, BOOL, STR,
+                    VOID, Ty,
                     type_desc)
 from .units import DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
 
@@ -283,6 +284,11 @@ class Checker(C.DiffContext):
         if len(e.args) != 2 or not isinstance(e.args[0], A.Name):
             raise self.err("push needs a list variable and a value: push(xs, x)", e)
         lst = self.expr(e.args[0], ctx)
+        if isinstance(lst, I.IVar) and isinstance(lst.ty, TextListTy):
+            v = self.expr(e.args[1], ctx)
+            if not isinstance(v.ty, StrTy):
+                raise self.err("this list holds text, so you can only push text onto it", e.args[1])
+            return I.SPush(lst.sym, v)
         if not isinstance(lst, I.IVar) or not isinstance(lst.ty, ListTy):
             raise self.err(f"push needs a list as its first argument, not {type_desc(lst.ty, self.U)}", e.args[0])
         v = self.expr(e.args[1], ctx)
@@ -404,6 +410,8 @@ class Checker(C.DiffContext):
                 items.append(("list", v, self.fmt(v)))
             elif isinstance(v.ty, VecTy):
                 items.append(("vec", v, self.fmt(v)))
+            elif isinstance(v.ty, TextListTy):
+                items.append(("textlist", v, None))
             elif isinstance(v.ty, BoolTy):
                 items.append(("bool", v, None))
             elif isinstance(v.ty, StrTy):
@@ -532,6 +540,13 @@ class Checker(C.DiffContext):
         lst = self.expr(s.iterable, ctx, allow_func=True)
         if isinstance(lst, SolRef):
             lst = self.sol_values(lst.view)
+        if isinstance(lst.ty, TextListTy):
+            sym = self.loop_var(s.var, STR, ctx, s)
+            sym.assigned = True
+            ctx.loop += 1
+            body = self.block(s.body, ctx)
+            ctx.loop -= 1
+            return I.SForIn(sym, lst, body)
         if not isinstance(lst.ty, ListTy):
             raise self.err(f"can't loop over {type_desc(lst.ty, self.U)}; 'for x in ...' needs a list", s.iterable,
                            hint="to count, write  for i from 1 to 10")
@@ -1056,6 +1071,10 @@ class Checker(C.DiffContext):
 
     def e_ListLit(self, e, ctx):
         items = [self.expr(x, ctx) for x in e.items]
+        if items and all(isinstance(it.ty, StrTy) for it in items):
+            return I.IList(items, TextListTy())
+        if any(isinstance(it.ty, StrTy) for it in items):
+            raise self.err("a list can hold numbers or text, but not both", e)
         dim = DExpr.fresh("list")
         for it, node in zip(items, e.items):
             self.need_num(it, node, "a list element")
@@ -1163,6 +1182,8 @@ class Checker(C.DiffContext):
             return self.vec_elem(t, int(idx.value) - 1, e.index)
         if isinstance(t, SolRef):
             t = self.sol_values(t.view)
+        if isinstance(t, I.Expr) and isinstance(t.ty, TextListTy):
+            return I.IIndex(t, self.index_expr(e.index, t, ctx), STR, e.line)
         if isinstance(t, FuncRef) or not isinstance(t.ty, ListTy):
             raise self.err("only lists can be indexed with [...]", e.target,
                            hint="to call a function use parentheses: f(x)")
@@ -1531,6 +1552,10 @@ class Checker(C.DiffContext):
             self.need_num(args[0], e.args[0])
             self.U.unify(args[0].ty.dim, DIMLESS)
             return self._bi(name, args, NumTy(DIMLESS), args)
+        if name == "len" and n == 1 and isinstance(args[0].ty, TextListTy):
+            r = self._bi("len", args, NumTy(DIMLESS), args)
+            r.sf = None
+            return r
         if name in LIST_FUNCS or name in ("values", "times"):
             need(1)
             a = args[0]

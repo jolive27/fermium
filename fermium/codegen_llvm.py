@@ -12,7 +12,7 @@ import math
 from llvmlite import ir
 
 from . import ir as I
-from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy
+from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, TextListTy
 
 F64 = ir.DoubleType()
 I64 = ir.IntType(64)
@@ -56,7 +56,7 @@ def lltype(ty):
         return ir.VectorType(F64, ty.n)
     if isinstance(ty, BoolTy):
         return I1
-    if isinstance(ty, ListTy):
+    if isinstance(ty, (ListTy, TextListTy)):
         return LIST
     if isinstance(ty, SolTy):
         return SOLP
@@ -112,6 +112,7 @@ class ModuleGen:
         e("fm_print_num", VOID, [I64, F64])
         e("fm_print_list", VOID, [I64, F64P, I64])
         e("fm_print_vec", VOID, [I64, F64P, I64])
+        e("fm_print_textlist", VOID, [F64P, I64])
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
@@ -803,6 +804,8 @@ class FuncGen:
     def s_SPush(self, s):
         b = self.b
         v = self.expr(s.value)
+        if isinstance(s.value.ty, StrTy):
+            v = b.sitofp(v, F64)
         hdr = b.load(self.slot(s.sym))
         pdata = b.gep(hdr, [I32(0), I32(0)])
         plen = b.gep(hdr, [I32(0), I32(1)])
@@ -901,7 +904,8 @@ class FuncGen:
         b.position_at_end(cond)
         b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
         b.position_at_end(body)
-        self.store(s.sym, b.load(b.gep(data, [b.load(iv)])))
+        el = b.load(b.gep(data, [b.load(iv)]))
+        self.store(s.sym, b.fptosi(el, I64) if isinstance(s.sym.ty, StrTy) else el)
         self.loops.append((inc, end))
         self.emit_body(s.body)
         self.loops.pop()
@@ -945,6 +949,9 @@ class FuncGen:
                 b.call(ex["fm_print_bool"], [b.zext(self.expr(payload), I64)])
             elif kind in ("text", "data"):
                 b.call(ex["fm_print_text"], [i64(fid)])
+            elif kind == "textlist":
+                lst = self.expr(payload)
+                b.call(ex["fm_print_textlist"], [self.ldata(lst), self.llen(lst)])
             elif kind == "textvar":
                 b.call(ex["fm_print_text"], [self.expr(payload)])
         b.call(ex["fm_print_end"], [])
@@ -1263,7 +1270,10 @@ class FuncGen:
         b = self.b
         out, data = self.new_list(i64(len(e.items)))
         for i, it in enumerate(e.items):
-            b.store(self.expr(it), b.gep(data, [i64(i)]))
+            v = self.expr(it)
+            if isinstance(it.ty, StrTy):
+                v = b.sitofp(v, F64)
+            b.store(v, b.gep(data, [i64(i)]))
         return out
 
     def elem_ptr(self, lst, idx):
@@ -1279,7 +1289,8 @@ class FuncGen:
 
     def e_IIndex(self, e):
         lst = self.expr(e.lst)
-        return self.b.load(self.elem_ptr(lst, self.expr(e.idx)))
+        v = self.b.load(self.elem_ptr(lst, self.expr(e.idx)))
+        return self.b.fptosi(v, I64) if isinstance(e.ty, StrTy) else v
 
     def e_IIntegral(self, e):
         fn = self.mg.lambda_for(e.lam)

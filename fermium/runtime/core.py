@@ -120,6 +120,9 @@ class Runtime:
                 s += " " + u.name
             rt.line.append(s)
 
+        def print_textlist(p, n):
+            rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
+
         def print_bool(b):
             rt.line.append("true" if b else "false")
 
@@ -185,13 +188,14 @@ class Runtime:
 
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
-                   "print_bool": print_bool, "print_text": print_text, "print_end": print_end,
+                   "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
                    "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
             "fm_print_num": CB(None, c_int64, c_double)(print_num),
             "fm_print_list": CB(None, c_int64, DPTR, c_int64)(print_list),
             "fm_print_bool": CB(None, c_int64)(print_bool),
             "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
+            "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
             "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),

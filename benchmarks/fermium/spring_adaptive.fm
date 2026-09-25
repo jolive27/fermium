@@ -1,11 +1,12 @@
 # Damped spring, adaptive Dormand–Prince RK45 from 0 to 100 s.
+# tolerance 1e-10 gives about the same final error (~2e-10 m) as the Julia/SciPy runs (rtol 1e-8, atol 1e-10).
 m = 1 kg
 k = 100 N/m
 b = 0.5 kg/s
 t0 = clock()
 solve m x'' = -k x - b x'
   with x(0) = 0.1 m, x'(0) = 0 m/s
-  for t from 0 s to 100 s tolerance 1e-8
+  for t from 0 s to 100 s tolerance 1e-10
 t1 = clock()
 print "x_100s", x(100 s) / (1 m) to 10 digits
 print "accepted_steps", len(x) - 1

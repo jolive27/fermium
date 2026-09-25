@@ -193,6 +193,14 @@ class VecTy(Ty):
         return f"Vec{self.n}[{self.dim}]"
 
 
+class TextListTy(Ty):
+    """A list of text values, like ["H-1", "He-4"] (stored as text ids)."""
+    kind = "textlist"
+
+    def __repr__(self):
+        return "List[text]"
+
+
 class SolTy(Ty):
     """Handle to an ODE solution (all components share one handle)."""
     kind = "sol"
@@ -234,5 +242,7 @@ def type_desc(t: Ty, U: Unifier) -> str:
         return f"a list of {U.describe(t.dim)}"
     if isinstance(t, VecTy):
         return f"a {t.n}-vector of {U.describe(t.dim)}"
+    if isinstance(t, TextListTy):
+        return "a list of text"
     return {"bool": "true/false value", "str": "text", "sol": "ODE solution", "data": "data table",
             "void": "nothing"}.get(t.kind, t.kind)

@@ -392,6 +392,13 @@ def write_report(records, info, args):
                     inner_ratio = inner / ref_inner[bench]
             if bench == "startup":
                 inner_txt = "n/a"
+            if bench == "spring_adaptive" and r["lang"] == "fermium":
+                notes.append("tolerance 1e-10 chosen so the final error (~1.8e-10 m) matches Julia's "
+                             "rtol=1e-8/atol=1e-10 run (~2e-10 m; exact 1.1e-12 m); different error norms, so "
+                             "x_100s and step counts differ at the noise floor")
+            if bench == "spring_rk4" and r["lang"] == "fermium":
+                notes.append("also stores the whole trajectory (dense solution usable after solve); others keep only "
+                             "the current state")
             if bench == "unit_loop" and r["lang"] == "julia" and not r["variant"]:
                 notes.append("wall includes loading Unitful.jl (both variants run in one process)")
             if r["variant"]:

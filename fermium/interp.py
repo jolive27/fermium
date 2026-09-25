@@ -491,6 +491,9 @@ class Interpreter:
                 py["print_bool"](1 if self.eval(payload, fr) else 0)
             elif kind in ("text", "data"):
                 py["print_text"](fid)
+            elif kind == "textlist":
+                v = self.eval(payload, fr)
+                py["print_textlist"](v, len(v))
             elif kind == "textvar":
                 py["print_text"](self.eval(payload, fr))
         py["print_end"]()
@@ -693,7 +696,7 @@ class Interpreter:
         return out
 
     def e_IList(self, e, fr):
-        return [float(self.eval(x, fr)) for x in e.items]
+        return [self.eval(x, fr) for x in e.items]
 
     def index(self, idx, n):
         i = int(idx) if math.isfinite(idx) else -1

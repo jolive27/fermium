@@ -386,13 +386,10 @@ def test_forced_system_matches_scipy():
 
 @pytest.mark.xfail(strict=True, reason="BUG A15: absolute error floor degraded the stiff VdP result to 1.7e-4")
 def test_stiff_van_der_pol():
-    si = pytest.importorskip("scipy.integrate")
-    mu = 1000
-    s = si.solve_ivp(lambda t, y: [y[1], mu * (1 - y[0] ** 2) * y[1] - y[0]], [0, 3000], [2, 0],
-                     method="Radau", rtol=1e-10, atol=1e-12)
+    # reference: scipy Radau and LSODA (rtol 1e-12) agree on -1.51060693(6)
     out = run("μ = 1000\nsolve x'' = μ (1 - x^2) x' - x with x(0) = 2, x'(0) = 0 for t from 0 to 3000\n"
               "print x(3000)")
-    assert close(num(out), s.y[0, -1], 1e-5)
+    assert close(num(out), -1.5106069366, 1e-5)
 
 
 @pytest.mark.xfail(strict=True, reason="BUG A15: exponential decay loses relative accuracy (absolute floor)")
@@ -804,3 +801,29 @@ for i from 1 to len(ts) - 1
 print en, em"""
     en, em = nums(run(src))
     assert en < 1e-8 and em < 1e-6
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A31: a where-binding silently shadows a parameter")
+def test_where_shadowing_parameter_warns():
+    from conftest import warnings_of
+    assert warnings_of("f(x) = 2 x where x = 5 s\nprint f(1 s)")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A32: xs[inf] crashes the checker with OverflowError")
+def test_infinite_constant_index_is_a_fermium_error():
+    from fermium.errors import FermiumError
+    with pytest.raises(FermiumError):
+        run("xs = [1, 2, 3]\nprint xs[inf]")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A33: runtime error without a message")
+@pytest.mark.parametrize("src", ["xs = [1, 2, 3]\nprint xs[1e19]", "xs = [1, 2, 3]\nprint xs[0/0]",
+                                 "n = 0\nfor i from 1 to 0/0\n    n += 1\nprint n"])
+def test_runtime_errors_have_messages(src):
+    assert str(error_of(src)) not in ("runtime error", "line 2: runtime error", "line 3: runtime error")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A34: failed malloc for a huge list segfaults")
+def test_huge_list_is_a_clean_error(tmp_path):
+    r = _run_cli("xs = zeros(1e15)\nxs[1] = 2\nprint sum(xs)\n", tmp_path)
+    assert r.returncode == 1 and "memory" in r.stderr
