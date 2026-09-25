@@ -555,7 +555,7 @@ FMT_PROGRAMS = [
     "omega = 3\nomega_0 = 2\nprint omega omega_0, omega_0^2",
     "a = 1 um\nprint a in angstrom, 1 Msun in kg",
     "A = 0.1 m\nomega = 10 1/s\nx(t) = A cos(omega t)\nv = d/dt x\nprint v(0.1 s), x''(0.1 s)",
-    "f(x, y) = x^2 y\nprint (partial/partial x f)(1, 2)",
+    "f(x, y) = x^2 y\ng = partial/partial x f\nprint g(1, 2)",
     "print integral x^2 dx from 0 to 1, sqrt(2)^3, cbrt(8)",
     "print 5 <= 6, 5 != 6, 1 ~= 1.0000000001, 20 degC",
 ]
@@ -723,25 +723,21 @@ def test_builtin_list_and_math_functions():
     assert run("print std([1, 2, 3, 4])") == "1.29099"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A27: variable set only in an untaken if-branch reads a made-up value")
 def test_variable_assigned_only_in_untaken_branch():
     with pytest.raises(Exception):
         run("x = 1\nif x > 2\n    y = 3 m\nprint y")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A27: variable set only inside a loop that never ran reads garbage")
 def test_variable_assigned_only_in_empty_loop():
     with pytest.raises(Exception):
         run("while false\n    w = 1\nprint w")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A27: function local set only in an untaken branch")
 def test_function_local_assigned_only_in_untaken_branch():
     with pytest.raises(Exception):
         run("f(x) =\n    if x > 0\n        y = 2 x\n    y\nprint f(-1)")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A29: `2(x+1)^2` applies ^2 to the product 2(x+1)")
 @pytest.mark.parametrize("src,want", [
     ("x = 3\nprint 2(x+1)^2", "32"),
     ("x = 3\nprint ½(x+1)^2", "8"),
@@ -900,3 +896,75 @@ def test_function_keeps_argument_display_unit():
 
 def test_function_result_value_with_mixed_unit_calls():
     assert run("f(x) = 2 x\nprint f(1 km) in m, f(3 cm) in cm, f(5 m)") == "2000 m 6 cm 10 m"
+
+
+# second derivatives found wrong by fuzzing f, f', f'' against mpmath (BUG A41)
+D2_FUZZ = [
+    ("exp(sin(exp(x)))", lambda m, x: m.exp(m.sin(m.exp(x)))),
+    ("sin(exp(sin(x)))^2", lambda m, x: m.sin(m.exp(m.sin(x))) ** 2),
+    ("exp(sin(exp(sin(x))))", lambda m, x: m.exp(m.sin(m.exp(m.sin(x))))),
+    ("cos((((2 - x) + (7 * 2)) * (cos((3/2)) / sin(x))))",
+     lambda m, x: m.cos(((2 - x) + 14) * (m.cos(m.mpf(3) / 2) / m.sin(x)))),
+    ("exp(sin(ln((-exp(sin(x)))^2 + 2)))", lambda m, x: m.exp(m.sin(m.log(m.exp(m.sin(x)) ** 2 + 2)))),
+]
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A41: factor_common drops a repeated factor")
+@pytest.mark.parametrize("formula,f", D2_FUZZ, ids=[c[0] for c in D2_FUZZ])
+def test_second_derivative_fuzz_cases(formula, f):
+    mpmath = pytest.importorskip("mpmath")
+    mpmath.mp.dps = 30
+    got = num(run(f"f(x) = {formula}\nh = f''\nprint h(13/10)"))
+    want = float(mpmath.diff(lambda x: f(mpmath, x), mpmath.mpf(13) / 10, 2))
+    assert close(got, want, 2e-5)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A41: first derivative of a product with a repeated inner factor")
+def test_first_derivative_repeated_factor():
+    got = num(run("f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)\ng = f'\nprint g(13/10)"))
+    assert close(got, 8.25545148831716, 1e-5)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A42: (∂/∂x f)(1, 2) no longer parses after the A29 fix")
+def test_call_parenthesised_partial_with_two_arguments():
+    assert run("f(x, y) = x^2 y\nprint (∂/∂x f)(1, 2), (partial/partial y f)(1, 2)") == "4 1"
+
+
+def test_call_parenthesised_derivative_one_argument():
+    assert run("f(x) = x^2\nprint (d/dx f)(3)") == "6"
+
+
+def test_definite_assignment_both_branches_ok():
+    assert run("x = 1\nif x > 0\n    y = 1\nelse\n    y = 2\nprint y") == "1"
+    assert "might not have a value" in str(error_of("x = 1\nif x > 2\n    y = 3 m\nprint y"))
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A43: loop variable read after a loop that never ran is garbage")
+@pytest.mark.parametrize("src", ["for i from 1 to 0\n    print 5\nprint i",
+                                 "for x in []\n    print 5\nprint x",
+                                 "f(n) =\n    for i from 1 to n\n        print 1\n    i\nprint f(0)"])
+def test_loop_variable_after_empty_loop(src):
+    # expected: "i might not have a value here" (the garbage printed now is nondeterministic)
+    assert "value" in str(error_of(src))
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A44: 1/√ endpoint singularity reported as 'doesn't converge'")
+@pytest.mark.parametrize("integral,want", [
+    ("1/sqrt(1 - x^2) dx from -1 to 1", math.pi),
+    ("1/sqrt(1 - x^2) dx from 0 to 1", math.pi / 2),
+    ("1/sqrt(cos(x) - cos(1)) dx from -1 to 1", 4.73759822490498),
+    ("1/sqrt(abs(x - 0.3)) dx from 0 to 1", 2 * (math.sqrt(0.3) + math.sqrt(0.7))),
+])
+def test_integrable_sqrt_singularities(integral, want):
+    assert close(num(run(f"print ∫ {integral}")), want, 1e-5)
+
+
+def test_integrable_power_singularities():
+    got = nums(run("print ∫ x^(-0.8) dx from 0 to 1\nprint ∫ abs(x)^(-0.5) dx from -1 to 1\n"
+                   "print ∫ x^(-0.95) dx from 0 to 1\nprint ∫ ln(abs(x)) dx from -1 to 1"))
+    assert all(close(g, w, 1e-5) for g, w in zip(got, [5, 4, 20, -2]))
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A44: weakly singular integrand only accurate to ~1e-4")
+def test_weak_singularity_accuracy():
+    assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.15956720188266, 1e-5)

@@ -363,6 +363,7 @@ class Checker(C.DiffContext):
             sym.hint = v.hint
             sym.direct = v.direct
         sym.assigned = True
+        self._note_assign(ctx, sym, not owned)
         return I.SAssign(sym, v)
 
     def s_IndexAssign(self, s, ctx):
@@ -502,14 +503,67 @@ class Checker(C.DiffContext):
         except FermiumError:
             return ""
 
+    # ---- definite assignment: a variable first set inside an if/loop may have no value afterwards
+    def _enter_region(self, ctx, kind, line):
+        reg = {"kind": kind, "line": line, "new": [], "assigned": [set()], "parent": None}
+        regs = ctx.__dict__.setdefault("regions", [])
+        reg["parent"] = regs[-1] if regs else None
+        regs.append(reg)
+        return reg
+
+    def _exit_region(self, ctx, reg):
+        ctx.regions.pop()
+        both = None
+        if reg["kind"] == "if" and len(reg["assigned"]) == 2:
+            both = reg["assigned"][0] & reg["assigned"][1]      # set on both sides of if/else
+        for sym in reg["new"]:
+            sym.region = reg["parent"]
+            if both is not None and sym.id in both:
+                continue
+            if getattr(sym, "unset_msg", None) is None:
+                what = {"if": "the if", "while": "the while loop", "for": "the for loop"}[reg["kind"]]
+                sym.unset_msg = f"{sym.name} might not have a value here: it is only set inside {what} on line " \
+                                f"{reg['line']}"
+            if reg["parent"] is not None:
+                reg["parent"]["new"].append(sym)
+        parent = reg["parent"]
+        if parent is not None:
+            ids = set().union(*reg["assigned"]) if reg["kind"] == "if" and len(reg["assigned"]) == 2 and False \
+                else (reg["assigned"][0] & reg["assigned"][1] if reg["kind"] == "if" and len(reg["assigned"]) == 2
+                      else set())
+            parent["assigned"][-1] |= ids
+
+    def _note_assign(self, ctx, sym, new):
+        regs = getattr(ctx, "regions", [])
+        if new:
+            sym.region = regs[-1] if regs else None
+            if regs:
+                regs[-1]["new"].append(sym)
+        else:
+            cur = regs[-1] if regs else None
+            # assigning at the level where the variable lives (or outside all regions) gives it a value
+            r = cur
+            while r is not None and r is not getattr(sym, "region", None):
+                r = r["parent"]
+            if cur is None or r is getattr(sym, "region", "none"):
+                if cur is getattr(sym, "region", None) or cur is None:
+                    sym.unset_msg = None
+        if regs:
+            regs[-1]["assigned"][-1].add(sym.id)
+
     def s_If(self, s, ctx):
         c = self.cond(s.cond, ctx)
         ctx.branch = getattr(ctx, "branch", 0) + 1
+        reg = self._enter_region(ctx, "if", s.line)
         try:
             then = self.block(s.then, ctx)
+            reg["assigned"].append(set())
             other = self.block(s.other, ctx) if s.other else []
+            if not s.other:
+                reg["assigned"].pop()
         finally:
             ctx.branch -= 1
+            self._exit_region(ctx, reg)
         return I.SIf(c, then, other)
 
     def cond(self, e, ctx):
@@ -522,7 +576,11 @@ class Checker(C.DiffContext):
     def s_While(self, s, ctx):
         c = self.cond(s.cond, ctx)
         ctx.loop += 1
-        body = self.block(s.body, ctx)
+        reg = self._enter_region(ctx, "while", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
         ctx.loop -= 1
         return I.SWhile(c, body)
 
@@ -557,7 +615,11 @@ class Checker(C.DiffContext):
         sym.sf = None
         sym.assigned = True
         ctx.loop += 1
-        body = self.block(s.body, ctx)
+        reg = self._enter_region(ctx, "for", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
         ctx.loop -= 1
         return I.SFor(sym, lo, hi, st, body)
 
@@ -579,7 +641,11 @@ class Checker(C.DiffContext):
         sym.hint = lst.hint
         sym.assigned = True
         ctx.loop += 1
-        body = self.block(s.body, ctx)
+        reg = self._enter_region(ctx, "for", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
         ctx.loop -= 1
         return I.SForIn(sym, lst, body)
 
@@ -728,6 +794,10 @@ class Checker(C.DiffContext):
 
     def var_ref(self, sym, ctx, node):
         """Reference a variable, marking it global or captured when used from another function."""
+        msg = getattr(sym, "unset_msg", None)
+        if msg and ctx.lam is None and (sym.func is ctx.func):
+            where = msg.split("inside ")[1]
+            raise self.err(msg, node, hint=f"give {sym.name} a value before {where}, e.g.  {sym.name} = 0")
         if ctx.lam is not None:
             lam = ctx.lam
             if sym in lam.locals or sym in lam.params or sym in lam.state or sym in lam.param_syms \
@@ -962,6 +1032,13 @@ class Checker(C.DiffContext):
         return None
 
     def power(self, e, ctx):
+        # k(x + 1)^2 with a number k means k·(x + 1)², not (k·(x + 1))²
+        if isinstance(e.left, A.Call) and isinstance(e.left.func, A.Name) and len(e.left.args) == 1 and \
+                not e.left.paren:
+            b, _ = ctx.scope.lookup(e.left.func.name)
+            if isinstance(b, (I.Sym, ConstInfo)):
+                inner = A.BinOp("^", e.left.args[0], e.right).at(e)
+                return self.e_BinOp(A.BinOp("*", e.left.func, inner, implicit=True).at(e), ctx)
         pconst = self.const_value(e.right)
         if isinstance(e.left, A.Name) and e.left.name == "e" and (pconst is None or pconst <= 0):
             b, _ = ctx.scope.lookup("e")

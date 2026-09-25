@@ -328,7 +328,7 @@ print g(-8)               # NaN  expected 0.0833333 (= 1/12), consistent with f(
 ```
 Only an exponent exactly equal to 1/3 gets the real-root treatment.
 
-## A27. (HIGH) Variables assigned only inside a branch/loop that didn't run: garbage or a made-up value
+## A27. [FIXED] (HIGH) Variables assigned only inside a branch/loop that didn't run: garbage or a made-up value
 The checker accepts reading a variable whose only assignment is inside an `if`/`for`/`while`
 that never executed; codegen reads an uninitialised slot (LLVM then feels free to use `undef`):
 ```
@@ -362,7 +362,7 @@ print f(-1)          # actual: 6.90214×10⁻³¹⁰   expected: an error
 ```
 (Globals defined *after* the call are correctly rejected: "z isn't defined".)
 
-## A29. (HIGH) `2(x+1)^2` squares the 2 as well: juxtaposition with a parenthesis binds tighter than `^`
+## A29. [FIXED] (HIGH) `2(x+1)^2` squares the 2 as well: juxtaposition with a parenthesis binds tighter than `^`
 `number(expr)` / `name(expr)` (multiplication, D8) is parsed like a call, a postfix, so a
 following `^` applies to the whole product:
 ```
@@ -534,3 +534,76 @@ Units written in the function body are kept (bugs-examples #4), but not the argu
 nuclear-physics user every `f(E)` needs `in MeV`. Display hints are per call site, so each call
 could carry its argument's hint (the instance is shared per dimension, so this must be done at
 the call, not in the monomorphised body).
+
+## A41. (HIGH) Symbolic derivative drops a factor: `exp(sin(exp(x)))''` is wrong
+Found by fuzzing f, f', f'' against mpmath (tests/test_adversarial.py has the fuzz cases).
+```
+f(x) = exp(sin(exp(x)))
+g = f''
+print g(13/10)       # actual: 0.856062     expected: 8.25545 (sympy / mpmath)
+print g              # g(x) = (cos(exp(x))² - sin(exp(x)) + cos(exp(x)))·exp(sin(exp(x)))·exp(x)
+                     # correct: (exp(x)·(cos(exp(x))² - sin(exp(x))) + cos(exp(x)))·exp(sin(exp(x)))·exp(x)
+```
+Smallest first-derivative repro:
+```
+f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)
+g = f'
+print g(13/10)       # actual 0.856062, expected 8.25545
+```
+Also `f(x) = sin(exp(sin(x)))^2`: f''(1.3) = 2.20714, expected 2.51432.
+Likely cause: `calculus.factor_common` builds `{key(f): f for f in fs}` per term, so a factor
+that occurs twice in a term (here `exp(x)·exp(x)`) is collapsed; then
+`remaining = [f for f in fs if key(f) not in common]` removes *every* copy while only one copy
+is multiplied back in front. Count multiplicities (take the minimum count across terms, remove
+that many).
+
+## A42. (regression from the A29 fix) `(∂/∂x f)(1, 2)` no longer parses
+```
+f(x, y) = x^2 y
+print (∂/∂x f)(1, 2)     # now: "expected ')' to close '(' but found ','"   (worked before; expected 4)
+```
+`(d/dx f)(3)` still works; a parenthesised expression followed by a multi-argument `(a, b)`
+must still be a call when the parenthesised thing is a function. (This form was in
+tests/test_adversarial.py FMT_PROGRAMS, which is how it was caught.)
+
+## A43. (A27 leftover) The loop variable after a loop that never ran is garbage
+```
+for i from 1 to 0
+    print 5
+print i              # actual: 6.92797×10⁻³¹⁰
+for x in []
+    print 5
+print x              # actual: 6.92365×10⁻³¹⁰
+f(n) =
+    for i from 1 to n
+        print 1
+    i
+print f(0)           # actual: 6.90166×10⁻³¹⁰
+```
+The A27 definite-assignment check doesn't cover the loop variable itself. Either treat it
+like other loop-body assignments ("i might not have a value here") or give it a defined value
+(e.g. `i` = start value) -- but then document what `i` is after a loop that ran (currently the
+last value, 3 for `from 1 to 3`).
+
+## A44. (HIGH, likely regression from the A4 fix) Convergent integrals with 1/√ endpoint singularities are rejected as "doesn't converge"
+```
+print ∫ 1/sqrt(1 - x^2) dx from -1 to 1          # expected π; actual: "this integral doesn't converge"
+print ∫ 1/sqrt(1 - x^2) dx from 0 to 1           # expected π/2; same error
+print ∫ 1/sqrt(0.25 - x^2) dx from -0.5 to 0.5   # expected π
+print ∫ 1/sqrt(cos(x) - cos(1)) dx from -1 to 1  # expected 4.7376 (pendulum period integral, θ₀ = 1)
+print ∫ 1/sqrt(abs(x - 0.3)) dx from 0 to 1      # expected 2.76877 (interior singularity)
+```
+These are the textbook physics integrals (period of a pendulum / of any 1-D oscillator
+between turning points, arcsine distribution). Note `∫ x^(-0.95) dx from 0 to 1` = 20 works,
+so the singularity at the lower limit is handled but at the upper limit (1 - x → 0) or at an
+interior point it isn't -- maybe the √ of a catastrophically cancelled `1 - x^2` becomes
+sqrt(0) = 0 → 1/0 = ∞ at a node, which the divergence check then treats as blow-up. An
+endpoint node should never be evaluated (GK nodes are interior) -- but after bisection at depth
+~50 a node can round onto the endpoint.
+
+Related accuracy issue: weakly singular integrands converge only to ~1e-4 relative, printed
+to 6 s.f.:
+```
+print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1          # actual 5.16031, expected 5.15957 (mpmath)
+print ∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3      # actual 13.7312, expected 13.7294
+```

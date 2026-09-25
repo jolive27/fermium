@@ -862,7 +862,8 @@ class Parser:
         t = self.tok
         e = self.atom()
         while True:
-            if self.at_op("(") and not self.tok.ws_before:
+            if self.at_op("(") and not self.tok.ws_before and not isinstance(e, (A.Num, A.Quantity)) and \
+                    not e.paren:
                 self.next()
                 args = []
                 self.skip_newlines()
