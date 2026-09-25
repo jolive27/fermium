@@ -180,7 +180,7 @@ print ½ m v^2
 
 ## ⚠️ Gotcha: `1/2 m v^2`
 
-Fermium reads implicit multiplication *before* division, the way physicists read `h c / λ k T` as (hc)/(λkT). So `1/2 m v^2` means 1/(2 m v²), which is not the kinetic energy. Fermium warns about this too. Write `(1/2) m v^2` or `½ m v^2`.
+Fermium reads implicit multiplication *before* division, the way physicists read `h c / λ k T` as (hc)/(λkT). So `1/2 mass v^2` means 1/(2 · mass · v²), which is not the kinetic energy, and Fermium warns about it. With a variable called `m`, `1/2 m v^2` doesn't even get that far: it is the `'2 m' is ambiguous` error from above. Write `(1/2) m v^2` or `½ m v^2`.
 
 Here's where that rule helps: the Planck distribution's exponent hc/(λk_BT) can be written exactly as on paper:
 
@@ -212,7 +212,7 @@ print p
 6 kg m/s
 ```
 
-The metre gotcha applies here too: `0.5 m v^2 where m = 2 kg` means 0.5 *metres* (Fermium warns you). Use `½ m v^2` or a longer name like `mass`.
+The metre gotcha applies here too: `0.5 m v^2 where m = 2 kg` is the same error (`'0.5 m' is ambiguous: … but m is also the m from 'where'`). Use `½ m v^2`, `0.5 * m * v^2` or a longer name like `mass`.
 
 ## Comments
 
@@ -241,7 +241,7 @@ It takes 2.02 s to fall.
 - A variable keeps its units forever.
 - `x += 1 m` updates a variable.
 - `print "text", value` and `print x to 6 digits`. A variable can also hold text: `planet = "Mars"`.
-- **Gotchas:** `0.5 m v^2` uses *metres*; `1/2 m v^2` means 1/(2mv²). Write `½ m v^2` or `0.5 * m * v^2`.
+- **Gotchas:** with your own `m`, `0.5 m v^2` is an error (right after a number, `m` is the metre); `1/2 mass v^2` means 1/(2·mass·v²). Write `½ m v^2` or `0.5 * m * v^2`.
 
 ## Exercises
 
