@@ -141,12 +141,12 @@ Textbook problems from ten fields of physics, solved in Fermium and checked agai
 | electromagnetism | 3 | 3 |
 | optics waves | 3 | 3 |
 | special relativity | 3 | 3 |
-| quantum | 3 | 0 |
-| nuclear | 3 | 0 |
-| astrophysics | 4 | 0 |
-| **total** | **31** | **9** |
+| quantum | 3 | 3 |
+| nuclear | 3 | 3 |
+| astrophysics | 4 | 3 |
+| **total** | **31** | **18** |
 
-Friction items logged: 38; fixed in the language: 32.
+Friction items logged: 38; fixed in the language: 33.
 <!-- /gauntlet-table -->
 
 ## Browser playground
