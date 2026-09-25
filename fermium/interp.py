@@ -15,10 +15,9 @@ import time
 
 import numpy as np
 
-from .codegen_llvm import XGK, WGK, WG, odd_root_numerator
 from . import ir as I
 from .errors import FermiumRuntimeError
-from .numerics import PyOps, quintic_hermite
+from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, BoolTy
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
@@ -996,19 +995,21 @@ def sum_seq(xs):
     return acc
 
 
-def run_interpreted(source, filename="<program>", out=None, base_dir=None):
-    """Compile to IR and run it with the interpreter (no LLVM)."""
+def run_interpreted(source, filename="<program>", out=None, base_dir=None, diags=None):
+    """Compile to IR and run it with the interpreter (no LLVM, so it also runs in Pyodide).
+
+    Pass a Diagnostics object as `diags` to see the warnings afterwards."""
     import os
     import sys
     from .checker import Checker
-    from .driver import finalize_tables
+    from .tables import finalize_tables
     from .errors import Diagnostics
     from .parser import parse
     from .runtime.core import Runtime
     out = out or sys.stdout
     base_dir = base_dir or (os.path.dirname(os.path.abspath(filename)) if not filename.startswith("<")
                             else os.getcwd())
-    d = Diagnostics()
+    d = diags if diags is not None else Diagnostics()
     prog = parse(source, d)
     ck = Checker(d, base_dir)
     mod = ck.check_program(prog)
