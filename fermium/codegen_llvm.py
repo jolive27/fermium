@@ -1590,7 +1590,12 @@ class FuncGen:
         h = self.expr(e.data)
         pp = self.alloca(F64P)
         n = b.call(self.mg.externs["fm_column"], [h, i64(e.col), pp])
-        return self.make_header(b.load(pp), n)
+        # copy out of NumPy's buffer: push may realloc a list's data, which must be our own (A50)
+        src = b.load(pp)
+        out, data = self.new_list(n)
+        with self.lp.range(i64(0), n) as i:
+            b.store(b.load(b.gep(src, [i])), b.gep(data, [i]))
+        return out
 
     # ------------------------------------------------------------ builtins
     MATH_INTRINSICS = {"sin": "sin", "cos": "cos", "exp": "exp", "ln": "log", "log": "log", "log10": "log10",

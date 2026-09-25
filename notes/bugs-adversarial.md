@@ -663,7 +663,7 @@ print g(1)        # error "d/dt(...) is a function; give it an argument, like d/
                   # expected 6 (works without `where`, with a = 3 on its own line)
 ```
 
-## A50. (low / latent) A loaded column is a list header over NumPy's buffer; `push` reallocs it
+## A50. [FIXED] (low / latent) A loaded column is a list header over NumPy's buffer; `push` reallocs it
 `e_IColumn` wraps the pointer returned by `fm_column` (NumPy's array data) in a list header
 with cap = len, so
 ```

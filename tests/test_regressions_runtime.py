@@ -1,5 +1,6 @@
 """Regressions for audit bugs in quadrature, loops, list sizes and runtime errors (A3, A33, A34, A43, A44, A51)."""
 import math
+import os
 
 import pytest
 
@@ -118,3 +119,10 @@ def test_anonymous_calculus_results_print_readably():
     assert run("print ∫ x dx") == "∫ x dx = x²/2"
     assert run("print d/dt (3 t^2)") == "d/dt (3t²) = 6t"
     assert run("F = ∫ x^2 dx\nprint F") == "F(x) = x³/3"
+
+
+def test_push_on_a_loaded_column(tmp_path):
+    import shutil
+    shutil.copy(os.path.join(os.path.dirname(__file__), "..", "examples", "data", "pendulum.csv"), tmp_path)
+    src = 'd = load "pendulum.csv"\nLs = d.L\nfor k from 1 to 1000\n    push(Ls, 1 m)\nprint len(Ls), len(d.L)'
+    assert run(src, base_dir=str(tmp_path)) == "1011 11"      # A50: the column is copied, so push can grow it

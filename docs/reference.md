@@ -458,8 +458,6 @@ These are known and not yet fixed. None of them is silent about units.
 
 - **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges don't have this problem (§9).
 - **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
-- **`u` inside `∫ … du` is the atomic mass unit.** `∫ 1/u du from 1 to 2` gives 6.02×10²⁶ 1/kg, not ln 2, because `u` is read as the unit before Fermium sees `du`. Use another name for the integration variable (`∫ 1/w dw`). Names such as `s` and `L` that are also units have the same problem.
-- **`max(x)` and `min(x)` of an ODE solution** only look at the solver's steps, so they can be off in the 4th digit (0.999848 instead of 1). For an accurate maximum, find where `x'(t)` is 0.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
 - **Matrices** and lists of vectors don't exist yet.

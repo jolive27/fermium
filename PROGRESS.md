@@ -5,7 +5,7 @@ _Last updated: 2026-09-25 01:10 UTC_
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
 
 ## Status at a glance (01:10 UTC)
-- **Tests:** 1753 passed, 7 skipped, 4 xfailed (strict xfails of known bugs A24, A54, A55, A56), in about 90 s. Coverage 91%.
+- **Tests:** 1753 passed, 7 skipped, 4 xfailed (strict xfails of known bugs), in about 90 s. Coverage 91%.
 - Every ```` ```fermium ```` block in the docs, bootcamp and README runs in the tests, and every bootcamp output box is compared with the real output (`tests/test_bootcamp_outputs.py`).
 - 25 examples, all tested; 7 rosetta programs in Fermium, Julia and Python.
 
@@ -23,21 +23,15 @@ _Last updated: 2026-09-25 01:10 UTC_
 - **`fermium build`:** no `plot`, `load` or `fit`; needs a C compiler.
 - **Vectors:** no matrices and no lists of vectors.
 - **Uncertainties:** `±` is reserved and gives a friendly error; not implemented (docs/uncertainties.md).
-- **VS Code:** tested under Node with a stand-in for the VS Code API, not in a running VS Code; no hover or live errors.
+- **VS Code:** live errors, hover with units and `\name` completion come from the language server (`fermium lsp`, tested over stdio); the extension itself is tested under Node with a stand-in for the VS Code API, not in a running VS Code.
 - **`stdlib/`:** empty. Constants and units live in `fermium/constants.py` and `fermium/units.py`.
 
 ## Known issues
-Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A22, A25–A36, A38–A49 and A51–A53 are fixed):
-- **A54 (silent wrong answer):** inside `∫ … du`, `u` is the atomic mass unit, so `∫ 1/u du from 1 to 2` is 6.02×10²⁶ 1/kg. `∫ 1/s ds` (prints `1 1/s`) and `∫ 2/L dL` are wrong the same way.
+Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A55 are fixed; A3 and A56 are partly fixed):
 - **Narrow peak at a subdivision point (silent wrong answer, AUDIT §4.5):** `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` gives exactly half (0.0886 against 0.177). A peak at 1000.5 is right.
 - **A3 (partly fixed):** a narrow peak in a huge finite range can be missed: `∫ exp(-x²) dx from -1e6 to 1e6` prints 0.
 - **A56 (partly fixed):** strong interior singularities away from 0 (`|x - 0.3|^-0.8`, and even `^-0.6`) are rejected as "doesn't converge".
-- **A55:** `max`/`min` of an ODE solution only look at step points (off in the 4th digit).
-- **A23:** `plot a vs b, c vs d` with different units shares one mislabelled axis.
-- **A24:** a CSV with an empty cell prints a Python "Exception ignored" message before the proper error.
-- **A37:** decays below about 10⁻³⁰⁰ stall.
-- **A50:** `push` on a loaded column reallocates NumPy-owned memory (latent; no crash seen).
-- **Traps by design:** `2 G` is 2 × the gravitational constant (gauss is `gauss`), `2 h` is 2 × Planck's constant, and `2 g` is 2 grams. `2 g` warns only if you defined your own `g`; `2 G` and `2 h` never warn.
+- **Traps by design:** `2 G` is 2 × the gravitational constant (gauss is `gauss`), `2 h` is 2 × Planck's constant (both warn), and `2 g` is 2 grams (warns if you defined your own `g`).
 - `sqrt(-1)` is NaN and `factorial(-1)` is ∞, silently.
 - No garbage collection: list memory is only freed when the program ends.
 
