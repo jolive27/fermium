@@ -1,13 +1,27 @@
 # PROGRESS
 
-_Last updated: 2026-09-25 01:10 UTC_
+_Last updated: 2026-09-25 02:00 UTC_
 
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
 
-## Status at a glance (01:10 UTC)
-- **Tests:** 1753 passed, 7 skipped, 4 xfailed (strict xfails of known bugs), in about 90 s. Coverage 91%.
+## Status at a glance (02:00 UTC)
+- **Tests:** 2051 passed, 1 xfailed (A56 limitation), in about 3.5 min with the gauntlet, Jupyter, LSP and AOT suites.
 - Every ```` ```fermium ```` block in the docs, bootcamp and README runs in the tests, and every bootcamp output box is compared with the real output (`tests/test_bootcamp_outputs.py`).
 - 25 examples, all tested; 7 rosetta programs in Fermium, Julia and Python.
+
+## Phase 2 (all six items done, 02:00 UTC)
+1. **Jupyter kernel:** `fermium jupyter install`; inline plots, errors, `\name` completion; `examples/notebook.ipynb` (tests/test_jupyter.py runs it with nbclient).
+2. **Language server + VS Code:** `fermium lsp` (pygls): live error/warning underlines, hover shows units, `\name` completion; the extension starts it (tests/test_lsp.py drives it over stdio; the extension is tested under Node with a VS Code stand-in).
+3. **Vectors and matrices with units:** matrices 1×1–4×4 (`det`, `inverse`, `solve_linear`, `Mᵀ`), 4-vectors, per-component units (`<1 m, 2 m/s>`), a 3-D orbit example (tests/test_matrices.py).
+4. **∇:** `∇f`, `∇·F`, `∇×F`, `∇²f` (ASCII `grad/div/curl/laplacian`), symbolic, with units (tests/test_vector_calculus.py).
+5. **Browser playground:** `web/` (Pyodide + the reference interpreter, bootcamp examples preloaded), verified in headless Chromium (tests/test_playground.py).
+6. **`fermium build`:** native executables now also support `load`, `fit` and `plot` (SVG) (tests/test_aot.py).
+
+Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
+
+## Gauntlet (Phase 3)
+- First pass done: 31 problems in 10 topics, each checked against closed forms or SciPy (`tests/test_gauntlet_*.py`).
+- 38 friction items logged in gauntlet/FRICTION.md; 7 fixed so far, three agents fixing the parser, `solve` and calculus clusters.
 
 ## What works
 - **Units:** checked at compile time and erased before codegen. 7 base dimensions with rational exponents, SI prefixes, physics and astronomy units, °C/°F as absolute temperatures, `in` conversions, CODATA 2022 constants.
@@ -92,3 +106,4 @@ Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A55 ar
   - Fixed so far: A5–A11, A15, A20–A22, A25, A27–A30 and most of the AUDIT §4 items.
   - Next: the remaining AUDIT items (docs claims, bootcamp output boxes, stale PROGRESS/BACKLOG) and the rest of the adversarial list. Then Phase 2 (Jupyter kernel).
 - 01:00 UTC — Phase 1 audit fixes: quadrature rewritten (A3/A44/A51/A56), A33/A34/A37/A41/A43/A55 fixed by me; checker + calculus agents fixed A16–A19, A26, A31–A32, A35, A38, A40, A42, A45–A49, A52 (merged). 1561 tests pass, 3 xfail. Agents now on A23/A24/A54 and AUDIT §2 docs.
+- 02:00 UTC — Phase 1 closed (all audit items fixed or documented; A56 off-zero singularities and the mid-range half-peak are documented limitations). Phase 2 items 1–6 all done and merged. Gauntlet first pass: 31 problems, 38 friction items, 7 fixed; parser/solve/calculus friction agents running. 2051 tests pass.
