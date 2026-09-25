@@ -81,10 +81,24 @@ Honest caveats:
 | 3 (06:30) | 15 | `36 km/h` read as km / Planck's h, °C in products, `°C ± %`, early PDE transients, vector zero integrals | all 15 |
 | 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
 | 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | all 19 (+3 of 4 nits) |
-| 6 (10:00) | TBD | TBD | TBD |
+| 6 (10:00) | 7, all silent wrong answers in the newest code | matrix/vector noise-zeroing hid real entries (a Minkowski metric), the integral noise snap zeroed real small integrals, the PDE start-up skip hid a 20 % error, a near-degenerate eigenpair mixed, `d/ds h(2 s)`, `∫ 3 s^2 ds` | #1–#4 reverted (D230); #5–#7 being fixed |
 
 ## Benchmarks
-TBD at 12:30 (M5): measured on a quiet machine, Fermium vs Julia vs Python, same algorithms and tolerances.
+The final table was measured at 10:21 UTC with nothing else running. Earlier runs had a stray process of mine using one of the 4 cores since 00:27; it was found and killed. The numbers are medians of 7 interleaved runs, with the same algorithms, tolerances and problem sizes in every language. Full table: benchmarks/RESULTS.md; reproduce with `python3 benchmarks/run.py --interleave -r 7 --langs fermium,fermium-base,julia,python,numpy`.
+
+| Benchmark | Fermium (compute) vs Julia | Before M5 | Pure Python vs Julia |
+|---|---:|---:|---:|
+| N-body, 1M steps | **0.95×** (matches) | 2.37× | 55× |
+| All-pairs forces, N = 2000, 4 threads (`parallel for` vs `Threads.@threads`) | **0.65×** (faster) | 5.74× | 54× (against Julia on 1 thread) |
+| the same, 1 thread | 1.09× | 2.40× | |
+| Damped spring, adaptive RK45, rtol 10⁻⁶ | **0.86×** (faster; different step controller, similar accuracy) | 0.84× | 20× |
+| Blackbody integrals, rtol 10⁻¹⁰ | 1.27× | 1.29× | 20× |
+| Damped spring, fixed RK4, 1M steps (Fermium stores the whole 40 MB trajectory) | 1.93× | 2.00× | 21× |
+| Loop with units | 1.54× | 1.64× | 79× |
+
+- **Whole-process time, including startup and JIT:** Fermium finishes before Julia on every benchmark (0.18–0.47 s against 0.28–2.9 s, startup included).
+- **The M5 goal** (match or beat Julia on ≥ 2 benchmarks) is met on 3.
+- **Where it loses:** the 3 slower rows are explained in RESULTS.md and D151: page faults from storing the trajectory, the D44/D45 bookkeeping per quadrature node, and bounds checks in the unit loop.
 
 ## Still weak (honest list)
 - **Uncertainties run in the reference interpreter** (slower than native), and aren't available in the REPL, Jupyter or `fermium build`. Vectors of uncertain values are refused.
