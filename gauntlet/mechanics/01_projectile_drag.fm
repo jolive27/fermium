@@ -35,28 +35,11 @@ solve r'' = <0 m/s², -g> - k |r'| r'
   with r(0) = <0, 0> m, r'(0) = v0 * <cos(θ), sin(θ)>
   for t from 0 s to T_vac
 
-# There is no "stop when y = 0" in solve, so find the zeros by bisection.
-# Apex: vertical velocity crosses zero.  Landing: height crosses zero.
-lo = 0 s
-hi = T_vac
-mid = 0 s      # workaround: see FRICTION.md M2 (reusing `mid` in the second loop)
-while hi - lo > 1e-9 s
-    mid = (lo + hi) / 2
-    if r'(mid).y > 0 m/s
-        lo = mid
-    else
-        hi = mid
-t_apex = lo
-
-lo = t_apex
-hi = T_vac
-while hi - lo > 1e-9 s
-    mid = (lo + hi) / 2
-    if r(mid).y > 0 m
-        lo = mid
-    else
-        hi = mid
-t_land = lo
+# When does the ball reach the top (y' = 0), and when does it land (y = 0)?
+# (Landing is the first zero after the apex; y = 0 at t = 0 too.)
+v_y(τ) = r'(τ).y           # workaround: a prime inside `solve` means an ODE (FRICTION M7)
+solve v_y(t_apex) = 0 m/s for t_apex from 0 s to T_vac
+solve r(t_land).y = 0 m for t_land from t_apex to T_vac
 
 print "drag range:", r(t_land).x to 6 digits
 print "drag height:", r(t_apex).y to 6 digits

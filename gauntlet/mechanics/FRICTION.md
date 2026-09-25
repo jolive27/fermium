@@ -37,6 +37,14 @@ range, 200.000 s, as the "apex time"). A physicist would not notice that unless 
 setting the end time; and/or a root finder, e.g. `t_land = root r(t).y = 0 m for t from t_a to t_b`
 (bracketed Brent). Either removes all four loops.
 
+**Update (during this pass):** the algebraic `solve lhs = rhs for x from a to b` landed on the
+branch, and all four loops are now one line each, e.g.
+`solve r(t_land).y = 0 m for t_land from t_apex to T_vac`. What remains: (i) you still have to
+guess an end time for the ODE that is long enough; (ii) "first root after a" means the landing
+search must start after the apex, because y = 0 at t = 0 as well (a physicist has to know to do
+that); (iii) M7 below. An `until r.y < 0 m` clause on the ODE would still read better for
+"integrate until it lands".
+
 ## M2. False "might not have a value" when a loop variable is reused in a second loop (wrong error, bug)
 
 Two bisection loops that both use a scratch variable `mid`. The second loop sets `mid` before
@@ -53,7 +61,9 @@ while n < 6
 print n                  #          the while loop on line 2"
 ```
 
-The same program with the first loop removed runs. The error message even points at the *first*
+The same program with the first loop removed runs. (Hit again in oscillations 01, with `w`,
+before root finding existed. No longer in the committed problems since `solve … for` replaced
+the loops, but the bug is still there.) The error message even points at the *first*
 loop, which has nothing to do with line 7. Workaround used: `mid = 0 s` before the first loop
 (`01_projectile_drag.fm`). **Fix:** the definite-assignment analysis must treat an assignment
 earlier in the same loop body as definite for reads later in that body, regardless of whether the
@@ -91,6 +101,28 @@ speed from `solve` prints `2461.25 m/s` (because the initial condition was `0 m/
 the two lines of the same table look inconsistent; I had to remember which is which in the test.
 **Fix:** none needed in the language; maybe prefer the unit of the largest-magnitude input in the
 equation when printing a solution. Low priority.
+
+## M7. A prime inside an algebraic `solve` is read as an ODE (awkward, confusing error)
+
+Wanted: `solve r'(t_apex).y = 0 m/s for t_apex from 0 s to T_vac` (when is the vertical velocity
+zero?). Got: `missing initial condition: r(start)` with the hint to add `with x(0) = …`. The prime
+makes `solve` think this is a differential equation. Workaround in `01_projectile_drag.fm`:
+
+```
+v_y(τ) = r'(τ).y
+solve v_y(t_apex) = 0 m/s for t_apex from 0 s to T_vac
+```
+
+**Fix:** an equation with no `with` whose primed names are existing ODE solutions called at the
+unknown is algebraic. At least the error should say "to find when r' is zero, define
+`v(t) = r'(t)` first".
+
+## M8. The root of `solve … for x from a to b` gets the unit of `a` (cosmetic)
+
+`solve W(s_stop) = 0 J for s_stop from 1 cm to 10 m` prints `141.506 cm`. I started the range at
+1 cm only to skip the trivial root at 0; the answer is naturally in metres. Had to add `in m`.
+**Fix:** use the unit of `b` (or of the larger end), or the unit of the other side of the equation's
+variable if it has one.
 
 ## What worked well (for balance)
 

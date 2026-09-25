@@ -22,7 +22,7 @@ REL = 2e-5
 
 _cache = {}
 _SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
-_NUM = re.compile(r"-?\d+(?:\.\d+)?(?:×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+|e-?\d+)?")
+_NUM = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?:×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+|e-?\d+)?(?![\d./])")
 
 
 def output(name):
@@ -120,6 +120,7 @@ def test_incline_pulley():
     assert vals(n, "largest speed") == pytest.approx([speed(x_vmax), x_vmax], rel=REL)
     assert val(n, "stops after") == pytest.approx(2 * x_vmax, rel=REL)
     assert abs(val(n, "work done at the stop (should be 0)")) < 1e-9
+    assert val(n, "stop from W(s) = 0") == pytest.approx(2 * x_vmax, rel=REL)
 
     t_half = math.pi * math.sqrt(Meff / c)
     assert val(n, "time to stop") == pytest.approx(t_half, rel=REL)

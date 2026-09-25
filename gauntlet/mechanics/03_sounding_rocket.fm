@@ -63,14 +63,7 @@ solve vc' = -g - ½ ρ(yc) C_d A vc |vc| / m_f,
   with vc(t_b) = vp(t_b), yc(t_b) = yp(t_b)
   for t from t_b to t_b + 400 s
 
-# apex: vc changes sign; bisection
-lo = t_b
-hi = t_b + 400 s
-while hi - lo > 1e-9 s
-    mid = (lo + hi) / 2
-    if vc(mid) > 0 m/s
-        lo = mid
-    else
-        hi = mid
-print "time of apex (air):", lo to 6 digits
-print "apex (air):", yc(lo) in km to 6 digits
+# apex: the vertical speed is zero
+solve vc(t_top) = 0 m/s for t_top from t_b to t_b + 400 s
+print "time of apex (air):", t_top to 6 digits
+print "apex (air):", yc(t_top) in km to 6 digits

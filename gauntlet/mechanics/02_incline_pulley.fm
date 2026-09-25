@@ -53,6 +53,8 @@ x_stop = 2 x_vmax
 print "largest speed:", speed(x_vmax) to 6 digits, "at", x_vmax to 6 digits
 print "stops after:", x_stop to 6 digits
 print "work done at the stop (should be 0):", W(x_stop)
+solve W(s_stop) = 0 J for s_stop from 1 cm to 10 m       # the same stop, found numerically
+print "stop from W(s) = 0:", s_stop in m to 6 digits
 
 # (d) equation of motion
 t_half = π √(M_eff / c_spring)
@@ -61,13 +63,6 @@ solve x'' = F(x) / M_eff
   for t from 0 s to t_half
 print "time to stop:", t_half to 6 digits
 print "ODE position at that time:", x(t_half) to 6 digits
-# The speed at a given position: find the time when x = 0.50 m by bisection
-lo = 0 s
-hi = t_half / 2
-while hi - lo > 1e-10 s
-    mid = (lo + hi) / 2
-    if x(mid) < 0.50 m
-        lo = mid
-    else
-        hi = mid
-print "ODE speed after 0.50 m:", x'(lo) to 6 digits
+# The speed at a given position: first find when x = 0.50 m
+solve x(t_05) = 0.50 m for t_05 from 0 s to t_half
+print "ODE speed after 0.50 m:", x'(t_05) to 6 digits
