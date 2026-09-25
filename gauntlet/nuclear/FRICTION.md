@@ -21,6 +21,8 @@ Severity scale: blocker / wrong answer / awkward / cosmetic.
   (step size pinned at the stability limit with tiny error estimates) that switches to it. Linear
   constant-coefficient systems like Bateman chains could even use the matrix exponential.
   Also: say "t = 255 min" (in the range's unit) rather than "15302.7 in SI units".
+- **Status:** fixed (gauntlet #25, D42): `using radau` solves the 720 min window in ~8 000 steps
+  (01_radon_progeny.fm now uses it), and RK45 warns when a long solve looks stiff.
 
 ### N2. `solve N3'(t_max) = 0 for t_max …` is treated as a differential equation
 - **Wanted:** the time of peak Bi-214 activity as the root of dN₃/dt on the existing solution.

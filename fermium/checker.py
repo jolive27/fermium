@@ -168,6 +168,7 @@ class Tables:
         self.plots = []
         self.loads = []
         self.fits = []
+        self.stiff = []     # (line, method) of each `solve ... using radau/bdf` (fermium build refuses them)
 
 
 class CheckedModule:

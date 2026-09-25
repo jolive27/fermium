@@ -30,7 +30,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 22 | A | oscillations (O6) | No matrices or eigenvalues for normal modes | Fixed: matrices, `det`, `solve_linear` (D33); `eigenvalues(M)`, `eigenvectors(M)` and `eigenvalues(K, M)` for K v = ω² M v by Jacobi rotations (D34) |
 | 23 | A | quantum (Q6) | No complex numbers | Open |
 | 24 | A | quantum (Q5) | Functions can't be passed to functions | Open |
-| 25 | A | nuclear (N1) | Stiff decay chains need millions of RK45 steps: no implicit solver | Open |
+| 25 | A | nuclear (N1) | Stiff decay chains need millions of RK45 steps: no implicit solver | Fixed: `using radau` (Radau IIA) and `using bdf` via SciPy, with `until`, backwards ranges and vectors; the radon chain over 720 min takes ~8 000 steps; RK45 warns when a long solve looks stiff, and "too many steps" suggests `using radau`; `fermium build` refuses them (D42) |
 | 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Fixed: `err(g)` gives a fitted parameter's standard error, with units |
 | 27 | A | gravitation (G5) | No `GM_sun` / `GM_earth` constants | Fixed: `GM_sun` (`GM☉`, IAU nominal) and `GM_earth` constants |
 | 28 | C | gravitation (G3) | `h² = …` gets the hint "use == to compare" | Fixed: the error says only a name can be assigned and suggests `solve h² = … for h from … to …` (D34) |

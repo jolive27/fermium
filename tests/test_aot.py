@@ -26,7 +26,8 @@ def reference_programs():
     progs = []
     for i, m in enumerate(re.findall(r"```fermium\n(.*?)```", open(os.path.join(ROOT, "docs", "reference.md"),
                                                                      encoding="utf-8").read(), re.S)):
-        if not re.search(r"\b(plot|fit|load)\b", m):
+        # `using radau` runs SciPy, so fermium build refuses it (D42; tests/test_stiff.py checks the error)
+        if not re.search(r"\b(plot|fit|load)\b", m) and not re.search(r"\busing\s+(radau|bdf)\b", m):
             progs.append(pytest.param(m, id=f"reference#{i + 1}"))
     return progs
 

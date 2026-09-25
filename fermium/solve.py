@@ -189,8 +189,10 @@ def check_solve(ck, s: A.Solve, ctx):
         ck.unify_or(step.ty.dim, tdim, lambda: f"the step is {ck.desc(step.ty.dim)} but {t} is {ck.desc(tdim)}",
                     s.step)
     method = (s.method or ("rk4" if step is not None else "rk45")).lower()
-    if method not in ("rk4", "rk45"):
-        raise ck.err(f"unknown method '{s.method}' (use rk4 or rk45)", s)
+    if method not in ("rk4", "rk45", "radau", "bdf"):
+        raise ck.err(f"unknown method '{s.method}' (use rk45, rk4 with a step, or radau for stiff equations)", s)
+    if method in ("radau", "bdf") and step is not None:
+        raise ck.err(f"{method} chooses its own steps: remove  step …  (a fixed step is for rk4)", s.step)
     if method == "rk4" and step is None:
         raise ck.err("the rk4 method needs a fixed step:  for t from 0 s to 5 s step 0.01 s", s)
 
@@ -350,6 +352,8 @@ def check_solve(ck, s: A.Solve, ctx):
         if not isinstance(tv, I.IConst) or not (0 < tv.value < 1):
             raise ck.err("the tolerance must be a plain number like 1e-8", s.tolerance)
         rtol = tv.value
+    if method in ("radau", "bdf"):
+        ck.tables.stiff.append((s.line, method))
     st = I.SSolve(sol_sym, lam, [y0[k] for k in layout], t0, t1, step, method, rtol, s.line)
     st.event = event                      # the stop condition's g = lhs - rhs (D39), or None
     st.evtext = evtext if evtext is not None else -1

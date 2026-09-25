@@ -52,7 +52,7 @@ def test_radon_progeny():
         for n, key in enumerate(names):
             want = lams[n] * bateman(n, T, lams, N0)
             assert lams[n] * sol.sol(T)[n] == pytest.approx(want, rel=1e-8)
-            # RK45 at rtol 1e-9 over ~10⁷ steps (the chain is stiff), printed to 8 digits: 1e-7
+            # Radau (`using radau`) at rtol 1e-9, printed to 8 digits: 1e-7
             assert field(line, key) == pytest.approx(want, rel=1e-7)
     # (b) peak of the Bi-214 activity: dN3/dt = 0
     dN3 = lambda t: lams[1] * bateman(1, t, lams, N0) - lams[2] * bateman(2, t, lams, N0)  # noqa: E731

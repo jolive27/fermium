@@ -394,6 +394,9 @@ print x'(1 s)
   - With `step 1 ms`, it uses classic fixed-step RK4.
   - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
   - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
+  - **`using radau`** is for **stiff** equations: time scales far apart, such as a decay chain with a 164 μs member followed for hours, fast chemistry next to slow chemistry, or a relaxation oscillator. RK45 has to keep its step below the shortest time scale for stability even after that part of the solution has settled, so it takes millions of steps. Radau (implicit Runge–Kutta, Radau IIA of order 5) takes steps sized by accuracy alone: the radon chain below takes about 8 000 steps over 12 hours, where RK45 needs 5×10⁷. `using bdf` is SciPy's variable-order BDF, of lower order (cheaper per step, less accurate at tight tolerances). Both use the same relative tolerance as RK45 (10⁻⁹, or `tolerance r`), and choose their own steps (a `step` is an error). They work with `until`, backwards ranges and vector unknowns, and the solution is used as usual.
+  - A long RK45 solve that is held back by stiffness warns: `this equation looks stiff: rk45 has taken 526031 steps, held small by stability rather than accuracy …; add using radau after the range`. The "too many steps" error suggests it too.
+  - `radau` and `bdf` run SciPy's solvers (they call the compiled right-hand side), so they need SciPy, and `fermium build` refuses them for now (use `fermium run`).
   - The order is `for t from a to b [step h] [tolerance r] [using method]`:
 
 ```fermium
@@ -406,6 +409,24 @@ solve y' = -y / (1 s)
   with y(0) = 1 m
   for t from 0 s to 1 s step 1 ms using rk4
 print y(1 s) to 10 digits
+```
+
+```fermium
+# the radon progeny on an air filter: Po-218 → Pb-214 → Bi-214 → Po-214 (164 μs)
+λ1 = ln(2) / 3.098 min
+λ2 = ln(2) / 26.8 min
+λ3 = ln(2) / 19.9 min
+λ4 = ln(2) / 164.3 μs
+solve
+    N1' = -λ1 N1
+    N2' = λ1 N1 - λ2 N2
+    N3' = λ2 N2 - λ3 N3
+    N4' = λ3 N3 - λ4 N4
+    with N1(0) = 1e6, N2(0) = 0, N3(0) = 0, N4(0) = 0
+    for t from 0 min to 720 min using radau
+print "Bi-214 atoms at 1 h:", N3(60 min)
+print "A(Po-214) / A(Bi-214) at 5 h:", λ4 N4(300 min) / (λ3 N3(300 min))
+print len(times(N1)), "steps"
 ```
 
 - **Using the result:**
@@ -603,7 +624,7 @@ program    := statement*
 statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | name(params) = expr | name(params) = NEWLINE INDENT block
             | print items | plot series [to "file"] | fit eq to expr [with binds]
-            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45]
+            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
