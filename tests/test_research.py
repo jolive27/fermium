@@ -645,3 +645,106 @@ def test_shell_model_levels_and_magic_numbers():
         assert top == ([2, 8, 20, 28, 50, 82, 126] if so else [2, 8, 20, 40, 70])
     assert "the 7 largest gaps WITH spin–orbit are at N = [2, 8, 20, 28, 50, 82, 126]" in out
     assert "the 5 largest gaps WITHOUT spin–orbit are at N = [2, 8, 20, 40, 70]" in out
+
+
+def _recombination_model():
+    """Planck 2018 ΛCDM, hydrogen only: Saha and Peebles' three-level atom (the equations of recombination.fm)."""
+    from scipy.constants import G, c, e, hbar, k, m_e, physical_constants, pi, sigma
+    mpc = 3.0856775814913673e22
+    h = 0.6736
+    H0 = 67.36e3 / mpc
+    obh2, och2, Yp, T0, neff = 0.02237, 0.1200, 0.2454, 2.7255, 3.046
+    rho_c = 3 * H0 ** 2 / (8 * pi * G)
+    om = (obh2 + och2) / h ** 2
+    orad = 4 * sigma * T0 ** 4 / c ** 3 / rho_c * (1 + 7 / 8 * (4 / 11) ** (4 / 3) * neff)
+    ol = 1 - om - orad
+    nH0 = (1 - Yp) * obh2 / h ** 2 * rho_c / (1.00782503 * physical_constants["atomic mass constant"][0])
+    sT = 8 * pi / 3 * physical_constants["classical electron radius"][0] ** 2
+    E0, lam = 13.598434 * e, 121.567e-9
+    Ea = 2 * pi * hbar * c / lam
+    E2 = E0 - Ea
+
+    def H(z):
+        return H0 * np.sqrt(om * (1 + z) ** 3 + orad * (1 + z) ** 4 + ol)
+
+    def alpha(T, F):
+        t = T / 1e4
+        return F * 4.309e-19 * t ** -0.6166 / (1 + 0.6703 * t ** 0.53)
+
+    def saha(z):
+        T, nH = T0 * (1 + z), nH0 * (1 + z) ** 3
+        S = (m_e * k * T / (2 * pi * hbar ** 2)) ** 1.5 * np.exp(-E0 / (k * T)) / nH
+        return 2 / (1 + np.sqrt(1 + 4 / S))
+
+    def s(z):
+        return nH0 * (1 + z) ** 3 * sT * c / (H(z) * (1 + z))
+
+    def rhs(z, y, F=1.0):
+        x = y[0]
+        T, nH = T0 * (1 + z), nH0 * (1 + z) ** 3
+        a = alpha(T, F)
+        b = a * (m_e * k * T / (2 * pi * hbar ** 2)) ** 1.5 * np.exp(-E2 / (k * T))
+        La = 8 * pi * H(z) / (lam ** 3 * nH * (1 - x))
+        C = (8.2245809 + La) / (8.2245809 + La + b)
+        return [C * (nH * a * x * x - b * (1 - x) * np.exp(-Ea / (k * T))) / (H(z) * (1 + z)), x * s(z)]
+    return dict(saha=saha, rhs=rhs, s=s, nH0=nH0, om=om, orad=orad)
+
+
+def test_recombination_matches_scipy_radau():
+    """Saha and Peebles x_e(z), τ = 1, the visibility peak and the F = 1.14 run vs SciPy's Radau on the same equations."""
+    from scipy.integrate import solve_ivp
+    from scipy.optimize import brentq
+    out = run_prog("recombination_history", "recombination.fm")
+    M = _recombination_model()
+    saha, rhs, s = M["saha"], M["rhs"], M["s"]
+    assert num(out, "n_H today =") == pytest.approx(M["nH0"], rel=1e-4)
+    assert num(out, "Ω_r =") == pytest.approx(M["orad"], rel=1e-3)
+    assert num(out, "Saha: x_e = 0.5 at z =") == pytest.approx(brentq(lambda z: saha(z) - 0.5, 1000, 2000), rel=1e-6)
+    x0 = saha(1600)
+    assert num(out, "x_e(1600) =") == pytest.approx(x0, rel=1e-7)
+    sols = {}
+    for F in (1.0, 1.14):
+        sol = solve_ivp(rhs, [1600, 200], [x0, 0], method="Radau", rtol=1e-11, atol=[1e-15, 1e-12], args=(F,),
+                        dense_output=True)
+        assert sol.success
+        sols[F] = sol
+    sol = sols[1.0]
+    xe = lambda z: sol.sol(z)[0]                                       # noqa: E731
+    tau = lambda z: sol.sol(z)[1] - sol.y[1, -1]                      # noqa: E731
+    kap = lambda z: xe(z) * s(z)                                        # noqa: E731
+    assert num(out, "Peebles: x_e = 0.5 at z =") == pytest.approx(brentq(lambda z: xe(z) - 0.5, 1000, 1600), rel=1e-6)
+    rows = re.findall(r"z = (\d+) : x_e Peebles = ([\d.]+)\s+Saha = ([\d.]+(?:×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?)", out)
+    assert len(rows) == 9
+    for z, xp, xs in rows:
+        assert float(xp) == pytest.approx(xe(float(z)), rel=1e-5), z
+        assert num("S " + xs, "S") == pytest.approx(saha(float(z)), rel=5e-3), z
+    assert num(out, "freeze-out: x_e(200) =") == pytest.approx(sol.y[0, -1], rel=1e-5)
+    dxdz = rhs(200, sol.y[:, -1])[0]
+    assert num(out, "at z = 200:") == pytest.approx(dxdz * 201 / sol.y[0, -1], rel=5e-3)
+    zs = brentq(lambda z: tau(z) - 1, 900, 1300, xtol=1e-10)
+    assert num(out, "τ = 1 at z_* =") == pytest.approx(zs, rel=1e-6)
+    zz = np.linspace(1000, 1200, 200001)
+    kk = xe(zz) * s(zz)
+    g = kk * np.exp(-tau(zz))
+    assert num(out, "g(z) peaks at z =") == pytest.approx(zz[np.argmax(g)], abs=0.01)
+    geta = xe(zz) * (1 + zz) ** 2 * np.exp(-tau(zz))
+    assert num(out, "g(η) peaks at z =") == pytest.approx(zz[np.argmax(geta)], abs=0.01)
+    assert num(out, "x_e at z_* =") == pytest.approx(xe(zs), rel=1e-5)
+    gmax = g.max()
+    zg = zz[np.argmax(g)]
+    zlo = brentq(lambda z: kap(z) * np.exp(-tau(z)) - gmax / 2, 800, zg)
+    zhi = brentq(lambda z: kap(z) * np.exp(-tau(z)) - gmax / 2, zg, 1300)
+    assert num(out, "half maximum at z =") == pytest.approx(zlo, rel=1e-4)
+    assert num(out, "FWHM Δz =") == pytest.approx(zhi - zlo, rel=5e-3)
+    f = sols[1.14]
+    line = line_of(out, "with F = 1.14:")
+    assert num(line, "x_e(200) =") == pytest.approx(f.y[0, -1], rel=1e-5)
+    assert num(line, "τ = 1 at z =") == pytest.approx(
+        brentq(lambda z: f.sol(z)[1] - f.y[1, -1] - 1, 900, 1300, xtol=1e-10), rel=1e-6)
+    assert num(line, "x_e(1100) =") == pytest.approx(f.sol(1100)[0], rel=1e-5)
+    # physics: last scattering within 0.5 of Planck 2018's z_* = 1089.92 ± 0.25; residual ionisation a few 10⁻⁴
+    assert abs(zs - 1089.92) < 0.5
+    assert 2e-4 < sol.y[0, -1] < 5e-4
+    line = line_of(out, "started at z = 2500:")                     # the stiff start gives the same history
+    assert num(line, "x_e(200) =") == pytest.approx(sol.y[0, -1], rel=1e-5)
+    assert num(line, "x_e(1100) =") == pytest.approx(xe(1100), rel=1e-5)
