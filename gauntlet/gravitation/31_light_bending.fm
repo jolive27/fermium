@@ -1,0 +1,47 @@
+# Gravitation 31 — Bending of light by the Sun and by a compact star
+#
+# (Weinberg, Gravitation and Cosmology, §8.5; Carroll, Spacetime and Geometry,
+#  §5.4 and Exercise 5.?; Misner, Thorne & Wheeler §25.6.)
+# A light ray in the Schwarzschild geometry obeys, with u = 1/r and φ the angle,
+#     d²u/dφ² + u = 3 G M u² / c²   (the exact null geodesic equation).
+# A ray that passes closest to the mass at r₀ has u(0) = 1/r₀, u'(0) = 0; it leaves
+# to infinity (u = 0) at φ∞, and the deflection is δ = 2 φ∞ − π.
+#   (a) The Sun, r₀ = R☉: integrate to u = 0 and give δ in arcseconds. Compare with
+#       Einstein's 4GM/(c² r₀) and with the second-order result
+#       δ ≈ 4m/r₀ + (15π/4 − 4)(m/r₀)², m = GM/c².
+#   (b) The exact deflection as a quadrature,
+#       δ = 2 ∫₀^{u₀} du / √(u₀² − u² − 2m(u₀³ − u³)) − π.
+#   (c) A neutron star (M = 1.40 M☉) and a ray with r₀ = 4 m (just outside the
+#       photon sphere r = 3 m): the weak-field formula fails badly.
+
+m_sun = GM_sun / c²
+r0 = R_sun
+# δ = 2φ∞ − π is 10⁻⁵ of φ∞, so φ∞ must be right to ~10⁻¹²: the default tolerance
+# (10⁻⁹) gives 1.751188″, 6×10⁻⁶ low; tolerance 1e-13 gives all 7 digits.
+solve u'' + u = 3 m_sun u²
+  with u(0) = 1 / r0, u'(0) = 0 /m
+  for φ from 0 to 3 tolerance 1e-13
+  until u = 0 /m
+φ_inf = times(u)[end]
+δ = 2 φ_inf - π
+print "(a) Sun: phi_inf =", φ_inf to 12 digits, " deflection =", δ in arcsec to 7 digits
+print "    Einstein 4m/r0 =", 4 m_sun / r0 in arcsec to 7 digits, " second order =", (4 m_sun / r0 + (15π/4 - 4) (m_sun / r0)²) in arcsec to 7 digits
+
+# (b) the quadrature; 1 − u²/u₀² etc. cancel badly for the Sun near u₀, so write
+#     u₀² − u² − 2m(u₀³ − u³) = (u₀ − u)(u₀ + u − 2m(u₀² + u₀ u + u²))
+# (the parameter was first called rg, but `2 rg` is 2 rontograms: r = ronto-, 10⁻²⁷)
+exact_deflection(M_g, r) =
+    u0 = 1 / r
+    # brackets needed: `… dw from 0 /m to u0 - π` takes u0 − π as the upper limit
+    I = ∫ 1 / √((u0 - w) (u0 + w - 2 M_g (u0² + u0 w + w²))) dw from 0 /m to u0
+    return 2 I - π
+print "(b) quadrature: Sun =", exact_deflection(m_sun, R_sun) in arcsec to 7 digits
+
+# (c) a neutron star, r0 = 4 m
+m_ns = 1.40 GM_sun / c²
+solve v'' + v = 3 m_ns v²
+  with v(0) = 1 / (4 m_ns), v'(0) = 0 /m
+  for φ from 0 to 6
+  until v = 0 /m
+δ_ns = 2 times(v)[end] - π
+print "(c) neutron star, r0 = 4m: deflection =", δ_ns in ° to 8 digits, " quadrature =", exact_deflection(m_ns, 4 m_ns) in ° to 8 digits, " weak field =", 4 m_ns / (4 m_ns) in ° to 6 digits

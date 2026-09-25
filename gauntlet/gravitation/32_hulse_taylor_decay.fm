@@ -1,0 +1,57 @@
+# Gravitation 32 — The Hulse–Taylor binary pulsar: periastron advance, orbital decay, merger
+#
+# (Weinberg, Gravitation and Cosmology, §10.4; Carroll §7.? ; Shapiro & Teukolsky,
+#  Black Holes, White Dwarfs and Neutron Stars, §16.4; Peters, Phys. Rev. 136, B1224
+#  (1964); Weisberg & Huang, ApJ 829, 55 (2016), Table 3.)
+# PSR B1913+16: orbital period P_b = 0.322997448918 day, eccentricity e = 0.6171340,
+# pulsar mass m_p = 1.438 M☉, companion m_c = 1.390 M☉.
+#   (a) The periastron advance ω' = 3 (2π/P_b)^(5/3) (G M)^(2/3) / (c² (1 − e²))
+#       in degrees per year (measured: 4.226585 °/yr).
+#   (b) The orbital decay from gravitational radiation (Peters–Mathews),
+#       P_b' = −(192π G^(5/3) / (5 c⁵)) (P_b/2π)^(−5/3) f(e) m_p m_c M^(−1/3),
+#       f(e) = (1 + 73/24 e² + 37/96 e⁴) / (1 − e²)^(7/2). Weisberg & Huang quote
+#       the GR prediction −2.40263×10⁻¹².
+#   (c) Integrate Peters' equations
+#         a' = −(64/5) β₀ (1 + 73/24 e² + 37/96 e⁴) / (a³ (1 − e²)^(7/2)),
+#         e' = −(304/15) β₀ e (1 + 121/304 e²) / (a⁴ (1 − e²)^(5/2)),
+#       β₀ = G³ m_p m_c M / c⁵, from today until a has shrunk to 10⁵ km, and compare
+#       the time with Peters' closed form: c₀ = a (1 − e²) e^(−12/19) (1 + 121/304 e²)^(−870/2299)
+#       is conserved, and the time from e₀ down to e is
+#         T(e) = (12/19) (c₀⁴ / β) ∫_e^{e₀} x^(29/19) (1 + 121/304 x²)^(1181/2299) / (1 − x²)^(3/2) dx,
+#       β = (64/5) β₀; T(0) is the merger time (about 300 million years).
+# (The integration stops at 10⁵ km: at 1000 km the time left is ~10 minutes, 10⁻¹⁴ of
+#  t ≈ 3×10⁸ yr, below the resolution of t itself, and the solver rightly gives up.)
+
+P_b = 0.322997448918 day
+e0 = 0.6171340
+m_p = 1.438 M_sun
+m_c = 1.390 M_sun
+M = m_p + m_c
+a0 = (G M (P_b / 2π)²)^(1/3)
+print "semi-major axis a0 =", a0 in km to 8 digits
+
+# (a) periastron advance
+ωdot = 3 (2π / P_b)^(5/3) (G M)^(2/3) / (c² (1 - e0²))
+print "(a) periastron advance =", ωdot in °/yr to 7 digits
+
+# (b) orbital decay
+fe(x) = (1 + (73/24) x² + (37/96) x⁴) / (1 - x²)^(7/2)
+Pdot = -(192π G^(5/3) / (5 c⁵)) (P_b / 2π)^(-5/3) fe(e0) m_p m_c / M^(1/3)
+print "(b) f(e) =", fe(e0) to 8 digits, " dP_b/dt =", Pdot to 7 digits
+
+# (c) Peters' equations
+β0 = G³ m_p m_c M / c⁵
+solve a' = -(64/5) β0 (1 + (73/24) ec² + (37/96) ec⁴) / (a³ (1 - ec²)^(7/2)),
+      ec' = -(304/15) β0 ec (1 + (121/304) ec²) / (a⁴ (1 - ec²)^(5/2))
+  with a(0 yr) = a0, ec(0 yr) = e0
+  for t from 0 yr to 1e9 yr tolerance 1e-12 using radau
+  until a = 100000 km
+T_ode = times(a)[end]
+e1 = ec[end]
+print "(c) time to a = 1e5 km =", T_ode in yr to 10 digits, " e there =", e1 to 8 digits
+
+βp = (64/5) β0
+c0 = a0 (1 - e0²) / e0^(12/19) / (1 + (121/304) e0²)^(870/2299)
+T_from(e) = (12/19) (c0⁴ / βp) ∫ x^(29/19) (1 + (121/304) x²)^(1181/2299) / (1 - x²)^(3/2) dx from e to e0
+print "    Peters: time from e0 to e1 =", T_from(e1) in yr to 10 digits
+print "    merger time =", T_from(0) in yr to 8 digits, " (circular orbit a0⁴/(4β) =", a0⁴ / (4 βp) in yr to 6 digits, ")"
