@@ -460,3 +460,21 @@ def format_number(x: float, sig: int = 6, trim: bool = True) -> str:
     if trim and "." in m:
         m = m.rstrip("0").rstrip(".")
     return f"{m}×10{str(exp).translate(SUPERSCRIPTS)}"
+
+
+# Unit names written out in words -> the symbol Fermium uses (only for suggestions in error messages)
+SPELLED_UNITS = {
+    "meter": "m", "meters": "m", "metre": "m", "metres": "m", "second": "s", "seconds": "s", "sec": "s",
+    "secs": "s", "kilogram": "kg", "kilograms": "kg", "gram": "g", "grams": "g", "kilometer": "km",
+    "kilometers": "km", "kilometre": "km", "kilometres": "km", "centimeter": "cm", "centimeters": "cm",
+    "centimetre": "cm", "centimetres": "cm", "millimeter": "mm", "millimeters": "mm", "foot": "ft",
+    "feet": "ft", "inches": "inch", "mile": "mi", "miles": "mi", "hour": "hr", "hours": "hr",
+    "minute": "min", "minutes": "min", "day": "day", "days": "day", "year": "yr", "years": "yr",
+    "newton": "N", "newtons": "N", "joule": "J", "joules": "J", "watt": "W", "watts": "W", "volt": "V",
+    "volts": "V", "amp": "A", "amps": "A", "ampere": "A", "amperes": "A", "ohm": "Ω", "ohms": "Ω",
+    "kelvin": "K", "kelvins": "K", "celsius": "°C", "degC": "°C", "fahrenheit": "°F", "pascal": "Pa",
+    "pascals": "Pa", "coulomb": "C", "coulombs": "C", "tesla": "T", "hertz": "Hz", "liter": "L",
+    "liters": "L", "litre": "L", "litres": "L", "degree": "°", "degrees": "°", "deg": "°", "radian": "rad",
+    "radians": "rad", "electronvolt": "eV", "electronvolts": "eV", "mph": "mi/hr", "kph": "km/hr",
+    "lb": "lbf or lbm", "lbs": "lbf or lbm", "pound": "lbf or lbm", "pounds": "lbf or lbm",
+}

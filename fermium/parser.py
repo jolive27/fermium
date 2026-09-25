@@ -176,11 +176,17 @@ class Parser:
                                  hint="for now write the value without its uncertainty")
             if t.kind == "OP" and t.value == "=":
                 hint = "use == to compare two values; = stores a value in a variable"
+            if t.kind == "OP" and t.value in ("+", "-") and self.peek().kind == "OP" and self.peek().value == t.value:
+                hint = f"Fermium has no {t.value}{t.value}; write  x {t.value}= 1"
             raise self.error(f"didn't expect '{t.raw}' here", hint=hint)
 
     # ------------------------------------------------------------ statements
     def statement(self, end_line=True):
         t = self.tok
+        if t.kind == "NAME" and t.value in ("def", "function", "fn") and self.peek().kind == "NAME":
+            nm = self.peek().raw
+            raise self.error(f"Fermium doesn't use '{t.raw}': a function is written like a formula",
+                             hint=f"write  {nm}(x) = 2 x   (or put the body on the indented lines after {nm}(x) =)")
         if t.kind == "KW" and self.peek().kind == "OP" and self.peek().value in ({"="} | AUG_OPS) and \
                 t.value not in ("print",):
             raise self.error(f"'{t.raw}' is a reserved word in Fermium, so it can't be a variable name",
@@ -1051,6 +1057,12 @@ class Parser:
             if t.value == "+-":
                 raise self.error("uncertainties (±) are planned for a future version of Fermium")
         if t.kind == "NEWLINE" or t.kind == "EOF":
+            prev = self.toks[self.i - 1] if self.i > 0 else None
+            pp = self.toks[self.i - 2] if self.i > 1 else None
+            if prev is not None and pp is not None and prev.kind == pp.kind == "OP" and prev.value == pp.value \
+                    and prev.value in ("+", "-"):
+                raise self.error("this line ended before the expression was complete",
+                                 hint=f"Fermium has no {prev.value}{prev.value}; write  x {prev.value}= 1")
             raise self.error("this line ended before the expression was complete")
         if t.kind == "OP" and t.value == "=":
             raise self.error("unexpected '='", hint="use == to compare two values")

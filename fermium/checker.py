@@ -20,7 +20,7 @@ from .errors import FermiumError, Diagnostics
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, TextListTy, BOOL, STR,
                     VOID, Ty,
                     type_desc)
-from .units import format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
+from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
 
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
@@ -184,6 +184,8 @@ class Checker(C.DiffContext):
                     sugg = "for hours write hr"
                 elif f.name in ("t",):
                     sugg = "for metric tons write tonne"
+                elif f.name in SPELLED_UNITS:
+                    sugg = f"Fermium writes units as symbols: {SPELLED_UNITS[f.name]}"
                 raise FermiumError(f"'{f.name}' is not a unit Fermium knows", f.line, f.col, len(f.name),
                                    hint=sugg or "see the units list in docs/reference.md")
             if u.affine:
@@ -891,7 +893,8 @@ class Checker(C.DiffContext):
                 hint = f"did you mean {close[0]}?"
         if hint is None and getattr(self, "_after_number", False):
             return self.err(f"'{name}' isn't a unit Fermium knows (or a variable you've defined)", e,
-                            hint="see the list of units in docs/reference.md §15")
+                            hint=f"Fermium writes units as symbols: {SPELLED_UNITS[name]}" if name in SPELLED_UNITS
+                            else "see the list of units in docs/reference.md §15")
         if hint is None and getattr(self, "_calling", False):
             hint = f"define the function first, e.g.  {name}(x) = 2 x"
         if name == "%":
@@ -1304,7 +1307,10 @@ class Checker(C.DiffContext):
                 raise self.err(f"a vector's components are .x, .y and .z (not .{e.name})", e)
             return self.vec_elem(t, "xyz".index(e.name), e)
         if not isinstance(t, I.Expr) or not isinstance(t.ty, DataTy):
-            raise self.err(f"'.{e.name}' only works on data loaded from a file (like data.{e.name})", e)
+            if isinstance(t, I.Expr) and isinstance(t.ty, NumTy) and e.name in ("x", "y", "z"):
+                raise self.err(f"this is a single number ({self.desc(t.ty.dim)}), not a vector, so it has no "
+                               f".{e.name}", e, hint="a vector is written <3, 4> m/s")
+            raise self.err(f"'.{e.name}' only works on vectors (v.x) and data loaded from a file (data.{e.name})", e)
         cols = t.ty.info["columns"]
         for i, c in enumerate(cols):
             if c["name"] == e.name:
@@ -1663,6 +1669,11 @@ class Checker(C.DiffContext):
 
     # ------------------------------------------------------------ builtins
     def builtin(self, name, e, ctx):
+        if name in ("sin", "cos", "tan") and len(e.args) == 1 and isinstance(e.args[0], A.Num) and e.args[0].digit \
+                and e.args[0].value >= 10 and e.args[0].value == int(e.args[0].value):
+            v = int(e.args[0].value)
+            self.diags.warn(f"{name}({v}) is the {name} of {v} radians", line=e.line, col=e.col,
+                            length=e.length, hint=f"for degrees write {name}({v}°)")
         if name in ("push", "append"):
             raise self.err(f"{name}(list, value) changes a list and doesn't give a value; "
                            f"write it on its own line", e)
@@ -1873,7 +1884,8 @@ class Checker(C.DiffContext):
             return self._bi(name, args, ListTy(DExpr.fresh(name) if name == "zeros" else DIMLESS), args)
         if name == "range":
             if n not in (2, 3):
-                raise self.err("range(a, b) or range(a, b, step)", e)
+                raise self.err("range needs a start and an end: range(a, b) or range(a, b, step)", e,
+                               hint="to count, write  for i from 1 to 10")
             for i in range(n):
                 self.need_num(args[i], e.args[i])
                 self.unify_or(args[0].ty.dim, args[i].ty.dim, lambda: "range: all values need the same units", e)

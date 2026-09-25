@@ -236,7 +236,8 @@ class Runtime:
             if n == 0:
                 return f"index {format_number(a)} is out of range: the list is empty"
             return f"index {format_number(a)} is out of range: the list has {n} element{'s' if n != 1 else ''} " \
-                   f"(valid indexes are 1 to {n})"
+                   f"(valid indexes are 1 to {n})" + ("; Fermium counts from 1, so the first element is [1]"
+                                                      if a == 0 else "")
         if kind == 2:
             return f"asked for the solution at {self.fmt_value(a, fmt)}, outside the range it was solved " \
                    f"for (it ends at {self.fmt_value(b, fmt)})"
