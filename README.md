@@ -127,6 +127,28 @@ Measured on the same machine, median of repeated runs. The full table, methods a
 
 Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.1–0.33 s against 0.9–2.8 s for the whole process), because Julia spends that time JIT-compiling. A program that computes one number takes 0.11 s in Fermium and 0.25 s in Julia (the `startup` row in RESULTS.md).
 
+## Gauntlet
+
+Textbook problems from ten fields of physics, solved in Fermium and checked against closed forms or SciPy ([gauntlet/](gauntlet/README.md)). Every rough edge they hit is logged in [gauntlet/FRICTION.md](gauntlet/FRICTION.md) and fixed in the language where possible.
+
+<!-- gauntlet-table -->
+| Topic | Pass 1 | Pass 2 |
+|---|---|---|
+| mechanics | 3 | 0 |
+| oscillations | 3 | 0 |
+| gravitation | 3 | 0 |
+| thermodynamics | 3 | 0 |
+| electromagnetism | 3 | 0 |
+| optics waves | 3 | 0 |
+| special relativity | 3 | 0 |
+| quantum | 3 | 0 |
+| nuclear | 3 | 0 |
+| astrophysics | 4 | 0 |
+| **total** | **31** | **0** |
+
+Friction items logged: 38; fixed in the language: 1.
+<!-- /gauntlet-table -->
+
 ## Browser playground
 
 `web/` is a static site that runs Fermium in the browser with [Pyodide](https://pyodide.org): an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It uses the reference interpreter (`fermium run --interp`), because llvmlite doesn't exist in the browser, so it is slower than the desktop compiler; its output matches `fermium run`.

@@ -17,4 +17,6 @@ The point is to find where the language gets in the way, and fix it.
 
 Topics, in order: mechanics, oscillations, gravitation, thermodynamics, electromagnetism,
 optics_waves, special_relativity, quantum, nuclear, astrophysics. The first pass has three
-problems per topic; the second pass is harder.
+problems per topic (files `01_…` to `09_…`); the second pass is harder (files `21_…` onward).
+
+`python3 gauntlet/summary.py` prints the counts table that the top-level README shows.
