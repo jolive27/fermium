@@ -327,3 +327,37 @@ print g                   # g(x) = 1/(3 x^0.666666666667)   (exponent printed as
 print g(-8)               # NaN  expected 0.0833333 (= 1/12), consistent with f(-8) = -2
 ```
 Only an exponent exactly equal to 1/3 gets the real-root treatment.
+
+## A27. (HIGH) Variables assigned only inside a branch/loop that didn't run: garbage or a made-up value
+The checker accepts reading a variable whose only assignment is inside an `if`/`for`/`while`
+that never executed; codegen reads an uninitialised slot (LLVM then feels free to use `undef`):
+```
+x = 1
+if x > 2
+    y = 3 m
+print y              # actual: 3 m   (never assigned!)     expected: an error
+for i from 1 to 0
+    z = 5
+print z              # actual: 5
+while false
+    w = 1
+print w              # actual: 6.90361×10⁻³¹⁰  (garbage)
+x = 1
+if x > 2
+    ys = [1, 2]
+print ys             # actual: "runtime error" (no message, no line)
+if x > 2
+    solve q' = -q with q(0) = 1 for t from 0 to 1
+print q(0.5)         # actual: "runtime error"
+```
+Expected: a compile-time error ("y might not have a value here: it is only set inside the if
+on line 2") -- definite-assignment analysis -- or at least a runtime error naming y.
+Same inside functions:
+```
+f(x) =
+    if x > 0
+        y = 2 x
+    y
+print f(-1)          # actual: 6.90214×10⁻³¹⁰   expected: an error
+```
+(Globals defined *after* the call are correctly rejected: "z isn't defined".)

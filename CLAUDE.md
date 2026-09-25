@@ -32,3 +32,20 @@ Fermium is a programming language for physicists (the user is a physics undergra
 - `pip install -e .` — install; exposes `fermium`.
 - `make check` — lint + tests + bootcamp snippets + examples. Must pass before every commit.
 - `fermium run file.fm`, `fermium` (REPL), `fermium fmt --pretty|--ascii file.fm`, `fermium doctor`.
+
+## Night plan, part 2 (user instruction received 00:05 UTC, after Tier 4 was complete)
+Keep working until 11:00 UTC. The phases, in order:
+1. **Strict audit:** start from a clean clone. Follow bootcamp Lesson 0, then run `make check`, all examples, every bootcamp snippet and the benchmarks. Write AUDIT.md and fix everything in it.
+2. **Features, in order:**
+   1. Jupyter kernel and an example notebook
+   2. Language server and VS Code: hover shows units, live error underlines, `\name` completion
+   3. Vectors and matrices with units, and 3-D vector ODEs
+   4. ∂/∂x, gradient, divergence, curl
+   5. Browser playground (Pyodide)
+   6. `fermium build`
+3. **Textbook gauntlet** in `gauntlet/<topic>/`: 3 tested problems per topic, and `gauntlet/FRICTION.md` gets fixed in the language. Topics, in order: mechanics, oscillations, gravitation, thermodynamics, electromagnetism, optics/waves, special relativity, quantum mechanics, nuclear physics, astrophysics. After that, a second, harder pass. Add a README "Gauntlet" section with counts.
+4. **Hourly rotating quality passes (~15 min):** beginner, adversarial, performance, correctness and docs, in rotation.
+
+Other rules:
+- Add a timestamped line to PROGRESS.md on the hour.
+- At 10:30 UTC stop new work and write MORNING_REPORT.md. Include the audit, Phase 2 status, gauntlet counts, the top 10 frictions and what is still weak.
