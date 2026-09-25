@@ -62,10 +62,10 @@ Lines you type into the **Terminal** (the Mac's command window) look like this:
 fermium run hello.fm
 ```
 
-Every Fermium example in this course is run automatically by Fermium's test suite, so the examples and outputs you see here really work.
+Every Fermium example in this course is run automatically by Fermium's test suite, and every output box is compared with what Fermium really prints, so the examples and outputs you see here really work. (The exceptions are the one-page summary in the cheat sheet and one deliberately endless loop in the troubleshooting guide.)
 
 ## A note for teachers and maintainers
 
-Each ```` ```fermium ```` block in `bootcamp/*.md` and `bootcamp/solutions/*.md` is executed by `tests/test_docs.py` (with the markdown file's folder as the working folder, so `load "data/pendulum.csv"` works). Blocks that deliberately fail are written as plain ```` ``` ```` blocks. Run `python3 -m pytest -q tests/test_docs.py` after editing.
+Each ```` ```fermium ```` block in `bootcamp/*.md` and `bootcamp/solutions/*.md` is executed by `tests/test_docs.py` (with the markdown file's folder as the working folder, so `load "data/pendulum.csv"` works). Blocks that deliberately fail are written as plain ```` ``` ```` blocks, marked `<!-- run as name.fm -->` when they have an output box. Run `python3 -m pytest -q tests/test_docs.py tests/test_bootcamp_outputs.py` after editing.
 
-The output boxes are real program output. After a change to Fermium or to an example, run `python3 bootcamp/update_outputs.py` to re-run every example and refresh them (an output box is any plain block after a `<!-- output -->` marker; a deliberately failing example is marked `<!-- run as name.fm -->`). Review the diff: a changed output can reveal a regression, or prose that no longer matches.
+The output boxes are real program output. After a change to Fermium or to an example, run `python3 bootcamp/update_outputs.py` to re-run every example and refresh them (an output box is any plain block after a `<!-- output -->` marker; a deliberately failing example is marked `<!-- run as name.fm -->`). Review the diff: a changed output can reveal a regression, or prose that no longer matches. `tests/test_bootcamp_outputs.py` fails when a box is out of date (the order of warnings doesn't matter), and `python3 bootcamp/update_outputs.py --check` lists the stale boxes without changing anything.

@@ -1,8 +1,45 @@
 # PROGRESS
 
-_Last updated: 2026-09-24 23:40 UTC_
+_Last updated: 2026-09-25 01:10 UTC_
 
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
+
+## Status at a glance (01:10 UTC)
+- **Tests:** 1753 passed, 7 skipped, 4 xfailed (strict xfails of known bugs A24, A54, A55, A56), in about 90 s. Coverage 91%.
+- Every ```` ```fermium ```` block in the docs, bootcamp and README runs in the tests, and every bootcamp output box is compared with the real output (`tests/test_bootcamp_outputs.py`).
+- 25 examples, all tested; 7 rosetta programs in Fermium, Julia and Python.
+
+## What works
+- **Units:** checked at compile time and erased before codegen. 7 base dimensions with rational exponents, SI prefixes, physics and astronomy units, °C/°F as absolute temperatures, `in` conversions, CODATA 2022 constants.
+- **Language:** variables, one-line and block functions, `if`/`else`, `for` (with units and `step`, and `to inf` with `break`), `while`, lists, text, `where`, 2-D and 3-D vectors. Variables that may be unset after an `if` or loop are compile errors.
+- **Calculus:** symbolic derivatives (`x'`, `d/dt`, `dx/dt`, `d²x/dt²`, `∂/∂x`) of one-line functions and formulas; definite integrals (adaptive Gauss–Kronrod, compiled; infinite ranges at any length scale; integrable singularities at the ends and at 0); indefinite integrals through SymPy; `solve` with RK4 or adaptive DP45 (`tolerance`, `using rk4|rk45`), systems and vector unknowns.
+- **Data:** `load` CSV with units, `fit` with units and standard errors (`examples/data/pendulum.csv` gives g = 9.818 m/s²), `plot` PNGs with unit labels.
+- **Tools:** `fermium run/check/fmt/doctor/build`, the REPL with `\name` Tab completion and history saved in `~/.fermium_history`, the VS Code extension (highlighting and `\name` completion). `fermium doctor` reports the C compiler that `fermium build` needs.
+- **Speed:** within 2× of Julia's compute time on 4 of the 5 benchmarks (benchmarks/RESULTS.md, 00:09 UTC run); whole-process times are shorter than Julia's.
+
+## Partial
+- **Adaptive-ODE benchmark:** results disagree with Julia and SciPy in the 00:09 RESULTS.md (Fermium took 2066 steps against 3713). The solver's error norm changed after that run (A15), so it needs a re-run.
+- **Derivatives and ∂:** only of one-line functions and formulas.
+- **`fermium build`:** no `plot`, `load` or `fit`; needs a C compiler.
+- **Vectors:** no matrices and no lists of vectors.
+- **Uncertainties:** `±` is reserved and gives a friendly error; not implemented (docs/uncertainties.md).
+- **VS Code:** tested under Node with a stand-in for the VS Code API, not in a running VS Code; no hover or live errors.
+- **`stdlib/`:** empty. Constants and units live in `fermium/constants.py` and `fermium/units.py`.
+
+## Known issues
+Open adversarial bugs (details in notes/bugs-adversarial.md; A1, A2, A4–A22, A25–A36, A38–A49 and A51–A53 are fixed):
+- **A54 (silent wrong answer):** inside `∫ … du`, `u` is the atomic mass unit, so `∫ 1/u du from 1 to 2` is 6.02×10²⁶ 1/kg. `∫ 1/s ds` (prints `1 1/s`) and `∫ 2/L dL` are wrong the same way.
+- **Narrow peak at a subdivision point (silent wrong answer, AUDIT §4.5):** `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` gives exactly half (0.0886 against 0.177). A peak at 1000.5 is right.
+- **A3 (partly fixed):** a narrow peak in a huge finite range can be missed: `∫ exp(-x²) dx from -1e6 to 1e6` prints 0.
+- **A56 (partly fixed):** strong interior singularities away from 0 (`|x - 0.3|^-0.8`, and even `^-0.6`) are rejected as "doesn't converge".
+- **A55:** `max`/`min` of an ODE solution only look at step points (off in the 4th digit).
+- **A23:** `plot a vs b, c vs d` with different units shares one mislabelled axis.
+- **A24:** a CSV with an empty cell prints a Python "Exception ignored" message before the proper error.
+- **A37:** decays below about 10⁻³⁰⁰ stall.
+- **A50:** `push` on a loaded column reallocates NumPy-owned memory (latent; no crash seen).
+- **Traps by design:** `2 G` is 2 × the gravitational constant (gauss is `gauss`), `2 h` is 2 × Planck's constant, and `2 g` is 2 grams. `2 g` warns only if you defined your own `g`; `2 G` and `2 h` never warn.
+- `sqrt(-1)` is NaN and `factorial(-1)` is ∞, silently.
+- No garbage collection: list memory is only freed when the program ends.
 
 ## Done
 - 22:18 Read the spec. Wrote CLAUDE.md.
@@ -19,7 +56,7 @@ _Last updated: 2026-09-24 23:40 UTC_
   - `∫ F(x) dx` = 1.0 J
   - damped-spring `solve` with DP45
   - `plot x vs t`
-  - `load` + `fit` gives g = 9.806 m/s²
+  - `load` + `fit` gives g ≈ 9.8 m/s² (9.818 m/s² with `examples/data/pendulum.csv` as of 01:10)
   - `where`
 - 23:10 CLI: `run`, `check`, `fmt --pretty/--ascii`, `doctor`. REPL with `\name<TAB>`.
 - 23:10 Wrote DECISIONS.md (D1–D22) and docs/reference.md. `check.sh` and Makefile in place.
@@ -39,16 +76,18 @@ _Last updated: 2026-09-24 23:40 UTC_
 - 23:40 README with gallery. 1066 tests passing.
 
 - 00:05 **New user direction received.** Tiers 1–4 are complete. The plan is now Phases 1–4 (see CLAUDE.md, "Night plan, part 2"). The end time moved to 13:00 UTC (9 AM ET), and the report is due at 12:30 UTC.
+- 00:05–01:00 Phase 1 audit: AUDIT.md written; most AUDIT §4 items and most of A1–A53 fixed (see the hourly log and `git log`).
+- 01:10 Docs pass: README, reference, DECISIONS and the VS Code README corrected against the code; reference §19 "Known limitations"; bootcamp output boxes refreshed and now tested; `doctor` checks for a C compiler.
 
 ## In progress
-- Tier 5 hardening.
+- Phase 2 features (Jupyter kernel first).
 
 ## Next
-- Property tests (hypothesis) for unit algebra and conversions.
-- Coverage toward 95% (in-process CLI/doctor tests).
-- Possibly: AOT `fermium build` (native executable via llvmlite object code + a small C runtime).
-- Re-run benchmarks on a quiet machine (~10:00 UTC) and update RESULTS.md.
-- MORNING_REPORT.md at ~10:45 UTC.
+- Re-run the benchmarks and update RESULTS.md and the README speed table (the adaptive row still says "spot check").
+- The open bugs above, silent wrong answers first (A54, the half-peak).
+- Phase 2: Jupyter kernel, language server, matrices, gradient/divergence/curl, browser playground.
+- Phase 3: the textbook gauntlet.
+- MORNING_REPORT.md at 12:30 UTC.
 
 ## Blocked
 - (none)

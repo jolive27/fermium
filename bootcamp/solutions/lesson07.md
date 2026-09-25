@@ -20,7 +20,7 @@ print "stops at", t
 <!-- output -->
 ```
 velocity at 2 s: 20 m/s
-acceleration at 2 s: -5.0 m/s²
+acceleration at 2 s: -5 m/s²
 stops at 6.0 s
 ```
 
@@ -76,7 +76,7 @@ print "zero force at", r0 in nm, ": F =", F(r0)
 0.35 nm 6.5×10⁻¹¹ N
 0.38 nm 1.4×10⁻¹² N
 0.45 nm -1.0×10⁻¹¹ N
-zero force at 0.38 nm : F = -1.3×10⁻²⁶ N
+zero force at 0.38 nm : F = -6.8×10⁻²⁷ N
 ```
 
 Positive force means repulsion (pushing r larger), negative means attraction. The force is zero at 2^(1/6)σ ≈ 0.38 nm (the tiny number there is rounding error, effectively zero): that's the equilibrium distance between the atoms.

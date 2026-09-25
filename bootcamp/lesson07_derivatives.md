@@ -19,9 +19,9 @@ print a
 
 <!-- output -->
 ```
-y(t) = 20 m/s t - 0.5·9.81 m/s^2 t²   [m, for t in s]
-v(t) = 20 m/s - t·9.81 m/s^2   [m/s, for t in s]
-a(t) = -9.81 m/s^2   [m/s²]
+y(t) = 20 m/s t - 0.5·9.81 m/s² t²   [m, for t in s]
+v(t) = 20 m/s - 9.81 m/s² t   [m/s, for t in s]
+a(t) = -9.81 m/s²   [m/s², for t in s]
 ```
 
 Fermium did the calculus for you, **exactly**, the way you would on paper (it isn't an approximation). `y'` is the velocity, `y''` the acceleration. Look at the units in brackets: y is in m, so y′ is in m/s and y″ in m/s². Fermium divides by the units of `t` each time.
@@ -38,9 +38,9 @@ print "directly:", y'(2 s)
 
 <!-- output -->
 ```
-velocity at 1 s: 10.2 m/s
+velocity at 1 s: 10.19 m/s
 velocity at 3 s: -9.43 m/s
-directly: 0.380 m/s
+directly: 0.38 m/s
 ```
 
 You can write `y'(2 s)` directly without giving the derivative a name.
@@ -58,8 +58,8 @@ print dy/dt(2 s)
 
 <!-- output -->
 ```
-v(t) = 20 m/s - t·9.81 m/s^2   [m/s, for t in s]
-0.380 m/s
+v(t) = 20 m/s - 9.81 m/s² t   [m/s, for t in s]
+0.38 m/s
 ```
 
 Second derivatives are written `y''`, `d²y/dt²` (ASCII: `d^2y/dt^2`), or `d²/dt² y`. They all mean the same thing. Here's an oscillation, x(t) = A cos(ωt), differentiated twice:
@@ -152,7 +152,7 @@ print x'
 ```
 estimate: 36.0000180 m/s
 exact:    36.0000000 m/s
-x'(t) = 3 t²·3 m/s^3
+x'(t) = 9 m/s³ t²
 ```
 
 The estimate is close but not exact; the prime is exact.

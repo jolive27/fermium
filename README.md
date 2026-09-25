@@ -2,14 +2,21 @@
 
 **Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
 
-```
+```fermium
 L = 1.20 m
 T = 2.21 s
 g = 4π² L / T²
 print g                 # 9.70 m/s²
 print g in ft/s²        # 31.8 ft/s²
+```
 
-y = L + T               # line 6: can't add length [m] to time [s]
+Add `y = L + T` as line 6 of that file (a length plus a time, by mistake), and the program doesn't run at all. The compiler stops it first:
+
+```
+pendulum.fm, line 6: can't add length [m] to time [s]
+    y = L + T
+        ^^^^^
+  hint: both sides of + and - must have the same units
 ```
 
 Fermium is a small programming language for physicists.
@@ -118,7 +125,7 @@ Measured on the same machine, median of repeated runs. The full table, methods a
 | Blackbody integrals | 0.91× Julia (faster) | 1× | ~23× Julia |
 | Loop with units | 1.09× Julia | 1× | ~80× Julia |
 
-Counting startup and compilation, Fermium programs finish sooner than Julia's (about 0.1–0.6 s against 1–3 s), because Julia spends that time JIT-compiling.
+Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.1–0.33 s against 0.9–2.8 s for the whole process), because Julia spends that time JIT-compiling. A program that computes one number takes 0.11 s in Fermium and 0.25 s in Julia (the `startup` row in RESULTS.md).
 
 ## Documentation
 - [Language reference](docs/reference.md)
@@ -131,7 +138,7 @@ Counting startup and compilation, Fermium programs finish sooner than Julia's (a
 ## Development
 
 ```
-./check.sh           # lint + all tests (including every code block in the docs and bootcamp) + all examples
+./check.sh           # lint + all tests (including every ```fermium code block and bootcamp output box) + all examples
 python3 benchmarks/run.py
 ```
 

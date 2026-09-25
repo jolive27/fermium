@@ -2,7 +2,7 @@
 
 Fermium is a programming language for physics. Numbers carry units, and the compiler checks those units **before your program runs**. Calculus (derivatives, integrals, differential equations) is part of the language. Programs are compiled to native code with LLVM.
 
-Every example on this page is tested (`tests/test_docs.py` runs each block marked with `fermium`).
+Every program example on this page is tested: `tests/test_docs.py` runs each block marked with `fermium`. The other blocks (command lines, the error display in §16, the `load`/`fit`/`plot` sketch in §11 and the grammar) are not run.
 
 ## Contents
 1. [Running programs](#1-running-programs)
@@ -23,6 +23,7 @@ Every example on this page is tested (`tests/test_docs.py` runs each block marke
 16. [Errors](#16-errors)
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
+19. [Known limitations](#19-known-limitations)
 
 ---
 
@@ -53,7 +54,7 @@ c_light = 3.00×10⁸ m/s
 
 Rules (see DECISIONS.md D7):
 - A unit name immediately after a number is a unit: `3 m` is 3 metres.
-- Units in brackets are always units: `3 [m/s]`, `x [m]`.
+- Units in brackets are always units: `3 [m/s]`, and in a function parameter, `f(x [m]) = ...` (see §5). A variable can't be declared with a bracket: `x [m] = 3` is an error; write `x = 3 m`.
 - Anywhere else, a name is a variable. `m v` is m times v.
 - A unit expression continues with `/` (`m/s`), with a space (`N m`), or with `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`.
 - **Dividing by your own variable:** a `/` with a space before it, followed by one of *your* variables, divides by that variable. With `g = 9.81 m/s²`, `20 m/s / g` is 2.04 s; `20 m/s/g` (no space) is 20 m/s per gram. Likewise `2.898e-3 m K / T` divides by a temperature `T`, not by tesla. When in doubt, use parentheses: `(20 m/s) / g`.
@@ -83,7 +84,7 @@ print E, p
   6. comparisons
   7. `not`, `and`, `or`
 
-  So `h c / λ k_B T` means (h c)/(λ k_B T). Also, `1/2 m v²` means 1/(2 m v²), and Fermium warns you. Write `½ m v²` instead.
+  So `h c / λ k_B T` means (h c)/(λ k_B T). Also, `1/2 x` means 1/(2x), and Fermium warns you. Write `½ m v²` or `(1/2) m v²` for one half. Careful: in `1/2 m`, the `m` right after the number is the unit (§2), so it is 0.5 per metre (DECISIONS D8).
 - **A variable keeps its units:** assigning a time to a variable that held a length is an error.
 - **Update in place:** `x += 1 m`, `x -= ...`, `x *= 2`, `x /= 2`.
 - **`where`:** gives names to values used in just one line:
@@ -166,6 +167,20 @@ y = if x > 0 m then x else -x
 
 - **Ranges include both ends:** `for i from 1 to 10` runs 1, 2, …, 10. With units, a `step` is required.
 - **Loop control:** `break` and `continue` work in loops.
+- **Loops without an end:** `for i from 1 to inf` (or `∞`) counts 1, 2, 3, … until a `break`:
+
+```fermium
+total = 0
+terms = 0
+for n from 1 to inf
+    total += 1/n^2
+    terms = n
+    if 1/n^2 < 1e-6
+        break
+print terms, total
+```
+
+- **A variable must have a value on every path.** Using a variable after an `if` or a loop that is the only place it was set is a compile error, because the `if` may be false and the loop may not run at all: `y might not have a value here: it is only set inside the if on line 1`. The same goes for a loop variable read after its loop (`for i from 1 to n` … `print i`), even a `for n from 1 to inf` loop. Give the variable a value before the `if` or loop, or copy the loop variable into another variable inside the loop, as `terms` above.
 - **Conditions:** comparisons are `==`, `!=` (`≠`), `<`, `>`, `<=` (`≤`), `>=` (`≥`) and `~=` (`≈`, "equal to within 10⁻⁶ relative"). Combine them with `and`, `or` and `not`.
 - **`assert condition, "message"`** stops the program if the condition is false.
 
@@ -188,6 +203,8 @@ print ts
 - **Indexing starts at 1:** `xs[1]` is the first element and `xs[end]` the last. An index out of range stops the program with a clear message.
 - **Arithmetic works element by element:** `xs + ys`, `2 xs` and `xs^2`. Functions such as `sin(xs)` work on each element.
 - **Growing a list:** `push(xs, value)` (or `append`) adds an element to the end.
+- **Size:** a list holds at most 10⁹ numbers. Asking for more (`zeros(2e9)`, or a range that long) stops the program with `not enough memory for a list of 2×10⁹ numbers (the most is 10⁹)`.
+- **Sorting:** `sort(xs)` sorts from smallest to largest and puts `NaN` values last.
 - **Setting an element:** `xs[i] = value`.
 - **Looping:** `for x in xs`.
 
@@ -237,7 +254,17 @@ print W
 print integral exp(-x^2) dx from -inf to inf
 ```
 
-- **Definite integrals** are computed numerically with adaptive Gauss–Kronrod quadrature (G7/K15, relative tolerance 10⁻¹⁰), compiled to native code. Infinite limits (`∞` or `inf`) work.
+- **Definite integrals** are computed numerically with adaptive Gauss–Kronrod quadrature (G7/K15, relative tolerance 10⁻¹⁰), compiled to native code.
+- **Infinite limits** (`∞` or `inf`) work, whatever the physical scale: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right.
+- **Singularities:** integrable blow-ups at an end of the range (like 1/√x at 0) work. An integrable blow-up at **0 inside the range** works too: the range is split there. Mild blow-ups like 1/√|x − c| work anywhere, but strong ones away from 0 may fail (see §19).
+- **Integrals that don't converge** (like ∫ 1/x dx from -1 to 1, or sin(x) up to ∞) stop with a clear error instead of giving a number.
+
+```fermium
+print ∫ exp(-x/(1 nm)) dx from 0 m to ∞          # 1 nm
+print ∫ exp(-(x/(1e8 m))^2) dx from -∞ to ∞      # √π × 10⁸ m
+print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, inside the range
+```
+
 - **Units:** the result's units are the integrand's units times the variable's units.
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
 
@@ -261,6 +288,22 @@ print x'(1 s)
 - **Methods:**
   - Without `step`, Fermium uses adaptive Dormand–Prince RK45 (relative tolerance 10⁻⁹).
   - With `step 1 ms`, it uses classic fixed-step RK4.
+  - **`tolerance 1e-12`** after the range sets the adaptive solver's relative tolerance (a plain number between 0 and 1). It has no effect on RK4.
+  - **`using rk4`** or **`using rk45`** (also `method rk4`) picks the method by name. `rk4` needs a `step`. With `using rk45`, the solver chooses its own steps and a `step` is ignored.
+  - The order is `for t from a to b [step h] [tolerance r] [using method]`:
+
+```fermium
+solve x' = -x / (1 s)
+  with x(0) = 1 m
+  for t from 0 s to 1 s tolerance 1e-12
+print x(1 s) to 10 digits
+
+solve y' = -y / (1 s)
+  with y(0) = 1 m
+  for t from 0 s to 1 s step 1 ms using rk4
+print y(1 s) to 10 digits
+```
+
 - **Using the result:**
   - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative.
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
@@ -319,16 +362,19 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | Function | Meaning |
 |---|---|
 | `sin cos tan asin acos atan sinh cosh tanh exp ln log log10 log2 erf gamma` | need plain numbers (angles are plain numbers) |
-| `sqrt cbrt abs floor ceil round sign` | keep or transform units |
+| `sqrt cbrt abs sign` | keep or transform units |
+| `floor ceil round` | need plain numbers: `floor(270 cm)` is an error, because the answer depends on the unit. Write `floor(x / (1 cm)) cm` |
 | `atan2(y, x) hypot(a, b) mod(a, b) min(a, b, …) max(…) clamp(x, lo, hi)` | arguments in the same units |
 | `len sum mean std min max first last cumsum diff reverse sort` | lists |
 | `linspace(a, b, n) range(a, b, step) zeros(n) ones(n)` | make lists |
 | `push(xs, x)` / `append` | add to a list |
 | `dot(a, b) trapz(ys, xs) interp(x, xs, ys)` | list maths |
 | `norm(v) unit(v) dot(a, b) cross(a, b) vec(x, y[, z])` | vectors (also `\|v\|`, `a · b`, `a × b`) |
+| `sign(v)` of a vector | the unit vector v/\|v\|, the same as `unit(v)`: `sign(<3, 4> m/s)` is `<0.6, 0.8>` |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |
+| `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
 
 ## 14. Constants
 
@@ -362,7 +408,8 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Derived units:** `N J W Pa C V F Ω(ohm) S Wb T H Hz Bq Gy Sv lm lx kat`.
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
-- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %` (`rev` = 2π, so `1 rev/min in Hz` is 2π/60 Hz; see DECISIONS D27).
+- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %`.
+  - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
 - **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12).
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
 
@@ -371,7 +418,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 Fermium reports problems in one line, points at the spot, and suggests a fix:
 
 ```
-line 3: can't add length [m] to time [s]
+prog.fm, line 3: can't add length [m] to time [s]
     y = x + t
         ^^^^^
   hint: both sides of + and - must have the same units
@@ -381,9 +428,9 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
 
 ## 17. Tools
 
-- **REPL:** run `fermium`. It keeps history. Type `\theta` then Tab to get θ; `\name` is also replaced when you press Enter. `:help` shows help, `:quit` leaves.
+- **REPL:** run `fermium`. It keeps history (the up arrow), saved between sessions in `~/.fermium_history`. Type `\theta` then Tab to get θ; `\name` is also replaced when you press Enter. `:help` shows help, `:quit` leaves.
 - **`fermium fmt file.fm --pretty` / `--ascii`:** converts between ASCII and symbols without changing the program's meaning.
-- **`fermium doctor`:** checks the installation and explains fixes.
+- **`fermium doctor`:** checks the installation and explains fixes. It also reports whether a C compiler is available, which only `fermium build` needs.
 - **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which is linked with a small C runtime. This needs a C compiler (on a Mac: `xcode-select --install`). Programs that use `plot`, `load` or `fit` can't be built yet, because those features use Python libraries.
 - **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion.
 
@@ -394,7 +441,7 @@ program    := statement*
 statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | name(params) = expr | name(params) = NEWLINE INDENT block
             | print items | plot series [to "file"] | fit eq to expr [with binds]
-            | solve eqs [with eqs] for t from a to b [step h]
+            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45]
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
@@ -404,3 +451,17 @@ postfix    := atom ( (args) | [index] | .name | ' )*
 atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|
             | √atom | ∫ … d x [from a to b] | d/dt atom | dx/dt | ∂/∂x atom | load "file"
 ```
+
+## 19. Known limitations
+
+These are known and not yet fixed. None of them is silent about units.
+
+- **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges don't have this problem (§9).
+- **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
+- **`u` inside `∫ … du` is the atomic mass unit.** `∫ 1/u du from 1 to 2` gives 6.02×10²⁶ 1/kg, not ln 2, because `u` is read as the unit before Fermium sees `du`. Use another name for the integration variable (`∫ 1/w dw`). Names such as `s` and `L` that are also units have the same problem.
+- **`max(x)` and `min(x)` of an ODE solution** only look at the solver's steps, so they can be off in the 4th digit (0.999848 instead of 1). For an accurate maximum, find where `x'(t)` is 0.
+- **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
+- **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
+- **Matrices** and lists of vectors don't exist yet.
+- **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
+- **`fermium build`** can't build programs that use `plot`, `load` or `fit`.

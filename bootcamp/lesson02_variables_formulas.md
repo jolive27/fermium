@@ -156,7 +156,7 @@ print 0.5 m v^2
 warning: line 3: 'm' after the number means the unit m, not your variable m
     print 0.5 m v^2
               ^
-  hint: to multiply by the variable write *m (e.g. 0.5*m) or put the number in a name; ½ m also works
+  hint: to multiply by your variable write 0.5*m
 4.5 m³/s²
 ```
 

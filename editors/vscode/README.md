@@ -6,7 +6,7 @@
   - `\hbar` → ħ, `\int` → ∫, `\sqrt` → √, `\partial` → ∂, `\pm` → ±
   - `\^2` → ², `\_0` → ₀
   - `\deg` → °, `\AA` → Å, `\Msun` → M☉
-- **Syntax highlighting** for `.fm` files. Numbers, keywords, constants, strings and comments are coloured. (Units after numbers are not yet coloured separately from variables.)
+- **Syntax highlighting** for `.fm` files: numbers, keywords, constants, strings and comments. Any name right after a number is coloured as a unit (the grammar can't tell `2 m` the unit from `2 m` the variable; the language server's warning can).
 
 Live errors and hover come from the Fermium language server (`fermium lsp`). Without it, the extension still highlights code and completes `\name` symbols.
 

@@ -108,7 +108,7 @@ print "energy at 100 s:", E(100 s) to 9 digits
 <!-- output -->
 ```
 energy at start: 0.250000000 J
-energy at 100 s: 0.249999940 J
+energy at 100 s: 0.249999933 J
 ```
 
 The energy stays the same to 7 digits after more than a hundred oscillations: the solver is accurate.
@@ -160,7 +160,7 @@ plot A vs t, B vs t to "chain.png"
 <!-- output -->
 ```
 B after 5 hours: 476.324
-most B ever: 542.848
+most B ever: 542.884
 plot saved to chain.png
 ```
 

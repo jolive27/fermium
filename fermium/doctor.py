@@ -44,6 +44,20 @@ def doctor():
             _ok(f"{mod} {m.__version__}")
         except ImportError:
             _bad(f"{mod} is not installed ({why}; everything else works)", f"run:  pip install {mod}")
+    # a C compiler links `fermium build` executables; nothing else needs one
+    try:
+        from . import aot
+        cc = aot.find_cc()
+    except ImportError:
+        cc = None
+    if cc:
+        _ok(f"C compiler: {cc} (only needed for  fermium build)")
+    else:
+        mac = platform.system() == "Darwin"
+        print("  - no C compiler found. That's fine: it's only needed for  fermium build  (standalone "
+              "executables);\n      run, the REPL, fmt and check work without it.\n"
+              f"      to get one: {'xcode-select --install' if mac else 'install clang or gcc'}"
+              f"{'' if mac else ' (on a Mac: xcode-select --install)'}")
     # compile and run a tiny program end to end
     try:
         from .driver import run_source

@@ -219,7 +219,7 @@ print f(xs), xs      # actual: error "v isn't a list, so you can't set v[...]" (
 D14's list-parameter detection counts indexing, looping and list functions but not index
 *assignment*; adding any read such as `len(v)` makes it work.
 
-## A17. (low, misleading error) `∫ 2 dm ...`, `∫ 1 dV ...`, `∫ 3 dT ...` read `dm`/`dV`/`dT` as units
+## A17. [FIXED] (low, misleading error) `∫ 2 dm ...`, `∫ 1 dV ...`, `∫ 3 dT ...` read `dm`/`dV`/`dT` as units
 After a number literal, `dm` is decimetres, `dV` decivolts, `dT` decitesla, `dg` decigrams, so a
 constant integrand gives "this integral is missing its 'dx'":
 ```
@@ -230,7 +230,7 @@ print ∫ 3 dT from 0 K to 2 K        # expected 6 K
 (`∫ 1 dt` and `∫ 1 dx` work.) Inside `∫ … d<name>`, a `d<name>` token right before `from`
 (or the end of the integral) should be the differential.
 
-## A18. Differentiating the length of a vector gives an internal-looking error about `sign`
+## A18. [FIXED] Differentiating the length of a vector gives an internal-looking error about `sign`
 ```
 r(t) = <t^2, t^3, 1>
 s(t) = |r(t)|
@@ -318,7 +318,7 @@ print γ(5)          # same
 The ASCII→Greek rule (D9) rewrites the builtin's name. (The derivative code knows about
 γ(...) -- "can't differentiate γ(...) symbolically" -- but calling it fails.)
 
-## A26. Real odd roots of negatives: `x^(1/3)` works but its derivative and `x^(2/3)` give NaN
+## A26. [FIXED] Real odd roots of negatives: `x^(1/3)` works but its derivative and `x^(2/3)` give NaN
 ```
 print (-8)^(1/3)          # -2   (real cube root, good)
 print (-8)^(2/3)          # NaN  expected 4 (or consistently NaN for all of them)
@@ -462,7 +462,7 @@ h = f'
 print h(1)                       # actual: -0.270784   expected: -0.270671 (= -2e⁻²)
 ```
 
-## A35. Indefinite integrals with a parameter fail: SymPy's Piecewise leaks out
+## A35. [FIXED] Indefinite integrals with a parameter fail: SymPy's Piecewise leaks out
 ```
 ω = 2 1/s
 F = ∫ cos(ω t) dt       # error: SymPy returned something Fermium can't use yet:
@@ -503,7 +503,7 @@ print x(30)             # actual: 3.79017×10⁻³⁰¹   expected: 9.35762×10�
 Looks like a fixed tiny absolute floor (~1e-300) in the error norm. Only matters at the edge
 of double range; everything down to ~1e-290 is right now.
 
-## A38. `fmt --ascii` turns `∂²/∂x² f` into `partial^2/partial x^2 f`, which doesn't parse
+## A38. [FIXED] `fmt --ascii` turns `∂²/∂x² f` into `partial^2/partial x^2 f`, which doesn't parse
 ```
 f(x, y) = x^2 y^2
 g = ∂²/∂x² f
@@ -656,7 +656,7 @@ Traceback from `codegen_llvm.map_list`: `TypeError: cannot store <2 x double> to
 Expected the checker's "lists of vectors aren't supported (yet)" error (D24 says lists of vectors
 are not done).
 
-## A49. (low) `g = d/dt (a t^2) where a = 3` is rejected
+## A49. [FIXED] (low) `g = d/dt (a t^2) where a = 3` is rejected
 ```
 g = d/dt (a t^2) where a = 3
 print g(1)        # error "d/dt(...) is a function; give it an argument, like d/dt(...)(x)"
@@ -703,7 +703,7 @@ fields (nuclear physics, astrophysics). Suggestion: pick the transform scale L f
 [a, ∞) into [a, a + L] + [a + L, ∞). The divergence heuristic also needs to be scale-aware
 (the AU case had the right value, 1.496e11 m, but was rejected).
 
-## A52. Symbolic derivatives overflow to NaN (∞/∞) where the true value is ~0 -- Fermi function
+## A52. [FIXED] Symbolic derivatives overflow to NaN (∞/∞) where the true value is ~0 -- Fermi function
 ```
 kT = 0.025 eV
 μ = 5 eV

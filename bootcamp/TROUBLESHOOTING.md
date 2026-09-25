@@ -246,7 +246,7 @@ print E
 warning: line 3: 'm' after the number means the unit m, not your variable m
     E = 0.5 m v^2
             ^
-  hint: to multiply by the variable write *m (e.g. 0.5*m) or put the number in a name; ½ m also works
+  hint: to multiply by your variable write 0.5*m
 4.5 m³/s²
 ```
 
@@ -543,7 +543,7 @@ print N(30 s)
 
 <!-- output -->
 ```
-range.fm, line 2: asked for the solution at 30 (SI units), outside the range it was solved for (it ends at 20)
+range.fm, line 2: asked for the solution at 30 s, outside the range it was solved for (it ends at 20 s)
     print N(30 s)
 ```
 
