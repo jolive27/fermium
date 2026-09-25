@@ -174,3 +174,21 @@ def test_u238_chain_matches_analytic_bateman():
     assert num(line_of(out, "Rn-222 reaches"), "after") == pytest.approx(3.8235 * np.log(100) / np.log(2), rel=5e-4)   # 6.64 half-lives
     t99 = -mp.log(1 - 0.99 * (lam[1] - lam[0]) / lam[1]) / (lam[1] - lam[0])
     assert num(out, "A(Pa-234m)/A(U-238) =") == pytest.approx(float(activity(2, t99) / activity(0, t99)), rel=1e-4)
+
+
+def test_hydrogen_levels_match_bohr_with_reduced_mass():
+    """Shooting eigenvalues n = 1..4, l = 0..n−1 vs −Ry (μ/m_e)/n²; Lyman α vs NIST 121.567 nm."""
+    from scipy.constants import c, e, h, m_e, m_p, physical_constants
+    out = run_prog("hydrogen_levels", "hydrogen.fm")
+    ry = physical_constants["Rydberg constant times hc in eV"][0]
+    mu = m_e * m_p / (m_e + m_p)
+    levels = re.findall(r"n = (\d)  l = (\d) : E = (-[\d.]+) eV", out)
+    assert sorted((int(n), int(l)) for n, l, _ in levels) == [(n, l) for n in range(1, 5) for l in range(n)]
+    for n, l, E in levels:
+        assert float(E) == pytest.approx(-ry * mu / m_e / int(n) ** 2, rel=1e-7), (n, l)
+    assert num(out, "largest relative difference from Bohr:") < 1e-7
+    lya = h * c / (0.75 * ry * mu / m_e * e) * 1e9
+    assert num(out, "Lyman α (2p → 1s):") == pytest.approx(lya, rel=1e-6)
+    assert num(out, "Lyman α (2p → 1s):") == pytest.approx(121.567, rel=2e-5)     # NIST (fine structure ~10⁻⁵)
+    assert num(out, "without the reduced mass it would be") == pytest.approx(lya * mu / m_e, rel=1e-6)
+    assert num(out, "2p: u² peaks at r =") == pytest.approx(4 * m_e / mu, rel=1e-5)
