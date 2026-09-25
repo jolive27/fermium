@@ -394,6 +394,8 @@ print integral exp(-x^2) dx from -inf to inf
 - **Infinite limits** (`∞` or `inf`) work, whatever the physical scale: Fermium first scans the integrand to find its length scale, so a nanometre-wide decay or a 10⁸ m wide Gaussian both come out right.
 - **Singularities:** integrable blow-ups at an end of the range (like 1/√x at 0) work. An integrable blow-up at **0 inside the range** works too: the range is split there. Mild blow-ups like 1/√|x − c| work anywhere, but strong ones away from 0 may fail (see §19).
 - **Integrals that don't converge** (like ∫ 1/x dx from -1 to 1, or sin(x) up to ∞) stop with a clear error instead of giving a number.
+- **Integrals that are 0** (by symmetry: `∫ sin(x) dx from -1 to 1`, the y component of a field that has none) converge: the error is judged against ∫|f| as well as against the result, so a 0 made of rounding noise is accepted (it prints as something like 10⁻¹⁷). A component of a vector integral that is noise compared with the other components is accepted to 10⁻¹⁰ of the vector's size (DECISIONS D44).
+- **NaN or ∞ in the integrand:** a 0/0 at a single point (like sin(x)/x at 0, if a sample lands exactly there) doesn't matter: once the quadrature has narrowed it down to a few floating-point numbers next to finite values, that point counts as 0. A NaN or ∞ over a stretch of the range is an error that says where, for example `the integrand is NaN at x = 767.1 (0/0? ∞/∞? an overflow like exp(710)?)` for `x⁴ exp(x) / (exp(x) - 1)²` up to 800: rewrite such an integrand in an overflow-safe form, `x⁴ exp(-x) / (1 - exp(-x))²`. `1 - cos(θ)` loses all its digits for tiny θ (it is exactly 0 below 10⁻⁸); write `2 sin(θ/2)²` (DECISIONS D45).
 
 ```fermium
 print ∫ exp(-x/(1 nm)) dx from 0 m to ∞          # 1 nm
@@ -453,6 +455,21 @@ print x'(1 s)
 ```
 
 - **Writing the equation:** use primes (`x'`, `x''`), `dx/dt`, `d/dt x` or `d²/dt² x`. Each equation is solved for its highest derivative automatically, and it must appear linearly. Initial conditions use primes: `x'(0) = 0 m/s`.
+- **Several highest derivatives in one equation** (Lagrange's equations, where θ₁'' and θ₂'' appear in both, M(q, q') q'' = f): write them as on paper. The equations must be linear in the highest derivatives (their coefficients may depend on t and the unknowns); Fermium collects the coefficients symbolically and solves the small linear system (Gaussian elimination with pivoting, up to 4 unknowns that are numbers) at every step. If the matrix is singular at some time, the error says when (DECISIONS D47). In `0.5 b''` with an unknown `b`, `b` is the unknown, not the unit barn.
+
+```fermium
+m1 = 1.0 kg
+m2 = 0.5 kg
+l1 = 1.0 m
+l2 = 0.7 m
+g = 9.81 m/s²
+solve (m1 + m2) l1 θ1'' + m2 l2 θ2'' cos(θ1 - θ2) + m2 l2 θ2'² sin(θ1 - θ2) + (m1 + m2) g sin(θ1) = 0 N,
+      l2 θ2'' + l1 θ1'' cos(θ1 - θ2) - l1 θ1'² sin(θ1 - θ2) + g sin(θ2) = 0 m/s²
+  with θ1(0 s) = 1.2, θ2(0 s) = -0.5, θ1'(0 s) = 0 /s, θ2'(0 s) = 0 /s
+  for t from 0 s to 5 s
+print θ1(5 s), θ2(5 s)
+```
+
 - **Vector unknowns:** `solve r'' = -G M_sun r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 29.8> km/s for t from 0 yr to 1 yr`. Afterwards `r(t)` is a vector, and `plot r.y vs r.x` draws the path.
 - **Systems:** separate equations with commas or `and`, or put them on the indented lines below `solve`. For example: `solve x' = -a x, y' = a x - b y with ...`
 - **Initial conditions:** every unknown needs one, and so does every derivative below the highest. They determine the unknowns' units, and both sides of every equation are unit-checked.
@@ -497,7 +514,8 @@ print len(times(N1)), "steps"
 ```
 
 - **Using the result:**
-  - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative.
+  - `x(t)` gives the value at a time (interpolated), and `x'(t)` the derivative. The highest derivative (`x'(t)` of an unknown in `x' = …`, `x''(t)` in `x'' = …`) is the right-hand side evaluated at the interpolated state, so it is as accurate as `x(t)` itself; the right side uses the values its variables had when the `solve` ran (DECISIONS D46). `plot x' vs t` still draws the interpolant's derivative.
+  - Inside a function, a solution can be used in `∫`, in an equation `solve … for T from a to b`, and at any time `x(t)`, but it can't be returned yet: return a number made from it (DECISIONS D48).
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
 - **Towards smaller t:** the range can go down, `for t from 5 s to 0 s`, with the initial conditions at the start (5 s). This works with both methods (a `step` is always written as a positive size). `times(x)` then decreases, `x[end]` is the value at the end of the range (0 s), and `x(t)` and `plot` work as usual.

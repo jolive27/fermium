@@ -846,9 +846,16 @@ class Checker(C.DiffContext):
     def s_Return(self, s, ctx):
         if ctx.is_main:
             raise self.err("return can only be used inside a function", s)
-        v = self.expr(s.value, ctx) if s.value is not None else None
-        if v is None:
+        if s.value is None:
             raise self.err("return needs a value", s)
+        v = self.expr(s.value, ctx, allow_func=True)
+        if isinstance(v, SolRef):        # Q17 (D48)
+            n, tn = v.view.name, v.view.tname
+            raise self.err(f"a function can't return the ODE solution {n} yet; return a number made from it instead, "
+                           f"like {n}(…), ∫ {n}({tn}) d{tn} or a root found with solve", s.value,
+                           hint="or solve the ODE at the top level, where its solution stays available")
+        if isinstance(v, FuncRef):
+            v = self.expr(s.value, ctx)      # the usual message for a function used as a value
         ctx.ret_types.append(v)
         return I.SReturn(v)
 
@@ -1027,9 +1034,11 @@ class Checker(C.DiffContext):
                 sym.storage = "global"
                 return self._ivar(sym)
             if sym not in lam.captures:
-                if not isinstance(sym.ty, (NumTy, BoolTy, VecTy, MatTy)):
-                    raise self.err(f"{sym.name} can't be used inside this integral/equation (only numbers, vectors "
-                                   f"and matrices can be captured from a function)", node)
+                # an ODE solution made in the function is passed as a pointer in the env (D48)
+                if not isinstance(sym.ty, (NumTy, BoolTy, VecTy, MatTy, SolTy)):
+                    what = self.user_name(sym, node)
+                    raise self.err(f"{what} can't be used inside this integral/equation yet (only numbers, vectors, "
+                                   f"matrices and ODE solutions can be taken in from the function)", node)
                 lam.captures.append(sym)
                 # an enclosing integrand / equation must capture it too, to pass it on (gauntlet E9)
                 p = getattr(ctx, "parent", None)
@@ -1046,8 +1055,18 @@ class Checker(C.DiffContext):
             if self._is_main_sym(sym):
                 sym.storage = "global"
             else:
-                raise self.err(f"{sym.name} belongs to another function and can't be used here", node)
+                raise self.err(f"{self.user_name(sym)} belongs to another function and can't be used here", node)
         return self._ivar(sym)
+
+    @staticmethod
+    def user_name(sym, node=None):
+        """How to name a variable in a message: an ODE solution's handle (__sol.3) by its unknowns."""
+        if isinstance(sym.ty, SolTy):
+            names = sym.ty.info.get("names", [])
+            return "the solution " + ", ".join(names) if names else "this ODE solution"
+        if isinstance(sym.ty, ListTy):
+            return f"the list {sym.name}"
+        return sym.name
 
     def _ivar(self, sym):
         r = I.IVar(sym)
@@ -2030,6 +2049,7 @@ class Checker(C.DiffContext):
             r = I.ISolEval(sol, view.comp, t, False, NumTy(view.dim))
         elif view.comp == view.top + view.stride:
             r = I.ISolEval(sol, view.top, t, True, NumTy(view.dim))
+            view.sol_sym.needs_rhs = True       # keep the right-hand side with the solution (D46)
         else:
             raise self.err(f"can't take that many derivatives of the solution {view.name}", e)
         return r
@@ -2918,6 +2938,11 @@ class Checker(C.DiffContext):
         self.all_lambdas.append(lam)
         r = I.IIntegral(lam, lo, hi, NumTy(body.ty.dim * lo.ty.dim))
         r.sf = self._minsf(lo, hi, body)
+        # for "the integrand is NaN or infinite at x = …" (D45): the variable's name and display format
+        r.xname = self.text(e.var)
+        xf = I.IConst(0, NumTy(lo.ty.dim))
+        xf.hint = lo.hint or hi.hint
+        r.xfmt = self.fmt(xf)
         return r
 
     def e_Sum(self, e, ctx):
@@ -2980,7 +3005,34 @@ class Checker(C.DiffContext):
             c = A.Integral(idx, e.var, e.lo, e.hi).at(e)
             c._component = True
             comps.append(c)
-        return self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        r = self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        return self._vector_integral_retry(r, ctx)
+
+    def _vector_integral_retry(self, r, ctx):
+        """A component that is 0 by symmetry can be rounding noise that no relative test on the
+        component passes (E10).  So each component is tried quietly first (NaN if it doesn't converge);
+        a component that failed is computed again with an absolute tolerance of 10⁻¹⁰ × Σ|other
+        components|, which is the vector's relative tolerance (D44)."""
+        if not isinstance(r, I.IVec) or r.ty.mixed or not all(isinstance(it, I.IIntegral) for it in r.items):
+            return r
+        binds, total = [], None
+        for it in r.items:
+            sym = self.new_sym(self.fresh_name("__vint"), NumTy(it.ty.dim), ctx)
+            sym.assigned = True
+            first = I.IIntegral(it.lam, it.lo, it.hi, it.ty)
+            first.xname, first.xfmt, first.soft = it.xname, it.xfmt, True
+            binds.append((sym, first))
+            v = I.IVar(sym)
+            size = I.IIf(I.ICmp("==", v, v, BOOL), I.IBuiltin("abs", [v], it.ty), I.IConst(0.0, it.ty), it.ty)
+            total = size if total is None else I.IBin("+", total, size, it.ty)
+        items = []
+        for (sym, _), it in zip(binds, r.items):
+            it.atol = I.IBin("*", I.IConst(1e-10, NumTy(DIMLESS)), total, it.ty)
+            v = I.IVar(sym)
+            items.append(I.IIf(I.ICmp("==", v, v, BOOL), v, it, it.ty))
+        out = I.ILet(binds, I.IVec(items, r.ty))
+        out.hint, out.sf = r.hint, r.sf
+        return out
 
     def indefinite_integral(self, e, ctx):
         # inline calls to one-line user functions so SymPy sees a plain formula

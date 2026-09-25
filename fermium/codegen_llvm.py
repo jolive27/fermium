@@ -29,8 +29,8 @@ F64PP = F64P.as_pointer()
 I8P = I8.as_pointer()
 LISTH = ir.LiteralStructType([F64P, I64, I64])    # list header: data, len, capacity
 LIST = LISTH.as_pointer()                          # a list value is a pointer to its (shared) header
-# solution: n, dim, cap, t*, y*, dy*
-SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P])
+# solution: n, dim, cap, t*, y*, dy*, the right-hand side f(t, y, dy, env) (or null) and its env (D46)
+SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P, I8P, F64P])
 SOLP = SOL.as_pointer()
 
 SCALAR_FN = ir.FunctionType(F64, [F64, F64P])
@@ -39,6 +39,8 @@ MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
+ERR_QUAD_NAN = 31          # the integrand is NaN on more than an isolated point (D45)
+ERR_QUAD_INF = 32          # ... or ±∞ (and nowhere NaN): it may blow up there (D45)
 ERR_DEEP = 10
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
@@ -51,6 +53,7 @@ ERR_POLE = 14               # solve lhs = rhs: the sign change is a jump (tan at
 ERR_ODE_NAN = 16            # the right side of an ODE is NaN or infinite at the start (#32)
 ERR_ODE_RANGE = 17          # an ODE's range starts and ends at the same value
 ERR_NO_EVENT = 18           # solve ... until: the stop condition never happened (D39)
+ERR_ODE_SINGULAR = 33      # the mass matrix of an ODE's highest derivatives is singular (D47)
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
@@ -153,6 +156,10 @@ class ModuleGen:
         self.errfmt = ir.GlobalVariable(self.module, I64, "fm.errfmt")   # print format for error values
         self.errfmt.initializer = i64(-1)
         self.errfmt.linkage = "internal"
+        # text id of the variable of the integral being computed, for "the integrand is NaN at x = …" (D45)
+        self.qvar = ir.GlobalVariable(self.module, F64, "fm.qvar")
+        self.qvar.initializer = f64(-1)
+        self.qvar.linkage = "internal"
         self._kernels_built = set()
         self._checked_malloc()
 
@@ -321,7 +328,8 @@ class ModuleGen:
 
     def raise_error(self, b, kind, a=None, c=None, line=None):
         ln = i64(line) if line else b.load(self.curline)
-        b.call(self.externs["fm_error"], [i64(kind), a if a is not None else f64(0), c if c is not None else f64(0),
+        kind = kind if isinstance(kind, ir.Value) else i64(kind)
+        b.call(self.externs["fm_error"], [kind, a if a is not None else f64(0), c if c is not None else f64(0),
                                           ln, b.load(self.errfmt)])
         b.call(self.externs["longjmp"], [b.bitcast(self.jmpbuf, I8P), ir.Constant(I32, 1)])
         b.unreachable()
@@ -332,6 +340,19 @@ class ModuleGen:
         if inline:
             fn.attributes.add("alwaysinline")
         return fn
+
+    def _qx(self, b, mode, p, q, u):
+        """x for the quadrature variable u (see fm_qf); mirrored in interp._qx."""
+        L = b.fsub(q, p)
+        v = b.fsub(f64(1), u)
+        lower = b.fcmp_ordered("<=", u, f64(0.5))
+        # measure from the nearer end so that points close to q keep their full precision
+        xl = b.fadd(p, b.fmul(L, b.fmul(b.fmul(u, u), b.fsub(f64(3), b.fmul(f64(2), u)))))
+        xh = b.fsub(q, b.fmul(L, b.fmul(b.fmul(v, v), b.fadd(f64(1), b.fmul(f64(2), u)))))
+        xfin = b.select(lower, xl, xh)
+        sx = b.fmul(q, b.fdiv(u, v))
+        xhalf = b.select(b.icmp_signed("==", mode, i64(1)), b.fadd(p, sx), b.fsub(p, sx))
+        return b.select(b.icmp_signed("==", mode, i64(0)), xfin, xhalf)
 
     def _k_qf(self):
         """The integrand in u ∈ [0, 1].  mode 0: x from p to q with the smoothstep substitution
@@ -346,11 +367,7 @@ class ModuleGen:
         b.position_at_end(blk_fin)
         L = b.fsub(q, p)
         v = b.fsub(f64(1), u)
-        lower = b.fcmp_ordered("<=", u, f64(0.5))
-        # measure from the nearer end so that points close to q keep their full precision
-        xl = b.fadd(p, b.fmul(L, b.fmul(b.fmul(u, u), b.fsub(f64(3), b.fmul(f64(2), u)))))
-        xh = b.fsub(q, b.fmul(L, b.fmul(b.fmul(v, v), b.fadd(f64(1), b.fmul(f64(2), u)))))
-        x = b.select(lower, xl, xh)
+        x = self._qx(b, i64(0), p, q, u)
         w = b.fmul(b.fmul(f64(6), b.fmul(u, v)), L)
         at_end = b.or_(b.fcmp_ordered("==", x, p), b.fcmp_ordered("==", x, q))
         with b.if_then(at_end):      # a node that rounds onto an end point has no weight
@@ -358,8 +375,7 @@ class ModuleGen:
         b.ret(b.fmul(b.call(f, [x, env]), w))
         b.position_at_end(blk_half)
         om = b.fsub(f64(1), u)
-        sx = b.fmul(q, b.fdiv(u, om))
-        x = b.select(b.icmp_signed("==", mode, i64(1)), b.fadd(p, sx), b.fsub(p, sx))
+        x = self._qx(b, mode, p, q, u)
         b.ret(b.fdiv(b.fmul(b.call(f, [x, env]), q), b.fmul(om, om)))
         return fn
 
@@ -388,31 +404,58 @@ class ModuleGen:
         return fn
 
     def _k_gk15(self):
+        """One Gauss–Kronrod 15-point panel [lo, hi] in u.  Returns the Kronrod estimate; out[0] = error
+        estimate, out[1] = the Kronrod estimate of ∫|g| (QUADPACK's resabs, D44), out[2] = u of a node where
+        the integrand is NaN, or -u of one where it is ±∞ (NaN if there is none; such nodes count as 0 in
+        the sums, D45),
+        out[3] = the largest |g| at the finite nodes."""
         qf = self.kernel("fm_qf")
         fn = self._new_fn("fm_gk15", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P],
                           inline=False)
-        f, env, mode, a, bb, lo, hi, errp = fn.args
+        f, env, mode, a, bb, lo, hi, outp = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
+        fabs = self.intrinsic("fabs")
+        maxnum = self.intrinsic("maxnum")
+        inf = f64(math.inf)
         c = b.fmul(f64(0.5), b.fadd(lo, hi))
         h = b.fmul(f64(0.5), b.fsub(hi, lo))
-        fc = b.call(qf, [f, env, mode, a, bb, c])
+        state = {"bad": f64(math.nan), "gmax": f64(0)}
+
+        def node(u):
+            g = b.call(qf, [f, env, mode, a, bb, u])
+            ok = b.fcmp_ordered("<", b.call(fabs, [g]), inf)
+            gz = b.select(ok, g, f64(0))
+            # a NaN node is recorded as +u and wins over a ±∞ node, recorded as -u
+            cur = state["bad"]
+            keep = b.or_(ok, b.fcmp_ordered(">", cur, f64(0)))
+            state["bad"] = b.select(b.fcmp_unordered("uno", g, g), u, b.select(keep, cur, b.fneg(u)))
+            state["gmax"] = b.call(maxnum, [state["gmax"], b.call(fabs, [gz])])
+            return gz
+        fc = node(c)
         resk = b.fmul(fc, f64(WGK[7]))
         resg = b.fmul(fc, f64(WG[3]))
+        rabs = b.fmul(b.call(fabs, [fc]), f64(WGK[7]))
         for j in range(7):
             dx = b.fmul(h, f64(XGK[j]))
-            f1 = b.call(qf, [f, env, mode, a, bb, b.fsub(c, dx)])
-            f2 = b.call(qf, [f, env, mode, a, bb, b.fadd(c, dx)])
+            f1 = node(b.fsub(c, dx))
+            f2 = node(b.fadd(c, dx))
             s = b.fadd(f1, f2)
             resk = b.fadd(resk, b.fmul(s, f64(WGK[j])))
+            rabs = b.fadd(rabs, b.fmul(b.fadd(b.call(fabs, [f1]), b.call(fabs, [f2])), f64(WGK[j])))
             if j % 2 == 1:
                 resg = b.fadd(resg, b.fmul(s, f64(WG[j // 2])))
-        fabs = self.intrinsic("fabs")
-        b.store(b.call(fabs, [b.fmul(b.fsub(resk, resg), h)]), errp)
+        b.store(b.call(fabs, [b.fmul(b.fsub(resk, resg), h)]), outp)
+        b.store(b.call(fabs, [b.fmul(rabs, h)]), b.gep(outp, [i64(1)]))
+        b.store(state["bad"], b.gep(outp, [i64(2)]))
+        b.store(state["gmax"], b.gep(outp, [i64(3)]))
         b.ret(b.fmul(resk, h))
         return fn
 
     QUAD_PANELS = 8          # initial uniform panels (helps with narrow peaks)
     QUAD_MAX = 2000          # subdivision budget; beyond it the integral is reported as not converging
+    QUAD_SOFT = 250          # budget of the quiet first try for a component of a vector integral (D44)
+    QUAD_ULPS = 8 * 2.220446049250313e-16    # a NaN panel this narrow (relative) is one point (D45)
+    QUAD_ROUND = 50 * 2.220446049250313e-16   # an error below this × ∫|f| is rounding (QUADPACK's 50 ε, D44)
 
     def _k_quad(self):
         """∫ f from a to b.  Finite ranges go straight to fm_quadcore; a half-line [a, ∞) is split at
@@ -484,7 +527,12 @@ class ModuleGen:
     def _k_quadcore(self):
         """Globally adaptive Gauss–Kronrod (QUADPACK-style) in u ∈ [0, 1] (see fm_qf for the modes):
         keep a list of panels, always bisect the one with the largest error estimate, stop when the
-        total error is small enough."""
+        total error is small enough: rtol of |total|, or rounding level (50 ε) of ∫|f|, so that an
+        integral that is 0 by symmetry converges (D44).  A panel with a NaN/∞ node counts as 0 with an
+        infinite error, so it is split first.  When such panels have shrunk to a run a few ulps wide in x
+        (one point, as far as the floating-point numbers can tell) with finite panels next to it, the run
+        counts as 0 with error width × the neighbours' largest |g| (D45).  If a NaN/∞ panel is left when
+        the budget runs out, the error says where the integrand was NaN or infinite."""
         gk = self.kernel("fm_gk15")
         fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64, F64P],
                           inline=False)
@@ -492,28 +540,64 @@ class ModuleGen:
         b = ir.IRBuilder(fn.append_basic_block("e"))
         lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
+        maxnum = self.intrinsic("maxnum")
         inf = f64(math.inf)
         lo, hi = f64(0), f64(1)
         M = self.QUAD_MAX
         mal = self.externs["malloc"]
         free = self.extern("free", VOID, [I8P])
-        raw = b.call(mal, [i64(8 * 4 * M)])
+        raw = b.call(mal, [i64(8 * 7 * M)])
         base = b.bitcast(raw, F64P)
-        plo, phi, pres, perr = (b.gep(base, [i64(k * M)]) for k in range(4))
-        errp = b.alloca(F64)
+        # per panel: ends in u, result, error, ∫|g|, u of a NaN/∞ node (NaN: none), largest finite |g|
+        # (-1: part of a NaN/∞ run that counts as one point)
+        plo, phi, pres, perr, pabs, pbad, pgmax = (b.gep(base, [i64(k * M)]) for k in range(7))
+        out1 = b.alloca(F64, size=4)
+        out2 = b.alloca(F64, size=4)
         n = b.alloca(I64)
+        walkv = [(b.alloca(F64), b.alloca(F64)) for _ in range(2)]
+        j = b.alloca(I64)
+
+        def get(p, k):
+            return b.load(b.gep(p, [k if isinstance(k, ir.Value) else i64(k)]))
+
+        def put(p, k, v):
+            b.store(v, b.gep(p, [k]))
+
+        def isbad(v):
+            return b.fcmp_ordered("==", v, v)
+
+        def store_panel(i, x0, x1, r, o):
+            """A panel with a NaN/∞ node counts 0 with an infinite error (D45)."""
+            badu = get(o, 2)
+            bad = isbad(badu)
+            put(plo, i, x0)
+            put(phi, i, x1)
+            put(pres, i, b.select(bad, f64(0), r))
+            put(perr, i, b.select(bad, inf, get(o, 0)))
+            put(pabs, i, b.select(bad, f64(0), get(o, 1)))
+            put(pbad, i, badu)
+            put(pgmax, i, get(o, 3))
+
+        def tiny_x(u0, u1):
+            """[u0, u1] is a few ulps wide in x: of x itself, or of the range's length (the length scale
+            on a half-line)."""
+            xa, xb = self._qx(b, mode, a, bb, u0), self._qx(b, mode, a, bb, u1)
+            scale = b.select(b.icmp_signed("==", mode, i64(0)), b.fsub(bb, a), bb)
+            scale = b.call(maxnum, [b.call(fabs, [scale]), b.call(maxnum, [b.call(fabs, [xa]), b.call(fabs, [xb])])])
+            ext = b.call(fabs, [b.fsub(xb, xa)])
+            return b.and_(b.fcmp_ordered("<=", ext, b.fmul(f64(self.QUAD_ULPS), scale)),
+                          b.fcmp_ordered("<", ext, inf))
         P = self.QUAD_PANELS
         width = b.fdiv(b.fsub(hi, lo), f64(P))
         with lp.range(i64(0), i64(P)) as i:
             x0 = b.fadd(lo, b.fmul(b.sitofp(i, F64), width))
             x1 = b.select(b.icmp_signed("==", i, i64(P - 1)), hi, b.fadd(x0, width))
-            b.store(x0, b.gep(plo, [i]))
-            b.store(x1, b.gep(phi, [i]))
-            b.store(b.call(gk, [f, env, mode, a, bb, x0, x1, errp]), b.gep(pres, [i]))
-            b.store(b.load(errp), b.gep(perr, [i]))
+            r = b.call(gk, [f, env, mode, a, bb, x0, x1, out1])
+            store_panel(i, x0, x1, r, out1)
         b.store(i64(P), n)
         tot = b.alloca(F64)
         terr = b.alloca(F64)
+        tabs = b.alloca(F64)
         worst = b.alloca(I64)
         cond_bb = fn.append_basic_block("q.cond")
         body_bb = fn.append_basic_block("q.body")
@@ -521,19 +605,23 @@ class ModuleGen:
         b.position_at_end(cond_bb)
         b.store(f64(0), tot)
         b.store(f64(0), terr)
+        b.store(f64(0), tabs)
         b.store(i64(0), worst)
         cnt = b.load(n)
         with lp.range(i64(0), cnt) as i:
             e = b.load(b.gep(perr, [i]))
             b.store(b.fadd(b.load(tot), b.load(b.gep(pres, [i]))), tot)
             b.store(b.fadd(b.load(terr), e), terr)
+            b.store(b.fadd(b.load(tabs), b.load(b.gep(pabs, [i]))), tabs)
             with b.if_then(b.fcmp_unordered(">", e, b.load(b.gep(perr, [b.load(worst)])))):
                 b.store(i, worst)
-        total, toterr = b.load(tot), b.load(terr)
-        goal = b.call(self.intrinsic("maxnum"), [atol, b.fmul(rtol, b.call(fabs, [total]))])
+        total, toterr, totabs = b.load(tot), b.load(terr), b.load(tabs)
+        goal = b.call(maxnum, [atol, b.fmul(rtol, b.call(fabs, [total]))])
         finite = b.fcmp_ordered("<", b.call(fabs, [total]), inf)
-        done = b.and_(finite, b.fcmp_ordered("<=", toterr, goal))
-        done = b.or_(done, b.and_(finite, b.fcmp_ordered("<=", toterr, b.fmul(f64(1e-14), b.call(fabs, [total])))))
+        done = b.fcmp_ordered("<=", toterr, goal)
+        done = b.or_(done, b.fcmp_ordered("<=", toterr, b.fmul(f64(1e-14), b.call(fabs, [total]))))
+        done = b.or_(done, b.fcmp_ordered("<=", toterr, b.fmul(f64(self.QUAD_ROUND), totabs)))
+        done = b.and_(finite, done)
         with b.if_then(done):
             b.call(free, [raw])
             b.ret(total)
@@ -541,16 +629,62 @@ class ModuleGen:
         # or the worst panel can't be split any more
         w = b.load(worst)
         wl, wh = b.load(b.gep(plo, [w])), b.load(b.gep(phi, [w]))
+        wbad = b.load(b.gep(pbad, [w]))
+        # the worst panel has a NaN/∞ node and is a few ulps wide: find the run of such panels around it
+        # (walking through panels that share an end); if the whole run is a few ulps wide and some
+        # neighbour is finite, it is one point: count it 0, with error width × the neighbours' largest |g|
+        with b.if_then(b.and_(b.and_(isbad(wbad), b.fcmp_ordered(">=", get(pgmax, w), f64(0))), tiny_x(wl, wh))):
+            ends, gs = [], []
+            for (from_arr, to_arr, start), (cur, g) in zip(((phi, plo, wl), (plo, phi, wh)), walkv):
+                b.store(start, cur)
+                b.store(f64(-1), g)
+                walk = fn.append_basic_block("q.walk")
+                step = fn.append_basic_block("q.step")
+                stop = fn.append_basic_block("q.stop")
+                b.branch(walk)
+                b.position_at_end(walk)
+                b.store(i64(-1), j)
+                with lp.range(i64(0), cnt) as i:
+                    with b.if_then(b.fcmp_ordered("==", get(from_arr, i), b.load(cur))):
+                        b.store(i, j)
+                jj = b.load(j)
+                with b.if_then(b.icmp_signed("<", jj, i64(0))):     # an end of the range
+                    b.branch(stop)
+                b.cbranch(isbad(get(pbad, jj)), step, stop)
+                b.position_at_end(step)
+                b.store(get(to_arr, jj), cur)
+                b.branch(walk)
+                b.position_at_end(stop)
+                # (a finite neighbour: its largest |g|; the end of the range: -1)
+                jj = b.load(j)
+                has = b.icmp_signed(">=", jj, i64(0))
+                safe = b.select(has, jj, i64(0))
+                b.store(b.select(has, get(pgmax, safe), f64(-1)), g)
+                ends.append(b.load(cur))
+                gs.append(b.load(g))
+            G = b.call(maxnum, [gs[0], gs[1]])
+            with b.if_then(b.and_(b.fcmp_ordered(">=", G, f64(0)), tiny_x(ends[0], ends[1]))):
+                with lp.range(i64(0), cnt) as i:
+                    x0, x1 = get(plo, i), get(phi, i)
+                    inside = b.and_(b.fcmp_ordered(">=", x0, ends[0]), b.fcmp_ordered("<=", x1, ends[1]))
+                    with b.if_then(inside):
+                        put(pres, i, f64(0))
+                        put(perr, i, b.fmul(b.fsub(x1, x0), G))
+                        put(pabs, i, f64(0))
+                        put(pgmax, i, f64(-1))
+                b.branch(cond_bb)
         mid = b.fmul(f64(0.5), b.fadd(wl, wh))
         # a panel near a singularity that has shrunk to a few hundred ulps can't usefully be split:
         # accept the result if the error is still small (≤ 1e-7 relative), else report it
-        big = b.call(self.intrinsic("maxnum"), [b.call(fabs, [wl]), b.call(fabs, [wh])])
+        big = b.call(maxnum, [b.call(fabs, [wl]), b.call(fabs, [wh])])
         stuck = b.fcmp_ordered("<=", b.fsub(wh, wl), b.fmul(f64(1e-13), big))
         with b.if_then(b.and_(stuck, b.and_(finite, b.fcmp_ordered("<=", toterr,
                                                                     b.fmul(f64(1e-7), b.call(fabs, [total])))))):
             b.call(free, [raw])
             b.ret(total)
-        bad = b.or_(b.icmp_signed(">=", cnt, i64(M - 1)), stuck)
+        # (the quiet first try of a vector component, atol < 0, gets a smaller budget: D44)
+        limit = b.select(b.fcmp_ordered("<", atol, f64(0)), i64(self.QUAD_SOFT), i64(M - 1))
+        bad = b.or_(b.icmp_signed(">=", cnt, limit), stuck)
         # a finite range that gets stuck or runs out of panels may have an interior singularity: ask
         # the caller (fm_quadfin) to split the range there, snapping to 0 when it is that close
         with b.if_then(b.and_(bad, b.fcmp_ordered("==", b.load(split), f64(1)))):
@@ -565,31 +699,35 @@ class ModuleGen:
                 b.store(c, b.gep(split, [i64(1)]))
                 b.call(free, [raw])
                 b.ret(f64(math.nan))
-        bad = b.or_(bad, b.fcmp_unordered("uno", toterr, toterr))
-        bad = b.or_(bad, b.fcmp_ordered("==", b.call(fabs, [total]), inf))
-        with b.if_then(bad):
+        fail = b.or_(bad, b.fcmp_unordered("uno", toterr, toterr))
+        fail = b.or_(fail, b.fcmp_ordered("==", b.call(fabs, [total]), inf))
+        # atol < 0: a first try for a component of a vector integral, which fails quietly with NaN (D44)
+        with b.if_then(b.and_(fail, b.fcmp_ordered("<", atol, f64(0)))):
+            b.call(free, [raw])
+            b.ret(f64(math.nan))
+        # the worst panel still has a NaN/∞ node (any such panel has an infinite error), or is a NaN/∞ run
+        # whose possible contribution is too big: say where
+        with b.if_then(b.and_(bad, isbad(wbad))):
+            kind = b.select(b.fcmp_ordered(">", wbad, f64(0)), i64(ERR_QUAD_NAN), i64(ERR_QUAD_INF))
+            self.raise_error(b, kind, self._qx(b, mode, a, bb, b.call(fabs, [wbad])), b.load(self.qvar))
+        with b.if_then(fail):
             self.raise_error(b, ERR_QUAD, total, toterr)
         b.branch(body_bb)
         b.position_at_end(body_bb)
         # bisect the worst panel: left half stays at index w, right half goes to the end
-        r1 = b.call(gk, [f, env, mode, a, bb, wl, mid, errp])
-        e1 = b.load(errp)
-        r2 = b.call(gk, [f, env, mode, a, bb, mid, wh, errp])
-        e2 = b.load(errp)
-        b.store(mid, b.gep(phi, [w]))
-        b.store(r1, b.gep(pres, [w]))
-        b.store(e1, b.gep(perr, [w]))
-        b.store(mid, b.gep(plo, [cnt]))
-        b.store(wh, b.gep(phi, [cnt]))
-        b.store(r2, b.gep(pres, [cnt]))
-        b.store(e2, b.gep(perr, [cnt]))
+        r1 = b.call(gk, [f, env, mode, a, bb, wl, mid, out1])
+        r2 = b.call(gk, [f, env, mode, a, bb, mid, wh, out2])
+        store_panel(w, wl, mid, r1, out1)
+        store_panel(cnt, mid, wh, r2, out2)
         b.store(b.add(cnt, i64(1)), n)
         b.branch(cond_bb)
         return fn
 
     def _sol_alloc(self, b, dim, cap, arrays=True):
         mal = self.externs["malloc"]
-        sp = b.bitcast(b.call(mal, [i64(48)]), SOLP)
+        sp = b.bitcast(b.call(mal, [i64(64)]), SOLP)
+        b.store(ir.Constant(I8P, None), b.gep(sp, [I32(0), I32(6)]))
+        b.store(ir.Constant(F64P, None), b.gep(sp, [I32(0), I32(7)]))
         b.store(i64(0), b.gep(sp, [I32(0), I32(0)]))
         b.store(dim, b.gep(sp, [I32(0), I32(1)]))
         b.store(cap, b.gep(sp, [I32(0), I32(2)]))
@@ -1369,6 +1507,9 @@ class ModuleGen:
         tp = b.load(b.gep(sp, [I32(0), I32(3)]))
         yp = b.load(b.gep(sp, [I32(0), I32(4)]))
         dp = b.load(b.gep(sp, [I32(0), I32(5)]))
+        rhs = b.load(b.gep(sp, [I32(0), I32(6)]))
+        ybuf = b.alloca(F64, size=dim)
+        kbuf = b.alloca(F64, size=dim)
         tfirst = b.load(tp)
         tlast = b.load(b.gep(tp, [b.sub(n, i64(1))]))
         span = b.fsub(tlast, tfirst)
@@ -1409,14 +1550,33 @@ class ModuleGen:
         tb = b.load(b.gep(tp, [i1]))
         hh = b.fsub(tb, ta)
         s = b.fdiv(b.fsub(t, ta), hh)
-        ia = b.add(b.mul(i, dim), comp)
-        ib = b.add(b.mul(i1, dim), comp)
-        ya = b.load(b.gep(yp, [ia]))
-        yb = b.load(b.gep(yp, [ib]))
-        ma = b.fmul(b.load(b.gep(dp, [ia])), hh)
-        mb = b.fmul(b.load(b.gep(dp, [ib])), hh)
         s2 = b.fmul(s, s)
         s3 = b.fmul(s2, s)
+        h00 = b.fadd(b.fsub(b.fmul(f64(2), s3), b.fmul(f64(3), s2)), f64(1))
+        h10 = b.fadd(b.fsub(s3, b.fmul(f64(2), s2)), s)
+        h01 = b.fadd(b.fmul(f64(-2), s3), b.fmul(f64(3), s2))
+        h11 = b.fsub(s3, s2)
+
+        def herm(c):
+            ia = b.add(b.mul(i, dim), c)
+            ib = b.add(b.mul(i1, dim), c)
+            ya = b.load(b.gep(yp, [ia]))
+            yb = b.load(b.gep(yp, [ib]))
+            ma = b.fmul(b.load(b.gep(dp, [ia])), hh)
+            mb = b.fmul(b.load(b.gep(dp, [ib])), hh)
+            return ya, yb, ma, mb, b.fadd(b.fadd(b.fmul(h00, ya), b.fmul(h10, ma)),
+                                          b.fadd(b.fmul(h01, yb), b.fmul(h11, mb)))
+        # a derivative from the right-hand side at the interpolated state: as accurate as the solution
+        # itself (the Hermite's own derivative is an order less accurate: S9, D46)
+        has_rhs = b.icmp_unsigned("!=", b.ptrtoint(rhs, I64), i64(0))
+        with b.if_then(b.and_(b.icmp_signed("!=", use_dy, i64(0)), has_rhs)):
+            lp = LoopHelper(b, fn)
+            with lp.range(i64(0), dim) as k:
+                b.store(herm(k)[4], b.gep(ybuf, [k]))
+            env = b.load(b.gep(sp, [I32(0), I32(7)]))
+            b.call(b.bitcast(rhs, ODE_FN.as_pointer()), [t, ybuf, kbuf, env])
+            b.ret(b.load(b.gep(kbuf, [comp])))
+        ya, yb, ma, mb, r = herm(comp)
         with b.if_then(b.icmp_signed("!=", use_dy, i64(0))):
             # derivative of the Hermite cubic: third-order accurate (linear interpolation of the
             # stored slopes would only be second order)
@@ -1426,11 +1586,6 @@ class ModuleGen:
             d11 = b.fsub(b.fmul(f64(3), s2), b.fmul(f64(2), s))
             num_ = b.fadd(b.fadd(b.fmul(d00, ya), b.fmul(d10, ma)), b.fadd(b.fmul(d01, yb), b.fmul(d11, mb)))
             b.ret(b.fdiv(num_, hh))
-        h00 = b.fadd(b.fsub(b.fmul(f64(2), s3), b.fmul(f64(3), s2)), f64(1))
-        h10 = b.fadd(b.fsub(s3, b.fmul(f64(2), s2)), s)
-        h01 = b.fadd(b.fmul(f64(-2), s3), b.fmul(f64(3), s2))
-        h11 = b.fsub(s3, s2)
-        r = b.fadd(b.fadd(b.fmul(h00, ya), b.fmul(h10, ma)), b.fadd(b.fmul(h01, yb), b.fmul(h11, mb)))
         b.ret(r)
         return fn
 
@@ -1792,26 +1947,56 @@ class FuncGen:
             k = self.mg.kernel("fm_dp45")
             sol = b.call(k, [fn, env, i64(n), y0p, t0, t1, f64(s.rtol)] + extra +
                          [i64(1 if getattr(s, "tdep", False) else 0)])
+        if getattr(s.sol_sym, "needs_rhs", False):
+            self.attach_rhs(s, sol)
         self.store(s.sol_sym, sol)
 
-    def make_env(self, lam):
+    def attach_rhs(self, s, sol):
+        """Keep the right-hand side with the solution, so x'(t) is f at the interpolated state (D46).  Its
+        env is a heap copy of the captured values and of the module-level numbers it reads, taken now:
+        a variable changed after the solve doesn't change the solution's derivative."""
         b = self.b
+        elam = getattr(s, "_eval_lam", None)
+        if elam is None:
+            lam = s.rhs
+            own = {x.id for x in list(lam.params) + list(lam.state) + list(lam.locals) + list(lam.captures)}
+            extra = [x for x in I.referenced_syms(lam.body) if x.id not in own and
+                     x.storage in ("global", "arena") and isinstance(x.ty, (NumTy, BoolTy, VecTy, MatTy))]
+            elam = I.ILambda("ode", lam.name + "_eval")
+            elam.params, elam.state, elam.locals, elam.body = lam.params, lam.state, lam.locals, lam.body
+            elam.captures = list(lam.captures) + extra
+            s._eval_lam = elam
+        b.store(b.bitcast(self.mg.lambda_for(elam), I8P), b.gep(sol, [I32(0), I32(6)]))
+        nslots = sum(env_slots(x) for x in elam.captures)
+        if nslots:
+            env = b.bitcast(b.call(self.mg.externs["malloc"], [i64(8 * nslots)]), F64P)
+            self.fill_env(elam, env)
+            b.store(env, b.gep(sol, [I32(0), I32(7)]))
+
+    def make_env(self, lam):
         if not lam.captures:
             return ir.Constant(F64P, None)
         env = self.alloca(ir.ArrayType(F64, sum(env_slots(s) for s in lam.captures)))
+        return self.fill_env(lam, self.b.gep(env, [I32(0), I32(0)]))
+
+    def fill_env(self, lam, env):
+        """Store the captured values of lam into env (a double*); returns env."""
+        b = self.b
         i = 0
         for sym in lam.captures:
             v = self.load(sym)
             if isinstance(sym.ty, BoolTy):
                 v = b.uitofp(v, F64)
+            if isinstance(sym.ty, SolTy):             # a solution: its pointer's bits (D48)
+                v = b.bitcast(b.ptrtoint(v, I64), F64)
             if isinstance(sym.ty, (VecTy, MatTy)):       # a vector or matrix takes n slots
                 for k in range(sym.ty.n):
-                    b.store(b.extract_element(v, I32(k)), b.gep(env, [I32(0), I32(i)]))
+                    b.store(b.extract_element(v, I32(k)), b.gep(env, [i64(i)]))
                     i += 1
                 continue
-            b.store(v, b.gep(env, [I32(0), I32(i)]))
+            b.store(v, b.gep(env, [i64(i)]))
             i += 1
-        return b.gep(env, [I32(0), I32(0)])
+        return env
 
     def s_SFit(self, s):
         b = self.b
@@ -1985,8 +2170,11 @@ class FuncGen:
             bad = z if bad is None else b.or_(bad, z)
         saved = getattr(self, "line", 0)
         self.line = e.line or saved
+        # the mass matrix of an ODE (D47): the error names the equation's variable and its value
+        sing = (ERR_ODE_SINGULAR, self.expr(e.sing_t), f64(e.sing_text)) if hasattr(e, "sing_t") else \
+            (ERR_SINGULAR,)
         with b.if_then(bad, likely=False):
-            self.fail(ERR_SINGULAR)
+            self.fail(*sing)
         self.line = saved
         return self.pack(out)
 
@@ -2210,9 +2398,20 @@ class FuncGen:
     def e_IIntegral(self, e):
         fn = self.mg.lambda_for(e.lam)
         env = self.make_env(e.lam)
+        lo, hi = self.expr(e.lo), self.expr(e.hi)
+        self.b.store(i64(getattr(e, "xfmt", -1)), self.mg.errfmt)
         self.mark_line()
         q = self.mg.kernel("fm_quad")
-        return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
+        # the variable's name for the kernel's NaN message; restored after, for an enclosing integral (D45)
+        saved = self.b.load(self.mg.qvar)
+        self.b.store(f64(getattr(e, "xname", -1)), self.mg.qvar)
+        # atol: 0, or -1 for the quiet first try of a vector integral's component, or an expression for its
+        # second try (D44)
+        atol = f64(-1) if getattr(e, "soft", False) else \
+            self.expr(e.atol) if getattr(e, "atol", None) is not None else f64(0)
+        r = self.b.call(q, [fn, env, lo, hi, f64(1e-10), atol])
+        self.b.store(saved, self.mg.qvar)
+        return r
 
     def e_ISum(self, e):
         """Σ(term for k from lo to hi step st): the count of a for loop (s_SFor), the terms added in order."""
@@ -2547,6 +2746,8 @@ class LambdaGen(FuncGen):
                 i += 1
             if isinstance(sym.ty, BoolTy):
                 v = b.fcmp_ordered("!=", v, f64(0))
+            if isinstance(sym.ty, SolTy):
+                v = b.inttoptr(b.bitcast(v, I64), SOLP)
             p = self.alloca(lltype(sym.ty), sym.name)
             b.store(v, p)
             self.slots[sym.id] = p
