@@ -509,11 +509,12 @@ def format_complex(re_, im_, dim, hint, sf, direct):
             if direct:
                 return format_number(v, 15, trim=True)
             if whole:
-                return str(int(v))
+                return str(round(v))
             return format_number(v, DEFAULT_SF, trim=False)
         return format_number(v, sf if direct else max(sf, 2), trim=False)
     # like a 2-vector: whole numbers print exactly only if both parts are whole (3 + 4i, but 0.500 + 1.00i)
-    whole = all(v == v and abs(v) < 1e7 and v == int(v) for v in (x, y))
+    from .units import _whole
+    whole = all(_whole(v) for v in (x, y))        # allowing for rounding in the last bits (D11)
     body = f"{f(x)} {'-' if y < 0 else '+'} {f(abs(y)) if y == y else 'NaN'}i"      # -0 prints as 0
     name = u.name
     if name in ("", "1"):
