@@ -971,6 +971,18 @@ class Interpreter:
     def e_IVecElem(self, e, fr):
         return self.eval(e.v, fr)[e.k]
 
+    def e_IVecIndex(self, e, fr):
+        v = self.eval(e.v, fr)
+        base = 0
+        for idx_e, size, stride in e.idxs:
+            idx = self.eval(idx_e, fr)
+            i = int(idx) if math.isfinite(idx) else -1
+            if not (1 <= i <= size) or float(i) != idx:
+                raise _Fail(ERR_INDEX, idx, float(-size))
+            base += (i - 1) * stride
+        xs = tuple(v[base + o] for o in e.offs)
+        return xs[0] if len(xs) == 1 else xs
+
     def e_IBin(self, e, fr):
         a, b = self.eval(e.a, fr), self.eval(e.b, fr)
         op = {"+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": fmul, "/": fdiv}[e.op]

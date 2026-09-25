@@ -286,6 +286,11 @@ class Runtime:
             n = int(b)
             if a != a:
                 return "a list index must be a whole number (1, 2, 3, ...), not NaN"
+            if n < 0:       # a vector's component or a matrix's row/column picked at run time (#54)
+                if abs(a) < math.inf and a != int(a):
+                    return f"an index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
+                return f"index {format_number(a)} is out of range: valid indexes here are 1 to {-n}" + \
+                    ("; Fermium counts from 1" if a == 0 else "")
             if abs(a) < math.inf and a != int(a):
                 return f"a list index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
             if n == 0:

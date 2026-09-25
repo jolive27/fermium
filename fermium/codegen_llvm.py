@@ -1837,6 +1837,23 @@ class FuncGen:
     def e_IVecElem(self, e):
         return self.b.extract_element(self.expr(e.v), I32(e.k))
 
+    def e_IVecIndex(self, e):
+        """v[i], M[i, j], M[i] with indexes known at run time, each checked (#54)."""
+        b = self.b
+        v = self.expr(e.v)
+        base = i64(0)
+        for idx_e, size, stride in e.idxs:
+            idx = self.expr(idx_e)
+            inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, f64(size)))
+            i = b.fptosi(b.select(inside, idx, f64(1)), I64)
+            bad = b.or_(b.not_(inside), b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, idx, f64(-size))
+            base = b.add(base, b.mul(b.sub(i, i64(1)), i64(stride)))
+        base = b.trunc(base, I32)
+        xs = [b.extract_element(v, b.add(base, I32(o))) for o in e.offs]
+        return xs[0] if len(xs) == 1 else self.pack(xs)
+
     # ------------------------------------------------------------ matrices (D29)
     def unpack(self, v, n):
         return [self.b.extract_element(v, I32(k)) for k in range(n)]

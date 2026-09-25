@@ -1,7 +1,10 @@
 """Gauntlet friction fixes: built-ins and small syntax (gauntlet/FRICTION.md #49, #50, #52, #53, #54, #55, #57)."""
 import io
 
+import pytest
+
 from conftest import run, error_of
+from fermium.errors import FermiumError
 from fermium.interp import run_interpreted
 
 
@@ -72,3 +75,52 @@ def test_55_unit_after_a_name_hint():
     e = error_of("A_d = 4\nm_a = 4 u\nμ = m_a A_d u / (m_a + A_d u)\nprint μ")
     assert "u isn't defined" in e.message
     assert "A_d * 1 u" in e.hint and "[u]" in e.hint
+
+
+# ---------------------------------------------------------------- #54 trace, angle, abs, row/column, v[i]
+def test_54_vector_indexed_by_a_loop_variable():
+    src = ("v = <1, 2, 3> m\ns = 0 m\nfor i from 1 to 3\n    s = s + v[i]\nprint s\n"
+           "M = [[1, 2], [3, 4]]\nt = 0\nfor i from 1 to 2\n    for j from 1 to 2\n        t = t + M[i, j] * i\n"
+           "print t\nfor i from 1 to 2\n    print M[i]\nk = 2\nprint v[k], v[end], v[k + 1]\nf(n) = v[n]\nprint f(3)")
+    assert both(src).split("\n") == ["6 m", "17", "<1, 2>", "<3, 4>", "2 m 3 m 3 m", "3 m"]
+
+
+def test_54_eigenvalues_indexed_in_a_loop():
+    src = ("K = [[2, -1], [-1, 2]] N/m\nM = [[1, 0], [0, 1]] kg\nω2 = eigenvalues(K, M)\n"
+           "for n from 1 to 2\n    print √(ω2[n]) to 6 digits")
+    assert both(src).split("\n") == ["1.00000 1/s", "1.73205 1/s"]
+
+
+@pytest.mark.parametrize("idx", ["k + 2", "k - 2", "k / 4"])
+def test_54_runtime_index_is_checked(idx):
+    src = f"v = <1, 2, 3> m\nk = 2\nprint v[{idx}]"
+    for runner in (run, interp):
+        with pytest.raises(FermiumError) as ei:
+            runner(src)
+        assert "1 to 3" in str(ei.value) or "whole number" in str(ei.value)
+
+
+def test_54_runtime_index_of_mixed_vector_refused():
+    assert "different units" in error_of("s = <1 m, 2 m/s>\nk = 1\nprint s[k]").message
+
+
+def test_54_trace_row_column():
+    src = ("M = [[1, 2, 3], [4, 5, 6], [7, 8, 10]] N/m\nprint trace(M)\nprint column(M, 2), row(M, 3)\n"
+           "for j from 1 to 3\n    print column(M, j)\n"
+           "f(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]\nprint ∫ trace(f(θ)) dθ from 0 to 1 to 10 digits")
+    assert both(src).split("\n") == ["16 N/m", "<2, 5, 8> N/m <7, 8, 10> N/m", "<1, 4, 7> N/m", "<2, 5, 8> N/m",
+                                     "<3, 6, 10> N/m", "1.682941970"]
+    assert "square" in error_of("print trace([[1, 2, 3], [4, 5, 6]])").message
+    assert "no column 4" in error_of("print column([[1, 2], [3, 4]], 4)").message
+
+
+def test_54_angle_between_vectors():
+    src = ("a = <1, 0, 0> m\nb = <1, 1, 0> m\nprint angle(a, b) in °\nprint angle(<1, 0> m, <-1, 1e-9> m)\n"
+           "F = <1, 1, 0> N\nprint angle(F, a) in °\nprint angle(<1, 0, 0>, <1, 1e-12, 0>)")
+    assert both(src).split("\n") == ["45°", "3.14159", "45°", "1×10⁻¹²"]
+    assert "2-vectors or two 3-vectors" in error_of("print angle(<1, 0>, <1, 0, 0>)").message
+
+
+def test_54_elementwise_abs():
+    assert both("v = <-1, 2, -3> m/s\nprint abs(v)\nprint abs([[1, -2], [-3, 4]])").split("\n") == \
+        ["<1, 2, 3> m/s", "[[1, 2], [3, 4]]"]

@@ -182,7 +182,7 @@ def test_matrix_variable_can_be_reassigned():
     ("n = 3\nprint identity(n)", "a fixed whole number"),
     ("M = identity(2)\nprint M[3, 1]", "row 3"),
     ("M = identity(2)\nprint M[1, 3]", "column 3"),
-    ("M = identity(2)\nk = 1\nprint M[k, 1]", "fixed number"),
+    ("M = identity(2)\nk = 3\nprint M[k, 1]", "valid indexes here are 1 to 2"),
     ("M = identity(2)\nM = identity(3)", "can't now hold a 3×3 matrix"),
     ("print |identity(2)|", "must be a number"),
     ("print sin(identity(2))", "must be a number"),

@@ -211,6 +211,10 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 1:
         if (a != a)
             snprintf(err_msg, sizeof err_msg, "a list index must be a whole number (1, 2, 3, ...), not NaN");
+        else if ((long long)b < 0 && !isinf(a) && a != floor(a))
+            snprintf(err_msg, sizeof err_msg, "an index must be a whole number (1, 2, 3, ...), not %s", x);
+        else if ((long long)b < 0)
+            snprintf(err_msg, sizeof err_msg, "index %s is out of range: valid indexes here are 1 to %lld", x, -(long long)b);
         else if (!isinf(a) && a != floor(a))
             snprintf(err_msg, sizeof err_msg, "a list index must be a whole number (1, 2, 3, ...), not %s", x);
         else if ((long long)b == 0)

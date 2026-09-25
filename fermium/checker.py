@@ -31,6 +31,7 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
+    "trace", "angle", "row", "column",
 }
 
 
@@ -1763,6 +1764,38 @@ class Checker(C.DiffContext):
             return I.ILet([(sym, I.IBuiltin("len", [target], NumTy(DIMLESS)))], body)
         return self.expr(idx_ast, ctx)
 
+    def fixed_or_runtime_index(self, idx_ast, size, ctx):
+        """An index into a vector or matrix of known size: an int (0-based) when it is a fixed number,
+        otherwise an IR expression (1-based, checked at run time; #54)."""
+        if isinstance(idx_ast, A.End):
+            return size - 1
+        n = I.IConst(size, NumTy(DIMLESS))
+        idx = self.index_expr(idx_ast, n, ctx)
+        if isinstance(idx, I.ILet):
+            if isinstance(idx.value, I.IConst):
+                idx = idx.value
+            else:          # v[end - 1]: `end` is the size, known here
+                idx = I.ILet([(sym, n) for sym, _ in idx.binds], idx.value)
+        if isinstance(idx, I.IConst):
+            return int(idx.value) - 1
+        return idx
+
+    def runtime_index(self, t, pieces, offs, ty, node):
+        """t's entries at flat base Σ (i − 1)·stride + offs; pieces: [(index int-or-expr, size, stride)]."""
+        if isinstance(t.ty, VecTy) and t.ty.mixed:
+            raise self.err("this vector's components have different units, so pick one with a fixed number, "
+                           "like v[1]", node)
+        idxs = []
+        for k, size, stride in pieces:
+            if isinstance(k, int):
+                if not 0 <= k < size:
+                    raise self.err(f"there is no index {k + 1} here: valid indexes are 1 to {size}", node)
+                k = I.IConst(k + 1, NumTy(DIMLESS))
+            idxs.append((k, size, stride))
+        r = I.IVecIndex(t, idxs, offs, ty, node.line)
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
     def mat_index(self, idx_ast, size, what, ctx):
         if isinstance(idx_ast, A.End):
             return size - 1
@@ -1787,6 +1820,11 @@ class Checker(C.DiffContext):
         if isinstance(e.target, A.Index):             # M[i, j] (parsed as M[i][j]) or M[i][j]
             inner = self.expr(e.target.target, ctx, allow_func=True)
             if isinstance(inner, I.Expr) and isinstance(inner.ty, MatTy):
+                ri = self.fixed_or_runtime_index(e.target.index, inner.ty.r, ctx)
+                ci = self.fixed_or_runtime_index(e.index, inner.ty.c, ctx)
+                if not isinstance(ri, int) or not isinstance(ci, int):
+                    return self.runtime_index(inner, [(ri, inner.ty.r, inner.ty.c), (ci, inner.ty.c, 1)], [0],
+                                              NumTy(inner.ty.dim), e)
                 i = self.mat_index(e.target.index, inner.ty.r, "row", ctx)
                 j = self.mat_index(e.index, inner.ty.c, "column", ctx)
                 r = I.IVecElem(inner, i * inner.ty.c + j, NumTy(inner.ty.dim))
@@ -1794,10 +1832,14 @@ class Checker(C.DiffContext):
                 return r
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
-            i = self.mat_index(e.index, t.ty.r, "row", ctx)
             if not 2 <= t.ty.c <= 4:
                 raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
                                e.index)
+            ri = self.fixed_or_runtime_index(e.index, t.ty.r, ctx)
+            if not isinstance(ri, int):
+                return self.runtime_index(t, [(ri, t.ty.r, t.ty.c)], list(range(t.ty.c)),
+                                          VecTy(t.ty.dim, t.ty.c), e)
+            i = self.mat_index(e.index, t.ty.r, "row", ctx)
             r = I.IBuiltin("shuffle", [t], VecTy(t.ty.dim, t.ty.c))
             r.idx = [i * t.ty.c + j for j in range(t.ty.c)]
             r.hint, r.sf = t.hint, t.sf
@@ -1806,7 +1848,10 @@ class Checker(C.DiffContext):
             idx = self.index_expr(e.index, I.IConst(t.ty.n, NumTy(DIMLESS)), ctx) \
                 if not isinstance(e.index, A.End) else I.IConst(t.ty.n, NumTy(DIMLESS))
             if not isinstance(idx, I.IConst):
-                raise self.err("a vector's component must be picked with a fixed number, like v[1], or v.x", e.index)
+                k = self.fixed_or_runtime_index(e.index, t.ty.n, ctx)
+                if not isinstance(k, int):          # v[i] in a loop: checked at run time (#54)
+                    return self.runtime_index(t, [(k, t.ty.n, 1)], [0], NumTy(t.ty.dim), e)
+                return self.vec_elem(t, k, e.index)
             return self.vec_elem(t, int(idx.value) - 1, e.index)
         if isinstance(t, SolRef) and t.view.n > 1:      # r[end] of a vector solution is a vector (A19)
             v = t.view
@@ -2229,6 +2274,8 @@ class Checker(C.DiffContext):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
             v.hint = u
             return v
+        if name in ("row", "column"):
+            return self.row_column(name, e, ctx)
         if name == "times" and len(e.args) == 1:
             v = self.expr(e.args[0], ctx, allow_func=True)
             if isinstance(v, SolRef):
@@ -2269,6 +2316,33 @@ class Checker(C.DiffContext):
             p = Fraction(1, 2) if name == "sqrt" else Fraction(1, 3)
             r = I.IPowC(args[0], float(p) if name == "sqrt" else 1 / 3, args[0].ty.__class__(args[0].ty.dim ** p))
             r.sf = args[0].sf
+            return r
+        if name == "abs" and n == 1 and isinstance(args[0].ty, (VecTy, MatTy)):
+            return self.map_entries(args[0], lambda x: self._bi("abs", [x], x.ty, [x]), ctx)
+        if name == "trace":
+            need(1)
+            self.need_square(args[0], "trace", e)
+            m = args[0]
+            k = m.ty.r
+            r = self.map_entries(m, None, ctx, reduce=[i * k + i for i in range(k)])
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        if name == "angle":
+            need(2)
+            a, c = args
+            for x, node in zip(args, e.args):
+                if not isinstance(x.ty, VecTy):
+                    raise self.err("angle(a, b) needs two vectors, like angle(<1, 0> m, <1, 1> m)", node)
+                self.shared_dim(x, "angle(a, b)", node)
+            if a.ty.n != c.ty.n or a.ty.n not in (2, 3):
+                raise self.err(f"angle(a, b) needs two 2-vectors or two 3-vectors, but got a {a.ty.n}-vector and a "
+                               f"{c.ty.n}-vector", e)
+            sa, sc = self.new_sym("·a", a.ty, ctx), self.new_sym("·b", c.ty, ctx)
+            cr = self.vec_arith("×", self._ivar(sa), self._ivar(sc), e)
+            y = self._bi("norm" if a.ty.n == 3 else "abs", [cr], NumTy(cr.ty.dim), [cr])
+            x = self.vec_arith("*", self._ivar(sa), self._ivar(sc), e)
+            r = I.ILet([(sa, a), (sc, c)], self._bi("atan2", [y, x], NumTy(DIMLESS), args))
+            r.sf = self._minsf(*args)
             return r
         if name in SAME1:
             need(1)
@@ -2451,6 +2525,52 @@ class Checker(C.DiffContext):
                 raise self.err("rand() takes no arguments", e)
             return self._bi(name, args, NumTy(DIMLESS), args)
         raise self.err(f"{name} can't be used this way", e)
+
+    def map_entries(self, t, fn, ctx, reduce=None):
+        """Apply fn to every entry of vector or matrix t (evaluated once), giving one of the same shape;
+        with reduce=[flat indexes], the sum of those entries instead (the trace)."""
+        sym = self.new_sym("·m", t.ty, ctx)
+        dims = t.ty.comp_dims() if isinstance(t.ty, VecTy) else [t.ty.dim] * (t.ty.r * t.ty.c)
+        hints = t.hint if isinstance(t.hint, MixedHint) else [t.hint] * len(dims)
+
+        def entry(k):
+            x = I.IVecElem(self._ivar(sym), k, NumTy(dims[k]))
+            x.hint, x.sf = hints[k], t.sf
+            return x
+        if reduce is not None:
+            body = entry(reduce[0])
+            for k in reduce[1:]:
+                body = I.IBin("+", body, entry(k), NumTy(t.ty.dim))
+            body.hint, body.sf = t.hint, t.sf
+        else:
+            items = [fn(entry(k)) for k in range(len(dims))]
+            body = I.IVec(items, t.ty)
+            body.hint, body.sf = t.hint, t.sf
+        r = I.ILet([(sym, t)], body)
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
+    def row_column(self, name, e, ctx):
+        if len(e.args) != 2:
+            raise self.err(f"{name}(M, {'i' if name == 'row' else 'j'}) takes a matrix and a number", e)
+        m = self.expr(e.args[0], ctx)
+        if not isinstance(m.ty, MatTy):
+            raise self.err(f"{name}(M, k) needs a matrix, like [[1, 2], [3, 4]]", e.args[0])
+        r_, c_ = m.ty.r, m.ty.c
+        length, size = (c_, r_) if name == "row" else (r_, c_)
+        if not 2 <= length <= 4:
+            raise self.err(f"a {name} of a {r_}×{c_} matrix has {length} entr{'y' if length == 1 else 'ies'}, so it "
+                           f"isn't a vector; pick an entry with M[i, j]", e)
+        k = self.fixed_or_runtime_index(e.args[1], size, ctx)
+        stride, offs = (c_, list(range(c_))) if name == "row" else (1, [i * c_ for i in range(r_)])
+        if isinstance(k, int):
+            if not 0 <= k < size:
+                raise self.err(f"this matrix has {size} {name}s, so there is no {name} {k + 1}", e.args[1])
+            r = I.IBuiltin("shuffle", [m], VecTy(m.ty.dim, length))
+            r.idx = [k * stride + o for o in offs]
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        return self.runtime_index(m, [(k, size, stride)], offs, VecTy(m.ty.dim, length), e)
 
     def _bi(self, name, args, ty, sfargs):
         r = I.IBuiltin(name, args, ty)
