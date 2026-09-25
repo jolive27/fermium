@@ -45,7 +45,6 @@ def run_both(src):
 # ---- #1: D233 forces parity on a slightly asymmetric double well: the tilt is below the symmetry test's
 #          tolerance (10⁻¹⁰ of the largest coefficient, set by the walls) but far above the tunnelling splitting --
 
-@rt7(1)
 def test_1_tilted_double_well_ground_state_is_localised():
     src = """m = m_e
 V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8 + 3e-9 eV * x / 1 nm
@@ -82,7 +81,6 @@ print u(0.5 mm, 0.002 s) to 5 digits
 
 # ---- #3: research/rutherford_mc/README.md (and research/README.md) quote numbers the program no longer prints --
 
-@rt7(3)
 def test_3_rutherford_readme_matches_the_program(tmp_path):
     d = os.path.join(ROOT, "research", "rutherford_mc")
     shutil.copy(os.path.join(d, "rutherford.fm"), tmp_path / "rutherford.fm")
@@ -98,7 +96,6 @@ def test_3_rutherford_readme_matches_the_program(tmp_path):
 
 # ---- #4: D11 applies "fewest significant figures" to +: a 1-figure addend wipes out a precise value -------------
 
-@rt7(4)
 def test_4_adding_a_small_correction_keeps_the_precise_value():
     out = run("T = 293.15 K\nprint T + 0.5 K\nm_p = 938.272 MeV\nprint m_p + 2.2 MeV\n").split("\n")
     # 293.65 K and 940.472 MeV (decimal places: 293.7 K, 940.5 MeV); Fermium prints 290 K and 940 MeV

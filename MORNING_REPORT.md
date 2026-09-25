@@ -60,7 +60,7 @@ Jupyter kernel and notebook; language server with unit hover, live errors and `\
 | 4 | U-238 Bateman chain (15 members, radau) | secular equilibrium; Rn-222 99 % in-growth in 25.40 d | closed-form Bateman, all digits |
 | 5 | Hydrogen levels (radial Schrödinger) | Lyman α 121.5684 nm | 121.567 nm (NIST; the gap is fine structure) |
 | 6 | Friedmann age, Planck 2018 | t₀ = 13.791 Gyr | 13.787 ± 0.020 Gyr |
-| 7 | Rutherford scattering, Monte Carlo | χ² = 35.6 / 35 bins vs exact | Geiger–Marsden 1913 |
+| 7 | Rutherford scattering, Monte Carlo | χ² = 38.2 / 35 bins vs exact (35 ± 8.4 expected) | Geiger–Marsden 1913 |
 | 8 | pp vs CNO crossover | 17.8–18.1 MK | ≈ 17–18 MK |
 | 9 | BBN network (stiff, 12 reactions, 10 MeV → 10⁴ s) | Y_p = 0.2423, D/H = 2.60×10⁻⁵, ⁷Li/H = 5.1×10⁻¹⁰ (SciPy agreement 3×10⁻⁶) | Y_p = 0.2471, D/H = 2.51×10⁻⁵ (Fields 2020). Y_p is 1.9 % low: Born weak rates, as expected. |
 | 10 | Nuclear shell model (Woods–Saxon + spin–orbit, Bohr & Mottelson parameters, ~450 eigenvalue problems) | the 7 largest shell gaps at N = 2, 8, 20, 28, 50, 82, 126 (without spin–orbit: 2, 8, 20, 40, 70); ²⁰⁸Pb N = 126 gap 3.54 MeV; rms over 13 levels 0.48 MeV | 3.43 MeV measured; the magic numbers |

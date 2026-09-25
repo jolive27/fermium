@@ -2009,7 +2009,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 self._warn_absolute_in_product(a, b, e)      # ΔT/Δx; b / T (Wien) is absolute by nature
         else:
             raise self.err(f"unknown operator {op}", e)
-        r.sf = self._minsf(a, b)
+        r.sf = self._sumsf(a, b) if op in ("+", "-") else self._minsf(a, b)
         return r
 
     def vec_arith(self, op, a, b, e):
@@ -2413,6 +2413,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
     def _minsf(self, *vs):
         s = [v.sf for v in vs if getattr(v, "sf", None) is not None]
         return min(s) if s else None
+
+    def _sumsf(self, *vs):
+        """Significant figures of a sum or difference: those of the most precise operand. The textbook rule counts
+        decimal places, which needs the magnitudes (known only at run time); the fewest significant figures made
+        293.15 K + 0.5 K print as 290 K (red team round 7 #4). This never shows a value less precisely than its
+        inputs, at the price of sometimes showing more (1.00 m - 0.999 m, D95)."""
+        s = [v.sf for v in vs if getattr(v, "sf", None) is not None]
+        return max(s) if s else None
 
     def const_value(self, e):
         """Evaluate a compile-time constant exponent; returns Fraction or None."""

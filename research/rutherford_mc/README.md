@@ -17,33 +17,30 @@ counts/N · π b_max²/ΔΩ is dσ/dΩ in barn/sr. The expected content of every
 N (b(θ₁)² − b(θ₂)²)/b_max². The 2×10⁷-iteration loop takes about 2 s. Run it from this folder with
 `fermium run rutherford.fm`.
 
-**Random numbers.** `rand()` has no seed function. The compiled program calls the C library's `drand48` without
-seeding it, so every `fermium run` happens to give the same numbers (the ones below); inside the test process the
-sequence continues from earlier programs, so `tests/test_research.py` uses statistical bounds (5σ Poisson, a χ²
-with a 10⁻⁶ false-alarm rate), not exact values.
+**Random numbers.** When this was written, `rand()` had no seed function. It now uses Fermium's seeded xoshiro256** generator (D80): a program that never calls `seed(n)` behaves as if it had called `seed(0)`, so every run prints the numbers below, in `fermium run`, `--interp` and `fermium build` alike. `tests/test_research.py` still checks with statistical bounds (5σ Poisson, a χ² with a 10⁻⁶ false-alarm rate), not exact values. The numbers were re-measured at 11:40 UTC with the seeded generator (red team round 7 #3); the first version of this page quoted an unseeded run.
 
 ## Results
 
 - d = **45.50 fm** (closed form: 2·79·1.44 MeV fm / 5 MeV), b_max = 521.1 fm, σ(θ > 5°) = 8531 barn.
-- **χ² of the 35 bins against the exact Rutherford contents: 35.6 for 35 degrees of freedom**: the Monte Carlo
+- **χ² of the 35 bins against the exact Rutherford contents: 38.2 for 35 degrees of freedom** (35 ± 8.4 expected): the Monte Carlo
   histogram is Rutherford's distribution, from 5° (≈10⁷ α per bin) to 180° (≈200 α per bin).
-- Fraction scattered backwards (θ > 90°): 0.001920 (MC) vs 0.001906 exact (1.4σ); of the α's deflected by more than 5°, about 1 in 500 come back (the "15-inch shell
+- Fraction scattered backwards (θ > 90°): 0.001913 (MC) vs 0.001906 exact (0.6σ); of the α's deflected by more than 5°, about 1 in 500 come back (the "15-inch shell
   bouncing off tissue paper" of Rutherford's remark).
 - dσ/dΩ(90°) = 5.176 barn/sr.
 
 | θ | MC dσ/dΩ sin⁴(θ/2)/(d/4)² | α in 5° window | exact (5° window average) | Geiger–Marsden N sin⁴(θ/2), normalised to mean 1 |
 |---|---|---|---|---|
-| 150° | 1.04 | 997 | 1.00 | 0.894 |
-| 135° | 0.973 | 1570 | 1.00 | 0.972 |
-| 120° | 1.00 | 2569 | 1.00 | 0.906 |
-| 105° | 1.02 | 4143 | 1.00 | 0.854 |
-| 75° | 1.02 | 11966 | 1.00 | 0.899 |
-| 60° | 0.991 | 22837 | 1.00 | 0.925 |
-| 45° | 1.00 | 55047 | 1.01 | 0.955 |
-| 37.5° | 1.01 | 95545 | 1.01 | 1.09 |
-| 30° | 1.01 | 187274 | 1.01 | 1.09 |
-| 22.5° | 1.02 | 450047 | 1.03 | 1.23 |
-| 15° | 1.06 | 1571295 | 1.06 | 1.19 |
+| 150° | 0.980 | 936 | 1.00 | 0.894 |
+| 135° | 1.02 | 1647 | 1.00 | 0.972 |
+| 120° | 1.00 | 2568 | 1.00 | 0.906 |
+| 105° | 0.988 | 4008 | 1.00 | 0.854 |
+| 75° | 1.00 | 11716 | 1.00 | 0.899 |
+| 60° | 1.01 | 23326 | 1.00 | 0.925 |
+| 45° | 1.01 | 55165 | 1.01 | 0.955 |
+| 37.5° | 1.01 | 95346 | 1.01 | 1.09 |
+| 30° | 1.02 | 188651 | 1.01 | 1.09 |
+| 22.5° | 1.03 | 450560 | 1.03 | 1.23 |
+| 15° | 1.06 | 1568413 | 1.06 | 1.19 |
 
 - The Monte Carlo reproduces 1/sin⁴(θ/2) within its Poisson errors (1/√counts: 3 % at 150°). The window averages above
   1 at small angles are real: over a 5° window at 15° the 1/sin⁴ factor changes by a factor of 2.6, and the average
@@ -60,8 +57,7 @@ with a 10⁻⁶ false-alarm rate), not exact values.
 - The sampling loop is four lines, with units: b in fm, θ an angle, the cross-section in barn/sr.
 - **`2 b` is 2 barn.** The physicist's name for the impact parameter is `b`, and `2 b` right after a number is the
   barn (with a warning), so `atan(d / (2 b))` would have been a unit error. `2*b` works; the warning pointed at it.
-- **No seed for `rand()`**, and the compiled `drand48` is never seeded: runs are reproducible by accident, a program
-  can't choose its seed, and two Monte Carlo runs with different seeds can't be compared without restarting.
+- **No seed for `rand()`** at the time (fixed since: `seed(n)`, D80).
 - **No `cot`**, and no list slices (`sum(counts[18:35])` is a parse error "expected ']'"); written as `1/tan` and a loop.
 - `plot … in barn` labels the axis `[barn]` for a quantity in barn/sr (steradians are dimensionless, so the unit
   vanishes); the title has to say "barn/sr".

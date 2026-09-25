@@ -438,8 +438,11 @@ def _symmetric(raw_alpha, raw_w):
     for c in (np.asarray(raw_alpha, dtype=float), np.asarray(raw_w, dtype=float)):
         if not np.all(np.isfinite(c)):
             return False
-        tol = 1e-10 * max(float(np.max(np.abs(c))), 1e-300)
-        if float(np.max(np.abs(c - c[::-1]))) > tol:
+        # point by point, relative to the values themselves: a tilt of 3e-9 eV at a well's bottom is an asymmetry
+        # even when the walls are 1000 eV (red team round 7 #1; a range-wide tolerance hid it)
+        m = c[::-1]
+        floor = 1e-14 * max(float(np.max(np.abs(c))), 1e-300)     # rounding of values near 0
+        if np.any(np.abs(c - m) > 1e-12 * np.maximum(np.abs(c), np.abs(m)) + floor):
             return False
     return True
 

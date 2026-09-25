@@ -1003,7 +1003,7 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
   9.161 km; pp/CNO 17.79 and 18.06 MK; recombination z_* 1089.61; SEMF a_V 15.414, rms 3.31 MeV, 13.3 MeV at
   Z = 50, N = 82; shell model gaps at 2, 8, 20, 28, 50, 82, 126; U-238 Rn-222 99 % at 25.40 d). Rutherford: see #3.
 
-### 1. D233 forces parity on a slightly asymmetric double well: the ground state is put in both wells (silent). Status: open
+### 1. D233 forces parity on a slightly asymmetric double well: the ground state is put in both wells (silent). Status: fixed (main session): `_symmetric` compares mirrored grid values point by point, relative to their own size (a 3e-9 eV tilt at a well's bottom is an asymmetry)
 - **Repro:** `m = m_e`, `V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8 + 3e-9 eV * x / 1 nm` (a 3 V/m field on the round 6
   double well), `solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ with ψ(-3 nm) = 0, ψ(3 nm) = 0 for x from -3 nm to 3 nm
   lowest 2` → `ψ₁(-1 nm)/ψ₁(1 nm)` = 1.00000, `ψ₂(-1 nm)/ψ₂(1 nm)` = −1.00000, ⟨x⟩₁ = 1.6×10⁻¹⁶ nm, no warning.
@@ -1016,7 +1016,7 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
   silently symmetrised away: the Stark effect of an ammonia-like inversion doublet comes out with no dipole.
 - **Test:** `test_1_tilted_double_well_ground_state_is_localised`.
 
-### 2. The heat equation after a jump: very early times are still 60 % wrong with no warning (silent). Status: open
+### 2. The heat equation after a jump: very early times are still 60 % wrong with no warning (silent). Status: open (documented limitation, reference §19): before √(Dt) reaches one grid cell the PDE value is an interpolation; refine `grid` for very early times
 - **Repro:** `D = 1e-4 m²/s`, `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(1 m, t) = 0 K
   for x from 0 m to 1 m, t from 0 s to 100 s` → `u(0.5 mm, 0.002 s)` = 55.0 K, `u(0.25 mm, 0.0025 s)` = 67.0 K,
   `u(0.5 mm, 0.01 s)` = 59.1 K, `u(1 mm, 0.01 s)` = 42.2 K; no warning.
@@ -1027,7 +1027,7 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
   estimated or warned about. (A smooth 1 cm Gaussian is 0.25 % off at 0.1–1 s, printed to 5 digits: same cause.)
 - **Test:** `test_2_heat_step_very_early_time_is_accurate_or_warned`.
 
-### 3. research/rutherford_mc/README.md quotes numbers the program no longer prints (docs). Status: open
+### 3. research/rutherford_mc/README.md quotes numbers the program no longer prints (docs). Status: fixed (main session): README re-measured with the seeded generator (χ² 38.2, backward fraction 0.001913)
 - **Repro:** `cd research/rutherford_mc && fermium run rutherford.fm` → χ² = 38.2 (README and research/README.md:
   35.6), backward fraction 0.00191255 (README 0.001920, "1.4σ"), 150° row 0.980 with 936 α (README 1.04, 997 α),
   and every table row differs. The run is reproducible (38.2 twice).
@@ -1037,7 +1037,7 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
   listed under Limitations are stale. The physics conclusion (χ² ≈ dof) still holds.
 - **Test:** `test_3_rutherford_readme_matches_the_program`.
 
-### 4. D11 applies "fewest significant figures" to +: `293.15 K + 0.5 K` prints `290 K` (silent). Status: open
+### 4. D11 applies "fewest significant figures" to +: `293.15 K + 0.5 K` prints `290 K` (silent). Status: fixed (main session): a sum or difference keeps the significant figures of its most precise operand (293.15 K + 0.5 K = 293.65 K; D11)
 - **Repro:** `T = 293.15 K` / `print T + 0.5 K` → `290 K`; `m_p = 938.272 MeV` / `print m_p + 2.2 MeV` → `940 MeV`;
   `L0 = 2.000 m` / `print L0 + 0.5 mm` → `2.0 m` (and `L0 + α L0 ΔT` for thermal expansion prints `2.0 m`).
 - **Reference:** 293.65 K, 940.472 MeV, 2.0005 m; by the decimal-place rule for sums, 293.7 K, 940.5 MeV, 2.000 m.
@@ -1048,7 +1048,7 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
   operand with the most (or skip the rule and print 3 figures), which never prints a value outside its precision.
 - **Test:** `test_4_adding_a_small_correction_keeps_the_precise_value`.
 
-### 5. An integral dominated by rounding error prints 3 figures of which 1 is right, with no warning (silent). Status: open
+### 5. An integral dominated by rounding error prints 3 figures of which 1 is right, with no warning (silent). Status: open (documented limitation, reference §19): a result at the integrand's rounding level shows more figures than are right; no warning yet
 - **Repro:** `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` → `7.93×10⁻⁹` (the D230 example; the snap is gone).
 - **Reference:** exactly 8×10⁻⁹ (the sine part cancels). SciPy `quad` gives 7.96×10⁻⁹ with an error estimate of
   1.0×10⁻⁸ and an IntegrationWarning about round-off. The result is at the integrand's rounding level (10⁶ × ε × 2 ≈
