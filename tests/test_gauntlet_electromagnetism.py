@@ -25,7 +25,7 @@ MU0 = 1.25663706127e-6       # CODATA 2022
 P8 = 1e-7                    # 8 printed significant figures
 ODE = 1e-6
 
-NUM = re.compile(r"(?:(?<=\s)|(?<==)|^)-?\d+(?:\.\d+)?(?:e-?\d+)?(?:×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)?")
+NUM = re.compile(r"(?:(?<=\s)|(?<==)|^)-?\d+(?:\.\d+)?(?:e-?\d+)?(?:×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)?(?![\d/.])")
 
 
 def run_problem(name):

@@ -1,0 +1,51 @@
+# Optics 02 — Lensmaker's equation, a two-lens system and chromatic aberration
+#
+# A biconvex lens of crown glass has radii R₁ = +20.0 cm and R₂ = −30.0 cm.
+# The glass follows Cauchy's formula n(λ) = A + B/λ² with A = 1.5046 and
+# B = 4200 nm².
+#
+# (a) Find n and the focal length at λ = 589 nm (sodium D), from the lensmaker's
+#     equation 1/f = (n − 1)(1/R₁ − 1/R₂).
+# (b) An object 3.00 mm tall stands 50.0 cm in front of the lens. Find the image
+#     distance, the magnification and the image height (1/s + 1/s' = 1/f).
+# (c) A diverging lens with f₂ = −15.0 cm is placed 10.0 cm behind the first.
+#     Where is the final image, and what is the overall magnification?
+# (d) Longitudinal chromatic aberration: find f at 486 nm (F line) and 656 nm
+#     (C line), and df/dλ at 589 nm.
+# (Hecht §5.2, Halliday/Resnick ch. 34)
+
+R1 = 20.0 cm
+R2 = -30.0 cm
+A = 1.5046
+B = 4200 nm²
+n(λ) = A + B / λ²
+f(λ) = 1 / ((n(λ) - 1) (1/R1 - 1/R2))
+
+# (a)
+λ_D = 589 nm
+f1 = f(λ_D)
+print "n at 589 nm =", n(λ_D) to 8 digits
+print "f at 589 nm =", f1 in cm to 8 digits
+
+# (b) thin-lens equation
+s1 = 50.0 cm
+h = 3.00 mm
+s1_img = 1 / (1/f1 - 1/s1)
+m1 = -s1_img / s1
+print "image distance =", s1_img in cm to 8 digits
+print "magnification  =", m1 to 8 digits
+print "image height   =", m1 h in mm to 8 digits
+
+# (c) second lens, 10 cm behind; its object is the first image
+f2 = -15.0 cm
+d = 10.0 cm
+s2 = d - s1_img            # negative: a virtual object behind lens 2
+s2_img = 1 / (1/f2 - 1/s2)
+m2 = -s2_img / s2
+print "final image distance s2' =", s2_img in cm to 8 digits
+print "overall magnification =", m1 m2 to 8 digits
+
+# (d) chromatic aberration
+print "f at 486 nm =", f(486 nm) in cm to 8 digits
+print "f at 656 nm =", f(656 nm) in cm to 8 digits
+print "df/dλ at 589 nm =", f'(λ_D) in mm/nm to 8 digits
