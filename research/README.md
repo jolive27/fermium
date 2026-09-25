@@ -13,3 +13,4 @@ computation.
 | 5 | [Hydrogen levels from the radial Schrödinger equation (shooting, reduced mass)](hydrogen_levels/) | n = 1..4, all l: Bohr × μ/m_e to 9×10⁻⁹; Lyman α 121.5684 nm vs 121.567 nm (NIST) | done |
 | 6 | [Age of the universe for Planck 2018 ΛCDM (Friedmann equation)](friedmann_planck2018/) | t₀ = 13.791 Gyr vs 13.787 ± 0.020 Gyr (Planck 2018 VI); z_eq 3419 vs 3387 ± 21; D_C(z = 1100) = 13 866 Mpc | done |
 | 7 | [Rutherford scattering: Monte Carlo vs dσ/dΩ ∝ 1/sin⁴(θ/2) and Geiger–Marsden 1913](rutherford_mc/) | 2×10⁷ α: χ² = 35.6 for 35 bins vs exact Rutherford; N sin⁴(θ/2) flat like Geiger–Marsden (±20 %) | done |
+| 8 | [pp chain vs CNO cycle: crossover temperature](pp_cno_crossover/) | 17.79 MK (Carroll & Ostlie rates), 18.06 MK (Kippenhahn & Weigert) vs ≈ 17–18 MK; ν = 3.9 and 19.9 vs T⁴, T^19.9 | done |

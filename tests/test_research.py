@@ -261,3 +261,39 @@ def test_rutherford_monte_carlo_statistics():
         assert gmr == pytest.approx(gm[a] * np.sin(np.radians(a) / 2) ** 4 / mean, abs=0.006)
         assert 0.8 < gmr < 1.25                                                 # Geiger–Marsden: N sin⁴ ≈ constant
     assert num(out, "Rutherford dσ/dΩ at 90°:") == pytest.approx((d / 4) ** 2 / np.sin(pi / 4) ** 4 / 1e-28, rel=1e-3)
+
+
+def test_pp_cno_crossover_matches_brentq():
+    """pp/CNO crossover (Carroll & Ostlie and Kippenhahn & Weigert rates) vs brentq; published ≈ 17–18 MK."""
+    from scipy.optimize import brentq
+    out = run_prog("pp_cno_crossover", "pp_cno.fm")
+    X, Xc = 0.70, 0.01
+
+    def pp(t6):
+        return 0.241 * X ** 2 * t6 ** (-2 / 3) * np.exp(-33.80 * t6 ** (-1 / 3))
+
+    def cno(t6):
+        return 8.67e20 * X * Xc * t6 ** (-2 / 3) * np.exp(-152.28 * t6 ** (-1 / 3))
+
+    t_co = brentq(lambda t: np.log(pp(t) / cno(t)), 5, 50, xtol=1e-12)
+    assert num(out, "crossover (Carroll & Ostlie rates): T =") == pytest.approx(t_co, rel=1e-3)
+    assert num(out, "closed form:") == pytest.approx(t_co, rel=1e-3)
+    assert 17 < t_co < 18.5                                            # the textbook crossover near 18 MK
+    for name, f in (("pp", pp), ("CNO", cno)):
+        h = 1e-5
+        nu = (np.log(f(15 * (1 + h))) - np.log(f(15 * (1 - h)))) / (np.log(1 + h) - np.log(1 - h))
+        assert num(line_of(out, "d ln ε/d ln T"), name) == pytest.approx(nu, rel=2e-3), name
+
+    def pp_kw(T):
+        T9 = T / 1e3
+        g11 = 1 + 3.82 * T9 + 1.51 * T9 ** 2 + 0.144 * T9 ** 3 - 0.0114 * T9 ** 4
+        return 2.57e4 * X ** 2 * g11 * T9 ** (-2 / 3) * np.exp(-3.381 * T9 ** (-1 / 3))
+
+    def cno_kw(T):
+        T9 = T / 1e3
+        g141 = 1 - 2.00 * T9 + 3.41 * T9 ** 2 - 2.43 * T9 ** 3
+        return 8.24e25 * X * Xc * g141 * T9 ** (-2 / 3) * np.exp(-15.231 * T9 ** (-1 / 3) - (T9 / 0.8) ** 2)
+
+    t_kw = brentq(lambda t: np.log(pp_kw(t) / cno_kw(t)), 5, 50, xtol=1e-12)
+    assert num(out, "crossover (Kippenhahn & Weigert rates): T =") == pytest.approx(t_kw, rel=1e-3)
+    assert 17 < t_kw < 18.5

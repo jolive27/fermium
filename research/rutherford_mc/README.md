@@ -27,8 +27,8 @@ with a 10⁻⁶ false-alarm rate), not exact values.
 - d = **45.50 fm** (closed form: 2·79·1.44 MeV fm / 5 MeV), b_max = 521.1 fm, σ(θ > 5°) = 8531 barn.
 - **χ² of the 35 bins against the exact Rutherford contents: 35.6 for 35 degrees of freedom**: the Monte Carlo
   histogram is Rutherford's distribution, from 5° (≈10⁷ α per bin) to 180° (≈200 α per bin).
-- Fraction scattered backwards (θ > 90°): 0.001920 (MC) vs 0.001906 exact (1.4σ); about 1 in 500, the "15-inch shell
-  bouncing off tissue paper" of Rutherford's remark.
+- Fraction scattered backwards (θ > 90°): 0.001920 (MC) vs 0.001906 exact (1.4σ); of the α's deflected by more than 5°, about 1 in 500 come back (the "15-inch shell
+  bouncing off tissue paper" of Rutherford's remark).
 - dσ/dΩ(90°) = 5.176 barn/sr.
 
 | θ | MC dσ/dΩ sin⁴(θ/2)/(d/4)² | α in 5° window | exact (5° window average) | Geiger–Marsden N sin⁴(θ/2), normalised to mean 1 |
