@@ -1,0 +1,53 @@
+# Astrophysics 32 — The Gamow peak: thermonuclear rates in the Sun and in helium burning
+#
+# (Clayton, Principles of Stellar Evolution and Nucleosynthesis, §4.3, eqs. 4-44 to 4-60;
+#  Rolfs & Rodney, Cauldrons in the Cosmos §4.2; Iliadis, Nuclear Physics of Stars §3.2;
+#  Adelberger et al., Rev. Mod. Phys. 83, 195 (2011) for S_pp.)
+# For a non-resonant reaction with a constant S factor,
+#     ⟨σv⟩ = √(8/(π μ)) (k T)^(−3/2) S ∫₀^∞ exp(−E/kT − b/√E) dE,
+#     b = √E_G = π α Z₁ Z₂ √(2 μ c²).
+# The integrand peaks at E₀ = (b k T / 2)^(2/3) with 1/e width Δ = 4 √(E₀ k T / 3), and
+# the Gaussian approximation gives ∫ ≈ (√π/2) Δ e^(−τ), τ = 3 E₀ / kT, corrected by the
+# factor (1 + 5/(12τ)).
+#   (a) p + p at the solar centre, T = 15.7 MK, and ¹²C + α at T = 0.200 GK: b, E₀, Δ, τ.
+#   (b) The integral exactly and in the Gaussian approximation, with and without the
+#       5/(12τ) correction.
+#   (c) The temperature sensitivity ν = d ln⟨σv⟩ / d ln T, by differentiating the
+#       integral (Leibniz rule), against the approximation (τ − 2)/3.
+#   (d) The pp rate in the solar core: S_pp(0) = 4.01×10⁻²⁵ MeV b, hydrogen mass fraction
+#       X = 0.34, ρ = 150 g/cm³. Give ⟨σv⟩ and the mean life of a proton 1/(n_p ⟨σv⟩)
+#       (Clayton: about 10¹⁰ yr).
+
+μ_pp = m_p / 2
+μ_Ca = (12.0 u) (4.002602 u) / (16.002602 u)
+b_pp = π α √(2 μ_pp c²)
+b_Ca = π α (6 * 2) √(2 μ_Ca c²)
+
+# (first called `integral(b, T)`, but `integral` is the ASCII spelling of ∫: the error
+#  was "expected ')' to close '(' but found ','")
+gamow_int(b, T) = ∫ exp(-E / (k_B T) - b / √E) dE from 0 keV to ∞
+report(name, b, T) =
+    E0 = (b k_B T / 2)^(2/3)
+    Δ = 4 √(E0 k_B T / 3)
+    τ = 3 E0 / (k_B T)
+    I = gamow_int(b, T)
+    gauss = √π / 2 * Δ exp(-τ)
+    print "(a)", name, " b =", b in keV^(1/2) to 8 digits, " E0 =", E0 in keV to 8 digits, " Delta =", Δ in keV to 8 digits, " tau =", τ to 8 digits
+    print "(b)", name, " integral =", I in keV to 10 digits, " Gaussian =", gauss in keV to 8 digits, " ratio =", I / gauss to 8 digits, " 1 + 5/(12 tau) =", 1 + 5 / (12 τ) to 8 digits
+    return τ
+
+T_sun = 15.7e6 K
+T_he = 0.200e9 K
+τ_pp = report("pp", b_pp, T_sun)
+τ_Ca = report("C12+alpha", b_Ca, T_he)
+
+# (c) ν = T/⟨σv⟩ d⟨σv⟩/dT = −3/2 + T I'(T)/I(T), with I'(T) under the integral sign
+dI_pp = ∂/∂T gamow_int
+print "(c) pp: nu =", -1.5 + T_sun dI_pp(b_pp, T_sun) / gamow_int(b_pp, T_sun) to 8 digits, " (tau - 2)/3 =", (τ_pp - 2) / 3 to 8 digits
+print "    C12+alpha: nu =", -1.5 + T_he dI_pp(b_Ca, T_he) / gamow_int(b_Ca, T_he) to 8 digits, " (tau - 2)/3 =", (τ_Ca - 2) / 3 to 8 digits
+
+# (d) the pp rate in the Sun's core
+S_pp = 4.01e-25 MeV b
+σv = √(8 / (π μ_pp)) (k_B T_sun)^(-3/2) S_pp gamow_int(b_pp, T_sun)
+n_p = 0.34 * 150 g/cm³ / m_p
+print "(d) <sigma v> =", σv in cm³/s to 6 digits, " n_p =", n_p in cm^-3 to 4 digits, " proton mean life =", 1 / (n_p σv) in yr to 4 digits
