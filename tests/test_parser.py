@@ -713,3 +713,19 @@ def test_fit_with_on_next_line(tmp_path):
 
 def test_strings_keep_their_characters():
     assert run('print "Pound–Rebka µ"') == "Pound–Rebka µ"
+
+
+def test_leibniz_higher_order_and_initial_conditions():
+    out = run("x(t) = t^3\nprint d²x/dt²(2)\nprint d^2x/dt^2(2)\n"
+              "solve d²y/dt² = -y with y(0) = 1, dy/dt(0) = 0 for t from 0 to 1\nprint y(1)\n"
+              "solve d/dt (dz/dt) = -z with z(0) = 1, z'(0) = 0 for t from 0 to 1\nprint z(1)")
+    assert out.split("\n") == ["12", "12", "0.540302", "0.540302"]
+
+
+def test_vec_call_with_unit():
+    assert run("print vec(3, 4) m/s") == "<3, 4> m/s"
+
+
+def test_solution_range_error_has_units():
+    e = error_of("solve x' = -x/(1 s) with x(0) = 1 m for t from 0 hr to 2 hr\nprint x(3 hr)")
+    assert "at 3 hr" in e.message and "ends at 2 hr" in e.message

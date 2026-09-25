@@ -129,10 +129,20 @@ void fm_print_end(void) {
     line[0] = 0;
 }
 
-void fm_error(int64_t kind, double a, double b, int64_t ln) {
-    char x[64], y[64];
-    fmt_num(a, 6, 1, x, sizeof x);
-    fmt_num(b, 6, 1, y, sizeof y);
+void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
+    char x[160], y[160];
+    if (kind == 2 && fmt >= 0) {       /* values with their units, like the Python runtime */
+        const fm_fmt *f = &fm_fmts[fmt];
+        char bx[128], by[128];
+        fmt_num((a - f->offset) / f->factor, 6, 1, bx, sizeof bx);
+        fmt_num((b - f->offset) / f->factor, 6, 1, by, sizeof by);
+        const char *sep = (f->unit[0] && strcmp(f->unit, "1")) ? " " : "";
+        snprintf(x, sizeof x, "%s%s%s", bx, sep, f->unit);
+        snprintf(y, sizeof y, "%s%s%s", by, sep, f->unit);
+    } else {
+        fmt_num(a, 6, 1, x, sizeof x);
+        fmt_num(b, 6, 1, y, sizeof y);
+    }
     err_line = ln;
     switch (kind) {
     case 1:
@@ -144,13 +154,14 @@ void fm_error(int64_t kind, double a, double b, int64_t ln) {
             snprintf(err_msg, sizeof err_msg, "index %s is out of range: the list has %lld elements (valid indexes are 1 to %lld)",
                      x, (long long)b, (long long)b);
         break;
-    case 2: snprintf(err_msg, sizeof err_msg, "asked for the solution at %s (SI units), outside the range it was solved for (it ends at %s)", x, y); break;
+    case 2: snprintf(err_msg, sizeof err_msg, "asked for the solution at %s%s, outside the range it was solved for (it ends at %s)", x, fmt >= 0 ? "" : " (SI units)", y); break;
     case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached t = %s in SI units)", x); break;
     case 4: snprintf(err_msg, sizeof err_msg, "%s", fm_texts[(int64_t)a]); break;
     case 5: snprintf(err_msg, sizeof err_msg, "these two lists have different lengths (%s and %s)", x, y); break;
     case 6: snprintf(err_msg, sizeof err_msg, "this list is empty"); break;
     case 7: snprintf(err_msg, sizeof err_msg, "the step must be a non-zero number that goes from the start towards the end"); break;
     case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near t = %s (SI units)", x); break;
+    case 9: snprintf(err_msg, sizeof err_msg, "this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating (like sin(x) up to ∞)"); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
 }

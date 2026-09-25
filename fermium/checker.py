@@ -1234,6 +1234,11 @@ class Checker(C.DiffContext):
                       f"{self.desc(view.tdim)}, not {self.desc(t.ty.dim)}", e.args[0])
         sol = self.var_ref(view.sol_sym, ctx, e)
         r = self._sol_eval_node(view, sol, t, e)
+        tf = I.IConst(0, NumTy(view.tdim))
+        tf.hint = getattr(view, "thint", None)
+        tfmt = self.fmt(tf)
+        for node in ([r] + list(getattr(r, "items", []))):
+            node.tfmt = tfmt
         r.sf = self._minsf(t, view) if getattr(view, "sf", None) is not None else t.sf
         if getattr(view, "hint", None) is not None:
             r.hint = view.hint
@@ -1748,8 +1753,10 @@ class Checker(C.DiffContext):
         self.need_num(hi, e.hi, "the upper limit")
         self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the limits of this integral are {self.desc(lo.ty.dim)} and "
                       f"{self.desc(hi.ty.dim)}; they need the same units", e,
-                      hint="if you divide or multiply the integral by something, put the integral in parentheses: "
-                           "(∫ ... dx from a to b) / M")
+                      hint=("e is the elementary charge in Fermium; for Euler's number write exp(1)"
+                            if any(isinstance(n, A.Name) and n.name == "e" for n in (e.lo, e.hi)) else
+                            "if you divide or multiply the integral by something, put the integral in parentheses: "
+                            "(∫ ... dx from a to b) / M"))
         lam = I.ILambda("scalar", self.fresh_name("integrand"))
         lam.locals = []
         scope = Scope(ctx.scope)

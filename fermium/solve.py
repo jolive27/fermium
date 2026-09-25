@@ -24,15 +24,19 @@ def _find_derivs(e, out):
 
 
 def _normalize_derivs(e, tvar):
-    """Rewrite d/dt x and dx/dt as x' so the rest of the code sees one form."""
+    """Rewrite d/dt x, dx/dt, d²x/dt² and d/dt (x') as primes so the rest of the code sees one form."""
     from .lexer import canonical_name
+    e = C.map_children(e, lambda c: _normalize_derivs(c, tvar))
     if isinstance(e, A.Deriv) and isinstance(e.operand, A.Name) and e.var == tvar:
         return A.Prime(e.operand, e.order).at(e)
+    if isinstance(e, A.Deriv) and isinstance(e.operand, A.Prime) and isinstance(e.operand.target, A.Name) \
+            and e.var == tvar:
+        return A.Prime(e.operand.target, e.operand.order + e.order).at(e)
     if isinstance(e, A.BinOp) and e.op == "/" and isinstance(e.left, A.Name) and isinstance(e.right, A.Name) \
             and e.right.name == "d" + tvar and e.left.name.startswith("d") and len(e.left.name) > 1 \
             and not e.left.paren:
         return A.Prime(A.Name(canonical_name(e.left.name[1:])).at(e.left), 1).at(e)
-    return C.map_children(e, lambda c: _normalize_derivs(c, tvar))
+    return e
 
 
 def check_solve(ck, s: A.Solve, ctx):
@@ -82,6 +86,11 @@ def check_solve(ck, s: A.Solve, ctx):
     shape = {}
     for ic in s.initial:
         lhs = ic.lhs
+        if isinstance(lhs, A.BinOp) and lhs.op == "/" and isinstance(lhs.right, A.Call) and \
+                isinstance(lhs.right.func, A.Name) and lhs.right.func.name == "d" + t and \
+                isinstance(lhs.left, A.Name) and lhs.left.name.startswith("d"):
+            from .lexer import canonical_name       # dx/dt(0) = ...
+            lhs = A.Call(A.Prime(A.Name(canonical_name(lhs.left.name[1:])), 1), lhs.right.args).at(lhs)
         if not isinstance(lhs, A.Call) or len(lhs.args) != 1:
             raise ck.err("initial conditions look like  x(0) = 1 m  or  x'(0) = 0 m/s", ic)
         f = lhs.func

@@ -756,10 +756,11 @@ class Parser:
             f = q.unit.factors[0]
             if f.name in self.known and f.name not in self.warned_units and f.name != "c":
                 self.warned_units.add(f.name)
+                num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
                 self.diags.warn(f"'{f.name}' right after a number is the unit {f.name}, not your variable {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
-                                hint=f"to multiply by the variable write 2*{f.name}; to make the unit explicit write "
-                                     f"[{f.name}]")
+                                hint=f"that's fine if you meant the unit; to multiply by your variable write "
+                                     f"{num}*{f.name}")
 
     def _warn_unit_then_term(self, e):
         """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
@@ -772,8 +773,8 @@ class Parser:
                 self.diags.warn(
                     f"'{f.name}' after the number means the unit {f.name}, not your "
                     f"variable {f.name}", line=f.line, col=f.col, length=len(f.name),
-                    hint=f"to multiply by the variable write *{f.name} (e.g. 0.5*{f.name}) or put the number in "
-                         f"a name; ½ {f.name} also works")
+                    hint=f"to multiply by your variable write {q.value.value:g}*{f.name}"
+                         if isinstance(q.value, A.Num) else f"write *{f.name} to multiply by your variable")
 
     def power(self):
         t = self.tok
@@ -835,6 +836,10 @@ class Parser:
                         raise self.error("expected ',' or ')' in the list of arguments" + self._found())
                 self.next()
                 e = self.span(A.Call(e, args), t)
+                if isinstance(e.func, A.Name) and e.func.name == "vec" and self.tok.kind == "NAME" and \
+                        is_unit_name(self.tok.raw) and self.tok.value not in self.known:
+                    u = self.unit_expr(explicit=False)          # vec(3, 4) m/s
+                    e = self.span(A.Quantity(e, u), t)
             elif self.at_op("[") and not self.tok.ws_before:
                 self.next()
                 idx = self.expr()
@@ -884,6 +889,10 @@ class Parser:
         if t.kind == "NAME":
             if t.value == "d" and self._is_deriv_op():
                 return self.deriv_op()
+            if t.value == "d":
+                lz = self._leibniz_higher()
+                if lz is not None:
+                    return lz
             if t.value == "∞" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
                     self.peek().value not in self.known:
                 self.next()
@@ -1039,6 +1048,40 @@ class Parser:
         # an operand must follow on the same line
         return nxt.kind in ("NAME", "NUM") or (nxt.kind == "OP" and nxt.value in ("(", "|")) or \
             (nxt.kind == "KW" and nxt.value in ("sqrt", "cbrt"))
+
+    def _leibniz_higher(self):
+        """d²x/dt² or d^2x/dt^2 -> Deriv(t, 2, x); returns None if the tokens don't match."""
+        j = self.i + 1
+        tk = self.toks
+        if tk[j].kind == "SUP":
+            order, j = tk[j].value, j + 1
+        elif tk[j].kind == "OP" and tk[j].value == "^" and tk[j + 1].kind == "NUM" and tk[j + 1].value == int(
+                tk[j + 1].value) and not tk[j + 2].ws_before:
+            order, j = int(tk[j + 1].value), j + 2
+        else:
+            return None
+        if tk[j].kind != "NAME" or tk[j].ws_before:
+            return None
+        xname = tk[j]
+        if not (tk[j + 1].kind == "OP" and tk[j + 1].value == "/"):
+            return None
+        v = tk[j + 2]
+        if v.kind != "NAME" or not v.raw.startswith("d") or len(v.raw) < 2:
+            return None
+        k = j + 3
+        if tk[k].kind == "SUP":
+            o2, k = tk[k].value, k + 1
+        elif tk[k].kind == "OP" and tk[k].value == "^" and tk[k + 1].kind == "NUM":
+            o2, k = int(tk[k + 1].value), k + 2
+        else:
+            return None
+        if o2 != order:
+            raise self.error(f"the orders don't match in this derivative (d{order}.../d...{o2})", tok=v)
+        start = self.tok
+        self.i = k
+        x = A.Name(xname.value)
+        x.line, x.col, x.length = xname.line, xname.col, len(xname.raw)
+        return self.span(A.Deriv(canonical_name(v.raw[1:]), order, x), start)
 
     def _deriv_order(self):
         if self.tok.kind == "SUP":

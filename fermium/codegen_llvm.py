@@ -92,6 +92,9 @@ class ModuleGen:
         self.curline = ir.GlobalVariable(self.module, I64, "fm.line")
         self.curline.initializer = i64(0)
         self.curline.linkage = "internal"
+        self.errfmt = ir.GlobalVariable(self.module, I64, "fm.errfmt")   # print format for error values
+        self.errfmt.initializer = i64(-1)
+        self.errfmt.linkage = "internal"
         self._kernels_built = set()
 
     # ------------------------------------------------------------ declarations
@@ -112,7 +115,7 @@ class ModuleGen:
         e("fm_print_bool", VOID, [I64])
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
-        e("fm_error", VOID, [I64, F64, F64, I64])
+        e("fm_error", VOID, [I64, F64, F64, I64, I64])
         e("fm_plot_series", VOID, [I64, I64, F64P, I64, F64P, I64])
         e("fm_plot_sol", VOID, [I64, I64, I8P, I64, I64, I64, I64])
         e("fm_plot_done", VOID, [I64])
@@ -223,7 +226,7 @@ class ModuleGen:
     def raise_error(self, b, kind, a=None, c=None, line=None):
         ln = i64(line) if line else b.load(self.curline)
         b.call(self.externs["fm_error"], [i64(kind), a if a is not None else f64(0), c if c is not None else f64(0),
-                                          ln])
+                                          ln, b.load(self.errfmt)])
         b.call(self.externs["longjmp"], [b.bitcast(self.jmpbuf, I8P), ir.Constant(I32, 1)])
         b.unreachable()
 
@@ -1268,6 +1271,7 @@ class FuncGen:
         return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
 
     def e_ISolEval(self, e):
+        self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)
         self.mark_line()
         k = self.mg.kernel("fm_sol_eval")
         return self.b.call(k, [self.expr(e.sol), i64(e.comp), self.expr(e.t), i64(1 if e.use_dy else 0)])

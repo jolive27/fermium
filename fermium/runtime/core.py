@@ -137,8 +137,8 @@ class Runtime:
                     os._exit(0)
             rt.line = []
 
-        def error(kind, a, b, line):
-            rt.error = rt.describe_error(kind, a, b)
+        def error(kind, a, b, line, fmt=-1):
+            rt.error = rt.describe_error(kind, a, b, fmt)
             rt.error_line = line or None
 
         def plot_series(pid, idx, xp, nx, yp, ny):
@@ -194,7 +194,7 @@ class Runtime:
             "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
-            "fm_error": CB(None, c_int64, c_double, c_double, c_int64)(error),
+            "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),
             "fm_plot_series": CB(None, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
             "fm_plot_sol": CB(None, c_int64, c_int64, c_void_p, c_int64, c_int64, c_int64, c_int64)(plot_sol),
             "fm_plot_done": CB(None, c_int64)(plot_done),
@@ -208,7 +208,15 @@ class Runtime:
             for name, cb in self.callbacks.items():
                 llvm.add_symbol(name, ctypes.cast(cb, c_void_p).value)
 
-    def describe_error(self, kind, a, b):
+    def fmt_value(self, v, fmt):
+        """Format a number with a print format (units) if one is known, else as plain SI."""
+        if fmt is not None and fmt >= 0 and self.tables and fmt < len(self.tables.fmts):
+            f = self.tables.fmts[fmt]
+            if "rdim" in f:
+                return format_quantity(v, f["rdim"], f["hint"], None, False)
+        return f"{format_number(v)} (SI units)"
+
+    def describe_error(self, kind, a, b, fmt=-1):
         if kind == 1:
             n = int(b)
             if a == a and a != int(a):
@@ -218,8 +226,8 @@ class Runtime:
             return f"index {format_number(a)} is out of range: the list has {n} element{'s' if n != 1 else ''} " \
                    f"(valid indexes are 1 to {n})"
         if kind == 2:
-            return f"asked for the solution at {format_number(a)} (SI units), outside the range it was solved " \
-                   f"for (it ends at {format_number(b)})"
+            return f"asked for the solution at {self.fmt_value(a, fmt)}, outside the range it was solved " \
+                   f"for (it ends at {self.fmt_value(b, fmt)})"
         if kind == 3:
             return f"the ODE solver needed too many steps (reached t = {format_number(a)} in SI units); " \
                    f"the equation may be stiff or blow up"

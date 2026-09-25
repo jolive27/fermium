@@ -3,7 +3,7 @@
 Each entry: minimal repro, expected, actual. Tests are in `tests/test_adversarial.py`
 (marked `xfail(strict=True, reason="BUG A<n>: ...")` until fixed).
 
-## A1. `push` on an aliased list reads freed memory (use-after-free, silent garbage)
+## A1. [FIXED] `push` on an aliased list reads freed memory (use-after-free, silent garbage)
 Lists are `{data, len, cap}` structs copied by value, so `ys = xs`, passing a list to a
 function, or `for x in xs` share `data`; `push` then `realloc`s it and the other copy keeps
 the freed pointer.
@@ -33,7 +33,7 @@ Also inconsistent semantics: `ys[1] = 100` through an alias *does* change `xs`, 
 through an alias changes only one length. Pick value or reference semantics and make push
 consistent (e.g. copy on assignment/call, or a heap list header).
 
-## A2. Integrals can hang forever (no global evaluation budget in the adaptive quadrature)
+## A2. [FIXED] Integrals can hang forever (no global evaluation budget in the adaptive quadrature)
 `fm_qrec` bisects recursively up to depth 40 on *each* branch with no total cap, so the
 worst case is ~2^40 GK15 evaluations. Both of these never finish (killed after 30 s):
 ```
@@ -44,7 +44,7 @@ print ∫ sin(x) dx from 0 to inf                # expected: an error (does not 
 bounded number of subdivisions (e.g. QUADPACK-style global heap with a limit) and a runtime
 error "the integral did not converge" when the limit is hit.
 
-## A3. Integrals silently return 0 when the first GK15 samples miss a narrow peak
+## A3. [PARTLY FIXED: x-20, x-30 and the half-line x-100 case work; x-100 over (-inf, inf) and ±1e6 still give 0] Integrals silently return 0 when the first GK15 samples miss a narrow peak
 ```
 print ∫ exp(-(x-100)^2) dx from -inf to inf    # actual: 0   expected: 1.77245
 print ∫ exp(-(x-100)^2) dx from 0 to inf       # actual: 0   expected: 1.77245
@@ -56,7 +56,7 @@ Suggestion: always subdivide a few levels (or start from several panels) before 
 zero error estimate, and never accept `err == 0 && res == 0` on the first panel for infinite
 ranges.
 
-## A4. Divergent / singular integrals silently return a finite garbage number
+## A4. [FIXED] Divergent / singular integrals silently return a finite garbage number
 ```
 print ∫ 1/x dx from 0 to 1            # actual: 34.7577        expected: error (diverges)
 print ∫ 1/x^2 dx from 0 to 1          # actual: 7.68126×10¹⁴  expected: error (diverges)
@@ -66,7 +66,7 @@ print ∫ 1/(x-0.3) dx from 0 to 1      # actual: -11            expected: error
 Hitting the depth limit (40) in `fm_qrec` is silently accepted. Expected: a runtime error
 such as "the integral doesn't converge (the integrand blows up near x = 0)".
 
-## A5. `solve` fails ("step became too small near t = 0") on smooth ODEs that start at rest
+## A5. [FIXED] `solve` fails ("step became too small near t = 0") on smooth ODEs that start at rest
 The scale-free error norm `sc = rtol·(max(|y|,|y_new|) + 1e-3·max|y| so far)` is 0 for a
 component that is still exactly 0 at the first steps, so any non-zero error estimate is
 rejected until h underflows.
@@ -90,7 +90,7 @@ Suggestion: floor the scale with something like the step's own |h·f| or a tiny 
 tolerance per component (e.g. relative to the largest |y| of *any* component with the same
 units, or 1e-3·|Δy| accumulated).
 
-## A6. `times(sol)` is in seconds even when `t` is a plain number
+## A6. [FIXED] `times(sol)` is in seconds even when `t` is a plain number
 ```
 solve x' = 1 with x(0) = 0 for t from 0 to 1
 ts = times(x)
@@ -100,13 +100,13 @@ print ts              # prints "[...] s"
 `x(1 s)` on the same solution is (correctly) rejected as "t is a plain number", so the two
 disagree.
 
-## A7. `solve ... step 0` silently returns the initial condition
+## A7. [FIXED] `solve ... step 0` silently returns the initial condition
 ```
 solve x' = 1 with x(0) = 0 for t from 0 to 1 step 0
 print x(1)            # actual: 0   expected: an error (the step must be non-zero), like `step -0.1`
 ```
 
-## A8. (HIGH) Negative °C / °F temperatures are wrong: `-40 °C` is -313.15 K
+## A8. [FIXED] (HIGH) Negative °C / °F temperatures are wrong: `-40 °C` is -313.15 K
 Unary minus is applied to the absolute value in kelvin, i.e. `-(40 °C)` = −313.15 K.
 ```
 T = -40 °C
@@ -119,7 +119,7 @@ print T in K                  # actual: [-283.15, 283.15] K   expected: [263.15,
 A negative literal directly followed by °C/°F must be converted as (−40 + 273.15) K. (`0 - 10 °C`
 is already rejected, which is fine.) Any winter/cryogenic program is silently wrong.
 
-## A9. Printing a subnormal number: Python exception leaks / wrong mantissa
+## A9. [FIXED] Printing a subnormal number: Python exception leaks / wrong mantissa
 ```
 print 5e-324      # actual: "Exception ignored on calling ctypes callback ... ZeroDivisionError" and an
                   #         empty line; expected 4.94066×10⁻³²⁴ (or 5×10⁻³²⁴)
@@ -128,7 +128,7 @@ print 1e-320      # actual: 10.0198×10⁻³²¹   expected: 9.99989×10⁻³²�
 `units.format_number` computes `10**exp` which underflows to 0.0 for exp ≤ -324 (and
 loses precision for subnormals).
 
-## A10. Significant figures stick to the *variable*, not to the value assigned
+## A10. [FIXED] Significant figures stick to the *variable*, not to the value assigned
 ```
 x = 1.20 m
 x = 2.123456 m
@@ -202,3 +202,51 @@ A decay printed with 6 significant figures and the wrong value is the worst kind
 answer. Suggestion: keep a *relative* tolerance on each component and only use an absolute
 floor while the component is still ≈0 at the start (e.g. floor from |h·f| of the current step,
 or floor = rtol·|y| with |y| replaced by |h·y'| when y == 0), or expose `atol`.
+(Kept as xfail in the tests: returning a confident `0` for ∫ of a positive function is a
+silent wrong answer; at minimum the quadrature could refuse to accept a zero estimate with
+zero error on an infinite or very wide interval without sampling further, or warn.)
+
+## A16. A function whose only list use is `v[i] = ...` is treated as scalar
+```
+f(v) =
+    v[1] = 42
+    0
+xs = [1, 2, 3]
+print f(xs), xs      # actual: error "v isn't a list, so you can't set v[...]" (with v = a plain number)
+                     # expected: 0 [42, 2, 3]
+```
+D14's list-parameter detection counts indexing, looping and list functions but not index
+*assignment*; adding any read such as `len(v)` makes it work.
+
+## A17. (low, misleading error) `∫ 2 dm ...`, `∫ 1 dV ...`, `∫ 3 dT ...` read `dm`/`dV`/`dT` as units
+After a number literal, `dm` is decimetres, `dV` decivolts, `dT` decitesla, `dg` decigrams, so a
+constant integrand gives "this integral is missing its 'dx'":
+```
+print ∫ 2 dm from 0 kg to 1 kg      # expected 2 kg
+print ∫ 1 dV from 0 m^3 to 2 m^3    # expected 2 m³
+print ∫ 3 dT from 0 K to 2 K        # expected 6 K
+```
+(`∫ 1 dt` and `∫ 1 dx` work.) Inside `∫ … d<name>`, a `d<name>` token right before `from`
+(or the end of the integral) should be the differential.
+
+## A18. Differentiating the length of a vector gives an internal-looking error about `sign`
+```
+r(t) = <t^2, t^3, 1>
+s(t) = |r(t)|
+g = s'
+print g(1)       # expected 2.88675 (= 10/(2√3))
+# actual: line 2: the argument of sign must be a number, but it is a 3-vector ...
+```
+d|u|/dt is implemented as sign(u)·u' (scalar rule) — for a vector it should be (u·u')/|u|.
+The user never wrote `sign`. Related gaps (clear error, but documented operations):
+`d/dt (r(t) × a)`, `d/dt r(t).y`, `d/dt unit(...)` all say "can't differentiate this
+expression symbolically".
+
+## A19. (low) Vector ODE solutions: `r''(t)` refused, `r[end]` error has no line number
+```
+solve r'' = -r with r(0) = <1, 0>, r'(0) = <0, 1> for t from 0 to 3
+print r''(3)     # error "can't take that many derivatives of the solution r''"
+                 # (scalar x''(t) works, and r.x''(3) works) -- expected <0.989992, -0.14112>
+print r[end]     # error "r is a vector; use its components, like r.x" -- no "line 2:" prefix,
+                 # and the final vector <cos 3, sin 3> would be a natural answer
+```

@@ -390,7 +390,7 @@ class Interpreter:
             with np.errstate(all="ignore"):
                 self.block(self.mod.main.body, self.globals)
         except _Fail as f:
-            rt.error = rt.describe_error(f.kind, f.a, f.b)
+            rt.error = rt.describe_error(f.kind, f.a, f.b, getattr(f, "fmt", -1))
             rt.error_line = self.line or None
             raise FermiumRuntimeError(rt.error, rt.error_line)
         except RecursionError:
@@ -716,7 +716,11 @@ class Interpreter:
         return quad(self.scalar_fn(e.lam, fr), self.eval(e.lo, fr), self.eval(e.hi, fr))
 
     def e_ISolEval(self, e, fr):
-        return self.eval(e.sol, fr).eval(e.comp, self.eval(e.t, fr), e.use_dy)
+        try:
+            return self.eval(e.sol, fr).eval(e.comp, self.eval(e.t, fr), e.use_dy)
+        except _Fail as f:
+            f.fmt = getattr(e, "tfmt", -1)
+            raise
 
     def e_ISolList(self, e, fr):
         sol = self.eval(e.sol, fr)
