@@ -72,7 +72,7 @@ b = 0.2 kg/s
 solve m x'' = -k x - b x'
   with x(0) = 10 cm, x'(0) = 0 m/s
   for t from 0 s to 5 s
-print x(5 s)                          # 3.52006 cm
+print x(5 s)                          # 3.52 cm (to 6 digits: 3.52006 cm)
 ```
 
 Also:
