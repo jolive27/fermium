@@ -2,7 +2,7 @@
 A17, A18, A26, A35, A38, A49, A52."""
 import math
 
-from conftest import run
+from conftest import run, error_of
 from numparse import num
 
 
@@ -92,3 +92,19 @@ def test_indefinite_integral_of_abs():
 
 def test_indefinite_integral_is_printed_with_its_name():
     assert run("F = ∫ x^2 dx\nprint F") == "F(x) = x³/3"
+
+
+# ---------------------------------------------------------------- A38: fmt --ascii ∂²
+def test_parser_accepts_ascii_second_partial():
+    assert run("f(x, y) = x^2 y^2\ng = partial^2/partial x^2 f\nprint g(1, 2)") == "8"
+
+
+def test_fmt_ascii_second_partial_round_trips():
+    from fermium.fmt import format_source
+    src = "f(x, y) = x^2 y^2\ng = ∂²/∂x² f\nprint g(1, 2)"
+    assert run(format_source(src, "ascii")) == run(src) == "8"
+    assert format_source(format_source(src, "ascii"), "pretty") == src.replace("^2", "²")
+
+
+def test_second_partial_orders_must_match():
+    assert "orders don't match" in str(error_of("f(x, y) = x^2 y^2\ng = ∂/∂x² f\nprint g(1, 2)"))

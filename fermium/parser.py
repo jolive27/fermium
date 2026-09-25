@@ -1158,14 +1158,13 @@ class Parser:
 
     def partial_op(self):
         t = self.next()   # ∂
-        order = 1
-        if self.tok.kind == "SUP":
-            order = self.next().value
+        order = self._deriv_order()      # ∂²/∂x² or partial^2/partial x^2 (what fmt --ascii writes)
         self.expect_op("/", "(write ∂/∂x f)")
         self.expect_kw("partial", "(write ∂/∂x f)")
         v = self.expect_name("the variable to differentiate by")
-        if self.tok.kind == "SUP":
-            self.next()
+        o2 = self._deriv_order()
+        if o2 != order and o2 != 1:
+            raise self.error(f"the orders don't match: ∂{order}/∂{v.value}{o2}", tok=v)
         operand = self.power()
         return self.span(A.Deriv(v.value, order, operand, partial=True), t)
 
