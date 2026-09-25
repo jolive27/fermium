@@ -471,3 +471,213 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - `1/x` in Monte Carlo with x ~ N(0, 1) gives a heavy-tailed result, as it should.
 - `std` of an uncertain list is a clear error (D122).
 - °C in a Python signature is refused.
+
+## Round 4 (07:30 UTC)
+
+Reviewer: an independent subagent, on claude/lucid-gauss-9y1ov2 at 6479b5d (round 3 fixes, D180–D185). Focus: (A) false
+positives from tonight's new rules (D7/D130/D170/D171 unit after number, D180 km/h, D181 °C, D174 prefixes, D173/D112
+limit warnings, D110 zero integrals, D131/D183 PDE step control, `tolerance`/`absolute`, D11 printing), from about 60
+ordinary textbook programs across mechanics, E&M, thermo, optics, QM, nuclear and astro; (B) silent wrong answers in
+feature interactions and printing. Every finding was reproduced with the JIT, and where noted with the interpreter and
+`fermium build`. Each has an `xfail(strict=True, reason="red team round 4 #N")` test in `tests/test_redteam4.py` named
+`test_<N>_…`. Delete the mark when the finding is fixed.
+
+**What held up (no findings despite targeted probing):**
+- Random differential testing of printing: 40 random programs of 60 prints each (magnitudes from 5e-324 to 1.8e308,
+  negative numbers, 999.5/9.995/0.0009995 rounding boundaries, ±∞, NaN, lists, vectors, `in`, `to N digits`), and 12
+  random programs with integrals, ODEs (RK45 and RK4), roots, Σ, derivatives, slices and °C conversions. JIT,
+  interpreter and `fermium build` printed identical text in every case, and agreed on run-time warnings.
+- 999.5 → `1.0×10³`, 9.996 → `10.0`, −9.996 → `-10.0`, `1e-320` → `1.0×10⁻³²⁰`, `-0.0` → `0`, `[1.0, ∞, -∞, NaN]`.
+- `km/hr`, `kph`, `mph`; `2 °C/min`, `J/(g °C)`, `dT = 2 °C/min`, `ΔT = T2 - T1`, weighted means of °C readings,
+  `linspace` and `for` over °C, `ΔT` from a list difference, `20.0 °C ± 0.5 °C`, `68.0 ± 1.0 °F in K`.
+- Uncertainties through stdlib modules (`mechanics.pendulum_period`, `nuclear.activity`, `stats.linear_slope`)
+  keep correlations: `T - T2` is `0 ± 0`, and so are `xs[1] - xs[1]` and slice sums.
+- A TDSE free packet against the analytic spreading (0.25 % at the peak, within the stated 0.1 % of the maximum); a
+  stationary state's phase `exp(-i E₁ t/ħ)`; the zero-integral warning doesn't fire on vectors with one zero component.
+- `absolute` with units, with the wrong units (a clear error), and negative (an error); the RLC impedance with `1i`.
+
+### 1. `absolute 1e-6 °C` is read as the absolute temperature 274.15 K (wrong-answer). Status: open
+- **Repro:** `k = 0.1 1/min`, then
+  `solve T' = -k (T - 20 °C) with T(0 min) = 90 °C for t from 0 min to 30 min tolerance 1e-10 absolute 1e-6 °C`,
+  `print T(30 min) in °C to 6 digits`.
+- **Expected:** 23.4851 °C (20 + 70 e⁻³), as with `absolute 1e-6 K`; or an error asking for the tolerance in K.
+- **Actual:** 26.6536 °C, with no warning (24.1 °C with the default tolerance and `absolute 0.001 °C`). The JIT, the
+  interpreter and `fermium build` agree. An absolute tolerance is a size of error, so it is a temperature *step*;
+  D12 reads a °C value as an absolute temperature, 274.15 K, which switches the error control off.
+- **Likely location:** the `absolute` option's constant folding in fermium/solve.py (the value is converted to SI
+  with the °C offset). `± 0.5 °C` already reads °C as a difference (D120); `absolute` should do the same, or refuse
+  °C/°F.
+
+### 2. Hz ↔ rpm at the Python boundary converts silently (wrong-answer). Status: open
+- **Repro:** `use python numpy as np:` / `    positive(f [Hz]) -> [Hz]` / `print np.positive(60 rpm)`.
+  Also `fermium.compile("f(freq [Hz]) = freq").f(Q(60, "rpm"))` → `6.28319 Hz`, and a function declared
+  `(w [rpm]) -> [rpm]` given `1 Hz` → `9.55 rpm`.
+- **Expected:** round 1 #2's warning ("Hz here means rad/s … 1 Hz is 9.5493 rpm, not 60 rpm"), since Python
+  receives the number in the declared unit.
+- **Actual:** `6.28 Hz` and no warning: the Python function receives 2π instead of 1. `print 60 rpm in Hz` in
+  Fermium does warn.
+- **Likely location:** fermium/pyinterop.py (argument and result conversion to the declared unit) and
+  fermium/api.py (`Q(…)` arguments to `fermium.compile` functions); neither consults the D95 cycles/angular tags.
+
+### 3. `1.5 kT` with your own k and T is 1.5 kilotesla, printed as "1.5 kT" (wrong-answer, silent). Status: open
+- **Repro:** `k = 1.38e-23 J/K`, `T = 300 K`, `E = 1.5 kT`, `print E`.
+- **Expected:** a warning or an error: `kT` is the unit kilotesla, but k and T are both your variables (write `k T`).
+- **Actual:** prints `1.5 kT` with no diagnostic. The output looks exactly like the intended formula. D7 only checks
+  whether the *unit's name* is one of your variables, not whether a prefixed unit spells two of them (`kT`; `mV`
+  with your m and V; `nA`, `pT`, …). Gotcha 4 ("`LT` is one name") doesn't help, because here it isn't a name.
+- **Likely location:** the unit-after-number rule in fermium/parser.py (`unit_expr`): a check "prefix and base are
+  both your variables" next to the D7 collision check.
+
+### 4. `60 s / (m c_w)` with your own m is a parse error (false-positive). Status: open
+- **Repro:** `P = 1000 W`, `m = 1 kg`, `c_w = 4186 J/(kg K)`, `print P 60 s / (m c_w)` (ΔT = P t / (m c)).
+- **Expected:** 14.3 K (60 000 J / 4186 J/K).
+- **Actual:** `expected ')' but found 'c_w'`. Also `10 m / (s τ)`, `1000 J / (kg cw)` and `5 s / (ohm Cv)` give
+  "expected ')'": a bracket after a unit and a spaced `/`, whose first name is a unit, is taken as a unit denominator
+  (D171) before checking that the whole bracket is units. With `mass` instead of `m` it works.
+- **Likely location:** fermium/parser.py, the D171 `/(units)` look-ahead (`_bracket_is_unit` or the `unit_expr`
+  continuation after `/`): it should look at every name in the bracket, and otherwise leave the `/` as a division.
+
+### 5. `∫ x * -2 dx from 0 to 1` says the dx is missing (false-positive). Status: open
+- **Repro:** `print ∫ x * -2 dx from 0 to 1`.
+- **Expected:** `-1`.
+- **Actual:** `this integral is missing its 'dx' (the variable to integrate over)`. `∫ (-2) * x dx` works.
+- **Likely location:** fermium/parser.py (~line 2155, the integral's `dx` search): the unary minus's operand is
+  parsed so that `dx` is consumed, or the integrand stops before it.
+
+### 6. The D173 limit warning fires when the other reading is a unit error (false-positive warning). Status: open
+- **Repro:** `v = 3 m/s`, `T = 10 s`, `t0 = 2 s`, `print ∫ v dt from 0 s to T - t0`.
+- **Expected:** `24 m` with no warning. The alternative reading `(∫ … to T) - t0` is metres minus seconds, so only
+  the limit reading is possible. The same holds for `∫ k λ / x dx from a to L - a` (volts minus metres).
+- **Actual:** `24 m` and "the ' - t0' is part of the upper limit … if that's what you meant, write to (T - t0)".
+  `∫_a^{L-a}` and `∫_0^{T-t0}` are far more common in textbooks than the δ = 2∫… − π form D173 was made for.
+- **Likely location:** the D173 warning is emitted in the parser. It should be decided in the checker, and only
+  when the integral and the added term have the same dimension.
+
+### 7. A spaced `/` after the upper limit is refused even when only the limit reading has the right units, and the hint points the wrong way (false-positive/message). Status: open
+- **Repro:** `E = 3600 J`, `P0 = 2 W`, `print ∫ P0 dt from 0 s to E / (2 P0)` (also `to E / P0`).
+- **Expected:** 3600 J (the limit is E/(2 P0) = 900 s, a time), or an error that suggests `to (E / (2 P0))`.
+- **Actual:** the D112 warning, then the error "the limits of this integral are time [s] and energy [J]" with the
+  hint "put the integral in parentheses: (∫ ... dx from a to b) / M", which is the reading the units rule out.
+- **Likely location:** D34/D112 in the parser, and the limit-units error at fermium/checker.py:288. When the
+  whole-integral reading fails on the limit's units and `(limit / divisor)` has the variable's units, say so.
+
+### 8. PDE step control warns on the textbook step-change problem although the answer is accurate (false-positive warning). Status: open
+- **Repro:** `L = 1 m`, `D = 1e-4 m^2/s`,
+  `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(L, t) = 0 K for x from 0 m to L, t from 0 s to 1000 s`,
+  `print u(0.1 m, 1000 s) to 6 digits`. The same happens with 20 °C / 100 °C, or 293.15 K / 373.15 K.
+- **Expected:** 65.8436 K (Fourier series; erfc gives 65.8451 K) and no warning.
+- **Actual:** 65.8435 K (right to 10⁻⁶) with "this PDE's time step could not be made fine enough: with 32000 steps
+  the estimated error is still 0.8% of the solution's largest value … the result may be inaccurate". With the °C or K
+  offsets it says 0.17 %: the absolute estimate is the same, so whether it warns depends on where zero is. It takes
+  about 3 s.
+- **Likely location:** D183's start-of-run comparison in fermium/runtime/pde.py. A jump between the initial value
+  and a boundary value is a non-smooth start that step doubling can't resolve in the first steps, and it doesn't
+  affect later times. D131's SDIRK2 start-up already handles it.
+
+### 9. The hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` (message). Status: open
+- **Repro:** `m = 9.11e-31 kg`, `n = 8.5e28 m^-3`, `print n` (an electron density next to the electron mass).
+- **Expected:** the hint `write 8.5e28 [m^-3] (or [1/m³]) to say so`, with the number as written.
+- **Actual:** "'8.5e+28 m' is the unit m, not your variable m", with the hint "write 8.5e+28 [m] to say so".
+  Following the hint gives a length, and the number is reformatted with `e+`.
+- **Likely location:** the D7 lone-unit warning in fermium/parser.py. It quotes only the first unit factor and
+  formats the number with `repr`.
+
+### 10. One token gets a warning ("is the unit") and then an error ("is ambiguous") (message). Status: open
+- **Repro:** `m = 1.2 kg`, `print 2.2 * 5000 m`. Also `E1 = π^2 ħ^2 / (2 m L^2)` with your own m and L: a warning
+  "reading 'L' as your variable L, not the unit L … write [m L]", then the error "'2 m' is ambiguous".
+- **Expected:** the error alone.
+- **Actual:** "warning: line 2: '5000 m' is the unit m, not your variable m … for 5000 × your variable write 5000*m",
+  followed by "'5000 m' is ambiguous". The two messages contradict each other about the same token.
+- **Likely location:** fermium/parser.py. The lone-unit warning is emitted before the enclosing product is seen; it
+  should be deferred (or dropped) when the D7 rule 5 error follows.
+
+### 11. An uncertainty that is only rounding noise sets the printed digits (misleading display). Status: open
+- **Repro:** `L = 1.000 ± 0.010 m`, `g = 9.81 m/s^2`, `T = 2 π sqrt(L / g)`, `print T / sqrt(L)`; and
+  `y = 1.000 ± 0.010 m`, `print (y / 3) * 3 - y`.
+- **Expected:** `2.01 ± 0 s/m^(1/2)` (or `2.006 ± 0`), and `0 ± 0 m`, as `x - x` already prints.
+- **Actual:** `2.0060666807106475318 ± 0.0000000000000000035 s/m^(1/2)` and `(0.0 ± 1.7)×10⁻¹⁸ m`. The linear
+  propagation leaves σ ≈ 10⁻¹⁸ (rounding in ∂f/∂x), and "values are shown to the second digit of σ" then prints 20
+  digits.
+- **Likely location:** fermium/uncertain.py (a σ below ~10⁻¹⁴ of the value, or of the inputs' σ, should count as
+  0) and the ± formatter in fermium/units.py.
+
+### 12. Quadrature and vector rounding noise prints as a 3-figure result (misleading display). Status: open
+- **Repro:**
+  - `print ∫ sin(x) dx from -π to π` → `3.19×10⁻¹⁶`;
+  - `f(x) = <cos(x), sin(x), 0>`, `print ∫ f(x) dx from 0 to π` → `<1.67×10⁻¹⁶, 2.00, 0>`;
+  - the on-axis Biot–Savart loop `∫ dB(φ) dφ from 0 to 2 π` → `<-2.4×10⁻²², -8.1×10⁻²³, 4.5×10⁻⁶> T`;
+  - a symmetric line charge's Eₓ → `3.6×10⁻¹⁵ V/m`.
+- **Expected:** 0 (and `<0, 2, 0>`, `<0, 0, 4.5×10⁻⁶> T`). Complex numbers already drop such noise
+  (`exp(1i π)` prints `-1 + 0i`); vectors and integrals don't.
+- **Actual:** a number shown with 3 significant figures, none of which is significant. Students read
+  `3.6×10⁻¹⁵ V/m` as a (tiny) physical field.
+- **Likely location:** `fm_quad` knows ∫|f| (`fm.qabs`, D110), and a result below ~10⁻¹³ × ∫|f| is 0 to the
+  quadrature's accuracy. For vectors, the component-wise formatter could drop components below ~10⁻¹⁴ × |v|, as
+  the complex formatter does.
+
+### 13. `2 kg c²` shows its SI value with 6 significant figures (display). Status: open
+- **Repro:** `print 2 kg c^2`; also `print 1 MeV/c^2` → `1 MeV/c² (= 1.78266×10⁻³⁰ kg)`.
+- **Expected:** `(= 1.80×10¹⁷ J)`, the D11 default of 3 figures. `print 2 * 1 kg * c^2` gives `1.80×10¹⁷ J`.
+- **Actual:** `2 kg c² (= 1.79751×10¹⁷ J)`. The parenthetical still uses the old 6-figure rule.
+- **Likely location:** the unit-with-constant display in fermium/units.py (and its mirrors in core.py and aot_rt.c).
+
+### 14. Lists pad exact integers and 1-figure literals to the longest element, and `10000000` prints as `1×10⁷` (display). Status: open
+- **Repro:**
+  - `print [1.2345, 2]` → `[1.2345, 2.0000]`;
+  - `print [5.018245e9, -6934.574, 9e1]` → `[5.018245×10⁹, -6934.574, 90.00000]`;
+  - `print <7.1094e-12, 39> N` → `<7.1094×10⁻¹², 39.000> N`;
+  - `print 10000000` → `1×10⁷`, while `print 123456789` prints as written (`1.23456789×10⁸`).
+- **Expected:** each element as written when the list is written out (D11): `[1.2345, 2]`, `90`, `39`, and
+  `10000000` (or `1.00×10⁷`).
+- **Actual:** the "as written" style gives every element the figure count of the most precise one, so an exact 2
+  claims 5 figures and `9e1` (1 figure) claims 7. The JIT, the interpreter and `fermium build` agree.
+- **Likely location:** the list "as written" branch of `format_default` in fermium/units.py (and `fmt_default` in
+  aot_rt.c), and the literal-as-written path for a whole number ≥ 10⁷.
+
+### 15. The bootcamp still says `0.5 m v^2` means metres with a warning, and that `1/2 m v^2` warns (docs). Status: open
+- **Where:**
+  - bootcamp/lesson02_variables_formulas.md:215: "`0.5 m v^2 where m = 2 kg` means 0.5 *metres* (Fermium warns
+    you)". It is the error "'0.5 m' is ambiguous: … also the m from 'where'".
+  - lesson02:244 (the summary): "`0.5 m v^2` uses *metres*".
+  - lesson02:183 and CHEATSHEET gotcha 3: "`1/2 m v^2` means 1/(2mv²) … Fermium warns about this". With a variable
+    m it is now the error "'2 m' is ambiguous". TROUBLESHOOTING #11 shows the warning, but with `mass`.
+  - TROUBLESHOOTING.md:26: the table of contents says "10. warning: 'm' after the number means the unit m", but the
+    section shows the error.
+- **Expected:** the prose says what the output boxes show (the boxes are right).
+
+### 16. Exact ties round half to even: `0.125` → `0.12`, `2.5e6 × 1.3` → `3.2×10⁶` (display/docs). Status: open
+- **Repro:** `print 0.125 * 1.0`, `print 2.5e6 * 1.3`, `print [0.125, 0.375] * 1.0` → `[0.12, 0.38]`.
+- **Expected:** either school rounding (`0.13`, `3.3×10⁶`), which is what a student's calculator and textbook give,
+  or a sentence in reference §4 saying that ties go to the even digit (ISO 80000-1's rule B).
+- **Actual:** half-to-even (Python's `format`), undocumented. Students checking a lab value by hand see a different
+  last digit.
+- **Likely location:** `format_number` in fermium/units.py, `fmt_default` in aot_rt.c, and docs/reference.md §4.
+
+### 17. Slicing a data table: the error calls it "not a list" and suggests vector components (message). Status: open
+- **Repro:** `data = load "pendulum.csv"`, `fit T = 2 π sqrt(L / g) to data[2:5]`.
+- **Expected:** a message about tables (fit a subset by slicing the columns, or "fitting part of a table isn't
+  supported yet").
+- **Actual:** "only lists can be sliced with [a:b], and this isn't a list", with the hint "pick single components
+  with v[1], v[2], ...", which is the hint for a vector.
+- **Likely location:** the slice check in fermium/checker.py (its hint assumes `VecTy`).
+
+### 18. An absolute tolerance larger than the solution is accepted silently (wrong-answer, user-set). Status: open
+- **Repro:** `solve x'' = -x / (1 s)^2 with x(0 s) = 1 m, x'(0 s) = 0 m/s for t from 0 s to 10 s absolute 1 km`,
+  `print x(10 s)`.
+- **Expected:** a warning: the absolute tolerance is 1000× the largest initial value, so the error control is off.
+  (`tolerance` outside (0, 1) is already refused.)
+- **Actual:** `89.2 m` (the exact value is −0.839 m) with no warning. A mistyped unit (km for mm) gives a silently
+  wrong run.
+- **Likely location:** the `absolute` checks in fermium/solve.py (D160). Compare each value with the unknown's
+  initial value (and with its range, when that is known at compile time).
+
+**Not reported** (checked, and either by design or already documented):
+- `h = 10 m`, `U = 12 V`, `T = 300 K` and `Q = 5 C` next to your own m, V, K and C warn (D7 rule 5). `2 m v`, `2 g h`,
+  `0.5 m v^2`, `2 m c^2`, `8.5e28 /m^3` and `0.1 /s` with your own m or s are errors (D7, D170, D171).
+- `double_speed(c) = 2 c` warns and means the speed of light (D130).
+- `n R 25 °C` and `k_B * 27 °C` warn that the reading enters as an absolute temperature (D181).
+- `x = 1/2 m` is 0.500 1/m (reference §3 says so, without a warning).
+- `tolerance r` with a variable, and `tolerance 10^-8`, are refused ("a plain number written out"). `tolerance` next
+  to `step` is ignored, as §10 says.
+- Declaring `np.sin(x [deg])` passes degrees to a function that takes radians: the user's declaration is wrong.
+- `[20 °C, 30 °C] in K` prints `[293, 303] K` (3 figures of 293.15), and `1.5 km in m` prints `1.5×10³ m` (D11).
