@@ -92,7 +92,7 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 01:10 Docs pass: README, reference, DECISIONS and the VS Code README corrected against the code; reference §19 "Known limitations"; bootcamp output boxes refreshed and now tested; `doctor` checks for a C compiler.
 
 ## In progress (05:40 UTC)
-- Agents: red-team round 2 fixes (14 findings), M5 performance (`parallel for`, optimisation pass), M6 Python interop, research #3 BBN network.
+- Agents: M5 performance (`parallel for`, optimisation pass), Phase 7 graduate gauntlet, research frictions (radau absolute tolerance, plot axes), red team round 3.
 
 ## Next
 - Merge those as they finish; red team round 3 (~06:30); Phase 7 graduate gauntlet; hourly quality passes.
@@ -103,7 +103,7 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - M1 natural units: done (D60). M2 dimensional analysis: done (D70, bootcamp lesson 11).
 - M3 numerics: done. Stiff solvers + stiffness warning, eigenvalue problems, 1-D PDEs with GIF output, FFT, root finding, Monte Carlo, seeded RNG (D42, D80–D83).
 - M4 uncertainties: done, interpreter-only (D120–D124, bootcamp lesson 12).
-- M5 performance: agent running. M6 Python interop: agent running.
+- M5 performance: agent running. M6 Python interop: done (D140–D142).
 - M7 modules and stdlib: done (D100–D103). M8 self-hosting: done (the unit database written in Fermium).
 
 ## Blocked
@@ -119,3 +119,4 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 03:05 UTC — Gauntlet second pass merged (30 harder problems; 61 total). Friction: 59 logged, 35 fixed. Fixed E9 (nested-integral capture, wrong answer) and A5 (ODE first step, wrong answer) myself. Higher-order functions merged. 2254 tests pass.
 - 04:05 UTC — Review priorities in progress: (1) complex numbers agent running; (2) unit-after-number rule revised (error when a colliding unit is combined with other factors, warning when alone; D7), bootcamp updated; (3) integral-reliability warnings queued behind the numerics agent; (4) PROGRESS Partial rewritten. Moonshots: M1 natural units and M2 dimensional analysis merged; M3 numerics and M7 modules running. Research: #1 SEMF/AME2020 done, batch 2–7 running. Red team round 1: 10 findings, fix agent running. Gauntlet friction 59 logged / 47 fixed.
 - 05:00 UTC — User request done: 3 significant figures by default when precision is ambiguous (display only; D11 with refinements: whole numbers exact, literals and loop grids as written, one style per list/vector, `to N digits` on lists). ~140 older tests updated to say `to N digits` where they check accuracy. Staged merges (branch merge-agents, tests green): M7 modules + stdlib, M3 (seeded RNG, FFT, eigenvalue problems, PDEs), research reproductions 2–8, research frictions #60–#65, complex numbers (review priority 1). Found and fixed a merge crash (PDE solutions left the new rhs pointer uninitialised). Agents running: red team round 2, M4 uncertainties.
+- 06:05 UTC — Merged: M4 uncertainties (±, correlations, Monte Carlo, uncertain fits; interpreter-only), M6 Python interop (use python …, fermium.compile), research #3 BBN (Y_p 0.2423, D/H 2.60e-5, ⁷Li/H 5.1e-10; SciPy agreement 3e-6), red-team round 2 (14 findings, all fixed: D130–D134), review priority 3 (zero-integral warning, D110). README feature section. 3202 tests pass. Running: M5 performance, Phase 7 graduate gauntlet, research frictions (radau atol, plot axes), red team round 3.
