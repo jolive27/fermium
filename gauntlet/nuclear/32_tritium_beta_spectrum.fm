@@ -1,0 +1,39 @@
+# Nuclear 32 — The tritium β spectrum, its mean energy and the ft value
+#
+# (Krane, Introductory Nuclear Physics, §9.2–9.3, eqs. 9.25–9.33 and Fig. 9.3;
+#  Wong 2nd ed. §5.4; Konopinski, The Theory of Beta Radioactivity ch. 1.)
+# ³H → ³He + e⁻ + ν̄ has Q = 18.591 keV and t½ = 12.32 yr. For an allowed transition
+# the electron spectrum in kinetic energy T is
+#     N(T) ∝ F(Z, T) p E (Q − T)²,     E = T + m c²,  p c = √(E² − m²c⁴),
+# with the non-relativistic Fermi function for the daughter charge Z = 2,
+#     F = 2πη / (1 − e^(−2πη)),   η = Z α E / (p c)  (= Z α / β).
+#   (a) The mean kinetic energy ⟨T⟩ = ∫ T N dT / ∫ N dT (measured about 5.7 keV),
+#       and the same without the Coulomb correction (F = 1).
+#   (b) The most probable kinetic energy (the peak of N(T)): solve dN/dT = 0.
+#   (c) The dimensionless Fermi integral f = ∫₁^{W₀} F p W (W₀ − W)² dW (W = E/mc²,
+#       p in units of m c), and log₁₀(f t½) with t½ in seconds (tabulated: 3.05, a
+#       superallowed mirror transition).
+
+Q = 18.591 keV
+mc2 = m_e c²
+Z = 2
+# F must be one line (with `where`) so that d/dT N works below: written over several
+# lines, `d/dT N` fails with "can't differentiate through F", an error with no line number
+F(T) = 2π η / (1 - exp(-2π η)) where η = Z α (T + mc2) / √((T + mc2)² - mc2²)
+N(T) = F(T) √((T + mc2)² - mc2²) (T + mc2) (Q - T)²
+N0(T) = √((T + mc2)² - mc2²) (T + mc2) (Q - T)²
+
+norm = ∫ N(T) dT from 0 keV to Q
+T_mean = (∫ T N(T) dT from 0 keV to Q) / norm
+T_mean0 = (∫ T N0(T) dT from 0 keV to Q) / (∫ N0(T) dT from 0 keV to Q)
+print "(a) <T> =", T_mean in keV to 8 digits, " without Coulomb =", T_mean0 in keV to 8 digits
+
+dN = d/dT N
+solve dN(Tp) = 0 keV^3 for Tp from 0.5 keV to 15 keV
+print "(b) most probable T =", Tp in keV to 8 digits
+
+W0 = 1 + Q / mc2
+FW(W) = 2π Z α W / √(W² - 1) / (1 - exp(-2π Z α W / √(W² - 1)))
+f = ∫ FW(W) √(W² - 1) W (W0 - W)² dW from 1 to W0
+t_half = 12.32 yr
+print "(c) W0 =", W0 to 10 digits, " f =", f to 8 digits, " log10(f t) =", log10(f t_half / (1 s)) to 5 digits

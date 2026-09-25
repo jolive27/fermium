@@ -241,3 +241,13 @@ Severity: wrong answer / bug / awkward / cosmetic.
   precision; its lowest eigenvalue sits between E₀ and E_var, as it must.
 - List element assignment (`E_shoot[2 found + p + 1] = E`), and 10-digit agreement of shooting with
   finite differences and with SciPy.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#66 (W)** With a variable `m`, `2 m c²` is silently read as 2 × the compound unit `m c²` (metre times c², because `c` is also a unit), with no error or warning, while `2 m v` is an ambiguity error (#10). Repro: `m = 2 kg` / `print 1 J / (2 m c²)` prints `5.56×10⁻¹⁸ kg/m`. Workaround: write `m_e` or `2*m`
+- **#69 (B)** `solve … lowest N` evaluates the equation at the end points, so the hydrogen radial equation with −k/r and u(0) = 0 stops with "the equation can't be evaluated at x = 0 (SI units)" (the variable is r, not x). The boundary value is known there; only interior points are needed. Workaround: an inner wall at r = 10⁻²⁰ m
+- **#70 (A)** The eigenstates of `solve … lowest N` are only second-order accurate (⟨1/r⟩ of hydrogen 2s/2p is 1.5×10⁻⁵ off with the default grid) while the eigenvalues are Richardson-extrapolated to ~10⁻¹⁰; reference §20 doesn't say so. Needed `grid 32000` for 10⁻⁷
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#75 (A)** A function can't define a helper function inside it ("functions must be defined at the top level"); the pulse shape had to move to the top level

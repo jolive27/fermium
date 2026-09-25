@@ -124,3 +124,12 @@ finite-distance value to 7 digits.
 - The apsidal-angle integral with inverse-square-root blow-ups at **both** ends, its upper end
   found by an algebraic `solve`: 7 digits with no substitution. (The SciPy reference needed one.)
 - Algebraic solves (L1, apsides, periapsis time) are one line each.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#67 (W)** `2 ∫ x dx from 0 to 1 - π` silently takes `1 - π` as the upper limit (prints 4.59, where `(2 ∫ x dx from 0 to 1) - π` is −2.14): a spaced `/` after the limit ends it or warns (#8, #61), a spaced `+`/`-` doesn't. δ = 2∫…du − π is how the deflection integral is written. Workaround: brackets
+- **#73 (A)** Textbook coefficients `73/24 e²`, `37/96 e⁴`, `121/304 e²`, `π²/12 t²`, `π⁴/80 t⁴` read as a/(b x) (D8): 9 warnings in two problems, each fixed with brackets. The warning works, but Peters' and Sommerfeld's formulas are written this way on paper
+- **#74 (A)** The unit-after-number rule (#10) with standard symbols: `2 Ω` (the Rabi frequency) is 2 ohms, `8 K` (the EOS constant) 8 kelvin, `2 b` 2 barns, `0.25 T` (a period) 0.25 tesla, `2 l²` (a length) 2 litres², `2 m` with a mass m; 7 of 20 problems hit it (all caught, as errors or with the #10 note)
+- **#77 (C)** The 2022 prefixes make short names units: a parameter `rg` gave "'2 rg' is ambiguous … rg is a unit (mass)" (the rontogram). Few physicists know ronto-/quecto-; the message could name the prefix

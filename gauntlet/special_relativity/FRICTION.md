@@ -147,3 +147,7 @@ convention and the message is clear, so this is only a note: a matrix with per-e
 `print Λ` shows `[[1.25, -0.750, 0, 0], [-0.750, 1.25, 0, 0], [0, 0, 1.00, 0], [0, 0, 0, 1.00]]`:
 the identity block gets "1.00" while the zeros print as "0", and −0.75 gets three figures. It reads
 as if the entries were measured. Minor.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Nothing new: both problems ran as first written, apart from frictions already logged.

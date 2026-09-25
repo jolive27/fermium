@@ -145,3 +145,9 @@ Severity: wrong answer / bug / awkward / cosmetic.
 - **The #10 note** for `2 l`.
 - Symbolic `f'` of the Woods–Saxon shape inside the spin–orbit potential, `load` of a CSV with a
   unit column, and an `∫` with limits computed inside a multi-line function all worked first time.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Details, repros and workarounds are in the problem files and in `gauntlet/FRICTION.md`:
+
+- **#71 (B)** `d/dT N` where `N` calls a multi-line function `F` fails with "can't differentiate through F: it's defined over several lines" with no line number or caret (a direct `d/dx F` has both). Workaround: make F one line with `where`

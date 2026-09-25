@@ -1,0 +1,68 @@
+# Mechanics 31 — Kapitza's pendulum: an inverted pendulum held up by a shaking pivot
+#
+# (Landau & Lifshitz, Mechanics, §30 and Problem 1 there; Goldstein 3rd ed.,
+#  Problem 2.23 / §11 on averaged motion.)
+# A rigid pendulum of length l = 20.0 cm hangs from a pivot that is shaken up and
+# down, y_pivot = a cos(ω t), with a = 1.00 cm and f = ω/2π = 100 Hz. In the frame of
+# the pivot the effective gravity is g − a ω² cos(ω t), so with θ measured from the
+# downward vertical
+#     θ'' = −(g − a ω² cos(ω t)) sin(θ) / l.
+#
+#   (a) Kapitza's averaged (effective) potential for the slow motion is
+#       U_eff(θ) = m g l (−cos θ) + m a² ω² sin²θ / 4, which makes the inverted
+#       position θ = π stable when a² ω² > 2 g l. Check the criterion, and give the
+#       small-oscillation frequencies of the slow motion about θ = 0 and θ = π:
+#       Ω₀² = g/l + a²ω²/(2l²),  Ω_π² = a²ω²/(2l²) − g/l.
+#   (b) Integrate the exact equation from θ = π − 0.100, θ' = 0 for 5.00 s.
+#       Strobe it once per drive period (t = n·2π/ω), which removes the fast
+#       micromotion, and measure the slow period from the strobed zero crossings of
+#       θ − π. Compare with 2π/Ω_π.
+#   (c) With a = 0.300 cm (a²ω² < 2 g l) the same start falls over: report the
+#       largest |θ − π| in the first 1.00 s.
+
+g = 9.81 m/s²
+l = 20.0 cm
+a = 1.00 cm
+f = 100 Hz
+ω = 2π f
+
+# (a)
+print "(a) a²ω² =", a² ω² to 6 digits, " 2 g l =", 2*g*l to 6 digits, " inverted stable:", a² ω² > 2*g*l
+Ω0 = √(g/l + a² ω² / (2*l²))
+Ω_π = √(a² ω² / (2*l²) - g/l)
+print "    Omega_0 =", Ω0 to 8 digits, " Omega_pi =", Ω_π to 8 digits, " slow period about pi =", 2π/Ω_π to 8 digits
+
+# (b) the exact equation
+solve θ'' = -(g - a ω² cos(ω t)) sin(θ) / l
+  with θ(0 s) = π - 0.100, θ'(0 s) = 0 /s
+  for t from 0 s to 5.00 s tolerance 1e-11
+
+T_drive = 1 / f
+N = floor(5.00 s / T_drive)
+# strobed zero crossings of θ − π, by linear interpolation between strobes
+crossings = []
+prev = θ(0 s) - π
+for n from 1 to N
+    cur = θ(n T_drive) - π
+    if prev < 0 and cur >= 0 or prev > 0 and cur <= 0
+        push(crossings, (n - 1) T_drive + T_drive prev / (prev - cur))
+    prev = cur
+k = len(crossings)
+T_slow = 2 (crossings[k] - crossings[1]) / (k - 1)
+print "(b) strobed crossings:", k, " slow period =", T_slow to 8 digits
+print "    relative difference from the averaged theory:", (T_slow - 2π/Ω_π) / (2π/Ω_π) to 4 digits
+dev = 0
+for n from 0 to N
+    dev = max(dev, abs(θ(n T_drive) - π))
+print "    largest strobed |theta - pi| =", dev to 6 digits
+
+# (c) a weaker drive: the inverted position is unstable
+a2 = 0.300 cm
+print "(c) a²ω² =", a2² ω² to 6 digits, " inverted stable:", a2² ω² > 2*g*l
+solve φ'' = -(g - a2 ω² cos(ω t)) sin(φ) / l
+  with φ(0 s) = π - 0.100, φ'(0 s) = 0 /s
+  for t from 0 s to 1.00 s tolerance 1e-11
+fall = 0
+for n from 0 to 100
+    fall = max(fall, abs(φ(n T_drive) - π))
+print "    largest strobed |phi - pi| in 1 s =", fall to 6 digits

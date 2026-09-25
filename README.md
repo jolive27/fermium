@@ -143,21 +143,21 @@ Counting startup and compilation, the Fermium benchmark programs finish sooner t
 Textbook problems from ten fields of physics, solved in Fermium and checked against closed forms or SciPy ([gauntlet/](gauntlet/README.md)). Every rough edge they hit is logged in [gauntlet/FRICTION.md](gauntlet/FRICTION.md) and fixed in the language where possible.
 
 <!-- gauntlet-table -->
-| Topic | Pass 1 | Pass 2 |
-|---|---|---|
-| mechanics | 3 | 3 |
-| oscillations | 3 | 3 |
-| gravitation | 3 | 3 |
-| thermodynamics | 3 | 3 |
-| electromagnetism | 3 | 3 |
-| optics waves | 3 | 3 |
-| special relativity | 3 | 3 |
-| quantum | 3 | 3 |
-| nuclear | 3 | 3 |
-| astrophysics | 4 | 3 |
-| **total** | **31** | **30** |
+| Topic | Pass 1 | Pass 2 | Pass 3 (graduate) |
+|---|---|---|---|
+| mechanics | 3 | 3 | 2 |
+| oscillations | 3 | 3 | 2 |
+| gravitation | 3 | 3 | 2 |
+| thermodynamics | 3 | 3 | 2 |
+| electromagnetism | 3 | 3 | 2 |
+| optics waves | 3 | 3 | 2 |
+| special relativity | 3 | 3 | 2 |
+| quantum | 3 | 3 | 2 |
+| nuclear | 3 | 3 | 2 |
+| astrophysics | 4 | 3 | 2 |
+| **total** | **31** | **30** | **20** |
 
-Friction items logged: 65; fixed in the language: 58.
+Friction items logged: 81; fixed in the language: 58.
 <!-- /gauntlet-table -->
 
 ## Browser playground

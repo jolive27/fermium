@@ -1,0 +1,56 @@
+# Electromagnetism 31 — Rectangular and circular waveguides: cutoffs, dispersion, wall loss
+#
+# (Jackson, Classical Electrodynamics 3rd ed., §8.4–8.5 and §8.7, eqs. 8.46–8.63;
+#  Pozar, Microwave Engineering 4th ed., §3.3–3.4, Example 3.1.)
+# A WR-90 X-band guide is a copper tube with inner sides a = 22.86 mm, b = 10.16 mm.
+#   (a) The TE_mn cutoff frequencies f_c = (c/2) √((m/a)² + (n/b)²) of TE10, TE20,
+#       TE01 and TE11, and the single-mode band.
+#   (b) At f = 10.0 GHz in the TE10 mode: the guide wavelength λ_g = λ/√(1 − (f_c/f)²),
+#       the phase and group velocities, and v_p v_g = c².
+#   (c) The TE10 cutoff again from the transverse eigenvalue problem
+#       −ψ'' = k_c² ψ, ψ(0) = ψ(a) = 0 (the eigenvalue solver), k_c = π/a.
+#   (d) Wall loss of TE10 in copper (σ = 5.80×10⁷ S/m), Pozar eq. 3.96:
+#       α_c = R_s (2b π² + a³ k²) / (a³ b β k η), R_s = √(ω μ₀ / 2σ), in dB/m.
+#   (e) A circular guide of radius R = 1.00 cm: the TE11 cutoff from the first zero of
+#       J₁'(x) (x = 1.8412) and the TM01 cutoff from the first zero of J₀ (x = 2.4048),
+#       f_c = c x / (2π R).
+
+a = 22.86 mm
+b = 10.16 mm
+fc(m, n) = (c / 2) √((m / a)² + (n / b)²)
+print "(a) TE10 =", fc(1, 0) in GHz to 8 digits, " TE20 =", fc(2, 0) in GHz to 8 digits, " TE01 =", fc(0, 1) in GHz to 8 digits, " TE11 =", fc(1, 1) in GHz to 8 digits
+
+# (b) TE10 at 10 GHz. The frequency is in cycles per second: Fermium's Hz means
+#     rad/s, so ω = 2π f and f/f_c is a ratio of two values in Hz.
+f = 10.0 GHz
+λ0 = c / f
+root = √(1 - (fc(1, 0) / f)²)
+λg = λ0 / root
+vp = c / root
+vg = c root
+print "(b) lambda_g =", λg in mm to 8 digits, " v_p/c =", vp / c to 8 digits, " v_g/c =", vg / c to 8 digits, " v_p v_g / c² =", vp vg / c² to 10 digits
+
+# (c) the transverse eigenvalue problem
+solve -ψ'' = κ ψ
+    with ψ(0 mm) = 0, ψ(a) = 0
+    for x from 0 mm to a
+    lowest 2
+print "(c) k_c =", √(κ[1]) to 10 digits, " pi/a =", π / a to 10 digits, " second / first =", κ[2] / κ[1] to 8 digits
+
+# (d) copper wall loss
+σ_Cu = 5.80e7 S/m
+ω = 2π f
+k = ω / c
+β = √(k² - (π / a)²)
+η = √(μ_0 / ε_0)
+R_s = √(ω μ_0 / (2 σ_Cu))
+α_c = R_s (2*b π² + a³ k²) / (a³ b β k η)     # (`2 b` would be 2 barns)
+print "(d) R_s =", R_s to 6 digits, " alpha_c =", α_c to 6 digits, " =", 20 log10(exp(1)) α_c * 1 m to 6 digits, "dB/m"
+
+# (e) circular guide
+R = 1.00 cm
+J1p = d/dx besselj(1, x)
+solve J1p(x) = 0 for x from 1 to 3
+x11 = x
+solve besselj(0, y) = 0 for y from 1 to 3
+print "(e) x'11 =", x11 to 10 digits, " TE11 =", c x11 / (2π R) in GHz to 8 digits, " x01 =", y to 10 digits, " TM01 =", c y / (2π R) in GHz to 8 digits

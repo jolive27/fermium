@@ -8,13 +8,16 @@ TOPICS = ["mechanics", "oscillations", "gravitation", "thermodynamics", "electro
           "special_relativity", "quantum", "nuclear", "astrophysics"]
 
 
+# the pass a problem belongs to is the first digit of its file name: 0 (pass 1, 01_… to 09_…),
+# 2 (pass 2, 21_…) and 3 (pass 3, graduate level, 31_…)
+PASSES = ["0", "2", "3"]
+
+
 def counts():
     rows = []
     for t in TOPICS:
-        progs = sorted(glob.glob(os.path.join(HERE, t, "*.fm")))
-        first = [p for p in progs if not os.path.basename(p).startswith("2")]
-        second = [p for p in progs if os.path.basename(p).startswith("2")]
-        rows.append((t, len(first), len(second)))
+        names = [os.path.basename(p) for p in glob.glob(os.path.join(HERE, t, "*.fm"))]
+        rows.append((t, *[sum(1 for n in names if n.startswith(d)) for d in PASSES]))
     return rows
 
 
@@ -28,10 +31,10 @@ def friction():
 
 def table():
     rows = counts()
-    out = ["| Topic | Pass 1 | Pass 2 |", "|---|---|---|"]
-    for t, a, b in rows:
-        out.append(f"| {t.replace('_', ' ')} | {a} | {b} |")
-    out.append(f"| **total** | **{sum(r[1] for r in rows)}** | **{sum(r[2] for r in rows)}** |")
+    out = ["| Topic | Pass 1 | Pass 2 | Pass 3 (graduate) |", "|---|---|---|---|"]
+    for t, *n in rows:
+        out.append(f"| {t.replace('_', ' ')} | " + " | ".join(str(k) for k in n) + " |")
+    out.append("| **total** | " + " | ".join(f"**{sum(r[i] for r in rows)}**" for i in range(1, len(PASSES) + 1)) + " |")
     total, fixed = friction()
     out.append("")
     out.append(f"Friction items logged: {total}; fixed in the language: {fixed}.")

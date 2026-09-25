@@ -134,3 +134,7 @@ builds the matrix twice. Fix: `trace(M)`.
 
 O1 (`solve I'(θ) = 0` is read as an ODE: `missing initial condition: I(start)`) bit again in
 `21_airy_disk.fm`; the `dI = I'` workaround still works.
+
+## Third pass (graduate, files 31_… and 32_…)
+
+Nothing new: both problems ran as first written, apart from frictions already logged.
