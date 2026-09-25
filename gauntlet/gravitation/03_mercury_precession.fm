@@ -1,0 +1,51 @@
+# Gravitation 03 — The perihelion precession of Mercury
+#
+# (Taylor, Classical Mechanics, §8.4 and problem 8.23; Hartle, Gravity, ch. 10.)
+# With u = 1/r and the orbit angle φ as the variable, Newtonian gravity gives the
+# Binet equation  u'' + u = GM/h².  General relativity adds a small term:
+#
+#     d²u/dφ² + u = GM/h² + 3 GM u² / c²
+#
+# which makes the ellipse turn a little on every orbit, by
+#     δφ ≈ 6π GM / (c² a (1 − e²))   per orbit.
+#
+# Mercury: a = 5.7909 × 10¹⁰ m, e = 0.20563, period 87.969 days;
+# GM☉ = 1.32712440018 × 10²⁰ m³/s².
+#
+#   (a) The predicted shift per orbit, and in arcseconds per century.
+#   (b) Integrate the relativistic orbit equation from perihelion through one
+#       orbit and locate the next perihelion (u' = 0 near φ = 2π). Compare.
+#   (c) Do the same with the Newtonian equation: the shift should be zero, which
+#       shows how precisely the numerical method can locate a perihelion.
+
+GM = 1.32712440018e20 m³/s²
+a = 5.7909e10 m
+e = 0.20563
+P = 87.969 day
+
+h = √(GM a (1 - e²))         # angular momentum per unit mass
+
+# (a)
+δφ_theory = 6π GM / (c² a (1 - e²))
+orbits_per_century = 100 yr / P
+print "predicted shift per orbit:", δφ_theory to 6 digits
+print "predicted shift per century:", δφ_theory orbits_per_century in arcsec to 6 digits
+
+# (b) the relativistic orbit, with the angle φ as the independent variable
+u_peri = 1 / (a (1 - e))
+solve u'' + u = GM / h² + 3 GM u² / c²
+  with u(0) = u_peri, u'(0) = 0 /m
+  for φ from 0 to 2.5π tolerance 1e-13
+du(φ) = u'(φ)
+solve du(φ_peri) = 0 /m for φ_peri from 1.5π to 2.5π
+δφ_ode = φ_peri - 2π
+print "ODE shift per orbit:", δφ_ode to 6 digits
+print "ODE shift per century:", δφ_ode orbits_per_century in arcsec to 6 digits
+
+# (c) Newtonian check
+solve w'' + w = GM / h²
+  with w(0) = u_peri, w'(0) = 0 /m
+  for φ from 0 to 2.5π tolerance 1e-13
+dw(φ) = w'(φ)
+solve dw(φ_newton) = 0 /m for φ_newton from 1.5π to 2.5π
+print "Newtonian shift per orbit:", φ_newton - 2π

@@ -1,0 +1,52 @@
+# Gravitation 02 — From low Earth orbit to geostationary orbit
+#
+# (Halliday/Resnick ch. 13; Taylor §8.8; Kleppner & Kolenkow ch. 10.)
+# Take GM⊕ = 3.986004418 × 10¹⁴ m³/s² and R⊕ = 6378.1 km.
+#
+#   (a) The radius of a geostationary orbit (period one sidereal day,
+#       86164.1 s) from Kepler's third law.
+#   (b) A satellite is in a circular orbit 300 km above the surface. Find the
+#       two burns Δv₁, Δv₂ of a Hohmann transfer to geostationary orbit, the
+#       total, and the transfer time.
+#   (c) The Δv needed to escape from the 300 km orbit instead.
+#   (d) Check (b) by integrating the orbit after the first burn: the apogee
+#       should be at the geostationary radius, reached after the transfer time,
+#       with the speed that the second burn tops up.
+
+GM = 3.986004418e14 m³/s²
+R_E = 6378.1 km
+T_sid = 86164.1 s
+
+# (a)
+r_geo = ∛(GM T_sid² / (4π²))
+print "geostationary radius:", r_geo in km to 6 digits
+print "geostationary altitude:", (r_geo - R_E) in km to 6 digits
+
+# (b)
+r1 = R_E + 300 km
+r2 = r_geo
+v_circ(r) = √(GM / r)
+a_t = (r1 + r2) / 2
+v_peri = √(GM (2/r1 - 1/a_t))        # vis-viva on the transfer ellipse
+v_apo = √(GM (2/r2 - 1/a_t))
+Δv1 = v_peri - v_circ(r1)
+Δv2 = v_circ(r2) - v_apo
+t_transfer = π √(a_t³ / GM)
+print "LEO speed:", v_circ(r1) in km/s to 6 digits
+print "first burn:", Δv1 in km/s to 6 digits
+print "second burn:", Δv2 in km/s to 6 digits
+print "total:", (Δv1 + Δv2) in km/s to 6 digits
+print "transfer time:", t_transfer in hr to 6 digits
+
+# (c)
+print "escape burn from LEO:", (√2 - 1) v_circ(r1) in km/s to 6 digits
+
+# (d) fly it
+solve r'' = -GM r / |r|³
+  with r(0) = <r1, 0 km>, r'(0) = <0 km/s, v_peri>
+  for t from 0 s to 1.5 * t_transfer
+v_r(τ) = r(τ) · r'(τ) / |r(τ)|
+solve v_r(t_apo) = 0 km/s for t_apo from 0.5 * t_transfer to 1.5 * t_transfer
+print "ODE apogee radius:", |r(t_apo)| in km to 6 digits
+print "ODE time to apogee:", t_apo in hr to 6 digits
+print "ODE speed at apogee:", |r'(t_apo)| in km/s to 6 digits
