@@ -266,6 +266,25 @@ print K[1, 2], K[2]
 - **Errors:** sizes that don't fit (`a 2×2 matrix times a 3-vector`), mixed units in a literal, and a singular matrix passed to `inverse` or `solve_linear` (a runtime error: "this matrix is singular").
 - Matrices can be function arguments and results: `rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]`.
 
+#### Eigenvalues and normal modes
+
+```fermium
+k = 80 N/m
+kc = 20 N/m
+K = [[k + kc, -kc], [-kc, k + kc]]
+print eigenvalues(K)                  # <80, 120> N/m
+print eigenvectors(K)                 # columns: the unit eigenvectors
+M = [[0.2, 0], [0, 0.4]] kg
+ω2 = eigenvalues(K, M)                # K v = ω² M v
+print ω2
+print √(ω2[1]), √(ω2[2])              # the normal-mode angular frequencies
+print eigenvectors(K, M)              # the mode shapes
+```
+
+- `eigenvalues(M)` of a **symmetric** 2×2, 3×3 or 4×4 matrix is a vector of its eigenvalues, **sorted from smallest to largest**, in the matrix's units (a stiffness matrix in N/m has eigenvalues in N/m). `eigenvectors(M)` is a matrix whose **columns** are the matching unit eigenvectors (column j belongs to eigenvalue j; each one's largest entry is positive). Computed by Jacobi rotations, to machine precision.
+- `eigenvalues(K, M)` and `eigenvectors(K, M)` solve the **generalized** problem K v = λ M v with symmetric K and a symmetric, positive-definite M (a mass matrix). For springs and masses λ = ω², in 1/s². The mode shapes are scaled to unit length. Don't write `eigenvalues(inverse(M) K)`: M⁻¹K is not symmetric, so it is an error that points to `eigenvalues(K, M)`.
+- **Errors** (when the program runs): a matrix that isn't symmetric (entries may differ by at most 10⁻¹⁰ of the largest entry), and a second matrix that isn't positive definite.
+
 ## 8. Derivatives
 
 ```fermium
@@ -283,6 +302,15 @@ print v(0.1 s)
 - **Printing a function** shows its formula and units, for example `v(t) = -A ω sin(ω t)   [m/s, for t in s]`.
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
+- **Functions defined by an integral** can be differentiated too, under the integral sign (the Leibniz rule): for `V(x, y, z) = ∫ … ds from a to b`, `∂/∂x V` is the function `∫ ∂/∂x(…) ds from a to b`. When a limit depends on the variable, its boundary term is added: `G(x) = ∫ x s² ds from 0 to x` gives `G'(x) = (∫ s² ds from 0 to x) + x³`. So `∇V`, `∇²V` and `x'` all work on such functions.
+
+```fermium
+λ = 2 nC/m
+L = 0.5 m
+V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)^2 + y^2 + z^2)) ds from -L to L
+print -∇V(0.3 m, 0.4 m, 0 m)          # the field of a finite line charge
+print ∂/∂x V
+```
 
 ### Vector calculus: ∇
 
@@ -330,6 +358,19 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 - **Units:** the result's units are the integrand's units times the variable's units.
 - **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number or name (`to L / 2`), Fermium warns that it divides the whole integral (DECISIONS D34).
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
+- **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
+
+```fermium
+R = 0.10 m
+I = 2.0 A
+ring(φ) = R * <cos(φ), sin(φ), 0>
+dl(φ) = R * <-sin(φ), cos(φ), 0>
+P = <0 m, 0 m, 0.05 m>
+B = μ₀ I / (4π) * ∫ dl(φ) × (P - ring(φ)) / |P - ring(φ)|^3 dφ from 0 to 2π
+print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding in x and y)
+```
+
+- **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
 
 ## 10. Differential equations: solve
 
@@ -454,6 +495,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `norm(v) unit(v) dot(a, b) cross(a, b) vec(x, y[, z])` | vectors (also `\|v\|`, `a · b`, `a × b`) |
 | `sign(v)` of a vector | the unit vector v/\|v\|, the same as `unit(v)`: `sign(<3, 4> m/s)` is `<0.6, 0.8>` |
 | `transpose(M) det(M) inverse(M) identity(n) solve_linear(M, b)` | matrices (also `Mᵀ`, `M v`, `A B`) |
+| `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |
@@ -546,6 +588,6 @@ These are known and not yet fixed. None of them is silent about units.
 - **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
-- **Matrices** and lists of vectors don't exist yet.
+- **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).

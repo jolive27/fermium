@@ -42,6 +42,8 @@ ERR_DEEP = 10
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
 ERR_SINGULAR = 15           # inverse / solve_linear of a singular matrix
+ERR_NOT_SYMMETRIC = 21      # eigenvalues / eigenvectors of a matrix that isn't symmetric (D38)
+ERR_NOT_POSDEF = 22         # eigenvalues(K, M) with a mass matrix M that isn't positive definite (D38)
 ERR_PENDING = -1            # a runtime callback (plot, load, fit) failed and already set the message
 ERR_ROOT = 13               # solve lhs = rhs: no sign change in the search range
 ERR_POLE = 14               # solve lhs = rhs: the sign change is a jump (tan at 90°), not a root
@@ -98,6 +100,21 @@ class LLOps:
 
     def select(self, c, x, y):
         return self.b.select(c, x, y)
+
+    def const(self, v):
+        return f64(v)
+
+    def sqrt(self, x):
+        return self.b.call(self.gen.mg.intrinsic("sqrt"), [x])
+
+    def abs(self, x):
+        return self.b.call(self.gen.mg.intrinsic("fabs"), [x])
+
+    def lt(self, x, y):
+        return self.b.fcmp_ordered("<", x, y)
+
+    def eq(self, x, y):
+        return self.b.fcmp_ordered("==", x, y)
 
 
 def i64(v):
@@ -1497,6 +1514,8 @@ class FuncGen:
             return out[0] if len(out) == 1 else self.pack(out)
         if name == "det":
             return linalg.det(ops, a, m.r)
+        if name in ("eigenvalues", "eigenvectors"):
+            return self.eigen_op(e, args, ops, a, m.r)
         if name == "inverse":
             out, piv = linalg.inverse(ops, a, m.r, f64(1), f64(0))
         else:
@@ -1511,6 +1530,30 @@ class FuncGen:
             self.fail(ERR_SINGULAR)
         self.line = saved
         return self.pack(out)
+
+    def eigen_op(self, e, args, ops, a, n):
+        """eigenvalues / eigenvectors (D38): fermium.linalg's Jacobi rotations, as straight-line code."""
+        b = self.b
+        mats = [a] + [self.unpack(x, n * n) for x in args[1:]]
+
+        def check(values, bad_if, kind):
+            bad = None
+            for v in values:
+                z = b.fcmp_ordered(bad_if, v, f64(0))
+                bad = z if bad is None else b.or_(bad, z)
+            saved = getattr(self, "line", 0)
+            self.line = e.line or saved
+            with b.if_then(bad, likely=False):
+                self.fail(kind)
+            self.line = saved
+        for mat in mats:
+            check(linalg.asymmetry(ops, mat, n), "<", ERR_NOT_SYMMETRIC)
+        if len(mats) == 1:
+            vals, vecs = linalg.jacobi_eigen(ops, a, n)
+        else:
+            vals, vecs, piv = linalg.generalized_eigen(ops, a, mats[1], n)
+            check(piv, "<=", ERR_NOT_POSDEF)
+        return self.pack(vals if e.name == "eigenvalues" else vecs)
 
     def hsum(self, v, n):
         b = self.b
@@ -1791,7 +1834,7 @@ class FuncGen:
             r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
             return b.fmul(sg, r)
         args = [self.expr(a) for a in e.args]
-        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear"):
+        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
             n = e.args[0].ty.n

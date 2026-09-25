@@ -26,6 +26,7 @@ ERR_QUAD = 9
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
 ERR_ROOT, ERR_POLE = 13, 14
 ERR_SINGULAR = 15
+ERR_NOT_SYMMETRIC, ERR_NOT_POSDEF = 21, 22
 
 
 class _Break(Exception):
@@ -911,6 +912,23 @@ class Interpreter:
             return out[0] if len(out) == 1 else tuple(out)
         if name == "det":
             return linalg.det(ops, a, m.r)
+        if name in ("eigenvalues", "eigenvectors"):     # mirrors CodeGen.eigen_op
+            n = m.r
+            mats = [a] + [list(x) for x in args[1:]]
+            fail = None
+            if any(v < 0 for mat in mats for v in linalg.asymmetry(ops, mat, n)):
+                fail = ERR_NOT_SYMMETRIC
+            elif len(mats) == 1:
+                vals, vecs = linalg.jacobi_eigen(ops, a, n)
+            else:
+                vals, vecs, piv = linalg.generalized_eigen(ops, a, mats[1], n)
+                if any(p <= 0 for p in piv):
+                    fail = ERR_NOT_POSDEF
+            if fail is not None:
+                if e.line:
+                    self.line = e.line
+                raise _Fail(fail)
+            return tuple(vals if name == "eigenvalues" else vecs)
         if name == "inverse":
             out, piv = linalg.inverse(ops, a, m.r, 1.0, 0.0)
         else:
@@ -926,7 +944,7 @@ class Interpreter:
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
             return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
         args = [self.eval(a, fr) for a in e.args]
-        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear"):
+        if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):
             a = args[0]

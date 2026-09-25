@@ -418,11 +418,13 @@ def _d(e, var, ctx):
             dn = ctx.derived_function(f.target.name, 0, f.order)
             return _d(A.Call(A.Name(dn), e.args), var, ctx)
     if isinstance(e, A.Integral) and e.lo is not None:
-        # Fundamental theorem of calculus for variable limits.
+        # Leibniz rule: d/dx ∫ f(x, s) ds from a(x) to b(x)
+        #   = ∫ ∂f/∂x ds from a to b + f(x, b) b'(x) - f(x, a) a'(x)   (D36)
         res = num(0)
-        if depends_on(e.integrand, var):
-            raise FermiumError("can't differentiate an integral whose integrand depends on the variable",
-                               e.line, e.col)
+        if e.var != var and depends_on(e.integrand, var):     # (inside, e.var is the integration variable)
+            inner = sympy_tidy(simplify(_d(inline_where(e.integrand), var, ctx)))
+            if not is_num(inner, 0):
+                res = _copy(e, integrand=inner)
         if e.hi is not None and depends_on(e.hi, var):
             res = add(res, mul(subst(e.integrand, {e.var: e.hi}), _d(e.hi, var, ctx)))
         if depends_on(e.lo, var):
@@ -669,6 +671,8 @@ def _src(e, pretty):
     if isinstance(e, A.BinOp):
         if e.op in ("+", "-"):
             l, lp = _src(e.left, pretty)
+            if isinstance(e.left, A.Integral):         # (∫ f ds from 0 to x) + x³, not ∫ ... to x + x³
+                l = f"({l})"
             r, rp = _src(e.right, pretty)
             r, rp = _paren(r, rp, PREC_PROD if e.op == "+" else PREC_PROD)
             if e.op == "-" and rp == PREC_SUM:
@@ -791,7 +795,10 @@ def isolate(lhs, rhs, target, placeholder="__H__"):
 
 
 # ---------------------------------------------------------------- SymPy bridge
-def to_sympy(e, symbols):
+def to_sympy(e, symbols, positive=frozenset(), quantities=None):
+    """Fermium AST -> SymPy.  Names become real symbols, or positive ones when listed in `positive`.
+    With a `quantities` dict, a literal quantity like `0.5 m` becomes a placeholder symbol (positive
+    when its number is), recorded as placeholder name -> the AST node (from_sympy maps it back)."""
     import sympy as sp
 
     def conv(e):
@@ -802,8 +809,16 @@ def to_sympy(e, symbols):
             if e.name == "π":
                 return sp.pi
             if e.name not in symbols:
-                symbols[e.name] = sp.Symbol(e.name, real=True)
+                if e.name in positive:
+                    symbols[e.name] = sp.Symbol(e.name, positive=True)
+                else:
+                    symbols[e.name] = sp.Symbol(e.name, real=True)
             return symbols[e.name]
+        if isinstance(e, A.Quantity) and quantities is not None and not A.free_names(e.value):
+            k = f"__q{len(quantities)}"
+            quantities[k] = e
+            pos = isinstance(e.value, A.Num) and e.value.value > 0
+            return sp.Symbol(k, positive=True) if pos else sp.Symbol(k, real=True)
         if isinstance(e, A.BinOp):
             a, b = conv(e.left), conv(e.right)
             return {"+": a + b, "-": a - b, "*": a * b, "/": a / b, "^": a ** b}[e.op] if e.op != "^" else a ** b
@@ -814,18 +829,30 @@ def to_sympy(e, symbols):
         if isinstance(e, A.Abs):
             return sp.Abs(conv(e.operand))
         if isinstance(e, A.Call) and isinstance(e.func, A.Name):
-            fns = {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "exp": sp.exp, "ln": sp.log, "log": sp.log,
-                   "sinh": sp.sinh, "cosh": sp.cosh, "tanh": sp.tanh, "asin": sp.asin, "acos": sp.acos,
-                   "atan": sp.atan, "sqrt": sp.sqrt, "abs": sp.Abs}
-            if e.func.name in fns and len(e.args) == 1:
-                return fns[e.func.name](conv(e.args[0]))
+            fn = SYMPY_FUNCS().get(e.func.name)
+            if fn is not None and len(e.args) == 1:
+                return fn(conv(e.args[0]))
         raise FermiumError("this integral is too complicated to do symbolically", e.line, e.col,
                            hint="give limits (from a to b) to compute it numerically")
     return conv(e)
 
 
-def from_sympy(x):
+def SYMPY_FUNCS():
     import sympy as sp
+    return {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "exp": sp.exp, "ln": sp.log, "log": sp.log,
+            "sinh": sp.sinh, "cosh": sp.cosh, "tanh": sp.tanh, "asin": sp.asin, "acos": sp.acos,
+            "atan": sp.atan, "sqrt": sp.sqrt, "abs": sp.Abs, "asinh": sp.asinh, "acosh": sp.acosh,
+            "atanh": sp.atanh, "erf": sp.erf, "erfc": sp.erfc, "sign": sp.sign}
+
+
+class _Unusable(Exception):
+    pass
+
+
+def from_sympy(x, back=None):
+    """SymPy -> Fermium AST.  `back` maps placeholder symbol names to the AST nodes they stand for."""
+    import sympy as sp
+    rec = lambda y: from_sympy(y, back)  # noqa: E731
     if x.is_Integer:
         return num(int(x))
     if x.is_Rational:
@@ -835,55 +862,64 @@ def from_sympy(x):
     if x is sp.pi:
         return name("π")
     if x.is_Symbol:
+        if back and x.name in back:
+            return back[x.name]
         return name(x.name)
     if x.is_Add:
         args = list(x.args)
-        out = from_sympy(args[0])
+        out = rec(args[0])
         for a in args[1:]:
-            out = add(out, from_sympy(a))
+            out = add(out, rec(a))
         return out
     if x.is_Mul:
         args = list(x.args)
-        out = from_sympy(args[0])
+        out = rec(args[0])
         for a in args[1:]:
             if a.is_Pow and a.exp.is_negative:
-                out = div(out, from_sympy(a.base ** (-a.exp)))
+                out = div(out, rec(a.base ** (-a.exp)))
             else:
-                out = mul(out, from_sympy(a))
+                out = mul(out, rec(a))
         return out
     if x.is_Pow:
         if x.exp == sp.Rational(1, 2):
-            return A.Sqrt(from_sympy(x.base))
+            return A.Sqrt(rec(x.base))
         if x.exp.is_negative:
-            return div(num(1), from_sympy(x.base ** (-x.exp)))
-        return pw(from_sympy(x.base), from_sympy(x.exp))
-    names = {sp.sin: "sin", sp.cos: "cos", sp.tan: "tan", sp.exp: "exp", sp.log: "ln", sp.sinh: "sinh",
-             sp.cosh: "cosh", sp.tanh: "tanh", sp.asin: "asin", sp.acos: "acos", sp.atan: "atan", sp.Abs: "abs",
-             sp.erf: "erf"}
+            return div(num(1), rec(x.base ** (-x.exp)))
+        return pw(rec(x.base), rec(x.exp))
+    names = {v: k for k, v in SYMPY_FUNCS().items() if k not in ("log", "sqrt")}
     if x.func in names:
-        return call(names[x.func], *[from_sympy(a) for a in x.args])
+        return call(names[x.func], *[rec(a) for a in x.args])
     if isinstance(x, sp.Piecewise) and x.args[-1][1] is sp.true:
         # e.g. ∫ |x| dx = -x²/2 for x <= 0, else x²/2  ->  if x <= 0 then ... else ...
-        out = from_sympy(x.args[-1][0])
+        out = rec(x.args[-1][0])
         for piece, cond in reversed(x.args[:-1]):
-            out = A.IfExpr(_cond_from_sympy(cond), from_sympy(piece), out)
+            out = A.IfExpr(_cond_from_sympy(cond, back), rec(piece), out)
         return out
-    raise FermiumError(f"SymPy returned something Fermium can't use yet: {x}")
+    raise FermiumError(f"SymPy's formula for this integral uses {_sympy_head(x)}, which Fermium doesn't have "
+                       f"yet: {x}", hint="give limits (from a to b) to compute it numerically")
 
 
-def _cond_from_sympy(c):
+def _sympy_head(x):
+    try:
+        return f"the function {x.func.__name__}"
+    except AttributeError:
+        return "something"
+
+
+def _cond_from_sympy(c, back=None):
     import sympy as sp
     ops = {sp.StrictLessThan: "<", sp.LessThan: "<=", sp.StrictGreaterThan: ">", sp.GreaterThan: ">=",
            sp.Equality: "==", sp.Unequality: "!="}
     if type(c) in ops:
-        return A.Compare(ops[type(c)], from_sympy(c.lhs), from_sympy(c.rhs))
+        return A.Compare(ops[type(c)], from_sympy(c.lhs, back), from_sympy(c.rhs, back))
     if isinstance(c, (sp.And, sp.Or)):
-        args = [_cond_from_sympy(a) for a in c.args]
+        args = [_cond_from_sympy(a, back) for a in c.args]
         out = args[0]
         for a in args[1:]:
             out = A.Logic("and" if isinstance(c, sp.And) else "or", out, a)
         return out
-    raise FermiumError(f"SymPy returned something Fermium can't use yet: {c}")
+    raise FermiumError(f"SymPy's formula for this integral has a condition Fermium can't use yet: {c}",
+                       hint="give limits (from a to b) to compute it numerically")
 
 
 def sympy_tidy(e):
@@ -902,15 +938,94 @@ def sympy_tidy(e):
         return e
 
 
-def integrate_symbolic(integrand, var):
-    """Indefinite integral via SymPy.  Returns an AST (without +C)."""
+def _odd_abs_fix(expr):
+    """u·f(|u| c)/|u| -> f(u c) for an odd function f (asinh, atan, ...): SymPy's answers for real
+    symbols often come as  (s - x) asinh(|s - x|/q)/|s - x|,  which is asinh((s - x)/q) but 0/0 at s = x."""
     import sympy as sp
-    syms = {}
-    expr = to_sympy(inline_where(integrand), syms)
+    odd = (sp.asinh, sp.atan, sp.asin, sp.atanh, sp.sinh, sp.tanh, sp.sin, sp.tan, sp.erf, sp.sign)
+
+    def fix_mul(m):
+        args = list(m.args)
+        for i, a in enumerate(args):
+            if not (a.is_Pow and a.exp == -1 and isinstance(a.base, sp.Abs)):
+                continue
+            u = a.base.args[0]
+            for sgn, cand in ((1, u), (-1, -u)):
+                if cand not in args:
+                    continue
+                j = args.index(cand)
+                for k, g in enumerate(args):
+                    if k in (i, j) or not isinstance(g, odd) or not g.args[0].has(a.base):
+                        continue
+                    w = g.args[0].subs(a.base, u)
+                    if (sp.simplify(w / u)).free_symbols & u.free_symbols:
+                        continue
+                    rest = [b for n, b in enumerate(args) if n not in (i, j, k)]
+                    return sp.Mul(sgn, g.func(w), *rest)
+        return m
+    for _ in range(4):
+        new = expr.replace(lambda y: y.is_Mul, fix_mul)
+        if new == expr:
+            break
+        expr = new
+    return expr
+
+
+def integrate_symbolic(integrand, var, positive=frozenset()):
+    """Indefinite integral via SymPy.  Returns an AST (without +C).
+
+    `positive` names the symbols that are safe to assume positive (physical constants, variables only
+    ever given positive values); the integration variable and every other name are just real (D37)."""
+    import sympy as sp
+    syms, quantities = {}, {}
+    expr = to_sympy(inline_where(integrand), syms, positive - {var}, quantities)
     v = syms.get(var) or sp.Symbol(var, real=True)
+    # a real constant that only enters through even powers (b² + s²) can be replaced by |b|, which is
+    # >= 0, so SymPy may take it positive; |b| goes back in afterwards
+    evens = {}
+    for p in sorted(expr.free_symbols - {v}, key=str):
+        if not p.is_positive and expr.subs(p, -p) == expr:
+            evens[p] = sp.Symbol(f"__even_{p.name}", positive=True)
+    work = expr.subs(evens)
     # conds="none": the generic answer, ∫ cos(ω t) dt = sin(ω t)/ω, not a Piecewise for ω = 0
-    res = sp.integrate(expr, v, conds="none")
+    res = sp.integrate(work, v, conds="none")
     if res.has(sp.Integral):
         raise FermiumError("SymPy couldn't find a formula for this integral",
                            hint="give limits (from a to b) to compute it numerically")
-    return simplify(from_sympy(sp.simplify(res)))
+    res = res.subs({q: sp.Abs(p) for p, q in evens.items()})
+    a = _odd_abs_fix(res)
+    b = _odd_abs_fix(sp.simplify(a))
+    best = min((a, b), key=lambda y: (y.count(sp.Abs), len(str(y))))
+    if not _antiderivative_ok(best, expr, v):
+        raise FermiumError("SymPy's formula for this integral isn't right for every value of the constants in it, "
+                           "so Fermium won't use it", hint="give limits (from a to b) to compute it numerically")
+    return simplify(from_sympy(best, quantities))
+
+
+def _antiderivative_ok(F, f, v, samples=12):
+    """Check dF/dv = f at random real points (positive symbols get positive values): a guard against
+    formulas that silently assume a sign, like SymPy's |a| asinh(|s|/|a|) s/(a |s|) for a < 0."""
+    import random
+    import sympy as sp
+    dF = sp.diff(F, v)
+    syms = sorted((F.free_symbols | f.free_symbols), key=str)
+    rng = random.Random(1234)
+    checked = 0
+    for _ in range(samples * 3):
+        vals = {}
+        for s_ in syms:
+            x = rng.uniform(0.3, 3.0)
+            vals[s_] = x if s_.is_positive or rng.random() < 0.5 else -x
+        try:
+            a = complex(dF.evalf(subs=vals))
+            b = complex(f.evalf(subs=vals))
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+        if not all(map(math.isfinite, (a.real, a.imag, b.real, b.imag))) or abs(b.imag) > 1e-12 * (1 + abs(b)):
+            continue
+        if abs(a - b) > 1e-7 * (abs(a) + abs(b) + 1e-300):
+            return False
+        checked += 1
+        if checked >= samples:
+            break
+    return True

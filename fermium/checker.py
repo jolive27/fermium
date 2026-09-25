@@ -30,7 +30,7 @@ LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "r
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
-    "transpose", "det", "inverse", "identity", "solve_linear",
+    "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
 }
 
 
@@ -252,6 +252,7 @@ class Checker(C.DiffContext):
         self.new_lambdas = []
         self._prescan_functions(prog.body, ctx)
         self.unit_collisions = getattr(prog, "unit_collisions", {})
+        self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
         self.check_uncalled()
         return CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
@@ -1322,6 +1323,8 @@ class Checker(C.DiffContext):
     def mat_builtin(self, name, args, e):
         n = len(args)
         k = 2 if name == "solve_linear" else 1
+        if name in ("eigenvalues", "eigenvectors"):
+            return self.eigen_builtin(name, args, e)
         if n != k:
             raise self.err(f"{name} takes {k} argument{'s' if k != 1 else ''} but was given {n}", e)
         m = args[0]
@@ -1348,6 +1351,31 @@ class Checker(C.DiffContext):
                                f"one component per row", e)
             db = self.shared_dim(b, "solve_linear(M, b)", e)
             r = I.IBuiltin("solve_linear", [m, b], VecTy(db / m.ty.dim, b.ty.n))
+        r.sf = self._minsf(*args)
+        r.line = e.line
+        return r
+
+    def eigen_builtin(self, name, args, e):
+        """eigenvalues(M) / eigenvectors(M) of a symmetric matrix, and eigenvalues(K, M) /
+        eigenvectors(K, M) for K v = λ M v (normal modes: λ = ω²).  Jacobi rotations (D38)."""
+        if len(args) not in (1, 2):
+            raise self.err(f"{name} takes a matrix, like {name}(K), or two, like {name}(K, M) for K v = λ M v, "
+                           f"but was given {len(args)} arguments", e)
+        for m in args:
+            self.need_square(m, name, e)
+        k = args[0]
+        if not 2 <= k.ty.r <= 4:
+            raise self.err(f"{name} needs a 2×2, 3×3 or 4×4 matrix, not {k.ty.r}×{k.ty.c}", e)
+        if len(args) == 2 and args[1].ty.r != k.ty.r:
+            raise self.err(f"{name}(K, M) needs K and M of the same size, but they are {k.ty.r}×{k.ty.r} and "
+                           f"{args[1].ty.r}×{args[1].ty.r}", e)
+        n = k.ty.r
+        if name == "eigenvalues":
+            dim = k.ty.dim if len(args) == 1 else k.ty.dim / args[1].ty.dim
+            r = I.IBuiltin(name, list(args), VecTy(dim, n))
+            r.hint = k.hint if len(args) == 1 else None      # eigenvalues of a matrix in N/m are in N/m
+        else:
+            r = I.IBuiltin(name, list(args), MatTy(DIMLESS, n, n))
         r.sf = self._minsf(*args)
         r.line = e.line
         return r
@@ -2231,7 +2259,7 @@ class Checker(C.DiffContext):
             return self.e_VecLit(A.VecLit(e.args).at(e), ctx)
         if name == "dot" and n == 2 and all(isinstance(a.ty, VecTy) for a in args):
             return self.vec_arith("*", args[0], args[1], e)
-        if name in ("transpose", "det", "inverse", "solve_linear"):
+        if name in ("transpose", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.mat_builtin(name, args, e)
         if name == "identity":
             need(1)
@@ -2560,7 +2588,13 @@ class Checker(C.DiffContext):
         xs.assigned = True
         lam.params = [xs]
         scope.names[e.var] = xs
+        marks = (len(self.new_lambdas), len(self.all_lambdas))
         body = self.expr(e.integrand, lctx)
+        if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
+            # a vector integrand: one integral per component (D35); drop the lambdas made on the way
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return self.vector_integral(e, body.ty.n, ctx)
         self.need_num(body, e.integrand, "the thing being integrated")
         lam.body = body
         self.new_lambdas.append(lam)
@@ -2568,6 +2602,17 @@ class Checker(C.DiffContext):
         r = I.IIntegral(lam, lo, hi, NumTy(body.ty.dim * lo.ty.dim))
         r.sf = self._minsf(lo, hi, body)
         return r
+
+    def vector_integral(self, e, n, ctx):
+        """∫ <f, g, h> ds from a to b = <∫ f ds, ∫ g ds, ∫ h ds>, Biot–Savart's ∫ dl × r / |r|³ too:
+        each component is its own adaptive integral of the integrand's k-th component (D35)."""
+        comps = []
+        for k in range(n):
+            idx = A.Index(e.integrand, A.Num(float(k + 1), None, False).at(e)).at(e.integrand)
+            c = A.Integral(idx, e.var, e.lo, e.hi).at(e)
+            c._component = True
+            comps.append(c)
+        return self.e_VecLit(A.VecLit(comps).at(e), ctx)
 
     def indefinite_integral(self, e, ctx):
         # inline calls to one-line user functions so SymPy sees a plain formula
@@ -2579,7 +2624,25 @@ class Checker(C.DiffContext):
                     m = {p.name: a for p, a in zip(b.fdef.params, n.args)}
                     return C.subst(C.inline_where(b.body_expr()), m)
             return n
-        body = C.integrate_symbolic(inline(e.integrand), e.var)
+        integrand = C.inline_where(inline(e.integrand))
+        # undefined names first, before SymPy sees them; and which names are safe to assume > 0 (D37)
+        positive = set()
+        for node in _name_uses(integrand):
+            if node.name == e.var or node.name == "π":
+                continue
+            b, scope = ctx.scope.lookup(node.name)
+            if b is None:
+                raise self.undefined(node.name, node if node.line else e, ctx)
+            if isinstance(b, ConstInfo) and node.name != "∞" and b.value > 0:
+                positive.add(node.name)
+            elif isinstance(b, I.Sym) and scope is self.globals and node.name in self.positive_names:
+                positive.add(node.name)
+        try:
+            body = C.integrate_symbolic(integrand, e.var, frozenset(positive))
+        except FermiumError as ex:
+            if ex.line is None:
+                ex.line, ex.col, ex.length = e.line, e.col, 1
+            raise
         fd = A.FuncDef(f"∫d{e.var}", [A.Param(e.var)], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("antideriv"), fd, ctx.scope if ctx.is_main else self.globals)
@@ -2599,6 +2662,92 @@ class Checker(C.DiffContext):
     def s_Plot(self, s, ctx):
         from .solve import check_plot
         return check_plot(self, s, ctx)
+
+
+def _name_uses(e):
+    """The Name nodes an expression reads (not function names being called, nor bound variables)."""
+    out = []
+
+    def walk(n, bound):
+        if isinstance(n, A.Name):
+            if n.name not in bound:
+                out.append(n)
+            return
+        if isinstance(n, A.Call):
+            if not isinstance(n.func, A.Name):
+                walk(n.func, bound)
+            for a in n.args:
+                walk(a, bound)
+            return
+        if isinstance(n, A.Integral):
+            walk(n.integrand, bound | {n.var})
+            for x in (n.lo, n.hi):
+                if x is not None:
+                    walk(x, bound)
+            return
+        for c in A.children(n):
+            walk(c, bound)
+    walk(e, frozenset())
+    return out
+
+
+def _positive_literal(v):
+    if isinstance(v, A.Num):
+        return v.value > 0
+    if isinstance(v, A.Quantity):
+        return _positive_literal(v.value)
+    if isinstance(v, A.BinOp) and v.op in "*/^" and not (v.op == "^" and not isinstance(v.right, A.Num)):
+        return _positive_literal(v.left) and (v.op == "^" or _positive_literal(v.right))
+    if isinstance(v, A.Sqrt):
+        return _positive_literal(v.operand)
+    return False
+
+
+def _positive_names(prog):
+    """Program variables that are safe to assume positive in a symbolic integral (D37): every assignment
+    to them is `name = <positive number or quantity>`, and nothing else binds them (loops, solve, fit,
+    function parameters, element assignments)."""
+    ok, bad = set(), set()
+
+    def walk(n):
+        if isinstance(n, A.Assign):
+            (ok if n.op == "=" and _positive_literal(n.value) else bad).add(n.name)
+        elif isinstance(n, (A.For, A.ForIn)):
+            bad.add(n.var)
+        elif isinstance(n, A.IndexAssign):
+            bad.add(n.target)
+        elif isinstance(n, A.Param):
+            bad.add(n.name)
+        elif isinstance(n, (A.Solve, A.Fit)):        # anything named in a solve or fit may be set by it
+            bad.update(_all_names(n))
+            if isinstance(n, A.Solve):
+                bad.add(n.var)
+        for v in vars(n).values():
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                for y in (x if isinstance(x, tuple) else (x,)):
+                    if isinstance(y, A.Node):
+                        walk(y)
+    walk(prog)
+    return ok - bad
+
+
+def _all_names(n):
+    out = set()
+
+    def walk(x):
+        if isinstance(x, A.Name):
+            out.add(x.name)
+        for v in vars(x).values():
+            if isinstance(v, str):
+                out.add(v)
+            for y in (v if isinstance(v, (list, tuple)) else [v]):
+                for z in (y if isinstance(y, tuple) else (y,)):
+                    if isinstance(z, A.Node):
+                        walk(z)
+                    elif isinstance(z, str):
+                        out.add(z)
+    walk(n)
+    return out
 
 
 def _always_returns(stmts) -> bool:
