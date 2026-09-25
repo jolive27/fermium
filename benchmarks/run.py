@@ -156,45 +156,75 @@ def run_once(argv, env, timeout):
     return proc, wall
 
 
-def bench_one(lang, bench, repeats, warmup, timeout, quick):
-    argv, env, why = command_for(lang, bench, quick)
-    rec = {"lang": lang, "bench": bench, "status": "skipped", "reason": why}
-    if argv is None:
-        return rec
-    rec["cmd"] = " ".join(argv)
-    walls, inners = [], {}
-    results, raw, results_printed = None, "", {}
-    try:
-        for k in range(warmup + repeats):
-            proc, wall = run_once(argv, env, timeout)
-            if proc.returncode != 0:
-                rec.update(status="failed",
-                           reason=f"exit {proc.returncode}: {(proc.stderr or proc.stdout).strip()[-400:]}")
-                return rec
-            printed = {}
-            res, tim = parse_output(proc.stdout, printed)
-            if bench != "startup" and "TIME_INNER" not in tim:
-                rec.update(status="failed", reason="no TIME_INNER line in output")
-                return rec
-            if k < warmup:
-                continue
-            walls.append(wall)
+class _Bench:
+    """Accumulates the runs of one (language, benchmark) pair; `step()` does one run."""
+
+    def __init__(self, lang, bench, repeats, warmup, timeout, quick):
+        self.argv, self.env, why = command_for(lang, bench, quick)
+        self.rec = {"lang": lang, "bench": bench, "status": "skipped", "reason": why}
+        self.bench, self.repeats, self.warmup, self.timeout = bench, repeats, warmup, timeout
+        self.k = 0
+        self.walls, self.inners = [], {}
+        self.results, self.raw, self.results_printed = None, "", {}
+        self.done = self.argv is None
+        if not self.done:
+            self.rec["cmd"] = " ".join(self.argv)
+
+    def step(self):
+        rec = self.rec
+        try:
+            proc, wall = run_once(self.argv, self.env, self.timeout)
+        except subprocess.TimeoutExpired:
+            rec.update(status="failed", reason=f"timeout after {self.timeout} s")
+            self.done = True
+            return
+        except OSError as exc:
+            rec.update(status="failed", reason=str(exc))
+            self.done = True
+            return
+        if proc.returncode != 0:
+            rec.update(status="failed", reason=f"exit {proc.returncode}: {(proc.stderr or proc.stdout).strip()[-400:]}")
+            self.done = True
+            return
+        printed = {}
+        res, tim = parse_output(proc.stdout, printed)
+        if self.bench != "startup" and "TIME_INNER" not in tim:
+            rec.update(status="failed", reason="no TIME_INNER line in output")
+            self.done = True
+            return
+        self.k += 1
+        if self.k > self.warmup:
+            self.walls.append(wall)
             for key, val in tim.items():
-                inners.setdefault(key, []).append(val)
-            if results is None:
-                results, raw, results_printed = res, proc.stdout, printed
-    except subprocess.TimeoutExpired:
-        rec.update(status="failed", reason=f"timeout after {timeout} s")
-        return rec
-    except OSError as exc:
-        rec.update(status="failed", reason=str(exc))
-        return rec
-    rec.update(status="ok", reason=None, runs=len(walls), walls=walls,
-               wall_median=statistics.median(walls),
-               inner={k: statistics.median(v) for k, v in inners.items()},
-               inner_all=inners, results=results, results_printed=results_printed,
-               raw_output=raw)
-    return rec
+                self.inners.setdefault(key, []).append(val)
+            if self.results is None:
+                self.results, self.raw, self.results_printed = res, proc.stdout, printed
+        if self.k >= self.warmup + self.repeats:
+            self.done = True
+            inners = self.inners
+            rec.update(status="ok", reason=None, runs=len(self.walls), walls=self.walls,
+                       wall_median=statistics.median(self.walls),
+                       inner={k: statistics.median(v) for k, v in inners.items()},
+                       inner_all=inners, results=self.results, results_printed=self.results_printed,
+                       raw_output=self.raw)
+
+
+def bench_one(lang, bench, repeats, warmup, timeout, quick):
+    b = _Bench(lang, bench, repeats, warmup, timeout, quick)
+    while not b.done:
+        b.step()
+    return b.rec
+
+
+def bench_interleaved(langs, bench, reps_for, warmup, timeout, quick):
+    """Run the languages of one benchmark in alternation (A B C A B C ...), so that a change in the
+    machine's load during the measurement affects every language alike."""
+    bs = [_Bench(lang, bench, reps_for(lang), warmup, timeout, quick) for lang in langs]
+    while not all(b.done for b in bs):
+        for b in bs:
+            if not b.done:
+                b.step()
+    return [b.rec for b in bs]
 
 
 # --------------------------------------------------------------------------- machine info
@@ -453,6 +483,9 @@ def main():
     ap.add_argument("--benchmarks", default=",".join(BENCHMARKS), help="comma-separated subset")
     ap.add_argument("--quick", action="store_true",
                     help="pure Python / NumPy nbody run 100k steps instead of 1M (normalized per step)")
+    ap.add_argument("--interleave", action="store_true",
+                    help="alternate the languages run by run (A B A B ...) instead of all runs of one "
+                         "language, then the next: fairer on a machine whose load changes")
     ap.add_argument("--timeout", type=float, default=900, help="seconds per run (default 900)")
     args = ap.parse_args()
     if args.slow_repeats is None:
@@ -461,16 +494,29 @@ def main():
     langs = [l for l in LANGS if l in args.langs.split(",")]
     benches = [b for b in BENCHMARKS if b in args.benchmarks.split(",")]
     records = []
+    def reps_for(lang):
+        return args.slow_repeats if lang in ("python", "numpy") else args.repeats
+
+    def show(rec):
+        print(f"[{rec['bench']:>15}] {rec['lang']:<8} ", end="")
+        if rec["status"] == "ok":
+            inner = rec["inner"].get("TIME_INNER")
+            print(f"wall {fmt_t(rec['wall_median'])}, inner {fmt_t(inner)}  {rec['results']}")
+        else:
+            print(f"{rec['status']}: {(rec['reason'] or '').splitlines()[0][:200]}")
+
     for bench in benches:
+        if args.interleave:
+            print(f"[{bench:>15}] {', '.join(langs)} interleaved ...", flush=True)
+            for rec in bench_interleaved(langs, bench, lambda l: args.repeats if bench == "startup" else reps_for(l),
+                                         args.warmup, args.timeout, args.quick):
+                show(rec)
+                records.append(rec)
+            continue
         for lang in langs:
-            reps = args.slow_repeats if lang in ("python", "numpy") and bench != "startup" else args.repeats
-            print(f"[{bench:>15}] {lang:<8} ...", end=" ", flush=True)
+            reps = args.repeats if bench == "startup" else reps_for(lang)
             rec = bench_one(lang, bench, reps, args.warmup, args.timeout, args.quick)
-            if rec["status"] == "ok":
-                inner = rec["inner"].get("TIME_INNER")
-                print(f"wall {fmt_t(rec['wall_median'])}, inner {fmt_t(inner)}  {rec['results']}")
-            else:
-                print(f"{rec['status']}: {(rec['reason'] or '').splitlines()[0][:200]}")
+            show(rec)
             records.append(rec)
 
     info = machine_info()

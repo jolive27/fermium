@@ -8,6 +8,7 @@ the integrand / right-hand side is inlined into them and everything is native.
 from __future__ import annotations
 
 import math
+import os
 
 from llvmlite import ir
 
@@ -32,6 +33,17 @@ LIST = LISTH.as_pointer()                          # a list value is a pointer t
 # solution: n, dim, cap, t*, y*, dy*, the right-hand side f(t, y, dy, env) (or null) and its env (D46)
 SOL = ir.LiteralStructType([I64, I64, I64, F64P, F64P, F64P, I8P, F64P])
 SOLP = SOL.as_pointer()
+
+# M5 optimisations (D150-D153).  Each can be switched off with FERMIUM_DISABLE=name,name (or "all") to
+# measure what it is worth; the results never depend on them (tests/test_parallel.py checks that).
+M5_OPTS = ("int_loops", "tbaa", "spec_quad", "host_cpu", "o3")
+M5_OFF = set(M5_OPTS) if os.environ.get("FERMIUM_DISABLE", "") == "all" else \
+    {w.strip() for w in os.environ.get("FERMIUM_DISABLE", "").split(",") if w.strip()}
+
+
+def m5(name):
+    return name not in M5_OFF
+
 
 SCALAR_FN = ir.FunctionType(F64, [F64, F64P])
 ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
@@ -1781,6 +1793,7 @@ class FuncGen:
             self.b.branch(self.body_bb)
         self.slots = {}
         self.loops = []
+        self.intvars = {}         # sym id -> i64 value of an integer loop's variable (s_SFor)
         self.lp = LoopHelper(self.b, fn)
 
     # ------------------------------------------------------------ storage
@@ -1851,8 +1864,7 @@ class FuncGen:
 
     def s_SIndexAssign(self, s):
         lst = self.load(s.sym)
-        idx = self.expr(s.idx)
-        p = self.elem_ptr(lst, idx)
+        p = self.index_ptr(lst, s.idx)
         self.b.store(self.expr(s.value), p)
 
     def s_SPush(self, s):
@@ -1911,8 +1923,54 @@ class FuncGen:
             b.branch(cond)
         b.position_at_end(end)
 
+    INT_LIMIT = 2.0 ** 40     # integer constants up to this size take part in integer loop counters
+
+    @staticmethod
+    def _assigns(stmts, sym):
+        """Does any statement in `stmts` (at any depth) set the variable `sym`?"""
+        for st in stmts:
+            if isinstance(st, (I.SAssign, I.SFor, I.SForIn)) and st.sym is sym:
+                return True
+            for sub in (getattr(st, "body", None), getattr(st, "then", None), getattr(st, "other", None)):
+                if sub and FuncGen._assigns(sub, sym):
+                    return True
+        return False
+
+    def int_expr(self, e):
+        """An i64 with exactly the value of the whole-number expression e, or None when that can't be known
+        at compile time.  Whole numbers: integer constants, the variables of integer loops (M5, D150) and
+        their sums and differences (all far below 2⁵³, where doubles are exact)."""
+        if isinstance(e, I.IConst):
+            v = e.value
+            if isinstance(e.ty, NumTy) and abs(v) <= self.INT_LIMIT and v == math.floor(v):
+                return i64(int(v))
+            return None
+        if isinstance(e, I.IVar):
+            return self.intvars.get(e.sym.id)
+        if isinstance(e, I.INeg) and isinstance(e.ty, NumTy):
+            a = self.int_expr(e.a)
+            return None if a is None else self.b.sub(i64(0), a)
+        if isinstance(e, I.IBin) and e.op in "+-" and isinstance(e.ty, NumTy) and \
+                isinstance(e.a.ty, NumTy) and isinstance(e.b.ty, NumTy):
+            a = self.int_expr(e.a)
+            if a is None:
+                return None
+            c = self.int_expr(e.b)
+            if c is None:
+                return None
+            return self.b.add(a, c) if e.op == "+" else self.b.sub(a, c)
+        return None
+
     def s_SFor(self, s):
         b, fn = self.b, self.fn
+        # An integer loop (M5, D150): a whole-number start and step, and a variable the body doesn't set.
+        # Its values are kept as an i64 k = lo + i·st and the variable is the double of k: the same numbers
+        # as lo + i·st in doubles (exact below 2⁵³), but indexing x[k] needs no float-to-integer checks.
+        ilo = ist = None
+        if m5("int_loops") and isinstance(s.step, I.IConst) and not self._assigns(s.body, s.sym):
+            ist = self.int_expr(s.step)
+            if ist is not None and ist.constant != 0:
+                ilo = self.int_expr(s.lo)
         lo = self.expr(s.lo)
         hi = self.expr(s.hi)
         st = self.expr(s.step)
@@ -1936,10 +1994,16 @@ class FuncGen:
         b.position_at_end(cond)
         b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
         b.position_at_end(body)
-        self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
+        if ilo is not None:
+            k = b.add(ilo, b.mul(b.load(iv), ist))
+            self.store(s.sym, b.sitofp(k, F64))
+            self.intvars[s.sym.id] = k
+        else:
+            self.store(s.sym, b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st)))
         self.loops.append((inc, end))
         self.emit_body(s.body)
         self.loops.pop()
+        self.intvars.pop(s.sym.id, None)
         if not b.block.is_terminated:
             b.branch(inc)
         b.position_at_end(inc)
@@ -2513,9 +2577,16 @@ class FuncGen:
             b.store(v, b.gep(data, [i64(i)]))
         return out
 
-    def elem_ptr(self, lst, idx):
+    def elem_ptr(self, lst, idx, k=None):
+        """Pointer to lst[idx] (1-based), stopping with an error outside 1..len.  k: the index as an i64 when
+        it is known to be a whole number (int_expr), which makes the check two integer comparisons."""
         b = self.b
         n = self.llen(lst)
+        if k is not None:
+            bad = b.icmp_unsigned(">=", b.sub(k, i64(1)), n)      # k < 1 or k > n
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, b.sitofp(k, F64), b.sitofp(n, F64))
+            return b.gep(self.ldata(lst), [b.sub(k, i64(1))])
         # check in floating point first: fptosi of NaN or of a number beyond 2^63 is undefined
         inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, b.sitofp(n, F64)))
         i = b.fptosi(b.select(inside, idx, f64(1)), I64)
@@ -2524,9 +2595,15 @@ class FuncGen:
             self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
         return b.gep(self.ldata(lst), [b.sub(i, i64(1))])
 
+    def index_ptr(self, lst, idx_expr):
+        k = self.int_expr(idx_expr)
+        if k is not None:
+            return self.elem_ptr(lst, None, k)
+        return self.elem_ptr(lst, self.expr(idx_expr))
+
     def e_IIndex(self, e):
         lst = self.expr(e.lst)
-        v = self.b.load(self.elem_ptr(lst, self.expr(e.idx)))
+        v = self.b.load(self.index_ptr(lst, e.idx))
         return self.b.fptosi(v, I64) if isinstance(e.ty, StrTy) else v
 
     def e_IIntegral(self, e):
