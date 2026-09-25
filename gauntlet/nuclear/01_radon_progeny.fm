@@ -1,6 +1,6 @@
 # Nuclear 01 — The radon decay chain (Bateman equations)
 #
-# (Krane, "Introductory Nuclear Physics", §6.4 and Problem 6.?.)  A filter
+# (Krane, "Introductory Nuclear Physics", §6.4, radioactive decay chains.)  A filter
 # that sampled radon-laden air holds, at t = 0, 1000 Bq of freshly collected
 # Po-218 and none of its daughters.  The chain is
 #

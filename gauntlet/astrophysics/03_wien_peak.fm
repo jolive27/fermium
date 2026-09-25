@@ -1,6 +1,6 @@
 # Astrophysics 03 — Where does a blackbody spectrum peak?
 #
-# (Carroll & Ostlie, §3.4 and Problem 3.?.)  Planck's law per unit frequency
+# (Carroll & Ostlie, §3.4.)  Planck's law per unit frequency
 # and per unit wavelength,
 #
 #     B_ν(T) = (2hν³/c²) / (exp(hν/kT) − 1),

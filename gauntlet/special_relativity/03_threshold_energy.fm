@@ -1,7 +1,7 @@
 # Special relativity 03 — Threshold energies from E² = (pc)² + (mc²)²
 #
 # (Taylor & Wheeler, "Spacetime Physics", Ch. 7 (momenergy); Griffiths,
-# "Introduction to Elementary Particles", Problem 3.?.)  The invariant mass of a
+# "Introduction to Elementary Particles", Ch. 3 (relativistic kinematics).)  The invariant mass of a
 # system, M c² = √(E_tot² − (p_tot c)²), is the same in every frame.  At
 # threshold the products are made at rest in the centre-of-momentum frame, so
 # M equals the sum of the product masses.
