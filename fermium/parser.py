@@ -443,6 +443,7 @@ class Parser:
         var = lo = hi = step = None
         method = None
         tol_node = [None]
+        until = [None]
         if self.tok.kind != "NEWLINE":
             eqs.append(self.equation())
             while self.at_op(",") or self.at_kw("and"):
@@ -464,7 +465,7 @@ class Parser:
                 var = vt.value
                 self.expect_kw("from")
                 saved = self.no_juxt_names
-                self.no_juxt_names = saved | {"tolerance", "using", "method"}
+                self.no_juxt_names = saved | {"tolerance", "using", "method", "until"}
                 lo = self.expr()
                 self.expect_kw("to")
                 hi = self.expr()
@@ -478,6 +479,9 @@ class Parser:
                 if self.tok.kind == "NAME" and self.tok.value in ("using", "method"):
                     self.next()
                     method = self.expect_name("a method name (rk4 or rk45)").value
+                if self.tok.kind == "NAME" and self.tok.value == "until" and "until" not in self.known:
+                    self.next()              # for t from 0 s to 9 s until y = 0 m  (D39)
+                    until[0] = self.equation()
                 return True
             return False
 
@@ -519,6 +523,8 @@ class Parser:
                                hint="add e.g.  for t from 0 s to 10 s")
         self._warn_divide_by_unknown(eqs)
         s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
+        if until[0] is not None:
+            s.until = until[0]
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
             for n in A.walk(eq.lhs):

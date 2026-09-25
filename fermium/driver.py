@@ -181,6 +181,7 @@ def run_source(source, filename="<program>", out=None, base_dir=None, show_warni
     if show_warnings:
         for w in p.diags.warnings:
             err.write(w.format(source, None) + "\n")
+    p.runtime.err = err
     p.run()
     return p
 

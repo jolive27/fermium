@@ -280,6 +280,7 @@ class Solve(Node):
     step: Node | None = None
     method: str | None = None
     tolerance: Node | None = None
+    until: Node | None = None     # the stop condition `until lhs = rhs` (an Equation, D39)
 
 
 @dataclass(eq=False)

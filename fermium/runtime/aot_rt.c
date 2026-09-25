@@ -187,9 +187,13 @@ void fm_print_end(void) {
     line[0] = 0;
 }
 
+/* the name of a solve's independent variable (a text id), for ODE errors */
+static const char *tname(double b) { return b >= 0 && b == b ? fm_texts[(int64_t)b] : "t"; }
+
 void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     char x[160], y[160];
-    if (kind == 2 && fmt >= 0) {       /* values with their units, like the Python runtime */
+    int with_units = kind == 2 || kind == 3 || kind == 8 || kind == 13 || kind == 14 || kind >= 16;
+    if (with_units && fmt >= 0) {       /* values with their units, like the Python runtime */
         const fm_fmt *f = &fm_fmts[fmt];
         char bx[128], by[128];
         fmt_num((a - f->offset) / f->factor, 6, 1, bx, sizeof bx);
@@ -216,12 +220,15 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
                      x, (long long)b, (long long)b == 1 ? "" : "s", (long long)b);
         break;
     case 2: snprintf(err_msg, sizeof err_msg, "asked for the solution at %s%s, outside the range it was solved for (it ends at %s)", x, fmt >= 0 ? "" : " (SI units)", y); break;
-    case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached t = %s in SI units)", x); break;
+    case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached %s = %s%s); the equation may be stiff or blow up", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
     case 4: snprintf(err_msg, sizeof err_msg, "%s", fm_texts[(int64_t)a]); break;
     case 5: snprintf(err_msg, sizeof err_msg, "these two lists have different lengths (%s and %s)", x, y); break;
     case 6: snprintf(err_msg, sizeof err_msg, "this list is empty"); break;
     case 7: snprintf(err_msg, sizeof err_msg, "the step must be a non-zero number that goes from the start towards the end"); break;
-    case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near t = %s (SI units)", x); break;
+    case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near %s = %s%s; the solution may blow up there", tname(b), x, fmt >= 0 ? "" : " (SI units)"); break;
+    case 16: snprintf(err_msg, sizeof err_msg, "the right side of the equation is NaN or infinite at %s = %s (0/0? 1/0?); if the equation is singular there, start slightly away from %s", tname(b), x, x); break;
+    case 17: snprintf(err_msg, sizeof err_msg, "the range of %s is empty: it starts and ends at %s", tname(b), x); break;
+    case 18: snprintf(err_msg, sizeof err_msg, "%s%s; make the range longer", fm_texts[(int64_t)b], x); break;
     case 9: snprintf(err_msg, sizeof err_msg, "this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating (like sin(x) up to ∞)"); break;
     case 10: snprintf(err_msg, sizeof err_msg, "%s called itself too many times (the program ran out of stack) -- is a base case missing?", a >= 0 ? fm_texts[(int64_t)a] : "a function"); break;
     case 11:
@@ -236,6 +243,21 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 22: snprintf(err_msg, sizeof err_msg, "in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix (positive masses on the diagonal)"); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
+}
+
+/* a warning found while the program runs (#36) */
+void fm_warn(int64_t kind, double a, int64_t ln, int64_t fmt) {
+    char x[160];
+    if (fmt >= 0) {
+        const fm_fmt *f = &fm_fmts[fmt];
+        char bx[128];
+        fmt_num((a - f->offset) / f->factor, 6, 1, bx, sizeof bx);
+        snprintf(x, sizeof x, "%s%s%s", bx, (f->unit[0] && strcmp(f->unit, "1")) ? " " : "", f->unit);
+    } else {
+        fmt_num(a, 6, 1, x, sizeof x);
+    }
+    if (kind == 1)
+        fprintf(stderr, "warning: line %lld: the two sides of this equation agree only to rounding error near %s, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n", (long long)ln, x);
 }
 
 static int cmp_double(const void *a, const void *b) {

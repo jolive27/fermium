@@ -27,6 +27,7 @@ ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
 ERR_ROOT, ERR_POLE = 13, 14
 ERR_SINGULAR = 15
 ERR_NOT_SYMMETRIC, ERR_NOT_POSDEF = 21, 22
+ERR_ODE_NAN, ERR_ODE_RANGE, ERR_NO_EVENT = 16, 17, 18
 
 
 class _Break(Exception):
@@ -161,12 +162,15 @@ class Sol:
         n, dim = self.n, self.dim
         tfirst, tlast = self.t[0], self.t[-1]
         slack = 1e-9 * abs(tlast - tfirst)
-        if t < tfirst - slack or t > tlast + slack or t != t:
+        lo_t, hi_t = min(tfirst, tlast), max(tfirst, tlast)
+        if t < lo_t - slack or t > hi_t + slack or t != t:
             raise _Fail(ERR_SOLRANGE, t, tlast)
+        # times increase, or decrease for a solve towards smaller t (D39): compare along the direction
+        sg = 1.0 if tlast >= tfirst else -1.0
         lo, hi = 0, n - 1
         while hi - lo > 1:
             mid = (lo + hi) // 2
-            if self.t[mid] <= t:
+            if self.t[mid] * sg <= t * sg:
                 lo = mid
             else:
                 hi = mid
@@ -194,9 +198,107 @@ class Sol:
         return h00 * ya + h10 * ma + (h01 * yb + h11 * mb)
 
 
-def rk4(f, y0, t0, t1, h0):
+# Dormand–Prince's dense output (Hairer, Nørsett & Wanner, DOPRI5): stage weights of the 4th-order term
+D_DP = [-12715105075 / 11282082432, 0, 87487479700 / 32700410799, -10690763975 / 1880347072,
+        701980252875 / 199316789632, -1453857185 / 822651844, 69997945 / 29380423]
+
+
+def _dense(ya, yb, da, db, r5, h, th):
+    """A step's dense output at the fraction th: the cubic Hermite through (ya, da), (yb, db) plus the
+    4th-order term r5 (0 for the Hermite alone).  Mirrors ModuleGen._emit_dense."""
+    r2 = yb - ya
+    r3 = h * da - r2
+    r4 = (r2 - h * db) - r3
+    th1 = 1.0 - th
+    return ya + th * (r2 + th1 * (r3 + th * (r4 + th1 * r5)))
+
+
+def _finite(v):
+    """True if every number in v is finite (x - x is NaN for ±∞ and NaN)."""
+    for x in v:
+        if not (x - x == 0):
+            return False
+    return True
+
+
+def _start(f, t0, y0, tname):
+    """The derivative at the start; stop with a clear message if it is NaN or infinite (A1, #32)."""
+    k0 = f(t0, y0)
+    if not _finite(k0):
+        raise _Fail(ERR_ODE_NAN, t0, float(tname))
+    return k0
+
+
+def _illinois(g, a, ga, c, gc):
+    """A sign change of g between a and c (ga, gc of opposite signs): Illinois to full precision.
+    Mirrors the loop in ModuleGen._k_event_locate."""
+    side = 0
+    for _ in range(200):
+        if abs(c - a) <= 4e-16 * max(abs(a), abs(c)):
+            break
+        x = c - gc * (c - a) / (gc - ga)
+        if not (min(a, c) < x < max(a, c)):
+            x = 0.5 * (a + c)
+        gx = g(x)
+        if gx == 0 or gx != gx:
+            return x
+        if gx * gc < 0:
+            a, ga, side = c, gc, 0
+        else:
+            if side == 1:
+                ga = 0.5 * ga
+            side = 1
+        c, gc = x, gx
+    return c
+
+
+class _Event:
+    """The stop condition of `solve ... until lhs = rhs` (D39): g = lhs - rhs changes sign.
+    Mirrors ModuleGen._emit_event_check."""
+
+    def __init__(self, g, t0, y0):
+        self.g = g
+        g0 = g(t0, y0)[0]
+        self.sgn = 1.0 if g0 > 0 else (-1.0 if g0 < 0 else 0.0)     # 0: not known yet
+
+    def check(self, f, sol, t, y, k, tn, yn, kn, ks=None):
+        """After a step from (t, y, k) to (tn, yn, kn): if g crossed zero, end the solution at the
+        crossing and return True.  The crossing is located on the step's dense output: Dormand–Prince's
+        4th-order continuous extension when its stages ks are given, else the cubic Hermite."""
+        gn = self.g(tn, yn)[0]
+        if not (gn == gn):
+            return False
+        if self.sgn == 0.0:
+            self.sgn = 1.0 if gn > 0 else (-1.0 if gn < 0 else 0.0)
+            return False
+        if not (gn == 0 or gn * self.sgn < 0):
+            return False
+        n = len(y)
+        h = tn - t
+        r5 = [0.0] * n
+        if ks is not None:
+            for j in range(n):
+                acc = D_DP[0] * ks[0][j]
+                for m in range(2, 7):
+                    acc = acc + D_DP[m] * ks[m][j]
+                r5[j] = h * acc
+
+        def state(x):
+            th = (x - t) / h
+            return [_dense(y[j], yn[j], k[j], kn[j], r5[j], h, th) for j in range(n)]
+        te = tn
+        if gn != 0:
+            te = _illinois(lambda x: self.g(x, state(x))[0], t, self.sgn, tn, gn)
+        ye = yn if te == tn else state(te)
+        sol.push(te, ye, f(te, ye))
+        return True
+
+
+def rk4(f, y0, t0, t1, h0, ev=None, tname=-1, evtext=-1):
     span = t1 - t0
-    ratio = fdiv(span, h0)
+    if not (span != 0):
+        raise _Fail(ERR_ODE_RANGE, t0, float(tname))
+    ratio = abs(fdiv(span, h0))            # the range gives the direction (D39), the step its size
     if ratio != ratio or ratio <= 0 or ratio > 1e12:
         raise _Fail(ERR_STEP, h0, span)
     steps = int(math.ceil(ratio - 1e-9))
@@ -206,9 +308,10 @@ def rk4(f, y0, t0, t1, h0):
     sol = Sol(n)
     y = list(y0)
     half = h * 0.5
+    k1 = _start(f, t0, y, tname)
+    event = _Event(ev, t0, y) if ev is not None else None
     for s in range(steps):
         t = t0 + s * h
-        k1 = f(t, y)
         sol.push(t, y, k1)
         tmp = [y[k] + half * k1[k] for k in range(n)]
         th = t + half
@@ -218,8 +321,15 @@ def rk4(f, y0, t0, t1, h0):
         tmp = [y[k] + h * k3[k] for k in range(n)]
         k4 = f(t + h, tmp)
         h6 = h / 6
-        y = [y[k] + h6 * (k1[k] + 2 * (k2[k] + k3[k]) + k4[k]) for k in range(n)]
-    sol.push(t1, y, f(t1, y))
+        yn = [y[k] + h6 * (k1[k] + 2 * (k2[k] + k3[k]) + k4[k]) for k in range(n)]
+        tn = t1 if s == steps - 1 else t0 + (s + 1) * h
+        kn = f(tn, yn)
+        if event is not None and event.check(f, sol, t, y, k1, tn, yn, kn):
+            return sol
+        y, k1 = yn, kn
+    if event is not None:
+        raise _Fail(ERR_NO_EVENT, t1, float(evtext))
+    sol.push(t1, y, k1)
     return sol
 
 
@@ -231,31 +341,77 @@ C_DP = [0, 1 / 5, 3 / 10, 4 / 5, 8 / 9, 1, 1]
 E_DP = [71 / 57600, 0, -71 / 16695, 71 / 1920, -17253 / 339200, 22 / 525, -1 / 40]
 
 
-def dp45(f, y0, t0, t1, rtol):
+def _jdist(u, v, fa, fe):
+    """Distance between two right-hand-side values, each component relative to |fa| + |fe|."""
+    d = 0.0
+    for j in range(len(u)):
+        w = abs(fa[j]) + abs(fe[j])
+        if w > 0:
+            d = d + abs(u[j] - v[j]) / w
+    return d
+
+
+def _find_jump(f, t, tn, y, fa):
+    """Is there a jump in f(·, y) (y held fixed) between t and tn, like `if t < 0.3 s then ...`?
+    Returns (lo, hi): adjacent times with f(lo) on the near side of the jump and f(hi) on the far side,
+    or None.  Mirrors ModuleGen._k_find_jump (D40)."""
+    fe = f(tn, y)
+    fm = f(t + 0.5 * (tn - t), y)
+    dfe = _jdist(fa, fe, fa, fe)
+    if not (dfe > 1e-12):
+        return None
+    mid = [0.5 * (fa[j] + fe[j]) for j in range(len(fa))]
+    if not (_jdist(fm, mid, fa, fe) > 0.4 * dfe):       # a jump puts f(midpoint) at one end
+        return None
+    lo, hi, flo, fhi = t, tn, fa, fe
+    for _ in range(200):
+        m = lo + 0.5 * (hi - lo)
+        if m == lo or m == hi:
+            break
+        fx = f(m, y)
+        if _jdist(fx, fa, fa, fe) <= _jdist(fx, fe, fa, fe):
+            lo, flo = m, fx
+        else:
+            hi, fhi = m, fx
+    if _jdist(flo, fhi, fa, fe) > 0.5 * dfe:            # most of the change happens in one rounding step
+        return lo, hi
+    return None
+
+
+def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
     n = len(y0)
     y = list(y0)
-    ymax = [abs(v) for v in y]
     sol = Sol(n)
     span = t1 - t0
-    if span <= 0:
-        raise _Fail(ERR_STEP, span, 0.0)
+    if not (span != 0):
+        raise _Fail(ERR_ODE_RANGE, t0, float(tname))
+    dirn = 1.0 if span > 0 else -1.0       # towards smaller t for a decreasing range (D39)
+    aspan = abs(span)
     t = t0
-    hv = span * 1e-4
+    hv = aspan * 1e-4
     count = 0
     k = [None] * 7
-    k[0] = f(t0, y)
+    k[0] = _start(f, t0, y, tname)
     sol.push(t0, y, k[0])
+    event = _Event(ev, t0, y) if ev is not None else None
     rej, first_rej = 0, 0.0
+    has_tgt, tgt_lo, tgt_hi = False, 0.0, 0.0     # a located jump in f (D40): land exactly on it
+    probed = False
     while True:
-        remaining = t1 - t
+        remaining = dirn * (t1 - t)
         if not (remaining > 1e-14 * abs(t1) and remaining > 0):
             break
         count += 1
         if count > 20_000_000:
-            raise _Fail(ERR_ODE_STEPS, t, 0.0)
-        h = min(hv, remaining)
-        if h < 1e-15 * (abs(t) + abs(span)):
-            raise _Fail(ERR_ODE_H, t, h)
+            raise _Fail(ERR_ODE_STEPS, t, float(tname))
+        stop = tgt_lo if has_tgt else t1
+        rstop = dirn * (stop - t)
+        land = hv >= rstop
+        h = rstop if land else hv
+        if h < 1e-15 * (abs(t) + aspan):
+            raise _Fail(ERR_ODE_H, t, float(tname))
+        tn = stop if land else t + dirn * h
+        hs = stop - t if land else dirn * h
         ynew = None
         for s in range(1, 7):
             tmp = []
@@ -263,18 +419,18 @@ def dp45(f, y0, t0, t1, rtol):
                 acc = y[j]
                 for m in range(s):
                     if A_DP[s][m] != 0:
-                        acc = acc + (h * A_DP[s][m]) * k[m][j]
+                        acc = acc + (hs * A_DP[s][m]) * k[m][j]
                 tmp.append(acc)
             if s == 6:
                 ynew = tmp
-            k[s] = f(t + h * C_DP[s], tmp)
+            k[s] = f(tn if C_DP[s] == 1 else t + hs * C_DP[s], tmp)
         errsum = 0.0
         for j in range(n):
             e = 0.0
             for m in range(7):
                 if E_DP[m] != 0:
                     e = e + E_DP[m] * k[m][j]
-            e = e * h
+            e = e * hs
             sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j])) + 5e-324
             r = fdiv(e, sc)
             errsum = errsum + r * r
@@ -283,18 +439,42 @@ def dp45(f, y0, t0, t1, rtol):
         fac = min(5.0, max(0.2, fac))
         stalled = rej >= 4 and errn >= 0.5 * first_rej
         if errn <= 1.0 or stalled:
-            t = t + h
+            if event is not None and event.check(f, sol, t, y, k[0], tn, ynew, k[6], k):
+                return sol
+            t = tn
             y = ynew
-            ymax = [max(ymax[j], abs(y[j])) for j in range(n)]
             k[0] = k[6]
             sol.push(t, y, k[0])
             hv = h * 2.0 if stalled else h * fac
+            if land and has_tgt:           # at the jump: restart on its far side
+                has_tgt = False
+                t = tgt_hi
+                k[0] = f(t, y)
+                sol.push(t, y, k[0])
+                hv = h
             rej = 0
+            probed = False
         else:
             if rej == 0:
                 first_rej = errn
             rej += 1
             hv = h * min(fac, 1.0)
+            if tdep and not probed and not has_tgt:
+                probed = True
+                jump = _find_jump(f, t, tn, y, k[0])
+                if jump is not None:
+                    lo, hi = jump
+                    hv = h
+                    if lo == t:                # the jump is right at t: k[0] is from the near side
+                        t = hi
+                        k[0] = f(t, y)
+                        sol.push(t, y, k[0])
+                        rej = 0
+                        probed = False
+                    else:
+                        has_tgt, tgt_lo, tgt_hi = True, lo, hi
+    if event is not None:
+        raise _Fail(ERR_NO_EVENT, t1, float(evtext))
     return sol
 
 
@@ -389,28 +569,34 @@ def _qscan(f, base, sign):
     return bs
 
 
-def root(f, a0, b0, scan=200):
-    """Mirrors fm_root in codegen_llvm.py."""
-    fa, fc = f(a0), f(b0)
+NOISE = 1e-12        # |lhs - rhs| at most this times |lhs| + |rhs| near the root: rounding noise (#36)
+
+
+def root(f, a0, b0, scan=200, scale=None, warn=None):
+    """Mirrors fm_root in codegen_llvm.py: the FIRST root after a0.  Always scans `scan` sub-intervals
+    from a0 for the first sign change (D32, #2), then refines it with Illinois.  scale(x) = |lhs| + |rhs|:
+    if lhs - rhs is rounding noise on both sides of the sign change, warn(x) is called (#36)."""
+    fa = f(a0)
     if fa == 0:
         return a0
-    if fc == 0:
-        return b0
-    a, c = a0, b0
-    if not fa * fc < 0:
-        h = (b0 - a0) / scan
-        fprev, found = fa, False
-        for i in range(1, scan + 1):
-            xi = b0 if i == scan else a0 + i * h
-            fi = f(xi)
-            if fi == 0:
-                return xi
-            if fprev * fi < 0:
-                a, fa, c, fc, found = xi - h, fprev, xi, fi, True
-                break
-            fprev = fi
-        if not found:
-            raise _Fail(ERR_ROOT, a0, b0)
+    h = (b0 - a0) / scan
+    fprev, found = fa, False
+    a = c = fc = 0.0
+    for i in range(1, scan + 1):
+        xi = b0 if i == scan else a0 + i * h
+        fi = f(xi)
+        if fi == 0:
+            if scale is not None and abs(fprev) <= NOISE * scale(xi - h):
+                warn(xi)
+            return xi
+        if fprev * fi < 0:
+            a, fa, c, fc, found = xi - h, fprev, xi, fi, True
+            break
+        fprev = fi
+    if not found:
+        raise _Fail(ERR_ROOT, a0, b0)
+    if scale is not None and abs(fa) <= NOISE * scale(a) and abs(fc) <= NOISE * scale(c):
+        warn(c)
     side = 0
     m0 = max(abs(fa), abs(fc))
     for _ in range(300):
@@ -501,7 +687,7 @@ class Interpreter:
                 self.block(self.mod.main.body, self.globals)
         except _Fail as f:
             rt.error = rt.describe_error(f.kind, f.a, f.b, getattr(f, "fmt", -1))
-            rt.error_line = self.line or None
+            rt.error_line = getattr(f, "line", None) or self.line or None
             raise FermiumRuntimeError(rt.error, rt.error_line)
         except RecursionError:
             raise FermiumRuntimeError("the program recursed too deeply", self.line or None)
@@ -612,9 +798,38 @@ class Interpreter:
                 py["print_text"](self.eval(payload, fr))
         py["print_end"]()
 
+    def guard(self, fn):
+        """Wrap a callback (integrand, right-hand side, equation) given to a kernel: an error inside it keeps
+        the line where it happened, so the kernel doesn't report it as its own (#13)."""
+        def g(*args):
+            try:
+                return fn(*args)
+            except _Fail as f:
+                if not hasattr(f, "line"):
+                    f.line = self.line
+                f.inner = True
+                raise
+        return g
+
+    def kernel(self, thunk, fmt=-1):
+        """Run a kernel (root, ODE, integral).  Its own errors report the line it was called from and its
+        display format, whatever lines its callbacks ran (the compiled kernels save the line and format
+        at entry the same way)."""
+        line0 = self.line
+        try:
+            return thunk()
+        except _Fail as f:
+            if not getattr(f, "inner", False) and not hasattr(f, "line"):
+                f.line = line0
+                f.fmt = fmt
+            raise
+        finally:
+            self.line = line0
+
     def ode_rhs(self, lam, fr):
         state = lam.state
 
+        @self.guard
         def f(t, y):
             lf = Frame(fr)
             lf.vars[lam.params[0].id] = t
@@ -642,11 +857,15 @@ class Interpreter:
             v = self.eval(e, fr)
             y0.extend(v if isinstance(v, tuple) else [v])
         f = self.ode_rhs(s.rhs, fr)
+        ev = self.ode_rhs(s.event, fr) if getattr(s, "event", None) is not None else None
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
+        tname, evtext, fmt = getattr(s, "tname", -1), getattr(s, "evtext", -1), getattr(s, "tfmt", -1)
         if s.method == "rk4":
-            sol = rk4(f, y0, t0, t1, self.eval(s.step, fr))
+            h0 = self.eval(s.step, fr)
+            sol = self.kernel(lambda: rk4(f, y0, t0, t1, h0, ev, tname, evtext), fmt)
         else:
-            sol = dp45(f, y0, t0, t1, s.rtol)
+            sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False)),
+                              fmt)
         fr.set(s.sol_sym, sol)
 
     def s_SFit(self, s, fr):
@@ -793,12 +1012,12 @@ class Interpreter:
         for p, a in zip(func.params, args):
             f.vars[p.id] = a
         saved = self.line
+        self.line = getattr(func, "def_line", None) or saved     # errors inside report their own line (#13)
         try:
             self.block(func.body, f)
         except _Return as r:
-            return r.value
-        finally:
             self.line = saved
+            return r.value
         raise FermiumRuntimeError(f"the function {func.name} finished without returning a value")
 
     def e_ICall(self, e, fr):
@@ -827,6 +1046,7 @@ class Interpreter:
         return lst[self.index(self.eval(e.idx, fr), len(lst))]
 
     def scalar_fn(self, lam, fr):
+        @self.guard
         def g(x):
             lf = Frame(fr)
             lf.vars[lam.params[0].id] = x
@@ -834,14 +1054,18 @@ class Interpreter:
         return g
 
     def e_IIntegral(self, e, fr):
-        return quad(self.scalar_fn(e.lam, fr), self.eval(e.lo, fr), self.eval(e.hi, fr))
+        f = self.scalar_fn(e.lam, fr)
+        lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
+        return self.kernel(lambda: quad(f, lo, hi))
 
     def e_IRoot(self, e, fr):
-        try:
-            return root(self.scalar_fn(e.lam, fr), self.eval(e.lo, fr), self.eval(e.hi, fr))
-        except _Fail as f:
-            f.fmt = getattr(e, "tfmt", -1)
-            raise
+        f = self.scalar_fn(e.lam, fr)
+        lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
+        fmt = getattr(e, "tfmt", -1)
+        scale = self.scalar_fn(e.scale, fr) if getattr(e, "scale", None) is not None else None
+        line = self.line
+        return self.kernel(lambda: root(f, lo, hi, scale=scale,
+                                        warn=lambda x: self.rt.warn(1, x, line, fmt)), fmt)
 
     def e_ISolEval(self, e, fr):
         try:
