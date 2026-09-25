@@ -973,3 +973,93 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
 - `print d/dt h(0.5)^2` prints `d/dt (h(0.5)²) = 0` (the formula reading, shown).
 - `table(T = Ts)` with Ts in °C reports the column as `T [K]` and `print d.T` in K (D193 says a column keeps its
   list's display unit); the values are right.
+
+## Round 7 (11:15 UTC)
+
+Reviewer: an independent subagent, on claude/lucid-gauss-9y1ov2 at 6480b72 (after the round 6 fixes D230–D233).
+Focus: silent wrong answers introduced by the latest fixes, the D11 printing rules on physics outputs, and a final
+pass over the 11 research programs. Each finding has an `xfail(strict=True)` test in `tests/test_redteam7.py` named
+`test_<N>_…`; delete the mark when the finding is fixed. JIT and `--interp` agree on every repro below.
+
+**What held up (no findings despite targeted probing):**
+- **D231/D232 (derivative, integration and ODE variables):** `∫ 9.81 m/s² dt from 0 s to 2 s` = 19.6 m/s,
+  `∫ 3 m/s ds from 0 s to 2 s` = 6 m, `∫ 3 N/m * s ds from 0 m to 2 m` = 6 J, `∫ 3 m/s^2 s ds from 0 s to 4 s` = 24 m
+  (variable reading, warned), `∫ n R T / V dV from 1 L to 2 L` = nRT ln 2, `∫ Q/(4π ε₀ r²) dr` to ∞;
+  `solve x'' = -9.81 m/s² … for t` (−19.6 m at 2 s), `solve x' = 5 m/s … for s from 0 s to 2 s` (10 m),
+  `solve y'' = -4 1/s^2 * y … for s` (cos 2), `u' = 1 m/s + 2 m/s^2 * s … for s` (6 m); `x(0 s)` in the conditions of
+  a solve over s is fine; nothing leaks after the solve/derivative/integral (`print 3 s` afterwards is 3 s).
+  `d/ds (3 m/s * s)` = 3 m/s; `d/dt (5 t^2)` = 10t; `d/ds (3 m/s s^2)` warns and gives 6 m/s s.
+- **D233 closed forms:** infinite well E₁ and E₃/E₁ = 9 to 9 digits, ψ₁(L/2) = √(2/L), ⟨ψ₁|ψ₃⟩ = 6×10⁻¹²; a tilted,
+  shifted oscillator (E = ħω/2 − F²/(2mω²) + F x₀ to 9 digits, ⟨x⟩ = 0.20475 nm exact); a step well (0.1923223 and
+  0.5617812 eV, exact matching condition agrees to 7 digits); the symmetric double well by both methods (parity,
+  norm 1, first lobe positive, ⟨ψ₂|ψ₃⟩ = 5×10⁻¹⁸); a symmetric quadruple well (splittings 10⁻⁹ relative: all four
+  states match the SciPy tight-binding pattern 0.66/1.6/1.6/0.66, …).
+- **D230:** vectors/matrices show honest noise (`M * inverse(M)`, `<1 AU, 1 mm, 0 m>`), the wave equation matches
+  d'Alembert to 5 digits at 0.01 s and later, `∫ exp(-x²) cos(10x) dx` over ℝ = 2.46×10⁻¹¹ (exact √π e⁻²⁵).
+- **D11:** 9.9996 × 1.00 → 10.0, 99999.7 × 1.00 → 1.00×10⁵, 2/3 × 10⁶ → 6.67×10⁵, lists `[0.667, 66.7, 6670]`,
+  negative values, `1 AU in m`, `c`, exact literals (`299792458 m/s`, `6.02214076×10²³`).
+- **Research:** 10 of 11 programs print their README headline numbers (BBN Y_p 0.242340, D/H 2.59588×10⁻⁵; t₀
+  13.791 Gyr, z_eq 3419; hydrogen 9.1×10⁻⁹, Lyman α 121.5684 nm; Lane–Emden ξ₁ and M_Ch 5.825; TOV 0.7102 M☉ at
+  9.161 km; pp/CNO 17.79 and 18.06 MK; recombination z_* 1089.61; SEMF a_V 15.414, rms 3.31 MeV, 13.3 MeV at
+  Z = 50, N = 82; shell model gaps at 2, 8, 20, 28, 50, 82, 126; U-238 Rn-222 99 % at 25.40 d). Rutherford: see #3.
+
+### 1. D233 forces parity on a slightly asymmetric double well: the ground state is put in both wells (silent). Status: open
+- **Repro:** `m = m_e`, `V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8 + 3e-9 eV * x / 1 nm` (a 3 V/m field on the round 6
+  double well), `solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ with ψ(-3 nm) = 0, ψ(3 nm) = 0 for x from -3 nm to 3 nm
+  lowest 2` → `ψ₁(-1 nm)/ψ₁(1 nm)` = 1.00000, `ψ₂(-1 nm)/ψ₂(1 nm)` = −1.00000, ⟨x⟩₁ = 1.6×10⁻¹⁶ nm, no warning.
+  E₂ − E₁ = 5.88×10⁻⁹ eV (right).
+- **Reference:** the wells differ by δ ≈ 6×10⁻⁹ eV, 100× the tunnelling splitting Δ ≈ 5×10⁻¹¹ eV, so the states are
+  localised: SciPy `eigh_tridiagonal` on the same equation (6000 intervals) gives ψ₁(−1 nm)/ψ₁(1 nm) = 199,
+  ⟨x⟩₁ = −0.981 nm, ψ₂(−1 nm)/ψ₂(1 nm) = −0.0050, E₂ − E₁ = 5.87×10⁻⁹ eV. `_symmetric` accepts a relative
+  asymmetry of 10⁻¹⁰ of the **largest** coefficient, which the walls make ~1000 eV (tolerance ~10⁻⁷ eV, more than the
+  whole tilt), while the pair counts as degenerate at 10⁻⁸ E ≈ 1.5×10⁻⁸ eV. So any asymmetry between Δ and ~10⁻⁸ E is
+  silently symmetrised away: the Stark effect of an ammonia-like inversion doublet comes out with no dipole.
+- **Test:** `test_1_tilted_double_well_ground_state_is_localised`.
+
+### 2. The heat equation after a jump: very early times are still 60 % wrong with no warning (silent). Status: open
+- **Repro:** `D = 1e-4 m²/s`, `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(1 m, t) = 0 K
+  for x from 0 m to 1 m, t from 0 s to 100 s` → `u(0.5 mm, 0.002 s)` = 55.0 K, `u(0.25 mm, 0.0025 s)` = 67.0 K,
+  `u(0.5 mm, 0.01 s)` = 59.1 K, `u(1 mm, 0.01 s)` = 42.2 K; no warning.
+- **Reference:** 80 K erfc(x / (2√(D t))) = 34.34 K, 57.89 K, 57.89 K, 38.36 K. D230 set the D206 skip to 0, which
+  fixed the 0.05 s point of round 6 #4 (34.24 vs 34.34 K), but before the diffusion length √(Dt) reaches a grid cell
+  (h = 2.5 mm) the value is an interpolation between the boundary and the first node. The reference says the step is
+  refined until the error is under 0.1 % of the range; this is 26 % of the range, and the spatial error isn't
+  estimated or warned about. (A smooth 1 cm Gaussian is 0.25 % off at 0.1–1 s, printed to 5 digits: same cause.)
+- **Test:** `test_2_heat_step_very_early_time_is_accurate_or_warned`.
+
+### 3. research/rutherford_mc/README.md quotes numbers the program no longer prints (docs). Status: open
+- **Repro:** `cd research/rutherford_mc && fermium run rutherford.fm` → χ² = 38.2 (README and research/README.md:
+  35.6), backward fraction 0.00191255 (README 0.001920, "1.4σ"), 150° row 0.980 with 936 α (README 1.04, 997 α),
+  and every table row differs. The run is reproducible (38.2 twice).
+- **Reference:** the README says "`rand()` has no seed function … the compiled program calls drand48 without seeding
+  it … every `fermium run` happens to give the same numbers (the ones below)"; since M3 (commit c32a62f) `rand()` is
+  xoshiro256** with `seed(n)` and an implicit `seed(0)` (reference §20), so the numbers and the "no seed" weakness
+  listed under Limitations are stale. The physics conclusion (χ² ≈ dof) still holds.
+- **Test:** `test_3_rutherford_readme_matches_the_program`.
+
+### 4. D11 applies "fewest significant figures" to +: `293.15 K + 0.5 K` prints `290 K` (silent). Status: open
+- **Repro:** `T = 293.15 K` / `print T + 0.5 K` → `290 K`; `m_p = 938.272 MeV` / `print m_p + 2.2 MeV` → `940 MeV`;
+  `L0 = 2.000 m` / `print L0 + 0.5 mm` → `2.0 m` (and `L0 + α L0 ΔT` for thermal expansion prints `2.0 m`).
+- **Reference:** 293.65 K, 940.472 MeV, 2.0005 m; by the decimal-place rule for sums, 293.7 K, 940.5 MeV, 2.000 m.
+  A 1-figure correction reduces a 5-figure value to 2 figures, and the printed 290 K is 3.65 K from the value.
+  Round 1 logged the opposite direction (`1.00 m - 0.999 m` over-claims) as not changed (D95) because decimal places
+  need the magnitude at run time; this direction is a visibly wrong number on ordinary physics (a temperature plus a
+  small change, a mass plus a binding energy). A compile-time fix is possible: for `+`/`−`, use the sig figs of the
+  operand with the most (or skip the rule and print 3 figures), which never prints a value outside its precision.
+- **Test:** `test_4_adding_a_small_correction_keeps_the_precise_value`.
+
+### 5. An integral dominated by rounding error prints 3 figures of which 1 is right, with no warning (silent). Status: open
+- **Repro:** `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` → `7.93×10⁻⁹` (the D230 example; the snap is gone).
+- **Reference:** exactly 8×10⁻⁹ (the sine part cancels). SciPy `quad` gives 7.96×10⁻⁹ with an error estimate of
+  1.0×10⁻⁸ and an IntegrationWarning about round-off. The result is at the integrand's rounding level (10⁶ × ε × 2 ≈
+  4×10⁻¹⁰ per node), so either the printed digits should be limited to the error estimate or a warning should say the
+  value is rounding-limited. Round 6's test only asks for 10⁻¹⁰ absolute, which 7.93 passes.
+- **Test:** `test_5_rounding_dominated_integral_is_right_to_its_printed_digits_or_warned`.
+
+**Not findings (noted):**
+- `∫ ψ₁(x) (-ħ²/(2m) ψ₁''(x) + V(x) ψ₁(x)) dx` (⟨H⟩ of the quadruple-well ground state) stops with "couldn't compute
+  this integral numerically … the estimate was 6.26812×10⁻¹⁹ ± 1.6×10⁻²⁶" — an error on a converged value (relative
+  error 3×10⁻⁸), not a silent answer.
+- `print |[3.0 m/s, 4.0 m/s]|` prints `[3.0, 4.0] m/s`: |…| of a list is element-wise, as `abs` is; a vector
+  (`<3, 4> m/s`) gives 5 m/s. A physicist may write the list form expecting the length.
+- `recombination.fm` prints the warning "h (Planck's constant) is now your variable" on every run (it means h = H₀/100).
