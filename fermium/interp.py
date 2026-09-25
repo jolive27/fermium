@@ -926,6 +926,8 @@ class Interpreter:
     def s_SSolve(self, s, fr):
         if s.method == "eigen":                 # D82
             return self.m3_eigen(s, fr)
+        if s.method == "pde":                   # D83
+            return self.m3_pde(s, fr)
         y0 = []
         for e in s.y0:
             v = self.eval(e, fr)
@@ -1241,6 +1243,45 @@ class Interpreter:
                 self.line = e.line
             raise _Fail(ERR_SINGULAR)
         return tuple(out)
+
+    def m3_pde(self, s, fr):
+        """solve ∂u/∂t = …: the same Python solver the compiled code calls (runtime/pde.py)."""
+        from .runtime.pde import PdeFail, pde_solve
+        from .runtime.m3rt import PDE_METHOD_NAMES
+        f = self.ode_rhs(s.rhs, fr)
+        xa, xb = self.eval(s.xa, fr), self.eval(s.xb, fr)
+        t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
+        step = self.eval(s.step, fr) if s.step is not None else None
+        try:
+            ts, ys, dys, ncomp, m = self.kernel(
+                lambda: pde_solve(f, xa, xb, t0, t1, grid=s.grid, order=s.order, method=PDE_METHOD_NAMES[s.pmethod],
+                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep), getattr(s, "tfmt", -1))
+        except PdeFail as ex:
+            raise FermiumRuntimeError(ex.message, self.line) from None
+        sol = Sol(ncomp * (m + 1))
+        sol.t, sol.y, sol.dy = list(ts), list(ys), list(dys)
+        fr.set(s.sol_sym, sol)
+
+    def e_IPdeEval(self, e, fr):
+        from .runtime.m3rt import pde_eval_py
+        sol = self.eval(e.sol, fr)
+        xa, xb = self.eval(e.xa, fr), self.eval(e.xb, fr)
+        x, t = self.eval(e.x, fr), self.eval(e.t, fr)
+        slack = 1e-9 * abs(xb - xa)
+        if x < xa - slack or x > xb + slack or x != x:
+            f = _Fail(ERR_SOLRANGE, x, xa if x < xa else xb)
+            f.fmt = getattr(e, "xfmt", -1)
+            raise f
+        try:
+            return pde_eval_py(sol.eval, xa, xb, e.m, e.comp0, x, t, e.which)
+        except _Fail as f:
+            f.fmt = getattr(e, "tfmt", -1)
+            raise
+
+    def s_SAnimate(self, s, fr):
+        from .runtime.m3rt import animate
+        sol = self.eval(s.sol, fr)
+        animate(self.rt, s.anim_id, sol.t, sol.y, self.eval(s.xa, fr), self.eval(s.xb, fr))
 
     def m3_eigen(self, s, fr):
         """solve … lowest N: the same Python solver the compiled code calls (runtime/eigen.py)."""

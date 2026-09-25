@@ -256,6 +256,14 @@ class Runtime:
                 rt.error = f"the Fourier transform failed: {ex}"
                 return 1
 
+        def pde(guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out):
+            from .m3rt import pde_cb
+            return pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out)
+
+        def animate(aid, solp, xa, xb):
+            from .m3rt import animate_cb
+            return animate_cb(rt, aid, solp, xa, xb)
+
         def eigen(guard, fn, env, a, b, nstates, grid, method, out):
             from .m3rt import eigen_cb
             return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out)
@@ -288,6 +296,9 @@ class Runtime:
                            c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
             "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
+            "fm_pde": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_double, c_double, c_double,
+                         c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, ctypes.POINTER(c_void_p))(pde),
+            "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
             "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
                            ctypes.POINTER(c_void_p))(eigen),
         }

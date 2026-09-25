@@ -151,6 +151,9 @@ def check_solve(ck, s: A.Solve, ctx):
     if getattr(s, "lowest", None) is not None:        # an eigenvalue problem (D82)
         from .m3solve import check_eigen
         return check_eigen(ck, s, ctx)
+    if getattr(s, "var2", None) is not None:          # a PDE in x and t (D83)
+        from .m3solve import check_pde
+        return check_pde(ck, s, ctx)
     t = s.var
     src_eqs, initial, until = _take_until(ck, s, ctx)
     eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in src_eqs]
@@ -527,6 +530,9 @@ def _label(ck, node):
 
 
 def check_plot(ck, s: A.Plot, ctx):
+    from .m3solve import plots_pde, check_animate
+    if getattr(s, "options", {}).get("animate") or plots_pde(ck, s, ctx):
+        return check_animate(ck, s, ctx)             # a PDE solution u(x, t) (D83)
     series = []
     labels = []
     for sr in s.series:

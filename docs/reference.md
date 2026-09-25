@@ -773,3 +773,51 @@ print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
 - The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
 - These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.
 
+
+### Partial differential equations: heat, waves, Schrödinger
+
+With two ranges, `for x from a to b, t from t0 to t1`, `solve` takes a **PDE** for an unknown u(x, t). Write the derivatives with ∂ (ASCII `partial`): `∂u/∂t`, `∂²u/∂x²`, `∂u/∂x`. The conditions after `with` are the initial value `u(x, t0) = …` and a boundary condition at each end, either a value `u(a, t) = …` or a slope `∂u/∂x(a, t) = …` (0 for an insulated end); both may depend on t.
+
+```fermium
+L = 1 m
+D = 0.01 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 10 s
+print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 s / L²)
+print ∂u/∂x(0 m, 5 s), ∂u/∂t(0.5 m, 5 s)
+```
+
+- **Using the solution:** `u(x, t)` anywhere in the range (cubic interpolation in x, Hermite in t), `∂u/∂x(x, t)`, `∂u/∂t(x, t)`, integrals like `∫ u(x, 2 s) dx from 0 m to L`, and plots of a formula like `plot u(x, 2 s) vs x from 0 m to L`.
+- **Pictures:** `plot u vs x` draws u at 6 times in one plot; `plot u vs x animate over t to "heat.gif"` writes an animated GIF (with `frames 30` to choose the number of frames, 60 by default). With a file name that does not end in `.gif` (or without the pillow package) it writes the frames as PNG files in a folder, `heat_frames/`.
+- **Waves:** an equation with `∂²u/∂t²` also needs the initial velocity `∂u/∂t(x, t0) = …`:
+
+```fermium
+c = 2 m/s
+f(x) = 1 cm * exp(-((x - 0.5 m) / 0.05 m)^2)
+solve ∂²u/∂t² = c² ∂²u/∂x²
+    with u(x, 0 s) = f(x), ∂u/∂t(x, 0 s) = 0 m/s, u(0 m, t) = 0 m, u(1 m, t) = 0 m
+    for x from 0 m to 1 m, t from 0 s to 0.1 s
+    grid 1000
+print u(0.7 m, 0.1 s), "  d'Alembert:", (f(0.5 m) + f(0.9 m)) / 2
+```
+
+- **The Schrödinger equation:** `i` in the equation is the imaginary unit, and a complex initial value is written `A(x) exp(i φ(x))`. The solution is complex, so `ψ(x, t)` is the 2-vector <Re ψ, Im ψ>: `|ψ(x, t)|^2` is the probability density, and `ψ(x, t).x`, `ψ(x, t).y` are the real and imaginary parts. An animation shows |ψ|².
+
+```fermium
+m = m_e
+σ = 1 nm
+k0 = 2 / (1 nm)
+solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(i k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 fs to 30 fs
+    grid 2000
+print "norm:", ∫ |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm
+print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", ħ k0 30 fs / m in nm, ")"
+```
+
+- **Methods:** second-order differences in x on `grid N` intervals (400 by default), and in t:
+  - first order in t: **Crank–Nicolson** (the default: second order, stable for any step, and it conserves ∫|ψ|² exactly for the Schrödinger equation), `using implicit` (backward Euler: first order, very robust) or `using explicit` (forward Euler: needs dt ≤ h²/(2D), which Fermium checks and chooses by default). The default is 1000 time steps; `t from 0 s to 10 s step 1 ms` sets the step.
+  - second order in t (waves): the explicit central-difference scheme. It needs c dt ≤ h (Courant number ≤ 1); by default Fermium takes the largest such step, where it is exact for a constant wave speed.
+- **What is supported:** one unknown; linear equations (each term has one factor u, ∂u/∂x or ∂²u/∂x², like `D ∂²u/∂x² - k u + S(x)`); coefficients that depend on x but not on t (a source term without u may depend on t). All units are checked before the program runs, like every other equation.
+- These run in Python (NumPy/SciPy), so `fermium build` refuses them for now. A narrow feature in a wide range can be missed by `∫` (§19): integrate over the part where the solution lives.

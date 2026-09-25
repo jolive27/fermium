@@ -479,3 +479,19 @@ def test_quantum_bound_states():
         assert vals[0] == pytest.approx(n - 0.5, abs=1e-8)
         assert vals[1] == pytest.approx(n - 0.5, abs=1e-8)
     assert os.path.exists(os.path.join(EXAMPLES, "gallery", "bound_states.png"))
+
+
+def test_pde_heat_waves_tunnelling():
+    """examples/41: heat (CN) against exp decay, a plucked string against d'Alembert, and tunnelling (D83)."""
+    out = run_example("41_pde_heat_waves_tunnelling")
+    exact = 80 * math.exp(-1.11e-4 * math.pi ** 2 * 200 / 0.25)
+    assert num(out, "rod: bump after 200 s:") == pytest.approx(exact, rel=2e-5)
+    assert num(out, "exact:") == pytest.approx(exact, rel=1e-5)
+    assert num(out, "string: middle after half a period:") == pytest.approx(-3.0, abs=1e-5)
+    assert num(out, "string: back after one period:") == pytest.approx(3.0, abs=1e-5)
+    t = num(out, "probability beyond the barrier:")
+    r = num(out, "reflected:")
+    assert 0.08 < t < 0.2 and t + r == pytest.approx(1, abs=1e-3)
+    assert num(out, "total probability (Crank–Nicolson keeps it):") == pytest.approx(1, abs=1e-4)
+    assert "animation saved to gallery/tunnelling.gif (40 frames)" in out
+    assert os.path.exists(os.path.join(EXAMPLES, "gallery", "heat_pde.png"))

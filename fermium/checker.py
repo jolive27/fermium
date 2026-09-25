@@ -986,6 +986,9 @@ class Checker(C.DiffContext):
         b, scope = self.lookup(name, ctx, e)
         if b is None:
             raise self.undefined(name, e, ctx)
+        if getattr(b, "is_pde", False):
+            raise self.err(f"{name} is a solution of a PDE, a function of {b.xname} and {b.tname}: write "
+                           f"{name}({b.xname}, {b.tname}), like {name}(0.5 m, 1 s)", e)
         if isinstance(b, FuncInfo) and scope is not None and scope.kind == "func":
             return FuncRef(b, name, param=True)      # a function passed in as an argument (D43)
         return self.use_binding(b, name, e, ctx)
@@ -1886,8 +1889,15 @@ class Checker(C.DiffContext):
     # ------------------------------------------------------------ calls
     def e_Call(self, e, ctx):
         f = e.func
+        if isinstance(f, A.Deriv) and isinstance(f.operand, A.Name) and \
+                getattr(ctx.scope.lookup(f.operand.name)[0], "is_pde", False):
+            from .m3solve import pde_call            # ∂u/∂x(x, t) of a PDE solution (D83)
+            return pde_call(self, ctx.scope.lookup(f.operand.name)[0], e, ctx, deriv=f)
         if isinstance(f, A.Name):
             b, _ = self.lookup(f.name, ctx, f)
+            if getattr(b, "is_pde", False):
+                from .m3solve import pde_call        # u(x, t) of a PDE solution (D83)
+                return pde_call(self, b, e, ctx)
             if b is None and f.name in ("γ", "Γ"):
                 return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
             if b is None and f.name == "err":           # err(g): the standard error of a fitted parameter

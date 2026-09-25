@@ -15,3 +15,6 @@ def finalize_tables(tables, U, start=0):
         f["rdims"] = [U.resolve(d) for d in f["dims"]]
         f["rydim"] = U.resolve(f["ydim"])
         f["col_units"] = {c["unit"].dim: c["unit"] for c in f.get("columns", []) if c["unit"].name not in ("1",)}
+    for a in getattr(tables, "m3_anims", []):          # plot u vs x animate over t (D83)
+        for k in ("udim", "xdim", "tdim"):
+            a["r" + k] = U.resolve(a[k])

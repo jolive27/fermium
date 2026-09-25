@@ -2557,3 +2557,4 @@ class LambdaGen(FuncGen):
 
 from . import codegen_m3  # noqa: E402  (M3 numerics: random numbers, FFT, PDEs; D80–D84)
 codegen_m3.attach(ModuleGen)
+codegen_m3.attach_funcgen(FuncGen)

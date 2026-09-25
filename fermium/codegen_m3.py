@@ -203,9 +203,88 @@ def attach(ModuleGen):
     ModuleGen._k_rand = k_rand
     ModuleGen._k_randn = k_randn
     ModuleGen._k_seed = k_seed
+    ModuleGen._k_pde_eval = k_pde_eval
 
 
-PY_SOLVES = {"eigen"}
+def attach_funcgen(FuncGen):
+    FuncGen.e_IPdeEval = e_IPdeEval
+    FuncGen.s_SAnimate = s_SAnimate
+
+
+def k_pde_eval(mg):
+    """double fm_pde_eval(sol, xa, xb, m, comp0, x, t, which): cubic Lagrange interpolation in x through the 4
+    grid points around x (fm_sol_eval, Hermite in t, at each); mirrors runtime/m3rt.pde_eval_py."""
+    from .codegen_llvm import SOLP
+    fn = mg._new_fn("fm_pde_eval", F64, [SOLP, F64, F64, I64, I64, F64, F64, I64], inline=False)
+    sp, xa, xb, m, comp0, x, t, which = fn.args
+    b = ir.IRBuilder(fn.append_basic_block("e"))
+    c = lambda v: ir.Constant(F64, v)          # noqa: E731
+    h = b.fdiv(b.fsub(xb, xa), b.sitofp(m, F64))
+    s = b.fdiv(b.fsub(x, xa), h)
+    j = b.fptosi(b.call(mg.intrinsic("floor"), [s]), I64)
+    one = ir.Constant(I64, 1)
+    j = b.select(b.icmp_signed("<", j, one), one, j)
+    mm2 = b.sub(m, ir.Constant(I64, 2))
+    j = b.select(b.icmp_signed(">", j, mm2), mm2, j)
+    r = b.fsub(s, b.sitofp(j, F64))
+    r2 = b.fmul(r, r)
+    # values: -r(r-1)(r-2)/6, (r+1)(r-1)(r-2)/2, -(r+1)r(r-2)/2, (r+1)r(r-1)/6
+    rm1, rm2, rp1 = b.fsub(r, c(1)), b.fsub(r, c(2)), b.fadd(r, c(1))
+    wv = [b.fdiv(b.fmul(b.fmul(b.fsub(c(0), r), rm1), rm2), c(6)),
+          b.fdiv(b.fmul(b.fmul(rp1, rm1), rm2), c(2)),
+          b.fdiv(b.fmul(b.fmul(b.fsub(c(0), rp1), r), rm2), c(2)),
+          b.fdiv(b.fmul(b.fmul(rp1, r), rm1), c(6))]
+    # x-derivatives: -(3r²-6r+2)/6, (3r²-4r-1)/2, -(3r²-2r-2)/2, (3r²-1)/6, over h
+    t3 = b.fmul(c(3), r2)
+    wd = [b.fdiv(b.fsub(c(0), b.fadd(b.fsub(t3, b.fmul(c(6), r)), c(2))), b.fmul(c(6), h)),
+          b.fdiv(b.fsub(b.fsub(t3, b.fmul(c(4), r)), c(1)), b.fmul(c(2), h)),
+          b.fdiv(b.fsub(c(0), b.fsub(b.fsub(t3, b.fmul(c(2), r)), c(2))), b.fmul(c(2), h)),
+          b.fdiv(b.fsub(t3, c(1)), b.fmul(c(6), h))]
+    isd = b.icmp_signed("==", which, one)
+    use_dy = b.select(b.icmp_signed("==", which, ir.Constant(I64, 2)), one, ir.Constant(I64, 0))
+    ev = mg.kernel("fm_sol_eval")
+    base = b.add(comp0, b.sub(j, one))
+    acc = c(0)
+    for k in range(4):
+        w = b.select(isd, wd[k], wv[k])
+        val = b.call(ev, [sp, b.add(base, ir.Constant(I64, k)), t, use_dy])
+        acc = b.fadd(acc, b.fmul(w, val))
+    b.ret(acc)
+    return fn
+
+
+def e_IPdeEval(g, e):
+    """u(x, t): x must be inside the grid (the error shows it in x's units), then fm_pde_eval."""
+    from .codegen_llvm import ERR_SOLRANGE
+    b = g.b
+    mg = g.mg
+    sol = g.expr(e.sol)
+    xa, xb = g.expr(e.xa), g.expr(e.xb)
+    x, t = g.expr(e.x), g.expr(e.t)
+    b.store(ir.Constant(I64, getattr(e, "xfmt", -1)), mg.errfmt)
+    g.mark_line()
+    slack = b.fmul(ir.Constant(F64, 1e-9), b.call(mg.intrinsic("fabs"), [b.fsub(xb, xa)]))
+    bad = b.or_(b.fcmp_ordered("<", x, b.fsub(xa, slack)), b.fcmp_ordered(">", x, b.fadd(xb, slack)))
+    bad = b.or_(bad, b.fcmp_unordered("uno", x, x))
+    with b.if_then(bad, likely=False):
+        g.fail(ERR_SOLRANGE, x, b.select(b.fcmp_ordered("<", x, xa), xa, xb))
+    b.store(ir.Constant(I64, getattr(e, "tfmt", -1)), mg.errfmt)
+    return b.call(mg.kernel("fm_pde_eval"), [sol, xa, xb, ir.Constant(I64, e.m), ir.Constant(I64, e.comp0), x, t,
+                                             ir.Constant(I64, e.which)])
+
+
+def s_SAnimate(g, s):
+    from .codegen_llvm import I8P, SOLP  # noqa: F401
+    b = g.b
+    mg = g.mg
+    g.mark_line()
+    ext = mg.extern("fm_animate", I64, [I64, SOLP, F64, F64])
+    st = b.call(ext, [ir.Constant(I64, s.anim_id), g.expr(s.sol), g.expr(s.xa), g.expr(s.xb)])
+    with b.if_then(b.icmp_signed("!=", st, ir.Constant(I64, 0)), likely=False):
+        g.fail(ERR_PENDING)
+
+
+PY_SOLVES = {"eigen", "pde"}
 
 
 def py_solve(g, s):
@@ -229,6 +308,15 @@ def py_solve(g, s):
         status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, t0, t1,
                               ir.Constant(I64, s.nstates), ir.Constant(I64, s.grid),
                               ir.Constant(I64, s.eig_method), out])
+    else:
+        ext = mg.extern("fm_pde", I64, [I8P, I8P, F64P, F64, F64, F64, F64, F64, I64, I64, I64, I64, I64, I64, I64,
+                                         SOLP.as_pointer()])
+        step = g.expr(s.step) if s.step is not None else ir.Constant(F64, float("nan"))
+        xa, xb = g.expr(s.xa), g.expr(s.xb)
+        status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, xa, xb, t0, t1, step,
+                              ir.Constant(I64, s.grid), ir.Constant(I64, s.order), ir.Constant(I64, s.pmethod),
+                              ir.Constant(I64, s.bc[0]), ir.Constant(I64, s.bc[1]),
+                              ir.Constant(I64, 1 if s.is_complex else 0), ir.Constant(I64, 1 if s.tdep else 0), out])
     with b.if_then(b.icmp_signed("!=", status, ir.Constant(I64, 0)), likely=False):
         with b.if_then(b.icmp_signed("==", status, ir.Constant(I64, 2))):
             b.call(mg.externs["longjmp"], [b.bitcast(mg.jmpbuf, I8P), ir.Constant(ir.IntType(32), 1)])

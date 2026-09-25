@@ -381,7 +381,13 @@ class Parser:
             st = self.tok
             y = self.expr_full()
             self.expect_kw("vs", "(write: plot y vs x)")
-            x = self.expr_full()
+            saved_nj = self.no_juxt_names
+            if "animate" not in self.known:
+                self.no_juxt_names = saved_nj | {"animate"}      # plot u vs x animate over t  (D83)
+            try:
+                x = self.expr_full()
+            finally:
+                self.no_juxt_names = saved_nj
             lo = hi = None
             if self.at_kw("from"):
                 self.next()
@@ -395,14 +401,17 @@ class Parser:
             break
         out = None
         opts = {}
-        while self.at_kw("to") or self.at_kw("with"):
+        def animate_next():
+            return self.tok.kind == "NAME" and self.tok.value == "animate" and "animate" not in self.known
+        while self.at_kw("to") or self.at_kw("with") or animate_next():
             if self.at_kw("to"):
                 self.next()
                 if self.tok.kind != "STR":
                     raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
                 out = self.next().value
                 continue
-            self.next()      # with log y / with log / with title "..."
+            if not animate_next():
+                self.next()      # with log y / with log / with title "..."   (`animate over t` needs no `with`)
             while True:
                 w = self.tok
                 if w.kind == "NAME" and w.value == "log":
@@ -412,13 +421,23 @@ class Parser:
                         axes = self.next().value
                     for a in axes:
                         opts["log" + a] = True
+                elif w.kind == "NAME" and w.value == "animate":
+                    self.next()             # with animate over t [frames 60]  (D83)
+                    if not (self.tok.kind == "NAME" and self.tok.value == "over"):
+                        raise self.error("write  with animate over t  (the variable that changes from frame to frame)")
+                    self.next()
+                    opts["animate"] = self.expect_name("the variable to animate over, like t").value
+                    if self.tok.kind == "NAME" and self.tok.value == "frames" and self.peek().kind == "NUM":
+                        self.next()
+                        opts["frames"] = self.next().value
                 elif w.kind == "NAME" and w.value == "title":
                     self.next()
                     if self.tok.kind != "STR":
                         raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
                     opts["title"] = self.next().value
                 else:
-                    raise self.error("plot options are:  with log y,  with log x,  with log,  with title \"...\"")
+                    raise self.error("plot options are:  with log y,  with log x,  with log,  with title \"...\",  "
+                                     "with animate over t")
                 if self.at_op(","):
                     self.next()
                     continue
@@ -474,6 +493,19 @@ class Parser:
                     self.next()
                     step = self.expr()
                 self.no_juxt_names = saved
+                if self.at_op(",") and self.peek().kind == "NAME" and self.peek(2).kind == "KW" and \
+                        self.peek(2).value == "from":
+                    self.next()             # a second range: a PDE in x and t (D83)
+                    m3["var2"] = self.next().value
+                    self.expect_kw("from")
+                    self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
+                    m3["lo2"] = self.expr()
+                    self.expect_kw("to")
+                    m3["hi2"] = self.expr()
+                    if self.at_kw("step"):
+                        self.next()
+                        m3["step2"] = self.expr()
+                    self.no_juxt_names = saved
                 if self.tok.kind == "NAME" and self.tok.value == "tolerance":
                     self.next()
                     tol_node[0] = self.expr()
@@ -541,6 +573,7 @@ class Parser:
             s.until = until[0]
         s.lowest = m3.get("lowest")
         s.grid = m3.get("grid")
+        s.var2, s.lo2, s.hi2, s.step2 = m3.get("var2"), m3.get("lo2"), m3.get("hi2"), m3.get("step2")
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
             for n in A.walk(eq.lhs):
@@ -1430,6 +1463,17 @@ class Parser:
     def partial_op(self):
         t = self.next()   # ∂
         order = self._deriv_order()      # ∂²/∂x² or partial^2/partial x^2 (what fmt --ascii writes)
+        if self.tok.kind == "NAME" and self.peek().kind == "OP" and self.peek().value == "/" and \
+                self.peek(2).kind == "KW" and self.peek(2).value == "partial":
+            # Leibniz form ∂u/∂t, ∂²u/∂x² (D83): the derivative of the function u
+            fn = self.next()
+            self.next()
+            self.next()
+            v = self.expect_name("the variable to differentiate by")
+            o2 = self._deriv_order()
+            if o2 != order and o2 != 1:
+                raise self.error(f"the orders don't match: ∂{order}{fn.value}/∂{v.value}{o2}", tok=v)
+            return self.span(A.Deriv(v.value, order, self.span(A.Name(fn.value), fn), partial=True), t)
         self.expect_op("/", "(write ∂/∂x f)")
         self.expect_kw("partial", "(write ∂/∂x f)")
         v = self.expect_name("the variable to differentiate by")
