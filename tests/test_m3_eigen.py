@@ -111,7 +111,8 @@ V(x) = if abs(x) < a then 0 eV else V0
 solve -ħ²/(2m_e) * ψ'' + V(x) ψ = E ψ
     with ψ(-2 nm) = 0, ψ(2 nm) = 0
     for x from -2 nm to 2 nm
-    lowest 3{method}
+    lowest 3
+    grid 3000{method}
 for n from 1 to 3
     print E[n] in eV to 14 digits
 """
@@ -247,3 +248,30 @@ def test_build_refuses_eigenvalue_problems(tmp_path):
     from fermium.aot import build
     with pytest.raises(FermiumError, match="fermium build can't compile an eigenvalue problem"):
         build(WELL.format(method=""), str(tmp_path / "w.fm"), str(tmp_path / "w"))
+
+
+# ---- gauntlet #69: a potential that is singular at an end (hydrogen's -k/r at r = 0) ---------------------------
+
+HYDROGEN = """V(r) = -1 eV nm / r
+solve -ħ²/(2*m_e) * u'' + V(r) u = E u
+    with u(0 nm) = 0, u(5 nm) = 0
+    for r from 0 nm to 5 nm
+    lowest 3
+    grid 3000{method}
+for k from 1 to 3
+    print E[k] in eV to 10 digits
+print ∫ u_1(r)^2 dr from 0 nm to 5 nm to 6 digits
+"""
+
+
+@pytest.mark.parametrize("method,rel", [("", 1e-7), ("\n    using shooting", 3e-6)])
+def test_hydrogen_like_radial_equation_with_the_coulomb_singularity_at_r_0(method, rel):
+    """u'' with V = -k/r, u(0) = 0: only interior points are evaluated, so r = 0 is allowed (#69).
+    E_n = -m k²/(2ħ² n²); the box of 5 nm is ~65 Bohr radii (a = ħ²/(m k) = 0.0762 nm), so the
+    box shifts the n ≤ 3 levels by far less than the tolerance."""
+    k = 1 * EV * 1e-9
+    e1 = -ME * k * k / (2 * HBAR ** 2) / EV
+    out = both(HYDROGEN.format(method=method)).splitlines()
+    for n in (1, 2, 3):
+        assert num(out[n - 1]) == pytest.approx(e1 / n ** 2, rel=rel)
+    assert num(out[3]) == pytest.approx(1.0, rel=1e-5)             # the state is normalised

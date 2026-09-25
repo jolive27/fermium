@@ -216,6 +216,13 @@ PREFIXES = {
     "y": 1e-24, "r": 1e-27, "q": 1e-30,
 }
 
+# The 2022 prefixes quetta- (Q), ronna- (R), ronto- (r) and quecto- (q) are accepted only on grams and metres,
+# and not where that makes a common physics name a unit: Rg, Qg, qg and Qm, but not rg (a gravitational radius),
+# rm, Rm or qm.  On every other unit they would turn two-letter names into units -- rs, RC, RL, RT, Rs, qV ...
+# -- so `2 rs` would silently be 2 rontoseconds (gauntlet #77, D174).
+_PREFIX_2022 = {"Q", "R", "r", "q"}
+_ALLOWED_2022 = {"Rg", "Qg", "qg", "Qm"}
+
 # Prefixed forms we refuse because they collide with common names or other units.
 _BLOCKED = {"ft", "mi", "Pa" + "", "cd", "min", "pc", "ha", "nmi", "Gs", "ms_", "dam"}
 
@@ -249,6 +256,8 @@ def lookup_unit(name: str):
     for p in sorted(PREFIXES, key=len, reverse=True):
         if name.startswith(p) and len(name) > len(p):
             rest = name[len(p):]
+            if p in _PREFIX_2022 and name not in _ALLOWED_2022:
+                continue
             if rest in _UNITS and _UNITS[rest][2] and name not in _BLOCKED:
                 f, d, _ = _UNITS[rest]
                 if rest == "g":  # kg etc.

@@ -27,13 +27,13 @@ fd(y) = 1 / (1 + exp(y))           # Fermi–Dirac occupation at energy/temperat
 # e± pairs (g = 4): energy density, pressure and dρ/dT, with x = m_e c²/T and u = p c / T
 ρ_e(T) =
     x = me / T
-    (2/π²) T⁴/(ħ c)³ * ∫ u² √(u² + x²) fd(√(u² + x²)) du from 0 to 60 + x
+    (2/π²) T⁴/(ħ c)³ * ∫ u² √(u² + x²) fd(√(u² + x²)) du from 0 to (60 + x)
 P_e(T) =
     x = me / T
-    (2/π²) T⁴/(ħ c)³ * ∫ u⁴ fd(√(u² + x²)) / (3 √(u² + x²)) du from 0 to 60 + x
+    (2/π²) T⁴/(ħ c)³ * ∫ u⁴ fd(√(u² + x²)) / (3 √(u² + x²)) du from 0 to (60 + x)
 dρe_dT(T) =
     x = me / T
-    (2/π²) T³/(ħ c)³ * ∫ u² (u² + x²) fd(√(u² + x²)) fd(-√(u² + x²)) du from 0 to 60 + x
+    (2/π²) T³/(ħ c)³ * ∫ u² (u² + x²) fd(√(u² + x²)) fd(-√(u² + x²)) du from 0 to (60 + x)
 ρ_γ(T) = (π²/15) T⁴/(ħ c)³
 
 # Entropy conservation: the neutrinos decoupled before e± annihilation, so T_ν ∝ 1/a while the photons are
