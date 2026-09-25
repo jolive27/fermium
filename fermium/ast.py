@@ -476,3 +476,23 @@ def free_names(n):
     for c in children(n):
         out += free_names(c)
     return out
+
+
+@dataclass(eq=False)
+class PySig(Node):
+    """One declared signature in `use python mod as m:` (D140): `f(x [m], n: int) -> list [J]`.
+
+    params: list of (name, UnitExpr-or-None, is_int); ret_shape: None (follow the arguments), 'list' or
+    'number'; ret_unit: UnitExpr or None (a plain number)."""
+    name: str
+    params: list
+    ret_shape: str | None = None
+    ret_unit: object = None
+
+
+@dataclass(eq=False)
+class UsePython(Node):
+    """`use python numpy as np`, `use python scipy.special as sp`, with optional signatures (D140)."""
+    module: str
+    alias: str | None = None
+    sigs: list = field(default_factory=list)

@@ -307,6 +307,14 @@ class Runtime:
             from .m3rt import eigen_cb
             return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname, fmt)
 
+        def pycall(cid, ptrs, lens, out):        # use python (D140)
+            from .pycall import jit_call
+            return jit_call(rt, cid, ptrs, lens, out)
+
+        def pyfetch(dst):
+            from .pycall import jit_fetch
+            jit_fetch(rt, dst)
+
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat, "print_cplx": print_cplx,
@@ -340,6 +348,8 @@ class Runtime:
                          c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64,
                          ctypes.POINTER(c_void_p))(pde),
             "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
+            "fm_pycall": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64), DPTR)(pycall),
+            "fm_pyfetch": CB(None, DPTR)(pyfetch),
             "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
                            c_int64, c_int64, ctypes.POINTER(c_void_p))(eigen),
         }

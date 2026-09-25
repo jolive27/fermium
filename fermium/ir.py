@@ -114,6 +114,13 @@ class IMap(Expr):
         self.func, self.args, self.list_pos, self.ty = func, args, list_pos, ty
 
 
+class IPyCall(Expr):
+    """A call of a Python function (`use python`, D140): call_id indexes tables.pycalls (names, unit factors)."""
+
+    def __init__(self, call_id, args, ty):
+        self.call_id, self.args, self.ty = call_id, args, ty
+
+
 class IBuiltin(Expr):
     def __init__(self, name, args, ty):
         self.name, self.args, self.ty = name, args, ty

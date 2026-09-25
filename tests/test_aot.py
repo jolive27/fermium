@@ -33,7 +33,8 @@ def reference_programs():
         # eigenvalue problems (lowest N) and PDEs run in Python too (D82, D83; test_m3_*.py check the error)
         if not re.search(r"\b(plot|fit|load)\b", m) and not re.search(r"\busing\s+(radau|bdf)\b", m) and \
                 not re.search(r"\blowest\s+\d", m) and not re.search(r"solve\s+[^\n]*∂", m) and \
-                "±" not in m:        # uncertainties: fermium build refuses them (D122; test_uncertainty.py)
+                "±" not in m and \
+                not re.search(r"\buse\s+python\b", m):          # ± (D122), Python interop (D140)
             progs.append(pytest.param(m, id=f"reference#{i + 1}"))
     return progs
 

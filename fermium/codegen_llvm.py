@@ -2658,6 +2658,34 @@ class FuncGen:
             return b.fsub(pos, neg)
         raise KeyError(name)
 
+    def e_IPyCall(self, e):
+        """A call into Python (D140): i64 fm_pycall(id, double** ptrs, i64* lens, double* out); a list result is
+        then copied into a new list by fm_pyfetch.  Negative status: the callback set the message."""
+        b = self.b
+        n = max(1, len(e.args))
+        ptrs = self.alloca(ir.ArrayType(F64P, n), "py.ptrs")
+        lens = self.alloca(ir.ArrayType(I64, n), "py.lens")
+        out = self.alloca(F64, "py.out")
+        for k, a in enumerate(e.args):
+            v = self.expr(a)
+            if isinstance(a.ty, ListTy):
+                p, ln = self.ldata(v), self.llen(v)
+            else:
+                p = self.alloca(F64, f"py.arg{k}")
+                b.store(v, p)
+                ln = i64(-1)
+            b.store(p, b.gep(ptrs, [I32(0), I32(k)]))
+            b.store(ln, b.gep(lens, [I32(0), I32(k)]))
+        f = self.mg.extern("fm_pycall", I64, [I64, F64PP, I64.as_pointer(), F64P])
+        st = b.call(f, [i64(e.call_id), b.gep(ptrs, [I32(0), I32(0)]), b.gep(lens, [I32(0), I32(0)]), out])
+        with b.if_then(b.icmp_signed("<", st, i64(0)), likely=False):
+            self.fail(ERR_PENDING)
+        if not isinstance(e.ty, ListTy):
+            return b.load(out)
+        lst, data = self.new_list(st)
+        b.call(self.mg.extern("fm_pyfetch", VOID, [F64P]), [data])
+        return lst
+
     def e_IBuiltin(self, e):
         b = self.b
         name = e.name

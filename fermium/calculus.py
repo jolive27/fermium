@@ -483,6 +483,11 @@ def _d(e, var, ctx):
         if depends_on(e.lo, var):
             res = sub(res, mul(subst(e.integrand, {e.var: e.lo}), _d(e.lo, var, ctx)))
         return res
+    if isinstance(e, A.Call) and isinstance(e.func, A.Field) and isinstance(e.func.target, A.Name):
+        nm = f"{e.func.target.name}.{getattr(e.func, 'raw', e.func.name)}"     # np.sin(x) from use python (D140)
+        raise FermiumError(f"can't differentiate {nm}(...) symbolically", e.line, e.col,
+                           hint="if it is a Python function, it is a black box to Fermium: write the formula in "
+                                "Fermium, or take a finite difference, like (f(x + h) - f(x - h)) / (2 h)")
     raise FermiumError("can't differentiate this expression symbolically", e.line, e.col)
 
 

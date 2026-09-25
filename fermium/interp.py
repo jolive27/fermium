@@ -1777,6 +1777,16 @@ class Interpreter:
             return self.mc.new(e, i, v, sg)
         return v + UFloat.measured(0.0, sg) if isinstance(v, UFloat) else UFloat.measured(v, sg)
 
+    def e_IPyCall(self, e, fr):
+        """A call into Python (D140): the same conversion code as the compiled fm_pycall callback."""
+        from .runtime.pycall import call, PyCallError
+        args = [self.eval(a, fr) for a in e.args]
+        try:
+            return call(self.rt.tables.pycalls[e.call_id], args, self.rt.base_dir)
+        except PyCallError as ex:
+            self.rt.error = str(ex)
+            raise FermiumRuntimeError(str(ex), self.line or None) from None
+
     def e_IBuiltin(self, e, fr):
         name = e.name
         if name in ("pm", "pm_rel", "unc_value", "unc_uncertainty", "unc_rel"):

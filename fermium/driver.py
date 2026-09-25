@@ -231,6 +231,13 @@ class ReplSession:
 
     def execute(self, text):
         """Compile and run one chunk of input.  Raises FermiumError on problems."""
+        fn = self.compile_input(text)
+        for w in self.diags.warnings:
+            self.out.write(w.format(text) + "\n")
+        self.run_entry(fn)
+
+    def compile_input(self, text):
+        """Compile one chunk of input into a callable entry point (without running it)."""
         self.count += 1
         self.diags.warnings.clear()
         prog = parse(text, self.diags, known=self.known)
@@ -256,10 +263,12 @@ class ReplSession:
         engine.finalize_object()
         self.engines.append(engine)
         self.runtime.engine_ref = engine
-        fn = ctypes.CFUNCTYPE(ctypes.c_int32)(engine.get_function_address(entry))
+        return ctypes.CFUNCTYPE(ctypes.c_int32)(engine.get_function_address(entry))
+
+    def run_entry(self, fn):
+        """Run a compiled entry point; raises FermiumRuntimeError if the program stops with an error."""
         self.runtime.error = None
-        for w in self.diags.warnings:
-            self.out.write(w.format(text) + "\n")
+        self.runtime.error_line = None
         with _CtrlC(self.out):
             code = call_with_big_stack(fn)
         if self.runtime.line:

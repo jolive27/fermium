@@ -105,7 +105,9 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
             i += 1
             continue
         text = t.raw
-        if mode == "pretty":
+        if mode == "pretty" and i >= 1 and toks[i - 1].kind == "OP" and toks[i - 1].raw == "." and not t.ws_before:
+            text = t.raw            # np.sqrt, sp.gamma: a Python name after '.' keeps its spelling (D140)
+        elif mode == "pretty":
             text = _pretty_token(toks, i, skip)
         elif t.kind == "KW" and t.value == "nabla":
             text = _nabla_ascii(toks, i, skip)
