@@ -44,6 +44,19 @@ def doctor():
             _ok(f"{mod} {m.__version__}")
         except ImportError:
             _bad(f"{mod} is not installed ({why}; everything else works)", f"run:  pip install {mod}")
+    # the editor and notebook tools: optional, each needs one package (red team 5 #16)
+    for mod, what in (("pygls", "the language server, fermium lsp (VS Code hover and live errors)"),
+                      ("ipykernel", "the Jupyter kernel (fermium jupyter install)")):
+        try:
+            __import__(mod)
+            try:
+                from importlib.metadata import version
+                ver = " " + version(mod)
+            except Exception:
+                ver = ""
+            _ok(f"{mod}{ver}: for {what}")
+        except ImportError:
+            print(f"  - {mod} is not installed: only needed for {what}\n      to get it: pip install {mod}")
     # a C compiler links `fermium build` executables; nothing else needs one
     try:
         from . import aot

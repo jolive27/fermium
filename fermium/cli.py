@@ -83,9 +83,15 @@ def cmd_check(args):
         return 1
     except Exception as e:
         return _internal(e)
-    for w in d.warnings:
+    ws = sorted(d.warnings, key=lambda w: (w.line or 0, w.col or 0))
+    for w in ws:
         sys.stderr.write(w.format(src) + "\n")
-    print(f"{args.file}: no problems found (units check out)")
+    sys.stderr.flush()
+    if ws:
+        n = len(ws)
+        print(f"{args.file}: units check out, {n} warning{'s' if n != 1 else ''} (read {'them' if n != 1 else 'it'} above)")
+    else:
+        print(f"{args.file}: no problems found (units check out)")
     return 0
 
 

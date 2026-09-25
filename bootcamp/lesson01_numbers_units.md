@@ -76,7 +76,7 @@ print 100 km / 2 hr
 ```
 
 Look at what happened:
-- `2 m + 30 cm` gave `2.3 m`. Fermium converted the centimetres for you.
+- `2 m + 30 cm` gave `2.30 m`. Fermium converted the centimetres for you.
 - `100 km / 2 hr` came out in m/s, because a distance divided by a time is a speed. Fermium works out the units of every result.
 
 Units are written the way you'd write them on paper:

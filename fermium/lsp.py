@@ -107,9 +107,9 @@ def _type_text(ck: Checker, ty, hint=None):
     if isinstance(ty, VecTy) and getattr(ty, "mixed", False):
         return f"a {ty.n}-D vector of (" + ", ".join(ck.desc(ck.U.resolve(d)) for d in ty.dims) + ")"
     if isinstance(ty, VecTy):
-        return f"a {ty.n}-D vector of " + _type_text(ck, NumTy(ty.dim), hint)
+        return f"a {ty.n}-D vector of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
     if isinstance(ty, MatTy):
-        return f"a {ty.r}×{ty.c} matrix of " + _type_text(ck, NumTy(ty.dim), hint)
+        return f"a {ty.r}×{ty.c} matrix of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
     if isinstance(ty, TextListTy):
         return "a list of text"
     if isinstance(ty, StrTy):
@@ -118,7 +118,29 @@ def _type_text(ck: Checker, ty, hint=None):
         return "true or false"
     if isinstance(ty, SolTy):
         return "the solution of an ODE"
+    info = getattr(ty, "info", None)
+    if getattr(ty, "kind", None) == "data" and isinstance(info, dict):
+        # a data table: its columns and their units (red team 5 nit)
+        cols = ", ".join(f"{c['name']} [{c['unit'].name}]" if c["unit"].name not in ("", "1") else c["name"]
+                         for c in info.get("columns", []))
+        where = "" if info.get("table") else f" from {info.get('path')}"
+        return f"a data table{where} with the columns {cols}"
     return getattr(ty, "kind", "a value")
+
+
+def module_of(an: Analysis, source: str, line: int, char: int):
+    """The module whose member is at the 0-based position (`mechanics.pendulum_period`), or None."""
+    ck = an.checker
+    lines = source.split("\n")
+    if ck is None or not 0 <= line < len(lines):
+        return None
+    text = lines[line]
+    for m in WORD.finditer(text):
+        if m.start() <= char <= m.end():
+            q = re.search(r"(" + WORD.pattern + r")\.$", text[:m.start()])
+            b = ck.globals.names.get(q.group(1)) if q else None
+            return b if isinstance(b, ModuleRef) else None
+    return None
 
 
 def hover_text(an: Analysis, source: str, line: int, char: int):
@@ -128,6 +150,11 @@ def hover_text(an: Analysis, source: str, line: int, char: int):
         return None
     ck = an.checker
     b = ck.globals.names.get(name) if ck is not None else None
+    mod = module_of(an, source, line, char)
+    if mod is not None:              # mechanics.pendulum_period: the module's own name (red team 5 #8)
+        b = mod.info.scope.names.get(name)
+        if b is None:
+            return f"**{name}**: not in the module {mod.info.name}"
     if isinstance(b, I.Sym):
         return f"**{name}**: {_type_text(ck, b.ty, getattr(b, 'hint', None))}"
     if isinstance(b, FuncInfo):
@@ -185,6 +212,29 @@ def completions(an: Analysis, source: str, line: int, char: int):
     return out
 
 
+# ------------------------------------------------------------------ positions
+# The protocol counts characters in UTF-16 code units; Fermium counts code points.  They differ after an
+# astral character such as 𝑖 (U+1D456), which is two UTF-16 units (red team 5 #7).
+def _line(source, line):
+    lines = source.split("\n")
+    return lines[line] if 0 <= line < len(lines) else ""
+
+
+def to_utf16(text: str, char: int) -> int:
+    """The UTF-16 column of the 0-based code-point column `char` in the line `text`."""
+    return char + sum(1 for c in text[:char] if ord(c) > 0xFFFF)
+
+
+def from_utf16(text: str, unit: int) -> int:
+    """The 0-based code-point column of the UTF-16 column `unit` in the line `text`."""
+    n = 0
+    for i, c in enumerate(text):
+        if n >= unit:
+            return i
+        n += 2 if ord(c) > 0xFFFF else 1
+    return len(text) + max(unit - n, 0)
+
+
 # ------------------------------------------------------------------ the LSP server
 def serve():                      # pragma: no cover - exercised by tests/test_lsp.py over stdio
     from lsprotocol import types as T
@@ -204,9 +254,11 @@ def serve():                      # pragma: no cover - exercised by tests/test_l
         diags = []
         for p in an.problems:
             ln, c = max(p.line - 1, 0), max(p.col - 1, 0)
+            text = _line(doc.source, ln)
             msg = p.message + (f"\nhint: {p.hint}" if p.hint else "")
             diags.append(T.Diagnostic(
-                range=T.Range(T.Position(ln, c), T.Position(ln, c + max(p.length, 1))), message=msg,
+                range=T.Range(T.Position(ln, to_utf16(text, c)), T.Position(ln, to_utf16(text, c + max(p.length, 1)))),
+                message=msg,
                 severity=T.DiagnosticSeverity.Error if p.severity == "error" else T.DiagnosticSeverity.Warning,
                 source="fermium"))
         ls.text_document_publish_diagnostics(T.PublishDiagnosticsParams(uri=uri, diagnostics=diags))
@@ -228,7 +280,8 @@ def serve():                      # pragma: no cover - exercised by tests/test_l
         uri = params.text_document.uri
         doc = ls.workspace.get_text_document(uri)
         an = cache.get(uri) or analyze(doc.source, doc_dir(uri))
-        text = hover_text(an, doc.source, params.position.line, params.position.character)
+        ln = params.position.line
+        text = hover_text(an, doc.source, ln, from_utf16(_line(doc.source, ln), params.position.character))
         if text is None:
             return None
         return T.Hover(contents=T.MarkupContent(kind=T.MarkupKind.Markdown, value=text))
@@ -238,12 +291,15 @@ def serve():                      # pragma: no cover - exercised by tests/test_l
         uri = params.text_document.uri
         doc = ls.workspace.get_text_document(uri)
         an = cache.get(uri) or analyze(doc.source, doc_dir(uri))
-        ln, ch = params.position.line, params.position.character
+        ln = params.position.line
+        text = _line(doc.source, ln)
+        ch = from_utf16(text, params.position.character)
         items = []
         for label, insert, start, detail in completions(an, doc.source, ln, ch):
             items.append(T.CompletionItem(
                 label=label, detail=detail, filter_text=label,
-                text_edit=T.TextEdit(range=T.Range(T.Position(ln, start), T.Position(ln, ch)), new_text=insert)))
+                text_edit=T.TextEdit(range=T.Range(T.Position(ln, to_utf16(text, start)),
+                                                   T.Position(ln, params.position.character)), new_text=insert)))
         return T.CompletionList(is_incomplete=False, items=items)
 
     server.start_io()

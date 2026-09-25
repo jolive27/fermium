@@ -1243,10 +1243,24 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         private = {p.id for p in par["private"]} | {isym.id}
         reductions, written, red_ops = [], [], set()
 
+        # where each statement of the body starts, so an error points at the statement, not at column 1
+        # (red team 5 #6)
+        starts = {}
+
+        def note(ss):
+            for st in ss if isinstance(ss, list) else ():
+                ln, col = getattr(st, "line", None), getattr(st, "col", None)
+                if ln and col and ln not in starts:
+                    starts[ln] = (col, getattr(st, "length", None) or 1)
+                for k in ("body", "then", "other"):
+                    note(getattr(st, k, None))
+        note(getattr(node, "body", None))
+
         def err(msg, line=None, hint=None):
             e = self.err(msg, node, hint=hint)
             if line and line != getattr(node, "line", None):
-                e.line, e.col, e.length = line, 1, 1
+                col, length = starts.get(line, (1, 1))
+                e.line, e.col, e.length = line, col, length
             return e
 
         def is_i(ix):
@@ -1556,6 +1570,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.direct = isinstance(e.value, A.Num)
         if u.affine and isinstance(e.value, A.Num):
             r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
+            r.abs_at = e                             # where it is written (the warning points there, #9)
         return r
 
     def lookup(self, name, ctx, node):
@@ -1809,6 +1824,17 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                             hint="for the remainder of a division use mod(n, 2)")
         if name in BUILTINS:
             return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
+        states = sorted((k for k in known if k.startswith(name + "_") and k[len(name) + 1:].isdigit()),
+                        key=lambda k: int(k[len(name) + 1:]))
+        if states:          # after an eigenvalue problem the states are ψ₁ … ψ_N (§20, red team 5 #12)
+            sub = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+            pretty = [name + k[len(name) + 1:].translate(sub) for k in states]
+            from .lexer import GREEK_TO_ASCII
+            ascii1 = "".join(GREEK_TO_ASCII.get(c, c) for c in states[0])
+            return self.err(f"{name} isn't defined: the eigenvalue problem's states are "
+                            f"{', '.join(pretty[:3])}{' … ' + pretty[-1] if len(pretty) > 3 else ''}", e,
+                            hint=f"use {pretty[0]} (ASCII: {ascii1}) for the lowest state, {pretty[0]}(x) for its "
+                                 f"value at x")
         return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
 
     # ------------------------------------------------------------ arithmetic
@@ -2270,8 +2296,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             return
         u = a.hint
         x, k = format_number(lit[0]), format_number(float(lit[0]) * u.factor + u.offset)
+        at = getattr(a, "abs_at", None) or e      # the `10 °C` itself, not the start of the formula (red team 5 #9)
         self.diags.warn(f"{x} {u.name} is an absolute temperature, so it enters this formula as {k} K",
-                        line=e.line, col=e.col,
+                        line=at.line or e.line, col=at.col or e.col, length=getattr(at, "length", None) or 1,
                         hint=f"for a temperature change (ΔT in Q = m c ΔT) write {format_number(lit[0] * u.factor, 3)} "
                              f"K; for an absolute temperature (p V = n R T) write {k} K to make it clear")
 
@@ -4084,8 +4111,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def e_Deriv(self, e, ctx):
         op = e.operand
-        if isinstance(op, A.Name):
-            b, _ = ctx.scope.lookup(op.name)
+        inner = None
+        if isinstance(op, A.Deriv) and isinstance(op.operand, (A.Name, A.Deriv)):
+            # ∂/∂x ∂/∂y f: differentiate the function ∂f/∂y again (mixed partials, red team 5 #18)
+            v = self.expr(op, ctx, allow_func=True)
+            if isinstance(v, FuncRef):
+                inner = v.info
+        if isinstance(op, A.Name) or inner is not None:
+            b = inner if inner is not None else ctx.scope.lookup(op.name)[0]
             if isinstance(b, FuncInfo):
                 params = [p.name for p in b.fdef.params]
                 if e.var in params:
@@ -4097,6 +4130,31 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 return FuncRef(self.derived_info(b, i, e.order, e))
             if isinstance(b, SolView):
                 return self.e_Prime(A.Prime(op, e.order).at(e), ctx)
+        if isinstance(op, A.Call) and isinstance(op.func, A.Name) and \
+                not any(C.depends_on(a, e.var) for a in op.args):
+            # d/dt x(2 s), ∂/∂x f(1, 2): a function called at a point that doesn't involve the variable. As a
+            # formula that is a constant with derivative 0, but it is read as "the derivative of x at 2 s", so
+            # that is what it means: (d/dt x)(2 s) (red team 5 #4, D221)
+            b, _ = ctx.scope.lookup(op.func.name)
+            if isinstance(b, (FuncInfo, SolView)):
+                fname = op.func.name
+                if isinstance(b, FuncInfo):
+                    params = [p.name for p in b.fdef.params]
+                    if e.var not in params and not (len(params) == 1 and not e.partial):
+                        ops = "∂/∂" if e.partial else "d/d"
+                        raise self.err(f"{fname} has no parameter called {e.var}, so {ops}{e.var} "
+                                       f"{C.to_source(op)} would be 0", e,
+                                       hint=f"{fname}'s parameters are {', '.join(params)}; differentiate with "
+                                            f"respect to one of them, e.g. ({ops}{params[0]} {fname})"
+                                            f"({', '.join(C.to_source(a) for a in op.args)})")
+                    inner = A.Deriv(e.var, e.order, op.func, e.partial).at(e)
+                else:
+                    inner = A.Prime(op.func, e.order).at(e)
+                call = A.Call(inner, op.args).at(op)
+                for k, v in vars(op).items():
+                    if k not in ("func", "args") and not hasattr(call, k):
+                        setattr(call, k, v)
+                return self.expr(call, ctx)
         # derivative of a formula
         bound, _ = ctx.scope.lookup(e.var)
         body = op
@@ -4109,9 +4167,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.nat = self.nat if self.nat.natural else None
-        info.display_name = f"d/d{e.var}(...)"
-        info.anon_label = f"d/d{e.var} ({C.to_source(op)})" if e.order == 1 else \
-            f"d^{e.order}/d{e.var}^{e.order} ({C.to_source(op)})"
+        from .units import SUPERSCRIPTS
+        dd = "∂" if e.partial else "d"           # ∂/∂x prints as ∂/∂x, not d/dx (red team 5 #4)
+        sup = "" if e.order == 1 else str(e.order).translate(SUPERSCRIPTS)
+        info.display_name = f"{dd}/{dd}{e.var}(...)"
+        info.anon_label = f"{dd}{sup}/{dd}{e.var}{sup} ({C.to_source(op)})"
         info.stable = True
         return FuncRef(info)
 

@@ -19,11 +19,12 @@ dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "scipy", "sympy", "matplotl
 fermium = "fermium.cli:entry"
 
 [tool.setuptools]
-packages = ["fermium", "fermium.runtime", "fermium.jupyter"]
+packages = ["fermium", "fermium.runtime", "fermium.jupyter", "fermium.selfhost"]
 
 [tool.setuptools.package-data]
 "fermium.runtime" = ["*.c"]
 "fermium" = ["stdlib/*.fm"]
+"fermium.selfhost" = ["*.fm"]
 
 [tool.ruff]
 line-length = 120

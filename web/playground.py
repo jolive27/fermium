@@ -41,6 +41,18 @@ def _pngs(root):
     return found
 
 
+def _split_warnings(text):
+    """The run-time warnings written while the program ran, one entry per warning (as `fermium run` shows them
+    on stderr)."""
+    items = []
+    for ln in text.splitlines():
+        if ln.startswith("warning:") or not items:
+            items.append(ln)
+        else:
+            items[-1] += "\n" + ln
+    return [w for w in items if w.strip()]
+
+
 def run(code, base_dir="."):
     """Run a Fermium program; return a JSON string with stdout, warnings, error and plots."""
     from fermium.errors import Diagnostics, FermiumError
@@ -50,11 +62,12 @@ def run(code, base_dir="."):
     os.makedirs(base_dir, exist_ok=True)
     before = _pngs(base_dir)
     out = io.StringIO()
+    err = io.StringIO()       # run-time warnings (the coarse RK4 step, the zero integral): shown on the page
     diags = Diagnostics()
     error = None
     t0 = time.time()
     try:
-        run_interpreted(code, "<playground>", out=out, base_dir=base_dir, diags=diags)
+        run_interpreted(code, "<playground>", out=out, base_dir=base_dir, diags=diags, err=err)
     except FermiumError as e:
         error = e.format(code, None)
     except ModuleNotFoundError as e:
@@ -76,7 +89,7 @@ def run(code, base_dir="."):
                               "png": base64.b64encode(fh.read()).decode("ascii")})
     return json.dumps({
         "stdout": out.getvalue(),
-        "warnings": [w.format(code, None) for w in diags.warnings],
+        "warnings": [w.format(code, None) for w in diags.warnings] + _split_warnings(err.getvalue()),
         "error": error,
         "plots": plots,
         "seconds": round(elapsed, 3),

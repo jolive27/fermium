@@ -111,6 +111,9 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
             text = _pretty_token(toks, i, skip)
         elif t.kind == "KW" and t.value == "nabla":
             text = _nabla_ascii(toks, i, skip)
+        elif t.kind == "NAME" and t.value == "𝑖" and _imag_literal_ok(toks, i):
+            out[-1] = ""                # 2𝑖 -> 2i, not 2 1i (red team 5 nit)
+            text = "i"
         else:
             text = _ascii_token(toks, i, closers, diags)
         # never glue two words together that were separate tokens (2πf -> "2 pi f", not "2pif")
@@ -176,6 +179,17 @@ def _nabla_ascii(toks, i, skip):
     skip.update(range(i + 1, j + 1))
     name, ok = (toks[j].raw, True) if toks[j].raw.isascii() else _ident_ascii(toks[j].value)
     return f"{word}({name if ok else toks[j].raw})"
+
+
+def _imag_literal_ok(toks, i):
+    """Can `2𝑖` be written as the literal `2i`?  Only after a plain number (not an exponent: 2^3𝑖 is (2³)𝑖, but
+    2^3i would be 2^(3i)), with nothing that could read as a unit after it."""
+    if i < 1 or toks[i - 1].kind != "NUM" or not all(c.isdigit() or c == "." for c in toks[i - 1].raw):
+        return False
+    if i >= 2 and toks[i - 2].kind == "OP" and toks[i - 2].raw in ("^", "**"):
+        return False
+    nxt = toks[i + 1] if i + 1 < len(toks) else None
+    return not (nxt is not None and nxt.kind in ("NAME", "NUM"))
 
 
 def _ascii_token(toks, i, closers, diags):
