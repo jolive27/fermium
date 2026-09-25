@@ -1240,6 +1240,44 @@ class Interpreter:
             raise _Fail(ERR_SINGULAR)
         return tuple(out)
 
+    def m3_fourier(self, name, args):
+        """Mirrors codegen_m3.fft / frequencies / argmax (D81)."""
+        if name == "frequencies":
+            n = _count(args[0])
+            if n < 1:
+                raise _Fail(ERR_EMPTY)
+            return [i / (n * args[1]) for i in range(n // 2 + 1)]
+        a = args[0]
+        if len(a) < 1:
+            raise _Fail(ERR_EMPTY)
+        if name in ("argmax", "argmin"):
+            best = 0
+            for i in range(1, len(a)):
+                x, y = a[i], a[best]
+                if (x > y if name == "argmax" else x < y) or (y != y and x == x):
+                    best = i
+            return float(best + 1)
+        from .runtime.spectral import spectrum
+        kind = {"fft_re": 0, "fft_im": 1, "amplitude_spectrum": 2, "power_spectrum": 3, "ifft": 4}[name]
+        if name == "ifft" and len(args[1]) != len(a):
+            raise _Fail(ERR_LEN, float(len(a)), float(len(args[1])))
+        return spectrum(kind, a, args[1] if name == "ifft" else None, args[1] if name == "power_spectrum" else 1.0)
+
+    def m3_random(self, name, args):
+        """The same generator as the compiled code, on the runtime's state (D80)."""
+        from . import rng
+        st = self.rt.rng_state
+        if name == "rand":
+            return rng.rand(st)
+        if name == "rand2":
+            return args[0] + (args[1] - args[0]) * rng.rand(st)
+        if name == "randn":
+            return rng.randn(st)
+        if name == "randn2":
+            return args[0] + args[1] * rng.randn(st)
+        rng.seed(st, args[0])
+        return 0.0
+
     def e_IBuiltin(self, e, fr):
         name = e.name
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
@@ -1285,9 +1323,14 @@ class Interpreter:
             return min(max(args[0], args[1]), args[2])
         if name == "factorial":
             return math1("gamma", args[0] + 1)
-        if name == "rand":
-            import random
-            return random.random()
+        if name in ("rand", "rand2", "randn", "randn2", "seed"):
+            return self.m3_random(name, args)
+        if name in ("fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum", "frequencies", "argmax",
+                    "argmin"):
+            return self.m3_fourier(name, args)
+        if name == "sample":
+            f = self.scalar_fn(e.lam, fr)
+            return [f(float(k + 1)) for k in range(_count(args[0]))]
         if name == "clock":
             return time.perf_counter()
         if name == "len":

@@ -24,6 +24,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
 19. [Known limitations](#19-known-limitations)
+20. [Numerics: random numbers, Fourier transforms, eigenstates, PDEs](#20-numerics-random-numbers-fourier-transforms-eigenstates-pdes)
 
 ---
 
@@ -582,7 +583,10 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
-| `factorial(n) rand()` | |
+| `factorial(n)` | |
+| `rand() rand(a, b) randn() randn(μ, σ) seed(n) sample(expr, N)` | seeded random numbers and Monte Carlo (§20) |
+| `fft_re(xs) fft_im(xs) ifft(re, im) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20) |
+| `argmax(xs) argmin(xs)` | the position (1-based) of the largest / smallest element |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
 
 ## 14. Constants
@@ -676,3 +680,69 @@ These are known and not yet fixed. None of them is silent about units.
 - **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
+
+## 20. Numerics: random numbers, Fourier transforms, eigenstates, PDEs
+
+### Random numbers and Monte Carlo
+
+```fermium
+seed(42)                       # the same numbers every run, in fermium run, fermium build and the interpreter
+print rand()                   # uniform in [0, 1)
+print rand(2 m, 3 m)           # uniform in [2 m, 3 m): both ends in the same units
+print randn()                  # standard normal (mean 0, standard deviation 1)
+print randn(9.81 m/s², 0.02 m/s²)   # normal with mean μ and standard deviation σ, in their units
+```
+
+- **`seed(n)`** is a statement on its own line. It restarts the generator: the same seed gives the same numbers, in `fermium run`, in a `fermium build` executable and in the reference interpreter (the generator, xoshiro256\*\*, is written once in LLVM IR and once in Python, DECISIONS D80). A program that never calls `seed` starts as if it had called `seed(0)`, so it is reproducible too. In the REPL and in Jupyter, the numbers continue from one input to the next.
+- **`sample(expr, N)`** evaluates `expr` N times, drawing new random numbers each time, and gives a list with the units of `expr`. With `mean`, `std` and `len`, this is a Monte Carlo estimate with its statistical error:
+
+```fermium
+seed(1)
+N = 100000
+inside = sample(if rand()^2 + rand()^2 < 1 then 1 else 0, N)
+p = mean(inside)
+print "π ≈", 4 p, "±", 4 sqrt(p (1 - p) / N)
+
+# a pendulum's period when its length is known to ±1 cm (Monte Carlo error propagation)
+g = 9.81 m/s²
+Ts = sample(2π sqrt(randn(1.00 m, 0.01 m) / g), 20000)
+print mean(Ts), "±", std(Ts)
+```
+
+- `randn` uses the Box–Muller method (two uniform numbers per normal number). `std` is the sample standard deviation (divides by N − 1).
+
+### Fourier transforms
+
+Fermium has no complex numbers, so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
+
+```fermium
+dt = 1 ms                                  # sampling interval
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V * sin(2π * 50 Hz * ts[i]) + 1 V * cos(2π * 120 Hz * ts[i])
+
+A = amplitude_spectrum(xs)                 # in V: a sine of amplitude 3 V gives a peak of 3 V
+f = frequencies(xs, dt)                    # in Hz: 0, 1 Hz, 2 Hz, …, 500 Hz (the Nyquist frequency)
+k = argmax(A)
+print "strongest:", f[k], "with amplitude", A[k]
+
+P = power_spectrum(xs, dt)                 # power spectral density, in V²/Hz
+print "Parseval:", sum(P) (f[2] - f[1]), "=", mean(xs * xs)
+
+back = ifft(fft_re(xs), fft_im(xs))        # the inverse transform gives back the signal
+print back[10], xs[10]
+```
+
+| Function | Gives | Units |
+|---|---|---|
+| `fft_re(xs)`, `fft_im(xs)` | real and imaginary parts of X_k = Σⱼ xⱼ e^(−2πi jk/n), k = 0 … n − 1 (NumPy's `fft`, not normalised) | those of xs |
+| `ifft(re, im)` | the real part of the inverse transform, (1/n) Σₖ Xₖ e^(2πi jk/n) | those of re and im |
+| `amplitude_spectrum(xs)` | one-sided amplitudes for k = 0 … n/2: \|Xₖ\|/n, doubled except at 0 Hz and at the Nyquist frequency | those of xs |
+| `power_spectrum(xs, dt)` | one-sided power spectral density \|Xₖ\|² dt/n (doubled likewise); Σ P Δf = mean(x²) | xs² × time (V²/Hz) |
+| `frequencies(xs, dt)` or `frequencies(n, dt)` | the frequencies of those n/2 + 1 bins, k/(n dt) (NumPy's `rfftfreq`) | 1/time (Hz) |
+
+- Any length works (not only powers of two). A frequency between two bins shows up in the nearest bins, spread out ("leakage"); a longer signal gives finer bins, Δf = 1/(n dt).
+- `fermium run` and the interpreter use NumPy's FFT; `fermium build` executables use a built-in C FFT (radix 2, and Bluestein's algorithm for other lengths), which agrees to rounding.
+

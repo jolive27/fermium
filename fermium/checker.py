@@ -32,6 +32,9 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
 }
+M3_FUNCS = {"randn", "seed", "sample", "fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum",
+            "frequencies", "argmax", "argmin"}          # seeded random numbers (D80); FFT built-ins join below (D81)
+BUILTINS |= M3_FUNCS
 
 
 class MixedHint(tuple):
@@ -396,6 +399,9 @@ class Checker(C.DiffContext):
         e = s.value
         if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name in ("push", "append"):
             return self.push_stmt(e, ctx)
+        if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == "seed" and \
+                ctx.scope.lookup("seed")[0] is None:
+            return self.seed_stmt(e, ctx)
         v = self.expr(e, ctx, allow_func=True)
         if ctx.is_main and self.repl and ctx.lam is None:
             return self.print_items([v], [e], ctx)
@@ -1073,7 +1079,8 @@ class Checker(C.DiffContext):
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None:
-            cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(BUILTINS)
+            cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(
+                BUILTINS - (set() if getattr(self, "_calling", False) else M3_FUNCS))  # speed ≠ seed (as a value)
             close = get_close_matches(name, cands, n=1, cutoff=0.7)
             if close:
                 hint = f"did you mean {close[0]}?"
@@ -2485,11 +2492,137 @@ class Checker(C.DiffContext):
             if n != 0:
                 raise self.err("clock() takes no arguments", e)
             return self._bi(name, args, NumTy(TIME_DIM), args)
-        if name == "rand":
-            if n != 0:
-                raise self.err("rand() takes no arguments", e)
-            return self._bi(name, args, NumTy(DIMLESS), args)
+        if name in ("rand", "randn"):
+            return self.m3_random(name, args, e)
+        if name == "seed":
+            raise self.err("seed(n) is a statement on its own line, like  seed(42)", e)
+        if name == "sample":
+            return self.m3_sample(e, ctx)
+        if name in ("fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum", "frequencies", "argmax",
+                    "argmin"):
+            return self.m3_fourier(name, args, e)
         raise self.err(f"{name} can't be used this way", e)
+
+    # ------------------------------------------------------------ random numbers (D80)
+    def m3_random(self, name, args, e):
+        """rand(), rand(a, b) (uniform in [a, b), same units), randn(), randn(μ, σ) (normal, same units)."""
+        n = len(args)
+        if n == 0:
+            r = self._bi(name, args, NumTy(DIMLESS), args)
+            r.sf = None
+            return r
+        if n != 2:
+            what = "rand() or rand(a, b)" if name == "rand" else "randn() or randn(μ, σ)"
+            raise self.err(f"{name} takes no arguments or two: {what}", e)
+        for i in range(2):
+            self.need_num(args[i], e.args[i])
+        a, b = args
+        self.unify_or(a.ty.dim, b.ty.dim, lambda: (
+            f"rand(a, b): a is {self.desc(a.ty.dim)} but b is {self.desc(b.ty.dim)}; they need the same units"
+            if name == "rand" else
+            f"randn(μ, σ): μ is {self.desc(a.ty.dim)} but σ is {self.desc(b.ty.dim)}; they need the same units"), e)
+        r = I.IBuiltin(name + "2", args, NumTy(a.ty.dim))
+        r.sf = None
+        r.hint = a.hint or b.hint
+        return r
+
+    def m3_sample(self, e, ctx):
+        """sample(expr, N): a list of N values of expr, evaluated afresh each time (so each rand() in it
+        draws new numbers) -- the building block of a Monte Carlo estimate (D80)."""
+        if len(e.args) != 2:
+            raise self.err("sample takes an expression and a count: sample(randn(0 m, 1 m), 1000)", e)
+        cnt = self.expr(e.args[1], ctx)
+        self.need_num(cnt, e.args[1], "the number of samples")
+        self.unify_or(cnt.ty.dim, DIMLESS, lambda: "the number of samples must be a plain number", e.args[1])
+        lam = I.ILambda("scalar", self.fresh_name("sample"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        k = I.Sym("__k", NumTy(DIMLESS), "local", lam)
+        k.assigned = True
+        lam.params = [k]
+        body = self.expr(e.args[0], lctx)
+        self.need_num(body, e.args[0], "the thing to sample")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.IBuiltin("sample", [cnt], ListTy(body.ty.dim))
+        r.lam = lam
+        r.hint = getattr(body, "hint", None)
+        r.sf = None
+        return r
+
+    # ------------------------------------------------------------ Fourier transforms (D81)
+    def m3_fourier(self, name, args, e):
+        n = len(args)
+        usage = {"fft_re": "fft_re(xs)", "fft_im": "fft_im(xs)", "ifft": "ifft(re, im)",
+                 "amplitude_spectrum": "amplitude_spectrum(xs)", "power_spectrum": "power_spectrum(xs, dt)",
+                 "frequencies": "frequencies(xs, dt) or frequencies(n, dt)", "argmax": "argmax(xs)",
+                 "argmin": "argmin(xs)"}[name]
+        want = {"ifft": 2, "power_spectrum": 2, "frequencies": 2}.get(name, 1)
+        if n != want:
+            raise self.err(f"{name} takes {want} argument{'s' if want > 1 else ''}: {usage}", e)
+
+        def need_list(i):
+            if not isinstance(args[i].ty, ListTy):
+                raise self.err(f"{usage}: {'xs' if i == 0 else 'the second argument'} must be a list, not "
+                               f"{type_desc(args[i].ty, self.U)}", e.args[i])
+
+        def need_step(i):
+            self.need_num(args[i], e.args[i], "the time step (spacing) between samples")
+        if name in ("argmax", "argmin"):
+            need_list(0)
+            r = self._bi(name, args, NumTy(DIMLESS), [])
+            r.sf = None
+            return r
+        if name == "frequencies":
+            need_step(1)
+            if isinstance(args[0].ty, ListTy):
+                cnt = self._bi("len", [args[0]], NumTy(DIMLESS), [])
+            else:
+                self.need_num(args[0], e.args[0], "the number of samples")
+                self.unify_or(args[0].ty.dim, DIMLESS, lambda: "frequencies(n, dt): n must be a plain number",
+                              e.args[0])
+                cnt = args[0]
+            d = DExpr.of(DIMLESS) / args[1].ty.dim
+            r = I.IBuiltin("frequencies", [cnt, args[1]], ListTy(d))
+            r.sf = None
+            if self.U.is_concrete(d) and self.U.resolve(d) == DIMLESS / TIME_DIM:
+                r.hint = lookup_unit("Hz")       # shown in Hz, not 1/s
+            return r
+        need_list(0)
+        if name == "ifft":
+            need_list(1)
+            self.unify_or(args[0].ty.dim, args[1].ty.dim, lambda: "ifft(re, im): the real and imaginary parts "
+                          "need the same units", e)
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim))
+        elif name == "power_spectrum":
+            need_step(1)
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim * args[0].ty.dim * args[1].ty.dim))
+            hp = hint_power(args[0].hint, 2)            # V -> V²/Hz, the usual unit of a spectral density
+            if hp is not None and self.U.is_concrete(args[1].ty.dim) and \
+                    self.U.resolve(args[1].ty.dim) == TIME_DIM:
+                try:
+                    u = parse_unit_string(f"{hp.name}/Hz")
+                    if self.U.is_concrete(r.ty.dim) and u.dim == self.U.resolve(r.ty.dim):
+                        r.hint = u
+                except (UnitSyntaxError, Exception):
+                    pass
+        else:
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim))
+            r.hint = args[0].hint if not (args[0].hint is not None and args[0].hint.affine) else None
+        r.sf = None
+        return r
+
+    def seed_stmt(self, e, ctx):
+        if len(e.args) != 1:
+            raise self.err("seed takes one whole number: seed(42)", e)
+        v = self.expr(e.args[0], ctx)
+        self.need_num(v, e.args[0], "the seed")
+        self.unify_or(v.ty.dim, DIMLESS, lambda: f"the seed must be a plain number, not {self.desc(v.ty.dim)}",
+                      e.args[0])
+        return I.SExpr(I.IBuiltin("seed", [v], NumTy(DIMLESS)))
 
     def _bi(self, name, args, ty, sfargs):
         r = I.IBuiltin(name, args, ty)

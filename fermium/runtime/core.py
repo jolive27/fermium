@@ -104,6 +104,10 @@ class Runtime:
         self.engine_ref = None
         self.err = sys.stderr
         self.warnings = []
+        # the random-number state (D80): compiled code and the interpreter both use this array
+        from ..rng import DEFAULT_STATE
+        self.rng_state = (ctypes.c_uint64 * 4)(*DEFAULT_STATE)
+        self.rng_addr = ctypes.addressof(self.rng_state)
         self._make_callbacks()
 
     # ------------------------------------------------------------ callbacks
@@ -241,6 +245,17 @@ class Runtime:
                 rt.error = getattr(ex, "message", None) or f"the stiff ODE solver failed: {ex}"
                 return 1
 
+        def fft(kind, a, b, n, dt, out):
+            try:
+                from .spectral import spectrum
+                vals = spectrum(kind, a[:n], b[:n] if b else None, dt)
+                for i, v in enumerate(vals):
+                    out[i] = v
+                return 0
+            except BaseException as ex:          # nothing may escape into the compiled code
+                rt.error = f"the Fourier transform failed: {ex}"
+                return 1
+
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat,
@@ -268,6 +283,7 @@ class Runtime:
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
                            c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
+            "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
         }
         if llvm is not None:
             for name, cb in self.callbacks.items():
