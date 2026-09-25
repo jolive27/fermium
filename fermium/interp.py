@@ -246,10 +246,10 @@ def _first_step(f, t0, y, k0, dirn, aspan, rtol):
         for yj, fj, gj in zip(y, k0, k1):
             if abs(yj) > 0:
                 d2 += ((gj - fj) / (rtol * abs(yj))) ** 2
-        dd1 = math.sqrt(d1 / cnt)
-        dd2 = math.sqrt(d2 / cnt) / h0
+        dd1 = math.sqrt(d1 / cnt) * rtol
+        dd2 = math.sqrt(math.sqrt(d2 / cnt) / h0 * rtol)
         m = max(dd1, dd2) if dd2 == dd2 else dd2
-        h1 = fpow(0.01 / m, 0.2) if m > 1e-15 else max(1e-6, h0 * 1e-3)
+        h1 = fpow(rtol, 0.2) / m if m > 0 else 100 * h0
         h = min(min(100 * h0, h1), aspan)
         if h == h:
             hv = h

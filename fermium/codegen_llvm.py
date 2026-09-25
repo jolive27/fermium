@@ -951,12 +951,14 @@ class ModuleGen:
                 with b.if_then(b.fcmp_ordered(">", yj, f64(0))):
                     r2 = b.fdiv(b.fsub(b.load(b.gep(k[1], [j])), b.load(b.gep(k[0], [j]))), b.fmul(rtol, yj))
                     b.store(b.fadd(b.load(d2), b.fmul(r2, r2)), d2)
-            dd1 = b.call(sq, [b.fdiv(b.load(d1), b.load(cnt))])
-            dd2 = b.fdiv(b.call(sq, [b.fdiv(b.load(d2), b.load(cnt))]), h0)
+            # a rate ω = max(|y'/y|, √|y''/y|) (dimensionally consistent, so any time unit works):
+            # a 5th-order step with (h ω)⁵ ≈ rtol
+            dd1 = b.fmul(b.call(sq, [b.fdiv(b.load(d1), b.load(cnt))]), rtol)
+            dd2 = b.call(sq, [b.fmul(b.fdiv(b.call(sq, [b.fdiv(b.load(d2), b.load(cnt))]), h0), rtol)])
             m = b.call(self.intrinsic("maxnum"), [dd1, dd2])
-            h1 = b.select(b.fcmp_ordered(">", m, f64(1e-15)),
-                          b.call(self.intrinsic("pow"), [b.fdiv(f64(0.01), m), f64(0.2)]),
-                          b.call(self.intrinsic("maxnum"), [f64(1e-6), b.fmul(h0, f64(1e-3))]))
+            h1 = b.select(b.fcmp_ordered(">", m, f64(0)),
+                          b.fdiv(b.call(self.intrinsic("pow"), [rtol, f64(0.2)]), m),
+                          b.fmul(f64(100), h0))
             h = b.call(self.intrinsic("minnum"), [b.fmul(f64(100), h0), h1])
             h = b.call(self.intrinsic("minnum"), [h, aspan])
             with b.if_then(b.fcmp_ordered("==", h, h)):       # not NaN (a NaN probe keeps the default)
