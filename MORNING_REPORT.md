@@ -1,7 +1,7 @@
 # Morning report: Fermium, the overnight run of Sep 24–25, 2026
 
-> **DRAFT (10:10 UTC; complete except the final benchmark table).** The final version, with M5 benchmark numbers, red team round 4 and the final test count,
-> will be written at 12:30 UTC. Everything below is backed by tests in `tests/` unless it says otherwise.
+> Final version, 11:45 UTC Sep 25 (branch `claude/lucid-gauss-9y1ov2`, draft PR jolive27/fermium#1). Everything below is backed by
+> tests in `tests/` unless it says otherwise; each number was re-checked against the program or file it comes from.
 
 ## In one paragraph
 
@@ -11,11 +11,11 @@ Fermium is a physics programming language:
 - programs compile to native code through LLVM.
 
 Overnight it went from a spec to:
-- 3609 passing tests;
+- 3612 passing tests (plus 2 strict xfails for the two documented red-team limitations);
 - 61 + 20 textbook problems;
 - 11 research reproductions compared with published numbers;
-- 6 red-team rounds;
-- all 8 moonshots done (M4 only in the interpreter; M5's numbers are waiting for the final quiet-machine benchmark).
+- 7 red-team rounds with 88 findings: 83 fixed, 2 partly fixed and 3 documented as by design or known limitations;
+- all 8 moonshots done (M4 only in the interpreter; M5 matches or beats Julia on 3 of 7 benchmark rows).
 
 ## User requests during the night
 
@@ -25,7 +25,7 @@ Overnight it went from a spec to:
 | The unit-after-number ambiguity (`2 g`, `2 m v`) (review priority 2) | **Done** (D7 revised, then D130, D170, D171, D180) | A unit name right after a number that is also your variable is an error when combined with other factors, and a warning when it stands alone. `2 c`, `2 m c²`, `8 /m³` and `36 km/h` are covered too. tests/test_unit_rule.py, test_gauntlet3_fixes.py, test_redteam2/3.py. |
 | Warn when an integral may be silently wrong (review priority 3) | **Done, partly** (D110) | A result that is exactly 0 because every sample was 0 warns, in JIT, interpreter and build (tests/test_integral_warnings.py). A peak that is only partly sampled is still not detected (D110, "Not done"). |
 | Stale "Partial" section in PROGRESS.md (review priority 4) | **Done** | Rewritten at 03:40 and kept current. |
-| **3 significant figures by default when precision is ambiguous or unspecified, display only** | **Done** (D11) | `1/2` → `0.500`, `2π` → `6.28`, `c` → `3.00×10⁸ m/s`. Values with stated precision keep it; whole numbers and literals print exactly; `to N digits` overrides; `1000000/3` → `3.33×10⁵`. The JIT, the interpreter and `fermium build` agree. tests/test_default_sigfigs.py. A test proves it is display only (`x = 1/3; x * 3 - 1` prints `0`). |
+| **3 significant figures by default when precision is ambiguous or unspecified, display only** | **Done** (D11) | `1/2` → `0.500`, `2π` → `6.28`, `c` → `3.00×10⁸ m/s`. Values with stated precision keep it; whole numbers and literals print exactly; `to N digits` overrides; `1000000/3` → `3.33×10⁵`; a sum keeps its most precise operand's figures (`293.15 K + 0.5 K` → `293.65 K`). The JIT, the interpreter and `fermium build` agree. tests/test_default_sigfigs.py. A test proves it is display only (`x = 1/3; x * 3 - 1` prints `0`). |
 
 ## Phase 1: audit
 AUDIT.md (00:05–00:25 UTC) checked the spec requirements, the doc claims, the stubs and the broken things. It found items A1–A30, and an adversarial pass (notes/bugs-adversarial.md) added A31–A56.
@@ -45,7 +45,7 @@ Jupyter kernel and notebook; language server with unit hover, live errors and `\
 | M2 | Dimensional analysis (`analyze …: T [s] depends on …`) | Done (D70), bootcamp lesson 11 | tests/test_dimensional_analysis.py |
 | M3 | Serious numerics: stiff solvers + stiffness warning, eigenvalue problems, 1-D PDEs (heat, wave, Schrödinger; GIF), FFT, root finding, Monte Carlo, seeded RNG | Done (D42, D80–D83, D131, D160) | tests/test_m3_*.py, test_stiff.py; all validated against SciPy/NumPy or closed forms |
 | M4 | Uncertainties (`5.0 ± 0.2 m`, correlations, `propagate montecarlo`, uncertain fit parameters, error bars), bootcamp lesson 12 | Done, **interpreter only** (D120–D124) | tests/test_uncertainty.py, checked against the `uncertainties` package and SciPy `curve_fit` covariances |
-| M5 | Performance: integer loop counters, `parallel for` (pthreads, reproducible sums), fair benchmarks | Done (D150–D152); on the loaded machine it matched or beat Julia on 4 rows (nbody 0.96×, forces 0.96×/0.62× with 4 threads, spring_adaptive 0.83×); final quiet-machine table below | RESULTS.md, tests/test_parallel.py |
+| M5 | Performance: integer loop counters, `parallel for` (pthreads, reproducible sums), fair benchmarks | Done (D150–D152). On a quiet machine it matches or beats Julia on 3 rows (nbody 0.95×, forces 0.65× with 4 threads, spring_adaptive 0.86×) and is slower on 3; the table is below. | RESULTS.md, tests/test_parallel.py |
 | M6 | Python interop: `use python numpy as np` with unit contracts; `fermium.compile()` from Python | Done (D140–D142) | tests/test_python_interop.py |
 | M7 | Modules (`import`, `from … import`), stdlib (mechanics, em, nuclear, astro, quantum, stats), `fermium.toml` | Done (D100–D103) | tests/test_modules.py, test_stdlib.py; docs/stdlib.md |
 | M8 | Self-hosting: the unit database is written in Fermium and generates the compiler's factor table | Done | fermium/selfhost/, tests/test_selfhost.py. It found that M☉ was rounded and that the parsec wasn't the IAU definition. |
@@ -76,7 +76,7 @@ Honest caveats:
 ## Phase 8: red team (REDTEAM.md)
 | Round | Findings | Silent wrong answers | Fixed |
 |---|---|---|---|
-| 1 (03:35) | 10 | Hz/rpm, the pole returned as a root, coarse RK4, °C sums | all |
+| 1 (03:35) | 10 | Hz/rpm, the pole returned as a root, coarse RK4, °C sums | 8; #1 (narrow peaks far out on infinite ranges) partly, #7 (sums over-claim figures) partly, see D95/D11 |
 | 2 (05:00) | 14 | `2 c` with your own c, Crank–Nicolson coarse step and sawtooth, `std` of one value, cyclotron frequency, Bateman NaN | all 14 |
 | 3 (06:30) | 15 | `36 km/h` read as km / Planck's h, °C in products, `°C ± %`, early PDE transients, vector zero integrals | all 15 |
 | 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
@@ -109,7 +109,6 @@ The final table was measured at 10:21 UTC with nothing else running. Earlier run
 - **Significant figures of sums** use the most precise operand, not the decimal-place rule, which would need the magnitudes at compile time. So `1.00 m - 0.999 m` over-claims (D95, D11).
 - **The unit-after-number rule is still the sharpest edge:** `2 g`, `8 K`, `2 b` and `0.25 T` collide with common variable names. They are caught (errors or warnings), but they cost time: 7 of 20 graduate problems hit one.
 - **Matrices go up to 16×16,** with one unit per matrix. There are no lists of vectors, and `solve` can't take a list of unknowns.
-- **The machine was heavily loaded all night,** so benchmark numbers need the quiet-machine re-run.
 
 ## How to check this report yourself
 ```
