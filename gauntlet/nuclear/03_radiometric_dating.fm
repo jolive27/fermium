@@ -1,0 +1,30 @@
+# Nuclear 03 — Radiometric dating: carbon-14 and a Rb–Sr isochron
+#
+# (Krane, "Introductory Nuclear Physics", §6.7.)
+#  (a) Carbon dating.  Living carbon shows 15.3 C-14 decays per minute per
+#      gram (t½ = 5730 yr).  A 5.00 g charcoal sample from an ancient fire
+#      pit shows 32.0 decays per minute.  How old is it, and how many C-14
+#      atoms are left in it?
+#  (b) Rb–Sr isochron.  Rb-87 decays to Sr-87 with λ = 1.3972×10⁻¹¹ per year.
+#      Minerals that formed together with different Rb contents lie today on
+#      the straight line
+#          ⁸⁷Sr/⁸⁶Sr = (⁸⁷Sr/⁸⁶Sr)₀ + (e^{λt} − 1) · ⁸⁷Rb/⁸⁶Sr.
+#      Fit the ten meteorite minerals in data/rb_sr_isochron.csv (simulated
+#      for this problem) and find the age and the initial ratio.
+
+# (a)
+t_half = 5730 yr
+λ_C = ln(2) / t_half
+A_modern = 15.3 min⁻¹ g⁻¹
+A_sample = 32.0 min⁻¹
+mass = 5.00 g
+age = ln(A_modern mass / A_sample) / λ_C
+print "(a) age =", age in yr to 8 digits
+print "    C-14 atoms =", A_sample / λ_C to 8 digits
+
+# (b)
+λ_Rb = 1.3972e-11 yr⁻¹
+data = load "data/rb_sr_isochron.csv"
+fit Sr87_Sr86 = slope Rb87_Sr86 + ratio0 to data with slope = 0.07, ratio0 = 0.7
+print "(b) slope =", slope to 8 digits, "  initial ratio =", ratio0 to 8 digits
+print "    age =", ln(1 + slope) / λ_Rb in Gyr to 8 digits
