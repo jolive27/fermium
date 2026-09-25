@@ -93,9 +93,9 @@ The rule (spec §3.4.2), refined:
   - Very large or small numbers print as `6.674×10⁻¹¹`.
 
 ## D12. Temperatures with °C/°F are absolute
-- **What:** `20 °C` means 293.15 K, and `T in °C` subtracts 273.15. `°C` can't be combined with other units (`J/°C` is an error). Use K for temperature differences and in formulas.
+- **What:** `20 °C` means 293.15 K, and `T in °C` subtracts 273.15. Inside a compound unit a degree can only be a step, so `°C/min`, `J/(g °C)` and `°F/s` are K-sized (no offset; gauntlet friction #21). Use K for temperature differences and in formulas.
 - **Why:** An affine unit is only well defined for absolute values.
-- **Differences (A47):** `a - b` with `b` in °C is always a temperature difference, shown in K, whatever unit `a` was written in. `300 K - 20 °C` is 6.85 K, and Newton's law of cooling `T' = -(T - Ta)/τ` works with `Ta = 20 °C` and `T(0) = 90 °C`. A value in K may be an absolute temperature or a difference, and both readings give the same number in K. Still errors: `°C + °C` and negating a °C value. `20 °C - 5 K` stays 15 °C (a change of 5 K). Alternative: tracking "absolute or difference" as part of the type. That is more precise, but it needs a new kind of type for one unit, so it was rejected for now.
+- **Differences (A47):** `a - b` with `b` in °C is always a temperature difference, shown in K, whatever unit `a` was written in. `300 K - 20 °C` is 6.85 K, and Newton's law of cooling `T' = -(T - Ta)/τ` works with `Ta = 20 °C` and `T(0) = 90 °C`. A value in K may be an absolute temperature or a difference, and both readings give the same number in K. Still errors: `°C + °C` and negating a °C value. `20 °C - 5 K` stays 15 °C (a change of 5 K). A difference shown `in °C` or `in °F` is shown without the offset, with a warning, and `2 T` of a °C value warns that it scales the absolute temperature (gauntlet friction #6). Alternative: tracking "absolute or difference" as part of the type. That is more precise, but it needs a new kind of type for one unit, so it was rejected for now.
 
 ## D13. Static typing: a variable keeps its dimension
 - **What:** Reassigning `x` with different units is an error ("x is length [m]; it can't now hold time [s]"). The REPL allows redefinition.

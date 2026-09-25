@@ -26,7 +26,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 18 | A | electromagnetism (E1) | ∇ or d/dx of a function defined by an integral isn't supported | Fixed: the Leibniz rule differentiates under the integral sign, with boundary terms for limits that depend on the variable; `∂/∂x V`, `∇V` and `∇²V` are integrals of the derivative (D36) |
 | 19 | A | electromagnetism (E2) | Integrals of vectors aren't supported (one integral per component) | Fixed: a vector integrand gives a vector with units, one adaptive quadrature per component; Biot–Savart (dl × r over r³) works (D35) |
 | 20 | B | electromagnetism (E7) | Indefinite integrals that SymPy answers with `asinh(Abs(…))` fail, without a line number | Fixed: asinh/acosh/atanh/abs/sign mapped, safe positive assumptions and abs(b) for even constants, quantities inside the formula, a numerical check of the antiderivative, undefined names first, and every failure has the line (D37) |
-| 21 | A | thermodynamics (T2) | `°C` can't be used in compound units (`°C/min`) | Open |
+| 21 | A | thermodynamics (T2) | `°C` can't be used in compound units (`°C/min`) | Fixed: in a compound unit a degree is a K-sized step: `2 °C/min`, `4.18 J/(g °C)` |
 | 22 | A | oscillations (O6) | No matrices or eigenvalues for normal modes | Fixed: matrices, `det`, `solve_linear` (D33); `eigenvalues(M)`, `eigenvectors(M)` and `eigenvalues(K, M)` for K v = ω² M v by Jacobi rotations (D34) |
 | 23 | A | quantum (Q6) | No complex numbers | Open |
 | 24 | A | quantum (Q5) | Functions can't be passed to functions | Open |

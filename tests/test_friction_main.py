@@ -56,3 +56,10 @@ def test_26_fit_standard_errors_as_values(tmp_path):
 def test_26_err_of_something_else_is_an_error():
     from conftest import error_of
     assert "standard error of a parameter found by fit" in str(error_of("x = 3\nprint err(x)"))
+
+
+def test_21_celsius_in_compound_units_is_a_temperature_step():
+    src = ("r = 2 °C/min\nprint r\nprint r in K/s\nc = 4.18 J/(g °C)\nprint c in J/(kg K)\n"
+           "T = 90 °C\nprint T + r * 5 min\nprint 0.5 K/s in °C/min\nprint 1 °F/s in K/s")
+    assert run(src).split("\n") == ["2 °C/min", "0.0333333 K/s", "4180 J/(kg K)", "100 °C", "30 °C/min",
+                                    "0.555556 K/s"]

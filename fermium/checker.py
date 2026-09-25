@@ -232,8 +232,10 @@ class Checker(C.DiffContext):
                                    hint=sugg or "see the units list in docs/reference.md")
             if u.affine:
                 if len(uexpr.factors) > 1 or f.exp != 1:
-                    raise FermiumError(f"{f.name} can't be combined with other units (it has an offset)", f.line,
-                                       f.col, len(f.name), hint="use K for temperature differences and in formulas")
+                    # in a compound unit (°C/min, J/(g °C)) a degree is a temperature step: K-sized, no offset
+                    # (gauntlet friction #21)
+                    u = Unit(u.name, u.dim, u.factor)
+                    u = u ** f.exp if f.exp != 1 else u
             else:
                 u = u ** f.exp if f.exp != 1 else u
             total = u if total is None else total * u

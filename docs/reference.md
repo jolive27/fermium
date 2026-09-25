@@ -569,7 +569,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
 - **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %`.
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
-- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12).
+- **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
 
 ## 16. Errors

@@ -100,7 +100,7 @@ REJECT = [
     ("in_C_m", "print 20 °C in m", ["can't show"], 1),
     ("to_func", "print to(3 m, s)", ["can't show length [m] in s"], 1),
     # °C
-    ("degC_compound", "c = 4.2 J/°C", ["°C can't be combined with other units"], 1),
+    ("degC_squared", "c = 4.2 J/(°C m)\nd = c + 1 J/m", ["can't add"], 2),
     ("degC_plus_m", "print 20 °C + 5 m", ["can't add"], 1),
     ("degC_plus_degC", "print 20 °C + 10 °C", ["absolute temperatures"], 1),
     # loops and branches
