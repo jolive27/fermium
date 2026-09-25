@@ -5,13 +5,13 @@ _Last updated: 2026-09-25 11:30 UTC_
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**. The whole night is summarised in MORNING_REPORT.md.
 
 ## Status at a glance (11:30 UTC)
-- **Tests:** 3609 passed at the last full run, plus 2 strict xfails (red team 7 #2 and #5, documented limitations). About 15 min on 4 cores.
+- **Tests:** 3612 passed at the last full run, plus 2 strict xfails (red team 7 #2 and #5, documented limitations). About 15 min on 4 cores.
 - **Every example is checked:**
   - every ```` ```fermium ```` block in the docs, bootcamp, README and SHOWCASE runs in the tests;
   - every bootcamp output box is compared with the real output;
   - the 31 examples, 11 research reproductions and 81 gauntlet problems are all tested.
 - **Moonshots:** all 8 done (M4 uncertainties only in the interpreter; M5 measured on a quiet machine: see MORNING_REPORT.md).
-- **Red team:** 7 rounds, 88 findings. All are fixed except 2, which are documented.
+- **Red team:** 7 rounds, 88 findings: 83 fixed, 2 partly fixed (round 1 #1, #7), 3 documented as by design or known limitations (round 4 #16, round 7 #2 and #5).
 
 ## Phase 2 (all six items done, 02:00 UTC)
 1. **Jupyter kernel:** `fermium jupyter install`; inline plots, errors, `\name` completion; `examples/notebook.ipynb` (tests/test_jupyter.py runs it with nbclient).
