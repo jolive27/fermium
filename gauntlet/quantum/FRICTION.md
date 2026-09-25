@@ -82,6 +82,8 @@ Severity scale: blocker / wrong answer / awkward / cosmetic.
 - **Wanted:** `bisect(f, lo, hi)` or `levels(psi_end, 3)` written once.
 - **Got:** `g is a function; give it an argument, like g(x)`.
 - **Fix:** allow function-valued parameters (they are compile-time specialised anyway).
+- **Now:** fixed (D43): `levels(psi_end, 3)`, `bisect(f, lo, hi)` and `shoot(V, E)` work; each call is
+  specialised for the function passed, so units are checked per function.
 
 ### Q6. No complex numbers
 - **Wanted:** ψ = e^{ikx}, `solve ψ'' = (2m/ħ²)(V − E) ψ with ψ(a) = 1, ψ'(a) = i k`, then

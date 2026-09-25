@@ -116,8 +116,10 @@ class ConstInfo:
 
 
 class FuncRef:
-    def __init__(self, info):
+    def __init__(self, info, name=None, param=False):
         self.info = info
+        self.name = name or info.display_name    # the name it was used by (V inside shoot(V, E))
+        self.param = param                       # bound as a function parameter of an instance (D43)
 
 
 class SolRef:
@@ -270,6 +272,8 @@ class Checker(C.DiffContext):
                 if b.fdef is None:
                     continue
                 if not b.one_liner and not b.fdef.params:
+                    continue
+                if self._func_param_uses(b):     # takes a function: checked per call instead (D43)
                     continue
                 args = [I.IConst(0, NumTy(DExpr.fresh())) for _ in b.fdef.params]
                 try:
@@ -825,7 +829,7 @@ class Checker(C.DiffContext):
                                                               else type_desc(v.ty, self.U))
             hint = None
             if isinstance(v, FuncRef):
-                hint = f"call it with an argument, e.g. {v.info.display_name}(x)"
+                hint = f"call it with an argument, e.g. {v.name}(x)"
             if isinstance(v, SolRef):
                 hint = f"use {v.view.name}({v.view.tname}) for its value at a time"
             raise self.err(f"{what} must be a number, but it is {got}", node, hint)
@@ -838,6 +842,8 @@ class Checker(C.DiffContext):
         if isinstance(r, (FuncRef, SolRef)):
             if not allow_func:
                 if isinstance(r, FuncRef):
+                    if r.param:
+                        raise self.err(f"{r.name} is a function here; call it like {r.name}(x)", e)
                     raise self.err(f"{r.info.display_name} is a function; give it an argument, "
                                    f"like {r.info.display_name}(x)", e)
                 v = r.view
@@ -927,6 +933,8 @@ class Checker(C.DiffContext):
         b, scope = self.lookup(name, ctx, e)
         if b is None:
             raise self.undefined(name, e, ctx)
+        if isinstance(b, FuncInfo) and scope is not None and scope.kind == "func":
+            return FuncRef(b, name, param=True)      # a function passed in as an argument (D43)
         return self.use_binding(b, name, e, ctx)
 
     def use_binding(self, b, name, e, ctx):
@@ -1849,8 +1857,7 @@ class Checker(C.DiffContext):
                 finally:
                     self._calling = False
             if isinstance(b, FuncInfo):
-                args = [self.expr(a, ctx) for a in e.args]
-                return self.call_user(b, args, e)
+                return self.call_user(b, self.call_args(e.args, ctx), e)
             if isinstance(b, SolView):
                 return self.sol_eval(b, e, ctx)
             later = self.future_funcs.get(f.name)
@@ -1868,16 +1875,14 @@ class Checker(C.DiffContext):
         if isinstance(f, A.Prime):
             target = self.expr(f, ctx, allow_func=True)
             if isinstance(target, FuncRef):
-                args = [self.expr(a, ctx) for a in e.args]
-                return self.call_user(target.info, args, e)
+                return self.call_user(target.info, self.call_args(e.args, ctx), e)
             if isinstance(target, SolRef):
                 return self.sol_eval(target.view, e, ctx)
             raise self.err("only functions can be called", f)
         if isinstance(f, (A.Deriv, A.Field, A.VecCalc, A.Call)):
             target = self.expr(f, ctx, allow_func=True)
             if isinstance(target, FuncRef):
-                args = [self.expr(a, ctx) for a in e.args]
-                return self.call_user(target.info, args, e)
+                return self.call_user(target.info, self.call_args(e.args, ctx), e)
             if isinstance(target, SolRef):
                 return self.sol_eval(target.view, e, ctx)
         if isinstance(f, (A.Num, A.Quantity)) or f.paren:
@@ -1924,12 +1929,75 @@ class Checker(C.DiffContext):
             raise self.err(f"can't take that many derivatives of the solution {view.name}", e)
         return r
 
+    # one-argument built-ins that can be passed to a function: simpson(sin, 0, π, 100) (D43)
+    PASSABLE_BUILTINS = ("sin", "cos", "tan", "exp", "ln", "log", "log10", "log2", "sinh", "cosh", "tanh",
+                         "asin", "acos", "atan", "sqrt", "cbrt", "abs")
+
+    def call_args(self, arg_asts, ctx):
+        """The arguments of a call of a user function: numbers, lists, vectors, or functions (a FuncRef:
+        a function's name, f', ∇φ, d/dt (...)), which are bound at compile time (D43)."""
+        out = []
+        for a in arg_asts:
+            if isinstance(a, A.Name) and ctx.scope.lookup(a.name)[0] is None \
+                    and a.name in self.PASSABLE_BUILTINS and a.name in BUILTINS:
+                out.append(FuncRef(self._builtin_info(a.name)))
+                continue
+            v = self.expr(a, ctx, allow_func=True)
+            if isinstance(v, SolRef):
+                raise self.err(f"{v.view.name} is the solution of an ODE; it can't be passed to a function yet",
+                               a, hint=f"pass a value, like {v.view.name}(1 s), or values({v.view.name}) for "
+                                       f"all computed values")
+            out.append(v)
+        return out
+
+    def _builtin_info(self, name):
+        cache = self.__dict__.setdefault("_builtin_infos", {})
+        if name not in cache:
+            fd = A.FuncDef(name, [A.Param("x")], A.Call(A.Name(name), [A.Name("x")]))
+            fd.line, fd.col = 0, 0
+            cache[name] = FuncInfo(f"builtin.{name}", fd, self.root)
+            cache[name].display_name = name
+        return cache[name]
+
+    def _func_param_uses(self, info: FuncInfo):
+        """Parameters the body uses like functions: {name: (sure, example)}.  sure: p'(x), d/dx p,
+        ∇p, p(a, b); not sure: p(x) (with a number for p, that means p × x)."""
+        if hasattr(info, "_fp_uses"):
+            return info._fp_uses
+        names = {p.name for p in info.fdef.params}
+        uses = {}
+        body = info.fdef.body if isinstance(info.fdef.body, list) else [info.fdef.body]
+        todo = list(body) + [v for _, v in (info.fdef.where or [])]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, (list, tuple)):
+                todo += [x for x in n if isinstance(x, (A.Node, list, tuple))]
+                continue
+            if not isinstance(n, A.Node):
+                continue
+            if isinstance(n, A.Prime) and isinstance(n.target, A.Name) and n.target.name in names:
+                uses[n.target.name] = (True, n.target.name + "'" * n.order)
+            elif isinstance(n, A.Deriv) and isinstance(n.operand, A.Name) and n.operand.name in names:
+                uses[n.operand.name] = (True, f"d/d{n.var} {n.operand.name}")
+            elif isinstance(n, A.VecCalc) and isinstance(n.func, A.Name) and n.func.name in names:
+                uses[n.func.name] = (True, f"∇{n.func.name}")
+            elif isinstance(n, A.Call) and isinstance(n.func, A.Name) and n.func.name in names:
+                sure = len(n.args) != 1
+                args = ", ".join(C.to_source(x) for x in n.args)
+                if sure or n.func.name not in uses:
+                    uses[n.func.name] = (sure, f"{n.func.name}({args})")
+            for v in vars(n).values():
+                if isinstance(v, (A.Node, list, tuple)):
+                    todo.append(v)
+        info._fp_uses = uses
+        return uses
+
     def call_user(self, info: FuncInfo, args, node):
         nparams = len(info.fdef.params)
         if len(args) != nparams:
             raise self.err(f"{info.display_name} takes {nparams} argument{'s' if nparams != 1 else ''} "
                            f"but was given {len(args)}", node)
-        list_args = [i for i, a in enumerate(args) if isinstance(a.ty, ListTy)]
+        list_args = [i for i, a in enumerate(args) if isinstance(a, I.Expr) and isinstance(a.ty, ListTy)]
         if list_args and not self._takes_lists(info):
             if len(list_args) > 1:
                 raise self.err("can't apply a function element-wise over two lists at once", node)
@@ -1942,7 +2010,8 @@ class Checker(C.DiffContext):
                 raise self.err(f"{info.display_name} returns {what}, so it can't be applied to each element "
                                f"of a list (lists of vectors aren't supported yet)", node,
                                hint="loop over the list and push the components into separate lists")
-            r = I.IMap(call.func, args, i, ListTy(call.ty.dim))
+            rt_args = [a for a in args if isinstance(a, I.Expr)]
+            r = I.IMap(call.func, rt_args, rt_args.index(args[i]), ListTy(call.ty.dim))
             r.sf = call.sf
             return r
         return self.instantiate(info, args, node)
@@ -1994,7 +2063,9 @@ class Checker(C.DiffContext):
         keyparts = []
         concrete = True
         for a in args:
-            if isinstance(a.ty, (NumTy, ListTy)):
+            if isinstance(a, FuncRef):
+                keyparts.append(("fn", a.info))       # one instance per passed function (D43)
+            elif isinstance(a.ty, (NumTy, ListTy)):
                 d = self.U.norm(a.ty.dim)
                 if not d.concrete:
                     concrete = False
@@ -2002,6 +2073,8 @@ class Checker(C.DiffContext):
             else:
                 keyparts.append((a.ty.kind,))
         key = tuple(keyparts)
+        fargs = args
+        args = [a for a in args if not isinstance(a, FuncRef)]      # what is passed at run time
         if cache and concrete and key in info.instances:
             inst = info.instances[key]
             r = I.ICall(inst, args, inst.ret_ty)
@@ -2009,6 +2082,18 @@ class Checker(C.DiffContext):
             r.hint = getattr(inst, "ret_hint", None)
             self._arg_hint(r, args)
             return r
+        uses = self._func_param_uses(info)
+        for p, a in zip(f.params, fargs):
+            if not isinstance(a, FuncRef) and uses.get(p.name, (False,))[0]:
+                raise self.err(f"{info.display_name} uses {p.name} as a function ({uses[p.name][1]}), but was "
+                               f"given {type_desc(a.ty, self.U)}", node,
+                               hint=f"pass a function's name, like {info.display_name}(g, ...) after g(x) = ...")
+            if not isinstance(a, FuncRef) and p.name in uses and isinstance(a.ty, NumTy) and node is not None \
+                    and node is not f:
+                self.diags.warn(f"{p.name} is a number here, so {uses[p.name][1]} in {info.display_name} means "
+                                f"{p.name} × (...)", line=node.line, col=node.col,
+                                hint=f"to pass a function, give its name: {info.display_name}(g, ...) after "
+                                     f"g(x) = ...; to multiply, write {p.name}*(...)")
         inst = I.IFunc(self.fresh_name(info.name), [])
         inst.display = info.display_name
         inst.name_text = self.text(info.display_name)
@@ -2019,7 +2104,13 @@ class Checker(C.DiffContext):
             info.instances[key] = inst
         scope = Scope(info.scope, kind="func")
         fctx = Ctx(inst, scope, is_main=False)
-        for p, a in zip(f.params, args):
+        for p, a in zip(f.params, fargs):
+            if isinstance(a, FuncRef):
+                if p.unit is not None:
+                    raise self.err(f"{info.display_name} expects {p.name} in {p.unit.text}, but got the "
+                                   f"function {a.name}", node)
+                scope.names[p.name] = a.info        # V(x) in the body calls the function passed in
+                continue
             ty = a.ty
             if isinstance(ty, NumTy):
                 ty = NumTy(DExpr.of(a.ty.dim))
@@ -2059,8 +2150,15 @@ class Checker(C.DiffContext):
             if e.line is None and node is not None:
                 e.line, e.col = node.line, node.col
             elif node is not None and node.line and e.line != node.line and not getattr(e, "call_noted", False):
-                argd = ", ".join(f"{p.name} = {type_desc(a.ty, self.U)}" for p, a in zip(f.params, args))
+                argd = ", ".join(f"{p.name} = " + (f"the function {a.name}" if isinstance(a, FuncRef)
+                                                   else type_desc(a.ty, self.U)) for p, a in zip(f.params, fargs))
                 note = f"this happened when calling {info.display_name} on line {node.line} (with {argd})"
+                num_called = [p.name for p, a in zip(f.params, fargs) if not isinstance(a, FuncRef)
+                              and p.name in uses and isinstance(a.ty, NumTy)]
+                if num_called:
+                    q = num_called[0]
+                    note += (f"; {q} was given a number, so {uses[q][1]} means {q} × (...); to pass a function, "
+                             f"give its name")
                 e.hint = f"{e.hint}; {note}" if e.hint else note
                 e.call_noted = True
             raise

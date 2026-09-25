@@ -140,6 +140,35 @@ print speed(10 m)
 - **Calling with a list** applies the function to each element: `F(xs)`.
 - **Functions can call each other and themselves.**
 
+**Passing a function to a function.** A parameter can be a function: pass the function's name and
+call it inside, like `V(x)`. A derivative (`g'`, `d/dt (3 t²)`, `∇φ`) or a one-argument built-in
+(`sin`, `exp`, `sqrt`, …) can be passed too.
+
+```fermium
+simpson(f, a, b, n) =
+    h = (b - a) / n
+    s = f(a) + f(b)
+    for i from 1 to n - 1
+        s += (if mod(i, 2) == 1 then 4 else 2) * f(a + i h)
+    s h / 3
+g(t) = 9.81 m/s² * t
+print simpson(g, 0 s, 2 s, 10), simpson(sin, 0, π, 100)
+
+force(V, x) = -V'(x)
+spring(x) = ½ (4 N/m) x²
+print force(spring, 3 m)
+```
+
+- Inside the function, the parameter can be called, differentiated (`V'(x)`, `d/dx V`), used in
+  `∫`, `solve` and `plot`, and passed on to another function.
+- It is resolved when the program is compiled: every function you pass makes its own copy, so units
+  are checked for each one (`energy(V2, 1 m)` can fail while `energy(V1, 1 m)` works) and it costs
+  nothing at run time (DECISIONS D43).
+- Using a function parameter as a number is an error: `V is a function here; call it like V(x)`.
+  Passing a number where the body uses `V'` or `V(a, b)` is an error; where the body only writes
+  `V(x)`, a number means `V × x` as usual, with a warning.
+- Not yet: `x -> x²` (anonymous functions), passing an ODE solution, printing a function parameter.
+
 ## 6. Conditions and loops
 
 ```fermium
