@@ -107,6 +107,8 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
         text = t.raw
         if mode == "pretty":
             text = _pretty_token(toks, i, skip)
+        elif t.kind == "KW" and t.value == "nabla":
+            text = _nabla_ascii(toks, i, skip)
         else:
             text = _ascii_token(toks, i, closers, diags)
         # never glue two words together that were separate tokens (2πf -> "2 pi f", not "2pif")
@@ -152,6 +154,26 @@ def _pretty_token(toks, i, skip):
             return t.raw
         return OP_PRETTY.get(t.raw, t.raw)
     return t.raw
+
+
+def _nabla_ascii(toks, i, skip):
+    """∇f, ∇·F, ∇×F, ∇²f -> grad(f), div(F), curl(F), laplacian(f)."""
+    j = i + 1
+    word = "grad"
+    t = toks[j]
+    if t.kind == "SUP" and t.value == 2:
+        word, j = "laplacian", j + 1
+    elif t.kind == "OP" and t.raw == "^" and toks[j + 1].kind == "NUM" and toks[j + 1].value == 2:
+        word, j = "laplacian", j + 2
+    elif t.kind == "OP" and t.value == "*":
+        word, j = "div", j + 1
+    elif t.kind == "OP" and t.raw == "×":
+        word, j = "curl", j + 1
+    if toks[j].kind != "NAME":
+        return "nabla"
+    skip.update(range(i + 1, j + 1))
+    name, ok = (toks[j].raw, True) if toks[j].raw.isascii() else _ident_ascii(toks[j].value)
+    return f"{word}({name if ok else toks[j].raw})"
 
 
 def _ascii_token(toks, i, closers, diags):

@@ -886,6 +886,22 @@ def _cond_from_sympy(c):
     raise FermiumError(f"SymPy returned something Fermium can't use yet: {c}")
 
 
+def sympy_tidy(e):
+    """A shorter equivalent formula via SymPy, or e itself when SymPy is missing or can't handle it
+    (used for display-friendly ∇ results; the value is the same either way)."""
+    try:
+        import sympy as sp
+        syms = {}
+        x = to_sympy(e, syms)
+        pos = {s: sp.Symbol(s.name, real=True) for s in x.free_symbols}   # coordinates may be negative
+        y = sp.simplify(x.subs(pos))
+        y = y.subs({v: k for k, v in pos.items()})
+        out = simplify(from_sympy(y))
+        return out if len(to_source(out)) < len(to_source(e)) else e
+    except Exception:
+        return e
+
+
 def integrate_symbolic(integrand, var):
     """Indefinite integral via SymPy.  Returns an AST (without +C)."""
     import sympy as sp

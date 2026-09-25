@@ -428,3 +428,9 @@ def test_rosetta_julia(name):
     code, out, err = other_outputs("julia")[name]
     assert code == 0, err
     assert_same_numbers(rosetta_fermium(name), out, name + ".jl")
+
+
+def test_electrostatics_nabla():
+    out = run_example("27_electrostatics_nabla").splitlines()
+    assert out[0] == "field on the axis, 10 cm away: <0, 0, 180.653> V/m"
+    assert out[2:4] == ["∇×E = 0: true", "∇²φ = 0 away from the charges: true"]

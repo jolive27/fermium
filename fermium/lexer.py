@@ -15,10 +15,10 @@ from .errors import FermiumError, Diagnostics
 KEYWORDS = {
     "if", "else", "elif", "then", "for", "from", "to", "step", "in", "while", "return",
     "break", "continue", "print", "plot", "vs", "solve", "with", "fit", "load", "and", "or",
-    "not", "where", "true", "false", "integral", "partial", "sqrt", "cbrt", "assert",
+    "not", "where", "true", "false", "integral", "partial", "sqrt", "cbrt", "assert", "nabla",
 }
 # Words that are spelled differently but mean the same keyword/operator.
-KEYWORD_ALIASES = {"∫": "integral", "∂": "partial", "√": "sqrt", "∛": "cbrt"}
+KEYWORD_ALIASES = {"∫": "integral", "∂": "partial", "√": "sqrt", "∛": "cbrt", "∇": "nabla"}
 
 GREEK = {
     "alpha": "α", "beta": "β", "gamma": "γ", "delta": "δ", "epsilon": "ε", "zeta": "ζ",

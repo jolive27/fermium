@@ -113,6 +113,8 @@ def test_unit_lookalike_constant_warns():
     assert any("gauss" in w for w in warnings_of("x = 3 G\nprint x"))
     assert not warnings_of("h = 2\nprint 3 h")
     assert not warnings_of("E = h * 1 Hz\nprint E")
+    assert not warnings_of("T = 5800 K\nB(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)\nprint B(1 THz)")
+    assert not warnings_of("ν = 1 Hz\nprint 2 h ν")
 
 
 def test_anonymous_calculus_results_print_readably():

@@ -244,6 +244,28 @@ print v(0.1 s)
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
 
+### Vector calculus: ∇
+
+```fermium
+q = 1 nC
+φ(x, y, z) = q / (4π ε₀ √(x² + y² + z²))
+E = -∇φ(0 m, 3 m, 4 m)
+print E
+print ∇φ
+
+B(x, y, z) = <-y, x, 0> T/m
+print ∇×B(1 m, 2 m, 3 m)
+print ∇·B(1 m, 2 m, 3 m)
+f(x, y) = x² y + sin(x)
+print ∇²f
+```
+
+- `∇f` (gradient), `∇·F` (divergence), `∇×F` (curl) and `∇²f` (Laplacian) of a one-line function of 2 or 3 Cartesian coordinates. The curl needs 3. The result is a new function of the same coordinates, differentiated symbolically, so `print ∇φ` shows its formula (tidied by SymPy when it is installed). Call it at a point like any function: `∇φ(1 m, 0 m, 0 m)`.
+- `F` for `∇·F` and `∇×F` must be a vector formula: `F(x, y, z) = <…, …, …>` (a unit after `>` applies to every component).
+- Units follow: φ in V with coordinates in m gives ∇φ in V/m. A component that differentiates to 0 fits the other components' units.
+- ASCII: `grad(f)`, `div(F)`, `curl(F)`, `laplacian(f)`; `fermium fmt --ascii` writes these. `∇` is typed `\nabla`.
+- Only Cartesian coordinates. For spherical or cylindrical coordinates, write the formulas out.
+
 ## 9. Integrals
 
 ```fermium

@@ -10,7 +10,7 @@ LATEX = {
     "Gamma": "Γ", "Delta": "Δ", "Theta": "Θ", "Lambda": "Λ", "Xi": "Ξ", "Pi": "Π", "Sigma": "Σ",
     "Upsilon": "Υ", "Phi": "Φ", "Psi": "Ψ", "Omega": "Ω",
     # physics & math
-    "hbar": "ħ", "int": "∫", "integral": "∫", "sqrt": "√", "cbrt": "∛", "partial": "∂", "pm": "±",
+    "hbar": "ħ", "int": "∫", "integral": "∫", "sqrt": "√", "cbrt": "∛", "partial": "∂", "nabla": "∇", "grad": "∇", "pm": "±",
     "infty": "∞", "inf": "∞", "deg": "°", "degree": "°", "celsius": "°C", "degC": "°C",
     "cdot": "·", "times": "×", "le": "≤", "leq": "≤", "ge": "≥", "geq": "≥", "ne": "≠", "neq": "≠",
     "approx": "≈", "AA": "Å", "angstrom": "Å", "sun": "☉", "odot": "☉", "Msun": "M☉", "half": "½",

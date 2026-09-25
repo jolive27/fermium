@@ -32,6 +32,9 @@ CMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "~="}
 AUG_OPS = {"+=", "-=", "*=", "/="}
 
 
+VEC_CALC_WORDS = {"grad": "grad", "div": "div", "curl": "curl", "laplacian": "lap"}
+
+
 class Parser:
     def __init__(self, tokens: list[Token], diags: Diagnostics | None = None, known=None):
         self.toks = tokens
@@ -767,7 +770,7 @@ class Parser:
         if t.kind == "NAME":
             return t.value not in self.no_juxt_names
         if t.kind == "KW":
-            return t.value in ("sqrt", "cbrt", "integral", "partial")
+            return t.value in ("sqrt", "cbrt", "integral", "partial", "nabla")
         if t.kind == "OP":
             if t.value == "(":
                 return True
@@ -869,6 +872,30 @@ class Parser:
             return self.span(A.BinOp("^", base, A.Num(float(s.value), None, False).at(s)), t)
         return base
 
+    def nabla_op(self):
+        """∇f, ∇·f, ∇×f, ∇²f (ASCII: nabla f, nabla*F, nabla×F, nabla^2 f)."""
+        t = self.next()
+        kind = "grad"
+        if self.tok.kind == "SUP" and self.tok.value == 2:
+            self.next()
+            kind = "lap"
+        elif self.at_op("^") and self.peek().kind == "NUM" and self.peek().value == 2:
+            self.next()
+            self.next()
+            kind = "lap"
+        elif self.at_op("*"):
+            self.next()
+            kind = "div"
+        elif self.at_op("×"):
+            self.next()
+            kind = "curl"
+        if self.tok.kind != "NAME":
+            raise self.error("∇ needs the name of a function after it, like ∇φ, ∇·E, ∇×B or ∇²φ" + self._found())
+        n = self.next()
+        name = A.Name(n.value)
+        name.line, name.col, name.length = n.line, n.col, len(n.raw)
+        return self.span(A.VecCalc(kind, name), t)
+
     def postfix(self):
         t = self.tok
         e = self.atom()
@@ -887,6 +914,9 @@ class Parser:
                         raise self.error("expected ',' or ')' in the list of arguments" + self._found())
                 self.next()
                 e = self.span(A.Call(e, args), t)
+                if isinstance(e.func, A.Name) and e.func.name in VEC_CALC_WORDS and e.func.name not in self.known \
+                        and len(args) == 1 and isinstance(args[0], A.Name):     # grad(f) is ∇f
+                    e = self.span(A.VecCalc(VEC_CALC_WORDS[e.func.name], args[0]), t)
                 if isinstance(e.func, A.Name) and e.func.name == "vec" and self.tok.kind == "NAME" and \
                         is_unit_name(self.tok.raw) and self.tok.value not in self.known:
                     u = self.unit_expr(explicit=False)          # vec(3, 4) m/s
@@ -974,6 +1004,8 @@ class Parser:
                 return self.integral()
             if t.value == "partial":
                 return self.partial_op()
+            if t.value == "nabla":
+                return self.nabla_op()
             if t.value == "load":
                 self.next()
                 if self.tok.kind != "STR":

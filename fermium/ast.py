@@ -164,6 +164,13 @@ class ListLit(Node):
 
 
 @dataclass(eq=False)
+class VecCalc(Node):
+    """∇f (grad), ∇·F (div), ∇×F (curl), ∇²f (lap) of a one-line function; a function itself."""
+    kind: str
+    func: Node
+
+
+@dataclass(eq=False)
 class VecLit(Node):
     """<3, 4> or <x, y, z>"""
     items: list

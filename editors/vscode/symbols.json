@@ -42,6 +42,8 @@
  "sqrt": "√",
  "cbrt": "∛",
  "partial": "∂",
+ "nabla": "∇",
+ "grad": "∇",
  "pm": "±",
  "infty": "∞",
  "inf": "∞",

@@ -919,6 +919,8 @@ class Checker(C.DiffContext):
         return None
 
     def e_BinOp(self, e, ctx):
+        if e.op in ("*", "/") and isinstance(e.left, A.BinOp):
+            e.left.in_product = True          # 2 h c² is Planck's law, not "2 hours": only a lone `2 h` warns
         if e.op == "^":
             return self.power(e, ctx)
         lz = self._leibniz(e, ctx)
@@ -935,6 +937,7 @@ class Checker(C.DiffContext):
         finally:
             self._after_number = False
         if e.implicit and isinstance(e.left, A.Num) and isinstance(e.right, A.Name) \
+                and not getattr(e, "in_product", False) \
                 and e.right.name in self.UNIT_LOOKALIKE_CONSTANTS \
                 and not isinstance(ctx.scope.lookup(e.right.name)[0], I.Sym):
             what, unit = self.UNIT_LOOKALIKE_CONSTANTS[e.right.name]
@@ -1402,6 +1405,10 @@ class Checker(C.DiffContext):
             b, _ = self.lookup(f.name, ctx, f)
             if b is None and f.name in ("γ", "Γ"):
                 return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
+            if b is None and f.name in ("grad", "div", "curl", "laplacian") and len(e.args) == 1 \
+                    and isinstance(e.args[0], A.Name):          # ASCII for ∇f, ∇·F, ∇×F, ∇²f
+                kind = "lap" if f.name == "laplacian" else f.name
+                return self.e_VecCalc(A.VecCalc(kind, e.args[0]).at(e), ctx)
             if b is None:
                 if f.name in BUILTINS:
                     return self.builtin(f.name, e, ctx)
@@ -1435,7 +1442,7 @@ class Checker(C.DiffContext):
             if isinstance(target, SolRef):
                 return self.sol_eval(target.view, e, ctx)
             raise self.err("only functions can be called", f)
-        if isinstance(f, (A.Deriv, A.Field)):
+        if isinstance(f, (A.Deriv, A.Field, A.VecCalc, A.Call)):
             target = self.expr(f, ctx, allow_func=True)
             if isinstance(target, FuncRef):
                 args = [self.expr(a, ctx) for a in e.args]
@@ -2004,6 +2011,124 @@ class Checker(C.DiffContext):
             f"d^{e.order}/d{e.var}^{e.order} ({C.to_source(op)})"
         info.stable = True
         return FuncRef(info)
+
+    VEC_CALC_NAMES = {"grad": "∇{}", "div": "∇·{}", "curl": "∇×{}", "lap": "∇²{}"}
+
+    def e_VecCalc(self, e, ctx):
+        """∇f, ∇·F, ∇×F, ∇²f of a one-line function of 2 or 3 coordinates: a new function of the same
+        coordinates, found by symbolic differentiation (so it prints as a formula)."""
+        name = e.func.name
+        b, _ = ctx.scope.lookup(name)
+        sym = {"grad": "∇", "div": "∇·", "curl": "∇×", "lap": "∇²"}[e.kind]
+        if not isinstance(b, FuncInfo):
+            raise self.err(f"{sym} works on a function of the coordinates, like φ(x, y, z) = ..., and {name} "
+                           f"isn't a function", e.func)
+        key = ("veccalc", e.kind)
+        if key in b.derived:
+            return FuncRef(b.derived[key])
+        if not b.one_liner:
+            raise self.err(f"{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and {name} is "
+                           f"defined over several lines", e.func)
+        params = [p.name for p in b.fdef.params]
+        if not 2 <= len(params) <= 3 or (e.kind == "curl" and len(params) != 3):
+            need = "3 coordinates, like B(x, y, z)" if e.kind == "curl" else "2 or 3 coordinates, like φ(x, y, z)"
+            raise self.err(f"{sym}{name} needs a function of {need}; {name} has {len(params)}", e.func)
+        dc = self._diffctx(b.scope)
+        body = b.body_expr()
+
+        def d(expr, p):
+            saved = self.cur_ctx
+            try:
+                return C.diff(expr, p, dc)
+            finally:
+                self.cur_ctx = saved
+
+        def add(terms):
+            out = terms[0]
+            for t in terms[1:]:
+                out = A.BinOp("+", out, t)
+            return C.simplify(out)
+        if e.kind in ("grad", "lap"):
+            if e.kind == "grad":
+                new = A.VecLit([d(body, p) for p in params])
+            else:
+                new = add([d(d(body, p), p) for p in params])
+        else:
+            comps = self._vector_components(C.inline_where(body), b.scope)
+            if comps is None:
+                raise self.err(f"{sym}{name} needs {name} to be a vector formula, like {name}(x, y, z) = <-y, x, 0> T",
+                               e.func)
+            if len(comps) != len(params):
+                raise self.err(f"{name} has {len(comps)} components but {len(params)} coordinates; {sym} needs "
+                               f"them to match", e.func)
+            if e.kind == "div":
+                new = add([d(c, p) for c, p in zip(comps, params)])
+            else:
+                x, y, z = params
+                fx, fy, fz = comps
+                new = A.VecLit([C.simplify(A.BinOp("-", d(fz, y), d(fy, z))),
+                                C.simplify(A.BinOp("-", d(fx, z), d(fz, x))),
+                                C.simplify(A.BinOp("-", d(fy, x), d(fx, y)))])
+        new = A.VecLit([C.sympy_tidy(c) for c in new.items]) if isinstance(new, A.VecLit) else C.sympy_tidy(new)
+        if isinstance(new, A.VecLit):      # a component that differentiates to 0 fits the others' units
+            new.items = [A.Num(0.0, None, True) if isinstance(c, A.Num) and c.value == 0 else c for c in new.items]
+        nm = f"{b.name}_{e.kind}"
+        fd = A.FuncDef(nm, b.fdef.params, new)
+        fd.line, fd.col = b.fdef.line, b.fdef.col
+        info = FuncInfo(nm, fd, b.scope)
+        info.display_name = self.VEC_CALC_NAMES[e.kind].format(b.display_name)
+        info.stable = True
+        b.derived[key] = info
+        b.scope.names[nm] = info
+        return FuncRef(info)
+
+    def _vector_components(self, body, scope, depth=0):
+        """The component formulas of a vector-valued formula: <a, b, c>, vec(a, b, c), <…> unit, -F, k F, F/k,
+        F ± G, a call of a one-line vector function, or ∇φ(…) / ∇×A(…).  None if it isn't one."""
+        if depth > 20:
+            return None
+        rec = lambda x: self._vector_components(x, scope, depth + 1)  # noqa: E731
+        if isinstance(body, A.Where):
+            return rec(C.inline_where(body))
+        if isinstance(body, A.VecLit):
+            return list(body.items)
+        if isinstance(body, A.Call) and isinstance(body.func, A.Name) and body.func.name == "vec":
+            return list(body.args)
+        if isinstance(body, A.Quantity):
+            inner = rec(body.value)
+            if inner is not None:
+                one = A.Quantity(A.Num(1.0), body.unit)
+                return [A.BinOp("*", c, one) for c in inner]
+            return None
+        if isinstance(body, A.Neg):
+            inner = rec(body.operand)
+            return None if inner is None else [A.Neg(c) for c in inner]
+        if isinstance(body, A.BinOp):
+            L, R = rec(body.left), rec(body.right)
+            if body.op in ("+", "-") and L is not None and R is not None and len(L) == len(R):
+                return [A.BinOp(body.op, a, b) for a, b in zip(L, R)]
+            if body.op == "*" and (L is None) != (R is None):
+                return [A.BinOp("*", body.left, c) for c in R] if L is None else [A.BinOp("*", c, body.right) for c in L]
+            if body.op == "/" and L is not None and R is None:
+                return [A.BinOp("/", c, body.right) for c in L]
+            return None
+        if isinstance(body, A.Call):
+            f = body.func
+            info = None
+            if isinstance(f, A.Name):
+                b, _ = scope.lookup(f.name)
+                info = b if isinstance(b, FuncInfo) and b.one_liner else None
+            elif isinstance(f, A.VecCalc):
+                ref = self.e_VecCalc(f, Ctx(None, scope, is_main=False))
+                info = ref.info
+            if info is None or len(info.fdef.params) != len(body.args):
+                return None
+            inner = rec(C.inline_where(info.body_expr()))
+            if inner is None:
+                return None
+            m = {p.name: a for p, a in zip(info.fdef.params, body.args)}
+            return [C.subst(c, m) for c in inner]
+        return None
 
     def e_Integral(self, e, ctx):
         if e.lo is None:

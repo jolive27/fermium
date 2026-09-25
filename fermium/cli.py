@@ -27,6 +27,12 @@ def _read(path):
 
 
 def _internal(e):
+    if isinstance(e, BrokenPipeError):          # `fermium run prog.fm | head`: the reader went away
+        try:
+            sys.stdout = open(os.devnull, "w")
+        except OSError:
+            pass
+        return 0
     if os.environ.get("FERMIUM_DEBUG"):
         traceback.print_exc()
     sys.stderr.write(f"internal error in Fermium: {type(e).__name__}: {e}\n"
