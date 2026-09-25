@@ -1627,6 +1627,9 @@ class Checker(C.DiffContext):
             if name != "abs":
                 r.sf = None      # a whole number: print it exactly
             return r
+        if name == "sign" and n == 1 and isinstance(args[0].ty, VecTy):
+            # sign(v) = v/|v|, the direction; d|u|/dt = sign(u)·u' then works for vectors too (A18)
+            return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
         if name == "sign" or name == "isnan":
             need(1)
             num_or_list(0)

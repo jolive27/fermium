@@ -58,3 +58,17 @@ def test_stable_derivative_keeps_printed_form():
 
 def test_derivative_of_formula_at_a_value_is_stable():
     assert num(run("x = 800\nprint d/dx (1/(exp(x) + 1))")) == 0
+
+
+# ---------------------------------------------------------------- A18: d|r|/dt of a vector
+def test_derivative_of_vector_length():
+    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1)")
+    assert close(num(out), 10 / (2 * math.sqrt(3)))
+
+
+def test_sign_of_a_vector_is_its_direction():
+    assert run("print sign(<3, 4> m)") == "<0.6, 0.8>"
+
+
+def test_derivative_of_scalar_abs_still_sign():
+    assert run("f(x) = |x - 1|\ng = f'\nprint g(0), g(3)") == "-1 1"
