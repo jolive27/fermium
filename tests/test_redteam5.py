@@ -264,7 +264,6 @@ def _read(p):
     return open(os.path.join(ROOT, p), encoding="utf-8").read()
 
 
-@rt5(14)
 def test_14_lesson0_repl_transcript_matches_the_repl():
     text = _read("bootcamp/lesson00_setup.md")
     out = repl("print 2 m + 30 cm\nprint 1 mi in km\n")
@@ -272,7 +271,6 @@ def test_14_lesson0_repl_transcript_matches_the_repl():
     assert "fm> print 2 m + 30 cm\n2.30 m" in text and "fm> print 1 mi in km\n1.61 km" in text
 
 
-@rt5(14)
 def test_14_lesson1_and_2b_prose_match_the_output():
     assert "gave `2.3 m`" not in _read("bootcamp/lesson01_numbers_units.md")     # the box says 2.30 m
     assert repl("\\theta = 30 \\deg\nprint sin(\\theta)\n").strip() == "0.500"
@@ -288,7 +286,6 @@ def test_15_lesson2_where_gotcha_is_an_error_not_a_warning():
 
 # ---- #16: reference §17/§18 and the editor README -------------------------------------------------------------
 
-@rt5(16)
 def test_16_reference_tools_section_lists_the_tools():
     ref = _read("docs/reference.md")
     tools = ref[ref.index("## 17. Tools"):ref.index("## 18.")]
@@ -298,7 +295,6 @@ def test_16_reference_tools_section_lists_the_tools():
     assert grammar.count("| solve eqs [with eqs]") == 1
 
 
-@rt5(16)
 def test_16_doctor_checks_what_the_editor_readme_says():
     assert "check with `fermium doctor`" in _read("editors/vscode/README.md")
     src = _read("fermium/doctor.py")
@@ -307,7 +303,6 @@ def test_16_doctor_checks_what_the_editor_readme_says():
 
 # ---- #17: `plot … to "f.png" title "t"` without `with` is a parse error -------------------------------------
 
-@rt5(17)
 def test_17_plot_option_after_file_name_without_with(tmp_path):
     out = run('ts = linspace(1 s, 2 s, 5)\nplot ts^2 vs ts to "a.png" title "sq"', base_dir=str(tmp_path))
     assert "a.png" in out
@@ -322,7 +317,6 @@ def test_18_mixed_partial_derivative():
 
 # ---- #19: the REPL lets a variable change its units (D13), and Lesson 2 doesn't say so -----------------------
 
-@rt5(19)
 def test_19_lesson2_says_the_repl_allows_redefinition():
     # Lesson 1 says "try everything in the REPL"; Lesson 2 says `v = 3 m/s` then `v = 5` is an error.
     # In the REPL it is silently accepted (DECISIONS D13), so the lesson's box can't be reproduced there.

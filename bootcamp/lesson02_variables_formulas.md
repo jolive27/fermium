@@ -125,6 +125,8 @@ reuse.fm, line 2: v is speed [m/s]; it can't now hold a plain number (no units)
   hint: each variable keeps its units; use a new name for a different quantity
 ```
 
+> **In the REPL this is allowed.** When you type the same two lines into the REPL (or a Jupyter cell), `v = 5` quietly starts a *new* variable v that replaces the old one, and `print v` shows `5`. That's on purpose: while you experiment, you often want to reuse a name. In a program (`fermium run file.fm`) a name keeps its units from start to end, which is where this check protects you.
+
 You can change the *value* of a variable, as long as the units still make sense:
 
 ```fermium

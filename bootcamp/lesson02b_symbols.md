@@ -87,7 +87,7 @@ It works for everything: `\omega` → ω, `\pi` → π, `\sqrt` → √, `\int` 
 ```
 fm> \theta = 30 \deg
 fm> print sin(\theta)
-0.5
+0.500
 ```
 
 (Pressing Return also converts any `\name` left in the line.) If you type the start of a name and press Tab twice, you'll see all the matches.

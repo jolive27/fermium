@@ -113,12 +113,15 @@ Checking your Fermium installation...
   ✓ scipy 1.17.1
   ✓ sympy 1.14.0
   ✓ matplotlib 3.11.2
+  ✓ pygls 2.1.1: for the language server, fermium lsp (VS Code hover and live errors)
+  ✓ ipykernel 7.3.0: for the Jupyter kernel (fermium jupyter install)
+  ✓ C compiler: cc (only needed for  fermium build)
   ✓ compiled and ran a test program: g = 9.70 m/s²
 
 Everything looks good! Try:  fermium   (then type  print 2 m + 30 cm )
 ```
 
-(On a Mac the first line says `Darwin arm64` or `Darwin x86_64` instead of `Linux`. *Darwin* is the technical name of macOS.)
+The pygls, ipykernel and C-compiler lines are for optional tools; if one of them says `-` instead of `✓`, everything in the bootcamp still works. (On a Mac the first line says `Darwin arm64` or `Darwin x86_64` instead of `Linux`. *Darwin* is the technical name of macOS.)
 
 A `✗` means something is missing. The line below it, starting with `fix:`, tells you what to type. Do that, then run `fermium doctor` again.
 
@@ -134,12 +137,12 @@ You're now *inside* Fermium. The prompt changes to `fm>`. Type a line and press 
 
 ```
 fm> print 2 m + 30 cm
-2.3 m
+2.30 m
 fm> print 1 mi in km
-1.60934 km
+1.61 km
 ```
 
-It added 2 metres and 30 centimetres correctly! This interactive prompt is called the **REPL** (Read–Evaluate–Print Loop: it reads a line, works it out, prints the answer, and repeats). It's perfect for quick calculations.
+It added 2 metres and 30 centimetres correctly! (Answers show 3 significant figures unless you ask for more: `print 1 mi in km to 6 digits` gives `1.60934 km`.) This interactive prompt is called the **REPL** (Read–Evaluate–Print Loop: it reads a line, works it out, prints the answer, and repeats). It's perfect for quick calculations.
 
 To leave the REPL and go back to the normal Terminal, type `:quit` (or press **Control + D**).
 

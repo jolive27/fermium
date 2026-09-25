@@ -520,6 +520,13 @@ class Parser:
                 if self.tok.kind != "STR":
                     raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
                 out = self.next().value
+                # `to "a.png" title "…"` / `to "a.png", log y`: options may follow the file name without `with`,
+                # as they may follow the last series (§11, red team 5 #17)
+                if self.at_op(","):
+                    self.next()
+                    bare_opts = True
+                elif self._plot_option_ahead():
+                    bare_opts = True
                 continue
             if not bare_opts and not animate_next():
                 self.next()      # with log y / with log / with title "..."   (`animate over t` needs no `with`)

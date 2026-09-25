@@ -710,7 +710,7 @@ plot data.T vs data.L to "pendulum.png"
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
-  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables.
+  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables. The same holds after the file name: `plot N vs t to "decay.png" title "Decay"`.
   - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
   - Several series: `plot a vs t, b vs t`.
 
@@ -1114,7 +1114,11 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
   - **Files are relative to the folder you run the program in**, not the folder of the `.fm` file. `load "data/pendulum.csv"` in a program built as `./pendulum` reads `data/pendulum.csv` from the current folder, and a plot is saved there too. The CSV is read when the program runs, so new measurements work without rebuilding; but the header must be the one the program was built with (the columns' units are compiled in), otherwise the program stops with a message saying so.
   - **Plots are SVG files.** `plot ... to "decay.png"` writes `decay.svg` and prints `plot saved to decay.svg (standalone programs write SVG)`. The plot has axes, ticks, unit labels, a legend, log scales and the title, but it is simpler than the matplotlib one (no minor ticks). Open it in a web browser.
   - **`fit`** uses Fermium's own Levenberg–Marquardt instead of SciPy. It starts from the same guesses and reports the same numbers to the printed digits. When the fit can't pin a parameter down (the warning *the fit may not have converged*), the value it stops at can differ from `fermium run`.
-- **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion.
+- **`fermium check file.fm`:** checks the units and the syntax without running the program. It prints the warnings in line order, then `units check out, 2 warnings` (or `no problems found` when there are none), and stops at the first error.
+- **Jupyter kernel:** `fermium jupyter install` registers a Fermium kernel (it needs `pip install ipykernel`). Each cell runs like a REPL input: variables carry over, plots are shown inline, warnings (also the run-time ones, like a too-coarse step) appear under the cell, and Tab completes `\name` symbols, names and a module's members (`mechanics.` → `spring_period`). A cell that fails leaves nothing behind. See `examples/notebook.ipynb`.
+- **Language server:** `fermium lsp` speaks the Language Server Protocol (it needs `pip install pygls`): live error and warning underlines, hover that shows a name's units (also `mechanics.pendulum_period`), and completion of `\name`, names and module members. `fermium doctor` says whether pygls and ipykernel are installed.
+- **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion, and uses `fermium lsp` for hover and live errors when pygls is installed.
+- **Browser playground:** `web/` runs Fermium in the browser with Pyodide (no install; the README's *Browser playground* section says how to build and serve it). It uses the reference interpreter, so it is slower, but it prints the same output and warnings as `fermium run`.
 
 ## 18. Grammar summary
 
@@ -1126,9 +1130,6 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [absolute a, …] [using rk4|rk45|radau|bdf]
               (tolerance, absolute, using and until in any order)
-            | if expr block [else block] | for x from a to b [step s] block
-            | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
-              (tolerance, using and until in any order)
             | if expr block [else block] | [parallel] for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
