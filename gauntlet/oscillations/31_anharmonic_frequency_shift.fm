@@ -1,0 +1,36 @@
+# Oscillations 31 — Frequency shift of an anharmonic oscillator (Landau–Lifshitz §28)
+#
+# (Landau & Lifshitz, Mechanics, §28, eq. 28.13; Goldstein 3rd ed. §11.6 (Lindstedt);
+#  José & Saletan §7.3.)
+# A particle moves in the potential U(x)/m = ½ ω₀² x² + ⅓ α x³ + ¼ β x⁴, so
+#     x'' = −ω₀² x − α x² − β x³,
+# with ω₀ = 2.00 rad/s, α = 0.300 m⁻¹ s⁻², β = 0.500 m⁻² s⁻². Landau's second-order
+# perturbation theory gives, for oscillation amplitude a,
+#     ω = ω₀ + (3β/(8ω₀) − 5α²/(12ω₀³)) a²  +  O(a³).
+#   (a) For releases from rest at x₀ = 0.05, 0.10, 0.20 and 0.40 m, find the period
+#       from the equation of motion: the first time x' = 0 again is half a period.
+#   (b) The same period exactly, from energy conservation:
+#       T = 2 ∫_{x₋}^{x₀} dx / √(2 (U(x₀) − U(x))/m), with x₋ < 0 the other turning point.
+#   (c) Compare the measured shift coefficient (ω − ω₀)/x₀² with Landau's
+#       coefficient; the difference should shrink roughly in proportion to x₀.
+
+ω0 = 2.00 rad/s
+α = 0.300 [1/(m s²)]    # `0.300 /(m s²)` is refused ("m isn't defined")
+β = 0.500 [1/(m² s²)]
+U(x) = ½ ω0² x² + α x³ / 3 + β x⁴ / 4
+k_LL = 3 β / (8 ω0) - 5 α² / (12 ω0³)
+print "Landau coefficient =", k_LL to 8 digits
+
+half_period(x0) =
+    solve x'' = -ω0² x - α x² - β x³
+      with x(0 s) = x0, x'(0 s) = 0 m/s
+      for t from 0 s to 10 s tolerance 1e-12
+      until x' = 0 m/s
+    return times(x)[end]
+
+for x0 in [0.05 m, 0.10 m, 0.20 m, 0.40 m]
+    T_ode = 2 half_period(x0)
+    solve U(xm) = U(x0) for xm from -2 x0 to -0.01 x0
+    T_exact = 2 ∫ 1 / √(2 (U(x0) - U(x))) dx from xm to x0
+    ω = 2π / T_exact
+    print "x0 =", x0, " T_ode =", T_ode to 11 digits, " T_exact =", T_exact to 11 digits, " x_minus =", xm to 10 digits, " coefficient =", (ω - ω0) / x0² to 8 digits
