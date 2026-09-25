@@ -9,3 +9,5 @@ build/
 dist/
 .ruff_cache/
 tests/programs/*.png
+web/gen/
+web/pyodide/
