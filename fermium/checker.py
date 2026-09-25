@@ -26,13 +26,15 @@ from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, par
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
 SAME1 = {"abs", "floor", "ceil", "round"}
+SPECIAL2 = {"besselj", "bessely", "besseli", "besselk"}      # (n, x): whole-number order n (#50)
+SPECIAL1 = {"ellipk", "ellipe"}                              # (m): parameter m = k²
 LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "reverse", "sort"}
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
     "trace", "angle", "row", "column",
-}
+} | SPECIAL2 | SPECIAL1
 
 
 class MixedHint(tuple):
@@ -2317,6 +2319,19 @@ class Checker(C.DiffContext):
             r = I.IPowC(args[0], float(p) if name == "sqrt" else 1 / 3, args[0].ty.__class__(args[0].ty.dim ** p))
             r.sf = args[0].sf
             return r
+        if name in SPECIAL2 or name in SPECIAL1:
+            k = 2 if name in SPECIAL2 else 1
+            need(k)
+            what = ["the order n", "x"] if k == 2 else ["m"]
+            for i in range(k):
+                self.need_num(args[i], e.args[i], f"{what[i]} in {name}")
+                if not self.U.unify(args[i].ty.dim, DIMLESS):
+                    raise self.err(f"{name} needs plain numbers, but {what[i]} is {self.desc(args[i].ty.dim)}",
+                                   e.args[i], hint="divide by a unit or a scale first, like besselj(1, k r) with "
+                                                   "k in 1/m and r in m")
+            if k == 2 and isinstance(args[0], I.IConst) and args[0].value != int(args[0].value):
+                raise self.err(f"{name}(n, x) needs a whole-number order n, not {args[0].value:g}", e.args[0])
+            return self._bi(name, args, NumTy(DIMLESS), args[k - 1:])
         if name == "abs" and n == 1 and isinstance(args[0].ty, (VecTy, MatTy)):
             return self.map_entries(args[0], lambda x: self._bi("abs", [x], x.ty, [x]), ctx)
         if name == "trace":

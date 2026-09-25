@@ -15,6 +15,7 @@ from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
 from . import linalg
+from . import special
 
 
 F64 = ir.DoubleType()
@@ -314,6 +315,8 @@ class ModuleGen:
         if name in self._kernels_built:
             return self.module.get_global(name)
         self._kernels_built.add(name)
+        if name in special.KERNELS:
+            return special.KERNELS[name](self)
         return getattr(self, "_k_" + name.replace("fm_", ""))()
 
     def raise_error(self, b, kind, a=None, c=None, line=None):
@@ -2230,6 +2233,12 @@ class FuncGen:
             if isinstance(e.args[0].ty, ListTy):
                 return self.map_list(args[0], lambda x, i: self.math1(name, x))
             return self.math1(name, args[0])
+        if name in ("besselj", "bessely"):
+            return special.ll_jn_yn(self, "jn" if name == "besselj" else "yn", *args)
+        if name in ("besseli", "besselk"):
+            return b.call(self.mg.kernel("fm_" + name), args)
+        if name in ("ellipk", "ellipe"):
+            return special.ll_ellip(self, name, args[0])
         if name == "isnan":
             return b.fcmp_unordered("uno", args[0], args[0])
         if name == "atan2":

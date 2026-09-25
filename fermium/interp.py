@@ -20,6 +20,7 @@ from .errors import FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy
 from . import linalg
+from . import special
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
@@ -1226,6 +1227,8 @@ class Interpreter:
             if isinstance(args[0], list):
                 return [math1(name, x) for x in args[0]]
             return math1(name, args[0])
+        if name in ("besselj", "bessely", "besseli", "besselk", "ellipk", "ellipe"):
+            return getattr(special, name)(*args)
         if name == "isnan":
             return args[0] != args[0]
         if name == "atan2":

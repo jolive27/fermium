@@ -151,6 +151,9 @@ BUILTIN_DERIVS = {
 }
 
 
+BESSEL = {"besselj": (1, -1), "bessely": (1, -1), "besseli": (1, 1), "besselk": (-1, 1)}
+
+
 class DiffContext:
     """What the differentiator needs to know about names.  The checker subclasses this."""
 
@@ -403,6 +406,22 @@ def _d(e, var, ctx):
                     t = mul(A.Call(A.Name(dname), list(e.args)), da)
                     terms = t if terms is None else add(terms, t)
                 return terms if terms is not None else num(0)
+            if fname in BESSEL and len(e.args) == 2 and not ctx.user_function(fname):
+                n, x = e.args
+                if not is_num(simplify(_d(n, var, ctx)), 0):
+                    raise FermiumError(f"can't differentiate {fname}(n, x) with respect to its order n", e.line, e.col)
+                lo, hi = A.Call(A.Name(fname), [sub(n, num(1)), x]), A.Call(A.Name(fname), [add(n, num(1)), x])
+                sgn, comb = BESSEL[fname]          # J, Y: (f(n−1) − f(n+1))/2; I: (…+…)/2; K: −(…+…)/2
+                d = div(add(lo, hi) if comb > 0 else sub(lo, hi), num(2))
+                return mul(neg(d) if sgn < 0 else d, _d(x, var, ctx))
+            if fname in ("ellipk", "ellipe") and len(e.args) == 1 and not ctx.user_function(fname):
+                m = e.args[0]
+                K, E = A.Call(A.Name("ellipk"), [m]), A.Call(A.Name("ellipe"), [m])
+                if fname == "ellipk":       # dK/dm = (E − (1 − m) K) / (2 m (1 − m))
+                    d = div(sub(E, mul(sub(num(1), m), K)), mul(mul(num(2), m), sub(num(1), m)))
+                else:                       # dE/dm = (E − K) / (2 m)
+                    d = div(sub(E, K), mul(num(2), m))
+                return mul(d, _d(m, var, ctx))
             if fname in ("min", "max", "floor", "ceil", "round", "sign", "atan2", "hypot"):
                 if fname == "hypot" and len(e.args) == 2:
                     a, b = e.args

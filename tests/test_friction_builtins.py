@@ -124,3 +124,84 @@ def test_54_angle_between_vectors():
 def test_54_elementwise_abs():
     assert both("v = <-1, 2, -3> m/s\nprint abs(v)\nprint abs([[1, -2], [-3, 4]])").split("\n") == \
         ["<1, 2, 3> m/s", "[[1, 2], [3, 4]]"]
+
+
+# ---------------------------------------------------------------- #50 Bessel functions, elliptic integrals
+BESSEL_CASES = [(n, x) for n in (0, 1, 2, 5, 12) for x in (0.01, 0.5, 1.0, 2.5, 7.0, 30.0, 150.0)]
+
+
+def _values(out):
+    return [float(t.replace("×10", "e").translate(str.maketrans("⁻⁰¹²³⁴⁵⁶⁷⁸⁹", "-0123456789")))
+            for t in out.split()]
+
+
+@pytest.mark.parametrize("fname,ref", [("besselj", "jv"), ("bessely", "yv"), ("besseli", "iv"), ("besselk", "kv")])
+def test_50_bessel_against_scipy(fname, ref):
+    sc = pytest.importorskip("scipy.special")
+    src = "\n".join(f"print {fname}({n}, {x}) to 16 digits" for n, x in BESSEL_CASES)
+    want = [float(getattr(sc, ref)(n, x)) for n, x in BESSEL_CASES]
+    for runner in (run, interp):
+        got = _values(runner(src))
+        for (n, x), g, w in zip(BESSEL_CASES, got, want):
+            assert g == pytest.approx(w, rel=1e-11, abs=1e-300), (fname, n, x)
+
+
+def test_50_bessel_negative_arguments_and_orders():
+    sc = pytest.importorskip("scipy.special")
+    src = "print besseli(3, -2) to 16 digits, besselj(-3, 2) to 16 digits, bessely(-2, 3) to 16 digits"
+    want = [sc.iv(3, -2), sc.jv(-3, 2), sc.yv(-2, 3)]
+    for runner in (run, interp):
+        assert _values(runner(src)) == pytest.approx(want, rel=1e-13)
+
+
+def test_50_elliptic_against_scipy():
+    sc = pytest.importorskip("scipy.special")
+    ms = [-5.0, -0.5, 0.0, 0.1, 0.5, 0.9, 0.99, 0.999999, 1 - 1e-12]
+    src = "\n".join(f"print ellipk({m!r}) to 16 digits, ellipe({m!r}) to 16 digits" for m in ms)
+    want = [v for m in ms for v in (sc.ellipk(m), sc.ellipe(m))]
+    for runner in (run, interp):
+        assert _values(runner(src)) == pytest.approx(want, rel=1e-14)
+    assert both("print ellipe(1), ellipk(1), besselk(0, 0)") == "1 ∞ ∞"
+
+
+def test_50_derivatives():
+    # J1' = (J0 − J2)/2, K1' = −K0 − K1/x, and dK/dm, dE/dm against a central difference of SciPy's values
+    sc = pytest.importorskip("scipy.special")
+    src = ("J1p(x) = d/dx besselj(1, x)\nprint J1p(2) to 15 digits\n"
+           "Kd(x) = d/dx besselk(1, x)\nprint besselk(0, 2) + Kd(2) + besselk(1, 2) / 2\n"
+           "Kp(m) = d/dm ellipk(m)\nEp(m) = d/dm ellipe(m)\nprint Kp(0.3) to 15 digits, Ep(0.3) to 15 digits\n"
+           "I0p(x) = d/dx besseli(0, x)\nprint I0p(1.5) to 15 digits")
+    got = _values(both(src))
+    h = 1e-5
+    assert got[0] == pytest.approx(sc.jvp(1, 2), rel=1e-13)
+    assert abs(got[1]) < 1e-15
+    assert got[2] == pytest.approx((sc.ellipk(0.3 + h) - sc.ellipk(0.3 - h)) / (2 * h), rel=1e-9)
+    assert got[3] == pytest.approx((sc.ellipe(0.3 + h) - sc.ellipe(0.3 - h)) / (2 * h), rel=1e-9)
+    assert got[4] == pytest.approx(sc.iv(1, 1.5), rel=1e-13)
+
+
+def test_50_errors():
+    assert "whole-number order" in error_of("print besselj(1.5, 2)").message
+    assert "plain numbers" in error_of("print besselj(1, 2 m)").message
+    assert "takes 2 arguments" in error_of("print besselk(2)").message
+
+
+def test_50_off_axis_ring_by_elliptic_integrals():
+    # Jackson's charged ring: the potential off the axis as an integral and with K(m)
+    src = ("a = 1 m\nλ = 1 nC/m\nk = 1/(4π ε₀)\n"
+           "V(r, z) = ∫ k λ a / √(r² + a² + z² - 2 r a cos(φ)) dφ from 0 to 2π\n"
+           "Vk(r, z) = 4 k λ a ellipk(4 a r / ((a + r)² + z²)) / √((a + r)² + z²)\n"
+           "print V(0.3 m, 0.2 m) / Vk(0.3 m, 0.2 m) to 12 digits")
+    assert both(src) == "1.00000000000"
+
+
+def test_50_pure_python_fallback_for_j(monkeypatch):
+    # without a C library, SciPy or mpmath (a bare browser playground) J_n comes from Bessel's integral
+    import sys
+    from fermium import special
+    sc = pytest.importorskip("scipy.special")
+    want = {(n, x): float(sc.jv(n, x)) for n, x in [(0, 1.0), (3, 7.5), (1, 40.0), (2, -3.0)]}
+    for mod in ("scipy", "scipy.special", "mpmath"):
+        monkeypatch.setitem(sys.modules, mod, None)
+    for (n, x), w in want.items():
+        assert special._bessel_fallback("jv", n, x) == pytest.approx(w, rel=1e-12, abs=1e-15)
