@@ -309,6 +309,30 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     }
     err_line = ln;
     if (kind == -1) return;            /* ERR_PENDING: load/fit/plot already wrote err_msg */
+    if (kind >= 1000000 && kind < 2000000) {
+        /* too many steps: a = the place reached, b = the start, the variable's name in the kind; enough digits
+           to tell the two apart (2499.4 s, not 2500 s next to a start of 2500 s) (D214) */
+        const char *nm = tname((double)(kind - 1000001));
+        for (int sig = 3; sig <= 15; sig++) {
+            char bx[128], by[128];
+            if (fmt >= 0) {
+                const fm_fmt *f = &fm_fmts[fmt];
+                const char *sep = (f->unit[0] && strcmp(f->unit, "1")) ? " " : "";
+                fmt_num((a - f->offset) / f->factor, sig, 1, bx, sizeof bx);
+                fmt_num((b - f->offset) / f->factor, sig, 1, by, sizeof by);
+                snprintf(x, sizeof x, "%s%s%s", bx, sep, f->unit);
+                snprintf(y, sizeof y, "%s%s%s", by, sep, f->unit);
+            } else {
+                fmt_num(a, sig, 1, bx, sizeof bx);
+                fmt_num(b, sig, 1, by, sizeof by);
+                snprintf(x, sizeof x, "%s (SI units)", bx);
+                snprintf(y, sizeof y, "%s (SI units)", by);
+            }
+            if (strcmp(x, y) != 0) break;
+        }
+        snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (20 million: it got from %s = %s only to %s = %s); if the equation is stiff (time scales far apart, like a 164 \xce\xbcs half-life in a chain followed for hours), add  using radau  after the range; otherwise the solution may blow up", nm, y, nm, x);
+        return;
+    }
     switch (kind) {
     case 1:
         if (a != a)

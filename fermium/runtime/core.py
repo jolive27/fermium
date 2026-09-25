@@ -450,7 +450,32 @@ class Runtime:
             except (BrokenPipeError, ValueError):
                 pass
 
+    def fmt_apart(self, a, b, fmt):
+        """Two values of one quantity with enough digits to tell them apart (2499.4 s, not 2500 s next to a
+        start of 2500 s) (D214)."""
+        for sf in (3, 4, 5, 6, 8, 10, 12, 15):
+            if fmt is not None and fmt >= 0 and self.tables and fmt < len(self.tables.fmts) and \
+                    "rdim" in self.tables.fmts[fmt]:
+                f = self.tables.fmts[fmt]
+                x, y = (format_quantity(v, f["rdim"], f["hint"], sf, False) for v in (a, b))
+            else:
+                x, y = (f"{format_number(v, sf)} (SI units)" for v in (a, b))
+            if x != y:
+                break
+        return x, y
+
     def describe_error(self, kind, a, b, fmt=-1):
+        if kind >= 1_000_000:         # "too many steps": a = the place reached, b = the start (D214)
+            stiff = kind >= 2_000_000
+            name = self.tname(kind - (2_000_001 if stiff else 1_000_001))
+            reached, start = self.fmt_apart(a, b, fmt)
+            where = f"it got from {name} = {start} only to {name} = {reached}"
+            if stiff:
+                return f"the stiff ODE solver needed too many steps ({where}); the solution may blow up or " \
+                       f"oscillate very fast there"
+            return f"the ODE solver needed too many steps (20 million: {where}); if the equation is stiff (time " \
+                   f"scales far apart, like a 164 μs half-life in a chain followed for hours), add  using radau  " \
+                   f"after the range; otherwise the solution may blow up"
         if kind == 1:
             n = int(b)
             if a != a:

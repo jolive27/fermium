@@ -28,6 +28,14 @@ from .errors import FermiumError, Diagnostics
 from .lexer import Token, tokenize, canonical_name
 from .units import is_unit_name
 
+
+def _is_constant(name):
+    """Is this a built-in constant's name (c, AU, M☉ are units too, with the same value)?"""
+    from .constants import CONSTANTS
+    if not hasattr(_is_constant, "names"):
+        _is_constant.names = set(CONSTANTS) | {a for v in CONSTANTS.values() for a in v[3]}
+    return name in _is_constant.names
+
 CMP_OPS = {"==", "!=", "<", ">", "<=", ">=", "~="}
 AUG_OPS = {"+=", "-=", "*=", "/="}
 
@@ -55,6 +63,9 @@ class Parser:
         self.collisions = {}         # line -> [(number, name)]: `2 L` read as a unit though L is a variable
         self.in_integrand = 0
         self.limit_start = None      # token index where an integral's upper limit starts (FRICTION #8)
+        self.unknown_collisions = set()   # (line, name): `2 u` read as a unit though u is a solve's unknown
+        self._named = None           # every name the program assigns, defines or loops over (D215)
+        self.solve_unknowns = set()  # the unknowns of the solve being parsed: names written with a prime (D211)
 
     # ------------------------------------------------------------ helpers
     @property
@@ -145,6 +156,7 @@ class Parser:
             self.skip_newlines()
         prog = A.Program(body)
         prog.unit_collisions = self.collisions
+        prog.unknown_collisions = self.unknown_collisions
         return prog
 
     def block(self):
@@ -626,10 +638,53 @@ class Parser:
         rhs = self.expr()
         return self.span(A.Equation(lhs, rhs), st)
 
+    def _unit_tok(self, tk):
+        """Is this token a unit name?  In a solve, the unknown written with a prime (`u''`) never is: a prime
+        on a unit means nothing, so `eV nm² * u''` and `0.5 u''` hold the unknown u, not the atomic mass unit
+        (D211)."""
+        return is_unit_name(tk.raw) and not getattr(tk, "unknown_prime", False)
+
+    def _solve_unknowns(self):
+        """Before parsing a solve: the names written with a prime in it (`u''`, `x'`), its unknowns (D211).
+        Scans to the end of the statement, including an indented block of equations and clauses."""
+        names = set()
+        depth = 0
+        j = self.i
+        while j < len(self.toks):
+            tk = self.toks[j]
+            if tk.kind == "EOF":
+                break
+            if tk.kind == "INDENT":
+                depth += 1
+            elif tk.kind == "DEDENT":
+                depth -= 1
+                if depth <= 0:
+                    break
+            elif tk.kind == "NEWLINE" and depth == 0 and self.toks[j + 1].kind != "INDENT":
+                break
+            elif tk.kind == "NAME" and self.toks[j + 1].kind == "PRIME" and not self.toks[j + 1].ws_before:
+                names.add(tk.value)
+                if is_unit_name(tk.raw):
+                    tk.unknown_prime = True
+            j += 1
+        return names
+
+    def _solve_equation(self, unknowns):
+        """An equation of a solve: its unknowns count as your variables while it is parsed, so the D7 rule
+        applies to them (`nm² * u''` isn't continued by u, `2 u * V` is ambiguous) (D211)."""
+        saved_known, saved_unk = self.known, self.solve_unknowns
+        self.known = saved_known | unknowns
+        self.solve_unknowns = unknowns
+        try:
+            return self.equation()
+        finally:
+            self.known, self.solve_unknowns = saved_known, saved_unk
+
     def solve_stmt(self):
         t = self.next()
         eqs = []
         initial = []
+        unknowns = self._solve_unknowns()
         var = lo = hi = step = None
         method = None
         tol_node = [None]
@@ -637,10 +692,10 @@ class Parser:
         until = [None]
         m3 = {}                   # `lowest N` / `grid N` of an eigenvalue problem or a PDE (D82, D83)
         if self.tok.kind != "NEWLINE":
-            eqs.append(self.equation())
+            eqs.append(self._solve_equation(unknowns))
             while self.at_op(",") or self.at_kw("and"):
                 self.next()
-                eqs.append(self.equation())
+                eqs.append(self._solve_equation(unknowns))
 
         def clause():
             nonlocal var, lo, hi, step, method
@@ -770,10 +825,10 @@ class Parser:
             self.next()
             while self.tok.kind not in ("DEDENT", "EOF"):
                 if not clause():
-                    eqs.append(self.equation())
+                    eqs.append(self._solve_equation(unknowns))
                     while self.at_op(",") or self.at_kw("and"):
                         self.next()
-                        eqs.append(self.equation())
+                        eqs.append(self._solve_equation(unknowns))
                 while clause():
                     pass
                 self.end_statement()
@@ -1405,7 +1460,7 @@ class Parser:
         """At '[': is this a unit in brackets ([m/s]) rather than a list ([1, 2])?"""
         j = self.i + 1
         t = self.toks[j]
-        if t.kind == "NAME" and is_unit_name(t.raw):
+        if t.kind == "NAME" and self._unit_tok(t):
             k = self._match(self.i)
             if k is None:
                 return True
@@ -1466,13 +1521,71 @@ class Parser:
             j += 1
         return False
 
+    def named_anywhere(self):
+        """Every name the program assigns (`m = …`, `m += …`), loops over (`for m in …`) or defines as a
+        function or parameter (`f(m, g) = …`), wherever it is: a unit name after `)` is a unit only if none of
+        these holds, so a variable set further down (or in a loop) is never silently read as a unit (D215)."""
+        if self._named is None:
+            out = set()
+            toks = self.toks
+            for j, tk in enumerate(toks):
+                if tk.kind != "NAME" or j + 1 >= len(toks):
+                    continue
+                nx = toks[j + 1]
+                prev = toks[j - 1] if j > 0 else None
+                if nx.kind == "OP" and nx.value in ("=", "+=", "-=", "*=", "/=", "^=") or \
+                        prev is not None and prev.kind in ("KW", "NAME") and prev.value in ("for", "as", "import"):
+                    out.add(tk.value)
+                elif nx.kind == "OP" and nx.value == "(" and not nx.ws_before and \
+                        (prev is None or prev.kind in ("NEWLINE", "INDENT", "DEDENT") or
+                         prev.kind == "KW" and prev.value in ("def", "function")):
+                    k = self._match(j + 1)          # f(a, b) = …: the parameters are names too
+                    if k is not None and k + 1 < len(toks) and toks[k + 1].kind == "OP" and toks[k + 1].value == "=":
+                        out.add(tk.value)
+                        out.update(p.value for p in toks[j + 2:k] if p.kind == "NAME")
+            self._named = out
+        return self._named
+
+    def _unit_after_paren(self, e, t):
+        """`(51 - 33 (N - Z)/A) MeV`: a unit right after a bracketed expression multiplies it by 1 unit, as
+        after a number (D7, D215).  When the name is also one of your variables (anywhere in the program),
+        `(a + b) m` keeps its old meaning, your variable: tested programs write `(…) m`, `(…) u`, `(…) g`,
+        `(4/3) T` for their own m, u, g, T (D215)."""
+        tk = self.tok
+        if not (e.paren and not isinstance(e, A.Uncertain) and tk.kind == "NAME" and self._unit_tok(tk) and
+                tk.value not in self.no_juxt_names and not _is_constant(tk.value) and not self._is_call_like()):
+            return None
+        if tk.value in self.known or tk.value in self.named_anywhere():
+            return None
+        u = self.unit_expr(explicit=False)
+        q = self.span(A.Quantity(e, u), t)
+        q.times_unit = True
+        return q
+
+    @staticmethod
+    def _number_first(e):
+        """Is e a product written after a number, like `100 h`?"""
+        while isinstance(e, A.BinOp) and e.implicit and not e.paren:
+            e = e.left
+        return isinstance(e, A.Num) and e.digit and not e.paren
+
+    def _free_unit_here(self):
+        """A unit name here that no variable, function, parameter or constant of the program shares (D215)."""
+        tk = self.tok
+        return tk.kind == "NAME" and self._unit_tok(tk) and tk.value not in self.known and \
+            tk.value not in self.named_anywhere() and tk.value not in self.no_juxt_names and \
+            not _is_constant(tk.value) and not self._is_call_like()
+
     def juxt(self):
         t = self.tok
         e = self.power()
-        if isinstance(e, A.Uncertain) and e.paren and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and \
+        if isinstance(e, A.Uncertain) and e.paren and self.tok.kind == "NAME" and self._unit_tok(self.tok) and \
                 self.tok.value not in self.known and not self._is_call_like():
             u = self.unit_expr(explicit=False)          # (5.0 ± 0.2) m: the unit applies to both (D120)
             e = self.span(A.Quantity(e, u), t)
+        q = self._unit_after_paren(e, t)
+        if q is not None:
+            e = q
         while True:
             if self.at_op("[") and self.tok.ws_before and self._bracket_is_unit():
                 u = self.bracket_unit()
@@ -1487,6 +1600,25 @@ class Parser:
                 r.unit_left = e               # `A_d u`: if u isn't defined, the hint suggests A_d * 1 u (#55)
             e = self.span(A.BinOp("*", e, r, implicit=True), t)
             e.juxt_ws, e.juxt_i = ws, ri
+            if r.paren:                       # `2 (a + b) MeV` (D215)
+                q = self._unit_after_paren(r, t)
+                if q is not None:
+                    e = self.span(A.Quantity(e, q.unit), t)
+                    e.times_unit = True
+            elif isinstance(r, A.Name) and r.name in self.known and self._number_first(e) and \
+                    self._free_unit_here():
+                # `100 h km/s/Mpc` with your h: a compound unit (two names or more) after `number variable` is
+                # a unit; a single one (`2 a b²`) stays a name, as before (D215)
+                j0 = self.i
+                roles = [getattr(tk, "role", None) for tk in self.toks[j0:j0 + 16]]
+                u = self.unit_expr(explicit=False)
+                if len(u.factors) >= 2:
+                    e = self.span(A.Quantity(e, u), t)
+                    e.times_unit = True
+                else:
+                    for tk, rl in zip(self.toks[j0:j0 + 16], roles):
+                        tk.role = rl
+                    self.i = j0
         self._warn_bare_unit(e)
         return e
 
@@ -1498,6 +1630,8 @@ class Parser:
             lst = self.collisions.setdefault(f.line, [])
             if (num, f.name) not in lst:
                 lst.append((num, f.name))
+            if f.name in self.solve_unknowns:
+                self.unknown_collisions.add((f.line, f.name))
 
     def _colliding_unit(self, e):
         """The (quantity, factor) if e is `2 g` with a single bare unit that is also one of your variables."""
@@ -1519,7 +1653,8 @@ class Parser:
                  "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals", "u": "atomic mass units",
                  "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
         what = words.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
-        whose = f"the {f.name} from 'where'" if where else f"your variable {f.name}"
+        whose = f"the {f.name} from 'where'" if where else (
+            f"the unknown {f.name} of this solve" if f.name in self.solve_unknowns else f"your variable {f.name}")
         raise self.error(f"'{num} {f.name}' is ambiguous: right after a number, {f.name} is a unit ({what}), "
                          f"but {f.name} is also {whose}",
                          tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
@@ -1538,10 +1673,11 @@ class Parser:
             if f.name in self.known and f.name not in self.warned_units and not then_mul:
                 self.warned_units.add(f.name)
                 num = A.num_text(q.value) if isinstance(q.value, A.Num) else "2"
-                self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not your variable {f.name}",
+                who = "the unknown" if f.name in self.solve_unknowns else "your variable"
+                self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not {who} {f.name}",
                                 line=f.line, col=f.col, length=len(f.name),
                                 hint=f"that's fine if you meant the unit (write {num} [{f.name}] to say so); for "
-                                     f"{num} × your variable write {num}*{f.name}")
+                                     f"{num} × {who} write {num}*{f.name}")
 
     def _warn_unit_then_term(self, e):
         """`0.5 m v²` with a variable m: the m is metres here -- almost certainly a mistake."""
@@ -1563,7 +1699,7 @@ class Parser:
             if self.tok.kind in ("SUP",):
                 raise self.error("two exponents in a row")
             r = self.span(A.BinOp("^", base, e), t)
-            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
+            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10⁸ m/s, like 10^8 m/s
                 self._check_compound_collision(None, u)
@@ -1573,7 +1709,7 @@ class Parser:
             self.next()
             ex = self.exponent()
             r = self.span(A.BinOp("^", base, ex), t)
-            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
+            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
                     and self.tok.value not in self.known and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10^8 m/s
                 self._check_compound_collision(None, u)
@@ -1657,7 +1793,7 @@ class Parser:
                         and len(args) == 1 and isinstance(args[0], A.Name):     # grad(f) is ∇f
                     e = self.span(A.VecCalc(VEC_CALC_WORDS[e.func.name], args[0]), t)
                 if isinstance(e.func, A.Name) and e.func.name == "vec" and self.tok.kind == "NAME" and \
-                        is_unit_name(self.tok.raw) and self.tok.value not in self.known:
+                        self._unit_tok(self.tok) and self.tok.value not in self.known:
                     u = self.unit_expr(explicit=False)          # vec(3, 4) m/s
                     e = self.span(A.Quantity(e, u), t)
             elif self.at_op("[") and not self.tok.ws_before:
@@ -1728,7 +1864,7 @@ class Parser:
                 if self.at_op("[") and self._bracket_is_unit():
                     u = self.bracket_unit()
                     return self.span(A.Quantity(n, u, bracket=True), t)
-                if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
+                if self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
                     u = self.unit_expr(explicit=False)
                     self._check_compound_collision(t.raw, u)
                     q = self.span(A.Quantity(n, u), t)
@@ -1755,7 +1891,7 @@ class Parser:
                 lz = self._leibniz_higher()
                 if lz is not None:
                     return lz
-            if t.value == "∞" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
+            if t.value == "∞" and self.peek().kind == "NAME" and self._unit_tok(self.peek()) and \
                     self.peek().value not in self.known:
                 self.next()
                 n = self.span(A.Name("∞"), t)
@@ -1836,7 +1972,7 @@ class Parser:
                 self.next()
                 lst = self.span(A.ListLit(items), t)
                 if items and self.tok.kind == "NAME" and \
-                        is_unit_name(self.tok.raw) and self.tok.value not in self.known and not self._is_call_like():
+                        self._unit_tok(self.tok) and self.tok.value not in self.known and not self._is_call_like():
                     # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
                     u = self.unit_expr(explicit=False)
                     lst = self.span(A.Quantity(lst, u), t)
@@ -1961,7 +2097,7 @@ class Parser:
             return
         nx = self.peek()
         names = []
-        if nx.kind == "NAME" and is_unit_name(nx.raw) and \
+        if nx.kind == "NAME" and self._unit_tok(nx) and \
                 not (self.at_op_at(self.i + 2, "(") and not self.toks[self.i + 2].ws_before):
             names = [nx]
         elif nx.kind == "OP" and nx.value == "(" and self._bracketed_reciprocal_unit(any_known=True):
@@ -1994,7 +2130,7 @@ class Parser:
         for m in range(self.i + 2, k):
             tk = self.toks[m]
             if tk.kind == "NAME":
-                if not is_unit_name(tk.raw) or (tk.value in self.known and not any_known):
+                if not self._unit_tok(tk) or (tk.value in self.known and not any_known):
                     return False
             elif tk.kind == "SUP":
                 pass
@@ -2016,8 +2152,8 @@ class Parser:
         t = self.tok
         if t.kind == "NUM" and t.value == 1 and t.digit and self.peek().kind == "OP" and self.peek().value == "/":
             nx = self.peek(2)
-            return nx.kind == "NAME" and is_unit_name(nx.raw)
-        if t.kind == "OP" and t.value == "/" and self.peek().kind == "NAME" and is_unit_name(self.peek().raw) and \
+            return nx.kind == "NAME" and self._unit_tok(nx)
+        if t.kind == "OP" and t.value == "/" and self.peek().kind == "NAME" and self._unit_tok(self.peek()) and \
                 self.peek().value not in self.known and \
                 (not self.peek().ws_before or self.peek().value in UNITS_NAMED_LIKE_BUILTINS) and \
                 not (self.peek(2).kind == "OP" and self.peek(2).value == "(" and not self.peek(2).ws_before):
@@ -2042,7 +2178,7 @@ class Parser:
         if not 2 <= len(items) <= 16:
             raise self.error(f"a vector needs 2 to 16 components, not {len(items)}", tok=t)
         v = self.span(A.VecLit(items), t)
-        if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
+        if self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
             u = self.unit_expr(explicit=False)
             v = self.span(A.Quantity(v, u), t)
         elif self._unit_reciprocal_follows():
@@ -2361,7 +2497,7 @@ class Parser:
 
         def unit_name_here(k=0):
             tk = self.peek(k) if k else self.tok
-            return tk.kind == "NAME" and is_unit_name(tk.raw)
+            return tk.kind == "NAME" and self._unit_tok(tk)
 
         # first factor
         if reciprocal:

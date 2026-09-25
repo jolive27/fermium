@@ -53,6 +53,7 @@ ODE_FN = ir.FunctionType(VOID, [F64, F64P, F64P, F64P])
 MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
+ERR_ODE_STEPS_FROM = 1_000_000     # + 1 + the variable's text id: "too many steps", a = reached, b = start (D214)
 ERR_QUAD = 9
 ERR_QUAD_NAN = 31          # the integrand is NaN on more than an isolated point (D45)
 ERR_QUAD_INF = 32          # ... or ±∞ (and nowhere NaN): it may blow up there (D45)
@@ -1592,7 +1593,8 @@ class ModuleGen:
         cnt = b.add(b.load(nsteps), i64(1))
         b.store(cnt, nsteps)
         with b.if_then(b.icmp_signed(">", cnt, i64(20_000_000))):
-            self.raise_error(b, ERR_ODE_STEPS, t, tname)
+            # the place reached and the start, with the variable's name in the kind (D214)
+            self.raise_error(b, b.add(b.fptosi(tname, I64), i64(ERR_ODE_STEPS_FROM + 1)), t, t0)
         tgt = b.icmp_signed("!=", b.load(hastgt), i64(0))
         stop = b.select(tgt, b.load(tgtlo), t1)
         rstop = b.fmul(dirn, b.fsub(stop, t))

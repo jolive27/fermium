@@ -26,7 +26,7 @@ from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy,
                     type_desc)
 from .linalg import transpose_index
 from .linalg_big import MAX_DIM
-from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
+from .units import SPELLED_UNITS, UNIT_NAMES_LONG, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
 
 MATH1 = {"sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
@@ -175,6 +175,12 @@ class SolView:
         self.tdim = tdim
         self.tname = tname
         self.name = name
+
+
+# constants whose names are also common variables (the Hubble h, an eccentricity e, G = 1 units): overriding
+# one with a plain number, or a value in the constant's own units, warns once at the assignment (D213)
+WELL_KNOWN_CONSTANTS = {"h": "Planck's constant", "c": "the speed of light", "G": "the gravitational constant",
+                        "e": "the elementary charge", "k_B": "Boltzmann's constant"}
 
 
 class ConstInfo:
@@ -518,9 +524,13 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             num, name = found[0]
             u = lookup_unit(name)
             word = next((w for w, sym in SPELLED_UNITS.items() if sym == name), None)
-            unit = f"the unit {word} ({name})" if word else f"the unit {name} ({self.desc(u.dim)})"
+            unit = f"the unit {word} ({name})" if word else (
+                f"the unit {name} ({UNIT_NAMES_LONG[name]})" if name in UNIT_NAMES_LONG
+                else f"the unit {name} ({self.desc(u.dim)})")
             fix = self._collision_fix(getattr(self, "_prog_ast", stmt), num, name, e.line)
-            e.message = (f"{name} here is read as {unit}, not your variable {name}: '{num} {name}' is a unit right "
+            unknown = (e.line, name) in getattr(getattr(self, "_prog_ast", None), "unknown_collisions", ())
+            who = f"the unknown {name} of this solve" if unknown else f"your variable {name}"
+            e.message = (f"{name} here is read as {unit}, not {who}: '{num} {name}' is a unit right "
                          f"after a number; write {fix}")
             called = [h for h in (e.hint or "").split("; ") if h.startswith("this happened when")]
             e.hint = "\n  ".join([f"the units then don't match: {msg}" + "".join(f"; {h}" for h in called)]
@@ -674,6 +684,18 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 self.diags.warn(f"{name} is the built-in {b.desc}; from here on, {name} means your value",
                                 line=getattr(node, "line", None), col=getattr(node, "col", None),
                                 hint=f"pick another name if you still need the constant {name}")
+            elif isinstance(b, ConstInfo) and not self.repl and name in WELL_KNOWN_CONSTANTS and \
+                    isinstance(v.ty, NumTy) and self.U.is_concrete(v.ty.dim) and \
+                    self.U.resolve(v.ty.dim) in (DIMLESS, b.unit.dim) and \
+                    name not in self.__dict__.setdefault("warned_consts", set()):
+                # `h = 0.6736` (the Hubble h): a plain number, or a value with the constant's own units, now
+                # holds a well-known constant's name; say so once, at the assignment (D213)
+                self.warned_consts.add(name)
+                what = WELL_KNOWN_CONSTANTS[name]
+                self.diags.warn(f"{name} ({what}) is now your variable: from here on, {name} means your value",
+                                line=getattr(node, "line", None), col=getattr(node, "col", None),
+                                hint=f"that's fine if you don't need {what} below; otherwise pick another name, "
+                                     f"like {name}_0 or {name}2")
             ty = v.ty
             sym = self.new_sym(name, ty, ctx)
             ctx.scope.names[name] = sym
@@ -1534,6 +1556,15 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), VecTy(DExpr.of(u.dim), v.ty.n))
             r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit) and _written(getattr(v, "items", []))
             return r
+        if getattr(e, "times_unit", False) and isinstance(v.ty, (NumTy, ListTy)) and not u.affine:
+            vd = self.U.norm(v.ty.dim)
+            if not (vd.concrete and vd.const.dimensionless):
+                # `(a + b) MeV`, `100 h km/s/Mpc` with h Planck's: times 1 unit, like `* 1 MeV` (D215)
+                dim = DExpr.of(v.ty.dim) * DExpr.of(u.dim)
+                ty = NumTy(dim) if isinstance(v.ty, NumTy) else ListTy(dim)
+                r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), ty)
+                r.hint, r.sf, r.direct = None, v.sf, False
+                return r
         if not isinstance(e.value, A.Num):
             vd = self.U.norm(v.ty.dim)
             if vd.concrete and not vd.const.dimensionless:
@@ -4115,8 +4146,23 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             body = C.diff(body, e.var, self._diffctx(ctx.scope))
         if isinstance(bound, I.Sym):
             return self.expr(C.stabilize(body), ctx)
-        # d/dt (formula in t) with t not defined -> a new function of t
-        fd = A.FuncDef(f"λ{self.counter}", [A.Param(e.var)], body)
+        # d/dt (formula in t) with t not defined -> a new function of t; `d/dr f(r, R)` with R not defined
+        # either -> a function of (r, R), ∂/∂r with R kept as a parameter (D212)
+        params = [e.var]
+        if isinstance(op, A.Call):
+            loose = [n for n in dict.fromkeys(A.free_names(op))
+                     if n != e.var and n not in BUILTINS and ctx.scope.lookup(n)[0] is None]
+            argn = [a.name for a in op.args if isinstance(a, A.Name)]
+            if loose and len(argn) == len(op.args) and e.var in argn and set(loose) <= set(argn):
+                params = [n for n in dict.fromkeys(argn) if n == e.var or n in loose]
+            elif loose:
+                fn = C.to_source(op.func)
+                raise self.err(f"d/d{e.var} {C.to_source(op)}: {', '.join(loose)} "
+                               f"{'is' if len(loose) == 1 else 'are'}n't defined, so this can't be a function of "
+                               f"{e.var} alone", e,
+                               hint=f"for the partial derivative with the other arguments kept as parameters, write "
+                                    f"∂/∂{e.var} {fn}  (a function of the same arguments as {fn})")
+        fd = A.FuncDef(f"λ{self.counter}", [A.Param(p) for p in params], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.nat = self.nat if self.nat.natural else None
