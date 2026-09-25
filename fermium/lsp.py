@@ -107,9 +107,9 @@ def _type_text(ck: Checker, ty, hint=None):
     if isinstance(ty, VecTy) and getattr(ty, "mixed", False):
         return f"a {ty.n}-D vector of (" + ", ".join(ck.desc(ck.U.resolve(d)) for d in ty.dims) + ")"
     if isinstance(ty, VecTy):
-        return f"a {ty.n}-D vector of " + _type_text(ck, NumTy(ty.dim), hint)
+        return f"a {ty.n}-D vector of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
     if isinstance(ty, MatTy):
-        return f"a {ty.r}×{ty.c} matrix of " + _type_text(ck, NumTy(ty.dim), hint)
+        return f"a {ty.r}×{ty.c} matrix of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
     if isinstance(ty, TextListTy):
         return "a list of text"
     if isinstance(ty, StrTy):

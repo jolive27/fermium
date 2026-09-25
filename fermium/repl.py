@@ -80,25 +80,35 @@ def opens_block(line):
 
 
 def describe_vars(session):
-    """One line per variable: name = value (numbers show their value and unit)."""
+    """One line per name: numbers show their value and unit, other values say what they are in physics words
+    (a complex number of …, a 2-D vector of …), and modules and functions are listed too (red team 5 #11)."""
     from . import ir as I
     from .checker import FuncInfo, SolView
+    from .importer import ModuleRef
+    from .lsp import _type_text
+    from .pyinterop import PyModRef
     from .runtime.core import format_quantity
     from .types import NumTy
+    ck = session.checker
     lines = []
-    for name, b in sorted(session.checker.globals.names.items()):
+    for name, b in sorted(ck.globals.names.items()):
         if name.startswith("__") or "'" in name or "_∂" in name:
             continue
         if isinstance(b, I.Sym) and isinstance(b.ty, NumTy) and b.slot is not None:
-            dim = session.checker.U.resolve(b.ty.dim)
+            dim = ck.U.resolve(b.ty.dim)
             v = session.arena[b.slot]
             lines.append(f"{name} = {format_quantity(v, dim, b.hint, b.sf, b.direct)}")
         elif isinstance(b, I.Sym):
-            lines.append(f"{name}: {b.ty.kind}")
+            lines.append(f"{name}: {_type_text(ck, b.ty, getattr(b, 'hint', None))}")
         elif isinstance(b, FuncInfo):
-            lines.append(f"{name}(...): function")
+            params = ", ".join(p.name for p in b.fdef.params) if b.fdef is not None else "..."
+            lines.append(f"{name}({params}): function")
         elif isinstance(b, SolView):
             lines.append(f"{name}: solution of an ODE")
+        elif isinstance(b, ModuleRef):
+            lines.append(f"{name}: the module {b.info.name}")
+        elif isinstance(b, PyModRef):
+            lines.append(f"{name}: the Python module {b.module}")
     return "\n".join(lines) if lines else "(no variables yet)"
 
 

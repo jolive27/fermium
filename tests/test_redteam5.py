@@ -229,7 +229,6 @@ def test_10_check_prints_warnings_in_line_order(tmp_path):
 
 # ---- #11: :vars shows internal type names -------------------------------------------------------------------
 
-@rt5(11)
 def test_11_repl_vars_uses_physics_words():
     out = repl("z = 3 + 4i\nv = <1, 2> m/s\nM = [[1, 2], [3, 4]]\nname = \"a\"\n:vars\n")
     for internal in (": cplx", ": vec", ": mat", ": str"):
@@ -238,7 +237,6 @@ def test_11_repl_vars_uses_physics_words():
 
 # ---- #12: after an eigenvalue problem, `print ψ` suggests ψ = 1.0 m ------------------------------------------
 
-@rt5(12)
 def test_12_eigenstate_name_hint():
     e = error_of("solve -hbar^2/(2 m_e) * psi'' = E psi with psi(0 nm) = 0, psi(1 nm) = 0 "
                  "for x from 0 nm to 1 nm lowest 2\nprint psi")
@@ -248,7 +246,6 @@ def test_12_eigenstate_name_hint():
 
 # ---- #13: Jupyter completes only \name, not names or module members ----------------------------------------
 
-@rt5(13)
 def test_13_jupyter_completes_module_members():
     pytest.importorskip("ipykernel")
     from fermium.jupyter.kernel import FermiumKernel

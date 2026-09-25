@@ -1824,6 +1824,17 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                             hint="for the remainder of a division use mod(n, 2)")
         if name in BUILTINS:
             return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
+        states = sorted((k for k in known if k.startswith(name + "_") and k[len(name) + 1:].isdigit()),
+                        key=lambda k: int(k[len(name) + 1:]))
+        if states:          # after an eigenvalue problem the states are ψ₁ … ψ_N (§20, red team 5 #12)
+            sub = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+            pretty = [name + k[len(name) + 1:].translate(sub) for k in states]
+            from .lexer import GREEK_TO_ASCII
+            ascii1 = "".join(GREEK_TO_ASCII.get(c, c) for c in states[0])
+            return self.err(f"{name} isn't defined: the eigenvalue problem's states are "
+                            f"{', '.join(pretty[:3])}{' … ' + pretty[-1] if len(pretty) > 3 else ''}", e,
+                            hint=f"use {pretty[0]} (ASCII: {ascii1}) for the lowest state, {pretty[0]}(x) for its "
+                                 f"value at x")
         return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
 
     # ------------------------------------------------------------ arithmetic

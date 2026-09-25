@@ -2,7 +2,8 @@
 
 Each cell is run by one ReplSession, so variables and functions carry over from cell to cell, as in
 the REPL.  Printed output is streamed back, plots are shown inline (and still saved as PNG files),
-errors come back in the usual one-line form, and TAB completes `\\name` symbols (`\\omega` → ω).
+errors come back in the usual one-line form, and TAB completes `\\name` symbols (`\\omega` → ω), the names
+defined so far, keywords, and a module's members (`mechanics.` → spring_period, …).  Warnings go to stderr.
 """
 from __future__ import annotations
 
@@ -113,11 +114,23 @@ class FermiumKernel(Kernel):
         text = code[:cursor_pos]
         i = text.rfind("\\")
         if i < 0 or any(c.isspace() for c in text[i:]):
-            return {"status": "ok", "matches": [], "cursor_start": cursor_pos, "cursor_end": cursor_pos,
-                    "metadata": {}}
+            return self._complete_names(text, cursor_pos)
         name = text[i + 1:]
         matches = [LATEX[name]] if name in LATEX else sorted({LATEX[k] for k in LATEX if k.startswith(name)})
         return {"status": "ok", "matches": matches, "cursor_start": i, "cursor_end": cursor_pos, "metadata": {}}
+
+    def _complete_names(self, text, cursor_pos):
+        """Names defined so far, keywords, and a module's members after `mechanics.` (as the language server
+        completes them, red team 5 #13)."""
+        from types import SimpleNamespace
+        from ..lsp import completions
+        line = text.split("\n")[-1]
+        items = completions(SimpleNamespace(checker=self.fm.checker), line, 0, len(line))
+        start = items[0][2] if items else len(line)
+        if not line[start:] and not line[:start].endswith("."):
+            items = []                          # nothing typed yet: don't list every name
+        return {"status": "ok", "matches": [label for label, *_ in items],
+                "cursor_start": cursor_pos - (len(line) - start), "cursor_end": cursor_pos, "metadata": {}}
 
     def do_is_complete(self, code):
         from ..repl import needs_more
