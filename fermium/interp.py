@@ -21,6 +21,8 @@ from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
 from . import linalg
 from . import special
+from .uncertain import UFloat, UncertainUse
+from . import uncertain as U
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
@@ -62,6 +64,10 @@ def fdiv(a, b):
 
 
 def fpow(a, b):
+    if isinstance(a, UFloat) or isinstance(b, UFloat):
+        return a ** b if isinstance(a, UFloat) else b.__rpow__(a)
+    if type(a) is np.ndarray or type(b) is np.ndarray:        # propagate montecarlo, vectorized (D123)
+        return np.power(np.asarray(a, dtype=float), b)
     try:
         r = a ** b
     except OverflowError:
@@ -95,7 +101,18 @@ MATH = {"sin": math.sin, "cos": math.cos, "tan": math.tan, "asin": math.asin, "a
         "ceil": math.ceil}
 
 
+NP_MATH = {"ln": np.log, "log": np.log, "abs": np.abs, "asin": np.arcsin, "acos": np.arccos, "atan": np.arctan,
+           "asinh": np.arcsinh, "acosh": np.arccosh, "atanh": np.arctanh}
+
+
 def math1(name, x):
+    if isinstance(x, UFloat):
+        return U.apply1(name, x, math1)
+    if type(x) is np.ndarray:                   # propagate montecarlo, vectorized (D123)
+        f = NP_MATH.get(name) or getattr(np, name, None)
+        if f is None or name in ("round", "gamma", "lgamma", "erf", "erfc"):
+            raise TypeError("not vectorized")
+        return f(x)
     if name == "round":
         return math.copysign(math.floor(abs(x) + 0.5), x) if math.isfinite(x) else x
     if name == "sign":
@@ -114,6 +131,18 @@ def math1(name, x):
 
 
 def powc(x, p):
+    if isinstance(x, UFloat):
+        return x.powc(p, powc)
+    if type(x) is np.ndarray:                   # propagate montecarlo, vectorized (D123)
+        if p == int(p):
+            return x ** p
+        if abs(p - 1 / 3) < 1e-15:
+            return np.cbrt(x)
+        r = np.abs(x) ** p
+        n = odd_root_numerator(p)
+        if n is None:
+            return np.where(x < 0, math.nan, r)
+        return np.where(x < 0, -r if n % 2 else r, r)
     if p == 2:
         return x * x
     if p == 3:
@@ -896,6 +925,7 @@ class Interpreter:
         self.rt = runtime
         self.globals = globals_frame or Frame()
         self.line = 0
+        self.mc = None          # the sampler inside propagate montecarlo (D123)
 
     def run(self):
         rt = self.rt
@@ -908,6 +938,9 @@ class Interpreter:
             raise FermiumRuntimeError(rt.error, rt.error_line)
         except RecursionError:
             raise FermiumRuntimeError("the program recursed too deeply", self.line or None)
+        except UncertainUse as u:
+            rt.error, rt.error_line = u.message, self.line or None
+            raise FermiumRuntimeError(u.message, self.line or None)
 
     # ------------------------------------------------------------ statements
     def block(self, stmts, fr):
@@ -1065,6 +1098,12 @@ class Interpreter:
                     out.extend(v)
                 else:
                     out.append(v)
+            for v in out:
+                if isinstance(v, UFloat):
+                    raise UncertainUse("a differential equation (solve) can't use uncertain values (±) yet; put "
+                                       "the solve inside a  propagate montecarlo  block, or use value(x)")
+                if type(v) is np.ndarray:
+                    raise TypeError("vectorized sample in an ODE")
             return out
         return f
 
@@ -1077,6 +1116,11 @@ class Interpreter:
         for e in s.y0:
             v = self.eval(e, fr)
             y0.extend(v if isinstance(v, tuple) else [v])
+        if any(isinstance(v, UFloat) for v in y0):
+            raise UncertainUse("a starting value of solve can't be uncertain (±) yet; put the solve inside a  "
+                               "propagate montecarlo  block, or use value(x)")
+        if any(type(v) is np.ndarray for v in y0):
+            raise TypeError("vectorized starting value")
         f = self.ode_rhs(s.rhs, fr)
         ev = self.ode_rhs(s.event, fr) if getattr(s, "event", None) is not None else None
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
@@ -1124,8 +1168,18 @@ class Interpreter:
         self.rt.fit(s.fit_id, h, p, model_fn=model)
         if self.rt.error:
             raise FermiumRuntimeError(self.rt.error, self.line)
-        for sym, v in zip(s.param_syms, p):
-            fr.set(sym, float(v))
+        k = len(s.param_syms)
+        vals = [float(v) for v in p[:k]]
+        if getattr(self.mod, "uses_unc", False):
+            # the fitted parameters carry their standard errors and correlations (D124)
+            cov = getattr(self.rt, "last_fit_cov", None)
+            ok = all(math.isfinite(float(e)) for e in p[k:2 * k])
+            us = U.correlated(vals, cov) if cov is not None and ok else None
+            if us is None:
+                us = [UFloat.measured(v, e) if math.isfinite(e) else v for v, e in zip(vals, p[k:])]
+            vals = us
+        for sym, v in zip(s.param_syms, vals):
+            fr.set(sym, v)
         for sym, v in zip(getattr(s, "err_syms", []), p[len(s.param_syms):]):
             fr.set(sym, float(v))
 
@@ -1135,6 +1189,9 @@ class Interpreter:
             kind = e["kind"]
             if kind == "lists":
                 y, x = self.eval(e["y"], fr), self.eval(e["x"], fr)
+                if U.any_uncertain([x, y]):         # error bars (D124)
+                    self.rt.plot_err[(s.plot_id, idx)] = ([U.sigma(v) for v in x], [U.sigma(v) for v in y], "bars")
+                    x, y = [U.nominal(v) for v in x], [U.nominal(v) for v in y]
                 if py["plot_series"](s.plot_id, idx, x, len(x), y, len(y)):
                     raise FermiumRuntimeError(self.rt.error, self.line)
             elif kind in ("sol", "solxy"):
@@ -1147,6 +1204,9 @@ class Interpreter:
                 g = self.scalar_fn(e["lam"], fr)
                 xs = [lo + i * ((hi - lo) / 399) for i in range(400)]
                 ys = [g(x) for x in xs]
+                if U.any_uncertain([ys]):            # a band of ±1σ around the curve (D124)
+                    self.rt.plot_err[(s.plot_id, idx)] = (None, [U.sigma(v) for v in ys], "band")
+                    ys = [U.nominal(v) for v in ys]
                 if py["plot_series"](s.plot_id, idx, xs, 400, ys, 400):
                     raise FermiumRuntimeError(self.rt.error, self.line)
         py["plot_done"](s.plot_id)
@@ -1158,6 +1218,95 @@ class Interpreter:
         arr = lambda v: (ctypes.c_double * max(1, len(v)))(*v)  # noqa: E731
         st = SolStruct(n, sol.dim, n, arr(sol.t), arr(sol.y), arr(sol.dy))
         return sample_solution(st, comp, use_dy, npts)
+
+    def s_SPropagate(self, s, fr):
+        """propagate montecarlo (D123): the block runs with every uncertain input replaced by samples.  First all
+        samples at once (NumPy arrays through the same code); a block with branches, loops or numerical kernels
+        falls back to one sample at a time.  Outputs become mean ± standard deviation, linked to the input sources
+        by regression so later formulas keep the correlations."""
+        from . import rng
+        given = s.n is not None
+        n = _count(self.eval(s.n, fr)) if given else MC_DEFAULT
+        if n < 2:
+            raise FermiumRuntimeError("propagate montecarlo needs at least 2 samples", self.line)
+        st = self.rt.rng_state
+        zs = {}
+
+        def z(key):
+            if key not in zs:
+                zs[key] = np.array([rng.randn(st) for _ in range(n)])
+            return zs[key]
+        assigned = []
+        for x in s.body:
+            for y in _walk_stmts(x):
+                if isinstance(y, I.SAssign) and y.sym not in assigned:
+                    assigned.append(y.sym)
+        snap = {}
+        for sym in assigned:
+            try:
+                snap[sym.id] = fr.get(sym)
+            except FermiumRuntimeError:
+                pass
+
+        def restore():
+            for sym in assigned:
+                if sym.id in snap:
+                    fr.set(sym, snap[sym.id])
+        line0 = self.line
+        results = None
+        try:
+            restore()
+            self.mc = _Sampler(z, None, n)
+            self.block(s.body, fr)
+            results = [np.broadcast_to(np.asarray(fr.get(sym), dtype=float), (n,)).copy() for sym in s.outs]
+        except (_Break, _Continue, _Return):
+            raise
+        except Exception:          # something that can't run on arrays: one sample at a time
+            results = None
+        finally:
+            self.mc = None
+            self.line = line0
+        if results is None:
+            m = n if given else MC_DEFAULT_SLOW
+            cols = [[] for _ in s.outs]
+            try:
+                for k in range(m):
+                    restore()
+                    self.mc = _Sampler(z, k, m)
+                    self.block(s.body, fr)
+                    for c, sym in zip(cols, s.outs):
+                        v = fr.get(sym)
+                        c.append(float(v) if not isinstance(v, UFloat) else math.nan)
+            finally:
+                self.mc = None
+            results = [np.array(c) for c in cols]
+            n = m
+        # link the ± inside the block to new sources, shared by all the outputs
+        src = {key: (key if isinstance(key, int) else U.new_source()) for key in zs}
+        for sym, y in zip(s.outs, results):
+            bad = int(np.count_nonzero(~np.isfinite(y)))
+            if bad:
+                raise FermiumRuntimeError(f"propagate montecarlo: {bad} of the {n} samples of {sym.name} aren't "
+                                          f"finite numbers (the formula fails for some sampled inputs)", line0)
+            mean = float(np.mean(y))
+            var = float(np.var(y, ddof=1))
+            if not var > 0:
+                fr.set(sym, UFloat(mean, {}))
+                continue
+            d = {}
+            dy = y - mean
+            for key, zk in zs.items():
+                zc = zk[:n] - zk[:n].mean()
+                c = float(np.dot(dy, zc) / np.dot(zc, zc))
+                if c != 0:
+                    d[src[key]] = c
+            lin = math.fsum(c * c for c in d.values())
+            if lin > var:
+                f = math.sqrt(var / lin)
+                d = {k: c * f for k, c in d.items()}
+            elif var - lin > 1e-12 * var:
+                d[U.new_source()] = math.sqrt(var - lin)       # the nonlinear part: its own source
+            fr.set(sym, UFloat(mean, d))
 
     # ------------------------------------------------------------ expressions
     def eval(self, e, fr):
@@ -1173,6 +1322,8 @@ class Interpreter:
         return getattr(e, "text_id", 0)
 
     def e_IVar(self, e, fr):
+        if self.mc is not None:
+            return self.mc.sample(fr.get(e.sym))
         return fr.get(e.sym)
 
     def e_IVec(self, e, fr):
@@ -1302,8 +1453,20 @@ class Interpreter:
             return self.eval(lam.body, lf)
         return g
 
+    def plain_fn(self, f, what):
+        """A callback given to a numerical kernel must return plain numbers (D122)."""
+        def g(*a):
+            r = f(*a)
+            if isinstance(r, UFloat):
+                raise UncertainUse(f"{what} can't use uncertain values (±) yet; put it inside a  propagate "
+                                   f"montecarlo  block, or use value(x)")
+            if type(r) is np.ndarray:
+                raise TypeError("vectorized sample in a kernel")
+            return r
+        return g
+
     def e_IIntegral(self, e, fr):
-        f = self.scalar_fn(e.lam, fr)
+        f = self.plain_fn(self.scalar_fn(e.lam, fr), "an integral")
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
         name = getattr(e, "xname", -1)
         atol = -1.0 if getattr(e, "soft", False) else \
@@ -1325,7 +1488,7 @@ class Interpreter:
         return acc
 
     def e_IRoot(self, e, fr):
-        f = self.scalar_fn(e.lam, fr)
+        f = self.plain_fn(self.scalar_fn(e.lam, fr), "solve … for x")
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
         fmt = getattr(e, "tfmt", -1)
         scale = self.scalar_fn(e.scale, fr) if getattr(e, "scale", None) is not None else None
@@ -1527,8 +1690,44 @@ class Interpreter:
         rng.seed(st, args[0])
         return 0.0
 
+    def unc_builtin(self, e, fr):
+        """±, value(x), uncertainty(x), rel(x) (D120, D121)."""
+        name = e.name
+        args = [self.eval(a, fr) for a in e.args]
+        if name in ("pm", "pm_rel"):
+            v, sg = args
+            if isinstance(v, list):
+                sgs = sg if isinstance(sg, list) else [sg] * len(v)
+                if len(sgs) != len(v):
+                    raise _Fail(ERR_LEN, float(len(v)), float(len(sgs)))
+                return [self.pm(e, x, y, name == "pm_rel", i) for i, (x, y) in enumerate(zip(v, sgs))]
+            return self.pm(e, v, sg, name == "pm_rel", 0)
+        a = args[0]
+        f = {"unc_value": U.nominal, "unc_uncertainty": U.sigma,
+             "unc_rel": lambda x: fdiv(U.sigma(x), abs(U.nominal(x)))}[name]
+        if isinstance(a, list):
+            return [f(x) for x in a]
+        if type(a) is np.ndarray:
+            raise TypeError("value/uncertainty of a Monte Carlo sample")
+        return f(a)
+
+    def pm(self, e, v, sg, rel, i):
+        if isinstance(sg, UFloat):
+            sg = sg.v          # the uncertainty of an uncertainty isn't propagated
+        if rel:
+            sg = abs(U.nominal(v)) * sg
+        if type(sg) is np.ndarray:
+            raise TypeError("a sampled uncertainty")
+        if sg < 0 or sg != sg:
+            raise UncertainUse(f"an uncertainty after ± can't be negative or NaN (got {sg:g} in SI units)")
+        if self.mc is not None:
+            return self.mc.new(e, i, v, sg)
+        return v + UFloat.measured(0.0, sg) if isinstance(v, UFloat) else UFloat.measured(v, sg)
+
     def e_IBuiltin(self, e, fr):
         name = e.name
+        if name in ("pm", "pm_rel", "unc_value", "unc_uncertainty", "unc_rel"):
+            return self.unc_builtin(e, fr)
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
             return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
         args = [self.eval(a, fr) for a in e.args]
@@ -1552,12 +1751,18 @@ class Interpreter:
                 return [math1(name, x) for x in args[0]]
             return math1(name, args[0])
         if name in ("besselj", "bessely", "besseli", "besselk", "ellipk", "ellipe"):
+            if U.any_uncertain(args):
+                return U.lift(getattr(special, name), args)
             return getattr(special, name)(*args)
         if name == "isnan":
             return args[0] != args[0]
         if name == "atan2":
+            if U.any_uncertain(args):
+                return U.lift(math.atan2, args, lambda y, x: (fdiv(x, x * x + y * y), -fdiv(y, x * x + y * y)))
             return math.atan2(*args)
         if name == "hypot":
+            if U.any_uncertain(args):
+                return U.lift(math.hypot, args, lambda x, y: (fdiv(x, math.hypot(x, y)), fdiv(y, math.hypot(x, y))))
             return math.hypot(*args)
         if name == "mod":
             a, c = args
@@ -1680,6 +1885,46 @@ class Interpreter:
             d = x - mean
             acc = acc + d * d
         return math.sqrt(acc / (n - 1 if n >= 2 else 1))
+
+
+MC_DEFAULT = 100_000          # samples when the block runs vectorized
+MC_DEFAULT_SLOW = 10_000      # ... and when it has to run one sample at a time
+
+
+class _Sampler:
+    """Inside propagate montecarlo: uncertain values read from variables become samples (D123).
+    k is None: all n samples as a NumPy array; else the k-th sample as a float."""
+
+    def __init__(self, z, k, n):
+        self.z, self.k, self.n = z, k, n
+
+    def sample(self, v):
+        if isinstance(v, UFloat):
+            if self.k is None:
+                out = np.full(self.n, v.v)
+                for key, c in v.d.items():
+                    out = out + c * self.z(key)
+                return out
+            return v.v + math.fsum(c * self.z(key)[self.k] for key, c in v.d.items())
+        if isinstance(v, list) and any(isinstance(x, UFloat) for x in v):
+            return [self.sample(x) for x in v]
+        return v
+
+    def new(self, e, i, v, sg):
+        """a ± σ inside the block: a new source, the same one for every sample of this ± (and list element)."""
+        zk = self.z(("pm", id(e), i))
+        v = self.sample(v)
+        return v + sg * (zk if self.k is None else zk[self.k])
+
+
+def _walk_stmts(st):
+    yield st
+    for attr in ("then", "other", "body"):
+        sub = getattr(st, attr, None)
+        if isinstance(sub, list):
+            for x in sub:
+                if isinstance(x, I.Stmt):
+                    yield from _walk_stmts(x)
 
 
 def sum_seq(xs):

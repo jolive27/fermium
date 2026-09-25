@@ -698,6 +698,10 @@ def _src(e, pretty):
             from .checker import canonical_unit_name
             text = canonical_unit_name(e.unit) or text
         return (f"{v} [{text}]" if e.bracket else f"{v} {text}"), PREC_JUXT
+    if isinstance(e, A.Uncertain):          # a ± b (D120)
+        v, vp = _src(e.value, pretty)
+        r, rp = _src(e.err, pretty)
+        return f"{_paren(v, vp, PREC_PROD)[0]} {'±' if pretty else '+-'} {_paren(r, rp, PREC_PROD)[0]}", PREC_SUM
     if isinstance(e, A.Neg):
         s, p = _src(e.operand, pretty)
         # -(a/b) and -a/b are the same number, so products and quotients need no parentheses

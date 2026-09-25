@@ -643,11 +643,17 @@ def test_constant_can_be_shadowed():
     assert run("h = 10 m\nprint h") == "10 m"
 
 
-# ====================================================================== uncertainties are reserved
-@pytest.mark.parametrize("src", ["x = 5 +- 1", "x = 5 ± 1", "print 1 +- 2", "x = 5.0 ± 0.2 m", "print ± 1"])
-def test_plus_minus_is_future_feature(src):
+# ====================================================================== uncertainties (D120; were reserved until M4)
+@pytest.mark.parametrize("src,out", [("print 5 +- 1", "5.0 ± 1.0"), ("print 5.0 ± 0.2 m", "5.00 ± 0.20 m"),
+                                     ("print (5.0 ± 0.2) m", "5.00 ± 0.20 m"), ("print 1 + 2.0 ± 0.1", "3.00 ± 0.10")])
+def test_plus_minus_parses(src, out):
+    assert run(src) == out
+
+
+@pytest.mark.parametrize("src", ["print ± 1", "x = 5 ±", "x = 1 ± 2 ± 3"])
+def test_plus_minus_misplaced(src):
     e = error_of(src)
-    assert "planned for a future version" in e.message
+    assert "±" in e.message
     assert e.line == 1
 
 

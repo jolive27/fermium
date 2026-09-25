@@ -106,6 +106,12 @@ class Program:
         finalize_tables(self.module.tables, self.checker.U)
         self.runtime = Runtime(self.out, self.base_dir)
         self.runtime.tables = self.module.tables
+        self.interpreted = getattr(self.module, "uses_unc", False)
+        if self.interpreted:
+            # uncertain values (±) run in the reference interpreter, not native code (D122)
+            self.llvm_ir = ""
+            self.timings = {"parse": t1 - t0, "check": t2 - t1, "codegen": 0.0, "llvm": 0.0}
+            return
         mg = ModuleGen(rng_addr=self.runtime.rng_addr)
         mg.emit_main(self.module.main, "fm_run")
         self.llvm_ir = str(mg.module)
@@ -129,6 +135,16 @@ class Program:
         rt.error = None
         rt.error_line = None
         t0 = time.perf_counter()
+        if self.interpreted:
+            from .interp import Interpreter
+            try:
+                Interpreter(self.module, rt).run()
+            finally:
+                self.timings["run"] = time.perf_counter() - t0
+                if rt.line:
+                    self.out.write(" ".join(rt.line) + "\n")
+                    rt.line = []
+            return
         with _CtrlC(self.out):
             code = call_with_big_stack(self.entry)
         self.timings["run"] = time.perf_counter() - t0
@@ -219,6 +235,9 @@ class ReplSession:
         self.diags.warnings.clear()
         prog = parse(text, self.diags, known=self.known)
         module = self.checker.check_program(prog, name="main")
+        if module.uses_unc:
+            raise FermiumError("uncertainties (±, propagate montecarlo) work in programs (fermium run file.fm) "
+                               "but not yet in the REPL or Jupyter", hint="save the lines in a .fm file and run it")
         for s in prog.body:
             if hasattr(s, "name"):
                 self.known.add(s.name)

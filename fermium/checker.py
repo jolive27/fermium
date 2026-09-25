@@ -37,6 +37,8 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
     "trace", "angle", "row", "column",
 } | SPECIAL2 | SPECIAL1
+UNC_FUNCS = {"value", "uncertainty", "rel"}         # parts of an uncertain value (D121)
+BUILTINS |= UNC_FUNCS
 M3_FUNCS = {"randn", "seed", "sample", "fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum",
             "frequencies", "argmax", "argmin"}          # seeded random numbers (D80); FFT built-ins join below (D81)
 BUILTINS |= M3_FUNCS
@@ -189,6 +191,7 @@ class CheckedModule:
         self.lambdas = lambdas
         self.tables = tables
         self.U = unifier
+        self.uses_unc = False      # uses ±, uncertainty(), propagate montecarlo: runs in the interpreter (D122)
 
 
 class Checker(ImportMixin, C.DiffContext):
@@ -197,6 +200,7 @@ class Checker(ImportMixin, C.DiffContext):
         self.U = Unifier()
         self.base_dir = base_dir
         self.repl = repl
+        self.uses_unc = False
         self.tables = Tables()
         self.root = Scope(kind="root")
         for name, (val, unit, desc) in all_constants().items():
@@ -265,6 +269,7 @@ class Checker(ImportMixin, C.DiffContext):
     # ============================================================ program
     def check_program(self, prog: A.Program, name="main") -> CheckedModule:
         self.main_count += 1
+        self.uses_unc = False
         fname = name if self.main_count == 1 else f"{name}.{self.main_count}"
         main = I.IFunc(fname, [], VOID)
         ctx = Ctx(main, self.globals, is_main=True)
@@ -277,7 +282,9 @@ class Checker(ImportMixin, C.DiffContext):
         self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
         self.check_uncalled()
-        return CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
+        m = CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
+        m.uses_unc = self.uses_unc
+        return m
 
     def _prescan_functions(self, body, ctx):
         self.future_funcs = {s.name: s.line for s in body if isinstance(s, A.FuncDef)}
@@ -2086,7 +2093,33 @@ class Checker(ImportMixin, C.DiffContext):
         return r
 
     def e_Uncertain(self, e, ctx):
-        raise self.err("uncertainties (±) are planned for a future version of Fermium", e)
+        """a ± b: a new independent error source (D120); `x ± 3%` is relative."""
+        self.uses_unc = True
+        v = self.expr(e.value, ctx)
+        self.need_numlike(v, e.value, "the value before ±")
+        rel = isinstance(e.err, A.Quantity) and e.err.unit.text.strip() == "%" and not (
+            v.hint is not None and getattr(v.hint, "name", "") == "%")
+        s = self.expr(e.err, ctx)
+        self.need_numlike(s, e.err, "the uncertainty after ±")
+        if isinstance(s.ty, ListTy) and not isinstance(v.ty, ListTy):
+            raise self.err("a single value needs a single uncertainty after ±, not a list", e.err)
+        if rel:
+            if not self.U.unify(s.ty.dim, DIMLESS):
+                raise self.err("a relative uncertainty is a plain number, like  x ± 3%", e.err)
+        else:
+            if s.hint is not None and getattr(s.hint, "affine", False):
+                # 20.0 ± 0.5 °C: the uncertainty is a temperature difference, 0.5 K, not 273.65 K
+                s = I.IBin("-", s, I.IConst(s.hint.offset, NumTy(s.ty.dim)), s.ty)
+            if not self.U.unify(v.ty.dim, s.ty.dim):
+                raise self.err(f"the uncertainty after ± is {self.desc(s.ty.dim)} but the value is "
+                               f"{self.desc(v.ty.dim)}; both need the same units", e.err,
+                               hint="write the unit once at the end, like  L = 1.20 ± 0.01 m")
+        ty = ListTy(v.ty.dim) if isinstance(v.ty, ListTy) else NumTy(v.ty.dim)
+        r = I.IBuiltin("pm_rel" if rel else "pm", [v, s], ty)
+        h = v.hint if v.hint is not None else (None if rel else s.hint)
+        r.hint = h if h is None or not getattr(h, "affine", False) or v.hint is h else None
+        r.sf = None
+        return r
 
     def e_ListLit(self, e, ctx):
         if e.items and all(isinstance(x, A.ListLit) for x in e.items):
@@ -2340,6 +2373,8 @@ class Checker(ImportMixin, C.DiffContext):
                 a0 = e.args[0] if len(e.args) == 1 else None
                 pb = self.lookup(a0.name, ctx, a0)[0] if isinstance(a0, A.Name) else None
                 es = getattr(pb, "err_sym", None)
+                if es is None and a0 is not None and self._maybe_uncertain(a0, ctx):
+                    return self.builtin("uncertainty", e, ctx)      # err(x) of any uncertain value (D121)
                 if es is None:
                     raise self.err("err(x) gives the standard error of a parameter found by fit, like err(g) after "
                                    "fit T = 2π √(L/g) to data", e)
@@ -2737,6 +2772,8 @@ class Checker(ImportMixin, C.DiffContext):
             return v
         if name in ("row", "column"):
             return self.row_column(name, e, ctx)
+        if name in UNC_FUNCS:
+            return self.unc_part(name, e, ctx)
         if name == "times" and len(e.args) == 1:
             v = self.expr(e.args[0], ctx, allow_func=True)
             if isinstance(v, SolRef):
@@ -3179,6 +3216,53 @@ class Checker(ImportMixin, C.DiffContext):
         self.unify_or(v.ty.dim, DIMLESS, lambda: f"the seed must be a plain number, not {self.desc(v.ty.dim)}",
                       e.args[0])
         return I.SExpr(I.IBuiltin("seed", [v], NumTy(DIMLESS)))
+
+    def unc_part(self, name, e, ctx):
+        """value(x), uncertainty(x), rel(x) (D121): plain numbers (lists for a list)."""
+        if len(e.args) != 1:
+            raise self.err(f"{name} takes 1 argument but was given {len(e.args)}", e)
+        self.uses_unc = True
+        a = self.expr(e.args[0], ctx)
+        self.need_numlike(a, e.args[0], f"the argument of {name}")
+        if name == "rel":
+            r = I.IBuiltin("unc_rel", [a], a.ty.__class__(DIMLESS))
+            r.sf = 2
+            return r
+        r = I.IBuiltin("unc_" + name, [a], a.ty)
+        r.hint = a.hint if a.hint is None or not getattr(a.hint, "affine", False) or name == "value" else None
+        r.sf = 2 if name == "uncertainty" else a.sf
+        return r
+
+    def _maybe_uncertain(self, node, ctx):
+        """err(x) outside a fit: only in a program that already uses uncertainties (else the fit message)."""
+        return self.uses_unc
+
+    def s_Propagate(self, s, ctx):
+        """propagate montecarlo [N samples] + formulas (D123)."""
+        self.uses_unc = True
+        n = None
+        if s.samples is not None:
+            n = self.expr(s.samples, ctx)
+            self.need_num(n, s.samples, "the number of samples")
+            if not self.U.unify(n.ty.dim, DIMLESS):
+                raise self.err("the number of samples must be a plain number", s.samples)
+        bad = (A.Print, A.Plot, A.Fit, A.FuncDef, A.Propagate, A.Import, A.Units, A.Return)
+        for st in s.body:
+            for x in _stmts_in(st):
+                if isinstance(x, bad):
+                    raise self.err("only formulas (name = …) go inside  propagate montecarlo; print or plot the "
+                                   "results after the block", x)
+        body = self.block(s.body, ctx)
+        outs, seen = [], set()
+        for st in body:
+            if isinstance(st, I.SAssign) and isinstance(st.sym.ty, NumTy) and st.sym.id not in seen:
+                seen.add(st.sym.id)
+                outs.append(st.sym)
+                st.sym.sf, st.sym.direct = None, False
+        if not outs:
+            raise self.err("propagate montecarlo needs at least one formula (name = …) in its block", s)
+        r = I.SPropagate(n, body, outs)
+        return r
 
     def _bi(self, name, args, ty, sfargs):
         r = I.IBuiltin(name, args, ty)
@@ -3633,6 +3717,17 @@ class Checker(ImportMixin, C.DiffContext):
             for p in self.tables.plots[n0:]:
                 p["nat"] = self.nat
         return r
+
+
+def _stmts_in(st):
+    """A statement and the statements nested in it (if/for/while bodies)."""
+    yield st
+    for attr in ("body", "then", "other", "orelse", "else_body"):
+        sub = getattr(st, attr, None)
+        if isinstance(sub, list):
+            for x in sub:
+                if isinstance(x, A.Node):
+                    yield from _stmts_in(x)
 
 
 def _name_uses(e):

@@ -368,3 +368,10 @@ class SAnimate(Stmt):
 
     def __init__(self, anim_id, sol, xa, xb):
         self.anim_id, self.sol, self.xa, self.xb = anim_id, sol, xa, xb
+
+
+class SPropagate(Stmt):
+    """propagate montecarlo [n samples] (D123): run `body` with sampled inputs; `outs` get mean ± std."""
+
+    def __init__(self, n, body, outs):
+        self.n, self.body, self.outs = n, body, outs

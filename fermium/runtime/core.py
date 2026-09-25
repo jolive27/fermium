@@ -17,6 +17,7 @@ except ImportError:            # the reference interpreter works without llvmlit
 
 from ..errors import FermiumRuntimeError
 from ..units import preferred_unit, format_number, Unit
+from ..uncertain import UFloat, format_uncertain, format_uncertain_list
 
 _initialized = False
 
@@ -101,6 +102,8 @@ class Runtime:
         self.datasets = {}
         self.keep = []
         self.plot_series = {}
+        self.plot_err = {}          # (plot id, series index) -> (x errors, y errors, "bars" | "band") (D124)
+        self.last_fit_cov = None
         self.plots_saved = []
         self.engine_ref = None
         self.err = sys.stderr
@@ -117,11 +120,17 @@ class Runtime:
 
         def print_num(fid, v):
             f = rt.tables.fmts[fid]
+            if type(v) is UFloat:              # 9.81 ± 0.12 m/s² (D121)
+                rt.line.append(format_uncertain(v, f["rdim"], f["hint"], display_unit))
+                return
             rt.line.append(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"], f.get("echo", True)))
 
         def print_list(fid, p, n):
             f = rt.tables.fmts[fid]
             u = display_unit(f["rdim"], f["hint"])
+            if any(type(p[i]) is UFloat for i in range(n)):
+                rt.line.append(format_uncertain_list([p[i] for i in range(n)], u))
+                return
             vals = [(p[i] - u.offset) / u.factor for i in range(n)]
             sf = f["sf"]
             if sf is not None and not f["direct"]:
@@ -548,7 +557,9 @@ class Runtime:
         guess = [p[i] for i in range(np_)]
         guess = [g if math.isfinite(g) else math.nan for g in guess]
         from .fitting import least_squares_fit
-        best, errs, rms = least_squares_fit(f, y, guess)
+        extra = {}
+        best, errs, rms = least_squares_fit(f, y, guess, extra)
+        self.last_fit_cov = extra.get("cov")
         for i in range(np_):
             p[i] = best[i]
             p[np_ + i] = errs[i] if errs[i] is not None and math.isfinite(errs[i]) else math.nan
@@ -594,7 +605,17 @@ class Runtime:
             xu = display_unit(s["rxdim"], s.get("xhint"))
             X = [(x - xu.offset) / xu.factor for x in xs]
             Y = [(y - yu.offset) / yu.factor for y in ys]
-            if s.get("points"):
+            eb = self.plot_err.pop((pid, idx), None)
+            if eb is not None and eb[2] == "bars":          # uncertain values: error bars (D124)
+                xe = [e / abs(xu.factor) for e in eb[0]] if eb[0] and any(eb[0]) else None
+                ye = [e / abs(yu.factor) for e in eb[1]] if eb[1] and any(eb[1]) else None
+                ax.errorbar(X, Y, yerr=ye, xerr=xe, fmt="o", label=s["ylabel"], markersize=5, capsize=3)
+            elif eb is not None:                             # an uncertain curve: a ±1σ band
+                ye = [e / abs(yu.factor) for e in eb[1]]
+                line, = ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
+                ax.fill_between(X, [a - b for a, b in zip(Y, ye)], [a + b for a, b in zip(Y, ye)],
+                                color=line.get_color(), alpha=0.25, linewidth=0)
+            elif s.get("points"):
                 ax.plot(X, Y, "o", label=s["ylabel"], markersize=5)     # measured data: markers, not lines
             else:
                 ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)

@@ -157,6 +157,9 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
     prog = parse(source, diags)
     ck = Checker(diags, base_dir)
     mod = ck.check_program(prog)
+    if getattr(mod, "uses_unc", False):
+        raise FermiumError("fermium build doesn't support uncertainties (±, propagate montecarlo) yet",
+                           hint="run the program with  fermium run  instead")
     t = mod.tables
     if t.stiff:          # the implicit solvers are SciPy's, and executables don't carry Python (D42)
         line, method = t.stiff[0]
