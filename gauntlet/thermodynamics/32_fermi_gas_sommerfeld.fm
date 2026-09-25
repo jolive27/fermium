@@ -1,0 +1,41 @@
+# Thermodynamics 32 — The ideal Fermi gas beyond the Sommerfeld expansion
+#
+# (Ashcroft & Mermin, Solid State Physics, ch. 2, eqs. 2.70–2.81; Pathria & Beale
+#  §8.1, eqs. 8.1.35–8.1.40; Kittel, Introduction to Solid State Physics ch. 6.)
+# The conduction electrons of sodium form a free electron gas with density
+# n = 2.65×10²⁸ m⁻³ (Ashcroft & Mermin Table 2.1). With the density of states per
+# volume g(E) = (1/2π²) (2m/ħ²)^(3/2) √E (spin ½ included), the chemical potential is
+# fixed by n = ∫₀^∞ g(E) f(E) dE, f = 1/(exp((E − μ)/k_B T) + 1).
+#   (a) E_F = (ħ²/2m)(3π² n)^(2/3) and T_F = E_F/k_B.
+#   (b) Solve for μ at T = 0.10 T_F and 0.30 T_F, and compare with Sommerfeld's
+#       μ/E_F = 1 − (π²/12) t² − (π⁴/80) t⁴,  t = T/T_F.
+#   (c) The heat capacity per electron, exactly (at fixed n),
+#         C/(n k_B) = β² [ ∫ g (E−μ)² f(1−f) dE − (∫ g (E−μ) f(1−f) dE)² / ∫ g f(1−f) dE ] / n,
+#       compared with the Sommerfeld law C/(n k_B) = (π²/2) t.
+#   (d) Room temperature, T = 300 K: t and the tiny shift 1 − μ/E_F.
+
+n_e = 2.65e28 m⁻³
+g(E) = (1 / (2π²)) (2 m_e / ħ²)^(3/2) √E
+E_F = (ħ² / (2 m_e)) (3π² n_e)^(2/3)
+T_F = E_F / k_B
+print "(a) E_F =", E_F in eV to 8 digits, " T_F =", T_F to 8 digits
+
+f(E, μ, T) = 1 / (exp((E - μ) / (k_B T)) + 1)
+density(μ, T) = ∫ g(E) f(E, μ, T) dE from 0 eV to ∞
+
+for t in [0.10, 0.30]
+    T = t T_F
+    solve density(μ, T) = n_e for μ from 0.5 E_F to 1.1 E_F
+    sommerfeld = 1 - (π²/12) t² - (π⁴/80) t⁴
+    # f(1 − f) written as 1/(4 cosh²((E − μ)/2kT)), which never overflows
+    w(E) = g(E) / (4 cosh((E - μ) / (2 k_B T))²)
+    I0 = ∫ w(E) dE from 0 eV to ∞
+    I1 = ∫ w(E) (E - μ) dE from 0 eV to ∞
+    I2 = ∫ w(E) (E - μ)² dE from 0 eV to ∞
+    C = (I2 - I1² / I0) / (k_B T)² / n_e
+    print "(b) t =", t, " mu/E_F =", μ / E_F to 10 digits, " Sommerfeld =", sommerfeld to 10 digits
+    print "(c) t =", t, " C/(n k) =", C to 8 digits, " Sommerfeld pi² t/2 =", (π²/2) t to 8 digits
+
+T_room = 300 K
+solve density(μr, T_room) = n_e for μr from 0.99 E_F to 1.01 E_F
+print "(d) t =", T_room / T_F to 6 digits, " 1 - mu/E_F =", 1 - μr / E_F to 3 digits, " Sommerfeld (π²/12) t² =", (π²/12) (T_room / T_F)² to 6 digits
