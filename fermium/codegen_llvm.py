@@ -388,12 +388,14 @@ class ModuleGen:
         b.branch(cond_bb)
         return fn
 
-    def _sol_alloc(self, b, dim, cap):
+    def _sol_alloc(self, b, dim, cap, arrays=True):
         mal = self.externs["malloc"]
         sp = b.bitcast(b.call(mal, [i64(48)]), SOLP)
         b.store(i64(0), b.gep(sp, [I32(0), I32(0)]))
         b.store(dim, b.gep(sp, [I32(0), I32(1)]))
         b.store(cap, b.gep(sp, [I32(0), I32(2)]))
+        if not arrays:
+            return sp
         tp = b.bitcast(b.call(mal, [b.mul(cap, i64(8))]), F64P)
         yp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, dim), i64(8))]), F64P)
         dp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, dim), i64(8))]), F64P)
@@ -433,7 +435,6 @@ class ModuleGen:
         return fn
 
     def _k_rk4(self):
-        push = self.kernel("fm_sol_push")
         fn = self._new_fn("fm_rk4", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64])
         f, env, n, y0, t0, t1, h0 = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
@@ -446,8 +447,18 @@ class ModuleGen:
         steps = b.fptosi(b.call(self.intrinsic("ceil"), [b.fsub(ratio, f64(1e-9))]), I64)
         steps = b.select(b.icmp_signed("<", steps, i64(1)), i64(1), steps)
         h = b.fdiv(span, b.sitofp(steps, F64))
-        sp = self._sol_alloc(b, n, b.add(steps, i64(1)))
+        sp = self._sol_alloc(b, n, b.add(steps, i64(1)), arrays=False)
         mal = self.externs["malloc"]
+        # The step count is known, so the output arrays are written directly (the pointers come straight
+        # from malloc, so LLVM knows they don't alias the program's variables and can keep those in registers).
+        cap = b.add(steps, i64(1))
+        tp = b.bitcast(b.call(mal, [b.mul(cap, i64(8))]), F64P)
+        yp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, n), i64(8))]), F64P)
+        dp = b.bitcast(b.call(mal, [b.mul(b.mul(cap, n), i64(8))]), F64P)
+        b.store(tp, b.gep(sp, [I32(0), I32(3)]))
+        b.store(yp, b.gep(sp, [I32(0), I32(4)]))
+        b.store(dp, b.gep(sp, [I32(0), I32(5)]))
+        b.store(cap, b.gep(sp, [I32(0), I32(0)]))
 
         def arr():
             return b.bitcast(b.call(mal, [b.mul(n, i64(8))]), F64P)
@@ -455,10 +466,17 @@ class ModuleGen:
         with lp.range(i64(0), n) as k:
             b.store(b.load(b.gep(y0, [k])), b.gep(y, [k]))
         half = b.fmul(h, f64(0.5))
+
+        def record(idx, t, y, d):
+            b.store(t, b.gep(tp, [idx]))
+            base = b.mul(idx, n)
+            with lp.range(i64(0), n) as k:
+                b.store(b.load(b.gep(y, [k])), b.gep(yp, [b.add(base, k)]))
+                b.store(b.load(b.gep(d, [k])), b.gep(dp, [b.add(base, k)]))
         with lp.range(i64(0), steps) as s:
             t = b.fadd(t0, b.fmul(b.sitofp(s, F64), h))
             b.call(f, [t, y, k1, env])
-            b.call(push, [sp, t, y, k1])
+            record(s, t, y, k1)
             with lp.range(i64(0), n) as k:
                 b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(half, b.load(b.gep(k1, [k])))), b.gep(tmp, [k]))
             th = b.fadd(t, half)
@@ -475,7 +493,7 @@ class ModuleGen:
                 acc = b.fadd(b.fadd(b.load(b.gep(k1, [k])), b.fmul(f64(2), s23)), b.load(b.gep(k4, [k])))
                 b.store(b.fadd(b.load(b.gep(y, [k])), b.fmul(h6, acc)), b.gep(y, [k]))
         b.call(f, [t1, y, k1, env])
-        b.call(push, [sp, t1, y, k1])
+        record(steps, t1, y, k1)
         b.ret(sp)
         return fn
 

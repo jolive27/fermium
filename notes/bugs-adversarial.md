@@ -272,3 +272,58 @@ h(x) = x^2
 # as a function on line 2, after this line"
 ```
 Same for any name that is also a constant (`c(2)`, `e(1)`, `G(3)`, `k_B(...)`), silently.
+
+## A22. Negating an absolute °C temperature (variable or parenthesised) gives nonsense
+After the A8 fix `-5 °C` is right, but:
+```
+T = 20 °C
+print -T              # actual: -566.3 °C (= -293.15 K)   expected: an error, like 20 °C + 10 °C
+x = -(5 °C)
+print x               # actual: -551.3 °C                 expected: -5 °C or an error
+```
+
+## A23. (low) `plot a vs b, c vs d` with different units puts both on one mislabelled axis
+```
+xs = [1 m, 2 m]
+ys = [1 s, 2 s]
+plot ys vs xs, xs vs ys to "h.png"
+```
+Saves a plot whose x axis says `xs [m]` and y axis `ys [s], xs [m]`; the second series' x
+values are seconds drawn on the metres axis. Expected: an error ("all series in one plot need
+the same x units"), like the unit checker does everywhere else. (Also: `plot ys vs xs` with
+lists of different lengths raises the error but still leaves an empty c.png behind.)
+
+## A24. (low) A CSV with an empty cell leaks a Python traceback before the error
+`gap.csv`:
+```
+x [m], y [m]
+1, 2
+2,
+3, 6
+```
+```
+d = load "gap.csv"
+print d.y
+```
+stderr shows `Exception ignored on calling ctypes callback function ... KeyError: 0` (from
+`Runtime.column`) and then the proper error `gap.csv, line 3: not a number: ['2', '']`. The
+column callback runs after the failed load; it should not be called (or should fail quietly).
+
+## A25. `gamma(x)` (listed in reference §13) is unusable: the lexer turns it into the Greek name γ
+```
+print gamma(5)      # actual: "line 1: γ isn't defined"   expected: 24
+print γ(5)          # same
+```
+The ASCII→Greek rule (D9) rewrites the builtin's name. (The derivative code knows about
+γ(...) -- "can't differentiate γ(...) symbolically" -- but calling it fails.)
+
+## A26. Real odd roots of negatives: `x^(1/3)` works but its derivative and `x^(2/3)` give NaN
+```
+print (-8)^(1/3)          # -2   (real cube root, good)
+print (-8)^(2/3)          # NaN  expected 4 (or consistently NaN for all of them)
+f(x) = x^(1/3)
+g = f'
+print g                   # g(x) = 1/(3 x^0.666666666667)   (exponent printed as a float, not 2/3)
+print g(-8)               # NaN  expected 0.0833333 (= 1/12), consistent with f(-8) = -2
+```
+Only an exponent exactly equal to 1/3 gets the real-root treatment.
