@@ -1069,6 +1069,10 @@ class Interpreter:
         return f
 
     def s_SSolve(self, s, fr):
+        if s.method == "eigen":                 # D82
+            return self.m3_eigen(s, fr)
+        if s.method == "pde":                   # D83
+            return self.m3_pde(s, fr)
         y0 = []
         for e in s.y0:
             v = self.eval(e, fr)
@@ -1431,6 +1435,98 @@ class Interpreter:
             raise _Fail(ERR_SINGULAR)
         return tuple(out)
 
+    def m3_pde(self, s, fr):
+        """solve ∂u/∂t = …: the same Python solver the compiled code calls (runtime/pde.py)."""
+        from .runtime.pde import PdeFail, pde_solve
+        from .runtime.m3rt import PDE_METHOD_NAMES
+        f = self.ode_rhs(s.rhs, fr)
+        xa, xb = self.eval(s.xa, fr), self.eval(s.xb, fr)
+        t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
+        step = self.eval(s.step, fr) if s.step is not None else None
+        try:
+            ts, ys, dys, ncomp, m = self.kernel(
+                lambda: pde_solve(f, xa, xb, t0, t1, grid=s.grid, order=s.order, method=PDE_METHOD_NAMES[s.pmethod],
+                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep), getattr(s, "tfmt", -1))
+        except PdeFail as ex:
+            raise FermiumRuntimeError(ex.message, self.line) from None
+        sol = Sol(ncomp * (m + 1))
+        sol.t, sol.y, sol.dy = list(ts), list(ys), list(dys)
+        fr.set(s.sol_sym, sol)
+
+    def e_IPdeEval(self, e, fr):
+        from .runtime.m3rt import pde_eval_py
+        sol = self.eval(e.sol, fr)
+        xa, xb = self.eval(e.xa, fr), self.eval(e.xb, fr)
+        x, t = self.eval(e.x, fr), self.eval(e.t, fr)
+        slack = 1e-9 * abs(xb - xa)
+        if x < xa - slack or x > xb + slack or x != x:
+            f = _Fail(ERR_SOLRANGE, x, xa if x < xa else xb)
+            f.fmt = getattr(e, "xfmt", -1)
+            raise f
+        try:
+            return pde_eval_py(sol.eval, xa, xb, e.m, e.comp0, x, t, e.which)
+        except _Fail as f:
+            f.fmt = getattr(e, "tfmt", -1)
+            raise
+
+    def s_SAnimate(self, s, fr):
+        from .runtime.m3rt import animate
+        sol = self.eval(s.sol, fr)
+        animate(self.rt, s.anim_id, sol.t, sol.y, self.eval(s.xa, fr), self.eval(s.xb, fr))
+
+    def m3_eigen(self, s, fr):
+        """solve … lowest N: the same Python solver the compiled code calls (runtime/eigen.py)."""
+        from .runtime.eigen import EigenFail, eigen_solve
+        f = self.ode_rhs(s.rhs, fr)
+        a, b = self.eval(s.t0, fr), self.eval(s.t1, fr)
+        try:
+            xs, ys, dys, _ = self.kernel(lambda: eigen_solve(f, a, b, s.nstates, s.grid,
+                                                             "shooting" if s.eig_method == 1 else "matrix"),
+                                         getattr(s, "tfmt", -1))
+        except EigenFail as ex:
+            raise FermiumRuntimeError(ex.message, self.line) from None
+        sol = Sol(3 * s.nstates)
+        sol.t, sol.y, sol.dy = list(xs), list(ys), list(dys)
+        fr.set(s.sol_sym, sol)
+
+    def m3_fourier(self, name, args):
+        """Mirrors codegen_m3.fft / frequencies / argmax (D81)."""
+        if name == "frequencies":
+            n = _count(args[0])
+            if n < 1:
+                raise _Fail(ERR_EMPTY)
+            return [i / (n * args[1]) for i in range(n // 2 + 1)]
+        a = args[0]
+        if len(a) < 1:
+            raise _Fail(ERR_EMPTY)
+        if name in ("argmax", "argmin"):
+            best = 0
+            for i in range(1, len(a)):
+                x, y = a[i], a[best]
+                if (x > y if name == "argmax" else x < y) or (y != y and x == x):
+                    best = i
+            return float(best + 1)
+        from .runtime.spectral import spectrum
+        kind = {"fft_re": 0, "fft_im": 1, "amplitude_spectrum": 2, "power_spectrum": 3, "ifft": 4}[name]
+        if name == "ifft" and len(args[1]) != len(a):
+            raise _Fail(ERR_LEN, float(len(a)), float(len(args[1])))
+        return spectrum(kind, a, args[1] if name == "ifft" else None, args[1] if name == "power_spectrum" else 1.0)
+
+    def m3_random(self, name, args):
+        """The same generator as the compiled code, on the runtime's state (D80)."""
+        from . import rng
+        st = self.rt.rng_state
+        if name == "rand":
+            return rng.rand(st)
+        if name == "rand2":
+            return args[0] + (args[1] - args[0]) * rng.rand(st)
+        if name == "randn":
+            return rng.randn(st)
+        if name == "randn2":
+            return args[0] + args[1] * rng.randn(st)
+        rng.seed(st, args[0])
+        return 0.0
+
     def e_IBuiltin(self, e, fr):
         name = e.name
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
@@ -1480,9 +1576,14 @@ class Interpreter:
             return min(max(args[0], args[1]), args[2])
         if name == "factorial":
             return math1("gamma", args[0] + 1)
-        if name == "rand":
-            import random
-            return random.random()
+        if name in ("rand", "rand2", "randn", "randn2", "seed"):
+            return self.m3_random(name, args)
+        if name in ("fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum", "frequencies", "argmax",
+                    "argmin"):
+            return self.m3_fourier(name, args)
+        if name == "sample":
+            f = self.scalar_fn(e.lam, fr)
+            return [f(float(k + 1)) for k in range(_count(args[0]))]
         if name == "clock":
             return time.perf_counter()
         if name == "len":

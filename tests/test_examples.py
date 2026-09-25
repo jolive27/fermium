@@ -469,3 +469,44 @@ def test_natural_units():
     assert out[7] == "Planck mass:        1.22089×10¹⁹ GeV = 2.17643×10⁻⁸ kg"   # CODATA 2.176434×10⁻⁸ kg
     assert out[8] == "Sun's r_s = 2GM:    2.95325 km"
     assert out[9] == "ħc = 197.327 MeV fm"
+
+
+def test_quantum_bound_states():
+    """examples/40: box, finite well (against its transcendental equations) and oscillator (D82)."""
+    out = run_example("40_quantum_bound_states")
+    assert num(out, "box: E1 =") == pytest.approx(num(out, "exact"), rel=1e-6)
+    assert num(out, "box: E1 =") == pytest.approx(0.376030, rel=1e-5)
+    assert num(out, "E2/E1 =") == pytest.approx(4, rel=1e-6)
+    from scipy.optimize import brentq
+    hbar, me, ev, a, v0 = 6.62607015e-34 / (2 * math.pi), 9.1093837139e-31, 1.602176634e-19, 0.5e-9, 5.0
+    k = lambda E: math.sqrt(2 * me * E * ev) / hbar                 # noqa: E731
+    q = lambda E: math.sqrt(2 * me * (v0 - E) * ev) / hbar          # noqa: E731
+    even = lambda E: k(E) * math.sin(k(E) * a) - q(E) * math.cos(k(E) * a)      # noqa: E731
+    odd = lambda E: -k(E) * math.cos(k(E) * a) - q(E) * math.sin(k(E) * a)      # noqa: E731
+    grid = [v0 * i / 5000 for i in range(1, 5000)]
+    levels = sorted(brentq(f, p, r) for f in (even, odd) for p, r in zip(grid, grid[1:]) if f(p) * f(r) < 0)
+    for n in (1, 2, 3):
+        assert num(out, f"finite well: level {n} at") == pytest.approx(levels[n - 1], rel=1e-4)
+    assert 0.005 < num(out, "probability outside the well in the ground state:") < 0.012
+    for n in (1, 2, 3, 4):
+        line = line_with(out, f"oscillator: E {n} / ħω =")
+        vals = numbers(line.split("=", 1)[1])
+        assert vals[0] == pytest.approx(n - 0.5, abs=1e-8)
+        assert vals[1] == pytest.approx(n - 0.5, abs=1e-8)
+    assert os.path.exists(os.path.join(EXAMPLES, "gallery", "bound_states.png"))
+
+
+def test_pde_heat_waves_tunnelling():
+    """examples/41: heat (CN) against exp decay, a plucked string against d'Alembert, and tunnelling (D83)."""
+    out = run_example("41_pde_heat_waves_tunnelling")
+    exact = 80 * math.exp(-1.11e-4 * math.pi ** 2 * 200 / 0.25)
+    assert num(out, "rod: bump after 200 s:") == pytest.approx(exact, rel=2e-5)
+    assert num(out, "exact:") == pytest.approx(exact, rel=1e-5)
+    assert num(out, "string: middle after half a period:") == pytest.approx(-3.0, abs=1e-5)
+    assert num(out, "string: back after one period:") == pytest.approx(3.0, abs=1e-5)
+    t = num(out, "probability beyond the barrier:")
+    r = num(out, "reflected:")
+    assert 0.08 < t < 0.2 and t + r == pytest.approx(1, abs=1e-3)
+    assert num(out, "total probability (Crank–Nicolson keeps it):") == pytest.approx(1, abs=1e-4)
+    assert "animation saved to gallery/tunnelling.gif (40 frames)" in out
+    assert os.path.exists(os.path.join(EXAMPLES, "gallery", "heat_pde.png"))

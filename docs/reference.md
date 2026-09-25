@@ -24,6 +24,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
 19. [Known limitations](#19-known-limitations)
+20. [Numerics: random numbers, Fourier transforms, eigenstates, PDEs](#20-numerics-random-numbers-fourier-transforms-eigenstates-pdes)
 
 ---
 
@@ -743,7 +744,10 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
-| `factorial(n) rand()` | |
+| `factorial(n)` | |
+| `rand() rand(a, b) randn() randn(μ, σ) seed(n) sample(expr, N)` | seeded random numbers and Monte Carlo (§20) |
+| `fft_re(xs) fft_im(xs) ifft(re, im) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20) |
+| `argmax(xs) argmin(xs)` | the position (1-based) of the largest / smallest element |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
 
 ```fermium
@@ -913,3 +917,144 @@ These are known and not yet fixed. None of them is silent about units.
 - **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
   has imported even if the file changes (restart the REPL to see the change).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
+
+## 20. Numerics: random numbers, Fourier transforms, eigenstates, PDEs
+
+### Random numbers and Monte Carlo
+
+```fermium
+seed(42)                       # the same numbers every run, in fermium run, fermium build and the interpreter
+print rand()                   # uniform in [0, 1)
+print rand(2 m, 3 m)           # uniform in [2 m, 3 m): both ends in the same units
+print randn()                  # standard normal (mean 0, standard deviation 1)
+print randn(9.81 m/s², 0.02 m/s²)   # normal with mean μ and standard deviation σ, in their units
+```
+
+- **`seed(n)`** is a statement on its own line. It restarts the generator: the same seed gives the same numbers, in `fermium run`, in a `fermium build` executable and in the reference interpreter (the generator, xoshiro256\*\*, is written once in LLVM IR and once in Python, DECISIONS D80). A program that never calls `seed` starts as if it had called `seed(0)`, so it is reproducible too. In the REPL and in Jupyter, the numbers continue from one input to the next.
+- **`sample(expr, N)`** evaluates `expr` N times, drawing new random numbers each time, and gives a list with the units of `expr`. With `mean`, `std` and `len`, this is a Monte Carlo estimate with its statistical error:
+
+```fermium
+seed(1)
+N = 100000
+inside = sample(if rand()^2 + rand()^2 < 1 then 1 else 0, N)
+p = mean(inside)
+print "π ≈", 4 p, "±", 4 sqrt(p (1 - p) / N)
+
+# a pendulum's period when its length is known to ±1 cm (Monte Carlo error propagation)
+g = 9.81 m/s²
+Ts = sample(2π sqrt(randn(1.00 m, 0.01 m) / g), 20000)
+print mean(Ts), "±", std(Ts)
+```
+
+- `randn` uses the Box–Muller method (two uniform numbers per normal number). `std` is the sample standard deviation (divides by N − 1).
+
+### Fourier transforms
+
+Fermium has no complex numbers, so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
+
+```fermium
+dt = 1 ms                                  # sampling interval
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V * sin(2π * 50 Hz * ts[i]) + 1 V * cos(2π * 120 Hz * ts[i])
+
+A = amplitude_spectrum(xs)                 # in V: a sine of amplitude 3 V gives a peak of 3 V
+f = frequencies(xs, dt)                    # in Hz: 0, 1 Hz, 2 Hz, …, 500 Hz (the Nyquist frequency)
+k = argmax(A)
+print "strongest:", f[k], "with amplitude", A[k]
+
+P = power_spectrum(xs, dt)                 # power spectral density, in V²/Hz
+print "Parseval:", sum(P) (f[2] - f[1]), "=", mean(xs * xs)
+
+back = ifft(fft_re(xs), fft_im(xs))        # the inverse transform gives back the signal
+print back[10], xs[10]
+```
+
+| Function | Gives | Units |
+|---|---|---|
+| `fft_re(xs)`, `fft_im(xs)` | real and imaginary parts of X_k = Σⱼ xⱼ e^(−2πi jk/n), k = 0 … n − 1 (NumPy's `fft`, not normalised) | those of xs |
+| `ifft(re, im)` | the real part of the inverse transform, (1/n) Σₖ Xₖ e^(2πi jk/n) | those of re and im |
+| `amplitude_spectrum(xs)` | one-sided amplitudes for k = 0 … n/2: \|Xₖ\|/n, doubled except at 0 Hz and at the Nyquist frequency | those of xs |
+| `power_spectrum(xs, dt)` | one-sided power spectral density \|Xₖ\|² dt/n (doubled likewise); Σ P Δf = mean(x²) | xs² × time (V²/Hz) |
+| `frequencies(xs, dt)` or `frequencies(n, dt)` | the frequencies of those n/2 + 1 bins, k/(n dt) (NumPy's `rfftfreq`) | 1/time (Hz) |
+
+- Any length works (not only powers of two). A frequency between two bins shows up in the nearest bins, spread out ("leakage"); a longer signal gives finer bins, Δf = 1/(n dt).
+- `fermium run` and the interpreter use NumPy's FFT; `fermium build` executables use a built-in C FFT (radix 2, and Bluestein's algorithm for other lengths), which agrees to rounding.
+
+### Bound states: solve … lowest N
+
+An equation that is linear in an unknown function ψ, with one undefined constant (the eigenvalue), zero boundary conditions at both ends and `lowest N`, is an **eigenvalue problem**: `solve` finds the N lowest eigenvalues and their eigenfunctions.
+
+```fermium
+m = m_e
+ħω = 1 eV
+ω = ħω / ħ
+V(x) = m ω² x² / 2
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 4
+for n from 1 to 4
+    print "E", n, "=", E[n] in eV, "  (ħω(n - ½) =", ħω (n - 0.5), ")"
+print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
+```
+
+- **The eigenvalue** is the one name in the equation that has no value yet (`E` here). Afterwards it is a list, `E[1] < E[2] < …`, with the units the equation gives it (energy).
+- **The states** are `ψ₁ … ψ_N` (ASCII `psi_1`): functions of x like an ODE solution, with `ψ₁'(x)`, `ψ₁''(x)`, `values(ψ₁)`, `times(ψ₁)` (the grid) and `plot ψ₁ vs x, ψ₂ vs x`. Each is normalised, ∫ψ² dx = 1 (so ψ has units 1/√length), and its first lobe (from the left) is positive.
+- **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
+- **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
+  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
+  - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).
+- The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
+- These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.
+
+
+### Partial differential equations: heat, waves, Schrödinger
+
+With two ranges, `for x from a to b, t from t0 to t1`, `solve` takes a **PDE** for an unknown u(x, t). Write the derivatives with ∂ (ASCII `partial`): `∂u/∂t`, `∂²u/∂x²`, `∂u/∂x`. The conditions after `with` are the initial value `u(x, t0) = …` and a boundary condition at each end, either a value `u(a, t) = …` or a slope `∂u/∂x(a, t) = …` (0 for an insulated end); both may depend on t.
+
+```fermium
+L = 1 m
+D = 0.01 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 10 s
+print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 s / L²)
+print ∂u/∂x(0 m, 5 s), ∂u/∂t(0.5 m, 5 s)
+```
+
+- **Using the solution:** `u(x, t)` anywhere in the range (cubic interpolation in x, Hermite in t), `∂u/∂x(x, t)`, `∂u/∂t(x, t)`, integrals like `∫ u(x, 2 s) dx from 0 m to L`, and plots of a formula like `plot u(x, 2 s) vs x from 0 m to L`.
+- **Pictures:** `plot u vs x` draws u at 6 times in one plot; `plot u vs x animate over t to "heat.gif"` writes an animated GIF (with `frames 30` to choose the number of frames, 60 by default). With a file name that does not end in `.gif` (or without the pillow package) it writes the frames as PNG files in a folder, `heat_frames/`.
+- **Waves:** an equation with `∂²u/∂t²` also needs the initial velocity `∂u/∂t(x, t0) = …`:
+
+```fermium
+c = 2 m/s
+f(x) = 1 cm * exp(-((x - 0.5 m) / 0.05 m)^2)
+solve ∂²u/∂t² = c² ∂²u/∂x²
+    with u(x, 0 s) = f(x), ∂u/∂t(x, 0 s) = 0 m/s, u(0 m, t) = 0 m, u(1 m, t) = 0 m
+    for x from 0 m to 1 m, t from 0 s to 0.1 s
+    grid 1000
+print u(0.7 m, 0.1 s), "  d'Alembert:", (f(0.5 m) + f(0.9 m)) / 2
+```
+
+- **The Schrödinger equation:** `i` in the equation is the imaginary unit, and a complex initial value is written `A(x) exp(i φ(x))`. The solution is complex, so `ψ(x, t)` is the 2-vector <Re ψ, Im ψ>: `|ψ(x, t)|^2` is the probability density, and `ψ(x, t).x`, `ψ(x, t).y` are the real and imaginary parts. An animation shows |ψ|².
+
+```fermium
+m = m_e
+σ = 1 nm
+k0 = 2 / (1 nm)
+solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(i k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 fs to 30 fs
+    grid 2000
+print "norm:", ∫ |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm
+print "centre:", ∫ x |ψ(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", ħ k0 30 fs / m in nm, ")"
+```
+
+- **Methods:** second-order differences in x on `grid N` intervals (400 by default), and in t:
+  - first order in t: **Crank–Nicolson** (the default: second order, stable for any step, and it conserves ∫|ψ|² exactly for the Schrödinger equation), `using implicit` (backward Euler: first order, very robust) or `using explicit` (forward Euler: needs dt ≤ h²/(2D), which Fermium checks and chooses by default). The default is 1000 time steps; `t from 0 s to 10 s step 1 ms` sets the step.
+  - second order in t (waves): the explicit central-difference scheme. It needs c dt ≤ h (Courant number ≤ 1); by default Fermium takes the largest such step, where it is exact for a constant wave speed.
+- **What is supported:** one unknown; linear equations (each term has one factor u, ∂u/∂x or ∂²u/∂x², like `D ∂²u/∂x² - k u + S(x)`); coefficients that depend on x but not on t (a source term without u may depend on t). All units are checked before the program runs, like every other equation.
+- These run in Python (NumPy/SciPy), so `fermium build` refuses them for now. A narrow feature in a wide range can be missed by `∫` (§19): integrate over the part where the solution lives.

@@ -106,7 +106,7 @@ class Program:
         finalize_tables(self.module.tables, self.checker.U)
         self.runtime = Runtime(self.out, self.base_dir)
         self.runtime.tables = self.module.tables
-        mg = ModuleGen()
+        mg = ModuleGen(rng_addr=self.runtime.rng_addr)
         mg.emit_main(self.module.main, "fm_run")
         self.llvm_ir = str(mg.module)
         t3 = time.perf_counter()
@@ -224,7 +224,7 @@ class ReplSession:
                 self.known.add(s.name)
         finalize_tables(self.checker.tables, self.checker.U)
         self.assign_slots(module)
-        mg = ModuleGen(name=f"repl{self.count}", arena_base=self.arena_base)
+        mg = ModuleGen(name=f"repl{self.count}", arena_base=self.arena_base, rng_addr=self.runtime.rng_addr)
         entry = f"fm_run_{self.count}"
         mg.emit_main(module.main, entry)
         tm = target_machine()
