@@ -742,3 +742,10 @@ def test_plot_options(tmp_path):
               'plot N vs t to "n.png" with log y, title "decay"', base_dir=str(tmp_path))
     assert out == "plot saved to n.png" and (tmp_path / "n.png").exists()
     assert "plot options are" in str(error_of('xs = [1, 2]\nplot xs vs xs with sideways'))
+
+
+def test_lists_of_text():
+    out = run('names = ["H-1", "He-4"]\npush(names, "C-12")\nprint names, len(names)\nfor n in names\n    print n\n'
+              'print names[2]')
+    assert out.split("\n") == ["[H-1, He-4, C-12] 3", "H-1", "He-4", "C-12", "He-4"]
+    assert "numbers or text" in str(error_of('xs = [1, "a"]'))

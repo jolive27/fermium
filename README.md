@@ -112,10 +112,11 @@ Measured on the same machine, median of repeated runs. The full table, methods a
 
 | Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|
-| N-body, 1M steps | ~1.3× Julia | 1× | ~55× Julia |
-| Damped spring, RK4, 1M steps | ~1.9× Julia | 1× | ~21× Julia |
-| Blackbody integrals | ~1.3× Julia | 1× | ~23× Julia |
-| Loop with units | ~1.05× Julia | 1× | ~80× Julia |
+| N-body, 1M steps | 1.28× Julia | 1× | ~56× Julia |
+| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory) | 1.82× Julia | 1× | ~21× Julia |
+| Damped spring, adaptive RK45, same accuracy | ~1.1× Julia (spot check; next full run updates RESULTS.md) | 1× | ~21× Julia |
+| Blackbody integrals | 0.91× Julia (faster) | 1× | ~23× Julia |
+| Loop with units | 1.09× Julia | 1× | ~80× Julia |
 
 Counting startup and compilation, Fermium programs finish sooner than Julia's (about 0.1–0.6 s against 1–3 s), because Julia spends that time JIT-compiling.
 

@@ -452,3 +452,11 @@ print sum(xs)               # Segmentation fault (exit 139)
 `zeros(1e12)` then `print xs[5]` prints `0`, and `print len(linspace(0, 1, 1e12))` prints
 `1×10¹²`, so the allocation result is never checked. Expected: "not enough memory for a list of
 3×10⁹ numbers". (Minor: `sort([3, 0/0, 1, 2])` returns `[3, NaN, 1, 2]` unsorted.)
+A30 shows up in ordinary programs:
+```
+solve x' = -x with x(0) = 1 for t from 0 to 2
+print ∫ x'(s) ds from 0 to 2     # actual: -0.864908   expected: -0.864665 (= x(2) - x(0))
+f(s) = x(s)^2
+h = f'
+print h(1)                       # actual: -0.270784   expected: -0.270671 (= -2e⁻²)
+```
