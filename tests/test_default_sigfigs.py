@@ -71,3 +71,16 @@ def test_fermium_build_prints_the_same(tmp_path):
     build(src, str(tmp_path / "p.fm"), str(exe))
     got = subprocess.run([str(exe)], capture_output=True, text=True, timeout=60).stdout.strip()
     assert got == run(src)
+
+
+@pytest.mark.parametrize("src,out", [
+    ("print 1000000/3", "3.33×10⁵"),                 # red team round 3 #9: not 333000
+    ("print 123456.7 m / 1.0", "1.2×10⁵ m"),         # 2 significant figures
+    ("print 1.5*12345.0", "1.9×10⁴"),
+    ("print 3141.59 to 1 digits", "3×10³"),
+    ("print 999999/3", "333333"),                    # whole numbers print exactly
+    ("print 1 kHz * 9.55 in Hz", "9550 Hz"),         # one non-significant zero stays in fixed notation
+    ("print 4186 J", "4186 J"),                      # a literal prints as written
+])
+def test_large_rounded_numbers_use_powers_of_ten(src, out):
+    assert both(src) == out

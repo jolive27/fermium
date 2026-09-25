@@ -305,6 +305,7 @@ class Solve(Node):
     method: str | None = None
     tolerance: Node | None = None
     until: Node | None = None     # the stop condition `until lhs = rhs` (an Equation, D39)
+    absolute: list | None = None  # `absolute a[, b …]`: absolute tolerances, one per unit (D160)
 
 
 @dataclass(eq=False)

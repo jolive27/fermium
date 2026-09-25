@@ -502,7 +502,9 @@ def format_number(x: float, sig: int = 6, trim: bool = True) -> str:
     # (no 10**exp arithmetic, which underflows for subnormal numbers)
     m, _, e = f"{x:.{sig - 1}e}".partition("e")
     exp = int(e)
-    if -4 <= exp < 6:
+    # fixed notation, unless rounding to `sig` figures would leave two or more non-significant zeros before
+    # the decimal point (333333 to 3 figures is 3.33×10⁵, not 333000; 9549 stays 9550) (D11)
+    if -4 <= exp < 6 and (trim or exp <= sig):
         decimals = max(sig - 1 - exp, 0)
         s = f"{float(m + 'e' + e):.{decimals}f}"
         if trim and "." in s:

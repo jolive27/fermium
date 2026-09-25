@@ -189,5 +189,5 @@ def test_mercury_precession():
 
 
 def test_all_gravitation_problems_are_tested():
-    names = sorted(f[:-3] for f in os.listdir(DIR) if f.endswith(".fm") and not f.startswith(("2", "3")))  # pass 1 only
+    names = sorted(f[:-3] for f in os.listdir(DIR) if f.endswith(".fm") and f.startswith("0"))  # pass 1 only
     assert names == ["01_orbit_elements", "02_hohmann_transfer", "03_mercury_precession"]

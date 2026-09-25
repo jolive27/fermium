@@ -125,14 +125,17 @@ def test_existing_one_half_warning_is_not_doubled():
 
 # ---------------------------------------------------------------- #10: 2 L is 2 litres: say so in unit errors
 def test_unit_error_after_collision_names_the_cause():
+    # D164: the reading is now the message itself, and the mismatch it caused is the hint
     e = error_of("T = 2.0 s\nfor t from 0 s to 1.2 T\n    print t")
-    assert "'1.2 T' here is 1.2 T" in e.hint and "1.2*T" in e.hint
+    assert "T here is read as the unit tesla (T), not your variable T" in e.message
+    assert "'1.2 T' is a unit right after a number" in e.message and "write 1.2 * T" in e.message
+    assert "time [s] to magnetic field [T]" in e.hint
 
 
 def test_unit_error_in_function_body_after_collision():
     e = error_of("L = 2 m\nf(x) = x + 2 L\nprint f(1 m)")
-    assert "can't add" in e.message
-    assert "'2 L' here is 2 L" in e.hint and "write 2*L" in e.hint
+    assert "L here is read as the unit liter (L), not your variable L" in e.message and "write 2 * L" in e.message
+    assert "can't add" in e.hint and "when calling f" in e.hint
 
 
 def test_no_collision_note_without_a_collision():
