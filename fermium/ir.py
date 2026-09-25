@@ -313,6 +313,26 @@ class IFunc:
         return f"IFunc({self.name})"
 
 
+def referenced_syms(node):
+    """The variables an expression (or a list of them) reads, in order, without looking inside nested
+    lambdas (integrands and the like have their own captures)."""
+    out, seen = [], set()
+
+    def visit(x):
+        if isinstance(x, IVar):
+            if x.sym.id not in seen:
+                seen.add(x.sym.id)
+                out.append(x.sym)
+        elif isinstance(x, (list, tuple)):
+            for y in x:
+                visit(y)
+        elif isinstance(x, Expr):
+            for v in vars(x).values():
+                visit(v)
+    visit(node)
+    return out
+
+
 class ILambda:
     """A nested function: integrand f(x), ODE right-hand side f(t, y), fit model, plot sampler.
 
