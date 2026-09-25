@@ -288,26 +288,18 @@ def dp45(f, y0, t0, t1, rtol):
     return sol
 
 
-def quad(f, a, b, rtol=1e-10, atol=0.0):
-    if a > b:
-        return -quad(f, b, a, rtol, atol)
-    if a == b:
-        return 0.0
-    a_inf, b_inf = abs(a) == math.inf, abs(b) == math.inf
-    mode = int(b_inf) + 2 * int(a_inf)
-
+def _quadcore(f, mode, p, q, rtol, atol):
     def qf(u):
         if mode == 0:
-            return f(u)
-        if mode == 1:
-            om = 1.0 - u
-            return fdiv(f(a + fdiv(u, om)), om * om)
-        if mode == 2:
-            om = 1.0 - u
-            return fdiv(f(b - fdiv(u, om)), om * om)
-        u2 = u * u
-        om = 1.0 - u2
-        return f(fdiv(u, om)) * fdiv(1.0 + u2, om * om)
+            L = q - p
+            v = 1.0 - u
+            x = p + L * (u * u * (3.0 - 2.0 * u)) if u <= 0.5 else q - L * (v * v * (1.0 + 2.0 * u))
+            if x == p or x == q:
+                return 0.0
+            return f(x) * (6.0 * (u * v) * L)
+        om = 1.0 - u
+        sx = q * fdiv(u, om)
+        return fdiv(f(p + sx if mode == 1 else p - sx) * q, om * om)
 
     def gk(lo, hi):
         c = 0.5 * (lo + hi)
@@ -323,15 +315,12 @@ def quad(f, a, b, rtol=1e-10, atol=0.0):
                 resg = resg + s * WG[j // 2]
         return resk * h, abs((resk - resg) * h)
 
-    lo = -1.0 if mode == 3 else 0.0
-    hi = b if mode == 0 else 1.0
-    lo = a if mode == 0 else lo
     P, M = 8, 2000
-    width = (hi - lo) / P
+    width = 1.0 / P
     panels = []
     for i in range(P):
-        x0 = lo + i * width
-        x1 = hi if i == P - 1 else x0 + width
+        x0 = i * width
+        x1 = 1.0 if i == P - 1 else x0 + width
         r, e = gk(x0, x1)
         panels.append([x0, x1, r, e])
     while True:
@@ -349,12 +338,46 @@ def quad(f, a, b, rtol=1e-10, atol=0.0):
             return total
         wl, wh = panels[w][0], panels[w][1]
         mid = 0.5 * (wl + wh)
-        if len(panels) >= M - 1 or mid <= wl or mid >= wh or toterr != toterr or abs(total) == math.inf:
+        stuck = (wh - wl) <= 1e-13 * max(abs(wl), abs(wh))
+        if stuck and finite and toterr <= 1e-7 * abs(total):
+            return total
+        if len(panels) >= M - 1 or stuck or toterr != toterr or abs(total) == math.inf:
             raise _Fail(ERR_QUAD, total, toterr)
         r1, e1 = gk(wl, mid)
         r2, e2 = gk(mid, wh)
         panels[w] = [wl, mid, r1, e1]
         panels.append([mid, wh, r2, e2])
+
+
+def _qscan(f, base, sign):
+    best, bs, sc = 0.0, 1.0, 1e-40
+    for _ in range(321):
+        v = abs(f(base + sign * sc)) * sc
+        if v > best and v < math.inf:
+            best, bs = v, sc
+        sc = sc * 10 ** 0.25
+    return bs
+
+
+def quad(f, a, b, rtol=1e-10, atol=0.0):
+    """Mirrors fm_quad / fm_quadcore / fm_qscan in codegen_llvm.py."""
+    if a > b:
+        return -quad(f, b, a, rtol, atol)
+    if a == b:
+        return 0.0
+    a_inf, b_inf = abs(a) == math.inf, abs(b) == math.inf
+    if not (a_inf or b_inf):
+        return _quadcore(f, 0, a, b, rtol, atol)
+    if not a_inf:
+        L = _qscan(f, a, 1.0)
+        return _quadcore(f, 0, a, a + L, rtol, atol) + _quadcore(f, 1, a + L, L, rtol, atol)
+    if not b_inf:
+        L = _qscan(f, b, -1.0)
+        return _quadcore(f, 2, b - L, L, rtol, atol) + _quadcore(f, 0, b - L, b, rtol, atol)
+    lr, ll = _qscan(f, 0.0, 1.0), _qscan(f, 0.0, -1.0)
+    vr, vl = abs(f(lr)) * lr, abs(f(-ll)) * ll
+    c = lr if not (vr < vl) else -ll
+    return _quadcore(f, 2, c, abs(c), rtol, atol) + _quadcore(f, 1, c, abs(c), rtol, atol)
 
 
 # ---------------------------------------------------------------- the interpreter

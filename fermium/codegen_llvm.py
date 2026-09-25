@@ -260,34 +260,57 @@ class ModuleGen:
         return fn
 
     def _k_qf(self):
-        # u-space evaluation with the infinite-interval transforms
+        """The integrand in u ∈ [0, 1].  mode 0: x from p to q with the smoothstep substitution
+        x = p + (q-p)(3u² - 2u³), which removes 1/√ singularities at the ends (dx/du vanishes there);
+        mode 1: x = p + q u/(1-u) (the half-line [p, ∞) with length scale q); mode 2: x = p - q u/(1-u)."""
         fn = self._new_fn("fm_qf", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64])
-        f, env, mode, a, bb, u = fn.args
+        f, env, mode, p, q, u = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
         blk_fin = fn.append_basic_block("fin")
-        blk_up = fn.append_basic_block("up")
-        blk_dn = fn.append_basic_block("dn")
-        blk_both = fn.append_basic_block("both")
-        sw = b.switch(mode, blk_fin)
-        sw.add_case(i64(1), blk_up)
-        sw.add_case(i64(2), blk_dn)
-        sw.add_case(i64(3), blk_both)
+        blk_half = fn.append_basic_block("half")
+        b.cbranch(b.icmp_signed("==", mode, i64(0)), blk_fin, blk_half)
         b.position_at_end(blk_fin)
-        b.ret(b.call(f, [u, env]))
-        b.position_at_end(blk_up)   # x = a + u/(1-u), dx = du/(1-u)^2
-        om = b.fsub(f64(1), u)
-        x = b.fadd(a, b.fdiv(u, om))
-        b.ret(b.fdiv(b.call(f, [x, env]), b.fmul(om, om)))
-        b.position_at_end(blk_dn)   # x = b - u/(1-u)
-        om = b.fsub(f64(1), u)
-        x = b.fsub(bb, b.fdiv(u, om))
-        b.ret(b.fdiv(b.call(f, [x, env]), b.fmul(om, om)))
-        b.position_at_end(blk_both)  # x = u/(1-u^2), dx = (1+u^2)/(1-u^2)^2
-        u2 = b.fmul(u, u)
-        om = b.fsub(f64(1), u2)
-        x = b.fdiv(u, om)
-        w = b.fdiv(b.fadd(f64(1), u2), b.fmul(om, om))
+        L = b.fsub(q, p)
+        v = b.fsub(f64(1), u)
+        lower = b.fcmp_ordered("<=", u, f64(0.5))
+        # measure from the nearer end so that points close to q keep their full precision
+        xl = b.fadd(p, b.fmul(L, b.fmul(b.fmul(u, u), b.fsub(f64(3), b.fmul(f64(2), u)))))
+        xh = b.fsub(q, b.fmul(L, b.fmul(b.fmul(v, v), b.fadd(f64(1), b.fmul(f64(2), u)))))
+        x = b.select(lower, xl, xh)
+        w = b.fmul(b.fmul(f64(6), b.fmul(u, v)), L)
+        at_end = b.or_(b.fcmp_ordered("==", x, p), b.fcmp_ordered("==", x, q))
+        with b.if_then(at_end):      # a node that rounds onto an end point has no weight
+            b.ret(f64(0))
         b.ret(b.fmul(b.call(f, [x, env]), w))
+        b.position_at_end(blk_half)
+        om = b.fsub(f64(1), u)
+        sx = b.fmul(q, b.fdiv(u, om))
+        x = b.select(b.icmp_signed("==", mode, i64(1)), b.fadd(p, sx), b.fsub(p, sx))
+        b.ret(b.fdiv(b.fmul(b.call(f, [x, env]), q), b.fmul(om, om)))
+        return fn
+
+    def _k_qscan(self):
+        """Length scale of an integrand on a half-line: the s = 10^(k/4), 10^-40 ≤ s ≤ 10^40, where
+        s·|f(base + sign·s)| is largest (1 if f is zero everywhere).  Integrals to ∞ use it so that
+        femtometres and astronomical units work alike."""
+        fn = self._new_fn("fm_qscan", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64], inline=False)
+        f, env, base, sign = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        fabs = self.intrinsic("fabs")
+        sv, best, bs = b.alloca(F64), b.alloca(F64), b.alloca(F64)
+        b.store(f64(1e-40), sv)
+        b.store(f64(0), best)
+        b.store(f64(1), bs)
+        with lp.range(i64(0), i64(321)):
+            sc = b.load(sv)
+            val = b.fmul(b.call(fabs, [b.call(f, [b.fadd(base, b.fmul(sign, sc)), env])]), sc)
+            better = b.and_(b.fcmp_ordered(">", val, b.load(best)), b.fcmp_ordered("<", val, f64(math.inf)))
+            with b.if_then(better):
+                b.store(val, best)
+                b.store(sc, bs)
+            b.store(b.fmul(sc, f64(10 ** 0.25)), sv)
+        b.ret(b.load(bs))
         return fn
 
     def _k_gk15(self):
@@ -318,13 +341,14 @@ class ModuleGen:
     QUAD_MAX = 2000          # subdivision budget; beyond it the integral is reported as not converging
 
     def _k_quad(self):
-        """Globally adaptive Gauss–Kronrod (QUADPACK-style): keep a list of panels, always bisect the
-        one with the largest error estimate, stop when the total error is small enough."""
-        gk = self.kernel("fm_gk15")
-        fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64])
+        """∫ f from a to b.  Finite ranges go straight to fm_quadcore; a half-line [a, ∞) is split at
+        a + L, with L the integrand's length scale (fm_qscan), into a finite piece and a tail; (-∞, ∞)
+        is split at the scan's peak into two tails."""
+        core = self.kernel("fm_quadcore")
+        scan = self.kernel("fm_qscan")
+        fn = self._new_fn("fm_quad", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64, F64, F64], inline=False)
         f, env, a, bb, rtol, atol = fn.args
         b = ir.IRBuilder(fn.append_basic_block("e"))
-        lp = LoopHelper(b, fn)
         fabs = self.intrinsic("fabs")
         inf = f64(math.inf)
         with b.if_then(b.fcmp_ordered(">", a, bb)):
@@ -333,11 +357,42 @@ class ModuleGen:
             b.ret(f64(0))
         a_inf = b.fcmp_ordered("==", b.call(fabs, [a]), inf)
         b_inf = b.fcmp_ordered("==", b.call(fabs, [bb]), inf)
-        mode = b.add(b.zext(b_inf, I64), b.mul(b.zext(a_inf, I64), i64(2)))
-        # mode: 0 finite, 1 [a,∞), 2 (-∞,b], 3 (-∞,∞)
-        lo = b.select(b.icmp_signed("==", mode, i64(3)), f64(-1), f64(0))
-        hi = b.select(b.icmp_signed("==", mode, i64(0)), bb, f64(1))
-        lo = b.select(b.icmp_signed("==", mode, i64(0)), a, lo)
+        with b.if_then(b.not_(b.or_(a_inf, b_inf))):
+            b.ret(b.call(core, [f, env, i64(0), a, bb, rtol, atol]))
+        with b.if_then(b.not_(a_inf)):          # [a, ∞)
+            L = b.call(scan, [f, env, a, f64(1)])
+            m = b.fadd(a, L)
+            b.ret(b.fadd(b.call(core, [f, env, i64(0), a, m, rtol, atol]),
+                         b.call(core, [f, env, i64(1), m, L, rtol, atol])))
+        with b.if_then(b.not_(b_inf)):          # (-∞, b]
+            L = b.call(scan, [f, env, bb, f64(-1)])
+            m = b.fsub(bb, L)
+            b.ret(b.fadd(b.call(core, [f, env, i64(2), m, L, rtol, atol]),
+                         b.call(core, [f, env, i64(0), m, bb, rtol, atol])))
+        # (-∞, ∞): split at the larger of the two peaks the scans find
+        lr = b.call(scan, [f, env, f64(0), f64(1)])
+        ll = b.call(scan, [f, env, f64(0), f64(-1)])
+        vr = b.fmul(b.call(fabs, [b.call(f, [lr, env])]), lr)
+        vl = b.fmul(b.call(fabs, [b.call(f, [b.fneg(ll), env])]), ll)
+        c = b.select(b.fcmp_unordered(">=", vr, vl), lr, b.fneg(ll))
+        L = b.call(fabs, [c])
+        b.ret(b.fadd(b.call(core, [f, env, i64(2), c, L, rtol, atol]),
+                     b.call(core, [f, env, i64(1), c, L, rtol, atol])))
+        return fn
+
+    def _k_quadcore(self):
+        """Globally adaptive Gauss–Kronrod (QUADPACK-style) in u ∈ [0, 1] (see fm_qf for the modes):
+        keep a list of panels, always bisect the one with the largest error estimate, stop when the
+        total error is small enough."""
+        gk = self.kernel("fm_gk15")
+        fn = self._new_fn("fm_quadcore", F64, [SCALAR_FN.as_pointer(), F64P, I64, F64, F64, F64, F64],
+                          inline=False)
+        f, env, mode, a, bb, rtol, atol = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        fabs = self.intrinsic("fabs")
+        inf = f64(math.inf)
+        lo, hi = f64(0), f64(1)
         M = self.QUAD_MAX
         mal = self.externs["malloc"]
         free = self.extern("free", VOID, [I8P])
@@ -386,7 +441,14 @@ class ModuleGen:
         w = b.load(worst)
         wl, wh = b.load(b.gep(plo, [w])), b.load(b.gep(phi, [w]))
         mid = b.fmul(f64(0.5), b.fadd(wl, wh))
-        stuck = b.or_(b.fcmp_ordered("<=", mid, wl), b.fcmp_ordered(">=", mid, wh))
+        # a panel near a singularity that has shrunk to a few hundred ulps can't usefully be split:
+        # accept the result if the error is still small (≤ 1e-7 relative), else report it
+        big = b.call(self.intrinsic("maxnum"), [b.call(fabs, [wl]), b.call(fabs, [wh])])
+        stuck = b.fcmp_ordered("<=", b.fsub(wh, wl), b.fmul(f64(1e-13), big))
+        with b.if_then(b.and_(stuck, b.and_(finite, b.fcmp_ordered("<=", toterr,
+                                                                    b.fmul(f64(1e-7), b.call(fabs, [total])))))):
+            b.call(free, [raw])
+            b.ret(total)
         bad = b.or_(b.icmp_signed(">=", cnt, i64(M - 1)), stuck)
         bad = b.or_(bad, b.fcmp_unordered("uno", toterr, toterr))
         bad = b.or_(bad, b.fcmp_ordered("==", b.call(fabs, [total]), inf))
