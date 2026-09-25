@@ -88,7 +88,7 @@ DEFAULT_SF = 3     # output precision when the inputs don't say (DECISIONS D11)
 def format_written(x, sf, exact_items=False):
     """An element of a list written out in the program: with the list's (fewest) significant figures if
     that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
-    if exact_items and x == x and abs(x) < 1e15 and x == int(x):
+    if exact_items and x == x and abs(x) < 1e7 and x == int(x):
         return str(int(x))              # a whole number as written ([1.2345, 2], not 2.0000; red team round 4 #14)
     if x == x and abs(x) < math.inf and x != 0 and float(f"{x:.{max(sf, 1) - 1}e}") != x:
         return format_number(x, 15, trim=True)

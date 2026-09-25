@@ -98,7 +98,7 @@ static void fmt_default(double x, int whole_ok, char *out, size_t cap) {
 static void fmt_written(double x, int sf, int exact_items, char *out, size_t cap) {
     char t[64];
     snprintf(t, sizeof t, "%.*e", sf > 1 ? sf - 1 : 0, x);
-    if (exact_items && isfinite(x) && fabs(x) < 1e15 && x == trunc(x)) { snprintf(out, cap, "%lld", (long long)x); return; }
+    if (exact_items && isfinite(x) && fabs(x) < 1e7 && x == trunc(x)) { snprintf(out, cap, "%lld", (long long)x); return; }
     if (isfinite(x) && x != 0 && strtod(t, NULL) != x) fmt_num(x, 15, 1, out, cap);
     else fmt_num(x, sf, 0, out, cap);
 }

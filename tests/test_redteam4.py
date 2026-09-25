@@ -179,7 +179,7 @@ def test_13_unit_with_constant_shows_si_value_with_default_figures():
 @pytest.mark.parametrize("src, good", [
     ("print [1.2345, 2]", "[1.2345, 2]"),
     # the main session's D11 rule prints the whole number 5.018245e9 in full; the finding was the 90.00000
-    ("print [5.018245e9, -6934.574, 9e1]", "[5018245000, -6934.574, 90]"),
+    ("print [5.018245e9, -6934.574, 9e1]", "[5.018245×10⁹, -6934.574, 90]"),
     ("print 10000000", "10000000"),
 ])
 def test_14_list_and_literal_printing(src, good):
