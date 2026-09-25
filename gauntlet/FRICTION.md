@@ -31,7 +31,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 23 | A | quantum (Q6) | No complex numbers | Open |
 | 24 | A | quantum (Q5) | Functions can't be passed to functions | Open |
 | 25 | A | nuclear (N1) | Stiff decay chains need millions of RK45 steps: no implicit solver | Open |
-| 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Open |
+| 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Fixed: `err(g)` gives a fitted parameter's standard error, with units |
 | 27 | A | gravitation (G5) | No `GM_sun` / `GM_earth` constants | Fixed: `GM_sun` (`GM☉`, IAU nominal) and `GM_earth` constants |
 | 28 | C | gravitation (G3) | `h² = …` gets the hint "use == to compare" | Fixed: the error says only a name can be assigned and suggests `solve h² = … for h from … to …` (D34) |
 | 29 | C | several (E8, T6, O3, M6, O2) | Derived units print in base SI (`kg/(s³ A)` for V/m²), `1/s` for rad/s | Fixed: composite display units (V/m², T m, W/(m² K), …) instead of base SI; `1/s` stays |

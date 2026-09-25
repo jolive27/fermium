@@ -385,7 +385,20 @@ def check_fit(ck, s: A.Fit, ctx):
                            "ycol": lam.ycol, "cols": [sym.col_index for sym in lam.col_syms],
                            "ydim": ydim, "yname": lname, "path": data.ty.info["path"],
                            "columns": cols})
-    return I.SFit(fit_id, data, out_syms, guesses, lam)
+    # standard errors, for err(x) (gauntlet friction #26): hidden variables written by the fit
+    err_syms = []
+    for n, sym in zip(params, out_syms):
+        es = getattr(sym, "err_sym", None)
+        if es is None:
+            es = ck.new_sym(f"__err_{n}", NumTy(pdims[n]), ctx)
+            ctx.scope.names[es.name] = es
+            sym.err_sym = es
+        es.assigned = True
+        es.hint, es.sf, es.direct = sym.hint, 2, False
+        err_syms.append(es)
+    r = I.SFit(fit_id, data, out_syms, guesses, lam)
+    r.err_syms = err_syms
+    return r
 
 
 # ============================================================ plot

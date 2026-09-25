@@ -1816,6 +1816,14 @@ class Checker(C.DiffContext):
             b, _ = self.lookup(f.name, ctx, f)
             if b is None and f.name in ("γ", "Γ"):
                 return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
+            if b is None and f.name == "err":           # err(g): the standard error of a fitted parameter
+                a0 = e.args[0] if len(e.args) == 1 else None
+                pb = self.lookup(a0.name, ctx, a0)[0] if isinstance(a0, A.Name) else None
+                es = getattr(pb, "err_sym", None)
+                if es is None:
+                    raise self.err("err(x) gives the standard error of a parameter found by fit, like err(g) after "
+                                   "fit T = 2π √(L/g) to data", e)
+                return self.var_ref(es, ctx, e)
             if b is None and f.name in ("grad", "div", "curl", "laplacian") and len(e.args) == 1 \
                     and isinstance(e.args[0], A.Name):          # ASCII for ∇f, ∇·F, ∇×F, ∇²f
                 kind = "lap" if f.name == "laplacian" else f.name

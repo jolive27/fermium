@@ -543,6 +543,7 @@ int64_t fm_fit(int64_t fid, int64_t h, double *p) {
     for (int i = 0; i < k; i++) {
         p[i] = best[i];
         if (singular) { ok[i] = 0; errs[i] = NAN; }
+        p[k + i] = (ok[i] && isfinite(errs[i])) ? errs[i] : NAN;     /* for err(x) */
     }
     printf("fit %s   (%lld data points from %s)\n", F->text, (long long)n, F->path);
     char val[200], se[100];

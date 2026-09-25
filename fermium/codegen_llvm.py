@@ -1377,7 +1377,7 @@ class FuncGen:
         b = self.b
         self.mg.lambda_for(s.model)
         n = len(s.param_syms)
-        p = self.alloca(ir.ArrayType(F64, n))
+        p = self.alloca(ir.ArrayType(F64, 2 * n))      # parameters, then their standard errors
         for i, g in enumerate(s.guesses):
             v = self.expr(g) if g is not None else f64(math.nan)
             b.store(v, b.gep(p, [I32(0), I32(i)]))
@@ -1385,6 +1385,8 @@ class FuncGen:
         self.fail_if(b.call(self.mg.externs["fm_fit"], [i64(s.fit_id), h, b.gep(p, [I32(0), I32(0)])]))
         for i, sym in enumerate(s.param_syms):
             self.store(sym, b.load(b.gep(p, [I32(0), I32(i)])))
+        for i, sym in enumerate(getattr(s, "err_syms", [])):
+            self.store(sym, b.load(b.gep(p, [I32(0), I32(n + i)])))
 
     def s_SPlot(self, s):
         b, ex = self.b, self.mg.externs

@@ -444,7 +444,7 @@ plot data.T vs data.L to "pendulum.png"
 - **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
-  - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables.
+  - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables, and `err(g)` is g's standard error (same units; NaN if it couldn't be estimated), so it can be carried into later results: `print err(g)/g`. Values are shown to the second digit of their standard error.
 - **Plots:** each form saves a PNG with labelled axes (units included) and prints where it was saved.
   - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines.
   - `plot x vs t` (an ODE solution)

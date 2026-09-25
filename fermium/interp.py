@@ -651,7 +651,7 @@ class Interpreter:
 
     def s_SFit(self, s, fr):
         lam = s.model
-        p = [self.eval(g, fr) if g is not None else math.nan for g in s.guesses]
+        p = [self.eval(g, fr) if g is not None else math.nan for g in s.guesses] + [math.nan] * len(s.guesses)
         h = self.eval(s.data, fr)
         data = self.rt.datasets[h]
 
@@ -669,6 +669,8 @@ class Interpreter:
         if self.rt.error:
             raise FermiumRuntimeError(self.rt.error, self.line)
         for sym, v in zip(s.param_syms, p):
+            fr.set(sym, float(v))
+        for sym, v in zip(getattr(s, "err_syms", []), p[len(s.param_syms):]):
             fr.set(sym, float(v))
 
     def s_SPlot(self, s, fr):

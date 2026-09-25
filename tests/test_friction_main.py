@@ -42,3 +42,17 @@ def test_27_gm_constants():
 def test_34_redefining_a_constant_that_was_used():
     assert any("from here on, h means your value" in w for w in warnings_of("E = h * 1 Hz\nh = 3 m\nprint h"))
     assert not warnings_of("h = 10 m\nprint h")          # h for height, never used as Planck's constant
+
+
+def test_26_fit_standard_errors_as_values(tmp_path):
+    import shutil
+    import os
+    shutil.copy(os.path.join(os.path.dirname(__file__), "..", "examples", "data", "pendulum.csv"), tmp_path)
+    src = 'data = load "pendulum.csv"\nfit T = 2π √(L/g) to data\nprint g, err(g)\nprint err(g)/g'
+    out = run(src, base_dir=str(tmp_path)).splitlines()
+    assert out[-2:] == ["9.82 m/s² 0.021 m/s²", "0.0021"]
+
+
+def test_26_err_of_something_else_is_an_error():
+    from conftest import error_of
+    assert "standard error of a parameter found by fit" in str(error_of("x = 3\nprint err(x)"))

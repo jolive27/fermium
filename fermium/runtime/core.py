@@ -373,6 +373,7 @@ class Runtime:
         best, errs, rms = least_squares_fit(f, y, guess)
         for i in range(np_):
             p[i] = best[i]
+            p[np_ + i] = errs[i] if errs[i] is not None and math.isfinite(errs[i]) else math.nan
         # report
         lines = [f"fit {info['text']}   ({n} data points from {info['path']})"]
         for i, name in enumerate(info["params"]):
