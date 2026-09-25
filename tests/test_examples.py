@@ -454,3 +454,18 @@ def test_electrostatics_nabla():
     out = run_example("27_electrostatics_nabla").splitlines()
     assert out[0] == "field on the axis, 10 cm away: <0, 0, 180.653> V/m"
     assert out[2:4] == ["∇×E = 0: true", "∇²φ = 0 away from the charges: true"]
+
+
+def test_natural_units():
+    """examples/28_natural_units.fm: atomic, nuclear and gravitational scales with ħ = c = 1 (D60)."""
+    out = run_example("28_natural_units").splitlines()
+    assert out[0] == "Bohr radius:        52917.7 fm = 0.529177 Å"              # CODATA a₀ = 0.529177 Å
+    assert out[1] == "Rydberg energy:     13.6057 eV"                           # CODATA 13.605693 eV
+    assert out[2] == "electron Compton λ: 2.42631 pm"                           # CODATA 2.42631024 pm
+    assert out[3] == "proton ƛ:           0.210309 fm"                          # CODATA 0.21030891 fm
+    assert out[4] == "pion range 1/m_π:   1.4138169 fm"                         # ħc/m_π = 197.327/139.570
+    assert out[5] == "muon decay length:  6.2336598 km"                         # (p/m) c τ
+    assert out[6] == "G = 6.70883×10⁻³⁹ 1/GeV²"                                 # PDG 6.70883×10⁻³⁹ GeV⁻²
+    assert out[7] == "Planck mass:        1.22089×10¹⁹ GeV = 2.17643×10⁻⁸ kg"   # CODATA 2.176434×10⁻⁸ kg
+    assert out[8] == "Sun's r_s = 2GM:    2.95325 km"
+    assert out[9] == "ħc = 197.327 MeV fm"

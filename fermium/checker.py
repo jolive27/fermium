@@ -16,12 +16,13 @@ from . import ast as A
 from . import calculus as C
 from . import ir as I
 from .constants import all_constants
+from .natural import SI, make_system, canonical_const_name
 from .errors import FermiumError, Diagnostics
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
                     VOID, Ty,
                     type_desc)
 from .linalg import transpose_index
-from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
+from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
 
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
@@ -84,6 +85,7 @@ class FuncInfo:
         self.display_name = name
         self.checked_generic = False
         self.stable = False           # a derivative: evaluate C.stabilize(body) (A52)
+        self.nat = None               # the unit system it was defined in (None: SI, callable anywhere; D60)
 
     @property
     def one_liner(self):
@@ -201,8 +203,14 @@ class Checker(C.DiffContext):
         self.new_funcs = []
         self.new_lambdas = []
         self.future_funcs = {}
+        self.nat = SI                 # the unit system in force (`units natural(ħ = c = 1)`, D60)
+        self._top_units = set()
 
     # ============================================================ helpers
+    def _set_system(self, system):
+        self.nat = system
+        self.U.namer = system.describe if system.natural else None
+
     def fresh_name(self, base):
         self.counter += 1
         return f"{base}.{self.counter}"
@@ -245,7 +253,7 @@ class Checker(C.DiffContext):
         if total is None:
             total = Unit("1", DIMLESS, 1.0)
         total.name = canonical_unit_name(uexpr) or total.name
-        return total
+        return self.nat.canon_unit(total)
 
     # ============================================================ program
     def check_program(self, prog: A.Program, name="main") -> CheckedModule:
@@ -256,6 +264,7 @@ class Checker(C.DiffContext):
         self.new_funcs = []
         self.new_lambdas = []
         self._prescan_functions(prog.body, ctx)
+        self._top_units |= {id(s) for s in prog.body if isinstance(s, A.Units)}
         self.unit_collisions = getattr(prog, "unit_collisions", {})
         self.positive_names = set() if self.repl else _positive_names(prog)
         main.body = self.block(prog.body, ctx, new_scope=False)
@@ -277,6 +286,8 @@ class Checker(C.DiffContext):
                 if self._func_param_uses(b):     # takes a function: checked per call instead (D43)
                     continue
                 args = [I.IConst(0, NumTy(DExpr.fresh())) for _ in b.fdef.params]
+                saved_nat = self.nat
+                self._set_system(b.nat or SI)
                 try:
                     saved = (self.new_funcs, self.new_lambdas)
                     self.new_funcs, self.new_lambdas = [], []
@@ -288,6 +299,7 @@ class Checker(C.DiffContext):
                     raise
                 finally:
                     self.new_funcs, self.new_lambdas = saved
+                    self._set_system(saved_nat)
 
     def block(self, stmts, ctx, new_scope=True):
         out = []
@@ -308,6 +320,7 @@ class Checker(C.DiffContext):
         if ctx.is_main and self.repl and ctx.lam is None:
             storage = "arena"
         sym = I.Sym(name, ty, storage, ctx.func)
+        sym.nat = self.nat
         if ctx.lam is None:
             ctx.func.locals.append(sym)
         else:
@@ -454,6 +467,10 @@ class Checker(C.DiffContext):
         b, scope = ctx.scope.lookup(name)
         owned = isinstance(b, I.Sym) and (b.func is ctx.func or (b.storage == "arena" and ctx.is_main)) \
             and (ctx.lam is None or b in getattr(ctx.lam, "locals", []))
+        if owned and getattr(b, "nat", SI).key != self.nat.key:
+            raise self.err(f"{name} was set outside this {self.nat.label()} region, so it can't be changed here "
+                           f"(its units mean something different there)", node,
+                           hint=f"use a new name for the value in {self.nat.name} units")
         if owned:
             sym = b
             if type(sym.ty) is not type(v.ty):
@@ -530,6 +547,7 @@ class Checker(C.DiffContext):
         if not ctx.is_main or ctx.lam is not None:
             raise self.err("functions must be defined at the top level of the program (not inside a block)", s)
         info = FuncInfo(s.name, s, ctx.scope)
+        info.nat = self.nat if self.nat.natural else None
         ctx.scope.names[s.name] = info
         params = {p.name for p in s.params}
         binds = list(s.where or [])
@@ -595,7 +613,9 @@ class Checker(C.DiffContext):
 
     def fmt(self, v):
         self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct,
-                                 "echo": getattr(v, "echo", True)})
+                                 "echo": getattr(v, "echo", True) and not self.nat.natural})
+        if self.nat is not SI:
+            self.tables.fmts[-1]["nat"] = self.nat
         return len(self.tables.fmts) - 1
 
     def fmt_components(self, v):
@@ -604,6 +624,8 @@ class Checker(C.DiffContext):
         first = len(self.tables.fmts)
         for d, h in zip(v.ty.dims, hints):
             self.tables.fmts.append({"dim": d, "hint": h, "sf": v.sf, "direct": v.direct})
+            if self.nat is not SI:
+                self.tables.fmts[-1]["nat"] = self.nat
         return first
 
     def describe_function(self, info: FuncInfo):
@@ -986,21 +1008,76 @@ class Checker(C.DiffContext):
 
     def use_binding(self, b, name, e, ctx):
         if isinstance(b, I.Sym):
-            return self.var_ref(b, ctx, e)
+            return self._from_system(b, self.var_ref(b, ctx, e), e)
         if isinstance(b, ConstInfo):
             self.__dict__.setdefault("used_consts", set()).add(name)
             if name == "∞":
                 r = I.IConst(math.inf, NumTy(DExpr.fresh("∞")))
+            elif self.nat.natural:        # its value in natural units, e.g. ħ = c = 1, m_e = 0.511 MeV (D60)
+                r = I.IConst(self.nat.const_value(canonical_const_name(b.name), b.value, b.unit.dim),
+                             NumTy(self.nat.canon_dim(b.unit.dim)))
             else:
                 r = I.IConst(b.value, NumTy(b.unit.dim))
-                r.hint = b.unit if b.unit.name not in ("1",) else None
+                r.hint = b.unit if b.unit.name not in ("1",) and self.nat.display != "astro" else None
             return r
         if isinstance(b, FuncInfo):
             return FuncRef(b)
         if isinstance(b, SolView):
+            other = getattr(b.sol_sym, "nat", SI)
+            if other.key != self.nat.key:
+                raise self.err(f"{name} was solved for outside this {self.nat.label()} region, so it can't be used "
+                               f"here", e, hint=f"solve the equation inside the region (or outside, and use it there)")
             self.var_ref(b.sol_sym, ctx, e)   # marks capture/global as needed
             return SolRef(b)
         raise self.err(f"can't use {name} here", e)
+
+    def _export_example(self, sym, system):
+        """A unit to suggest for taking sym out of its natural-units region: fm for 1/energy, MeV for energy..."""
+        if isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)) and getattr(sym.ty, "dim", None) is not None:
+            d = self.U.norm(sym.ty.dim)
+            if d.concrete and "ħ" in system.consts:
+                _, beta = system.split(d.const)
+                if all(b == 0 for b in beta[1:]):
+                    return {1: "MeV  (or kg for a mass)", -1: "fm  (or s for a time)", 0: "1",
+                            -2: "fm²  (or barn)"}.get(beta[0], system.display_unit(d.const).name)
+        return "fm  (or MeV, s, kg, ...)"
+
+    def _from_system(self, sym, r, node):
+        """A variable set under another unit system (D60).  SI values (or those of a system with fewer constants
+        set to 1) convert uniquely into the current natural units; the other way is ambiguous (is 1/MeV a length
+        or a time?), so it needs an explicit  x in unit."""
+        other = getattr(sym, "nat", None)
+        if other is None or other.key == self.nat.key:
+            return r
+        cur = self.nat
+        if not other.key <= cur.key:
+            what = f"{sym.name} was computed in {other.name} units ({' = '.join(other.consts)} = 1)"
+            hint = f"say which unit you want, like  {sym.name} in {self._export_example(sym, other)}"
+            raise self.err(f"{what}, so its units here are ambiguous", node, hint=hint)
+        if not isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)) or (isinstance(sym.ty, VecTy) and sym.ty.mixed):
+            if isinstance(sym.ty, (BoolTy, StrTy, TextListTy)):
+                return r
+            raise self.err(f"{sym.name} was set outside this {cur.label()} region and can't be used here", node)
+        d = self.U.norm(sym.ty.dim)
+        if not d.concrete:
+            raise self.err(f"the units of {sym.name} aren't known yet, so it can't be converted into "
+                           f"{cur.name} units here", node, hint=f"give {sym.name} a unit where it is set")
+        f = cur.factor(d.const)
+        nd = DExpr.of(cur.canon_dim(d.const))
+        if isinstance(sym.ty, NumTy):
+            ty = NumTy(nd)
+        elif isinstance(sym.ty, ListTy):
+            ty = ListTy(nd)
+        elif isinstance(sym.ty, VecTy):
+            ty = VecTy(nd, sym.ty.n)
+        else:
+            ty = MatTy(nd, sym.ty.r, sym.ty.c)
+        out = I.IBin("*", r, I.IConst(f, NumTy(DIMLESS)), ty) if f != 1.0 or nd.const != d.const else r
+        if out is r:
+            return r
+        out.sf, out.direct = r.sf, r.direct
+        out.hint = cur.canon_unit(r.hint) if isinstance(r.hint, Unit) else None
+        return out
 
     def var_ref(self, sym, ctx, node):
         """Reference a variable, marking it global or captured when used from another function."""
@@ -1613,6 +1690,9 @@ class Checker(C.DiffContext):
         return r
 
     def e_Convert(self, e, ctx):
+        exported = self._export(e, ctx)
+        if exported is not None:
+            return exported
         v = self.expr(e.value, ctx)
         self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
         u = self.resolve_unit(e.unit)
@@ -1620,8 +1700,11 @@ class Checker(C.DiffContext):
             raise self.err(f"can't show a vector with different units per component in {u.name}", e,
                            hint="convert one component at a time, like s.x in cm")
         if not self.U.unify(v.ty.dim, u.dim):
-            raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e,
-                           hint="the units you convert to must measure the same kind of quantity")
+            hint = "the units you convert to must measure the same kind of quantity"
+            if self.nat.natural:
+                hint = (f"in {self.nat.name} units ({' = '.join(self.nat.consts)} = 1) a length or time is 1/energy "
+                        f"and a mass is an energy; check the powers of energy")
+            raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e, hint=hint)
         if not self._warn_angle_in_hz(v, u, e):
             self._warn_omega_in_hz(e.value, v, u, e)
         if u.affine and getattr(v, "tdelta", False):
@@ -1633,6 +1716,62 @@ class Checker(C.DiffContext):
         v.hint = u
         v.direct = False
         return v
+
+    def _export(self, e, ctx):
+        """`x in fm` (or `2 x/y in fm`) using variables computed under a natural system that doesn't hold here
+        (outside their region): the one place where natural units turn back into SI.  The expression is checked
+        in that system; the target unit fixes the SI dimension, and the split D = Σ aᵢ Cᵢ + Σ βⱼ Bⱼ (natural.py)
+        gives the unique factor Π Cᵢ^aᵢ (D60)."""
+        foreign = {}
+        for n in A.free_names(e.value):
+            b, _ = ctx.scope.lookup(n)
+            other = getattr(b, "nat", None) if isinstance(b, I.Sym) else None
+            if other is not None and not other.key <= self.nat.key:
+                foreign.setdefault(other.key, (other, n))
+        if not foreign:
+            return None
+        if len(foreign) > 1:
+            names = " and ".join(f"{n} ({o.name} units)" for o, n in foreign.values())
+            raise self.err(f"this mixes values from different unit systems: {names}", e,
+                           hint="convert each one on its own first, like  x_si = x in fm")
+        other, name = next(iter(foreign.values()))
+        saved = self.nat
+        self._set_system(SI)
+        try:
+            u_si = self.resolve_unit(e.unit)
+        finally:
+            self._set_system(saved)
+        self._set_system(other)
+        try:
+            r = self.expr(e.value, ctx)
+        finally:
+            self._set_system(saved)
+        self.need_numlike(r, e.value, "the value to convert", allow_vec=True)
+        if isinstance(r.ty, VecTy) and r.ty.mixed:
+            raise self.err(f"can't show a vector with different units per component in {u_si.name}", e)
+        if u_si.affine:
+            raise self.err(f"can't convert from {other.name} units to {u_si.name}; use K", e)
+        what = name if isinstance(e.value, A.Name) else "this"
+        want = other.canon_dim(u_si.dim)
+        if not self.U.unify(r.ty.dim, want):
+            raise self.err(f"{what} is {other.describe(self.U.resolve(r.ty.dim))} in {other.name} units, so it "
+                           f"can't be shown in {u_si.name} ({other.describe(want)})", e,
+                           hint=f"in {other.name} units a length or time is 1/energy and a mass is an energy")
+        # SI value = canonical value / factor(D); then into the current system's representation
+        f = self.nat.factor(u_si.dim) / other.factor(u_si.dim)
+        d = DExpr.of(self.nat.canon_dim(u_si.dim))
+        if isinstance(r.ty, VecTy):
+            nty = VecTy(d, r.ty.n)
+        elif isinstance(r.ty, MatTy):
+            nty = MatTy(d, r.ty.r, r.ty.c)
+        elif isinstance(r.ty, ListTy):
+            nty = ListTy(d)
+        else:
+            nty = NumTy(d)
+        out = I.IBin("*", r, I.IConst(f, NumTy(DIMLESS)), nty)
+        out.hint = self.nat.canon_unit(u_si)
+        out.sf, out.direct = r.sf, False
+        return out
 
     def _warn_angle_in_hz(self, v, u, e):
         """`1 rev/min in Hz` is 2π/60 Hz, because angles are plain numbers (D6, D27; A46)."""
@@ -1718,6 +1857,10 @@ class Checker(C.DiffContext):
         return r
 
     def e_Load(self, e, ctx):
+        if self.nat.natural:
+            raise self.err(f"data files can't be loaded inside a {self.nat.label()} region (their columns are in "
+                           f"SI units)", e, hint="load the file before the  units  line; its columns then convert "
+                           "into natural units when you use them")
         path = e.path
         full = path if os.path.isabs(path) else os.path.join(self.base_dir, path)
         if not os.path.exists(full):
@@ -1768,9 +1911,9 @@ class Checker(C.DiffContext):
         s = self._ivar(v.sol_sym)
         if self.cur_ctx is not None:
             s = self.var_ref(v.sol_sym, self.cur_ctx, None)
-        if v.comp > v.top:
-            return I.ISolList(s, v.top, "dy", ListTy(v.dim))
-        return I.ISolList(s, v.comp, "y", ListTy(v.dim))
+        r = I.ISolList(s, v.top, "dy", ListTy(v.dim)) if v.comp > v.top else I.ISolList(s, v.comp, "y", ListTy(v.dim))
+        r.tdim = v.tdim
+        return r
 
     def index_expr(self, idx_ast, target, ctx):
         if isinstance(idx_ast, A.End):
@@ -2119,6 +2262,12 @@ class Checker(C.DiffContext):
                 keyparts.append((a.ty.kind, tuple(d.const.e)))
             else:
                 keyparts.append((a.ty.kind,))
+        fnat = info.nat or SI
+        if not fnat.key <= self.nat.key:
+            raise self.err(f"{info.display_name} was defined in {fnat.name} units ({' = '.join(fnat.consts)} = 1), so "
+                           f"it can only be used where those units hold", node,
+                           hint=f"define {info.display_name} outside the  units  region to use it everywhere")
+        keyparts.append(("units", self.nat.key))      # checked again in each unit system it is used in (D60)
         key = tuple(keyparts)
         fargs = args
         args = [a for a in args if not isinstance(a, FuncRef)]      # what is passed at run time
@@ -2168,7 +2317,7 @@ class Checker(C.DiffContext):
             if p.unit is not None:
                 u = self.resolve_unit(p.unit)
                 if not isinstance(ty, (NumTy, ListTy)) or not self.U.unify(ty.dim, u.dim):
-                    raise self.err(f"{info.display_name} expects {p.name} in {u.name} ({dim_name(u.dim)}), "
+                    raise self.err(f"{info.display_name} expects {p.name} in {u.name} ({self.desc(u.dim)}), "
                                    f"but got {type_desc(a.ty, self.U)}", node)
                 sym.hint = u
             inst.params.append(sym)
@@ -2253,7 +2402,7 @@ class Checker(C.DiffContext):
             u_ast = e.args[1]
             text = C.to_source(u_ast)
             try:
-                u = parse_unit_string(text.replace(" ", " "))
+                u = self.nat.canon_unit(parse_unit_string(text.replace(" ", " ")))
             except UnitSyntaxError as ex:
                 raise self.err(str(ex), u_ast)
             ue = A.UnitExpr([A.UnitFactor(text)], text)
@@ -2265,7 +2414,7 @@ class Checker(C.DiffContext):
             if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
                 raise self.err("to(x, unit) needs a number", e)
             if not self.U.unify(v.ty.dim, u.dim):
-                raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
+                raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e)
             v.hint = u
             return v
         if name == "times" and len(e.args) == 1:
@@ -2401,7 +2550,7 @@ class Checker(C.DiffContext):
                 return r
             if name == "times":
                 if isinstance(a, I.ISolList):
-                    return I.ISolList(a.sol, a.comp, "t", ListTy(DExpr.of(TIME_DIM)))
+                    return I.ISolList(a.sol, a.comp, "t", ListTy(getattr(a, "tdim", None) or DExpr.of(TIME_DIM)))
                 raise self.err("times(...) needs an ODE solution", e)
         if name in ("norm", "unit", "hat"):
             need(1)
@@ -2484,7 +2633,11 @@ class Checker(C.DiffContext):
         if name == "clock":
             if n != 0:
                 raise self.err("clock() takes no arguments", e)
-            return self._bi(name, args, NumTy(TIME_DIM), args)
+            r = self._bi(name, args, NumTy(TIME_DIM), args)
+            if self.nat.natural:        # seconds -> natural units (D60)
+                r = I.IBin("*", r, I.IConst(self.nat.factor(TIME_DIM), NumTy(DIMLESS)),
+                           NumTy(self.nat.canon_dim(TIME_DIM)))
+            return r
         if name == "rand":
             if n != 0:
                 raise self.err("rand() takes no arguments", e)
@@ -2551,6 +2704,7 @@ class Checker(C.DiffContext):
         fd = A.FuncDef(nm, f.params, body)
         fd.line, fd.col = f.line, f.col
         d = FuncInfo(nm, fd, info.scope)
+        d.nat = info.nat
         d.display_name = pretty
         d.stable = True
         d.parent = (info if getattr(info, "parent", None) is None else info.parent[0], i,
@@ -2607,6 +2761,7 @@ class Checker(C.DiffContext):
         fd = A.FuncDef(f"λ{self.counter}", [A.Param(e.var)], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
+        info.nat = self.nat if self.nat.natural else None
         info.display_name = f"d/d{e.var}(...)"
         info.anon_label = f"d/d{e.var} ({C.to_source(op)})" if e.order == 1 else \
             f"d^{e.order}/d{e.var}^{e.order} ({C.to_source(op)})"
@@ -2683,6 +2838,7 @@ class Checker(C.DiffContext):
         fd = A.FuncDef(nm, b.fdef.params, new)
         fd.line, fd.col = b.fdef.line, b.fdef.col
         info = FuncInfo(nm, fd, b.scope)
+        info.nat = b.nat
         info.display_name = self.VEC_CALC_NAMES[e.kind].format(b.display_name)
         info.stable = True
         b.derived[key] = info
@@ -2817,6 +2973,7 @@ class Checker(C.DiffContext):
         fd = A.FuncDef(f"∫d{e.var}", [A.Param(e.var)], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("antideriv"), fd, ctx.scope if ctx.is_main else self.globals)
+        info.nat = self.nat if self.nat.natural else None
         info.display_name = f"∫d{e.var}"
         info.anon_label = f"∫ {C.to_source(e.integrand)} d{e.var}"
         return FuncRef(info)
@@ -2830,9 +2987,33 @@ class Checker(C.DiffContext):
         from .solve import check_fit
         return check_fit(self, s, ctx)
 
+    def s_Units(self, s, ctx):
+        """`units natural(ħ = c = 1)`: the rest of the program; `units nuclear:` + a block: just that block (D60)."""
+        if id(s) not in self._top_units or not ctx.is_main or ctx.lam is not None:
+            raise self.err("a  units  line must be at the top level of the program (not inside a function, loop or "
+                           "if)", s)
+        try:
+            system = make_system(s.system, [canonical_const_name(c) for c in s.consts])
+        except ValueError as ex:
+            raise self.err(str(ex), s)
+        if s.body is None:
+            self._set_system(system)
+            return None
+        saved = self.nat
+        self._set_system(system)
+        try:
+            return self.block(s.body, ctx)
+        finally:
+            self._set_system(saved)
+
     def s_Plot(self, s, ctx):
         from .solve import check_plot
-        return check_plot(self, s, ctx)
+        n0 = len(self.tables.plots)
+        r = check_plot(self, s, ctx)
+        if self.nat is not SI:
+            for p in self.tables.plots[n0:]:
+                p["nat"] = self.nat
+        return r
 
 
 def _name_uses(e):

@@ -217,6 +217,9 @@ class Parser:
                 if end_line and not isinstance(s, (A.If, A.For, A.ForIn, A.While, A.Solve)):
                     self.end_statement()
                 return s
+        if t.kind == "NAME" and t.value == "units" and self.peek().kind == "NAME" and \
+                self.peek().value in ("natural", "nuclear", "astro", "SI"):
+            return self.units_stmt(end_line)
         if t.kind == "NAME":
             nxt = self.peek()
             if nxt.kind == "OP" and nxt.value == "=":
@@ -256,6 +259,36 @@ class Parser:
             raise self._assign_to_non_name(t, e)
         s = self.span(A.ExprStmt(e), t)
         if end_line:
+            self.end_statement()
+        return s
+
+    def units_stmt(self, end_line=True):
+        """units natural(ħ = c = 1) | units nuclear | units astro | units SI, optionally with ':' + a block (D60)."""
+        t = self.next()
+        system = self.next().value
+        consts = []
+        if self.at_op("("):
+            self.next()
+            while True:
+                names = [self.expect_name("a constant, like ħ or c").value]
+                while True:
+                    self.expect_op("=", "(write it like  units natural(ħ = c = 1))")
+                    if self.tok.kind == "NUM":
+                        break
+                    names.append(self.expect_name("a constant, like ħ or c").value)
+                num = self.next()
+                if float(num.value) != 1:
+                    raise self.error("natural units set constants to 1, like  units natural(ħ = c = 1)", num)
+                consts += names
+                if self.at_op(","):
+                    self.next()
+                    continue
+                break
+            self.expect_op(")")
+        s = self.span(A.Units(system, consts), t)
+        if self.at_op(":"):
+            s.body = self.block()
+        elif end_line:
             self.end_statement()
         return s
 

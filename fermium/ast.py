@@ -346,6 +346,14 @@ class Assert(Node):
 
 
 @dataclass(eq=False)
+class Units(Node):
+    """`units natural(ħ = c = 1)` (the rest of the program) or `units nuclear:` + a block (D60)."""
+    system: str
+    consts: list = field(default_factory=list)
+    body: list | None = None
+
+
+@dataclass(eq=False)
 class Program(Node):
     body: list
 
