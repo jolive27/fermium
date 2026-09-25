@@ -36,7 +36,7 @@ def interp(src):
 
 # ------------------------------------------------------------------ physics results
 def test_bohr_radius():
-    out = run("units natural(ħ = c = 1)\na0 = 1/(α m_e)\nprint a0 in fm\nprint a0 in Å\nprint a0").splitlines()
+    out = run("units natural(ħ = c = 1)\na0 = 1/(α m_e)\nprint a0 in fm to 6 digits\nprint a0 in Å to 6 digits\nprint a0 to 6 digits").splitlines()
     assert out[0] == "52917.7 fm"
     assert out[1] == "0.529177 Å"
     assert out[2].endswith("MeV⁻¹") and abs(num(out[2]) - 1 / (7.2973525643e-3 * 0.51099895)) < 1e-3
@@ -44,12 +44,12 @@ def test_bohr_radius():
 
 def test_compton_wavelength_of_the_electron():
     # λ_C = h/(m_e c) = 2π/m_e in natural units = 2.42631 pm
-    out = run("units natural\nλ = 2π/m_e\nprint λ in pm")
+    out = run("units natural\nλ = 2π/m_e\nprint λ in pm to 9 digits")
     assert abs(num(out) - 2.42631023538) < 1e-5
 
 
 def test_reduced_compton_wavelength_of_the_proton():
-    out = run("units natural\nlam = 1/m_p\nprint lam in fm")
+    out = run("units natural\nlam = 1/m_p\nprint lam in fm to 9 digits")
     assert abs(num(out) - 0.2103089) < 1e-6
 
 
@@ -60,13 +60,13 @@ def test_pion_exchange_range():
 
 
 def test_schwarzschild_radius_with_G_in_natural_units():
-    out = run("units natural\nr_s = 2 G M☉\nprint r_s in km\nprint G in GeV^-2").splitlines()
+    out = run("units natural\nr_s = 2 G M☉\nprint r_s in km to 6 digits\nprint G in GeV^-2 to 6 digits").splitlines()
     assert abs(num(out[0]) - 2 * 6.67430e-11 * 1.98841e30 / 299792458.0**2 / 1e3) < 1e-4
     assert abs(num(out[1]) - 6.70883e-39) < 1e-43       # G = 1/M_Planck² (PDG: 6.70883×10⁻³⁹ GeV⁻²)
 
 
 def test_schwarzschild_radius_geometrized():
-    out = run("units natural(G = c = 1)\nM = M☉\nprint M\nprint 2 M in km").splitlines()
+    out = run("units natural(G = c = 1)\nM = M☉\nprint M to 7 digits\nprint 2 M in km to 6 digits").splitlines()
     assert abs(num(out[0]) - 1476.625) < 1e-2 and out[0].endswith(" m")
     assert abs(num(out[1]) - 2.95325) < 1e-5
 
@@ -81,15 +81,15 @@ def test_muon_decay_length():
 
 
 def test_planck_units():
-    out = run("units natural(ħ = c = G = 1)\nprint m_p\nprint 1 in kg\nprint m_p in kg").splitlines()
+    out = run("units natural(ħ = c = G = 1)\nprint m_p to 6 digits\nprint 1 in kg to 7 digits\nprint m_p in kg to 12 digits").splitlines()
     assert abs(num(out[0]) - 1.67262192595e-27 / 2.176434e-8) / num(out[0]) < 1e-5
     assert abs(num(out[1]) - 2.176434e-8) < 1e-13          # the Planck mass
     assert abs(num(out[2]) - 1.67262192595e-27) < 1e-32
 
 
 def test_temperature_with_boltzmann_constant_set_to_one():
-    out = run("units natural(ħ = c = k_B = 1)\nT = 300 K\nprint T in meV\nprint 1 eV in K to 9 digits\n"
-              "print 25 °C in K")
+    out = run("units natural(ħ = c = k_B = 1)\nT = 300 K\nprint T in meV to 6 digits\nprint 1 eV in K to 9 digits\n"
+              "print 25 °C in K to 5 digits")
     lines = out.splitlines()
     assert abs(num(lines[0]) - 25.852) < 1e-3
     assert abs(num(lines[1]) - 11604.518) < 1e-2
@@ -97,7 +97,7 @@ def test_temperature_with_boltzmann_constant_set_to_one():
 
 
 def test_natural_print_shows_powers_of_MeV():
-    out = run("units natural\nE = 939.6 MeV\nr = 1/(197.3 MeV)\nprint E\nprint r\nprint E^2\nprint m_e").splitlines()
+    out = run("units natural\nE = 939.6 MeV\nr = 1/(197.3 MeV)\nprint E\nprint r\nprint E^2\nprint m_e to 6 digits").splitlines()
     assert out[0] == "939.6 MeV"
     assert out[1] == "0.005068 MeV⁻¹"      # 4 significant figures, like 197.3
     assert out[2] == "882800 MeV²"
@@ -106,13 +106,13 @@ def test_natural_print_shows_powers_of_MeV():
 
 def test_hbar_and_c_are_exactly_one():
     assert run("units natural\nprint ħ, c, ħ c, ħ == 1, c == 1") == "1 1 1 true true"
-    assert run("units natural\nprint ħ c in MeV fm") == "197.327 MeV fm"
+    assert run("units natural\nprint ħ c in MeV fm to 6 digits") == "197.327 MeV fm"
 
 
 def test_ODE_and_derivative_inside_natural_units():
     src = ("units natural\nω = 10 MeV\nsolve x'' = -ω^2 x with x(0) = 1.00000 fm, x'(0) = 0 for t from 0 to 1 fm\n"
            "print x(0.500000 fm) in fm to 6 digits\nprint cos(ω * 0.500000 fm) to 6 digits\n"
-           "V(r) = -50 MeV * exp(-r/(1.2 fm))\nF(r) = -d/dr V(r)\nprint F(1 fm) in MeV/fm\nprint F(1 fm) in N")
+           "V(r) = -50 MeV * exp(-r/(1.2 fm))\nF(r) = -d/dr V(r)\nprint F(1 fm) in MeV/fm to 6 digits\nprint F(1 fm) in N to 6 digits")
     out = run(src).splitlines()
     assert out[0] == "0.999679 fm" and out[1] == "0.999679"
     f = -50 / 1.2 * math.exp(-1 / 1.2)
@@ -121,7 +121,7 @@ def test_ODE_and_derivative_inside_natural_units():
 
 
 def test_integral_inside_natural_units():
-    assert run("units natural\nk = 2 fm^-1\nI = ∫ exp(-k x) dx from 0 to ∞\nprint I in fm") == "0.5 fm"
+    assert run("units natural\nk = 2 fm^-1\nI = ∫ exp(-k x) dx from 0 to ∞\nprint I in fm") == "0.500 fm"
 
 
 # ------------------------------------------------------------------ units are still checked
@@ -145,8 +145,8 @@ def test_natural_units_still_catch_unit_errors(src, msg):
 
 def test_mass_plus_energy_and_length_plus_time_are_fine():
     assert run("units natural\nprint 1 kg + 1 J in kg") == "1 kg"
-    assert run("units natural\nprint (1 m + 1 s) in m") == "2.99792×10⁸ m"
-    assert run("units natural\nprint 1 eV/c^2 in kg") == "1.78266×10⁻³⁶ kg"
+    assert run("units natural\nprint (1 m + 1 s) in m to 6 digits") == "2.99792×10⁸ m"
+    assert run("units natural\nprint 1 eV/c^2 in kg to 6 digits") == "1.78266×10⁻³⁶ kg"
 
 
 # ------------------------------------------------------------------ regions and boundaries
@@ -154,7 +154,7 @@ def test_block_region_and_explicit_export():
     src = ("units nuclear:\n    r = 2 fm\n    E = 10 MeV\nprint r in m\nx = r in fm\nprint x\nprint E in J to 10 digits\n"
            "print E in kg to 10 digits")
     out = run(src).splitlines()
-    assert out[0] == "2×10⁻¹⁵ m"
+    assert out[0] == "2.00×10⁻¹⁵ m"
     assert out[1] == "2 fm"
     assert abs(num(out[2]) - 1.602176634e-12) < 1e-20
     assert abs(num(out[3]) - 1.602176634e-12 / 299792458.0**2) < 1e-38
@@ -179,7 +179,7 @@ def test_export_with_the_wrong_power_of_energy():
 def test_SI_variables_convert_into_natural_units():
     out = run("L = 2 m\nm = 3 kg\nunits natural\nprint L, L in fm\nprint m in MeV to 12 digits\n"
               "print L m in 1 to 12 digits").splitlines()
-    assert out[0] == "2 m 2×10¹⁵ fm"
+    assert out[0] == "2 m 2.00×10¹⁵ fm"
     assert abs(num(out[1]) - 3 * 299792458.0**2 / 1.602176634e-13) / num(out[1]) < 1e-9
     # L m / (ħ/c) is dimensionless in natural units
     assert abs(num(out[2]) - 2 * 3 * 299792458.0 / (6.62607015e-34 / (2 * math.pi))) / num(out[2]) < 1e-9
@@ -192,7 +192,7 @@ def test_can_not_change_an_SI_variable_inside_natural_units():
 
 def test_SI_function_is_checked_again_in_natural_units():
     # f(m) = m c² works in both: in natural units c = 1, and the answer converts back to the same joules
-    out = run("f(m) = m c^2\nprint f(1 kg)\nunits natural\nprint f(1 kg) in J").splitlines()
+    out = run("f(m) = m c^2\nprint f(1 kg) to 6 digits\nunits natural\nprint f(1 kg) in J to 6 digits").splitlines()
     assert out == ["8.98755×10¹⁶ J", "8.98755×10¹⁶ J"]
 
 
@@ -228,15 +228,15 @@ def test_loading_data_inside_natural_units_is_refused(tmp_path):
 
 
 def test_units_SI_switches_back():
-    assert run("units natural\nE = 2 MeV\nunits SI\nprint E in J\nprint 1 m") == "3.20435×10⁻¹³ J\n1 m"
+    assert run("units natural\nE = 2 MeV\nunits SI\nprint E in J to 6 digits\nprint 1 m") == "3.20435×10⁻¹³ J\n1 m"
 
 
 # ------------------------------------------------------------------ units astro
 def test_astro_display_preset():
-    out = run("units astro\nprint G\nprint M☉\nprint 4π^2 (1 AU)^3/(G * (1 yr)^2)\nprint 3 m\nprint 1 AU/yr in km/s")
+    out = run("units astro\nprint G to 6 digits\nprint M☉\nprint 4π^2 (1 AU)^3/(G * (1 yr)^2) to 6 digits\nprint 3 m\nprint 1 AU/yr in km/s to 6 digits")
     lines = out.splitlines()
     assert lines[0] == "39.4769 AU³/(M☉ yr²)"          # 4π² in solar units (Julian year, nominal M☉)
-    assert lines[1] == "1 M☉"
+    assert lines[1] == "1 M☉"               # the constant M☉ (1 M☉ up to round-off, which counts as whole; D11)
     assert lines[2] == "1.00004 M☉"
     assert lines[3] == "3 m"                             # a unit you write is kept
     assert abs(num(lines[4]) - 4.74047) < 1e-4
@@ -313,7 +313,7 @@ def test_fermium_build_matches_run(src, tmp_path):
 
 def test_fine_structure_constant_emerges_in_natural_units():
     out = run("units natural\nprint e^2/(4π ε_0) to 9 digits, α to 9 digits\n"
-              "print e^2/(4π ε_0 * 1 fm) in MeV").splitlines()
+              "print e^2/(4π ε_0 * 1 fm) in MeV to 6 digits").splitlines()
     assert out[0] == "0.00729735256 0.00729735256"
     assert out[1] == "1.43996 MeV"            # e²/(4πε₀) = 1.44 MeV fm
 
@@ -324,12 +324,12 @@ def test_heaviside_lorentz_charge():
 
 
 def test_celsius_with_boltzmann_constant_set_to_one():
-    assert run("units natural(ħ = c = k_B = 1)\nT = 25 °C\nprint T, T in K, T in meV") == "25 °C 298.15 K 25.6926 meV"
+    assert run("units natural(ħ = c = k_B = 1)\nT = 25 °C\nprint T, T in K to 5 digits, T in meV to 6 digits") == "25 °C 298.15 K 25.6926 meV"
 
 
 def test_SI_function_uses_SI_global_inside_natural_units():
     out = run("L0 = 1 fm\nf(x) = x + L0\nprint f(1 m)\nunits natural\nprint f(1 fm) in fm")
-    assert out == "1×10¹⁵ fm\n2 fm"
+    assert out == "1.00×10¹⁵ fm\n2 fm"
     assert "can't add energy or mass [MeV] to length or time" in error_of(
         "L0 = 1 fm\nf(x) = x + L0\nunits natural\nprint f(1 MeV)").message
 

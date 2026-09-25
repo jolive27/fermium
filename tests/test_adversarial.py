@@ -162,7 +162,7 @@ def test_push_many_and_sum():
 
 def test_push_onto_literal_and_linspace():
     assert run("xs = [1, 2, 3]\npush(xs, 4)\npush(xs, 5)\nprint xs") == "[1, 2, 3, 4, 5]"
-    assert run("xs = linspace(0, 1, 3)\npush(xs, 4)\nprint xs") == "[0, 0.5, 1, 4]"
+    assert run("xs = linspace(0, 1, 3)\npush(xs, 4)\nprint xs") == "[0, 0.500, 1.00, 4.00]"
 
 
 def test_index_end_arithmetic_and_assignment():
@@ -203,13 +203,13 @@ def test_push_while_iterating():
 # ---------------------------------------------------------------------------
 def test_vector_operations():
     out = run("a = <1, 2, 3> m\nb = <4, 5, 6> s\nprint a · b, a × b, |a|, a.x, a[3]")
-    assert out == "32 m s <-3, 6, -3> m s 3.74166 m 1 m 3 m"
+    assert out == "32 m s <-3, 6, -3> m s 3.74 m 1 m 3 m"
     assert run("a = <1, 2> m\nb = <3, -1> m\nprint a × b, a · b") == "-7 m² 1 m²"
 
 
 def test_vector_function_derivative_and_field():
-    assert run("F(r) = -r / |r|^3\nprint F(<1, 1, 0> m)") == "<-0.353553, -0.353553, 0> 1/m²"
-    out = run("r(t) = <cos(t), sin(t), t> m\nv = r'\nprint v(1/2)")
+    assert run("F(r) = -r / |r|^3\nprint F(<1, 1, 0> m)") == "<-0.354, -0.354, 0> 1/m²"
+    out = run("r(t) = <cos(t), sin(t), t> m\nv = r'\nprint v(1/2) to 6 digits")
     vals = [float(x) for x in out.split(">")[0].strip("<").split(",")]
     assert all(close(a, b) for a, b in zip(vals, [-math.sin(0.5), math.cos(0.5), 1.0]))
 
@@ -248,7 +248,7 @@ DERIV_CASES = [
 def test_symbolic_derivatives_match_numeric(formula, f):
     mpmath = pytest.importorskip("mpmath")
     mpmath.mp.dps = 30
-    out = run(f"f(x) = {formula}\ng = f'\nh = f''\nprint g(13/10), h(13/10)")
+    out = run(f"f(x) = {formula}\ng = f'\nh = f''\nprint g(13/10) to 6 digits, h(13/10) to 6 digits")
     a, b = nums(out)
     x0 = mpmath.mpf(13) / 10
     d1 = float(mpmath.diff(lambda x: f(mpmath, x), x0))
@@ -257,7 +257,7 @@ def test_symbolic_derivatives_match_numeric(formula, f):
 
 
 def test_derivative_through_user_function_and_if():
-    assert num(run("g(x) = x^3\nf(x) = g(2 x) + sin(g(x))\nd = f'\nprint d(1)")) == pytest.approx(
+    assert num(run("g(x) = x^3\nf(x) = g(2 x) + sin(g(x))\nd = f'\nprint d(1) to 6 digits")) == pytest.approx(
         24 + 3 * math.cos(1), rel=1e-5)
     assert run("f(x) = if x > 0 then x^2 else -x^3\nd = f'\nprint d(2), d(-2)") == "4 -12"
 
@@ -267,7 +267,7 @@ def test_partial_derivatives_mixed():
 fx = ∂/∂x f
 fy = ∂/∂y f
 fxy = ∂/∂y fx
-print fx(1, 2), fy(1, 2), fxy(1, 2)"""
+print fx(1, 2) to 6 digits, fy(1, 2) to 6 digits, fxy(1, 2) to 6 digits"""
     a, b, c = nums(run(src))
     assert close(a, 4 + 2 * math.cos(2)) and close(b, 1 + math.cos(2))
     assert close(c, 2 + math.cos(2) - 2 * math.sin(2))
@@ -281,16 +281,16 @@ def test_derivative_uses_current_global():
 # Integrals
 # ---------------------------------------------------------------------------
 def test_integrals_known_values():
-    src = """print ∫ exp(-x^2) dx from -inf to inf
-print ∫ 1/(1+x^2) dx from 0 to inf
-print ∫ x^2 exp(-x) dx from 0 to inf
-print ∫ sin(x)/x dx from 1 to 100
-print ∫ 1/sqrt(x) dx from 0 to 1
-print ∫ ln(x) dx from 0 to 1
-print ∫ exp(-x^2) dx from inf to -inf
-print ∫ exp(-x^2/2e-6) dx from -inf to inf
-print ∫ 1/(1+(x-50)^2) dx from -inf to inf
-print ∫ exp(-x/1e6) dx from 0 to inf"""
+    src = """print ∫ exp(-x^2) dx from -inf to inf to 6 digits
+print ∫ 1/(1+x^2) dx from 0 to inf to 6 digits
+print ∫ x^2 exp(-x) dx from 0 to inf to 6 digits
+print ∫ sin(x)/x dx from 1 to 100 to 6 digits
+print ∫ 1/sqrt(x) dx from 0 to 1 to 6 digits
+print ∫ ln(x) dx from 0 to 1 to 6 digits
+print ∫ exp(-x^2) dx from inf to -inf to 6 digits
+print ∫ exp(-x^2/2e-6) dx from -inf to inf to 6 digits
+print ∫ 1/(1+(x-50)^2) dx from -inf to inf to 6 digits
+print ∫ exp(-x/1e6) dx from 0 to inf to 6 digits"""
     got = nums(run(src))
     si = 1.5622254668890563 - 0.9460830703671830      # Si(100) - Si(1)
     want = [math.sqrt(math.pi), math.pi / 2, 2, si, 2, -1, -math.sqrt(math.pi),
@@ -300,8 +300,8 @@ print ∫ exp(-x/1e6) dx from 0 to inf"""
 
 
 def test_integral_inside_function_parameter_and_variable_limit():
-    assert run("f(a) = ∫ x^a dx from 0 to 1\nprint f(1), f(2)") == "0.5 0.333333"
-    assert run("g(b) = ∫ exp(-b x) dx from 0 to inf\nprint g(2), g(0.1)") == "0.5 10"
+    assert run("f(a) = ∫ x^a dx from 0 to 1\nprint f(1), f(2)") == "0.500 0.333"
+    assert run("g(b) = ∫ exp(-b x) dx from 0 to inf\nprint g(2), g(0.1)") == "0.500 10"
     assert num(run("F(t) = ∫ sin(u) du from 0 to t\nprint F(3.141592653589793)")) == pytest.approx(2, rel=1e-9)
 
 
@@ -320,19 +320,19 @@ def test_integral_units():
 
 
 def test_integral_offset_gaussian_half_line():
-    assert close(num(run("print ∫ exp(-(x-100)^2) dx from 0 to inf")), math.sqrt(math.pi))
+    assert close(num(run("print ∫ exp(-(x-100)^2) dx from 0 to inf to 6 digits")), math.sqrt(math.pi))
 
 
 def test_integral_offset_gaussian_over_all_space():
     # was BUG A3.  Documented limitation (not tested): a peak of width 1 in a *finite* range of
     # ±1e6, e.g. ∫ exp(-x^2) dx from -1e6 to 1e6, can still be missed and give 0.
-    got = nums(run("print ∫ exp(-(x-100)^2) dx from -inf to inf\n"
-                   "print ∫ exp(-(x-1000)^2) dx from -inf to inf"))
+    got = nums(run("print ∫ exp(-(x-100)^2) dx from -inf to inf to 6 digits\n"
+                   "print ∫ exp(-(x-1000)^2) dx from -inf to inf to 6 digits"))
     assert all(close(g, math.sqrt(math.pi)) for g in got)
 
 
 def test_integral_offset_gaussian_does_not_hang():
-    out = run_with_timeout("print ∫ exp(-(x-20)^2) dx from -inf to inf", 3)
+    out = run_with_timeout("print ∫ exp(-(x-20)^2) dx from -inf to inf to 6 digits", 3)
     assert out is not None and close(num(out), math.sqrt(math.pi))
 
 
@@ -362,9 +362,9 @@ b = 0.2 kg/s
 solve m x'' = -k x - b x'
   with x(0) = 0.1 m, x'(0) = 0 m/s
   for t from 0 s to 5 s
-print x[end] in m
-print x(1 s) in m
-print x'(1 s) in m/s"""
+print x[end] in m to 6 digits
+print x(1 s) in m to 6 digits
+print x'(1 s) in m/s to 6 digits"""
     s = _ivp(lambda t, y: [y[1], (-50 * y[0] - 0.2 * y[1]) / 0.5], [0, 5], [0.1, 0])
     got = [num(l) for l in run(src).split("\n")]
     assert close(got[0], s.sol(5)[0], 1e-5)
@@ -373,14 +373,14 @@ print x'(1 s) in m/s"""
 
 def test_highest_derivative_on_both_sides():
     s = _ivp(lambda t, y: [y[1], (-y[1] - 2 * y[0]) / 2], [0, 2], [1, 0])
-    out = run("solve x'' = -x' - x'' - 2x with x(0) = 1, x'(0) = 0 for t from 0 to 2\nprint x(2)")
+    out = run("solve x'' = -x' - x'' - 2x with x(0) = 1, x'(0) = 0 for t from 0 to 2\nprint x(2) to 6 digits")
     assert close(num(out), s.y[0, -1], 1e-5)
 
 
 def test_forced_system_matches_scipy():
     s = _ivp(lambda t, y: [y[1], -y[0] - 0.1 * y[1] + math.cos(t)], [0, 10], [1, 0])
     out = run("solve x' = y, y' = -x - 0.1 y + cos(t) with x(0) = 1, y(0) = 0 for t from 0 to 10\n"
-              "print x(10), y(10)")
+              "print x(10) to 6 digits, y(10) to 6 digits")
     a, b = nums(out)
     assert close(a, s.y[0, -1], 1e-5) and close(b, s.y[1, -1], 1e-5)
 
@@ -388,7 +388,7 @@ def test_forced_system_matches_scipy():
 def test_stiff_van_der_pol():
     # reference: scipy Radau and LSODA (rtol 1e-12) agree on -1.51060693(6)
     out = run("μ = 1000\nsolve x'' = μ (1 - x^2) x' - x with x(0) = 2, x'(0) = 0 for t from 0 to 3000\n"
-              "print x(3000)")
+              "print x(3000) to 6 digits")
     assert close(num(out), -1.5106069366, 1e-5)
 
 
@@ -398,25 +398,25 @@ def test_stiff_van_der_pol():
     ("λ = 1 1/s\nsolve N' = -λ N with N(0) = 1e20 for t from 0 s to 50 s\nprint N(50 s)", 1e20 * math.exp(-50)),
 ])
 def test_exponential_decay_keeps_relative_accuracy(src, want):
-    assert close(num(run(src)), want, 1e-5)
+    assert close(num(run(src + " to 6 digits")), want, 1e-5)
 
 
 def test_exponential_decay_moderate_range():
-    got = nums(run("solve x' = -x with x(0) = 1 for t from 0 to 10\nprint x(10), x(5)"))
+    got = nums(run("solve x' = -x with x(0) = 1 for t from 0 to 10\nprint x(10) to 6 digits, x(5) to 6 digits"))
     assert close(got[0], math.exp(-10), 1e-5) and close(got[1], math.exp(-5), 1e-5)
 
 
 def test_solve_in_loop_and_function():
-    assert run("for k from 1 to 3\n    solve x' = -k x with x(0) = 1 for t from 0 to 1\n    print x(1)") == \
+    assert run("for k from 1 to 3\n    solve x' = -k x with x(0) = 1 for t from 0 to 1\n    print x(1) to 6 digits") == \
         "0.367879\n0.135335\n0.0497871"
     assert run("decay(k) =\n    solve y' = -k y with y(0) = 1 for t from 0 to 1\n    y(1)\n"
-               "print decay(2), decay(3)") == "0.135335 0.0497871"
+               "print decay(2) to 6 digits, decay(3) to 6 digits") == "0.135335 0.0497871"
 
 
 def test_rk4_step_adjusted_to_cover_range():
     assert run("solve x' = -x with x(0) = 1 for t from 0 to 1 step 0.3\nprint times(x)") == \
         "[0, 0.25, 0.5, 0.75, 1] s" or True    # unit shown is covered by A6
-    assert num(run("solve x' = x with x(0) = 1 for t from 0 to 1 step 0.1\nprint x(1)")) == \
+    assert num(run("solve x' = x with x(0) = 1 for t from 0 to 1 step 0.1\nprint x(1) to 6 digits")) == \
         pytest.approx(math.e, rel=1e-5)
 
 
@@ -426,12 +426,12 @@ def test_blowup_is_reported():
 
 
 def test_ode_starting_from_rest_power_forcing():
-    assert run("solve x' = t^4 with x(0) = 0 for t from 0 to 1\nprint x(1)") == "0.2"
+    assert run("solve x' = t^4 with x(0) = 0 for t from 0 to 1\nprint x(1) to 6 digits") == "0.200000"
 
 
 def test_driven_oscillator_from_rest():
     s = _ivp(lambda t, y: [y[1], -y[0] + math.sin(t) ** 3], [0, 3], [0, 0])
-    out = run("solve x'' = -x + sin(t)^3 with x(0) = 0, x'(0) = 0 for t from 0 to 3\nprint x(3)")
+    out = run("solve x'' = -x + sin(t)^3 with x(0) = 0, x'(0) = 0 for t from 0 to 3\nprint x(3) to 6 digits")
     assert close(num(out), s.y[0, -1], 1e-5)
 
 
@@ -462,18 +462,18 @@ UNIT_CASES = [
 
 @pytest.mark.parametrize("expr,want", UNIT_CASES, ids=[c[0] for c in UNIT_CASES])
 def test_unit_conversion_factors(expr, want):
-    assert close(num(run(f"print {expr}")), want, 1e-5)
+    assert close(num(run(f"print {expr} to 6 digits")), want, 1e-5)
 
 
 def test_celsius_fahrenheit_positive():
-    assert run("T = 20 °C\nprint T in K, T in °F, T") == "293.15 K 68 °F 20 °C"
-    assert run("print 0 K in °C") == "-273.15 °C"
+    assert run("T = 20 °C\nprint T in K to 5 digits, T in °F, T") == "293.15 K 68 °F 20 °C"
+    assert run("print 0 K in °C to 5 digits") == "-273.15 °C"
     assert run("T1 = 20 °C\nT2 = 30 °C\nprint T2 - T1") == "10 K"
     assert run("T = 20 °C\nT += 5 K\nprint T") == "25 °C"
 
 
 def test_negative_celsius_literal():
-    assert run("T = -40 °C\nprint T in K, T in °F, T") == "233.15 K -40 °F -40 °C"
+    assert run("T = -40 °C\nprint T in K to 5 digits, T in °F, T") == "233.15 K -40 °F -40 °C"
 
 
 def test_negative_fahrenheit_literal():
@@ -481,7 +481,7 @@ def test_negative_fahrenheit_literal():
 
 
 def test_negative_celsius_in_list():
-    assert run("T = [-10 °C, 10 °C]\nprint T in K") == "[263.15, 283.15] K"
+    assert run("T = [-10 °C, 10 °C]\nprint T in K") == "[263, 283] K"
 
 
 def test_rational_exponents():
@@ -538,7 +538,7 @@ def test_repl_redefinitions():
     assert repl("f(x) = x^2\ng(x) = f(x) + 1\nf(x) = 10 x\nprint g(2)\n") == "21\n"
     assert repl("x = 1 m\nf(y) = x + y\nprint f(1 m)\nx = 2 s\nprint f(1 s)\nprint f(1 m)\n") == \
         "2 m\n3 s\n2 m\n"
-    assert repl("solve x' = -x with x(0) = 1 for t from 0 to 1\nprint x(1)\nx = 5\nprint x\n") == \
+    assert repl("solve x' = -x with x(0) = 1 for t from 0 to 1\nprint x(1) to 6 digits\nx = 5\nprint x\n") == \
         "0.367879\n5\n"
 
 
@@ -633,7 +633,7 @@ def test_constant_integrand_with_unit_like_differential():
 
 
 def test_derivative_of_vector_length():
-    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1)")
+    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1) to 6 digits")
     assert close(num(out), 10 / (2 * math.sqrt(3)))
 
 
@@ -642,10 +642,10 @@ def test_vector_kepler_orbit_in_si_units_matches_scipy():
     np = pytest.importorskip("numpy")
     src = """GM = G M_sun
 solve r'' = -GM r / |r|^3 with r(0) = <1, 0> AU, r'(0) = <0, 30> km/s for t from 0 s to 1 yr
-print r(1 yr) in AU"""
+print r(1 yr) in AU to 6 digits"""
     out = run(src)
     got = [float(v) for v in out.split(">")[0].strip("<").split(",")]
-    GM = 6.6743e-11 * num(run("print M_sun in kg"))
+    GM = 6.6743e-11 * num(run("print M_sun in kg to 6 digits"))
     AU, yr = 149597870700.0, 31557600.0
 
     def f(t, y):
@@ -683,7 +683,7 @@ def test_negating_absolute_celsius_is_rejected():
 
 
 def test_negative_celsius_through_functions_and_where():
-    assert run("f(T) = T in K\nprint f(-5 °C)") == "268.15 K"
+    assert run("f(T) = T in K\nprint f(-5 °C) to 5 digits") == "268.15 K"
     assert run("T = -5 °C\nprint T + 10 K, T - 10 K") == "5 °C -15 °C"
     assert run("T = [-5 °C, 5 °C]\nprint mean(T), max(T), min(T)") == "0 °C 5 °C -5 °C"
 
@@ -702,7 +702,7 @@ def test_gamma_function():
 
 
 def test_cube_root_derivative_negative():
-    assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8)")), 1 / 12)
+    assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8) to 6 digits")), 1 / 12)
 
 
 def test_builtin_list_and_math_functions():
@@ -710,8 +710,8 @@ def test_builtin_list_and_math_functions():
     assert run("print interp(2.5, [1, 2, 3], [10, 20, 30]), trapz([1, 1, 1], [0, 1, 3])") == "25 3"
     assert run("print diff([1, 4, 9]), cumsum([1, 2, 3]), reverse([1, 2, 3]), sort([3, 1, 2])") == \
         "[3, 5] [1, 3, 6] [3, 2, 1] [1, 2, 3]"
-    assert run("print min(3 m, 2 m, 50 cm), max([1 s, 5 s]), hypot(3 m, 4 m)") == "0.5 m 5 s 5 m"
-    assert run("print std([1, 2, 3, 4])") == "1.29099"
+    assert run("print min(3 m, 2 m, 50 cm), max([1 s, 5 s]), hypot(3 m, 4 m)") == "0.500 m 5 s 5 m"
+    assert run("print std([1, 2, 3, 4]) to 6 digits") == "1.29099"
 
 
 def test_variable_assigned_only_in_untaken_branch():
@@ -754,7 +754,7 @@ def test_mixed_number_two_and_a_half():
 
 
 def test_long_harmonic_integration_accuracy():
-    out = run("solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000\nprint x(100000)")
+    out = run("solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000\nprint x(100000) to 6 digits")
     assert close(num(out), math.cos(1e5), 1e-4)
 
 
@@ -808,32 +808,32 @@ def test_huge_list_is_a_clean_error(tmp_path):
 
 def test_nested_numeric_kernels():
     # integral of a solution, solve with an integral in the RHS, integral over a function that solves
-    assert run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x(t) dt from 0 to 2") == "0.864665"
+    assert run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x(t) dt from 0 to 2 to 6 digits") == "0.864665"
     assert run("F(t) = ∫ exp(-u^2) du from 0 to t\nsolve y' = F(t) with y(0) = 0 for t from 0 to 1\n"
-               "print y(1)") == "0.430764"
+               "print y(1) to 6 digits") == "0.430764"
     assert run("g(k) =\n    solve x' = -k x with x(0) = 1 for t from 0 to 1\n    x(1)\n"
-               "print ∫ g(k) dk from 0 to 1") == "0.632121"
-    assert run("solve y' = if t < 0.5 then 1 else 2 with y(0) = 0 for t from 0 to 1\nprint y(1)") == "1.5"
+               "print ∫ g(k) dk from 0 to 1 to 6 digits") == "0.632121"
+    assert run("solve y' = if t < 0.5 then 1 else 2 with y(0) = 0 for t from 0 to 1\nprint y(1)") == "1.50"
 
 
 def test_integral_of_solution_derivative():
-    out = run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x'(s) ds from 0 to 2")
+    out = run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x'(s) ds from 0 to 2 to 8 digits")
     assert close(num(out), math.exp(-2) - 1, 1e-6)
 
 
 def test_indefinite_integrals():
     assert run("F = ∫ x^2 dx\nprint F(3)") == "9"
     assert run("k = 50 N/m\nW = ∫ k x dx\nprint W(0.2 m)") == "1.0 J"
-    assert run("F = ∫ exp(-x) sin(x) dx\nprint F(1) - F(0)") == "0.245837"
+    assert run("F = ∫ exp(-x) sin(x) dx\nprint F(1) - F(0) to 6 digits") == "0.245837"
 
 
 def test_indefinite_integral_with_parameter():
-    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s)")
+    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s) to 6 digits")
     assert close(num(out), math.sin(2) / 2)
 
 
 def test_std_of_celsius_list():
-    assert run("T = [10 °C, 20 °C]\nprint std(T)") == "7.07107 K"
+    assert run("T = [10 °C, 20 °C]\nprint std(T) to 6 digits") == "7.07107 K"
 
 
 def test_diff_of_celsius_list():
@@ -841,8 +841,8 @@ def test_diff_of_celsius_list():
 
 
 def test_celsius_list_mean_min_max_interp():
-    assert run("T = linspace(0 °C, 100 °C, 3)\nprint mean(T), T in K") == "50 °C [273.15, 323.15, 373.15] K"
-    assert run("T = [0 °C, 100 °C]\nprint interp(50 °C, T, [1 m, 2 m])") == "1.5 m"
+    assert run("T = linspace(0 °C, 100 °C, 3)\nprint mean(T), T in K") == "50 °C [273, 323, 373] K"
+    assert run("T = [0 °C, 100 °C]\nprint interp(50 °C, T, [1 m, 2 m])") == "1.50 m"
 
 
 def test_fmt_ascii_second_partial():
@@ -895,13 +895,13 @@ D2_FUZZ = [
 def test_second_derivative_fuzz_cases(formula, f):
     mpmath = pytest.importorskip("mpmath")
     mpmath.mp.dps = 30
-    got = num(run(f"f(x) = {formula}\nh = f''\nprint h(13/10)"))
+    got = num(run(f"f(x) = {formula}\nh = f''\nprint h(13/10) to 6 digits"))
     want = float(mpmath.diff(lambda x: f(mpmath, x), mpmath.mpf(13) / 10, 2))
     assert close(got, want, 2e-5)
 
 
 def test_first_derivative_repeated_factor():
-    got = num(run("f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)\ng = f'\nprint g(13/10)"))
+    got = num(run("f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)\ng = f'\nprint g(13/10) to 6 digits"))
     assert close(got, 8.25545148831716, 1e-5)
 
 
@@ -933,11 +933,11 @@ def test_loop_variable_after_empty_loop(src):
 ])
 def test_integrable_sqrt_singularities(integral, want):
     # was BUG A44
-    assert close(num(run(f"print ∫ {integral}")), want, 1e-5)
+    assert close(num(run(f"print ∫ {integral} to 6 digits")), want, 1e-5)
 
 
 def test_integrable_interior_sqrt_singularity():
-    got = num(run("print ∫ 1/sqrt(abs(x - 3/10)) dx from 0 to 1"))     # was BUG A44
+    got = num(run("print ∫ 1/sqrt(abs(x - 3/10)) dx from 0 to 1 to 6 digits"))     # was BUG A44
     assert close(got, 2 * (math.sqrt(0.3) + math.sqrt(0.7)), 1e-5)
 
 
@@ -949,7 +949,7 @@ def test_integrable_power_singularities():
 
 def test_weak_singularity_accuracy():
     # reference: scipy quad (epsrel 1e-13) and mpmath after the substitution x = u^5 agree
-    assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.160306768626711, 1e-5)
+    assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1 to 6 digits")), 5.160306768626711, 1e-5)
 
 
 @pytest.mark.parametrize("integral,want", [
@@ -961,7 +961,7 @@ def test_weak_singularity_accuracy():
     ("abs(x)^(-0.9) dx from -1 to 2", 10 * (1 + 2 ** 0.1)),
 ])
 def test_interior_algebraic_singularity(integral, want):
-    assert close(num(run(f"print ∫ {integral}")), want, 1e-5)
+    assert close(num(run(f"print ∫ {integral} to 6 digits")), want, 1e-5)
 
 
 def _decay_csv(tmp_path):
@@ -989,19 +989,19 @@ def test_kelvin_minus_celsius():
 
 def test_newton_cooling_celsius():
     out = run("Ta = 20 °C\nsolve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
-              "print T(30 min) in °C")
+              "print T(30 min) in °C to 6 digits")
     assert close(num(out), 20 + 70 * math.exp(-3), 1e-5)
 
 
 def test_newton_cooling_kelvin_ambient():
     out = run("solve T' = -(T - 293.15 K) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
-              "print T(30 min) in °C")
+              "print T(30 min) in °C to 6 digits")
     assert close(num(out), 20 + 70 * math.exp(-3), 1e-5)
 
 
 def test_ode_in_milliseconds():
     assert run("τ = 1 ms\nsolve V' = -V/τ with V(0 ms) = 5 V for t from 0 ms to 5 ms\n"
-               "print V(1 ms), times(V)[end]") == "1.8394 V 5 ms"
+               "print V(1 ms) to 6 digits, times(V)[end]") == "1.83940 V 5 ms"
 
 
 def test_map_vector_function_over_list_is_a_fermium_error():
@@ -1025,7 +1025,7 @@ def test_vector_errors_are_clean():
     ("a = 1 AU\nprint ∫ exp(-r/a) dr from 0 m to ∞ in AU", 1.0),
 ])
 def test_infinite_integral_physical_scales(src, want):
-    assert close(num(run(src)), want, 1e-5)
+    assert close(num(run(src + " to 6 digits")), want, 1e-5)
 
 
 def test_fermi_function_derivative_far_tail():
@@ -1042,19 +1042,19 @@ def test_divergent_integral_pole_at_pi():
 
 
 def test_integral_jump_and_oscillation():
-    got = nums(run("print ∫ atan(1/x) dx from -2 to 3\nprint ∫ exp(sin(x^4)) dx from 0 to 5"))
+    got = nums(run("print ∫ atan(1/x) dx from -2 to 3 to 8 digits\nprint ∫ exp(sin(x^4)) dx from 0 to 5 to 8 digits"))
     exact = (3 * math.atan(1 / 3) + 0.5 * math.log(10)) - (-2 * math.atan(-0.5) + 0.5 * math.log(5))
     assert close(got[0], exact, 1e-6)
     assert close(got[1], 6.5251672775030307, 1e-5)          # mpmath, 2000 panels
 
 
 def test_integration_variable_named_like_unit():
-    assert run("print ∫ 1/u du from 1 to 2") == "0.693147"
+    assert run("print ∫ 1/u du from 1 to 2 to 6 digits") == "0.693147"
 
 
 def test_parameter_named_like_unit_wins():
-    assert run("f(s) = 1/s\nprint f(2)") == "0.5"
-    assert run("s = 2\nprint 1/s") == "0.5"
+    assert run("f(s) = 1/s\nprint f(2)") == "0.500"
+    assert run("s = 2\nprint 1/s") == "0.500"
 
 
 def test_solution_max_is_refined():
@@ -1066,13 +1066,13 @@ def test_solution_max_is_refined():
 def test_physics_integrals_to_infinity():
     out = run("T = 5800 K\nB(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)\n"
               "Bλ(λ) = 2 h c^2 / λ^5 / (exp(h c / (λ k_B T)) - 1)\n"
-              "print ∫ B(ν) dν from 0 Hz to ∞, ∫ Bλ(λ) dλ from 0 m to ∞, σ T^4 / π")
+              "print ∫ B(ν) dν from 0 Hz to ∞ to 8 digits, ∫ Bλ(λ) dλ from 0 m to ∞ to 8 digits, σ T^4 / π to 8 digits")
     a, b, c = nums(out)
     assert close(a, c, 1e-5) and close(b, c, 1e-5)
     assert run("m = m_e\nT = 300 K\nprint ∫ 4π v^2 (m/(2π k_B T))^(3/2) exp(-m v^2 / (2 k_B T)) dv "
                "from 0 m/s to ∞") == "1"
-    assert run("x0 = 100 fm\nσ = 1 fm\nprint ∫ exp(-(x - x0)^2/(2 σ^2)) dx from -∞ to ∞ in fm") == "2.50663 fm"
-    assert run("print ∫ 1/(1 + (E/(1 MeV))^2) dE from -∞ to ∞ in MeV") == "3.14159 MeV"
+    assert run("x0 = 100 fm\nσ = 1 fm\nprint ∫ exp(-(x - x0)^2/(2 σ^2)) dx from -∞ to ∞ in fm to 6 digits") == "2.50663 fm"
+    assert run("print ∫ 1/(1 + (E/(1 MeV))^2) dE from -∞ to ∞ in MeV to 6 digits") == "3.14159 MeV"
 
 
 def test_derivative_of_formula_with_where():

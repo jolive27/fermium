@@ -14,7 +14,7 @@ def nums(out):
 
 def test_point_charge_field_is_minus_grad_phi():
     src = ("q = 1 nC\nφ(x, y, z) = q / (4π ε₀ √(x² + y² + z²))\n"
-           "print -∇φ(1 m, 0 m, 0 m)\nprint -∇φ(0 m, 3 m, 4 m) to 10 digits")
+           "print -∇φ(1 m, 0 m, 0 m) to 6 digits\nprint -∇φ(0 m, 3 m, 4 m) to 10 digits")
     a, b = run(src).split("\n")
     k = 8.9875517862e9 * 1e-9
     assert a == "<8.98755, 0, 0> V/m"

@@ -29,7 +29,7 @@ print 2^10
 5
 14
 20
-2.5
+2.50
 1024
 ```
 
@@ -70,9 +70,9 @@ print 100 km / 2 hr
 ```
 3 m
 9.81 m/s²
-2.3 m
-3.2 kg
-13.8889 m/s
+2.30 m
+3.20 kg
+13.9 m/s
 ```
 
 Look at what happened:
@@ -143,11 +143,11 @@ print 20 degC in K
 
 <!-- output -->
 ```
-27.7778 m/s
-1.60934 km
-3.15576×10⁷ s
+27.8 m/s
+1.61 km
+3.16×10⁷ s
 2.18×10⁻¹⁸ J
-293.15 K
+293 K
 ```
 
 `in` only converts between units that measure the same kind of thing. `print 5 kg in N` is an error (a mass isn't a force).
@@ -167,11 +167,11 @@ print 2.0 / 3
 ```
 6.3 m
 20 m/s
-0.666667
+0.667
 0.67
 ```
 
-Whole numbers like `2` and `3` count as exact, so `2 / 3` prints 6 digits. Fermium always *calculates* with full precision; this only changes how many digits are *shown*. (Lesson 2 shows how to ask for more digits.)
+Whole numbers like `2` and `3` don't say how precise they are, so when nothing in the calculation gives a precision, Fermium shows **3 significant figures**, the usual textbook default: `2 / 3` prints `0.667`, and `1 / 2` prints `0.500`. (A whole-number answer, like `4 * 5`, prints exactly: `20`.) Fermium always *calculates* with full precision; this only changes how many digits are *shown*. (Lesson 2 shows how to ask for more digits.)
 
 ## Physical constants
 
@@ -187,11 +187,11 @@ print k_B
 
 <!-- output -->
 ```
-2.99792×10⁸ m/s
-6.62607×10⁻³⁴ J s
-6.6743×10⁻¹¹ m³/(kg s²)
-9.10938×10⁻³¹ kg
-1.38065×10⁻²³ J/K
+3.00×10⁸ m/s
+6.63×10⁻³⁴ J s
+6.67×10⁻¹¹ m³/(kg s²)
+9.11×10⁻³¹ kg
+1.38×10⁻²³ J/K
 ```
 
 The underscore `_` is how you write a subscript: `m_e` is mₑ, the electron mass. Others include `m_p` (proton), `m_n` (neutron), `e` (the elementary charge), `N_A`, `epsilon_0`, `g_n` (standard gravity, 9.80665 m/s²), `M_sun`, `M_earth`, `R_earth`, `AU`.
@@ -207,8 +207,8 @@ print m_p * c^2 in MeV
 
 <!-- output -->
 ```
-0.510999 MeV
-938.272 MeV
+0.511 MeV
+938 MeV
 ```
 
 ## ⚠️ The big gotcha: a name right after a number is a unit
@@ -225,7 +225,7 @@ print 2 g h
 
 <!-- output -->
 ```
-1.32521×10⁻³⁶ kg² m²/s
+1.33×10⁻³⁶ kg² m²/s
 ```
 
 Nonsense! Fermium read `2 g` as **2 grams**, and then multiplied by `h`, which is **Planck's constant**. The same thing happens with `3 m` (metres, not a mass `m`), `5 s` (seconds), `2 c` (the speed of light is also a unit!), `4 K`, `2 A`, `10 N`.
@@ -275,7 +275,7 @@ print 1 AU / c in min
 <!-- output -->
 ```
 1 AU/c (= 499.005 s)
-8.31675 min
+8.32 min
 ```
 
 Dividing by a variable you made yourself is friendlier. If you put a **space before the `/`**, Fermium divides by *your* variable:
@@ -310,8 +310,8 @@ print 1/(139.57 MeV) in fm
 
 <!-- output -->
 ```
-52917.7 fm
-0.529177 Å
+52900 fm
+0.529 Å
 1.4138 fm
 ```
 

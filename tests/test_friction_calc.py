@@ -105,7 +105,7 @@ def test_divergence_of_integral_potential_gradient_is_laplacian():
 
 # ------------------------------------------------------------------ #19 vector integrands
 def test_integral_of_vector_literal_is_vector_of_integrals():
-    assert both("print ∫ <s, s^2, 1> ds from 0 to 1") == "<0.5, 0.333333, 1>"
+    assert both("print ∫ <s, s^2, 1> ds from 0 to 1") == "<0.500, 0.333, 1.00>"
     out = both("print ∫ <cos(φ), sin(φ)> dφ from 0 to π/2 to 12 digits")
     assert np.allclose(vec(out), [1, 1], rtol=1e-12)
 
@@ -148,7 +148,7 @@ print μ₀ I R^2 / (2 (R^2 + (0.05 m)^2)^1.5) to 10 digits
 
 
 def test_vector_integral_inside_function_and_with_parameter():
-    assert both("f(x) = ∫ <x s, s> ds from 0 to 1\nprint f(3)") == "<1.5, 0.5>"
+    assert both("f(x) = ∫ <x s, s> ds from 0 to 1\nprint f(3)") == "<1.50, 0.500>"
 
 
 def test_matrix_integrand_still_an_error():
@@ -256,7 +256,7 @@ K = [[k + kc, -kc], [-kc, k + kc]]
 print λ
 print λ[2] in kN/m
 """
-    assert both(src).splitlines() == ["<80, 120> N/m", "0.12 kN/m"]
+    assert both(src).splitlines() == ["<80, 120> N/m", "0.120 kN/m"]
 
 
 def test_generalized_eigenvalues_normal_modes_match_scipy():

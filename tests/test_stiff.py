@@ -207,7 +207,7 @@ def test_error_in_a_function_called_by_the_right_side_has_its_line():
 
 def test_blow_up():
     e = both_error("solve z' = z² / 1 s with z(0) = 1 for t from 0 s to 2 s using radau")   # z = 1/(1 - t)
-    assert "blow up" in e.message and "t = 1 s" in e.message
+    assert "blow up" in e.message and "t = 1.00 s" in e.message
 
 
 def test_nan_at_start_and_empty_range():

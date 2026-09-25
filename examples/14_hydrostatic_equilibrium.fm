@@ -45,7 +45,7 @@ solve p' = -p M_air g_n / (R_gas T_air)
 # (called H_atm: in `8849 m / H` the H would be read as the unit henry)
 H_atm = R_gas T_air / (M_air g_n)
 print "scale height H =", H_atm in km
-print "pressure at Everest's summit (8849 m):", p(8849 m) in kPa, "  exact:", 101.325 kPa * exp(-8849 m / H_atm)
+print "pressure at Everest's summit (8849 m):", p(8849 m) in kPa to 6 digits, "  exact:", 101.325 kPa * exp(-8849 m / H_atm) to 6 digits
 print "pressure at 30 km:", p(30 km) in kPa
 
 plot p in kPa vs z in km to "gallery/atmosphere.png"

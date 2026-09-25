@@ -194,21 +194,21 @@ def test_fit_with_the_analysis_result(tmp_path):
 
 
 def test_only_constants_defines_a_value():
-    out = both("analyze planck: ℓ [m] depends on G, ħ, c\nprint planck\n").split("\n")
+    out = both("analyze planck: ℓ [m] depends on G, ħ, c\nprint planck to 6 digits\n").split("\n")
     assert out[3] == "  so ℓ ∝ √(G ħ/c³)   (ℓ = C √(G ħ/c³), with C a pure number)"
-    assert out[4].startswith("  defined planck = √(G ħ/c³) = 1.61626×10⁻³⁵ m")
+    assert out[4].startswith("  defined planck = √(G ħ/c³) = 1.62×10⁻³⁵ m")
     assert out[5] == "1.61626×10⁻³⁵ m"
 
 
 def test_hydrogen_statement_gives_the_rydberg_energy():
-    out = both("analyze hydrogen: E [J] depends on m_e, e, ε₀, ħ\nprint hydrogen/(32 π²) in eV\n").split("\n")
+    out = both("analyze hydrogen: E [J] depends on m_e, e, ε₀, ħ\nprint hydrogen/(32 π²) in eV to 6 digits\n").split("\n")
     assert "  so E ∝ m_e e⁴/(ε₀² ħ²)   (E = C m_e e⁴/(ε₀² ħ²), with C a pure number)" in out
     assert out[-1] == "13.6057 eV"
 
 
 def test_kepler_statement_constant_is_not_a_parameter():
     out = both("analyze kepler: T [s] depends on a [m], G, M [kg]\n"
-               "print 2π kepler(AU, M_sun) in day\n").split("\n")
+               "print 2π kepler(AU, M_sun) in day to 6 digits\n").split("\n")
     assert "  defined kepler(a, M) = √(a³/(G M)), so T = C kepler(a, M)" in out
     assert out[-1].startswith("365.2")
 

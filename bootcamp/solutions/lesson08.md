@@ -11,8 +11,8 @@ print pi / 2
 
 <!-- output -->
 ```
-1.5708
-1.5708
+1.57
+1.57
 ```
 
 Exactly π/2 (sin² averages to ½ over a half-period of length π).
@@ -29,7 +29,7 @@ print ½ m_sat (11.2 km/s)^2
 
 <!-- output -->
 ```
-6.24955×10¹⁰ J
+6.25×10¹⁰ J
 6.27×10¹⁰ J
 ```
 
@@ -45,7 +45,7 @@ print "total:     ", integral I(t) dt from 0 s to inf in mC
 
 <!-- output -->
 ```
-first 10 s: 5.78596 mC
+first 10 s: 5.79 mC
 total:      6 mC
 ```
 
@@ -82,5 +82,5 @@ print "Wien:", b_W / T in nm
 <!-- output -->
 ```
 loop: 502 nm
-Wien: 501.518 nm
+Wien: 502 nm
 ```

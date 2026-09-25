@@ -12,7 +12,7 @@ def close(a, b, rel=1e-5):
 
 # ---------------------------------------------------------------- A26: real odd roots
 def test_cube_root_derivative_at_negative_x():
-    assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8)")), 1 / 12)
+    assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8) to 6 digits")), 1 / 12)
 
 
 def test_cube_root_derivative_prints_fraction_exponent():
@@ -20,7 +20,7 @@ def test_cube_root_derivative_prints_fraction_exponent():
 
 
 def test_odd_root_powers_of_negative_numbers():
-    assert run("print (-8)^(2/3), (-8)^(1/3), (-8)^(-2/3), (-32)^(3/5)") == "4 -2 0.25 -8"
+    assert run("print (-8)^(2/3), (-8)^(1/3), (-8)^(-2/3), (-32)^(3/5)") == "4 -2 0.250 -8"
     assert run("x = -8\nprint x^(2/3), x^(1/5) < 0") == "4 true"
     assert run("f(x) = x^(2/3)\nprint f(-8)") == "4"
 
@@ -49,7 +49,7 @@ def test_planck_derivative_is_finite_everywhere():
     src = "f(x) = x^3/(exp(x) - 1)\ng = f'\n"
     assert num(run(src + "print g(800)")) == 0
     want = (3 * 4 * (math.exp(2) - 1) - 8 * math.exp(2)) / (math.exp(2) - 1) ** 2
-    assert close(num(run(src + "print g(2)")), want)
+    assert close(num(run(src + "print g(2) to 6 digits")), want)
 
 
 def test_stable_derivative_keeps_printed_form():
@@ -62,12 +62,12 @@ def test_derivative_of_formula_at_a_value_is_stable():
 
 # ---------------------------------------------------------------- A18: d|r|/dt of a vector
 def test_derivative_of_vector_length():
-    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1)")
+    out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1) to 6 digits")
     assert close(num(out), 10 / (2 * math.sqrt(3)))
 
 
 def test_sign_of_a_vector_is_its_direction():
-    assert run("print sign(<3, 4> m)") == "<0.6, 0.8>"
+    assert run("print sign(<3, 4> m)") == "<0.600, 0.800>"
 
 
 def test_derivative_of_scalar_abs_still_sign():
@@ -76,12 +76,12 @@ def test_derivative_of_scalar_abs_still_sign():
 
 # ---------------------------------------------------------------- A35: SymPy Piecewise
 def test_indefinite_integral_with_parameter():
-    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s)")
+    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s) to 6 digits")
     assert close(num(out), math.sin(2) / 2)
 
 
 def test_indefinite_integrals_generic_branch():
-    assert close(num(run("k = 3\nF = ∫ exp(-k x) dx\nprint F(1) - F(0)")), (1 - math.exp(-3)) / 3)
+    assert close(num(run("k = 3\nF = ∫ exp(-k x) dx\nprint F(1) - F(0) to 6 digits")), (1 - math.exp(-3)) / 3)
     assert close(num(run("a = 2\nF = ∫ x^a dx\nprint F(3) - F(0)")), 9)
 
 
@@ -118,8 +118,8 @@ def test_constant_integrand_with_unit_like_differential():
 
 
 def test_unit_like_names_still_units_outside_integrals():
-    assert run("x = 2 dm\nprint x in m") == "0.2 m"
-    assert run("print ∫ 2 dm dx from 0 to 1") == "0.2 m"
+    assert run("x = 2 dm\nprint x in m") == "0.200 m"
+    assert run("print ∫ 2 dm dx from 0 to 1") == "0.200 m"
     assert run("print ∫ 2 m dm from 0 kg to 1 kg") == "2 kg m"
 
 

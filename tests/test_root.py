@@ -38,8 +38,8 @@ def test_first_sign_change_is_found_by_scanning():
 
 
 def test_units_and_display_unit():
-    out = both("L = 1 m\nsolve L tan(θ) = 2 m for θ from 0 to 1.5\nprint θ\n"
-               "g = 9.81 m/s²\nsolve g t²/2 = 20 m for t from 0 s to 10 s\nprint t\n"
+    out = both("L = 1 m\nsolve L tan(θ) = 2 m for θ from 0 to 1.5\nprint θ to 6 digits\n"
+               "g = 9.81 m/s²\nsolve g t²/2 = 20 m for t from 0 s to 10 s\nprint t to 6 digits\n"
                "solve E² = (3 MeV)² + (4 MeV)² for E from 0 MeV to 10 MeV\nprint E")
     assert out.split("\n") == ["1.10715", "2.01928 s", "5 MeV"]
 

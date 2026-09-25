@@ -98,7 +98,8 @@ def test_46_cancelling_but_nonzero_integral_keeps_its_relative_accuracy():
                                  "print ∫ sin(x) dx from 0 to ∞", "print ∫ 1/x^2 dx from -1 to 1",
                                  "print ∫ 1/(x-0.3) dx from 0 to 1"])
 def test_46_divergent_integrals_are_still_reported(src):
-    assert "doesn't converge" in both_error(src).message
+    m = both_error(src).message   # divergence is reported as kind 9 ("may diverge") or 32 ("infinite at x = …, may blow up")
+    assert "may diverge" in m or "may blow up" in m
 
 
 # ---------------------------------------------------------------- #45: NaN / ∞ in the integrand

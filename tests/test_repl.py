@@ -43,7 +43,7 @@ def test_calculus_in_repl():
 
 
 def test_solve_in_repl():
-    out = repl_lines("solve x' = -x/(1 s) with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s)\n")
+    out = repl_lines("solve x' = -x/(1 s) with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s) to 6 digits\n")
     assert out == ["0.367879 kg"]
 
 

@@ -31,5 +31,5 @@ print "neutron star:", v_ns in km/s, "=", v_ns / c, "of light speed"
 
 # The Schwarzschild radius: where the escape speed equals c
 r_s(M) = 2 G M / c²
-print "Schwarzschild radius of the Sun:  ", r_s(M_sun) in km
+print "Schwarzschild radius of the Sun:  ", r_s(M_sun) in km to 4 digits
 print "Schwarzschild radius of the Earth:", r_s(M_earth) in mm

@@ -54,7 +54,7 @@ def test_function_body_unit_wins_over_argument_unit():
 
 
 def test_function_argument_unit_needs_same_dimension():
-    assert run("f(m) = m c^2\nprint f(1 u) in MeV") == "931.494 MeV"
+    assert run("f(m) = m c^2\nprint f(1 u) in MeV to 6 digits") == "931.494 MeV"
     assert run("f(x) = 2 x\nprint f(1 km) in m, f(3 cm) in cm, f(5 m)") == "2000 m 6 cm 10 m"
 
 
@@ -80,7 +80,7 @@ def test_kelvin_minus_celsius():
 
 def test_newton_cooling_celsius_ambient():
     out = run("Ta = 20 °C\nsolve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
-              "print T(30 min) in °C")
+              "print T(30 min) in °C to 6 digits")
     assert abs(num(out) - (20 + 70 * math.exp(-3))) < 1e-4
 
 
@@ -149,5 +149,5 @@ def test_rpm_unit():
 def test_rev_per_min_in_hz_warns():
     w = warnings_of("print 1 rev/min in Hz")
     assert any("1 rev/min is 0.10472 Hz here, not 0.0166667 Hz" in m for m in w)   # tailored text (redteam #2)
-    assert run("print 1 rev/min in Hz") == "0.10472 Hz"
+    assert run("print 1 rev/min in Hz to 5 digits") == "0.10472 Hz"
     assert not warnings_of("print 3 /s in Hz")

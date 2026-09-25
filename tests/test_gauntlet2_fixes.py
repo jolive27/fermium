@@ -15,7 +15,7 @@ def both(src):
 
 def test_E9_nested_integral_captures_the_function_parameter():
     assert both("f(z) = ∫ (∫ z dφ from 0 to 1) ds from 0 to 1\nprint f(2)") == "2"
-    assert both("f(z, w) = ∫ (∫ z s + w φ dφ from 0 to 1) ds from 0 to 1\nprint f(2, 3)") == "2.5"
+    assert both("f(z, w) = ∫ (∫ z s + w φ dφ from 0 to 1) ds from 0 to 1\nprint f(2, 3)") == "2.50"
     assert both("g(a) = ∫ (∫ (∫ a dx from 0 to 1) dy from 0 to 1) dz from 0 to 1\nprint g(5)") == "5"
 
 
@@ -32,7 +32,7 @@ def test_43_unit_collision_note_reaches_later_lines():
 
 
 def test_41_dimensionless_result_isnt_shown_in_degrees():
-    assert both("θ = 60°\nf(θ) = 2 cos(θ)\nprint f(θ)") == "1"
+    assert both("θ = 60°\nf(θ) = 2 cos(θ)\nprint f(θ)") == "1"     # 2 cos 60° is 1 up to round-off, which counts as whole (D11)
 
 
 def test_47_nabla_holds_non_coordinate_parameters_fixed():

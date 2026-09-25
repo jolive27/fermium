@@ -16,7 +16,7 @@ except ImportError:            # the reference interpreter works without llvmlit
     llvm = None
 
 from ..errors import FermiumRuntimeError
-from ..units import preferred_unit, format_number, Unit
+from ..units import preferred_unit, format_number, format_default, format_default_seq, _whole, Unit
 
 _initialized = False
 
@@ -68,11 +68,22 @@ def fit_sigfigs(val, err):
     return max(4, min(12, math.floor(math.log10(abs(val))) - math.floor(math.log10(err)) + 2))
 
 
-def format_quantity(v, dim, hint, sf, direct, echo=True):
+DEFAULT_SF = 3     # output precision when the inputs don't say (DECISIONS D11)
+
+
+def format_written(x, sf):
+    """An element of a list written out in the program: with the list's (fewest) significant figures if
+    that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
+    if x == x and abs(x) < math.inf and x != 0 and float(f"{x:.{max(sf, 1) - 1}e}") != x:
+        return format_number(x, 15, trim=True)
+    return format_number(x, sf, trim=False)
+
+
+def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
     u = display_unit(dim, hint)
     x = (v - u.offset) / u.factor
     if sf is None:
-        s = format_number(x, 6, trim=True)
+        s = format_number(x, 15, trim=True) if direct else format_default(x, DEFAULT_SF, whole_ok)
     else:
         s = format_number(x, sf if direct else max(sf, 2), trim=False)
     name = u.name
@@ -123,10 +134,13 @@ class Runtime:
             if sf is not None and not f["direct"]:
                 sf = max(sf, 2)            # same rule as single numbers (DECISIONS D11)
             if n > 12:
-                shown = [format_number(x, sf or 4, trim=sf is None) for x in vals[:5]] + ["…"] + \
-                        [format_number(x, sf or 4, trim=sf is None) for x in vals[-3:]]
+                vals = vals[:5] + vals[-3:]
+            if sf and f["direct"] is True:    # a list written out: each element as written ([0, 0.5, 1, 1.5])
+                shown = [format_written(x, sf) for x in vals]
             else:
-                shown = [format_number(x, sf or 6, trim=sf is None) for x in vals]
+                shown = [format_number(x, sf, trim=False) for x in vals] if sf else format_default_seq(vals, DEFAULT_SF)
+            if n > 12:
+                shown = shown[:5] + ["…"] + shown[5:]
             s = "[" + ", ".join(shown) + "]"
             if u.name not in ("", "1"):
                 s += " " + u.name
@@ -137,8 +151,11 @@ class Runtime:
         def seq_values(f, p, idx):
             u = display_unit(f["rdim"], f["hint"])
             sf = f["sf"]
-            vals = [format_number(p[i] / u.factor, sf if f["direct"] and sf else max(sf or 6, 2) if sf else 6,
-                                  trim=sf is None) for i in idx]
+            xs = [p[i] / u.factor for i in idx]
+            vals = [format_written(x, sf) if f["direct"] is True else format_number(x, sf, trim=False)
+                    if f["direct"] else format_number(x, max(sf, 2), trim=False)
+                    for x in xs] if sf \
+                else format_default_seq(xs, DEFAULT_SF)
             return vals, ("" if u.name in ("", "1") else " " + u.name)
 
         def print_vec(fid, p, n):
@@ -147,18 +164,20 @@ class Runtime:
 
         def print_mvec(fid, p, n):
             """A vector with a unit per component: <1 m, 2 m/s> (one format per component, D29)."""
-            parts = []
-            for i in range(n):
-                f = rt.tables.fmts[fid + i]
-                parts.append(format_quantity(p[i], f["rdim"], f["hint"], f["sf"], f["direct"]))
+            fs = [rt.tables.fmts[fid + i] for i in range(n)]
+            # one number style for all components (D11): whole numbers bare only if every default one is whole
+            xs = [(p[i] - u.offset) / u.factor for i, u in ((i, display_unit(f["rdim"], f["hint"]))
+                                                            for i, f in enumerate(fs))
+                  if fs[i]["sf"] is None and not fs[i]["direct"]]
+            whole = all(_whole(x) or not math.isfinite(x) for x in xs)
+            parts = [format_quantity(p[i], f["rdim"], f["hint"], f["sf"], f["direct"], whole_ok=whole)
+                     for i, f in enumerate(fs)]
             rt.line.append("<" + ", ".join(parts) + ">")
 
         def print_mat(fid, p, r, c):
             f = rt.tables.fmts[fid]
-            rows = []
-            for i in range(r):
-                vals, unit = seq_values(f, p, range(i * c, i * c + c))
-                rows.append("[" + ", ".join(vals) + "]")
+            vals, unit = seq_values(f, p, range(r * c))        # one number style for the whole matrix
+            rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
             rt.line.append("[" + ", ".join(rows) + "]" + unit)
 
         def print_textlist(p, n):

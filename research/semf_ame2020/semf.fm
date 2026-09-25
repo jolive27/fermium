@@ -22,7 +22,7 @@ Bfit(Z, A, P) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² /
 residual = []
 for i from 1 to len(As)
     push(residual, nuclei.B[i] - Bfit(Zs[i], As[i], nuclei.P[i]))
-print "rms residual:", std(residual)
+print "rms residual:", std(residual) to 6 digits
 
 # the nuclei most underbound by the formula sit at the magic numbers (A ≥ 40: the liquid drop is poor below)
 worst = 0 MeV

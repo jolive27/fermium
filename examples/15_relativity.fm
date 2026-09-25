@@ -12,7 +12,7 @@
 
 γ(v) = 1 / √(1 - v²/c²)
 
-print "rest energies:  electron", m_e c² in MeV, "  proton", m_p c² in MeV, "  neutron", m_n c² in MeV
+print "rest energies:  electron", m_e c² in MeV to 6 digits, "  proton", m_p c² in MeV to 6 digits, "  neutron", m_n c² in MeV to 6 digits
 
 # An electron accelerated through 1 MV (kinetic energy 1 MeV)
 KE = 1.000 MeV        # (not K: `2K` would be 2 kelvin!)

@@ -15,8 +15,8 @@ print "after 10000 years:", N(10000 yr)
 
 <!-- output -->
 ```
-after 5730 years:  0.500015
-after 10000 years: 0.298308
+after 5730 years:  0.500
+after 10000 years: 0.298
 ```
 
 Half is left after one half-life, as it should be. (You can also write the equation exactly as in the exercise: `solve dN/dt = -N / tau`.)
@@ -66,7 +66,7 @@ print "terminal velocity:", sqrt(2 mass g / (rho C A)) to 4 digits
 
 <!-- output -->
 ```
-speed after 30 s: 43.2269 m/s = 155.617 km/hr
+speed after 30 s: 43.2 m/s = 156 km/hr
 terminal velocity: 43.23 m/s
 ```
 
@@ -86,7 +86,7 @@ print "V at t = RC:", V(R C), "which is", V(R C) / V0, "of V0"
 <!-- output -->
 ```
 RC = 1 s
-V at t = RC: 3.1606 V which is 0.632121 of V0
+V at t = RC: 3.16 V which is 0.632 of V0
 ```
 
 1 − 1/e = 0.632.
@@ -109,7 +109,7 @@ plot x vs t to "driven.png"
 
 <!-- output -->
 ```
-largest amplitude: 0.249998 m
+largest amplitude: 0.250 m
 theory at resonance, F0 / (b omega): 0.25 m
 plot saved to driven.png
 ```

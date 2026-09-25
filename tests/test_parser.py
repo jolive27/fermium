@@ -22,7 +22,7 @@ def test_textbook_fraction_shape():
 
 
 def test_textbook_fraction_value():
-    assert run("h = 2\nc = 3\nλ = 4\nk_B = 5\nT = 6\nprint h c / λ k_B T") == "0.05"
+    assert run("h = 2\nc = 3\nλ = 4\nk_B = 5\nT = 6\nprint h c / λ k_B T") == "0.0500"
 
 
 def test_one_over_2x_shape_and_warning():
@@ -52,12 +52,12 @@ def test_one_half_m_v_squared_is_ambiguous():
 
 def test_four_pi_squared_L():
     assert sx_of("4π² L") == "(* (* 4 (^ π 2)) L)"
-    assert run("L = 1\nprint 4π² L") == "39.4784"
+    assert run("L = 1\nprint 4π² L to 6 digits") == "39.4784"
 
 
 def test_pi_caret_two_then_name():
     # a number right after ^ never takes a unit: pi^2 L = π²·L
-    assert run("L = 1\nprint 4 pi^2 L") == "39.4784"
+    assert run("L = 1\nprint 4 pi^2 L to 6 digits") == "39.4784"
 
 
 def test_unary_minus_covers_whole_product():
@@ -78,8 +78,8 @@ def test_power_is_right_associative():
 
 
 def test_negative_exponent():
-    assert run("print 2^-1") == "0.5"
-    assert run("print 10^-2") == "0.01"
+    assert run("print 2^-1") == "0.500"
+    assert run("print 10^-2") == "0.0100"
 
 
 def test_explicit_star_and_slash_left_to_right():
@@ -253,7 +253,7 @@ def test_integral_runs():
 
 
 def test_integral_infinite_limits():
-    assert run("print ∫ exp(-x^2) dx from -inf to inf\nprint √π") == "1.77245\n1.77245"
+    assert run("print ∫ exp(-x^2) dx from -inf to inf to 6 digits\nprint √π to 6 digits") == "1.77245\n1.77245"
 
 
 def test_integral_without_dx_is_error():
@@ -279,7 +279,7 @@ def test_solve_multiline_clauses():
 
 
 def test_solve_single_line():
-    src = "a = 2 s⁻¹\nsolve x' = -a x with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s)"
+    src = "a = 2 s⁻¹\nsolve x' = -a x with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s) to 6 digits"
     assert run(src) == "0.135335 kg"
 
 
@@ -291,7 +291,7 @@ def test_solve_shape():
 
 def test_solve_system_commas_and_step():
     src = ("a = 2 s^-1\nsolve x' = -a x, y' = a x - y/(1 s) with x(0) = 1 kg, y(0) = 0 kg "
-           "for t from 0 s to 1 s step 1 ms\nprint x(1 s)")
+           "for t from 0 s to 1 s step 1 ms\nprint x(1 s) to 6 digits")
     assert run(src) == "0.135335 kg"
     s = stmt("solve x' = -a x, y' = a x with x(0) = 1, y(0) = 0 for t from 0 to 1 step 0.1")
     assert len(s.equations) == 2 and s.step is not None
@@ -299,18 +299,18 @@ def test_solve_system_commas_and_step():
 
 def test_solve_system_with_and():
     src = ("a = 2 s^-1\nsolve x' = -a x and y' = a x with x(0) = 1 kg and y(0) = 0 kg "
-           "for t from 0 s to 1 s\nprint y(1 s)")
+           "for t from 0 s to 1 s\nprint y(1 s) to 6 digits")
     assert run(src) == "0.864665 kg"
 
 
 def test_solve_indented_block():
     src = ("a = 2 s⁻¹\nb = 1 [1/s]\nsolve\n    x' = -a x\n    y' = a x - b y\n"
-           "    with x(0) = 1 kg, y(0) = 0 kg\n    for t from 0 s to 1 s step 1 ms\nprint x(1 s)")
+           "    with x(0) = 1 kg, y(0) = 0 kg\n    for t from 0 s to 1 s step 1 ms\nprint x(1 s) to 6 digits")
     assert run(src) == "0.135335 kg"
 
 
 def test_solve_d_dt_form():
-    assert run("solve d/dt x = -x/(1 s) with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s)") == "0.367879 kg"
+    assert run("solve d/dt x = -x/(1 s) with x(0) = 1 kg for t from 0 s to 1 s\nprint x(1 s) to 6 digits") == "0.367879 kg"
 
 
 def test_solve_result_end_and_values():
@@ -345,7 +345,7 @@ def datadir(tmp_path):
 
 
 def test_load_columns(datadir):
-    assert run('data = load "pend.csv"\nprint data.L', base_dir=datadir) == "[0.5, 1, 1.5, 2] m"
+    assert run('data = load "pend.csv"\nprint data.L', base_dir=datadir) == "[0.500, 1.00, 1.50, 2.00] m"
 
 
 def test_fit_existing_parameter(datadir):
@@ -448,7 +448,7 @@ def test_for_negative_step():
 
 
 def test_for_accumulate():
-    assert run("total = 0 m\nfor i from 1 to 10\n    total += i * 1 cm\nprint total") == "0.55 m"   # the first operand's unit (m) is kept (D11)
+    assert run("total = 0 m\nfor i from 1 to 10\n    total += i * 1 cm\nprint total") == "0.550 m"   # the first operand's unit (m) is kept (D11)
 
 
 def test_for_in():
@@ -560,7 +560,7 @@ def test_list_arithmetic():
 
 def test_list_functions():
     assert run("ys = [3 m, 5 m, 7 m]\nprint sum(ys), mean(ys), max(ys)") == "15 m 5 m 7 m"
-    assert run("print linspace(0 s, 1 s, 5)") == "[0, 0.25, 0.5, 0.75, 1] s"
+    assert run("print linspace(0 s, 1 s, 5)") == "[0, 0.250, 0.500, 0.750, 1.00] s"
 
 
 def test_index_out_of_range():
@@ -614,7 +614,7 @@ def test_absolute_value_bars():
 
 
 def test_roots():
-    assert run("print √(9 m²), ∛(27 m³), cbrt(8), sqrt(16)") == "3 m 3 m 2 4"
+    assert run("print √(9 m²), ∛(27 m³), cbrt(8), sqrt(16)") == "3 m 3 m 2 4"   # ∛27 is 3 up to round-off, which counts as whole (D11)
 
 
 def test_sqrt_binds_to_atom():
@@ -704,7 +704,7 @@ def test_malformed_derivative_order(src):
 
 
 def test_leibniz_notation_in_solve_and_functions():
-    assert run("solve dN/dt = -N / (2 s) with N(0) = 100 for t from 0 s to 1 s\nprint N(1 s)") == "60.6531"
+    assert run("solve dN/dt = -N / (2 s) with N(0) = 100 for t from 0 s to 1 s\nprint N(1 s) to 6 digits") == "60.6531"
     assert run("f(t) = 3 m t / (1 s)\nprint df/dt(2 s)") == "3 m/s"
 
 
@@ -720,8 +720,8 @@ def test_strings_keep_their_characters():
 
 def test_leibniz_higher_order_and_initial_conditions():
     out = run("x(t) = t^3\nprint d²x/dt²(2)\nprint d^2x/dt^2(2)\n"
-              "solve d²y/dt² = -y with y(0) = 1, dy/dt(0) = 0 for t from 0 to 1\nprint y(1)\n"
-              "solve d/dt (dz/dt) = -z with z(0) = 1, z'(0) = 0 for t from 0 to 1\nprint z(1)")
+              "solve d²y/dt² = -y with y(0) = 1, dy/dt(0) = 0 for t from 0 to 1\nprint y(1) to 6 digits\n"
+              "solve d/dt (dz/dt) = -z with z(0) = 1, z'(0) = 0 for t from 0 to 1\nprint z(1) to 6 digits")
     assert out.split("\n") == ["12", "12", "0.540302", "0.540302"]
 
 
@@ -736,7 +736,7 @@ def test_solution_range_error_has_units():
 
 def test_solve_clauses_indented_less_than_equations():
     out = run("solve\n    x' = -x / (2 s)\n    y' = x / (2 s)\n  with x(0) = 1, y(0) = 0\n  for t from 0 s to 10 s\n"
-              "print y(10 s)")
+              "print y(10 s) to 6 digits")
     assert out == "0.993262"
 
 

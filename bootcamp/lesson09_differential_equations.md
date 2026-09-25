@@ -20,9 +20,9 @@ print "exact:     ", 1000 exp(-10 s / tau)
 
 <!-- output -->
 ```
-after 5 s:  367.879
-after 10 s: 135.335
-exact:      135.335
+after 5 s:  368
+after 10 s: 135
+exact:      135
 ```
 
 A `solve` has three parts:
@@ -81,8 +81,8 @@ plot x vs t to "damped.png"
 
 <!-- output -->
 ```
-x at 10 s: 0.145813 cm
-velocity at 1 s: 0.360444 m/s
+x at 10 s: 0.146 cm
+velocity at 1 s: 0.360 m/s
 plot saved to damped.png
 ```
 
@@ -129,7 +129,7 @@ plot theta in deg vs t to "pendulum_big.png"
 
 <!-- output -->
 ```
-angle after 1 s: -80.5021°
+angle after 1 s: -80.5°
 plot saved to pendulum_big.png
 ```
 
@@ -159,8 +159,8 @@ plot A vs t, B vs t to "chain.png"
 
 <!-- output -->
 ```
-B after 5 hours: 476.324
-most B ever: 542.884
+B after 5 hours: 476
+most B ever: 543
 plot saved to chain.png
 ```
 

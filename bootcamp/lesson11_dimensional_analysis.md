@@ -53,7 +53,7 @@ dimensional analysis of pendulum: T depends on L, m, g
 fit T = C pendulum(L, 9.81 m/s²)   (7 data points from data/pendulum.csv)
   C = 6.269   (standard error 0.012)
   rms residual = 0.00850 s
-C = 6.27 and 2π = 6.28319
+C = 6.27 and 2π = 6.28
 ```
 
 The data says C ≈ 6.27, within about one standard error of 2π. Units predicted the shape of the law; the experiment measured the number.
@@ -74,7 +74,7 @@ dimensional analysis of planck: ℓ depends on G, ħ, c
   4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group
   Π₁ = ℓ √(c³/(G ħ))
   so ℓ ∝ √(G ħ/c³)   (ℓ = C √(G ħ/c³), with C a pure number)
-  defined planck = √(G ħ/c³) = 1.61626×10⁻³⁵ m
+  defined planck = √(G ħ/c³) = 1.62×10⁻³⁵ m
 ```
 
 Because everything in the formula is a constant, `planck` is simply a number (with units), and Fermium prints it: 1.6 × 10⁻³⁵ m.
@@ -93,7 +93,7 @@ dimensional analysis of kepler: T depends on a, G, M
   Π₁ = T √(G M/a³)
   so T ∝ √(a³/(G M))   (T = C √(a³/(G M)), with C a pure number)
   defined kepler(a, M) = √(a³/(G M)), so T = C kepler(a, M)
-one year: 365.257 day
+one year: 365 day
 ```
 
 T² ∝ a³: Kepler's third law, from units alone. `G` is a constant, so it isn't an argument of `kepler(a, M)`. With C = 2π (from Newton's laws) you get the length of the year.

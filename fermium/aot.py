@@ -69,7 +69,7 @@ def tables_c(tables) -> str:
         u = display_unit(f["rdim"], f["hint"])
         sf = -1 if f["sf"] is None else int(f["sf"])
         name = u.name if u.name not in ("1",) else ""
-        lines.append(f"  {{{u.factor!r}, {u.offset!r}, {sf}, {1 if f['direct'] else 0}, {cs(name)}}},")
+        lines.append(f"  {{{u.factor!r}, {u.offset!r}, {sf}, {int(f['direct'] or 0)}, {cs(name)}}},")
     lines.append("  {1.0, 0.0, -1, 0, \"\"}};")
     lines.append("const char *fm_texts[] = {")
     for t in tables.texts:

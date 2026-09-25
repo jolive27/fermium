@@ -30,7 +30,7 @@ print KE in kJ
 
 <!-- output -->
 ```
-578.704 kJ
+579 kJ
 ```
 
 ## 3. Escape velocity
@@ -42,7 +42,7 @@ print v_esc in km/s
 
 <!-- output -->
 ```
-11.1799 km/s
+11.2 km/s
 ```
 
 (`2 G` is safe: `G` isn't a unit name in Fermium; gauss is written `gauss`. If in doubt, write `2 * G`.)

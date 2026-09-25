@@ -504,6 +504,29 @@ def format_number(x: float, sig: int = 6, trim: bool = True) -> str:
     return f"{m}×10{str(exp).translate(SUPERSCRIPTS)}"
 
 
+def format_default(x: float, sig: int = 3, whole_ok: bool = True) -> str:
+    """A value whose precision the program doesn't give (DECISIONS D11): a whole number below 10⁷ prints
+    exactly (a count, 20, 1000000), anything else with `sig` significant figures, trailing zeros kept
+    (0.500, 3.00×10⁸)."""
+    if whole_ok and _whole(x):
+        return str(round(x))
+    return format_number(x, sig, trim=False)
+
+
+def _whole(x: float) -> bool:
+    """A whole number below 10⁷, allowing for rounding in its last bits (M☉ in astro units is
+    0.99999999999999989, ∛27 is 3.0000000000000004)."""
+    return x == 0 or (x == x and abs(x) < 1e7 and round(x) != 0 and abs(x - round(x)) <= 1e-13 * abs(x))
+
+
+def format_default_seq(xs, sig: int = 3) -> list:
+    """format_default for the elements of a list, vector or matrix, in one style: whole numbers print exactly
+    only if every element is one ([1, 2, 3], but [0.500, 1.00, 1.50])."""
+    if all(_whole(x) or not math.isfinite(x) for x in xs):      # NaN and ∞ don't decide the style
+        return [str(round(x)) if math.isfinite(x) else format_number(x) for x in xs]
+    return [format_number(x, sig, trim=False) for x in xs]
+
+
 # Unit names written out in words -> the symbol Fermium uses (only for suggestions in error messages)
 SPELLED_UNITS = {
     "meter": "m", "meters": "m", "metre": "m", "metres": "m", "second": "s", "seconds": "s", "sec": "s",

@@ -92,8 +92,18 @@ The rule (spec §3.4.2), refined:
 
 ## D11. Printing: significant figures and display units
 - **Significant figures:** A literal with a decimal point carries significant figures (`1.20` → 3). Integers are exact.
-  - A computed result prints with max(2, the fewest significant figures among its inputs). All-exact inputs print up to 6 significant figures with trailing zeros trimmed.
-  - A value that came straight from a literal prints exactly as written.
+  - A computed result prints with max(2, the fewest significant figures among its inputs).
+  - **When the precision is ambiguous or unspecified, the default is 3 significant figures** (user instruction, 04:20 UTC Sep 25). This covers every input being exact: integers, π, constants such as c or G. Trailing zeros are kept, so `1/2` prints `0.500`, `2π` prints `6.28` and `c` prints `3.00×10⁸ m/s`. Until this change the rule was "up to 6 significant figures, trailing zeros trimmed".
+    - **Display only:** the rule changes the text `print` shows, never the value. Every calculation uses the full double-precision number (`x = 1/3` prints `0.333`, yet `x * 3 - 1` prints `0`; tests/test_default_sigfigs.py).
+    - A list, vector or matrix written out in the program prints each element as written when the list's fewest significant figures would round one of them (`[0, 0.5, 1, 1.5]`, which earlier printed as `[0, 0.5, 1, 2]`).
+    - Exception 1: a whole number below 10⁷ prints exactly (`4*5` → `20`, a count `len(x) - 1` → `1000000`). Counting is not a measurement.
+    - Exception 2: a value that came straight from a literal prints exactly as written (`12345678`, `3.14159`).
+    - A value within 10⁻¹³ (relative) of a whole number counts as whole. So rounding in the last bits doesn't turn `∛(27 m³)` into `3.00 m`, or M☉ in astro units into `1.00 M☉`.
+    - A loop variable prints as written when it runs over a `from … to … step …` grid (`0.07 s`, not `0.0700 s`) or over a written-out list (`for n in [0, 1, 1.5]` shows `1.5`).
+    - One style per list, vector (including one with a unit per component) or matrix. NaN and ∞ don't count when choosing it (`[1, 2, 3, NaN]`).
+    - `print x to N digits` overrides the default, for lists and vectors too (`[0.333333, 0.666667]`). Programs and tests that compare many digits say so explicitly.
+    - Lists, vectors and matrices follow the same rule per element. The C runtime of `fermium build` mirrors it (`fmt_default`, `FM_DEFAULT_SF` in aot_rt.c; `format_default` in units.py).
+    - **Why 3:** it is the textbook convention for answers given without a stated precision, and physics inputs are rarely known better. Six digits suggested a precision nobody asked for. **Alternatives considered:** 4 digits (Mathematica-like), or treating exact integers as infinitely precise and keeping 6. The user asked for 3.
   - This reproduces the spec's `9.70 m/s²`, `10 1/s` and `1.0 J`.
 - **Display unit:**
   - The unit the user wrote (literal or `in`) is kept through `+`, `-` and scaling by plain numbers.

@@ -24,7 +24,7 @@ def both(src):
 # ---------------------------------------------------------------- #52 prefixes on rad
 def test_52_mrad_and_urad():
     assert both("θ = 2.5 mrad\nprint θ in μrad\nprint 3 μrad in mrad\nprint 1 krad/s in rad/s").split("\n") == \
-        ["2500 μrad", "0.003 mrad", "1000 rad/s"]
+        ["2500 μrad", "0.00300 mrad", "1000 rad/s"]
 
 
 # ---------------------------------------------------------------- #57 chained comparisons
@@ -68,7 +68,7 @@ def test_53_unindented_else_gets_a_hint():
 # ---------------------------------------------------------------- #55 units after names and vectors
 def test_55_unit_after_vector_literal_with_slash():
     assert both("a = <0, 0> /s\nprint a\nb = <1, 2> 1/s\nprint b\nx = 4 m\nprint <1, 2> / x").split("\n") == \
-        ["<0, 0> 1/s", "<1, 2> 1/s", "<0.25, 0.5> 1/m"]
+        ["<0, 0> 1/s", "<1, 2> 1/s", "<0.250, 0.500> 1/m"]
 
 
 def test_55_unit_after_a_name_hint():
@@ -115,9 +115,9 @@ def test_54_trace_row_column():
 
 
 def test_54_angle_between_vectors():
-    src = ("a = <1, 0, 0> m\nb = <1, 1, 0> m\nprint angle(a, b) in °\nprint angle(<1, 0> m, <-1, 1e-9> m)\n"
+    src = ("a = <1, 0, 0> m\nb = <1, 1, 0> m\nprint angle(a, b) in °\nprint angle(<1, 0> m, <-1, 1e-9> m) to 6 digits\n"
            "F = <1, 1, 0> N\nprint angle(F, a) in °\nprint angle(<1, 0, 0>, <1, 1e-12, 0>)")
-    assert both(src).split("\n") == ["45°", "3.14159", "45°", "1×10⁻¹²"]
+    assert both(src).split("\n") == ["45°", "3.14159", "45°", "1.00×10⁻¹²"]
     assert "2-vectors or two 3-vectors" in error_of("print angle(<1, 0>, <1, 0, 0>)").message
 
 

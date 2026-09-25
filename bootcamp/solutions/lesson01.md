@@ -11,8 +11,8 @@ print 1 AU / c in min
 
 <!-- output -->
 ```
-499.005 s
-8.31675 min
+499 s
+8.32 min
 ```
 
 About 8 minutes and 19 seconds. When you look at the Sun, you see it as it was 8 minutes ago.
@@ -26,8 +26,8 @@ print 70 mph in m/s
 
 <!-- output -->
 ```
-112.654 km/hr
-31.2928 m/s
+113 km/hr
+31.3 m/s
 ```
 
 ## 3. Rest energies
@@ -39,8 +39,8 @@ print (m_n - m_p) * c^2 in MeV
 
 <!-- output -->
 ```
-939.565 MeV
-1.29333 MeV
+940 MeV
+1.29 MeV
 ```
 
 The neutron is about 1.29 MeV heavier than the proton. That's why a free neutron can decay into a proton (plus an electron and an antineutrino).
@@ -78,8 +78,8 @@ print h * c / 530 nm in eV
 
 <!-- output -->
 ```
-3.74801×10⁻¹⁹ J
-2.33932 eV
+3.75×10⁻¹⁹ J
+2.34 eV
 ```
 
 About 2.3 eV, typical for visible light.

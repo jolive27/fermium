@@ -49,11 +49,11 @@ def test_1_reference_doesnt_promise_every_scale():
 # ---- #2: Hz vs rad/s vs rev/rpm --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("src,value,text", [
-    ("print 1 Hz in rpm", "9.5493 rpm", "1 Hz is 9.5493 rpm, not 60 rpm"),
-    ("f = 50 Hz\nprint f in rev/min", "477.465 rev/min", "1 Hz is 9.5493 rev/min, not 60 rev/min"),
-    ("print 1 Hz in rev/s", "0.159155 rev/s", "1 Hz is 0.159155 rev/s, not 1 rev/s"),
+    ("print 1 Hz in rpm", "9.55 rpm", "1 Hz is 9.5493 rpm, not 60 rpm"),
+    ("f = 50 Hz\nprint f in rev/min", "477 rev/min", "1 Hz is 9.5493 rev/min, not 60 rev/min"),
+    ("print 1 Hz in rev/s", "0.159 rev/s", "1 Hz is 0.159155 rev/s, not 1 rev/s"),
     ("print 1 Hz in rad/s", "1 rad/s", "1 Hz is 1 rad/s, not 6.28319 rad/s"),
-    ("print 1 kHz in rpm", "9549.3 rpm", "1 kHz is 9549.3 rpm, not 60000 rpm"),
+    ("print 1 kHz in rpm", "9550 rpm", "1 kHz is 9549.3 rpm, not 60000 rpm"),
 ])
 def test_2_hz_to_turns_warns_with_the_right_numbers(src, value, text):
     assert run(src) == value
@@ -137,7 +137,7 @@ def test_4_even_pole_is_no_solution_and_nan_domains_still_work():
 
 # ---- #5: fixed-step RK4 that is far too coarse -----------------------------------------------------------
 
-COARSE = "solve x'' = -(10/(1 s))² x with x(0) = 1 m, x'(0) = 0 m/s for t from 0 s to 10 s step {h}\nprint x(10 s)"
+COARSE = "solve x'' = -(10/(1 s))² x with x(0) = 1 m, x'(0) = 0 m/s for t from 0 s to 10 s step {h}\nprint x(10 s) to 6 digits"
 
 
 def test_5_coarse_rk4_step_warns():

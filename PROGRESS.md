@@ -91,15 +91,16 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 00:05–01:00 Phase 1 audit: AUDIT.md written; most AUDIT §4 items and most of A1–A53 fixed (see the hourly log and `git log`).
 - 01:10 Docs pass: README, reference, DECISIONS and the VS Code README corrected against the code; reference §19 "Known limitations"; bootcamp output boxes refreshed and now tested; `doctor` checks for a C compiler.
 
-## In progress
-- Phase 2 features (Jupyter kernel first).
+## In progress (04:35 UTC)
+- **User request: 3 significant figures by default** when a result's precision is ambiguous or unspecified. Display only (D11). Done in the JIT, the interpreter and `fermium build`, with tests/test_default_sigfigs.py, the bootcamp boxes and the examples. Two agents are updating the ~130 older tests that compared 6-digit output.
+- Merging finished agents: M3 (seeded RNG, FFT, eigenvalue problems, PDEs), M7 (modules and stdlib), research batch 2–7.
+- Agents running: complex numbers (review priority 1), research-friction fixes.
 
 ## Next
-- Re-run the benchmarks and update RESULTS.md and the README speed table (the adaptive row still says "spot check").
-- The open bugs above, silent wrong answers first (A54, the half-peak).
-- Phase 2: Jupyter kernel, language server, matrices, gradient/divergence/curl, browser playground.
-- Phase 3: the textbook gauntlet.
-- MORNING_REPORT.md at 12:30 UTC.
+- Review priority 3: warn when an integral comes out exactly 0 because every sample was 0 (a narrow peak missed); 7 initial panels so the middle of the range is a node. The patch is ready and will be applied after the sig-fig commit.
+- M4 uncertainties, M5 benchmarks (needs a quiet machine), M6 Python interop.
+- Red team round 2 (due about 05:00), BBN research reproduction, hourly quality pass.
+- MORNING_REPORT.md and SHOWCASE.md at 12:30 UTC.
 
 ## Blocked
 - (none)
@@ -113,3 +114,4 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 02:00 UTC — Phase 1 closed (all audit items fixed or documented; A56 off-zero singularities and the mid-range half-peak are documented limitations). Phase 2 items 1–6 all done and merged. Gauntlet first pass: 31 problems, 38 friction items, 7 fixed; parser/solve/calculus friction agents running. 2051 tests pass.
 - 03:05 UTC — Gauntlet second pass merged (30 harder problems; 61 total). Friction: 59 logged, 35 fixed. Fixed E9 (nested-integral capture, wrong answer) and A5 (ODE first step, wrong answer) myself. Higher-order functions merged. 2254 tests pass.
 - 04:05 UTC — Review priorities in progress: (1) complex numbers agent running; (2) unit-after-number rule revised (error when a colliding unit is combined with other factors, warning when alone; D7), bootcamp updated; (3) integral-reliability warnings queued behind the numerics agent; (4) PROGRESS Partial rewritten. Moonshots: M1 natural units and M2 dimensional analysis merged; M3 numerics and M7 modules running. Research: #1 SEMF/AME2020 done, batch 2–7 running. Red team round 1: 10 findings, fix agent running. Gauntlet friction 59 logged / 47 fixed.
+- 05:00 UTC — User request done: 3 significant figures by default when precision is ambiguous (display only; D11 with refinements: whole numbers exact, literals and loop grids as written, one style per list/vector, `to N digits` on lists). ~140 older tests updated to say `to N digits` where they check accuracy. Staged merges (branch merge-agents, tests green): M7 modules + stdlib, M3 (seeded RNG, FFT, eigenvalue problems, PDEs), research reproductions 2–8, research frictions #60–#65, complex numbers (review priority 1). Found and fixed a merge crash (PDE solutions left the new rhs pointer uninitialised). Agents running: red team round 2, M4 uncertainties.

@@ -36,7 +36,7 @@ for tt from 0 hr to 100 hr step 0.01 hr
     if N_Tc'(tt) < 0 / (1 s)
         t_peak = tt
         break
-print "Tc-99m peaks at", t_peak, "  (formula:", ln(λ_Tc/λ_Mo) / (λ_Tc - λ_Mo) in hr, ")"
+print "Tc-99m peaks at", t_peak to 4 digits, "  (formula:", ln(λ_Tc/λ_Mo) / (λ_Tc - λ_Mo) in hr to 4 digits, ")"
 
 # Activities at the peak: at that moment the two activities are equal
 print "Mo-99 activity: ", λ_Mo N_Mo(t_peak) in GBq

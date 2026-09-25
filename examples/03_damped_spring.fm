@@ -29,7 +29,7 @@ solve m x'' = -k x - b x'
 # Exact solution for the same starting conditions
 x_exact(t) = 10.0 cm * exp(-γ t) * (cos(ω_d t) + γ/ω_d * sin(ω_d t))
 
-print "x(5 s) numerical:", x(5 s) in cm, "  exact:", x_exact(5 s) in cm to 6 digits
+print "x(5 s) numerical:", x(5 s) in cm to 6 digits, "  exact:", x_exact(5 s) in cm to 6 digits
 print "speed at 1 s:", x'(1 s)
 
 # Energy slowly leaks out of the oscillator

@@ -31,7 +31,7 @@ print "Kepler's third law:", 1.524^1.5, "yr"
 
 <!-- output -->
 ```
-simulated period: 1.86824 yr
+simulated period: 1.87 yr
 Kepler's third law: 1.881 yr
 ```
 
@@ -55,10 +55,10 @@ print "escape velocity:", sqrt(2 GM / r) in km/s
 
 <!-- output -->
 ```
-40 km/s bound, E = -8.71279×10⁷ J/kg
-42 km/s bound, E = -5.12793×10⁶ J/kg
-44 km/s escapes, E = 8.08721×10⁷ J/kg
-escape velocity: 42.1219 km/s
+40 km/s bound, E = -8.71×10⁷ J/kg
+42 km/s bound, E = -5.13×10⁶ J/kg
+44 km/s escapes, E = 8.09×10⁷ J/kg
+escape velocity: 42.1 km/s
 ```
 
 The escape velocity from the Earth's orbit is √2 times the orbital speed: 42.1 km/s.
@@ -124,7 +124,7 @@ print "after 365 days:", x in AU, y in AU
 
 <!-- output -->
 ```
-after 365 days: 0.999999 AU -0.001453 AU
+after 365 days: 1.00 AU -0.001453 AU
 ```
 
 Now, to try a different force law (say, 1/r³ instead of 1/r²), you only change two lines at the top.

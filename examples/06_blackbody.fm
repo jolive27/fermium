@@ -28,13 +28,13 @@ for i from 1 to 60
     else
         hi = mid
 λ_peak = (lo + hi) / 2
-print "peak wavelength (from dB/dλ = 0):", λ_peak in nm
-print "Wien's law b / T:                ", b_W / T in nm
+print "peak wavelength (from dB/dλ = 0):", λ_peak in nm to 4 digits
+print "Wien's law b / T:                ", b_W / T in nm to 4 digits
 
 # Total emitted power per square metre
 flux = π * ∫ B(λ) dλ from 0 nm to ∞
-print "π ∫ B dλ =", flux in MW/m²
-print "σ T⁴     =", σ T⁴ in MW/m²
+print "π ∫ B dλ =", flux in MW/m² to 6 digits
+print "σ T⁴     =", σ T⁴ in MW/m² to 6 digits
 print "relative difference:", flux / (σ T⁴) - 1
 
 # Multiply by the Sun's area to get its luminosity

@@ -19,7 +19,7 @@
 typedef struct {
     double factor, offset;
     int sf;       /* significant figures, -1 = exact */
-    int direct;   /* value written directly as a literal */
+    int direct;   /* 1: value written directly as a literal; 2: `to N digits` */
     const char *unit;
 } fm_fmt;
 
@@ -49,6 +49,8 @@ static void trim_zeros(char *s) {
     while (n && s[n - 1] == '0') s[--n] = 0;
     if (n && s[n - 1] == '.') s[--n] = 0;
 }
+
+#define FM_DEFAULT_SF 3   /* output precision when the inputs don't say (DECISIONS D11) */
 
 static void fmt_num(double x, int sig, int trim, char *out, size_t cap) {
     if (isnan(x)) { snprintf(out, cap, "NaN"); return; }
@@ -80,20 +82,57 @@ static void fmt_num(double x, int sig, int trim, char *out, size_t cap) {
     snprintf(out, cap, "%s×10%s", tmp, sup);
 }
 
+/* a value whose precision the program doesn't give (D11): whole numbers below 10⁷ exactly, else
+   FM_DEFAULT_SF significant figures with trailing zeros kept; mirrors units.format_default */
+static int is_whole(double x) {     /* units._whole: allows for rounding in the last bits */
+    return x == 0 || (x == x && fabs(x) < 1e7 && round(x) != 0 && fabs(x - round(x)) <= 1e-13 * fabs(x));
+}
+
+static void fmt_default(double x, int whole_ok, char *out, size_t cap) {
+    if (whole_ok && is_whole(x)) { fmt_num(round(x), 17, 1, out, cap); return; }
+    fmt_num(x, FM_DEFAULT_SF, 0, out, cap);
+}
+
+/* an element of a list written out in the program (core.format_written): with the list's significant
+   figures if that shows it exactly, else as written */
+static void fmt_written(double x, int sf, char *out, size_t cap) {
+    char t[64];
+    snprintf(t, sizeof t, "%.*e", sf > 1 ? sf - 1 : 0, x);
+    if (isfinite(x) && x != 0 && strtod(t, NULL) != x) fmt_num(x, 15, 1, out, cap);
+    else fmt_num(x, sf, 0, out, cap);
+}
+
+/* one number style for a whole list/vector/matrix (units.format_default_seq): whole numbers exactly only
+   if every printed element is one; with skip, an n > 12 list prints elements 0-4 and n-3..n-1 */
+static int all_whole(const fm_fmt *f, const double *p, int64_t n, int skip) {
+    for (int64_t i = 0; i < n; i++) {
+        if (skip && n > 12 && i == 5) i = n - 3;
+        double x = (p[i] - f->offset) / f->factor;
+        if (isfinite(x) && !is_whole(x)) return 0;      /* NaN and ∞ don't decide the style */
+    }
+    return 1;
+}
+
 static int attached(const char *u) {
     return !strcmp(u, "°") || !strcmp(u, "%") || !strcmp(u, "′") || !strcmp(u, "″");
 }
 
+static void fmt_value_w(const fm_fmt *f, double v, int sig_default, int whole_ok, char *out, size_t cap);
+
 static void fmt_value(const fm_fmt *f, double v, int sig_default, char *out, size_t cap) {
+    fmt_value_w(f, v, sig_default, 1, out, cap);
+}
+
+static void fmt_value_w(const fm_fmt *f, double v, int sig_default, int whole_ok, char *out, size_t cap) {
     double x = (v - f->offset) / f->factor;
-    if (f->sf < 0) fmt_num(x, sig_default, 1, out, cap);
+    if (f->sf < 0) { if (f->direct) fmt_num(x, sig_default, 1, out, cap); else fmt_default(x, whole_ok, out, cap); }
     else fmt_num(x, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
 }
 
 void fm_print_num(int64_t fid, double v) {
     const fm_fmt *f = &fm_fmts[fid];
     char buf[128], all[256];
-    fmt_value(f, v, 6, buf, sizeof buf);
+    fmt_value(f, v, 15, buf, sizeof buf);
     if (!f->unit[0] || !strcmp(f->unit, "1")) snprintf(all, sizeof all, "%s", buf);
     else if (attached(f->unit)) snprintf(all, sizeof all, "%s%s", buf, f->unit);
     else snprintf(all, sizeof all, "%s %s", buf, f->unit);
@@ -106,11 +145,13 @@ static void print_seq(int64_t fid, const double *p, int64_t n, const char *open,
     char buf[128];
     int sf = f->sf;
     if (sf >= 0 && !f->direct && sf < 2) sf = 2;
+    int whole = sf < 0 && all_whole(f, p, n, 1);
     strcpy(out, open);
     for (int64_t i = 0; i < n; i++) {
         if (n > 12 && i == 5) { strcat(out, "…, "); i = n - 3; }
         double x = (p[i] - f->offset) / f->factor;
-        if (sf < 0) fmt_num(x, n > 12 ? 4 : 6, 1, buf, sizeof buf);
+        if (sf < 0) fmt_num(whole ? round(x) : x, whole ? 17 : FM_DEFAULT_SF, whole, buf, sizeof buf);
+        else if (f->direct == 1) fmt_written(x, sf, buf, sizeof buf);
         else fmt_num(x, sf, 0, buf, sizeof buf);
         strcat(out, buf);
         if (i + 1 < n) strcat(out, ", ");
@@ -128,10 +169,16 @@ void fm_print_vec(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "<",
 void fm_print_mvec(int64_t fid, double *p, int64_t n) {
     static char out[4096];
     char buf[128];
+    int whole = 1;              /* one number style for all components (core.print_mvec, D11) */
+    for (int64_t i = 0; i < n; i++) {
+        const fm_fmt *f = &fm_fmts[fid + i];
+        double x = (p[i] - f->offset) / f->factor;
+        if (f->sf < 0 && !f->direct && isfinite(x) && !is_whole(x)) whole = 0;
+    }
     strcpy(out, "<");
     for (int64_t i = 0; i < n; i++) {
         const fm_fmt *f = &fm_fmts[fid + i];
-        fmt_value(f, p[i], 6, buf, sizeof buf);
+        fmt_value_w(f, p[i], 15, whole, buf, sizeof buf);
         strcat(out, buf);
         if (f->unit[0] && strcmp(f->unit, "1")) {
             if (!attached(f->unit)) strcat(out, " ");
@@ -150,13 +197,15 @@ void fm_print_mat(int64_t fid, double *p, int64_t r, int64_t c) {
     char buf[128];
     int sf = f->sf;
     if (sf >= 0 && !f->direct && sf < 2) sf = 2;
+    int whole = sf < 0 && all_whole(f, p, r * c, 0);
     strcpy(out, "[");
     for (int64_t i = 0; i < r; i++) {
         strcat(out, "[");
         for (int64_t j = 0; j < c; j++) {
             double x = (p[i * c + j] - f->offset) / f->factor;
-            if (sf < 0) fmt_num(x, 6, 1, buf, sizeof buf);
-            else fmt_num(x, sf, 0, buf, sizeof buf);
+            if (sf < 0) fmt_num(whole ? round(x) : x, whole ? 17 : FM_DEFAULT_SF, whole, buf, sizeof buf);
+            else if (f->direct == 1) fmt_written(x, sf, buf, sizeof buf);
+        else fmt_num(x, sf, 0, buf, sizeof buf);
             strcat(out, buf);
             if (j + 1 < c) strcat(out, ", ");
         }

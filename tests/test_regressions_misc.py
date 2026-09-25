@@ -21,10 +21,10 @@ def interp(src, base_dir=None):
 
 # ---------------------------------------------------------------- A54: ∫ … du with a unit-named variable
 @pytest.mark.parametrize("src, want", [
-    ("print ∫ 1/u du from 1 to 2", "0.693147"),
-    ("print ∫ 1/s ds from 1 to 2", "0.693147"),
-    ("print ∫ 2/L dL from 1 m to 2 m", "1.38629"),
-    ("f(x) = ∫ 1/u du from 1 to x\nprint f(3)", "1.09861"),
+    ("print ∫ 1/u du from 1 to 2 to 6 digits", "0.693147"),
+    ("print ∫ 1/s ds from 1 to 2 to 6 digits", "0.693147"),
+    ("print ∫ 2/L dL from 1 m to 2 m to 6 digits", "1.38629"),
+    ("f(x) = ∫ 1/u du from 1 to x\nprint f(3) to 6 digits", "1.09861"),
 ])
 def test_integration_variable_named_like_a_unit(src, want):
     assert run(src) == want
@@ -34,7 +34,7 @@ def test_integration_variable_named_like_a_unit(src, want):
 
 def test_integration_variable_is_local_to_the_integral():
     # after the integral, u is the atomic mass unit again
-    assert run("print ∫ 1/u du from 1 to 2\nprint 1/u") == "0.693147\n1 1/u"
+    assert run("print ∫ 1/u du from 1 to 2 to 6 digits\nprint 1/u") == "0.693147\n1 1/u"
 
 
 def test_d_unit_differential_still_works():

@@ -62,12 +62,12 @@ def test_matrix_sum_difference_scaling():
               "print K1 + K2\nprint K2 - K1\nprint 2 K1\nprint K1 * 2 m\nprint -K1\nprint K1 / 2")
     assert out.split("\n") == ["[[11, 22], [33, 44]] N/m", "[[9, 18], [27, 36]] N/m",
                                "[[2, 4], [6, 8]] N/m", "[[2, 4], [6, 8]] N", "[[-1, -2], [-3, -4]] N/m",
-                               "[[0.5, 1], [1.5, 2]] N/m"]
+                               "[[0.500, 1.00], [1.50, 2.00]] N/m"]
 
 
 def test_matrix_times_vector_multiplies_dimensions():
     out = run("K = [[2, -1], [-1, 2]] N/m\nx = <1, 2> cm\nprint K x in N\nprint K * x in N\nprint K · x in N")
-    assert out.split("\n") == ["<0, 0.03> N"] * 3
+    assert out.split("\n") == ["<0, 0.0300> N"] * 3
 
 
 def test_matrix_times_vector_against_numpy():
@@ -197,7 +197,7 @@ def test_matrix_errors(src, phrase):
 def test_state_vector_keeps_a_unit_per_component():
     out = run("s = <1 m, 2 m/s>\nprint s\nprint s.x, s.y, s[2]\nprint s * 2\nprint 2 kg * s\nprint s / (2 s)")
     assert out.split("\n") == ["<1 m, 2 m/s>", "1 m 2 m/s 2 m/s", "<2 m, 4 m/s>", "<2 kg m, 4 kg m/s>",
-                               "<0.5 m/s, 1 m/s²>"]
+                               "<0.500 m/s, 1.00 m/s²>"]
 
 
 def test_state_vector_negation_and_if():

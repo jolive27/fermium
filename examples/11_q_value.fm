@@ -29,7 +29,7 @@ Th234 = 234.0436014 u
 # Q from two lists of masses: reactants and products
 Q(before, after) = (sum(before) - sum(after)) c²
 
-print "1 u c² =", 1 u c² in MeV
+print "1 u c² =", 1 u c² in MeV to 6 digits
 print "D + T  -> He-4 + n     Q =", Q([H2, H3], [He4, m_n]) in MeV to 5 digits
 print "D + D  -> He-3 + n     Q =", Q([H2, H2], [He3, m_n]) in MeV to 5 digits
 print "p + Li-7 -> 2 He-4     Q =", Q([H1, Li7], [He4, He4]) in MeV to 5 digits

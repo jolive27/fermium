@@ -13,7 +13,7 @@
 # This is why electrons and neutrons diffract off crystals.
 
 λ_C = h / (m_e c)
-print "Compton wavelength of the electron:", λ_C in pm
+print "Compton wavelength of the electron:", λ_C in pm to 6 digits
 
 # Cs-137 gamma rays (662 keV) scattered at different angles
 E_γ = 661.657 keV
@@ -28,7 +28,7 @@ print "backscatter peak:", E_after(180°) in keV
 # de Broglie wavelengths
 λ_dB(p) = h / p
 p_nonrel(mass, E) = √(2 mass E)       # (not `2 m`: that is 2 metres)
-print "electron, 100 eV:      ", λ_dB(p_nonrel(m_e, 100 eV)) in nm
+print "electron, 100 eV:      ", λ_dB(p_nonrel(m_e, 100 eV)) in nm to 4 digits
 print "thermal neutron, 25 meV:", λ_dB(p_nonrel(m_n, 25 meV)) in nm
 print "baseball, 0.145 kg at 40 m/s:", λ_dB(0.145 kg * 40 m/s)
 

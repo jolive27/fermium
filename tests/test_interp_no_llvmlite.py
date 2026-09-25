@@ -16,11 +16,11 @@ sys.path.insert(0, ROOT)
 
 PROGRAMS = {
     "pendulum": ("print 4π² (1.20 m) / (2.21 s)²\n", "9.70 m/s²"),
-    "integral": ("print ∫ x² dx from 0 m to 2 m\n", "2.66667 m³"),
+    "integral": ("print ∫ x² dx from 0 m to 2 m\n", "2.67 m³"),
     "function+loop": ("KE(M, v) = ½ M v²\nfor v in [1 m/s, 2 m/s]\n    print KE(2 kg, v)\n", "1 J\n4 J"),
     "list": ("L = [1.0 m, 1.2 m, 1.4 m]\nprint mean(L)\n", "1.2 m"),
     "ode": ("k = 1 N/m\nmass = 1 kg\nsolve mass x'' = -k x\n  with x(0) = 1 m, x'(0) = 0 m/s\n  for t from 0 s to 10 s\n"
-            "print x(π * 1 s)\n", "-1 m"),
+            "print x(π * 1 s)\n", "-1.00 m"),
 }
 
 

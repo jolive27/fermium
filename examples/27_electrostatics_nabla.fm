@@ -10,7 +10,7 @@ r(x, y, z) = √(x² + y² + z²)
 # the potential of +q at z = d/2 and -q at z = -d/2
 φ(x, y, z) = q / (4π ε₀ r(x, y, z - d/2)) - q / (4π ε₀ r(x, y, z + d/2))
 E = -∇φ(0 m, 0 m, 10 cm)
-print "field on the axis, 10 cm away:", E
+print "field on the axis, 10 cm away:", E to 6 digits
 
 # far away the dipole field along the axis is 2 p / (4π ε₀ z³) with p = q d
 p = q d

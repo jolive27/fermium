@@ -27,7 +27,7 @@ def test_2d_cross_is_a_number():
 
 def test_scaling_and_sums():
     out = run("v = <3, 4> m/s\nm = 2 kg\np = m v\nprint p\nprint v + <1, 1> m/s\nprint -v / 2\nprint unit(v)")
-    assert out.split("\n") == ["<6, 8> kg m/s", "<4, 5> m/s", "<-1.5, -2> m/s", "<0.6, 0.8>"]
+    assert out.split("\n") == ["<6, 8> kg m/s", "<4, 5> m/s", "<-1.50, -2.00> m/s", "<0.600, 0.800>"]
 
 
 def test_vector_functions():

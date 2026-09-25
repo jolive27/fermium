@@ -42,7 +42,7 @@ spring is solved adaptively; the answer comes back in cm because that's how x(0)
 ```fermium
 units natural(ħ = c = 1)
 a0 = 1/(α m_e)
-print "Bohr radius:", a0 in fm, "=", a0 in Å
+print "Bohr radius:", a0 in fm to 6 digits, "=", a0 in Å to 6 digits
 m_π = 139.57039 MeV
 print "range of the nuclear force:", 1/m_π in fm
 ```

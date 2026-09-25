@@ -38,9 +38,9 @@ print "directly:", y'(2 s)
 
 <!-- output -->
 ```
-velocity at 1 s: 10.19 m/s
+velocity at 1 s: 10.2 m/s
 velocity at 3 s: -9.43 m/s
-directly: 0.38 m/s
+directly: 0.380 m/s
 ```
 
 You can write `y'(2 s)` directly without giving the derivative a name.
@@ -59,7 +59,7 @@ print dy/dt(2 s)
 <!-- output -->
 ```
 v(t) = 20 m/s - 9.81 m/s² t   [m/s, for t in s]
-0.38 m/s
+0.380 m/s
 ```
 
 Second derivatives are written `y''`, `d²y/dt²` (ASCII: `d^2y/dt^2`), or `d²/dt² y`. They all mean the same thing. Here's an oscillation, x(t) = A cos(ωt), differentiated twice:
@@ -113,8 +113,8 @@ print "force at twice the radius:", F(2 R_earth)
 
 <!-- output -->
 ```
-force on 1 kg at the surface: -9.79845 N
-force at twice the radius: -2.44961 N
+force on 1 kg at the surface: -9.80 N
+force at twice the radius: -2.45 N
 ```
 
 The force is negative because it points *inward* (toward smaller r), and it's about 9.8 N at the surface, as it should be. At twice the distance it's four times weaker: the inverse-square law, which we never typed in. It came from differentiating 1/r.
@@ -132,8 +132,8 @@ print x'(ts)
 
 <!-- output -->
 ```
-[0, 0.25, 0.5, 0.75, 1] s
-[10, 8.77583, 5.40302, 0.707372, -4.16147] m/s
+[0, 0.250, 0.500, 0.750, 1.00] s
+[10.0, 8.78, 5.40, 0.707, -4.16] m/s
 ```
 
 ## What's happening inside
@@ -178,7 +178,7 @@ print fx(1, 2), fy(1, 2)
 ```
 fx(x, y) = 2x y
 fy(x, y) = x² + cos(y)
-4 0.583853
+4 0.584
 ```
 
 ## Summary

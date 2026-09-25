@@ -67,7 +67,7 @@ def test_bracketed_division_stays_in_the_upper_limit():
 
 def test_spaced_division_by_a_number_after_a_limit_warns():
     src = "print ∫ x dx from 0 to 1 / 2"
-    assert run(src) == "0.25"
+    assert run(src) == "0.250"
     assert warns(src, "divides the whole integral")
     assert warnings_of("print ∫ x dx from 0 to 1/2") == []
 
@@ -155,7 +155,7 @@ def test_pi_subscript_is_the_same_name_as_ascii():
 
 
 def test_pi_alone_is_still_the_constant():
-    assert run("x = 2π\nprint x") == "6.28319"
+    assert run("x = 2π\nprint x to 6 digits") == "6.28319"
 
 
 # ---------------------------------------------------------------- #15: 15.3 / min / g
@@ -165,8 +165,8 @@ def test_per_minute_per_gram_with_spaces():
 
 
 def test_min_function_still_works_after_a_number():
-    assert run("print 2 / min(4, 8)") == "0.5"
-    assert run("print 3/min(4, 8)") == "0.75"
+    assert run("print 2 / min(4, 8)") == "0.500"
+    assert run("print 3/min(4, 8)") == "0.750"
 
 
 def test_user_variable_named_min_is_divided_by():

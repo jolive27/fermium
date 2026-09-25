@@ -33,8 +33,8 @@ print data.T
 <!-- output -->
 ```
 data from data/pendulum.csv: columns L [m], T [s]
-[0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.4] m
-[0.904, 1.28, 1.555, 1.786, 1.993, 2.198, 2.359] s
+[0.200, 0.400, 0.600, 0.800, 1.00, 1.20, 1.40] m
+[0.904, 1.28, 1.55, 1.79, 1.99, 2.20, 2.36] s
 ```
 
 `load` reads the file. The path `"data/pendulum.csv"` is relative to the folder your program is in, so save your program in the `bootcamp` folder (next to the `data` folder), or change the path.
@@ -54,8 +54,8 @@ print "mean g =", mean(g), "+/-", std(g) / sqrt(len(g))
 
 <!-- output -->
 ```
-[9.66168, 9.63829, 9.79603, 9.90118, 9.93906, 9.80586, 9.93189] m/s²
-mean g = 9.81057 m/s² +/- 0.04668 m/s²
+[9.66, 9.64, 9.80, 9.90, 9.94, 9.81, 9.93] m/s²
+mean g = 9.81 m/s² +/- 0.0467 m/s²
 ```
 
 (We printed the text `"+/-"` rather than the symbol `±`, which Fermium reserves for a future feature.)

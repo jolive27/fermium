@@ -38,8 +38,8 @@ print sqrt(pi)
 ```
 2
 2
-1.77245
-1.77245
+1.77
+1.77
 ```
 
 Infinite limits work: write `inf` (or `∞`). The Gaussian integral gives √π, as it should.
@@ -79,7 +79,7 @@ print "centre of mass:", x_cm
 <!-- output -->
 ```
 mass: 6 kg
-centre of mass: 1.11111 m
+centre of mass: 1.11 m
 ```
 
 ⚠️ Notice the **parentheses** around the second integral. Without them, `... from 0 m to 2 m / M` would mean "up to (2 m / M)", and Fermium would complain that the limits have different units.
@@ -122,9 +122,9 @@ print "power of the Sun:", flux * 4 pi R_sun^2
 
 <!-- output -->
 ```
-integral of Planck: 6.32007×10⁷ W/m²
-Stefan-Boltzmann:  6.32007×10⁷ W/m²
-power of the Sun: 3.84393×10²⁶ W
+integral of Planck: 6.32×10⁷ W/m²
+Stefan-Boltzmann:  6.32×10⁷ W/m²
+power of the Sun: 3.84×10²⁶ W
 ```
 
 Planck's law and the Stefan–Boltzmann law agree, and multiplying by the Sun's surface area gives its total power, about 3.8 × 10²⁶ W. (We integrated from 10 nm to 100 μm because that's where nearly all the light is; outside that range, B is tiny.)

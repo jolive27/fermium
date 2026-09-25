@@ -102,8 +102,8 @@ def test_solution_max_of_time_list_is_plain():
 
 
 def test_decay_into_subnormals():
-    out = both("solve x' = -x with x(0) = 1 for t from 0 to 700\nprint x(700)\n"
-               "solve y' = -y with y(0) = 1e-300 for t from 0 to 30\nprint y(30)")
+    out = both("solve x' = -x with x(0) = 1 for t from 0 to 700\nprint x(700) to 6 digits\n"
+               "solve y' = -y with y(0) = 1e-300 for t from 0 to 30\nprint y(30) to 6 digits")
     assert out.split("\n") == ["9.85968×10⁻³⁰⁵", "9.35762×10⁻³¹⁴"]
 
 

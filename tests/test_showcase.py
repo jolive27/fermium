@@ -11,7 +11,7 @@ BLOCKS = re.findall(r"```fermium\n(.*?)```", open(os.path.join(ROOT, "SHOWCASE.m
 
 EXPECT = [
     ["9.70 m/s²", "31.8 ft/s²"],
-    ["∇φ(x, y, z) = <-q x/(4π ε", "V/m", "3.52006 cm"],
+    ["∇φ(x, y, z) = <-q x/(4π ε", "V/m", "3.52 cm"],
     ["52917.7 fm", "0.529177 Å", "1.4138"],
     ["T ∝ √(L/g)", "m drops out"],
     ["MeV"],

@@ -13,8 +13,8 @@
 # classically the Sun could not shine. Quantum tunnelling saves the day
 # (see example 23).
 
-print "ħc =", ħ c in MeV fm
-print "e²/(4π ε₀) =", e² / (4π ε_0) in MeV fm, "  α ħc =", α ħ c in MeV fm
+print "ħc =", ħ c in MeV fm to 6 digits
+print "e²/(4π ε₀) =", e² / (4π ε_0) in MeV fm to 6 digits, "  α ħc =", α ħ c in MeV fm to 6 digits
 
 r0 = 1.20 fm
 R(A) = r0 A^(1/3)

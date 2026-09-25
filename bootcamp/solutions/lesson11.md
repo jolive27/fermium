@@ -16,7 +16,7 @@ dimensional analysis of waves: v depends on g, λ
   Π₁ = v/√(g λ)
   so v ∝ √(g λ)   (v = C √(g λ), with C a pure number)
   defined waves(g, λ) = √(g λ), so v = C waves(g, λ)
-λ = 100 m: 12.4931 m/s
+λ = 100 m: 12.5 m/s
 ```
 
 v ∝ √(g λ): longer waves are faster. That's why the long swell from a distant storm arrives at the beach before the short, choppy waves.
@@ -34,8 +34,8 @@ dimensional analysis of hydrogen: E depends on m_e, e, ε₀, ħ
   5 quantities, 4 independent dimensions (length, mass, time, current) → 5 − 4 = 1 dimensionless group
   Π₁ = E ε₀² ħ²/(m_e e⁴)
   so E ∝ m_e e⁴/(ε₀² ħ²)   (E = C m_e e⁴/(ε₀² ħ²), with C a pure number)
-  defined hydrogen = m_e e⁴/(ε₀² ħ²) = 6.88463×10⁻¹⁶ J
-13.6057 eV
+  defined hydrogen = m_e e⁴/(ε₀² ħ²) = 6.88×10⁻¹⁶ J
+13.6 eV
 ```
 
 All four are built-in constants, so `hydrogen` is a value. With C = 1/(32π²) = 1/(2 (4π)²) it is the Rydberg energy, 13.6 eV, the energy needed to ionize hydrogen. Dimensional analysis found the whole formula except the number.
@@ -54,7 +54,7 @@ dimensional analysis of horizon: r depends on G, M, c
   Π₁ = r c²/(G M)
   so r ∝ G M/c²   (r = C G M/c², with C a pure number)
   defined horizon(M) = G M/c², so r = C horizon(M)
-Sun: 2.95325 km
+Sun: 2.95 km
 ```
 
 r ∝ G M/c². Squeeze the Sun inside 3 km and light can't escape.

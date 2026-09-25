@@ -50,16 +50,16 @@ for d from 0 km to 10 km step 1 km
 <!-- output -->
 ```
 0 km 0 μs
-1 km 3.33564 μs
-2 km 6.67128 μs
-3 km 10.0069 μs
-4 km 13.3426 μs
-5 km 16.6782 μs
-6 km 20.0138 μs
-7 km 23.3495 μs
-8 km 26.6851 μs
-9 km 30.0208 μs
-10 km 33.3564 μs
+1 km 3.34 μs
+2 km 6.67 μs
+3 km 10.0 μs
+4 km 13.3 μs
+5 km 16.7 μs
+6 km 20.0 μs
+7 km 23.3 μs
+8 km 26.7 μs
+9 km 30.0 μs
+10 km 33.4 μs
 ```
 
 About 3.3 μs per kilometre, which is why engineers say "light goes about a foot per nanosecond".
@@ -77,7 +77,7 @@ print N, "bacteria after", t, "=", t in hr
 
 <!-- output -->
 ```
-1048576 bacteria after 400 min = 6.66667 hr
+1048576 bacteria after 400 min = 6.67 hr
 ```
 
 `2 * N`, not `2 N`: `2 N` would be two newtons! (Fermium would stop with an error, because `N` holds a plain number.)

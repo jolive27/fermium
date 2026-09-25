@@ -100,6 +100,6 @@ def test_example_notebook_runs(jupyter_path, tmp_path):
     assert text(code[0]) == "9.70 m/s²\n31.8 ft/s²\n"
     assert "can't add" in text(code[1])
     assert text(code[2]) == "10 rad/s\n"
-    assert "3.52006 cm" in text(code[3])
+    assert "3.52 cm" in text(code[3])
     assert any(o.output_type == "display_data" and "image/png" in o.data for o in code[3].outputs)
     assert text(code[4]).splitlines()[1] == "1 fm"

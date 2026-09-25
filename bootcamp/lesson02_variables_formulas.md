@@ -66,7 +66,7 @@ print time_to_hear
 
 <!-- output -->
 ```
-2.91545 s
+2.92 s
 ```
 
 ## Printing text and values together
@@ -193,7 +193,7 @@ print x
 
 <!-- output -->
 ```
-4.79592
+4.80
 ```
 
 (Here `h`, `c` and `k_B` are the built-in constants, and `lam` is short for λ. The answer has no units, as the argument of an exponential must.)

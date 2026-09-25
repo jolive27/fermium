@@ -54,7 +54,7 @@ print 2 m + 30 cm
 
 <!-- output -->
 ```
-2.3 m
+2.30 m
 ```
 
 Lines you type into the **Terminal** (the Mac's command window) look like this:

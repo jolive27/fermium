@@ -53,7 +53,7 @@ print N'(8 day) in 1/day
 <!-- output -->
 ```
 -625 1/day
--229.925 1/day
+-230 1/day
 ```
 
 At the start, 5000/8 = 625 nuclei per day decay; one lifetime later, e times fewer.

@@ -268,7 +268,7 @@ warning: line 3: this is read as a/(b c), i.e. 1/(2 ...): implicit multiplicatio
     print 1/2 mass v^2
            ^
   hint: if you meant (1/2) times the rest, write (1/2) with parentheses (or ½ for one half)
-0.0277778 s²/(kg m²)
+0.0278 s²/(kg m²)
 ```
 
 **Means:** in Fermium, multiplication without `*` happens *before* division (so that `h c / λ k T` means (hc)/(λkT), as in textbooks). So `1/2 mass v^2` is 1/(2 · mass · v²).

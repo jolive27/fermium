@@ -14,7 +14,7 @@ from numparse import num
 DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gauntlet", "astrophysics")
 G, C, H, HBAR, KB, ME = K.G, K.c, K.h, K.hbar, K.k, K.m_e
 MU = K.physical_constants["atomic mass constant"][0]
-MSUN = 1.98841e30          # IAU 2015 nominal GM☉ / G (CODATA 2022 G), as Fermium's M_sun
+MSUN = 1.3271244e20 / 6.67430e-11   # IAU 2015 nominal GM☉ / G (CODATA 2022 G), exactly as Fermium defines M_sun
 MPC = 3.0856775814913673e22
 YR = 365.25 * 86400
 GYR = 1e9 * YR

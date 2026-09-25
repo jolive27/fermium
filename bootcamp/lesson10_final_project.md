@@ -56,7 +56,7 @@ print "after 365 days: x =", x in AU, "y =", y in AU
 
 <!-- output -->
 ```
-after 365 days: x = 1.00002 AU y = -0.002767 AU
+after 365 days: x = 1.00 AU y = -0.002768 AU
 ```
 
 After 365 days, the Earth is back near (1 AU, 0), where it started. It works!
@@ -146,8 +146,8 @@ print "period:", period in day
 <!-- output -->
 ```
 energy per kg at start: -4.437×10⁸ J/kg
-relative energy change after 2 years: 1.282×10⁻⁹
-period: 365.125 day
+relative energy change after 2 years: 1.281×10⁻⁹
+period: 365 day
 ```
 
 - The energy is negative (the Earth is *bound* to the Sun) and changes by about one part in a billion over two years. Excellent.
@@ -239,10 +239,10 @@ plot ys in AU vs xs in AU to "eccentric_orbit.png"
 
 <!-- output -->
 ```
-closest to the Sun: 0.291068 AU
-furthest from the Sun: 1 AU
-period: 0.518709 yr
-T^2 / a^3 = 1.00021 yr²/AU³
+closest to the Sun: 0.291 AU
+furthest from the Sun: 1.00 AU
+period: 0.519 yr
+T^2 / a^3 = 1.00 yr²/AU³
 plot saved to eccentric_orbit.png
 ```
 
@@ -273,7 +273,7 @@ print "distance after 0.25 yr:", r(0.25 yr) in AU to 3 digits
 
 <!-- output -->
 ```
-closest approach (solve): -0.291067 AU
+closest approach (solve): -0.291 AU
 distance after 0.25 yr: 0.302 AU
 ```
 
@@ -308,7 +308,7 @@ print "distance from the Sun:", |r| in AU
 
 <!-- output -->
 ```
-after 365 days: <1.000, -0.002767> AU
+after 365 days: <1.000, -0.002768> AU
 distance from the Sun: 1.000 AU
 ```
 

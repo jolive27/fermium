@@ -114,6 +114,7 @@ print to(g, km/hr^2)
 
 - `print a, b, c` prints the values separated by spaces.
 - `print x to 6 digits` shows 6 significant figures instead of the automatic choice.
+- **How many digits by default:** a result shows as many significant figures as its least precise input (`1.20 m` has 3; at least 2). When that is ambiguous or unspecified (all inputs exact, like `1/2`, `2π`, `c`), it shows **3** (`0.500`, `6.28`, `3.00×10⁸ m/s`). Whole numbers below 10⁷ print exactly, and a value written as a literal prints as written (DECISIONS D11). This is display only: calculations always use the full double-precision value.
 - Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Text can't be used in arithmetic.
 - `x in unit` shows a value in another unit. The units must measure the same kind of quantity.
 - Numbers are printed with sensible significant figures: the fewest significant figures of the inputs, but at least 2.

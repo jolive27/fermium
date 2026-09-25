@@ -902,6 +902,7 @@ class Checker(C.DiffContext):
         sym = self.loop_var(s.var, NumTy(lo.ty.dim), ctx, s)
         sym.hint = lo.hint
         sym.sf = None
+        sym.direct = True       # grid values print as written (0.07 s, not 0.0700 s; D11)
         sym.assigned = True
         ctx.loop += 1
         reg = self._enter_region(ctx, "for", s.line)
@@ -933,6 +934,9 @@ class Checker(C.DiffContext):
         # for E in [0.50 eV, 0.75 eV] keeps the elements' precision when they all share it (friction #30)
         sfs = {getattr(it, "sf", None) for it in getattr(lst, "items", [None])}
         sym.sf = sfs.pop() if len(sfs) == 1 else None
+        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11)
+        items = getattr(lst, "items", None)
+        sym.direct = sym.sf is None and bool(items) and all(getattr(it, "direct", False) for it in items)
         sym.assigned = True
         ctx.loop += 1
         reg = self._enter_region(ctx, "for", s.line)
@@ -2045,7 +2049,7 @@ class Checker(C.DiffContext):
         if e.digits < 1 or e.digits > 17:
             raise self.err("the number of digits must be between 1 and 17", e)
         v.sf = e.digits
-        v.direct = True
+        v.direct = 2            # asked for (2), not written as a literal (True): lists use exactly sf digits
         v.echo = False          # no "(= … SI)" echo for a value printed to chosen digits (friction #31)
         return v
 

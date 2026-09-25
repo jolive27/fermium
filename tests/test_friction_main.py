@@ -35,8 +35,8 @@ def test_16_milli_and_micro_arcseconds():
 
 
 def test_27_gm_constants():
-    assert run("print GM_sun / G in kg\nprint GM☉").split("\n") == ["1.98841×10³⁰ kg", "1.32712×10²⁰ m³/s²"]
-    assert run("print √(GM_earth / R_earth)") == "7905.39 m/s"
+    assert run("print GM_sun / G in kg to 6 digits\nprint GM☉ to 6 digits").split("\n") == ["1.98841×10³⁰ kg", "1.32712×10²⁰ m³/s²"]
+    assert run("print √(GM_earth / R_earth) to 6 digits") == "7905.39 m/s"
 
 
 def test_34_redefining_a_constant_that_was_used():
@@ -59,7 +59,7 @@ def test_26_err_of_something_else_is_an_error():
 
 
 def test_21_celsius_in_compound_units_is_a_temperature_step():
-    src = ("r = 2 °C/min\nprint r\nprint r in K/s\nc = 4.18 J/(g °C)\nprint c in J/(kg K)\n"
-           "T = 90 °C\nprint T + r * 5 min\nprint 0.5 K/s in °C/min\nprint 1 °F/s in K/s")
+    src = ("r = 2 °C/min\nprint r\nprint r in K/s to 6 digits\nc = 4.18 J/(g °C)\nprint c in J/(kg K)\n"
+           "T = 90 °C\nprint T + r * 5 min\nprint 0.5 K/s in °C/min\nprint 1 °F/s in K/s to 6 digits")
     assert run(src).split("\n") == ["2 °C/min", "0.0333333 K/s", "4180 J/(kg K)", "100 °C", "30 °C/min",
                                     "0.555556 K/s"]
