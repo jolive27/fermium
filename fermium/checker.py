@@ -1029,9 +1029,10 @@ class Checker(C.DiffContext):
         left = getattr(e, "unit_left", None)
         if hint is None and lookup_unit(name) is not None and left is not None:
             lt = C.to_source(left)
-            lt = lt if len(lt) <= 24 else "x"
             hint = (f"{name} is a unit, and units go right after a number; to multiply {lt} by {name} write "
-                    f"{lt} * 1 {name} or {lt} [{name}]")
+                    f"{lt} * 1 {name} or {lt} [{name}]") if len(lt) <= 24 else \
+                (f"{name} is a unit, and units go right after a number; to multiply by it write * 1 {name} or "
+                 f"[{name}] after the value")
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None:
@@ -1070,8 +1071,6 @@ class Checker(C.DiffContext):
         return None
 
     def e_BinOp(self, e, ctx):
-        if e.implicit and isinstance(e.right, A.Name) and not isinstance(e.left, A.Num):
-            e.right.unit_left = e.left        # `A_d u`: the hint suggests A_d * 1 u (#55)
         if e.op in ("*", "/") and isinstance(e.left, A.BinOp):
             e.left.in_product = True          # 2 h c² is Planck's law, not "2 hours": only a lone `2 h` warns
         if e.op == "^":
@@ -1889,6 +1888,8 @@ class Checker(C.DiffContext):
         f = e.func
         if isinstance(f, A.Name):
             b, _ = self.lookup(f.name, ctx, f)
+            if b is None and f.name == "Σ":
+                return self.builtin("sum", e, ctx)         # Σ(xs) is sum(xs)
             if b is None and f.name in ("γ", "Γ"):
                 return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
             if b is None and f.name == "err":           # err(g): the standard error of a fitted parameter
@@ -2864,6 +2865,57 @@ class Checker(C.DiffContext):
         r.sf = self._minsf(lo, hi, body)
         return r
 
+    def e_Sum(self, e, ctx):
+        """Σ(body for k from a to b step s) (#49, D51): the body is a scalar lambda of k (like an integrand),
+        summed by a loop that counts like `for k from a to b step s`; a vector body sums per component."""
+        lo = self.expr(e.lo, ctx)
+        hi = self.expr(e.hi, ctx)
+        self.need_num(lo, e.lo, "the start of the sum")
+        self.need_num(hi, e.hi, "the end of the sum")
+        self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"this sum runs from {self.desc(lo.ty.dim)} to "
+                      f"{self.desc(hi.ty.dim)}; the start and end need the same units", e)
+        if e.step is not None:
+            st = self.expr(e.step, ctx)
+            self.need_num(st, e.step, "the step of the sum")
+            self.unify_or(lo.ty.dim, st.ty.dim, lambda: "the step of a sum needs the same units as its start", e.step)
+        else:
+            st = I.IConst(1.0, NumTy(lo.ty.dim))
+            if not self.U.unify(lo.ty.dim, DIMLESS):
+                raise self.err(f"this sum runs over {self.desc(lo.ty.dim)}, so it needs a step, like "
+                               f"Σ(… for {e.var} from a to b step 1 {getattr(lo.hint, 'name', 'm')})", e)
+        if isinstance(hi, I.IConst) and math.isinf(hi.value):
+            raise self.err("a sum needs a finite number of terms", e.hi,
+                           hint=f"sum up to a large fixed number, like Σ(… for {e.var} from 1 to 1000)")
+        lam = I.ILambda("scalar", self.fresh_name("term"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        ks = I.Sym(e.var, NumTy(lo.ty.dim), "local", lam)
+        ks.assigned = True
+        ks.sf = None                    # a count is exact
+        lam.params = [ks]
+        scope.names[e.var] = ks
+        marks = (len(self.new_lambdas), len(self.all_lambdas))
+        body = self.expr(e.body, lctx)
+        if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            comps = []
+            for k in range(body.ty.n):
+                idx = A.Index(e.body, A.Num(float(k + 1), None, False).at(e)).at(e.body)
+                c = A.Sum(idx, e.var, e.lo, e.hi, e.step).at(e)
+                c._component = True
+                comps.append(c)
+            return self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        self.need_num(body, e.body, "each term of a sum")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.ISum(lam, lo, hi, st, NumTy(body.ty.dim))
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
     def vector_integral(self, e, n, ctx):
         """∫ <f, g, h> ds from a to b = <∫ f ds, ∫ g ds, ∫ h ds>, Biot–Savart's ∫ dl × r / |r|³ too:
         each component is its own adaptive integral of the integrand's k-th component (D35)."""
@@ -2943,6 +2995,12 @@ def _name_uses(e):
         if isinstance(n, A.Integral):
             walk(n.integrand, bound | {n.var})
             for x in (n.lo, n.hi):
+                if x is not None:
+                    walk(x, bound)
+            return
+        if isinstance(n, A.Sum):
+            walk(n.body, bound | {n.var})
+            for x in (n.lo, n.hi, n.step):
                 if x is not None:
                     walk(x, bound)
             return

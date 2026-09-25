@@ -2125,6 +2125,36 @@ class FuncGen:
         q = self.mg.kernel("fm_quad")
         return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
 
+    def e_ISum(self, e):
+        """Σ(term for k from lo to hi step st): the count of a for loop (s_SFor), the terms added in order."""
+        b, fn = self.b, self.fn
+        f = self.mg.lambda_for(e.lam)
+        env = self.make_env(e.lam)
+        lo, hi, st = self.expr(e.lo), self.expr(e.hi), self.expr(e.step)
+        with b.if_then(b.fcmp_unordered("==", st, f64(0))):
+            self.fail(ERR_STEP, st, f64(0))
+        span = b.fdiv(b.fsub(hi, lo), st)
+        cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
+        cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+        with b.if_then(b.fcmp_unordered("uno", cnt, cnt), likely=False):
+            self.fail(ERR_RANGE, lo, hi)
+        cnt = b.select(b.fcmp_ordered(">", cnt, f64(2.0 ** 62)), f64(2.0 ** 62), cnt)
+        n = b.fptosi(cnt, I64)
+        iv, acc = self.alloca(I64), self.alloca(F64)
+        b.store(i64(0), iv)
+        b.store(f64(0), acc)
+        cond, body, end = (fn.append_basic_block(nm) for nm in ("s.c", "s.b", "s.e"))
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
+        b.position_at_end(body)
+        k = b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st))
+        b.store(b.fadd(b.load(acc), b.call(f, [k, env])), acc)
+        b.store(b.add(b.load(iv), i64(1)), iv)
+        b.branch(cond)
+        b.position_at_end(end)
+        return b.load(acc)
+
     def e_IRoot(self, e):
         fn = self.mg.lambda_for(e.lam)
         env = self.make_env(e.lam)

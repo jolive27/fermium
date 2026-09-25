@@ -168,6 +168,13 @@ class IIntegral(Expr):
         self.lam, self.lo, self.hi, self.ty = lam, lo, hi, ty
 
 
+class ISum(Expr):
+    """Σ(body for k from lo to hi step st): lam(k) summed over the range, as a for loop counts it (D51)."""
+
+    def __init__(self, lam, lo, hi, step, ty):
+        self.lam, self.lo, self.hi, self.step, self.ty = lam, lo, hi, step, ty
+
+
 class IRoot(Expr):
     """The x in [lo, hi] where lam(x) = 0 (solve lhs = rhs for x from lo to hi)."""
 

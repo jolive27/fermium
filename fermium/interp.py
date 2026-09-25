@@ -1098,6 +1098,20 @@ class Interpreter:
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
         return self.kernel(lambda: quad(f, lo, hi))
 
+    def e_ISum(self, e, fr):
+        f = self.scalar_fn(e.lam, fr)
+        lo, hi, st = self.eval(e.lo, fr), self.eval(e.hi, fr), self.eval(e.step, fr)
+        if st == 0 or st != st:
+            raise _Fail(ERR_STEP, st, 0.0)
+        span = fdiv(hi - lo, st)
+        if span != span:
+            raise _Fail(ERR_RANGE, lo, hi)
+        n = max(0, int(math.floor(span + 1e-9) + 1.0)) if abs(span) < math.inf else (2 ** 62 if span > 0 else 0)
+        acc = 0.0
+        for i in range(n):
+            acc = acc + f(lo + i * st)
+        return acc
+
     def e_IRoot(self, e, fr):
         f = self.scalar_fn(e.lam, fr)
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)

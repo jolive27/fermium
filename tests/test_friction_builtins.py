@@ -205,3 +205,38 @@ def test_50_pure_python_fallback_for_j(monkeypatch):
         monkeypatch.setitem(sys.modules, mod, None)
     for (n, x), w in want.items():
         assert special._bessel_fallback("jv", n, x) == pytest.approx(w, rel=1e-12, abs=1e-15)
+
+
+# ---------------------------------------------------------------- #49 one-line sums
+def test_49_sums():
+    src = ("print Σ(k² for k from 1 to 10)\nprint sum(1/k² for k from 1 to 1000) to 8 digits\n"
+           "N = 5\nS(N) = Σ(k for k from 1 to N)\nprint S(4), S(N)\nprint Σ(k for k from 1 to 9 step 2)\n"
+           "xs = [1 m, 2 m, 3 m]\nprint Σ(xs), sum(xs)\nprint Σ(r for r from 1 m to 3 m step 1 m)\n"
+           "print Σ(<k, k²> m for k from 1 to 3)\nprint Σ(k for k from 5 to 1), Σ(k for k from 3 to 1 step -1)")
+    assert both(src).split("\n") == ["385", "1.6439346", "10 15", "25", "6 m 6 m", "6 m", "<6, 14> m", "0 6"]
+
+
+def test_49_fourier_series_derivative_and_laplacian():
+    import math
+    src = ("f(x) = Σ(sin(n x)/n for n from 1 to 49 step 2)\ng = f'\nprint f(1) to 12 digits, g(1) to 12 digits\n"
+           "print g\n"
+           "a = 1 m\nV0 = 10 V\n"
+           "term(n, x, y) = 4 V0 / (n π) * sin(n π x / a) sinh(n π y / a) / sinh(n π)\n"
+           "φ(x, y) = Σ(term(n, x, y) for n from 1 to 61 step 2)\n"
+           "print φ(0.5 m, 0.5 m) to 8 digits\nlap = ∇²φ\nprint lap(0.3 m, 0.7 m)\n"
+           "u(x, y) = Σ(sin(n x) sin(n y) / n² for n from 1 to 7)\nL = ∇²u\nprint L(0.4, 1.1) to 12 digits")
+    out = both(src).split("\n")
+    f1 = sum(math.sin(n) / n for n in range(1, 50, 2))
+    g1 = sum(math.cos(n) for n in range(1, 50, 2))
+    assert [float(v) for v in out[0].split()] == pytest.approx([f1, g1], rel=1e-11)
+    assert out[1] == "g(x) = Σ(cos(n x) for n from 1 to 49 step 2)"
+    assert out[2:4] == ["2.5000000 V", "0 V/m²"]
+    lap = -2 * sum(math.sin(n * 0.4) * math.sin(n * 1.1) for n in range(1, 8))
+    assert float(out[4]) == pytest.approx(lap, rel=1e-11)
+
+
+def test_49_sum_errors():
+    assert "limits depend on N" in error_of("F(x, N) = Σ(sin(k x) for k from 1 to N)\nG = ∂/∂N F\nprint G(1, 2)").message
+    assert "needs a step" in error_of("print Σ(r for r from 1 m to 3 m)").message
+    assert "finite number of terms" in error_of("print Σ(1/k² for k from 1 to ∞)").message
+    assert "expected 'from'" in error_of("print Σ(k² for k in 1)").message

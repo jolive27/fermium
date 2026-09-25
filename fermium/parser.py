@@ -996,6 +996,8 @@ class Parser:
             self._warn_unit_then_term(e)
             ws, ri = self.tok.ws_before, self.i
             r = self.power()
+            if isinstance(r, A.Name) and not isinstance(e, A.Num):
+                r.unit_left = e               # `A_d u`: if u isn't defined, the hint suggests A_d * 1 u (#55)
             e = self.span(A.BinOp("*", e, r, implicit=True), t)
             e.juxt_ws, e.juxt_i = ws, ri
         self._warn_bare_unit(e)
@@ -1205,6 +1207,10 @@ class Parser:
                 n = self.span(A.Name("∞"), t)
                 u = self.unit_expr(explicit=False)
                 return self.span(A.Quantity(n, u), t)
+            if t.value in ("Σ", "sum") and self.peek().kind == "OP" and self.peek().value == "(":
+                j = self._sum_for_index()
+                if j is not None:
+                    return self.sum_expr(j)
             self.next()
             if t.value == "end" and self.in_index():
                 return self.span(A.End(), t)
@@ -1291,6 +1297,49 @@ class Parser:
         if t.kind == "OP" and t.value == "=":
             raise self.error("unexpected '='", hint="use == to compare two values")
         raise self.error(f"didn't expect '{t.raw}' here")
+
+    def _sum_for_index(self):
+        """At `Σ (` or `sum (`: the index of a `for` at the top level inside the brackets, or None."""
+        depth = 0
+        j = self.i + 1
+        while j < len(self.toks):
+            tk = self.toks[j]
+            if tk.kind == "EOF":
+                return None
+            if tk.kind == "OP" and tk.value in "([{":
+                depth += 1
+            elif tk.kind == "OP" and tk.value in ")]}":
+                depth -= 1
+                if depth == 0:
+                    return None
+            elif depth == 1 and tk.kind == "KW" and tk.value == "for":
+                return j
+            j += 1
+        return None
+
+    def sum_expr(self, j):
+        """Σ(k² for k from 1 to 10) or sum(f(k) for k from 1 to N step 2): a one-line sum (#49, D51)."""
+        t = self.next()
+        self.next()                                   # (
+        if self.toks[j + 1].kind == "NAME":
+            self.known.add(self.toks[j + 1].value)    # the summation variable is a variable, not a unit
+        body = self.expr()
+        if not self.at_kw("for"):
+            raise self.error("expected 'for' in this sum (write: Σ(k² for k from 1 to 10))" + self._found())
+        self.next()
+        vt = self.expect_name("the summation variable (write: Σ(k² for k from 1 to 10))")
+        self.expect_kw("from", "(write: Σ(k² for k from 1 to 10))")
+        lo = self.expr()
+        self.expect_kw("to", "(write: Σ(k² for k from 1 to 10))")
+        hi = self.expr()
+        step = None
+        if self.at_kw("step"):
+            self.next()
+            step = self.expr()
+        if not self.at_op(")"):
+            raise self.error("expected ')' to close this sum" + self._found())
+        self.next()
+        return self.span(A.Sum(body, vt.value, lo, hi, step), t)
 
     def _unit_reciprocal_follows(self):
         """`0.1 1/s` or `0.1 /s` right after a number."""

@@ -66,6 +66,10 @@ def subst(e, mapping):
         return _copy(e, integrand=subst(e.integrand, inner),
                      lo=subst(e.lo, mapping) if e.lo is not None else None,
                      hi=subst(e.hi, mapping) if e.hi is not None else None)
+    if isinstance(e, A.Sum):
+        inner = {k: v for k, v in mapping.items() if k != e.var}
+        return _copy(e, body=subst(e.body, inner), lo=subst(e.lo, mapping), hi=subst(e.hi, mapping),
+                     step=subst(e.step, mapping) if e.step is not None else None)
     if isinstance(e, A.Where):
         bound = {b for b, _ in e.bindings}
         inner = {k: v for k, v in mapping.items() if k not in bound}
@@ -101,6 +105,8 @@ def map_children(e, f):
     if isinstance(e, A.Integral):
         return _copy(e, integrand=f(e.integrand), lo=f(e.lo) if e.lo is not None else None,
                      hi=f(e.hi) if e.hi is not None else None)
+    if isinstance(e, A.Sum):
+        return _copy(e, body=f(e.body), lo=f(e.lo), hi=f(e.hi), step=f(e.step) if e.step is not None else None)
     if isinstance(e, (A.ListLit, A.VecLit)):
         return _copy(e, items=[f(x) for x in e.items])
     if isinstance(e, A.IfExpr):
@@ -436,6 +442,16 @@ def _d(e, var, ctx):
         if isinstance(f, A.Prime) and isinstance(f.target, A.Name) and ctx.user_function(f.target.name):
             dn = ctx.derived_function(f.target.name, 0, f.order)
             return _d(A.Call(A.Name(dn), e.args), var, ctx)
+    if isinstance(e, A.Sum):
+        # d/dx Σ f(k, x) = Σ ∂f/∂x, term by term (D51); the limits may not depend on x
+        if e.var == var:
+            return num(0)
+        for b in (e.lo, e.hi, e.step):
+            if b is not None and depends_on(b, var):
+                raise FermiumError(f"can't differentiate this sum with respect to {var}: its limits depend on {var}",
+                                   e.line, e.col, hint="the number of terms changes in steps, so it has no derivative")
+        inner = simplify(_d(inline_where(e.body), var, ctx))
+        return num(0) if is_num(inner, 0) else _copy(e, body=inner)
     if isinstance(e, A.Integral) and e.lo is not None:
         # Leibniz rule: d/dx ∫ f(x, s) ds from a(x) to b(x)
         #   = ∫ ∂f/∂x ds from a to b + f(x, b) b'(x) - f(x, a) a'(x)   (D36)
@@ -771,6 +787,12 @@ def _src(e, pretty):
         if e.lo is not None:
             s += f" from {_src(e.lo, pretty)[0]} to {_src(e.hi, pretty)[0]}"
         return s, 0
+    if isinstance(e, A.Sum):
+        s = f"{'Σ' if pretty else 'sum'}({_src(e.body, pretty)[0]} for {e.var} from {_src(e.lo, pretty)[0]} " \
+            f"to {_src(e.hi, pretty)[0]}"
+        if e.step is not None:
+            s += f" step {_src(e.step, pretty)[0]}"
+        return s + ")", PREC_ATOM
     if isinstance(e, A.Convert):
         return f"{_src(e.value, pretty)[0]} in {e.unit.text}", 0
     if isinstance(e, A.Where):
