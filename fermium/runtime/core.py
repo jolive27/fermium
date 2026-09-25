@@ -450,6 +450,13 @@ class Runtime:
         text = "warning: " + (f"line {line}: " if line else "") + msg + suf
         if kind == 7 and any(w.startswith(text.split(" is ")[0]) for w in self.warnings):
             return            # once per solve, not once per loop pass
+        self.warn_text(text)
+
+    def warn_text(self, text):
+        """Show a run-time warning (once per distinct text), as warn() does; used by solvers whose message
+        carries more than one number (the eigenvalue solver's nearly degenerate levels, D233)."""
+        if not text.startswith("warning: "):
+            text = "warning: " + text
         if text not in self.warnings:
             self.warnings.append(text)
             try:

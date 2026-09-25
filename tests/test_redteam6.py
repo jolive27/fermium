@@ -100,7 +100,6 @@ print u(2.5 mm, 0.05 s) to 5 digits
 # ---- #5: D190's inverse iteration mixes a near-degenerate pair: a symmetric double well's ground state
 #          loses its parity ---------------------------------------------------------------------------------------
 
-@rt6(5)
 def test_5_double_well_ground_state_is_symmetric():
     src = """m = m_e
 V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8
@@ -120,12 +119,16 @@ print ∫ x ψ₁(x)^2 dx from -3 nm to 3 nm in nm
 
 # ---- #6: `d/ds h(2 s)` reads `2 s` as 2 seconds (D221 derivative at a point), silently -----------------------------
 
-@rt6(6)
 def test_6_derivative_variable_named_like_a_unit_is_the_variable():
     from fermium.driver import run_source
     import io
     out, err = io.StringIO(), io.StringIO()
-    run_source("h(s) = s^2\nprint d/ds h(2 s)\n", "<t>", out=out, err=err)
+    from fermium.errors import FermiumError
+    try:
+        run_source("h(s) = s^2\nprint d/ds h(2 s)\n", "<t>", out=out, err=err)
+    except FermiumError as ex:       # the fix (D231) makes it a D7 error that asks which reading is meant
+        err.write(f"error (stronger than the warning asked for): {ex}")
+        assert "ambiguous" in str(ex), ex
     # on paper d/ds h(2s) = 2 h'(2s) = 8s (what `d/ds h(2*s)` prints as a formula); Fermium prints `4 s`
     # (h' at 2 seconds) with no warning
     assert out.getvalue().strip() != "4 s" or "warning" in err.getvalue(), out.getvalue()
@@ -133,7 +136,6 @@ def test_6_derivative_variable_named_like_a_unit_is_the_variable():
 
 # ---- #7: `∫ 3 s^2 ds` reads `3 s^2` as 3 square seconds, with no D7 warning ---------------------------------------
 
-@rt6(7)
 def test_7_integration_variable_named_like_a_unit_warns_or_is_the_variable():
     from fermium.driver import run_source
     import io
@@ -141,3 +143,75 @@ def test_7_integration_variable_named_like_a_unit_warns_or_is_the_variable():
     run_source("print ∫ 3 s^2 ds from 0 to 1\n", "<t>", out=out, err=err)
     # ∫₀¹ 3s² ds = 1; Fermium prints `3 s²` silently (a parameter `f(s) = 3 s^2` and `Σ(2 g for g …)` do warn)
     assert out.getvalue().strip() == "1" or "warning" in err.getvalue(), out.getvalue()
+
+
+def _run_both(src):
+    from fermium.driver import run_source
+    import io
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        run_source(src, "<t>", out=out, err=err)
+    except Exception as ex:          # a parse error surfaces as an exception here
+        return out.getvalue(), err.getvalue() + str(ex)
+    return out.getvalue(), err.getvalue()
+
+
+def test_6_derivative_variable_collision_is_an_error_that_names_both_readings():
+    for src, frag in (("h(s) = s^2\nprint d/ds h(2 s)\n", "'2 s' is ambiguous: s is the variable you differentiate by"),
+                      ("k(m) = m^2\nprint d/dm k(2 m)\n", "'2 m' is ambiguous: m is the variable you differentiate by"),
+                      ("g(x, s) = x s\nprint ∂/∂s g(1, 2 s)\n", "'2 s' is ambiguous")):
+        out, err = _run_both(src)
+        assert out == "" and frag in err, (src, out, err)
+        assert "2*" in err and "[" in err, err
+    # the explicit forms keep working: 2*s is the formula (D221), 2 [s] the unit, and a variable that isn't
+    # a unit name is unaffected
+    assert run("h(s) = s^2\nprint d/ds h(2*s)\n") == "d/ds (h(2·s)) = 2 h'(2·s)"
+    assert run("h(s) = s^2\nprint d/ds h(2 [s])\n") == "4 s"
+    assert run("x(t) = t^2\nprint d/dt x(2 s)\n") == "4 s"
+
+
+def test_7_integration_variable_m_and_ode_variable_warn():
+    out, err = _run_both("print ∫ 2 m dm from 0 to 1\n")
+    assert "'2 m' is the unit m, not your variable m" in err, err
+    out, err = _run_both("solve y' = 3 s^2 with y(0) = 0 for s from 0 to 1\nprint y(1)\n")
+    assert "'3 s^2' is the unit s^2, not your variable s" in err, err
+    out, err = _run_both("solve y' = 3 s y with y(0) = 1 for s from 0 to 1\nprint y(1)\n")
+    assert "'3 s' is ambiguous" in err, err
+    assert run("print ∫ 3*s^2 ds from 0 to 1\n") == "1"
+
+
+def test_5_nearly_degenerate_pair_without_symmetry_warns():
+    # the same double well on an asymmetric range: the pair can't be symmetrised, so it is flagged (D233)
+    src = """m = m_e
+V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3.5 nm) = 0
+    for x from -3 nm to 3.5 nm
+    lowest 2
+print E[2] - E[1] in eV
+"""
+    out, err = _run_both(src)
+    assert "levels 1 and 2 are nearly degenerate" in err and "ψ₁, ψ₂ can be any mixture" in err, err
+    from fermium.interp import run_interpreted
+    import io
+    iout, ierr = io.StringIO(), io.StringIO()
+    run_interpreted(src, "<t>", out=iout, err=ierr)
+    assert iout.getvalue() == out and "nearly degenerate" in ierr.getvalue(), (iout.getvalue(), ierr.getvalue())
+
+
+def test_5_double_well_shooting_and_odd_state():
+    base = """m = m_e
+V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 2{m}
+print ψ₂(-1 nm) / ψ₂(1 nm) to 6 digits
+print ∫ ψ₁(x) ψ₂(x) dx from -3 nm to 3 nm
+"""
+    for m in ("", " using shooting"):
+        out, err = _run_both(base.format(m=m))
+        ratio, overlap = out.strip().split("\n")
+        assert abs(num(ratio) + 1) < 1e-3, out
+        assert abs(num(overlap)) < 1e-6, out
+        assert "degenerate" not in err, err

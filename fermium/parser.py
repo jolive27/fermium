@@ -71,6 +71,7 @@ class Parser:
         self.limit_start = None      # token index where an integral's upper limit starts (FRICTION #8)
         self.unknown_collisions = set()   # (line, name): `2 u` read as a unit though u is a solve's unknown
         self._named = None           # every name the program assigns, defines or loops over (D215)
+        self.deriv_vars = set()      # variables of the d/ds, ∂/∂s whose operand is being parsed (D231)
         self.solve_unknowns = set()  # the unknowns of the solve being parsed: names written with a prime (D211)
 
     # ------------------------------------------------------------ helpers
@@ -688,7 +689,7 @@ class Parser:
     def _solve_unknowns(self):
         """Before parsing a solve: the names written with a prime in it (`u''`, `x'`), its unknowns (D211).
         Scans to the end of the statement, including an indented block of equations and clauses."""
-        names = set()
+        names, indep = set(), set()     # indep: the independent variables (`for s from …`), red team 6 #7
         depth = 0
         j = self.i
         while j < len(self.toks):
@@ -707,14 +708,21 @@ class Parser:
                 names.add(tk.value)
                 if is_unit_name(tk.raw):
                     tk.unknown_prime = True
+            elif tk.kind == "NAME" and j > 0 and self.toks[j + 1].kind == "KW" and self.toks[j + 1].value == "from" \
+                    and ((self.toks[j - 1].kind == "KW" and self.toks[j - 1].value == "for") or
+                         (self.toks[j - 1].kind == "OP" and self.toks[j - 1].value == ",")):
+                indep.add(tk.value)
             j += 1
+        self.solve_independents = indep
         return names
 
     def _solve_equation(self, unknowns):
         """An equation of a solve: its unknowns count as your variables while it is parsed, so the D7 rule
         applies to them (`nm² * u''` isn't continued by u, `2 u * V` is ambiguous) (D211)."""
         saved_known, saved_unk = self.known, self.solve_unknowns
-        self.known = saved_known | unknowns
+        # the independent variable (`for s from …`) is your variable too: `y' = 3 s^2` is not 3 square seconds
+        # without a word (red team round 6 #7, D232)
+        self.known = saved_known | unknowns | getattr(self, "solve_independents", set())
         self.solve_unknowns = unknowns
         try:
             return self.equation()
@@ -1712,6 +1720,8 @@ class Parser:
         num = self._num_text(q)
         u = lookup_unit(f.name)
         what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        if f.name in self.deriv_vars and not where:
+            self._deriv_var_collision(q, f)
         whose = f"the {f.name} from 'where'" if where else (
             f"the unknown {f.name} of this solve" if f.name in self.solve_unknowns else f"your variable {f.name}")
         self._drop_warnings_between(f.line, q.col or 0, max(self.tok.col or 0, f.col or 0) if
@@ -1753,6 +1763,8 @@ class Parser:
             q = q.right
         if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
+            if f.name in self.deriv_vars and isinstance(q.value, A.Num):
+                self._deriv_var_collision(q, f)
             if f.name in self.known:
                 self._note_collision(q, f)
             then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
@@ -2380,8 +2392,33 @@ class Parser:
         o2 = self._deriv_order()
         if o2 != order:
             raise self.error(f"the orders don't match: d{order}/d{var}{o2}", tok=v)
-        operand = self.power()
+        operand = self._deriv_operand(var)
         return self.span(A.Deriv(var, order, operand), t)
+
+    def _deriv_operand(self, var):
+        """The operand of d/ds or ∂/∂s.  Its variable counts as your variable for D7, and a lone unit of that name
+        right after a number (`d/ds h(2 s)`) is an error: the reader means 2s, the unit rule says 2 seconds, and
+        D221 would silently give h' at 2 seconds (red team round 6 #6, D231)."""
+        saved_known, saved_dv = self.known, self.deriv_vars
+        self.known = saved_known | {var}
+        self.deriv_vars = saved_dv | {var}
+        try:
+            return self.power()
+        finally:
+            self.known, self.deriv_vars = saved_known, saved_dv
+
+    def _deriv_var_collision(self, q, f):
+        """`2 s` inside the operand of d/ds (D231): an error that says which reading is which."""
+        from .units import lookup_unit, dim_name
+        num = self._num_text(q)
+        ut = q.unit.text.strip() or f.name
+        u = lookup_unit(f.name)
+        what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        self._drop_warnings_between(f.line, q.col or 0, 10 ** 9)
+        raise self.error(f"'{num} {ut}' is ambiguous: {f.name} is the variable you differentiate by, but right "
+                         f"after a number {f.name} is the unit {what}",
+                         tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
+                         hint=f"write  {num}*{ut}  for {num} × the variable {f.name}, or  {num} [{ut}]  for the unit")
 
     def partial_op(self):
         t = self.next()   # ∂
@@ -2403,7 +2440,7 @@ class Parser:
         o2 = self._deriv_order()
         if o2 != order and o2 != 1:
             raise self.error(f"the orders don't match: ∂{order}/∂{v.value}{o2}", tok=v)
-        operand = self.power()
+        operand = self._deriv_operand(v.value)
         return self.span(A.Deriv(v.value, order, operand, partial=True), t)
 
     def integral(self):
@@ -2416,11 +2453,16 @@ class Parser:
         self.in_integrand += 1
         try:
             body = self.sum()
+            integrand, var = self._split_dvar(body)
+            if integrand is not body and var in new:
+                # `∫ 3 s^2 ds`: the unit s² was read together with the trailing `ds`, so the lone-unit check
+                # (D7 rule 5) saw a compound unit; check the integrand again now that `ds` is split off, with the
+                # integration variable counted as your variable (red team round 6 #7, D232)
+                self._warn_bare_unit(integrand)
         finally:
             self.known -= new
             self.limit_start = saved_limit
             self.in_integrand -= 1
-        integrand, var = self._split_dvar(body)
         if var is None:
             raise self.error("this integral is missing its 'dx' (the variable to integrate over)", tok=t,
                              hint="write e.g.  ∫ F(x) dx from 0 m to 1 m")

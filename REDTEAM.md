@@ -934,7 +934,7 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   u is evaluated at a time inside (or near) the unchecked window would make it visible.
 - **Test:** `test_4_heat_step_early_times_are_accurate_or_warned`.
 
-### 5. D190's inverse iteration mixes a near-degenerate pair: a symmetric double well's ground state has no parity (silent). Status: open
+### 5. D190's inverse iteration mixes a near-degenerate pair: a symmetric double well's ground state has no parity (silent). Status: fixed (D233)
 - **Repro:** `V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8`; `solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ with ψ(-3 nm) = 0,
   ψ(3 nm) = 0 for x from -3 nm to 3 nm lowest 2` (m = m_e) → `ψ₁(-1 nm) = 4.24×10⁴`, `ψ₁(1 nm) = 4.18×10⁴ 1/m^(1/2)`,
   ⟨x⟩₁ = ∫ x ψ₁² dx = −1.32×10⁻¹¹ m, ⟨x⟩₂ = +1.32×10⁻¹¹ m (the tunnelling splitting is 5×10⁻¹¹ eV). With
@@ -945,8 +945,9 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   refinement is shifted by the FD eigenvalue, which is within the splitting of the other state, so it converges to a
   mixture; ammonia-inversion-style problems get a 1.4 % asymmetric ground state and a spurious dipole.
 - **Test:** `test_5_double_well_ground_state_is_symmetric`.
+- **Fix:** two levels closer than 10⁻⁸ of the largest |E| are nearly degenerate. When the equation is symmetric about the middle of the range at every grid point, the pair is replaced by its even and odd combinations (fewer nodes first): ψ₁(−1 nm)/ψ₁(1 nm) = 1.00000 and ⟨x⟩₁ = 0 by both methods, ψ₂ odd. Otherwise (e.g. the same well on −3 nm … 3.5 nm) the run warns *levels 1 and 2 are nearly degenerate (ΔE/E = 3.8×10⁻¹¹); their eigenfunctions ψ₁, ψ₂ can be any mixture …* (JIT and interpreter). The original test passes unchanged; new tests cover the odd state, shooting, and the warning.
 
-### 6. `d/ds h(2 s)` is h′ at 2 seconds, not the derivative in s (silent). Status: open
+### 6. `d/ds h(2 s)` is h′ at 2 seconds, not the derivative in s (silent). Status: fixed (D231)
 - **Repro:** `h(s) = s^2` / `print d/ds h(2 s)` → `4 s`, no warning. `print d/ds h(2*s)` → `d/ds (h(2·s)) = 2 h'(2·s)`,
   and `d/dt f(3 t)` gives the formula too. `k(m) = m^2` / `d/dm k(2 m)` → `4 m`. (`u = 1` first, `d/du f(2 u)` does
   warn.)
@@ -954,13 +955,15 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   `d/ds` doesn't count as "your variable" for D7, unlike D211's rule for the unknowns of a solve and function
   parameters (`f(s) = 3 s^2` warns).
 - **Test:** `test_6_derivative_variable_named_like_a_unit_is_the_variable`.
+- **Fix:** the variable of `d/dv`/`∂/∂v` is your variable in its operand, and `2 s` right after a number there is an error: *'2 s' is ambiguous: s is the variable you differentiate by, but right after a number s is the unit seconds* (hint: `2*s` or `2 [s]`); `d/dm k(2 m)` and `∂/∂s g(1, 2 s)` too. The test now also accepts that error (it only allowed a warning; the error is stronger: no number is printed).
 
-### 7. `∫ 3 s^2 ds` integrates 3 square seconds, with no warning (silent; older than D190). Status: open
+### 7. `∫ 3 s^2 ds` integrates 3 square seconds, with no warning (silent; older than D190). Status: fixed (D232)
 - **Repro:** `print ∫ 3 s^2 ds from 0 to 1` → `3 s²`; `print ∫ 2 m dm from 0 to 1` → `2 m`. No warning, while the
   same `3 s^2` as a function parameter (`f(s) = 3 s^2`) and `Σ(2 g for g from 1 to 3)` warn (D7).
 - **Reference:** ∫₀¹ 3s² ds = 1 and ∫₀¹ 2m dm = 1. The integration variable should count as your variable for the D7
   rules (the unit reading with a warning, as elsewhere), the same fix as #6.
 - **Test:** `test_7_integration_variable_named_like_a_unit_warns_or_is_the_variable`.
+- **Fix:** the integrand is checked again after its `ds` is split off (the unit reader had taken `s^2 ds` as one compound unit): `∫ 3 s^2 ds` and `∫ 2 m dm` warn *'3 s^2' is the unit s^2, not your variable s*, as `f(s) = 3 s^2` does; in a product it is D7's error. ODEs had the same hole (`solve y' = 3 s^2 … for s from 0 to 1`): a solve's independent variables now count as your variables in its equations. `Σ` already warned.
 
 **Not findings (noted):**
 - A kinked potential (`V = F |x − 0.0123 nm|`, Airy levels) gives E₁ to 1.8×10⁻⁶ at the default grid (0.3428147156 vs
