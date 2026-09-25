@@ -33,7 +33,7 @@ gap. The program does three things:
    the next level, in units of ħω. The next N tried is the next level-filling number of that nucleus.
 
 The box (40 fm) is wide enough: moving the wall to 60 or 80 fm changes the least-bound level (3d3/2, −0.65 MeV)
-by 3×10⁻⁶ MeV. The program runs in ~25 s (about 600 eigenvalue problems). Run it from this folder with
+by 3×10⁻⁶ MeV. The program runs in ~25 s (about 450 eigenvalue problems). Run it from this folder with
 `fermium run shell.fm`.
 
 ## Results
@@ -109,7 +109,7 @@ from memory**, rounded to 10 keV; check them against ENSDF before quoting them.
 
 ## What writing it in Fermium showed
 - **The eigenvalue solver makes this short.** One `solve … lowest 5` per (l, j), written exactly as the radial
-  Schrödinger equation with its units, and about 600 of them run in 25 s. The magic-number scan (a function
+  Schrödinger equation with its units, and about 450 of them run in 25 s. The magic-number scan (a function
   with a `solve` for Z inside, then a spectrum per nucleus) needed no numerical code at all.
 - **`f'(r)` of a known function is refused inside an eigenvalue equation.** Writing the spin–orbit term as
   `Vls r0² ls f'(r) / r` gives "an eigenvalue problem needs one unknown function with a second derivative,
