@@ -83,6 +83,8 @@ least make the error say "to multiply by a vector write `v0 * <…>`".
 Problem 02(d): "check the ODE speed when x = 0.50 m". The solution is a function of t, so I had to
 invert x(t) by bisection (M1 again). A `x' at x = 0.50 m` or `when x = 0.50 m` query on an ODE
 solution would read like the problem statement. Same fix as M1 (root finder).
+**Update:** now `solve x(t_05) = 0.50 m for t_05 from 0 s to t_half` then `x'(t_05)`. Two lines,
+fine.
 
 ## M5. Two-phase motion: the natural way works, but it is undocumented (cosmetic / docs)
 

@@ -1,0 +1,52 @@
+# Gravitation 01 — Orbital elements from a position and a velocity
+#
+# (Taylor, Classical Mechanics, ch. 8; Kleppner & Kolenkow ch. 10.)
+# An asteroid is observed 1.50 AU from the Sun, at r = (1.50, 0) AU, moving with
+# velocity v = (5.00, 22.0) km/s. Take GM☉ = 1.32712440018 × 10²⁰ m³/s².
+#
+#   (a) Its specific energy and angular momentum; is it bound?
+#   (b) The semi-major axis, the eccentricity, the perihelion and aphelion
+#       distances and the period (Kepler's third law).
+#   (c) Integrate Newton's law for 1.2 periods. Find the aphelion and the next
+#       perihelion (where the radial velocity r·v is zero) and compare the
+#       distances with (b); the time between them is half a period.
+#   (d) Check the vis-viva equation v² = GM (2/r − 1/a) and the conservation of
+#       angular momentum at t = 1.00 yr.
+
+GM = 1.32712440018e20 m³/s²
+r0 = <1.50, 0> AU
+v0 = <5.00, 22.0> km/s
+
+# (a)
+ε = ½ |v0|² - GM / |r0|
+h = r0 × v0                          # a number in 2-D: the z-component
+print "specific energy:", ε in km²/s² to 6 digits
+print "angular momentum per kg:", h in km²/s to 6 digits
+print "bound:", ε < 0 J/kg
+
+# (b)
+a = -GM / (2 ε)
+e = √(1 + 2 ε h² / GM²)
+T = 2π √(a³ / GM)
+print "semi-major axis:", a in AU to 6 digits
+print "eccentricity:", e to 6 digits
+print "perihelion:", a (1 - e) in AU to 6 digits
+print "aphelion:", a (1 + e) in AU to 6 digits
+print "period:", T in yr to 6 digits
+
+# (c) the orbit, numerically
+solve r'' = -GM r / |r|³
+  with r(0) = r0, r'(0) = v0
+  for t from 0 s to 1.2 * T         # `1.2 T` is 1.2 tesla: FRICTION G1
+
+v_r(τ) = r(τ) · r'(τ) / |r(τ)|       # radial velocity (a prime inside solve means an ODE)
+solve v_r(t_aph) = 0 km/s for t_aph from 0 s to T
+solve v_r(t_peri) = 0 km/s for t_peri from t_aph + T/4 to 1.2 * T
+print "aphelion from the ODE:", |r(t_aph)| in AU to 6 digits
+print "perihelion from the ODE:", |r(t_peri)| in AU to 6 digits
+print "period from the ODE:", 2 (t_peri - t_aph) in yr to 6 digits
+
+# (d)
+t1 = 1.00 yr
+print "vis-viva, v² at 1 yr:", |r'(t1)|² in km²/s² to 6 digits, "vs", GM (2/|r(t1)| - 1/a) in km²/s² to 6 digits
+print "angular momentum at 1 yr:", r(t1) × r'(t1) in km²/s to 6 digits
