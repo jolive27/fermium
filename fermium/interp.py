@@ -626,7 +626,8 @@ class Interpreter:
             kind = e["kind"]
             if kind == "lists":
                 y, x = self.eval(e["y"], fr), self.eval(e["x"], fr)
-                py["plot_series"](s.plot_id, idx, x, len(x), y, len(y))
+                if py["plot_series"](s.plot_id, idx, x, len(x), y, len(y)):
+                    raise FermiumRuntimeError(self.rt.error, self.line)
             elif kind in ("sol", "solxy"):
                 sol = self.eval(e["sol"], fr)
                 ts, ys = self.sample(sol, e["comp"], e["dy"])
@@ -637,7 +638,8 @@ class Interpreter:
                 g = self.scalar_fn(e["lam"], fr)
                 xs = [lo + i * ((hi - lo) / 399) for i in range(400)]
                 ys = [g(x) for x in xs]
-                py["plot_series"](s.plot_id, idx, xs, 400, ys, 400)
+                if py["plot_series"](s.plot_id, idx, xs, 400, ys, 400):
+                    raise FermiumRuntimeError(self.rt.error, self.line)
         py["plot_done"](s.plot_id)
 
     def sample(self, sol, comp, use_dy, npts=600):

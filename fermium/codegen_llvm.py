@@ -52,6 +52,7 @@ ERR_QUAD = 9
 ERR_DEEP = 10
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
+ERR_PENDING = -1            # a runtime callback (plot, load, fit) failed and already set the message
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
@@ -153,12 +154,12 @@ class ModuleGen:
         e("fm_print_text", VOID, [I64])
         e("fm_print_end", VOID, [])
         e("fm_error", VOID, [I64, F64, F64, I64, I64])
-        e("fm_plot_series", VOID, [I64, I64, F64P, I64, F64P, I64])
+        e("fm_plot_series", I64, [I64, I64, F64P, I64, F64P, I64])
         e("fm_plot_sol", VOID, [I64, I64, I8P, I64, I64, I64, I64])
         e("fm_plot_done", VOID, [I64])
         e("fm_load", I64, [I64])
         e("fm_column", I64, [I64, I64, F64PP])
-        e("fm_fit", VOID, [I64, I64, F64P])
+        e("fm_fit", I64, [I64, I64, F64P])
         e("fm_sort", VOID, [F64P, I64])
         e("fm_clock", F64, [])
         e("malloc", I8P, [I64])
@@ -1025,6 +1026,11 @@ class FuncGen:
     def fail(self, kind, a=None, c=None):
         self.mg.raise_error(self.b, kind, a, c, getattr(self, "line", 0) or None)
 
+    def fail_if(self, status):
+        """Stop the program if a runtime callback returned a nonzero status (it set the message)."""
+        with self.b.if_then(self.b.icmp_signed("!=", status, i64(0)), likely=False):
+            self.fail(ERR_PENDING)
+
     def s_SAssign(self, s):
         self.store(s.sym, self.expr(s.value))
 
@@ -1246,7 +1252,7 @@ class FuncGen:
             v = self.expr(g) if g is not None else f64(math.nan)
             b.store(v, b.gep(p, [I32(0), I32(i)]))
         h = self.expr(s.data)
-        b.call(self.mg.externs["fm_fit"], [i64(s.fit_id), h, b.gep(p, [I32(0), I32(0)])])
+        self.fail_if(b.call(self.mg.externs["fm_fit"], [i64(s.fit_id), h, b.gep(p, [I32(0), I32(0)])]))
         for i, sym in enumerate(s.param_syms):
             self.store(sym, b.load(b.gep(p, [I32(0), I32(i)])))
 
@@ -1257,8 +1263,8 @@ class FuncGen:
             if kind == "lists":
                 y = self.expr(e["y"])
                 x = self.expr(e["x"])
-                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), self.ldata(x), self.llen(x),
-                                              self.ldata(y), self.llen(y)])
+                self.fail_if(b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), self.ldata(x), self.llen(x),
+                                                           self.ldata(y), self.llen(y)]))
             elif kind in ("sol", "solxy"):
                 sol = b.bitcast(self.expr(e["sol"]), I8P)
                 c2 = e.get("comp2", -1)
@@ -1278,7 +1284,7 @@ class FuncGen:
                     x = b.fadd(lo, b.fmul(b.sitofp(i, F64), dx))
                     b.store(x, b.gep(xs, [i]))
                     b.store(b.call(fn, [x, env]), b.gep(ys, [i]))
-                b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), xs, i64(npts), ys, i64(npts)])
+                self.fail_if(b.call(ex["fm_plot_series"], [i64(s.plot_id), i64(idx), xs, i64(npts), ys, i64(npts)]))
         b.call(ex["fm_plot_done"], [i64(s.plot_id)])
 
     # ------------------------------------------------------------ expressions
@@ -1574,7 +1580,10 @@ class FuncGen:
         return out
 
     def e_ILoad(self, e):
-        return self.b.call(self.mg.externs["fm_load"], [i64(e.load_id)])
+        h = self.b.call(self.mg.externs["fm_load"], [i64(e.load_id)])
+        with self.b.if_then(self.b.icmp_signed("==", h, i64(0)), likely=False):
+            self.fail(ERR_PENDING)          # a bad file: the loader set the message (A24)
+        return h
 
     def e_IColumn(self, e):
         b = self.b

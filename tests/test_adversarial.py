@@ -1048,7 +1048,6 @@ def test_integral_jump_and_oscillation():
     assert close(got[1], 6.5251672775030307, 1e-5)          # mpmath, 2000 panels
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A54: in ∫ 1/u du, u is read as the atomic mass unit")
 def test_integration_variable_named_like_unit():
     assert run("print ∫ 1/u du from 1 to 2") == "0.693147"
 
@@ -1080,7 +1079,6 @@ def test_derivative_of_formula_with_where():
     assert run("g = d/dt (a t^2) where a = 3\nprint g(1)") == "6"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A24: bad CSV leaks 'Exception ignored ... KeyError' to stderr")
 def test_bad_csv_has_no_python_noise(tmp_path):
     (tmp_path / "gap.csv").write_text("x [m], y [m]\n1, 2\n2,\n3, 6\n")
     r = _run_cli('d = load "gap.csv"\nprint d.y\n', tmp_path)

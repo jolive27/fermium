@@ -283,7 +283,7 @@ x = -(5 °C)
 print x               # actual: -551.3 °C                 expected: -5 °C or an error
 ```
 
-## A23. (low) `plot a vs b, c vs d` with different units puts both on one mislabelled axis
+## A23. [FIXED] (low) `plot a vs b, c vs d` with different units puts both on one mislabelled axis
 ```
 xs = [1 m, 2 m]
 ys = [1 s, 2 s]
@@ -294,7 +294,7 @@ values are seconds drawn on the metres axis. Expected: an error ("all series in 
 the same x units"), like the unit checker does everywhere else. (Also: `plot ys vs xs` with
 lists of different lengths raises the error but still leaves an empty c.png behind.)
 
-## A24. (low) A CSV with an empty cell leaks a Python traceback before the error
+## A24. [FIXED] (low) A CSV with an empty cell leaks a Python traceback before the error
 `gap.csv`:
 ```
 x [m], y [m]
@@ -734,7 +734,7 @@ print ∫ 1/sin(x)^3 dx from 1 to 5     # actual: 4.82374×10³²   expected: sa
 to a huge value. A relative-magnitude check (result ≫ integrand scale × interval, or error
 estimate not shrinking with depth) would catch it.
 
-## A54. Inside `∫ … du`, `1/u` is "per atomic mass unit", not 1/(the integration variable)
+## A54. [FIXED] Inside `∫ … du`, `1/u` is "per atomic mass unit", not 1/(the integration variable)
 Variables and parameters named like units win over the unit (`s = 2; print 1/s` → 0.5,
 `f(s) = 1/s` → 0.5), but the integration variable isn't known yet when the integrand is read:
 ```

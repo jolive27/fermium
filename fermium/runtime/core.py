@@ -32,6 +32,7 @@ def init_llvm():
 CB = ctypes.CFUNCTYPE
 c_double, c_int64, c_void_p = ctypes.c_double, ctypes.c_int64, ctypes.c_void_p
 DPTR = ctypes.POINTER(ctypes.c_double)
+ERR_PENDING = -1        # fm_error kind: stop with the message a callback already put in rt.error
 
 
 class SolStruct(ctypes.Structure):
@@ -141,16 +142,19 @@ class Runtime:
             rt.line = []
 
         def error(kind, a, b, line, fmt=-1):
-            rt.error = rt.describe_error(kind, a, b, fmt)
+            if kind != ERR_PENDING:          # ERR_PENDING: a callback already set rt.error
+                rt.error = rt.describe_error(kind, a, b, fmt)
             rt.error_line = line or None
 
         def plot_series(pid, idx, xp, nx, yp, ny):
             if nx != ny:
                 rt.error = f"plot: the two lists have different lengths ({ny} and {nx} values)"
-                return
+                rt.plot_series.pop(pid, None)
+                return 1
             xs = [xp[i] for i in range(nx)]
             ys = [yp[i] for i in range(ny)]
             rt.plot_series.setdefault(pid, []).append((idx, xs, ys))
+            return 0
 
         def plot_sol(pid, idx, solp, comp, dy, comp2, dy2):
             s = ctypes.cast(solp, ctypes.POINTER(SolStruct)).contents
@@ -180,6 +184,8 @@ class Runtime:
                 rt.fit(fid, h, p)
             except FermiumRuntimeError as ex:
                 rt.error = ex.message
+                return 1
+            return 0
 
         def sort(p, n):
             vals = sorted((p[i] for i in range(n)), key=lambda v: (v != v, v if v == v else 0.0))  # NaN last
@@ -199,12 +205,12 @@ class Runtime:
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_print_end": CB(None)(print_end),
             "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),
-            "fm_plot_series": CB(None, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
+            "fm_plot_series": CB(c_int64, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
             "fm_plot_sol": CB(None, c_int64, c_int64, c_void_p, c_int64, c_int64, c_int64, c_int64)(plot_sol),
             "fm_plot_done": CB(None, c_int64)(plot_done),
             "fm_load": CB(c_int64, c_int64)(load),
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
-            "fm_fit": CB(None, c_int64, c_int64, DPTR)(fit),
+            "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_clock": CB(c_double)(time.perf_counter),
         }
