@@ -212,8 +212,11 @@ class Lexer:
                     ws = True
                     continue
                 self.adv(p - self.pos)
-                if self.tokens and self.tokens[-1].kind != "NEWLINE" and self.tokens[-1].kind != "INDENT":
-                    pass
+                if width > self.indents[-1] and self._else_continues():
+                    # `u(t) = if t < t1 then a` + an indented `else ...` line: one expression (#53)
+                    self.tokens.pop()
+                    ws = True
+                    continue
                 if width > self.indents[-1]:
                     self.indents.append(width)
                     self.add("INDENT", width, self.pos, self.line, self.col, True)
@@ -304,6 +307,20 @@ class Lexer:
     def _continuation_word(self):
         rest = self.src[self.pos:self.pos + 5]
         return rest.startswith(("with ", "for ", "with\t", "for\t"))
+
+    def _else_continues(self):
+        """An indented line starting with `else` continues an if-expression begun on the line above."""
+        rest = self.src[self.pos:self.pos + 5]
+        if not (rest.startswith("else") and (len(rest) < 5 or not (rest[4].isalnum() or rest[4] == "_"))):
+            return False
+        if not self.tokens or self.tokens[-1].kind != "NEWLINE":
+            return False
+        k = len(self.tokens) - 2
+        while k >= 0 and self.tokens[k].kind not in ("NEWLINE", "INDENT", "DEDENT"):
+            if self.tokens[k].kind == "KW" and self.tokens[k].value == "then":
+                return True
+            k -= 1
+        return False
 
     def _continues(self):
         """A line ending in a binary operator or comma continues on the next line."""

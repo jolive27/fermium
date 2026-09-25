@@ -148,6 +148,16 @@ class Integral(Node):
 
 
 @dataclass(eq=False)
+class Sum(Node):
+    """Σ(body for var from lo to hi step st): a finite sum written in one line (#49, D51)."""
+    body: Node
+    var: str
+    lo: Node
+    hi: Node
+    step: Node | None = None
+
+
+@dataclass(eq=False)
 class Sqrt(Node):
     operand: Node
     root: int = 2
@@ -371,6 +381,8 @@ def children(n):
         return [n.operand]
     if isinstance(n, Integral):
         return [x for x in (n.integrand, n.lo, n.hi) if x is not None]
+    if isinstance(n, Sum):
+        return [x for x in (n.body, n.lo, n.hi, n.step) if x is not None]
     if isinstance(n, (ListLit, VecLit)):
         return list(n.items)
     if isinstance(n, IfExpr):
@@ -399,6 +411,12 @@ def free_names(n):
         inner = [x for x in free_names(n.integrand) if x != n.var]
         out = inner
         for b in (n.lo, n.hi):
+            if b is not None:
+                out += free_names(b)
+        return out
+    if isinstance(n, Sum):
+        out = [x for x in free_names(n.body) if x != n.var]
+        for b in (n.lo, n.hi, n.step):
             if b is not None:
                 out += free_names(b)
         return out

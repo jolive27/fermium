@@ -26,12 +26,15 @@ from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, par
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
 SAME1 = {"abs", "floor", "ceil", "round"}
+SPECIAL2 = {"besselj", "bessely", "besseli", "besselk"}      # (n, x): whole-number order n (#50)
+SPECIAL1 = {"ellipk", "ellipe"}                              # (m): parameter m = k²
 LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "reverse", "sort"}
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
     "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
-}
+    "trace", "angle", "row", "column",
+} | SPECIAL2 | SPECIAL1
 
 
 class MixedHint(tuple):
@@ -1072,6 +1075,13 @@ class Checker(C.DiffContext):
             if a in known and b in known:
                 hint = f"did you mean {a} {b} ({a} times {b})? Fermium reads {name} as one name; put a space between"
                 break
+        left = getattr(e, "unit_left", None)
+        if hint is None and lookup_unit(name) is not None and left is not None:
+            lt = C.to_source(left)
+            hint = (f"{name} is a unit, and units go right after a number; to multiply {lt} by {name} write "
+                    f"{lt} * 1 {name} or {lt} [{name}]") if len(lt) <= 24 else \
+                (f"{name} is a unit, and units go right after a number; to multiply by it write * 1 {name} or "
+                 f"[{name}] after the value")
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None:
@@ -1804,6 +1814,38 @@ class Checker(C.DiffContext):
             return I.ILet([(sym, I.IBuiltin("len", [target], NumTy(DIMLESS)))], body)
         return self.expr(idx_ast, ctx)
 
+    def fixed_or_runtime_index(self, idx_ast, size, ctx):
+        """An index into a vector or matrix of known size: an int (0-based) when it is a fixed number,
+        otherwise an IR expression (1-based, checked at run time; #54)."""
+        if isinstance(idx_ast, A.End):
+            return size - 1
+        n = I.IConst(size, NumTy(DIMLESS))
+        idx = self.index_expr(idx_ast, n, ctx)
+        if isinstance(idx, I.ILet):
+            if isinstance(idx.value, I.IConst):
+                idx = idx.value
+            else:          # v[end - 1]: `end` is the size, known here
+                idx = I.ILet([(sym, n) for sym, _ in idx.binds], idx.value)
+        if isinstance(idx, I.IConst):
+            return int(idx.value) - 1
+        return idx
+
+    def runtime_index(self, t, pieces, offs, ty, node):
+        """t's entries at flat base Σ (i − 1)·stride + offs; pieces: [(index int-or-expr, size, stride)]."""
+        if isinstance(t.ty, VecTy) and t.ty.mixed:
+            raise self.err("this vector's components have different units, so pick one with a fixed number, "
+                           "like v[1]", node)
+        idxs = []
+        for k, size, stride in pieces:
+            if isinstance(k, int):
+                if not 0 <= k < size:
+                    raise self.err(f"there is no index {k + 1} here: valid indexes are 1 to {size}", node)
+                k = I.IConst(k + 1, NumTy(DIMLESS))
+            idxs.append((k, size, stride))
+        r = I.IVecIndex(t, idxs, offs, ty, node.line)
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
     def mat_index(self, idx_ast, size, what, ctx):
         if isinstance(idx_ast, A.End):
             return size - 1
@@ -1828,6 +1870,11 @@ class Checker(C.DiffContext):
         if isinstance(e.target, A.Index):             # M[i, j] (parsed as M[i][j]) or M[i][j]
             inner = self.expr(e.target.target, ctx, allow_func=True)
             if isinstance(inner, I.Expr) and isinstance(inner.ty, MatTy):
+                ri = self.fixed_or_runtime_index(e.target.index, inner.ty.r, ctx)
+                ci = self.fixed_or_runtime_index(e.index, inner.ty.c, ctx)
+                if not isinstance(ri, int) or not isinstance(ci, int):
+                    return self.runtime_index(inner, [(ri, inner.ty.r, inner.ty.c), (ci, inner.ty.c, 1)], [0],
+                                              NumTy(inner.ty.dim), e)
                 i = self.mat_index(e.target.index, inner.ty.r, "row", ctx)
                 j = self.mat_index(e.index, inner.ty.c, "column", ctx)
                 r = I.IVecElem(inner, i * inner.ty.c + j, NumTy(inner.ty.dim))
@@ -1835,10 +1882,14 @@ class Checker(C.DiffContext):
                 return r
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
-            i = self.mat_index(e.index, t.ty.r, "row", ctx)
             if not 2 <= t.ty.c <= 4:
                 raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
                                e.index)
+            ri = self.fixed_or_runtime_index(e.index, t.ty.r, ctx)
+            if not isinstance(ri, int):
+                return self.runtime_index(t, [(ri, t.ty.r, t.ty.c)], list(range(t.ty.c)),
+                                          VecTy(t.ty.dim, t.ty.c), e)
+            i = self.mat_index(e.index, t.ty.r, "row", ctx)
             r = I.IBuiltin("shuffle", [t], VecTy(t.ty.dim, t.ty.c))
             r.idx = [i * t.ty.c + j for j in range(t.ty.c)]
             r.hint, r.sf = t.hint, t.sf
@@ -1847,7 +1898,10 @@ class Checker(C.DiffContext):
             idx = self.index_expr(e.index, I.IConst(t.ty.n, NumTy(DIMLESS)), ctx) \
                 if not isinstance(e.index, A.End) else I.IConst(t.ty.n, NumTy(DIMLESS))
             if not isinstance(idx, I.IConst):
-                raise self.err("a vector's component must be picked with a fixed number, like v[1], or v.x", e.index)
+                k = self.fixed_or_runtime_index(e.index, t.ty.n, ctx)
+                if not isinstance(k, int):          # v[i] in a loop: checked at run time (#54)
+                    return self.runtime_index(t, [(k, t.ty.n, 1)], [0], NumTy(t.ty.dim), e)
+                return self.vec_elem(t, k, e.index)
             return self.vec_elem(t, int(idx.value) - 1, e.index)
         if isinstance(t, SolRef) and t.view.n > 1:      # r[end] of a vector solution is a vector (A19)
             v = t.view
@@ -1883,6 +1937,8 @@ class Checker(C.DiffContext):
         f = e.func
         if isinstance(f, A.Name):
             b, _ = self.lookup(f.name, ctx, f)
+            if b is None and f.name == "Σ":
+                return self.builtin("sum", e, ctx)         # Σ(xs) is sum(xs)
             if b is None and f.name in ("γ", "Γ"):
                 return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
             if b is None and f.name == "err":           # err(g): the standard error of a fitted parameter
@@ -2270,6 +2326,8 @@ class Checker(C.DiffContext):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
             v.hint = u
             return v
+        if name in ("row", "column"):
+            return self.row_column(name, e, ctx)
         if name == "times" and len(e.args) == 1:
             v = self.expr(e.args[0], ctx, allow_func=True)
             if isinstance(v, SolRef):
@@ -2310,6 +2368,46 @@ class Checker(C.DiffContext):
             p = Fraction(1, 2) if name == "sqrt" else Fraction(1, 3)
             r = I.IPowC(args[0], float(p) if name == "sqrt" else 1 / 3, args[0].ty.__class__(args[0].ty.dim ** p))
             r.sf = args[0].sf
+            return r
+        if name in SPECIAL2 or name in SPECIAL1:
+            k = 2 if name in SPECIAL2 else 1
+            need(k)
+            what = ["the order n", "x"] if k == 2 else ["m"]
+            for i in range(k):
+                self.need_num(args[i], e.args[i], f"{what[i]} in {name}")
+                if not self.U.unify(args[i].ty.dim, DIMLESS):
+                    raise self.err(f"{name} needs plain numbers, but {what[i]} is {self.desc(args[i].ty.dim)}",
+                                   e.args[i], hint="divide by a unit or a scale first, like besselj(1, k r) with "
+                                                   "k in 1/m and r in m")
+            if k == 2 and isinstance(args[0], I.IConst) and args[0].value != int(args[0].value):
+                raise self.err(f"{name}(n, x) needs a whole-number order n, not {args[0].value:g}", e.args[0])
+            return self._bi(name, args, NumTy(DIMLESS), args[k - 1:])
+        if name == "abs" and n == 1 and isinstance(args[0].ty, (VecTy, MatTy)):
+            return self.map_entries(args[0], lambda x: self._bi("abs", [x], x.ty, [x]), ctx)
+        if name == "trace":
+            need(1)
+            self.need_square(args[0], "trace", e)
+            m = args[0]
+            k = m.ty.r
+            r = self.map_entries(m, None, ctx, reduce=[i * k + i for i in range(k)])
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        if name == "angle":
+            need(2)
+            a, c = args
+            for x, node in zip(args, e.args):
+                if not isinstance(x.ty, VecTy):
+                    raise self.err("angle(a, b) needs two vectors, like angle(<1, 0> m, <1, 1> m)", node)
+                self.shared_dim(x, "angle(a, b)", node)
+            if a.ty.n != c.ty.n or a.ty.n not in (2, 3):
+                raise self.err(f"angle(a, b) needs two 2-vectors or two 3-vectors, but got a {a.ty.n}-vector and a "
+                               f"{c.ty.n}-vector", e)
+            sa, sc = self.new_sym("·a", a.ty, ctx), self.new_sym("·b", c.ty, ctx)
+            cr = self.vec_arith("×", self._ivar(sa), self._ivar(sc), e)
+            y = self._bi("norm" if a.ty.n == 3 else "abs", [cr], NumTy(cr.ty.dim), [cr])
+            x = self.vec_arith("*", self._ivar(sa), self._ivar(sc), e)
+            r = I.ILet([(sa, a), (sc, c)], self._bi("atan2", [y, x], NumTy(DIMLESS), args))
+            r.sf = self._minsf(*args)
             return r
         if name in SAME1:
             need(1)
@@ -2492,6 +2590,52 @@ class Checker(C.DiffContext):
                 raise self.err("rand() takes no arguments", e)
             return self._bi(name, args, NumTy(DIMLESS), args)
         raise self.err(f"{name} can't be used this way", e)
+
+    def map_entries(self, t, fn, ctx, reduce=None):
+        """Apply fn to every entry of vector or matrix t (evaluated once), giving one of the same shape;
+        with reduce=[flat indexes], the sum of those entries instead (the trace)."""
+        sym = self.new_sym("·m", t.ty, ctx)
+        dims = t.ty.comp_dims() if isinstance(t.ty, VecTy) else [t.ty.dim] * (t.ty.r * t.ty.c)
+        hints = t.hint if isinstance(t.hint, MixedHint) else [t.hint] * len(dims)
+
+        def entry(k):
+            x = I.IVecElem(self._ivar(sym), k, NumTy(dims[k]))
+            x.hint, x.sf = hints[k], t.sf
+            return x
+        if reduce is not None:
+            body = entry(reduce[0])
+            for k in reduce[1:]:
+                body = I.IBin("+", body, entry(k), NumTy(t.ty.dim))
+            body.hint, body.sf = t.hint, t.sf
+        else:
+            items = [fn(entry(k)) for k in range(len(dims))]
+            body = I.IVec(items, t.ty)
+            body.hint, body.sf = t.hint, t.sf
+        r = I.ILet([(sym, t)], body)
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
+    def row_column(self, name, e, ctx):
+        if len(e.args) != 2:
+            raise self.err(f"{name}(M, {'i' if name == 'row' else 'j'}) takes a matrix and a number", e)
+        m = self.expr(e.args[0], ctx)
+        if not isinstance(m.ty, MatTy):
+            raise self.err(f"{name}(M, k) needs a matrix, like [[1, 2], [3, 4]]", e.args[0])
+        r_, c_ = m.ty.r, m.ty.c
+        length, size = (c_, r_) if name == "row" else (r_, c_)
+        if not 2 <= length <= 4:
+            raise self.err(f"a {name} of a {r_}×{c_} matrix has {length} entr{'y' if length == 1 else 'ies'}, so it "
+                           f"isn't a vector; pick an entry with M[i, j]", e)
+        k = self.fixed_or_runtime_index(e.args[1], size, ctx)
+        stride, offs = (c_, list(range(c_))) if name == "row" else (1, [i * c_ for i in range(r_)])
+        if isinstance(k, int):
+            if not 0 <= k < size:
+                raise self.err(f"this matrix has {size} {name}s, so there is no {name} {k + 1}", e.args[1])
+            r = I.IBuiltin("shuffle", [m], VecTy(m.ty.dim, length))
+            r.idx = [k * stride + o for o in offs]
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        return self.runtime_index(m, [(k, size, stride)], offs, VecTy(m.ty.dim, length), e)
 
     def _bi(self, name, args, ty, sfargs):
         r = I.IBuiltin(name, args, ty)
@@ -2776,6 +2920,57 @@ class Checker(C.DiffContext):
         r.sf = self._minsf(lo, hi, body)
         return r
 
+    def e_Sum(self, e, ctx):
+        """Σ(body for k from a to b step s) (#49, D51): the body is a scalar lambda of k (like an integrand),
+        summed by a loop that counts like `for k from a to b step s`; a vector body sums per component."""
+        lo = self.expr(e.lo, ctx)
+        hi = self.expr(e.hi, ctx)
+        self.need_num(lo, e.lo, "the start of the sum")
+        self.need_num(hi, e.hi, "the end of the sum")
+        self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"this sum runs from {self.desc(lo.ty.dim)} to "
+                      f"{self.desc(hi.ty.dim)}; the start and end need the same units", e)
+        if e.step is not None:
+            st = self.expr(e.step, ctx)
+            self.need_num(st, e.step, "the step of the sum")
+            self.unify_or(lo.ty.dim, st.ty.dim, lambda: "the step of a sum needs the same units as its start", e.step)
+        else:
+            st = I.IConst(1.0, NumTy(lo.ty.dim))
+            if not self.U.unify(lo.ty.dim, DIMLESS):
+                raise self.err(f"this sum runs over {self.desc(lo.ty.dim)}, so it needs a step, like "
+                               f"Σ(… for {e.var} from a to b step 1 {getattr(lo.hint, 'name', 'm')})", e)
+        if isinstance(hi, I.IConst) and math.isinf(hi.value):
+            raise self.err("a sum needs a finite number of terms", e.hi,
+                           hint=f"sum up to a large fixed number, like Σ(… for {e.var} from 1 to 1000)")
+        lam = I.ILambda("scalar", self.fresh_name("term"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        ks = I.Sym(e.var, NumTy(lo.ty.dim), "local", lam)
+        ks.assigned = True
+        ks.sf = None                    # a count is exact
+        lam.params = [ks]
+        scope.names[e.var] = ks
+        marks = (len(self.new_lambdas), len(self.all_lambdas))
+        body = self.expr(e.body, lctx)
+        if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            comps = []
+            for k in range(body.ty.n):
+                idx = A.Index(e.body, A.Num(float(k + 1), None, False).at(e)).at(e.body)
+                c = A.Sum(idx, e.var, e.lo, e.hi, e.step).at(e)
+                c._component = True
+                comps.append(c)
+            return self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        self.need_num(body, e.body, "each term of a sum")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.ISum(lam, lo, hi, st, NumTy(body.ty.dim))
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
     def vector_integral(self, e, n, ctx):
         """∫ <f, g, h> ds from a to b = <∫ f ds, ∫ g ds, ∫ h ds>, Biot–Savart's ∫ dl × r / |r|³ too:
         each component is its own adaptive integral of the integrand's k-th component (D35)."""
@@ -2855,6 +3050,12 @@ def _name_uses(e):
         if isinstance(n, A.Integral):
             walk(n.integrand, bound | {n.var})
             for x in (n.lo, n.hi):
+                if x is not None:
+                    walk(x, bound)
+            return
+        if isinstance(n, A.Sum):
+            walk(n.body, bound | {n.var})
+            for x in (n.lo, n.hi, n.step):
                 if x is not None:
                     walk(x, bound)
             return

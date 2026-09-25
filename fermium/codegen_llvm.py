@@ -15,6 +15,7 @@ from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
 from . import linalg
+from . import special
 
 
 F64 = ir.DoubleType()
@@ -314,6 +315,8 @@ class ModuleGen:
         if name in self._kernels_built:
             return self.module.get_global(name)
         self._kernels_built.add(name)
+        if name in special.KERNELS:
+            return special.KERNELS[name](self)
         return getattr(self, "_k_" + name.replace("fm_", ""))()
 
     def raise_error(self, b, kind, a=None, c=None, line=None):
@@ -1926,6 +1929,23 @@ class FuncGen:
     def e_IVecElem(self, e):
         return self.b.extract_element(self.expr(e.v), I32(e.k))
 
+    def e_IVecIndex(self, e):
+        """v[i], M[i, j], M[i] with indexes known at run time, each checked (#54)."""
+        b = self.b
+        v = self.expr(e.v)
+        base = i64(0)
+        for idx_e, size, stride in e.idxs:
+            idx = self.expr(idx_e)
+            inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, f64(size)))
+            i = b.fptosi(b.select(inside, idx, f64(1)), I64)
+            bad = b.or_(b.not_(inside), b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, idx, f64(-size))
+            base = b.add(base, b.mul(b.sub(i, i64(1)), i64(stride)))
+        base = b.trunc(base, I32)
+        xs = [b.extract_element(v, b.add(base, I32(o))) for o in e.offs]
+        return xs[0] if len(xs) == 1 else self.pack(xs)
+
     # ------------------------------------------------------------ matrices (D29)
     def unpack(self, v, n):
         return [self.b.extract_element(v, I32(k)) for k in range(n)]
@@ -2194,6 +2214,36 @@ class FuncGen:
         q = self.mg.kernel("fm_quad")
         return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
 
+    def e_ISum(self, e):
+        """Σ(term for k from lo to hi step st): the count of a for loop (s_SFor), the terms added in order."""
+        b, fn = self.b, self.fn
+        f = self.mg.lambda_for(e.lam)
+        env = self.make_env(e.lam)
+        lo, hi, st = self.expr(e.lo), self.expr(e.hi), self.expr(e.step)
+        with b.if_then(b.fcmp_unordered("==", st, f64(0))):
+            self.fail(ERR_STEP, st, f64(0))
+        span = b.fdiv(b.fsub(hi, lo), st)
+        cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
+        cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+        with b.if_then(b.fcmp_unordered("uno", cnt, cnt), likely=False):
+            self.fail(ERR_RANGE, lo, hi)
+        cnt = b.select(b.fcmp_ordered(">", cnt, f64(2.0 ** 62)), f64(2.0 ** 62), cnt)
+        n = b.fptosi(cnt, I64)
+        iv, acc = self.alloca(I64), self.alloca(F64)
+        b.store(i64(0), iv)
+        b.store(f64(0), acc)
+        cond, body, end = (fn.append_basic_block(nm) for nm in ("s.c", "s.b", "s.e"))
+        b.branch(cond)
+        b.position_at_end(cond)
+        b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
+        b.position_at_end(body)
+        k = b.fadd(lo, b.fmul(b.sitofp(b.load(iv), F64), st))
+        b.store(b.fadd(b.load(acc), b.call(f, [k, env])), acc)
+        b.store(b.add(b.load(iv), i64(1)), iv)
+        b.branch(cond)
+        b.position_at_end(end)
+        return b.load(acc)
+
     def e_IRoot(self, e):
         fn = self.mg.lambda_for(e.lam)
         env = self.make_env(e.lam)
@@ -2302,6 +2352,12 @@ class FuncGen:
             if isinstance(e.args[0].ty, ListTy):
                 return self.map_list(args[0], lambda x, i: self.math1(name, x))
             return self.math1(name, args[0])
+        if name in ("besselj", "bessely"):
+            return special.ll_jn_yn(self, "jn" if name == "besselj" else "yn", *args)
+        if name in ("besseli", "besselk"):
+            return b.call(self.mg.kernel("fm_" + name), args)
+        if name in ("ellipk", "ellipe"):
+            return special.ll_ellip(self, name, args[0])
         if name == "isnan":
             return b.fcmp_unordered("uno", args[0], args[0])
         if name == "atan2":

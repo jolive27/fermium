@@ -134,6 +134,17 @@ class IVecElem(Expr):
         self.v, self.k, self.ty = v, k, ty
 
 
+class IVecIndex(Expr):
+    """Entries of a vector or matrix picked by indexes known only at run time (v[i], M[i, j], M[i]).
+
+    idxs: [(index expr, size, stride)]: the flat 0-based base is Σ (index − 1)·stride, each index
+    checked to be a whole number from 1 to size; offs: the flat offsets from the base that make the
+    result (one: a number; several: a vector, like a row or a column)."""
+
+    def __init__(self, v, idxs, offs, ty, line=0):
+        self.v, self.idxs, self.offs, self.ty, self.line = v, idxs, offs, ty, line
+
+
 class IIndex(Expr):
     def __init__(self, lst, idx, ty, line=0):
         self.lst, self.idx, self.ty, self.line = lst, idx, ty, line
@@ -155,6 +166,13 @@ class ILet(Expr):
 class IIntegral(Expr):
     def __init__(self, lam, lo, hi, ty):
         self.lam, self.lo, self.hi, self.ty = lam, lo, hi, ty
+
+
+class ISum(Expr):
+    """Σ(body for k from lo to hi step st): lam(k) summed over the range, as a for loop counts it (D51)."""
+
+    def __init__(self, lam, lo, hi, step, ty):
+        self.lam, self.lo, self.hi, self.step, self.ty = lam, lo, hi, step, ty
 
 
 class IRoot(Expr):

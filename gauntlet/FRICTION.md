@@ -54,14 +54,14 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 46 | B | electromagnetism (E10) | An integral that is 0 by symmetry (a zero vector component) is reported as not converging | Open |
 | 47 | B | electromagnetism (E11) | `∇²term` for `term(n, x, y)` treats n as a coordinate and never finishes compiling | Fixed: parameters named x, y, z are the coordinates; others (like n) are held fixed |
 | 48 | B | quantum, astrophysics (Q16, A7, Q17) | An ODE solution made inside a function can't be used in `∫` or an algebraic `solve`, or returned; the error names `__sol.3` | Open |
-| 49 | A | electromagnetism (E12) | No one-line sum (Σ), so a Fourier series can't be written as a one-line function and differentiated | Open |
-| 50 | A | electromagnetism, optics (E16, O4) | No Bessel functions or elliptic integrals | Open |
+| 49 | A | electromagnetism (E12) | No one-line sum (Σ), so a Fourier series can't be written as a one-line function and differentiated | Fixed: `Σ(term for k from a to b [step s])` (ASCII `sum(…)`), differentiated term by term, so `f'` and `∇²φ` of a Fourier series work (D51) |
+| 50 | A | electromagnetism, optics (E16, O4) | No Bessel functions or elliptic integrals | Fixed: `besselj`, `bessely`, `besseli`, `besselk` (whole-number order) and `ellipk(m)`, `ellipe(m)` with m = k², with their derivatives (D52) |
 | 51 | A | optics, quantum (O7, Q18) | Matrices stop at 4×4, can't have a unit per entry and can't be filled in a loop | Open |
-| 52 | A | special relativity (S6) | No `mrad` (`rad` takes no prefixes) | Open |
-| 53 | A | special relativity (S8) | An `if … then … else` expression can't continue on the next line | Open |
-| 54 | A | special relativity, optics, oscillations, gravitation (S11, O10, G9) | No `trace(M)`, `angle(a, b)`, element-wise `abs` on vectors; a vector can't be indexed by a loop variable | Open |
-| 55 | A | nuclear, mechanics (N8, M12) | A unit after a name or a vector needs brackets (`A_d u`, `<0, 0> /s`) | Open |
+| 52 | A | special relativity (S6) | No `mrad` (`rad` takes no prefixes) | Fixed: `rad` takes SI prefixes (`mrad`, `μrad`, `krad/s`) (D50) |
+| 53 | A | special relativity (S8) | An `if … then … else` expression can't continue on the next line | Fixed: an indented line starting with `else` continues an if-expression; otherwise the error says to indent it or use brackets (D50) |
+| 54 | A | special relativity, optics, oscillations, gravitation (S11, O10, G9) | No `trace(M)`, `angle(a, b)`, element-wise `abs` on vectors; a vector can't be indexed by a loop variable | Fixed: `trace(M)`, `angle(a, b)`, `row(M, i)`, `column(M, j)`, element-wise `abs`, and `v[i]`/`M[i, j]` with run-time indexes, bounds-checked (D53) |
+| 55 | A | nuclear, mechanics (N8, M12) | A unit after a name or a vector needs brackets (`A_d u`, `<0, 0> /s`) | Fixed: `<0, 0> /s` and `<1, 2> 1/s` take the unit; `A_d u` stays an error (units follow numbers) whose hint says `A_d * 1 u` or `A_d [u]` (D50) |
 | 56 | A | nuclear (N9, N10, N11) | Lists: no mapping over two lists, `fit` only takes loaded data, unknowns can't be lists, no unit after `[…]` | Open |
-| 57 | A | nuclear (N13) | No chained comparisons (`a < x < b`) | Open |
+| 57 | A | nuclear (N13) | No chained comparisons (`a < x < b`) | Fixed: `a < x < b` means `a < x and x < b`, with x evaluated once (D50) |
 | 58 | W | astrophysics (A9) | `2/(3H₀√Ω) asinh(…)` is warned about (#9) but still runs with the other meaning | Fixed: `a/(b) c` with a bracketed denominator followed by a spaced factor is an error showing both readings |
 | 59 | C | several (E14, M13, E15, O12, S13, T12, O14, Q19, Q20, N14, A10) | Cosmetics: `∂2f/∂x2`, printed formulas with `2 g·`, rounding noise in matrices, J/(m³ K⁴) shown in base SI, mixed 1/s and rad/s, unit-free error texts | Open |

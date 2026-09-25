@@ -483,9 +483,11 @@ def test_logic_and_comparisons():
     assert run("print 2 != 3, 2 <= 1, 3 >= 3") == "true false true"
 
 
-def test_chained_comparison_error():
-    e = error_of("print 1 < 2 < 3")
-    assert "chained" in e.message
+def test_chained_comparison():
+    # a < b < c means a < b and b < c (gauntlet #57); mixing == with < is still refused
+    assert run("print 1 < 2 < 3, 1 < 3 < 2") == "true false"
+    e = error_of("print 1 < 2 == 2")
+    assert "chain" in e.message
 
 
 def test_single_equals_in_condition_hint():

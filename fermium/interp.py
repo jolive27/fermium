@@ -20,6 +20,7 @@ from .errors import FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy
 from . import linalg
+from . import special
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
@@ -1019,6 +1020,18 @@ class Interpreter:
     def e_IVecElem(self, e, fr):
         return self.eval(e.v, fr)[e.k]
 
+    def e_IVecIndex(self, e, fr):
+        v = self.eval(e.v, fr)
+        base = 0
+        for idx_e, size, stride in e.idxs:
+            idx = self.eval(idx_e, fr)
+            i = int(idx) if math.isfinite(idx) else -1
+            if not (1 <= i <= size) or float(i) != idx:
+                raise _Fail(ERR_INDEX, idx, float(-size))
+            base += (i - 1) * stride
+        xs = tuple(v[base + o] for o in e.offs)
+        return xs[0] if len(xs) == 1 else xs
+
     def e_IBin(self, e, fr):
         a, b = self.eval(e.a, fr), self.eval(e.b, fr)
         op = {"+": lambda x, y: x + y, "-": lambda x, y: x - y, "*": fmul, "/": fdiv}[e.op]
@@ -1132,6 +1145,20 @@ class Interpreter:
         f = self.scalar_fn(e.lam, fr)
         lo, hi = self.eval(e.lo, fr), self.eval(e.hi, fr)
         return self.kernel(lambda: quad(f, lo, hi))
+
+    def e_ISum(self, e, fr):
+        f = self.scalar_fn(e.lam, fr)
+        lo, hi, st = self.eval(e.lo, fr), self.eval(e.hi, fr), self.eval(e.step, fr)
+        if st == 0 or st != st:
+            raise _Fail(ERR_STEP, st, 0.0)
+        span = fdiv(hi - lo, st)
+        if span != span:
+            raise _Fail(ERR_RANGE, lo, hi)
+        n = max(0, int(math.floor(span + 1e-9) + 1.0)) if abs(span) < math.inf else (2 ** 62 if span > 0 else 0)
+        acc = 0.0
+        for i in range(n):
+            acc = acc + f(lo + i * st)
+        return acc
 
     def e_IRoot(self, e, fr):
         f = self.scalar_fn(e.lam, fr)
@@ -1262,6 +1289,8 @@ class Interpreter:
             if isinstance(args[0], list):
                 return [math1(name, x) for x in args[0]]
             return math1(name, args[0])
+        if name in ("besselj", "bessely", "besseli", "besselk", "ellipk", "ellipe"):
+            return getattr(special, name)(*args)
         if name == "isnan":
             return args[0] != args[0]
         if name == "atan2":

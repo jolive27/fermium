@@ -718,6 +718,10 @@ class Parser:
             c = self.expr()
             self.expect_kw("then", "(write: if condition then a else b)")
             a = self.expr()
+            if not self.at_kw("else") and self.tok.kind in ("NEWLINE", "EOF", "DEDENT"):
+                raise self.error("expected 'else' (an if-expression needs an else part) but the line ended",
+                                 hint="to continue on the next line, indent the line that starts with else, "
+                                      "or put the whole right side in brackets ( … )")
             self.expect_kw("else", "(an if-expression needs an else part)")
             b = self.expr()
             return self.span(A.IfExpr(c, a, b), t)
@@ -770,12 +774,36 @@ class Parser:
     def compare(self):
         t = self.tok
         e = self.sum()
-        if self.tok.kind == "OP" and self.tok.value in CMP_OPS:
-            op = self.next().value
-            e = self.span(A.Compare(op, e, self.sum()), t)
-            if self.tok.kind == "OP" and self.tok.value in CMP_OPS:
-                raise self.error("chained comparisons like a < b < c aren't supported",
-                                 hint="write a < b and b < c")
+        if not (self.tok.kind == "OP" and self.tok.value in CMP_OPS):
+            return e
+        # a < x < b means a < x and x < b, with x evaluated once (D50)
+        operands, ops = [e], []
+        while self.tok.kind == "OP" and self.tok.value in CMP_OPS:
+            ops.append(self.next().value)
+            operands.append(self.sum())
+        if len(ops) == 1:
+            return self.span(A.Compare(ops[0], operands[0], operands[1]), t)
+        if any(op in ("==", "!=", "~=") for op in ops) and not all(op == "==" for op in ops):
+            raise self.error("a chain of comparisons can only use <, <=, > and >= (like a < x < b), or only ==",
+                             hint="write the comparisons separately, joined with and")
+        binds = []
+        for k in range(1, len(operands) - 1):
+            x = operands[k]
+            if not isinstance(x, (A.Name, A.Num)):
+                self.chain_count = getattr(self, "chain_count", 0) + 1
+                nm = f"·chain{self.chain_count}"
+                binds.append((nm, x))
+                operands[k] = A.Name(nm).at(x)
+        e = None
+        for k, op in enumerate(ops):
+            lo, hi = operands[k], operands[k + 1]
+            c = A.Compare(op, lo, hi).at(lo)
+            if hi.line == lo.line and getattr(hi, "length", None):
+                c.length = max(1, hi.col + hi.length - lo.col)
+            e = c if e is None else A.Logic("and", e, c).at(e)
+        e = self.span(e, t)
+        if binds:
+            e = self.span(A.Where(e, binds), t)
         return e
 
     def sum(self):
@@ -981,6 +1009,8 @@ class Parser:
             self._warn_unit_then_term(e)
             ws, ri = self.tok.ws_before, self.i
             r = self.power()
+            if isinstance(r, A.Name) and not isinstance(e, A.Num):
+                r.unit_left = e               # `A_d u`: if u isn't defined, the hint suggests A_d * 1 u (#55)
             e = self.span(A.BinOp("*", e, r, implicit=True), t)
             e.juxt_ws, e.juxt_i = ws, ri
         self._warn_bare_unit(e)
@@ -1190,6 +1220,10 @@ class Parser:
                 n = self.span(A.Name("∞"), t)
                 u = self.unit_expr(explicit=False)
                 return self.span(A.Quantity(n, u), t)
+            if t.value in ("Σ", "sum") and self.peek().kind == "OP" and self.peek().value == "(":
+                j = self._sum_for_index()
+                if j is not None:
+                    return self.sum_expr(j)
             self.next()
             if t.value == "end" and self.in_index():
                 return self.span(A.End(), t)
@@ -1277,6 +1311,49 @@ class Parser:
             raise self.error("unexpected '='", hint="use == to compare two values")
         raise self.error(f"didn't expect '{t.raw}' here")
 
+    def _sum_for_index(self):
+        """At `Σ (` or `sum (`: the index of a `for` at the top level inside the brackets, or None."""
+        depth = 0
+        j = self.i + 1
+        while j < len(self.toks):
+            tk = self.toks[j]
+            if tk.kind == "EOF":
+                return None
+            if tk.kind == "OP" and tk.value in "([{":
+                depth += 1
+            elif tk.kind == "OP" and tk.value in ")]}":
+                depth -= 1
+                if depth == 0:
+                    return None
+            elif depth == 1 and tk.kind == "KW" and tk.value == "for":
+                return j
+            j += 1
+        return None
+
+    def sum_expr(self, j):
+        """Σ(k² for k from 1 to 10) or sum(f(k) for k from 1 to N step 2): a one-line sum (#49, D51)."""
+        t = self.next()
+        self.next()                                   # (
+        if self.toks[j + 1].kind == "NAME":
+            self.known.add(self.toks[j + 1].value)    # the summation variable is a variable, not a unit
+        body = self.expr()
+        if not self.at_kw("for"):
+            raise self.error("expected 'for' in this sum (write: Σ(k² for k from 1 to 10))" + self._found())
+        self.next()
+        vt = self.expect_name("the summation variable (write: Σ(k² for k from 1 to 10))")
+        self.expect_kw("from", "(write: Σ(k² for k from 1 to 10))")
+        lo = self.expr()
+        self.expect_kw("to", "(write: Σ(k² for k from 1 to 10))")
+        hi = self.expr()
+        step = None
+        if self.at_kw("step"):
+            self.next()
+            step = self.expr()
+        if not self.at_op(")"):
+            raise self.error("expected ')' to close this sum" + self._found())
+        self.next()
+        return self.span(A.Sum(body, vt.value, lo, hi, step), t)
+
     def _unit_reciprocal_follows(self):
         """`0.1 1/s` or `0.1 /s` right after a number."""
         t = self.tok
@@ -1310,6 +1387,10 @@ class Parser:
         v = self.span(A.VecLit(items), t)
         if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
             u = self.unit_expr(explicit=False)
+            v = self.span(A.Quantity(v, u), t)
+        elif self._unit_reciprocal_follows():
+            # `<0, 0> /s` and `<1, 2> 1/s`, as after a number (#55)
+            u = self.unit_expr(explicit=True, reciprocal=True)
             v = self.span(A.Quantity(v, u), t)
         return v
 

@@ -66,6 +66,10 @@ def subst(e, mapping):
         return _copy(e, integrand=subst(e.integrand, inner),
                      lo=subst(e.lo, mapping) if e.lo is not None else None,
                      hi=subst(e.hi, mapping) if e.hi is not None else None)
+    if isinstance(e, A.Sum):
+        inner = {k: v for k, v in mapping.items() if k != e.var}
+        return _copy(e, body=subst(e.body, inner), lo=subst(e.lo, mapping), hi=subst(e.hi, mapping),
+                     step=subst(e.step, mapping) if e.step is not None else None)
     if isinstance(e, A.Where):
         bound = {b for b, _ in e.bindings}
         inner = {k: v for k, v in mapping.items() if k not in bound}
@@ -101,6 +105,8 @@ def map_children(e, f):
     if isinstance(e, A.Integral):
         return _copy(e, integrand=f(e.integrand), lo=f(e.lo) if e.lo is not None else None,
                      hi=f(e.hi) if e.hi is not None else None)
+    if isinstance(e, A.Sum):
+        return _copy(e, body=f(e.body), lo=f(e.lo), hi=f(e.hi), step=f(e.step) if e.step is not None else None)
     if isinstance(e, (A.ListLit, A.VecLit)):
         return _copy(e, items=[f(x) for x in e.items])
     if isinstance(e, A.IfExpr):
@@ -149,6 +155,9 @@ BUILTIN_DERIVS = {
     "abs": lambda u: call("sign", u),
     "erf": lambda u: mul(div(num(2), A.Sqrt(name("π"))), call("exp", neg(pw(u, 2)))),
 }
+
+
+BESSEL = {"besselj": (1, -1), "bessely": (1, -1), "besseli": (1, 1), "besselk": (-1, 1)}
 
 
 class DiffContext:
@@ -403,6 +412,22 @@ def _d(e, var, ctx):
                     t = mul(A.Call(A.Name(dname), list(e.args)), da)
                     terms = t if terms is None else add(terms, t)
                 return terms if terms is not None else num(0)
+            if fname in BESSEL and len(e.args) == 2 and not ctx.user_function(fname):
+                n, x = e.args
+                if not is_num(simplify(_d(n, var, ctx)), 0):
+                    raise FermiumError(f"can't differentiate {fname}(n, x) with respect to its order n", e.line, e.col)
+                lo, hi = A.Call(A.Name(fname), [sub(n, num(1)), x]), A.Call(A.Name(fname), [add(n, num(1)), x])
+                sgn, comb = BESSEL[fname]          # J, Y: (f(n−1) − f(n+1))/2; I: (…+…)/2; K: −(…+…)/2
+                d = div(add(lo, hi) if comb > 0 else sub(lo, hi), num(2))
+                return mul(neg(d) if sgn < 0 else d, _d(x, var, ctx))
+            if fname in ("ellipk", "ellipe") and len(e.args) == 1 and not ctx.user_function(fname):
+                m = e.args[0]
+                K, E = A.Call(A.Name("ellipk"), [m]), A.Call(A.Name("ellipe"), [m])
+                if fname == "ellipk":       # dK/dm = (E − (1 − m) K) / (2 m (1 − m))
+                    d = div(sub(E, mul(sub(num(1), m), K)), mul(mul(num(2), m), sub(num(1), m)))
+                else:                       # dE/dm = (E − K) / (2 m)
+                    d = div(sub(E, K), mul(num(2), m))
+                return mul(d, _d(m, var, ctx))
             if fname in ("min", "max", "floor", "ceil", "round", "sign", "atan2", "hypot"):
                 if fname == "hypot" and len(e.args) == 2:
                     a, b = e.args
@@ -417,6 +442,16 @@ def _d(e, var, ctx):
         if isinstance(f, A.Prime) and isinstance(f.target, A.Name) and ctx.user_function(f.target.name):
             dn = ctx.derived_function(f.target.name, 0, f.order)
             return _d(A.Call(A.Name(dn), e.args), var, ctx)
+    if isinstance(e, A.Sum):
+        # d/dx Σ f(k, x) = Σ ∂f/∂x, term by term (D51); the limits may not depend on x
+        if e.var == var:
+            return num(0)
+        for b in (e.lo, e.hi, e.step):
+            if b is not None and depends_on(b, var):
+                raise FermiumError(f"can't differentiate this sum with respect to {var}: its limits depend on {var}",
+                                   e.line, e.col, hint="the number of terms changes in steps, so it has no derivative")
+        inner = simplify(_d(inline_where(e.body), var, ctx))
+        return num(0) if is_num(inner, 0) else _copy(e, body=inner)
     if isinstance(e, A.Integral) and e.lo is not None:
         # Leibniz rule: d/dx ∫ f(x, s) ds from a(x) to b(x)
         #   = ∫ ∂f/∂x ds from a to b + f(x, b) b'(x) - f(x, a) a'(x)   (D36)
@@ -752,6 +787,12 @@ def _src(e, pretty):
         if e.lo is not None:
             s += f" from {_src(e.lo, pretty)[0]} to {_src(e.hi, pretty)[0]}"
         return s, 0
+    if isinstance(e, A.Sum):
+        s = f"{'Σ' if pretty else 'sum'}({_src(e.body, pretty)[0]} for {e.var} from {_src(e.lo, pretty)[0]} " \
+            f"to {_src(e.hi, pretty)[0]}"
+        if e.step is not None:
+            s += f" step {_src(e.step, pretty)[0]}"
+        return s + ")", PREC_ATOM
     if isinstance(e, A.Convert):
         return f"{_src(e.value, pretty)[0]} in {e.unit.text}", 0
     if isinstance(e, A.Where):

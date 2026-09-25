@@ -154,7 +154,7 @@ _UNITS = {
     "m": (1.0, L, True), "g": (1e-3, M, True), "s": (1.0, T, True), "A": (1.0, I, True),
     "K": (1.0, TH, True), "mol": (1.0, N, True), "cd": (1.0, J, True),
     # dimensionless / angles
-    "rad": (1.0, DIMLESS, False), "sr": (1.0, DIMLESS, False),
+    "rad": (1.0, DIMLESS, True), "sr": (1.0, DIMLESS, False),
     "°": (_PI / 180, DIMLESS, False), "deg": (_PI / 180, DIMLESS, False),
     "arcmin": (_PI / 10800, DIMLESS, False), "arcsec": (_PI / 648000, DIMLESS, True),
     # milli- and micro-arcseconds, as astronomers write them
