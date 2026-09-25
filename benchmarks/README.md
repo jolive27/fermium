@@ -72,11 +72,17 @@ c = 299792458 m/s, k_B = 1.380649e-23 J/K, σ = 5.670374419e-8 W m⁻² K⁻⁴.
    x₀ = 0.1 m, v₀ = 0), classic RK4, dt = 1e-5 s, 0 → 10 s (10⁶ steps).
    Matches the analytic solution: x(10 s) = 0.006835571546 m.
    **spring_adaptive** — same ODE, 0 → 100 s, Dormand–Prince RK45,
-   rtol = 1e-8, atol = 1e-10. Julia and pure Python use a hand-written DP45
+   purely relative error control at rtol = 1e-6 in every language (Fermium
+   `tolerance 1e-6`, whose norm is purely relative, D17; the others
+   rtol = 1e-6, atol = 1e-30). Julia and pure Python use a hand-written DP45
    whose step-size controller and initial-step heuristic mirror
    `scipy.integrate.solve_ivp(method="RK45")`, so all three take exactly the
-   same 3713 accepted steps. (|x(100 s)| is ~1e-12 m analytically; the printed
-   ~-2e-10 m is the expected global error at atol = 1e-10.)
+   same 4903 accepted steps. Fermium's controller differs (4297 steps).
+   Exact: x(100 s) = 1.1176166148e-12 m. Fermium prints 1.11735e-12 m
+   (relative error 2.4e-4), the others 1.11745e-12 m (1.5e-4): comparable,
+   not identical, accuracy. (Until red-team round 1 this benchmark compared
+   Fermium at a pure-relative 1e-10 with the others at rtol 1e-8 + atol 1e-10,
+   which is not a like-for-like setting.)
 3. **blackbody** — ∫ B_ν(ν, T) dν over 1e11–1e16 Hz for 1000 temperatures
    1000–10000 K, adaptive Gauss–Kronrod with rtol = 1e-8: Julia `QuadGK.quadgk`
    (GK 7/15), SciPy `quad` (QUADPACK QAGS, GK 10/21, `epsabs=0`), pure Python a

@@ -43,7 +43,7 @@ def test_d_unit_differential_still_works():
 
 def test_divergent_integral_with_u_is_an_error():
     e = error_of("print ∫ 1/u du from 0 to 1")
-    assert "doesn't converge" in e.message
+    assert "couldn't compute this integral" in e.message
 
 
 # ---------------------------------------------------------------- runtime errors inside plots
@@ -52,7 +52,7 @@ def test_runtime_error_in_plotted_function_stops_the_program(tmp_path):
     for runner in (run, interp):
         with pytest.raises(FermiumError) as ei:
             runner(src, base_dir=str(tmp_path))
-        assert "doesn't converge" in ei.value.message
+        assert "couldn't compute this integral" in ei.value.message
         assert not (tmp_path / "p.png").exists()
 
 

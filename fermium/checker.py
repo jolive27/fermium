@@ -1346,6 +1346,7 @@ class Checker(C.DiffContext):
                     msg = f"can't subtract {db} from {da}"
                 raise self.err(msg, e, hint=self.mismatch_hint(a, b))
             r = I.IBin(op, a, b, mk(a.ty.dim))
+            self._warn_confusable_sum(op, a, b, e)
             aff_a = a.hint is not None and a.hint.affine
             aff_b = b.hint is not None and b.hint.affine
             if op == "+" and aff_a and aff_b:
@@ -1361,13 +1362,18 @@ class Checker(C.DiffContext):
         elif op == "*":
             r = I.IBin("*", a, b, mk(a.ty.dim * b.ty.dim))
             r.hint = self._keep_hint(a, b)
+            if r.hint is not None:
+                self._drop_turn_hint(r, a, b, "*")
             if r.hint is not None and r.hint.affine:
-                self.diags.warn(f"this scales an absolute temperature: {r.hint.name} values are multiplied as kelvins "
-                                f"(20 °C is 293.15 K, so 2 × 20 °C is 313.15 °C)", line=e.line, col=e.col,
-                                hint="to scale a temperature change, write it in K")
+                k = b if a.hint is r.hint else a
+                self._warn_scaled_temperature(r.hint, "×", k, e)
         elif op == "/":
             r = I.IBin("/", a, b, mk(a.ty.dim / b.ty.dim))
             r.hint = a.hint if self._dimless(b) and a.hint is not None and b.hint is None else None
+            if r.hint is not None:
+                self._drop_turn_hint(r, a, b, "/")
+            if r.hint is not None and r.hint.affine:
+                self._warn_scaled_temperature(r.hint, "/", b, e)
         else:
             raise self.err(f"unknown operator {op}", e)
         r.sf = self._minsf(a, b)
@@ -1402,6 +1408,7 @@ class Checker(C.DiffContext):
                 raise self.err(f"can't {verb} vectors of {da} and {db}", e,
                                hint=self.mismatch_hint(a, b))
             r = I.IBin(op, a, b, VecTy(a.ty.dim, a.ty.n))
+            self._warn_confusable_sum(op, a, b, e)
             r.hint = a.hint or b.hint
         elif op == "*" and va and vb:
             if a.ty.n != b.ty.n:
@@ -1640,6 +1647,56 @@ class Checker(C.DiffContext):
     def _dimless(self, v):
         d = self.U.norm(v.ty.dim)
         return d.concrete and d.const.dimensionless
+
+    @classmethod
+    def _const_value(cls, x):
+        """The value of a constant expression built from numbers (2π, 1/2), or None."""
+        if isinstance(x, I.IConst):
+            return x.value if isinstance(x.value, float) or isinstance(x.value, int) else None
+        if isinstance(x, I.IBin) and x.op in ("*", "/", "+", "-"):
+            a, b = cls._const_value(x.a), cls._const_value(x.b)
+            if a is None or b is None:
+                return None
+            try:
+                return {"*": a * b, "/": a / b if b else None, "+": a + b, "-": a - b}[x.op]
+            except (OverflowError, TypeError):
+                return None
+        return None
+
+    def _drop_turn_hint(self, r, a, b, op):
+        """2π f with f in Hz is an angular frequency, and ω/(2π) with ω in rad/s a frequency: don't keep
+        showing the old unit (redteam #2)."""
+        src = a if a.hint is r.hint else b
+        k = b if src is a else a
+        v = self._const_value(k)
+        if v is None or v == 0:
+            return
+        two_pi = 2 * math.pi
+        kind = self._unit_kind(r.hint)
+        up = (op == "*" and abs(v / two_pi - 1) < 1e-12) or (op == "/" and abs(v * two_pi - 1) < 1e-12)
+        down = (op == "/" and abs(v / two_pi - 1) < 1e-12) or (op == "*" and abs(v * two_pi - 1) < 1e-12)
+        if (kind == "cycles" and up) or (kind == "angular" and down):
+            r.hint = None
+
+    def _warn_scaled_temperature(self, u, op, k, e):
+        """2 T or T / 2 with T in °C/°F scales the absolute temperature (in K) (D12, redteam #6)."""
+        f = self._const_value(k)
+        if f == 1.0:
+            return            # T * 1 changes nothing
+        ex = 20.0 if u.name == "°C" else 68.0
+        kelvin = ex * u.factor + u.offset
+        if f is not None and f != 0 and math.isfinite(f):
+            res = (kelvin * f if op == "×" else kelvin / f)
+            shown = (res - u.offset) / u.factor
+            fs, ks = format_number(f), format_number(kelvin)
+            example = (f"{fs} × {format_number(ex)} {u.name} is {fs} × {ks} K = {format_number(shown)} {u.name}"
+                       if op == "×" else
+                       f"{format_number(ex)} {u.name} / {fs} is {ks} K / {fs} = {format_number(shown)} {u.name}")
+        else:
+            example = f"{format_number(ex)} {u.name} is {format_number(kelvin)} K, and that is what gets scaled"
+        verb = "multiplied" if op == "×" else "divided"
+        self.diags.warn(f"this scales an absolute temperature: {u.name} values are {verb} as kelvins ({example})",
+                        line=e.line, col=e.col, hint="to scale a temperature change, write it in K")
 
     def _keep_hint(self, a, b):
         """Scaling by a plain number keeps the unit the user wrote (2 × 3 eV = 6 eV)."""
@@ -1883,18 +1940,88 @@ class Checker(C.DiffContext):
         out.sf, out.direct = r.sf, False
         return out
 
+    ANGLE_WORDS = {"rev", "rpm", "rad", "°", "deg", "arcmin", "arcsec"}
+
+    @staticmethod
+    def _unit_words(unit):
+        name = getattr(unit, "name", None)
+        return set(re.findall(r"[^\s/·*^()⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+", name)) if name else set()
+
+    def _unit_kind(self, unit):
+        """A light tag on a unit the user wrote, for mix-ups that share an SI dimension (D95, redteam #2, #10):
+        'cycles' (Hz), 'angular' (rad/s, rev/s, rpm, °/s), 'Gy', 'Sv', 'Bq', 'energy' (J), 'torque' (N m)."""
+        w = self._unit_words(unit)
+        if not w:
+            return None
+        if any(x in self.ANGLE_WORDS or x.endswith("rad") for x in w):
+            return "angular"
+        if any(re.fullmatch(r"[kMGTPm]?Hz", x) for x in w):
+            return "cycles"
+        for tag in ("Gy", "Sv", "Bq"):
+            if any(re.fullmatch(r"[a-zA-Zμ]?" + tag, x) for x in w) and len(w) == 1:
+                return tag
+        if len(w) == 1 and re.fullmatch(r"[kMGTmμn]?J", next(iter(w))):
+            return "energy"
+        if len(w) == 2 and "m" in w and any(re.fullmatch(r"[kMm]?N", x) for x in w):
+            return "torque"
+        return None
+
     def _warn_angle_in_hz(self, v, u, e):
-        """`1 rev/min in Hz` is 2π/60 Hz, because angles are plain numbers (D6, D27; A46)."""
-        def words(unit):
-            return set(re.findall(r"[^\s/·*^()⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+", unit.name)) if unit is not None else set()
-        angles = words(v.hint) & {"rev", "rpm", "rad", "°", "deg", "arcmin", "arcsec"}
-        if angles and any(w.endswith("Hz") for w in words(u)):
-            a = sorted(angles)[0]
-            self.diags.warn(f"angles are plain numbers (1 rev = 2π), so a rate in {a} converted to Hz is "
-                            f"an angular frequency: 1 rev/min is 2π/60 = 0.105 Hz", line=e.line, col=e.col,
-                            hint="to count turns per second write  in rev/s  (1 rev/min = 1/60 rev/s)")
-            return True
-        return False
+        """Converting between Hz and rev, rpm, rad/s or °/s (either way): angles are plain numbers, so Hz is
+        rad/s, and 1 Hz is 9.55 rpm, not 60 (D6, D27, D95; A46, redteam #2)."""
+        src, dst = self._unit_kind(v.hint), self._unit_kind(u)
+        if {src, dst} != {"cycles", "angular"} or v.hint.dim is None:
+            return False
+        try:
+            actual = v.hint.factor / u.factor
+        except ZeroDivisionError:
+            return False
+        s, t = v.hint.name, u.name
+        if src == "angular" and not (self._unit_words(v.hint) & (self.ANGLE_WORDS - {"rad"})):
+            return False      # rad/s in Hz: _warn_omega_in_hz says it
+        if src == "cycles":
+            expected = actual * 2 * math.pi
+            msg = (f"Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 {s} is "
+                   f"{format_number(actual)} {t}, not {format_number(expected)} {t}"
+                   + ("" if t == "rev/s" else "; 1 Hz = 1/(2π) rev/s"))
+            hint = (f"if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is "
+                    f"3000 rpm), or multiply it by 2π:  2π f in {t}")
+        else:
+            expected = actual / (2 * math.pi)
+            msg = (f"angles are plain numbers (1 rev = 2π), so a rate in {s} shown in {t} is an angular "
+                   f"frequency: 1 {s} is {format_number(actual)} {t} here, not {format_number(expected)} {t}")
+            hint = (f"to count turns per second write  in rev/s ; for the frequency in cycles per second "
+                    f"divide by 2π:  ω/(2π) in {t}")
+        self.diags.warn(msg, line=e.line, col=e.col, hint=hint)
+        return True
+
+    CONFUSABLE = {
+        frozenset(("cycles", "angular")): ("a value in {a} and one in {b}: Fermium treats rad as 1, so Hz and "
+                                           "rad/s are the same unit and they add as if 1 Hz were 1 rad/s",
+                                           "if the Hz value counts cycles per second, multiply it by 2π first"),
+        frozenset(("Bq", "cycles")): ("a value in {a} and one in {b}: both are 1/s in SI, but becquerels count "
+                                      "decays and hertz count cycles", "check that both mean the same thing"),
+        frozenset(("Bq", "angular")): ("a value in {a} and one in {b}: both are 1/s in SI, but becquerels count "
+                                       "decays and {b} is an angular rate", "check that both mean the same thing"),
+        frozenset(("Gy", "Sv")): ("a value in {a} and one in {b}: both are J/kg in SI, but grays measure absorbed "
+                                  "dose and sieverts equivalent dose (weighted by the radiation type)",
+                                  "convert the absorbed dose with the radiation weighting factor first "
+                                  "(H = w_R D)"),
+        frozenset(("energy", "torque")): ("a value in {a} and one in {b}: both are kg m²/s² in SI, but J is "
+                                          "an energy and N m a torque", "check that both mean the same thing"),
+    }
+
+    def _warn_confusable_sum(self, op, a, b, e):
+        """1 Gy + 1 Sv, 1 Bq + 1 Hz, 1 Hz + 1 rad/s: the same SI dimension, different things (redteam #2, #10)."""
+        ka, kb = self._unit_kind(a.hint), self._unit_kind(b.hint)
+        if ka is None or kb is None or ka == kb:
+            return
+        entry = self.CONFUSABLE.get(frozenset((ka, kb)))
+        if entry is None:
+            return
+        verb = "adding" if op == "+" else "subtracting"
+        msg, hint = entry
+        self.diags.warn(f"{verb} " + msg.format(a=a.hint.name, b=b.hint.name), line=e.line, col=e.col, hint=hint)
 
     OMEGA_NAMES = re.compile(r"^(ω|Ω|omega|Omega)")
 
@@ -2733,6 +2860,10 @@ class Checker(C.DiffContext):
                 r = self._bi("len", args, NumTy(DIMLESS), args)
                 r.sf = None    # a count is exact
                 return r
+            if name in ("sum", "cumsum") and a.hint is not None and a.hint.affine:
+                raise self.err(f"can't add absolute temperatures: {name} of a list in {a.hint.name} would add "
+                               f"them as kelvins (10 {a.hint.name} + 20 {a.hint.name} isn't 30 {a.hint.name})",
+                               e, hint="mean(...) works; to add temperature changes, write them in K")
             if name in ("sum", "mean", "first", "last"):
                 r = self._bi(name, args, NumTy(a.ty.dim), args)
                 r.hint = a.hint

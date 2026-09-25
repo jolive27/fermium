@@ -297,9 +297,15 @@ class Runtime:
             msg = (f"this equation looks stiff: rk45 has taken {int(a)} steps, held small by stability rather than "
                    f"accuracy (time scales far apart); add  using radau  after the range for an implicit solver "
                    f"made for this")
+        elif kind == 7:
+            msg = (f"the step is too coarse for this equation: the estimated error is {format_number(a * 100, 2)}% "
+                   f"of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or "
+                   f"drop  step  to use the adaptive solver")
         else:
             msg = "warning"
         text = "warning: " + (f"line {line}: " if line else "") + msg
+        if kind == 7 and any(w.startswith(text.split(" is ")[0]) for w in self.warnings):
+            return            # once per solve, not once per loop pass
         if text not in self.warnings:
             self.warnings.append(text)
             try:
@@ -362,8 +368,9 @@ class Runtime:
             return (f"{name} called itself too many times (the program ran out of stack) -- is a base case "
                     f"missing, like  if n <= 0 then ...?")
         if kind == 9:
-            return ("this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating "
-                    f"(like sin(x) up to ∞) -- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
+            return ("couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate "
+                    "without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere "
+                    f"-- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
         if kind in (31, 32):
             i = int(b) if b == b else -1
             name = self.tables.texts[i] if self.tables and 0 <= i < len(self.tables.texts) else "x"
@@ -372,7 +379,7 @@ class Runtime:
                 return (f"the integrand is NaN at {name} = {self.fmt_value(a, fmt)} (0/0? ∞/∞? an overflow like "
                         f"exp(710)?), so this integral can't be computed; rewrite the integrand so it stays finite "
                         f"there, {fix}")
-            return (f"this integral doesn't converge: the integrand is infinite at {name} = {self.fmt_value(a, fmt)} "
+            return (f"couldn't compute this integral: the integrand is infinite at {name} = {self.fmt_value(a, fmt)} "
                     f"(1/0? an overflow like exp(710)?), so it may blow up there (like 1/x at 0); if it shouldn't, "
                     f"rewrite it so it stays finite, e.g. 1 - cos(x) as 2 sin(x/2)²")
         if kind == 11:

@@ -1,7 +1,10 @@
 # Damped spring m x'' = -k x - b x', adaptive Dormand–Prince RK45, 0 -> 100 s,
-# rtol = 1e-8, atol = 1e-10. Hand-written; the step-size controller and initial
-# step selection follow scipy.integrate.solve_ivp(method="RK45") so accepted-step
-# counts are directly comparable.
+# purely relative error control: rtol = 1e-6, atol = 1e-30 (matched to Fermium's
+# `tolerance 1e-6`, whose error norm is purely relative, D17). Hand-written; the
+# step-size controller and initial step selection follow
+# scipy.integrate.solve_ivp(method="RK45"), so accepted-step counts are directly
+# comparable with the Python/SciPy versions (Fermium's controller differs).
+# Exact solution: x(100 s) = 1.1176166148e-12 m.
 using Printf
 
 const M = 1.0
@@ -83,9 +86,9 @@ function dopri5(y::S, t::Float64, tend::Float64; rtol::Float64, atol::Float64)
 end
 
 function main()
-    dopri5((0.1, 0.0), 0.0, 1.0; rtol=1e-8, atol=1e-10)   # warm-up
+    dopri5((0.1, 0.0), 0.0, 1.0; rtol=1e-6, atol=1e-30)   # warm-up
     t0 = time_ns()
-    y, nacc = dopri5((0.1, 0.0), 0.0, 100.0; rtol=1e-8, atol=1e-10)
+    y, nacc = dopri5((0.1, 0.0), 0.0, 100.0; rtol=1e-6, atol=1e-30)
     t = (time_ns() - t0) / 1e9
     @printf("x_100s %.10g\n", y[1])
     println("accepted_steps ", nacc)

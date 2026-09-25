@@ -229,7 +229,7 @@ print k"""
 def test_integral_error_in_a_one_line_function_has_its_line():
     src = "x = 1\nK(k) = ∫ 1/√(1 - k² sin(φ)²) dφ from 0 to π/2\nprint K(0.5)\nprint K(1)"
     e = both_error(src)
-    assert e.line == 2 and "doesn't converge" in e.message
+    assert e.line == 2 and "couldn't compute this integral" in e.message
 
 
 def test_error_inside_a_callback_function_reports_where_it_happened():
