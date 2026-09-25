@@ -181,7 +181,7 @@ print 2⁻¹ m              # error                       expected 0.5 m
 Either accept a unit after `number superscript` (like after `number ^ number`) or have
 `fmt --pretty` leave `^` alone in that position.
 
-## A15. (HIGH) Adaptive `solve` loses all relative accuracy once a solution decays (absolute error floor)
+## A15. [FIXED] (HIGH) Adaptive `solve` loses all relative accuracy once a solution decays (absolute error floor)
 After the A5 fix (absolute floor ≈ max|dy/dt| × span × 1e-3 × rtol) — and to a lesser degree
 with the older `1e-3·max|y| so far` floor — a decaying solution is only accurate to an
 *absolute* ~1e-12 of its peak, so exponential decay (radioactivity!) is silently wrong:
@@ -273,7 +273,7 @@ h(x) = x^2
 ```
 Same for any name that is also a constant (`c(2)`, `e(1)`, `G(3)`, `k_B(...)`), silently.
 
-## A22. Negating an absolute °C temperature (variable or parenthesised) gives nonsense
+## A22. [FIXED] Negating an absolute °C temperature (variable or parenthesised) gives nonsense
 After the A8 fix `-5 °C` is right, but:
 ```
 T = 20 °C
@@ -397,7 +397,7 @@ print x(100000)     # actual: -0.996591   expected: -0.999361 (cos 1e5)
 scipy RK45 at the same rtol=1e-9 (atol=1e-12) gives -0.999349 (error 1.2e-5, vs Fermium's
 2.8e-3, i.e. ~200× worse), with Fermium printing 6 significant figures.
 
-## A30. `x'(t)` from a `solve` is only first-order accurate between steps (linear interpolation of slopes)
+## A30. [FIXED] `x'(t)` from a `solve` is only first-order accurate between steps (linear interpolation of slopes)
 `fm_sol_eval` evaluates `x'(t)` by *linear* interpolation of the stored derivatives, so its
 error is O(h²) — thousands of times larger than the solver's tolerance, while printed to 6 s.f.:
 ```
@@ -460,3 +460,77 @@ f(s) = x(s)^2
 h = f'
 print h(1)                       # actual: -0.270784   expected: -0.270671 (= -2e⁻²)
 ```
+
+## A35. Indefinite integrals with a parameter fail: SymPy's Piecewise leaks out
+```
+ω = 2 1/s
+F = ∫ cos(ω t) dt       # error: SymPy returned something Fermium can't use yet:
+                        #   Piecewise((sin(t*ω)/ω, (ω > 0) | (ω < 0)), (t, True))
+k = 3
+F = ∫ exp(-k x) dx      # same, Piecewise((-exp(-k*x)/k, ...
+a = 2
+F = ∫ x^a dx            # same
+F = ∫ abs(x) dx         # same
+```
+These are the most common textbook antiderivatives. Fix: declare the SymPy symbols for
+parameters as `nonzero=True`/`positive=True` (or take the generic branch of a Piecewise whose
+condition is "parameter ≠ 0"). The error also has no line number and names SymPy/Python syntax.
+Minor, same area: `print F` shows `∫dx(x) = x³/3` rather than `F(x) = x³/3`, and `∫ 1/x dx`
+gives ln(x), so `F(-1)` is NaN (ln|x| expected).
+
+## A36. [FIXED] (HIGH) `std`, `diff`, `sum`, `cumsum` of a °C list print nonsense in °C
+The B1 fix (difference of two absolute temperatures is in K) doesn't reach the list functions:
+```
+T = [10 °C, 20 °C]
+print std(T)            # actual: -266.079 °C   expected: 7.07107 K  (`std(T) in K` is right)
+T = [0 °C, 100 °C]
+print diff(T)           # actual: [-173.15] °C  expected: [100] K
+print cumsum(T)         # actual: [0, 373.15] °C  expected: an error (sum of absolute temperatures)
+T = linspace(0 °C, 100 °C, 3)
+print sum(T)            # actual: 696.3 °C      expected: an error, or 969.45 K
+```
+Realistic case: `d = load "data.csv"` with a `T [°C]` column, then `print std(d.T)`.
+(`mean`, `min`, `max`, `interp`, `trapz` are right.)
+
+## A37. (low, after the A15 fix) Decay below ~1e-300 stalls
+```
+solve x' = -x with x(0) = 1 for t from 0 to 700
+print x(700)            # actual: 7.99895×10⁻³⁰²   expected: 9.85968×10⁻³⁰⁵
+solve x' = -x with x(0) = 1e-300 for t from 0 to 30
+print x(30)             # actual: 3.79017×10⁻³⁰¹   expected: 9.35762×10⁻³¹⁴ (subnormal)
+```
+Looks like a fixed tiny absolute floor (~1e-300) in the error norm. Only matters at the edge
+of double range; everything down to ~1e-290 is right now.
+
+## A38. `fmt --ascii` turns `∂²/∂x² f` into `partial^2/partial x^2 f`, which doesn't parse
+```
+f(x, y) = x^2 y^2
+g = ∂²/∂x² f
+print g(1, 2)          # 8
+```
+`fermium fmt --ascii` gives `g = partial^2/partial x^2 f` → "expected '/' (write ∂/∂x f) but
+found '^'". Either accept `partial^2/partial x^2` in the parser (like `d^2/dt^2`) or emit
+another spelling.
+
+## A39. CLI: Python traceback for a file that isn't UTF-8, or a directory
+```
+printf 'x = 5 \xb5m\nprint x\n' > latin1.fm     # a Latin-1 "µm", e.g. saved by an old Windows editor
+fermium run latin1.fm      # Traceback ... UnicodeDecodeError: 'utf-8' codec can't decode byte 0xb5
+fermium fmt --pretty latin1.fm   # same
+mkdir dir.fm; fermium run dir.fm   # Traceback ... IsADirectoryError
+```
+Expected one-line errors ("latin1.fm isn't a UTF-8 text file (byte 0xB5 on line 1); save it as
+UTF-8", "dir.fm is a folder, not a file"). `cli._read` only handles FileNotFoundError.
+
+## A40. (low, cosmetic) The unit of an *argument* is lost through a function call
+```
+f(x) = 2 x
+print 2 * (1 km), f(1 km)      # 2 km 2000 m
+print 2 (1 eV), f(1 eV)        # 2 eV 3.20435×10⁻¹⁹ J
+f(E) = E
+print f(3 MeV)                 # 4.80653×10⁻¹³ J    expected 3 MeV
+```
+Units written in the function body are kept (bugs-examples #4), but not the argument's. For a
+nuclear-physics user every `f(E)` needs `in MeV`. Display hints are per call site, so each call
+could carry its argument's hint (the instance is shared per dimension, so this must be done at
+the call, not in the monomorphised body).

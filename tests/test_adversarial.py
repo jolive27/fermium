@@ -384,7 +384,6 @@ def test_forced_system_matches_scipy():
     assert close(a, s.y[0, -1], 1e-5) and close(b, s.y[1, -1], 1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A15: absolute error floor degraded the stiff VdP result to 1.7e-4")
 def test_stiff_van_der_pol():
     # reference: scipy Radau and LSODA (rtol 1e-12) agree on -1.51060693(6)
     out = run("μ = 1000\nsolve x'' = μ (1 - x^2) x' - x with x(0) = 2, x'(0) = 0 for t from 0 to 3000\n"
@@ -392,7 +391,6 @@ def test_stiff_van_der_pol():
     assert close(num(out), -1.5106069366, 1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A15: exponential decay loses relative accuracy (absolute floor)")
 @pytest.mark.parametrize("src,want", [
     ("solve x' = -x with x(0) = 1 for t from 0 to 30\nprint x(30)", math.exp(-30)),
     ("solve x' = -x with x(0) = 1 for t from 0 to 60\nprint x(60)", math.exp(-60)),
@@ -686,7 +684,6 @@ def test_call_before_definition_does_not_use_constant():
         run("print h(2)\nh(x) = x^2")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A22: negating an absolute °C temperature")
 def test_negating_absolute_celsius_is_rejected():
     with pytest.raises(Exception):
         run("T = 20 °C\nprint -T")
@@ -770,13 +767,11 @@ def test_mixed_number_two_and_a_half():
     assert out == "2.5"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A15: long integrations drift (absolute floor scales with the span)")
 def test_long_harmonic_integration_accuracy():
     out = run("solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000\nprint x(100000)")
     assert close(num(out), math.cos(1e5), 1e-4)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A30: x'(t) linearly interpolates the stored slopes (O(h²))")
 def test_solution_derivative_between_steps():
     src = """solve x' = cos(t) with x(0) = 0 for t from 0 to 20
 ts = times(x)
@@ -827,3 +822,81 @@ def test_runtime_errors_have_messages(src):
 def test_huge_list_is_a_clean_error(tmp_path):
     r = _run_cli("xs = zeros(1e15)\nxs[1] = 2\nprint sum(xs)\n", tmp_path)
     assert r.returncode == 1 and "memory" in r.stderr
+
+
+def test_nested_numeric_kernels():
+    # integral of a solution, solve with an integral in the RHS, integral over a function that solves
+    assert run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x(t) dt from 0 to 2") == "0.864665"
+    assert run("F(t) = ∫ exp(-u^2) du from 0 to t\nsolve y' = F(t) with y(0) = 0 for t from 0 to 1\n"
+               "print y(1)") == "0.430764"
+    assert run("g(k) =\n    solve x' = -k x with x(0) = 1 for t from 0 to 1\n    x(1)\n"
+               "print ∫ g(k) dk from 0 to 1") == "0.632121"
+    assert run("solve y' = if t < 0.5 then 1 else 2 with y(0) = 0 for t from 0 to 1\nprint y(1)") == "1.5"
+
+
+def test_integral_of_solution_derivative():
+    out = run("solve x' = -x with x(0) = 1 for t from 0 to 2\nprint ∫ x'(s) ds from 0 to 2")
+    assert close(num(out), math.exp(-2) - 1, 1e-6)
+
+
+def test_indefinite_integrals():
+    assert run("F = ∫ x^2 dx\nprint F(3)") == "9"
+    assert run("k = 50 N/m\nW = ∫ k x dx\nprint W(0.2 m)") == "1.0 J"
+    assert run("F = ∫ exp(-x) sin(x) dx\nprint F(1) - F(0)") == "0.245837"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A35: SymPy Piecewise for ∫ cos(ω t) dt")
+def test_indefinite_integral_with_parameter():
+    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s)")
+    assert close(num(out), math.sin(2) / 2)
+
+
+def test_std_of_celsius_list():
+    assert run("T = [10 °C, 20 °C]\nprint std(T)") == "7.07107 K"
+
+
+def test_diff_of_celsius_list():
+    assert run("T = [0 °C, 100 °C]\nprint diff(T)") == "[100] K"
+
+
+def test_celsius_list_mean_min_max_interp():
+    assert run("T = linspace(0 °C, 100 °C, 3)\nprint mean(T), T in K") == "50 °C [273.15, 323.15, 373.15] K"
+    assert run("T = [0 °C, 100 °C]\nprint interp(50 °C, T, [1 m, 2 m])") == "1.5 m"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A38: fmt --ascii writes partial^2/partial x^2, which doesn't parse")
+def test_fmt_ascii_second_partial():
+    from fermium.fmt import format_source
+    src = "f(x, y) = x^2 y^2\ng = ∂²/∂x² f\nprint g(1, 2)"
+    assert run(format_source(src, "ascii")) == run(src) == "8"
+
+
+def test_fmt_round_trip_more():
+    from fermium.fmt import format_source
+    for src in ["x(t) = t^3\nprint d²/dt² x, d/dt x",
+                "θ₀ = 0.1\nω₁₂ = 2\nprint θ₀ ω₁₂, √θ₀, ∛8",
+                "print 1 Å, 2 μm, 3 M☉ in kg, 20 °C, ∞, -∞",
+                "x = 2\nprint ¼ x, ¾ x, ⅓ x, x⁻¹, x²·x",
+                "T = 300 K\nprint 2.898e-3 m K / T"]:
+        base = run(src)
+        a = format_source(src, "ascii")
+        assert run(a) == base
+        assert run(format_source(a, "pretty")) == base
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A39: a non-UTF-8 source file gives a Python traceback")
+def test_cli_non_utf8_file(tmp_path):
+    f = tmp_path / "latin1.fm"
+    f.write_bytes(b"x = 5 \xb5m\nprint x\n")
+    r = subprocess.run([sys.executable, "-m", "fermium.cli", "run", str(f)], capture_output=True, text=True,
+                       timeout=20, cwd=ROOT)
+    assert "Traceback" not in r.stderr and r.returncode != 0
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A40: argument's display unit lost through a function")
+def test_function_keeps_argument_display_unit():
+    assert run("f(E) = E\nprint f(3 MeV)") == "3 MeV"
+
+
+def test_function_result_value_with_mixed_unit_calls():
+    assert run("f(x) = 2 x\nprint f(1 km) in m, f(3 cm) in cm, f(5 m)") == "2000 m 6 cm 10 m"

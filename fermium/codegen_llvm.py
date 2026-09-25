@@ -524,6 +524,10 @@ class ModuleGen:
         tv = b.alloca(F64)
         hv = b.alloca(F64)
         nsteps = b.alloca(I64)
+        rejcount = b.alloca(I64)
+        firstrej = b.alloca(F64)
+        b.store(i64(0), rejcount)
+        b.store(f64(0), firstrej)
         b.store(t0, tv)
         b.store(b.fmul(span, f64(1e-4)), hv)
         b.store(i64(0), nsteps)
@@ -577,14 +581,11 @@ class ModuleGen:
             e = b.fmul(e, h)
             yo = b.call(fabs, [b.load(b.gep(y, [j]))])
             yn = b.call(fabs, [b.load(b.gep(ynew, [j]))])
-            # scale-free error norm: relative to the size the component has reached, with an absolute floor
-            # of (largest |dy/dt| seen, including this step's stages) × (time span) -- so an unknown that
-            # starts at exactly 0 still gets a sensible tolerance, whatever its units
-            fs = b.load(b.gep(fmx, [j]))
-            for m in range(1, 7):
-                fs = b.call(fmax, [fs, b.call(fabs, [b.load(b.gep(k[m], [j]))])])
-            sc = b.fmul(rtol, b.fadd(b.fadd(b.call(fmax, [yo, yn]), b.fmul(f64(1e-3), b.load(b.gep(ymax, [j])))),
-                                     b.fmul(f64(1e-3), b.fmul(fs, span))))
+            # relative error norm (scale-free, so it works in any units and keeps decays accurate):
+            # relative to the size of the component, or to this step's own change when the component
+            # passes through zero
+            dlt = b.call(fabs, [b.fsub(b.load(b.gep(ynew, [j])), b.load(b.gep(y, [j])))])
+            sc = b.fmul(rtol, b.fadd(b.call(fmax, [yo, yn]), dlt))
             sc = b.fadd(sc, f64(1e-300))
             r = b.fdiv(e, sc)
             b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
@@ -593,7 +594,12 @@ class ModuleGen:
         pw = self.intrinsic("pow")
         fac = b.fmul(f64(0.9), b.call(pw, [b.call(fmax, [errn, f64(1e-10)]), f64(-0.2)]))
         fac = b.call(fmin, [f64(5.0), b.call(fmax, [f64(0.2), fac])])
-        accept = b.fcmp_ordered("<=", errn, f64(1.0))
+        # If shrinking the step no longer reduces the (relative) error, the tolerance can't be met by
+        # refining -- typically an unknown that starts at exactly 0 (x' = t⁴, x(0) = 0). Accept then.
+        nrej = b.load(rejcount)
+        stalled = b.and_(b.icmp_signed(">=", nrej, i64(4)),
+                         b.fcmp_ordered(">=", errn, b.fmul(f64(0.5), b.load(firstrej))))
+        accept = b.or_(b.fcmp_ordered("<=", errn, f64(1.0)), stalled)
         with b.if_else(accept) as (yes, no):
             with yes:
                 tn = b.fadd(t, h)
@@ -606,8 +612,12 @@ class ModuleGen:
                     b.store(b.call(fmax, [b.load(b.gep(fmx, [j])), b.call(fabs, [b.load(b.gep(k[6], [j]))])]),
                             b.gep(fmx, [j]))
                 b.call(push, [sp, tn, y, k[0]])
-                b.store(b.fmul(h, fac), hv)
+                b.store(b.select(stalled, b.fmul(h, f64(2.0)), b.fmul(h, fac)), hv)
+                b.store(i64(0), rejcount)
             with no:
+                with b.if_then(b.icmp_signed("==", nrej, i64(0))):
+                    b.store(errn, firstrej)
+                b.store(b.add(nrej, i64(1)), rejcount)
                 b.store(b.fmul(h, b.call(fmin, [fac, f64(1.0)])), hv)
         b.branch(cond_bb)
         b.position_at_end(end_bb)
@@ -663,16 +673,21 @@ class ModuleGen:
         s = b.fdiv(b.fsub(t, ta), hh)
         ia = b.add(b.mul(i, dim), comp)
         ib = b.add(b.mul(i1, dim), comp)
-        with b.if_then(b.icmp_signed("!=", use_dy, i64(0))):
-            da = b.load(b.gep(dp, [ia]))
-            db = b.load(b.gep(dp, [ib]))
-            b.ret(b.fadd(da, b.fmul(s, b.fsub(db, da))))
         ya = b.load(b.gep(yp, [ia]))
         yb = b.load(b.gep(yp, [ib]))
         ma = b.fmul(b.load(b.gep(dp, [ia])), hh)
         mb = b.fmul(b.load(b.gep(dp, [ib])), hh)
         s2 = b.fmul(s, s)
         s3 = b.fmul(s2, s)
+        with b.if_then(b.icmp_signed("!=", use_dy, i64(0))):
+            # derivative of the Hermite cubic: third-order accurate (linear interpolation of the
+            # stored slopes would only be second order)
+            d00 = b.fsub(b.fmul(f64(6), s2), b.fmul(f64(6), s))
+            d10 = b.fadd(b.fsub(b.fmul(f64(3), s2), b.fmul(f64(4), s)), f64(1))
+            d01 = b.fsub(b.fmul(f64(6), s), b.fmul(f64(6), s2))
+            d11 = b.fsub(b.fmul(f64(3), s2), b.fmul(f64(2), s))
+            num_ = b.fadd(b.fadd(b.fmul(d00, ya), b.fmul(d10, ma)), b.fadd(b.fmul(d01, yb), b.fmul(d11, mb)))
+            b.ret(b.fdiv(num_, hh))
         h00 = b.fadd(b.fsub(b.fmul(f64(2), s3), b.fmul(f64(3), s2)), f64(1))
         h10 = b.fadd(b.fsub(s3, b.fmul(f64(2), s2)), s)
         h01 = b.fadd(b.fmul(f64(-2), s3), b.fmul(f64(3), s2))

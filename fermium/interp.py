@@ -167,13 +167,16 @@ class Sol:
         h = tb - ta
         s = (t - ta) / h
         ia, ib = i * dim + comp, (i + 1) * dim + comp
-        if use_dy:
-            da, db = self.dy[ia], self.dy[ib]
-            return da + s * (db - da)
         ya, yb = self.y[ia], self.y[ib]
         ma, mb = self.dy[ia] * h, self.dy[ib] * h
         s2 = s * s
         s3 = s2 * s
+        if use_dy:
+            d00 = 6 * s2 - 6 * s
+            d10 = 3 * s2 - 4 * s + 1
+            d01 = 6 * s - 6 * s2
+            d11 = 3 * s2 - 2 * s
+            return ((d00 * ya + d10 * ma) + (d01 * yb + d11 * mb)) / h
         h00 = 2 * s3 - 3 * s2 + 1
         h10 = s3 - 2 * s2 + s
         h01 = -2 * s3 + 3 * s2
@@ -232,7 +235,7 @@ def dp45(f, y0, t0, t1, rtol):
     k = [None] * 7
     k[0] = f(t0, y)
     sol.push(t0, y, k[0])
-    fmx = [abs(v) for v in k[0]]
+    rej, first_rej = 0, 0.0
     while True:
         remaining = t1 - t
         if not (remaining > 1e-14 * abs(t1) and remaining > 0):
@@ -262,24 +265,25 @@ def dp45(f, y0, t0, t1, rtol):
                 if E_DP[m] != 0:
                     e = e + E_DP[m] * k[m][j]
             e = e * h
-            fs = fmx[j]
-            for m in range(1, 7):
-                fs = max(fs, abs(k[m][j]))
-            sc = rtol * ((max(abs(y[j]), abs(ynew[j])) + 1e-3 * ymax[j]) + 1e-3 * (fs * span))
+            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j]))
             r = fdiv(e, sc)
             errsum = errsum + r * r
         errn = math.sqrt(errsum / n)
         fac = 0.9 * fpow(max(errn, 1e-10), -0.2)
         fac = min(5.0, max(0.2, fac))
-        if errn <= 1.0:
+        stalled = rej >= 4 and errn >= 0.5 * first_rej
+        if errn <= 1.0 or stalled:
             t = t + h
             y = ynew
             ymax = [max(ymax[j], abs(y[j])) for j in range(n)]
             k[0] = k[6]
-            fmx = [max(fmx[j], abs(k[6][j])) for j in range(n)]
             sol.push(t, y, k[0])
-            hv = h * fac
+            hv = h * 2.0 if stalled else h * fac
+            rej = 0
         else:
+            if rej == 0:
+                first_rej = errn
+            rej += 1
             hv = h * min(fac, 1.0)
     return sol
 

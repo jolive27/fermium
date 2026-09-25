@@ -389,10 +389,8 @@ def sample_solution(s: SolStruct, comp, use_dy, npts=600):
     t = np.ctypeslib.as_array(s.t, shape=(n,)).copy()
     y = np.ctypeslib.as_array(s.y, shape=(n * dim,)).reshape(n, dim)[:, comp].copy()
     dy = np.ctypeslib.as_array(s.dy, shape=(n * dim,)).reshape(n, dim)[:, comp].copy()
-    if use_dy:
-        return t, dy
     if n >= npts or n < 2:
-        return t, y
+        return t, (dy if use_dy else y)
     tt = np.linspace(t[0], t[-1], npts)
     i = np.clip(np.searchsorted(t, tt, side="right") - 1, 0, n - 2)
     h = t[i + 1] - t[i]
@@ -401,6 +399,10 @@ def sample_solution(s: SolStruct, comp, use_dy, npts=600):
     h10 = u**3 - 2 * u**2 + u
     h01 = -2 * u**3 + 3 * u**2
     h11 = u**3 - u**2
+    if use_dy:
+        d00, d10 = 6 * u**2 - 6 * u, 3 * u**2 - 4 * u + 1
+        d01, d11 = 6 * u - 6 * u**2, 3 * u**2 - 2 * u
+        return tt, (d00 * y[i] + d10 * h * dy[i] + d01 * y[i + 1] + d11 * h * dy[i + 1]) / h
     yy = h00 * y[i] + h10 * h * dy[i] + h01 * y[i + 1] + h11 * h * dy[i + 1]
     return tt, yy
 

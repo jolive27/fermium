@@ -999,6 +999,9 @@ class Checker(C.DiffContext):
                 return self.e_Quantity(neg, ctx)
         a = self.expr(e.operand, ctx)
         self.need_numlike(a, e.operand, allow_vec=True)
+        if a.hint is not None and a.hint.affine:
+            raise self.err(f"can't negate an absolute temperature ({a.hint.name})", e,
+                           hint="write the negative number directly, like -5 °C, or use K")
         r = I.INeg(a)
         r.hint, r.sf, r.direct = a.hint, a.sf, a.direct
         return r
@@ -1596,11 +1599,13 @@ class Checker(C.DiffContext):
                 return r
             if name == "std":
                 r = self._bi(name, args, NumTy(a.ty.dim), args)
-                r.hint = a.hint
+                r.hint = a.hint if not (a.hint is not None and a.hint.affine) else None   # a spread: K, not °C
                 return r
             if name in ("cumsum", "diff", "reverse", "sort", "values"):
                 r = self._bi(name if name != "values" else "copy", args, ListTy(a.ty.dim), args)
                 r.hint = a.hint
+                if name in ("diff", "cumsum") and a.hint is not None and a.hint.affine:
+                    r.hint = None     # differences of temperatures are shown in K
                 return r
             if name == "times":
                 if isinstance(a, I.ISolList):
