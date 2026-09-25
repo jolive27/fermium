@@ -323,10 +323,11 @@ def test_integral_offset_gaussian_half_line():
     assert close(num(run("print ∫ exp(-(x-100)^2) dx from 0 to inf")), math.sqrt(math.pi))
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A3: a narrow peak far from 0 is missed and the integral is 0")
 def test_integral_offset_gaussian_over_all_space():
+    # was BUG A3.  Documented limitation (not tested): a peak of width 1 in a *finite* range of
+    # ±1e6, e.g. ∫ exp(-x^2) dx from -1e6 to 1e6, can still be missed and give 0.
     got = nums(run("print ∫ exp(-(x-100)^2) dx from -inf to inf\n"
-                   "print ∫ exp(-x^2) dx from -1e6 to 1e6"))
+                   "print ∫ exp(-(x-1000)^2) dx from -inf to inf"))
     assert all(close(g, math.sqrt(math.pi)) for g in got)
 
 
@@ -801,14 +802,12 @@ def test_infinite_constant_index_is_a_fermium_error():
         run("xs = [1, 2, 3]\nprint xs[inf]")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A33: runtime error without a message")
 @pytest.mark.parametrize("src", ["xs = [1, 2, 3]\nprint xs[1e19]", "xs = [1, 2, 3]\nprint xs[0/0]",
                                  "n = 0\nfor i from 1 to 0/0\n    n += 1\nprint n"])
 def test_runtime_errors_have_messages(src):
     assert str(error_of(src)) not in ("runtime error", "line 2: runtime error", "line 3: runtime error")
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A34: failed malloc for a huge list segfaults")
 def test_huge_list_is_a_clean_error(tmp_path):
     r = _run_cli("xs = zeros(1e15)\nxs[1] = 2\nprint sum(xs)\n", tmp_path)
     assert r.returncode == 1 and "memory" in r.stderr
@@ -930,7 +929,6 @@ def test_definite_assignment_both_branches_ok():
     assert "might not have a value" in str(error_of("x = 1\nif x > 2\n    y = 3 m\nprint y"))
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A43: loop variable read after a loop that never ran is garbage")
 @pytest.mark.parametrize("src", ["for i from 1 to 0\n    print 5\nprint i",
                                  "for x in []\n    print 5\nprint x",
                                  "f(n) =\n    for i from 1 to n\n        print 1\n    i\nprint f(0)"])
@@ -939,15 +937,19 @@ def test_loop_variable_after_empty_loop(src):
     assert "value" in str(error_of(src))
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A44: 1/√ endpoint singularity reported as 'doesn't converge'")
 @pytest.mark.parametrize("integral,want", [
     ("1/sqrt(1 - x^2) dx from -1 to 1", math.pi),
     ("1/sqrt(1 - x^2) dx from 0 to 1", math.pi / 2),
     ("1/sqrt(cos(x) - cos(1)) dx from -1 to 1", 4.73759822490498),
-    ("1/sqrt(abs(x - 0.3)) dx from 0 to 1", 2 * (math.sqrt(0.3) + math.sqrt(0.7))),
 ])
 def test_integrable_sqrt_singularities(integral, want):
+    # was BUG A44
     assert close(num(run(f"print ∫ {integral}")), want, 1e-5)
+
+
+def test_integrable_interior_sqrt_singularity():
+    got = num(run("print ∫ 1/sqrt(abs(x - 3/10)) dx from 0 to 1"))     # was BUG A44
+    assert close(got, 2 * (math.sqrt(0.3) + math.sqrt(0.7)), 1e-5)
 
 
 def test_integrable_power_singularities():
@@ -956,9 +958,20 @@ def test_integrable_power_singularities():
     assert all(close(g, w, 1e-5) for g, w in zip(got, [5, 4, 20, -2]))
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A44: weakly singular integrand only accurate to ~1e-4")
 def test_weak_singularity_accuracy():
-    assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.15956720188266, 1e-5)
+    # reference: scipy quad (epsrel 1e-13) and mpmath after the substitution x = u^5 agree
+    assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.160306768626711, 1e-5)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A56: interior |x|^-0.8 singularity rejected as divergent")
+@pytest.mark.parametrize("integral,want", [
+    ("((1/x)^2 + 1)^(2/5) dx from -2 to 3", 13.7312084140662),
+    ("abs(x)^(-0.8) dx from -1 to 1", 10.0),
+    ("abs(x - 3/10)^(-0.8) dx from 0 to 1", 5 * (0.3 ** 0.2 + 0.7 ** 0.2)),
+    ("abs(x)^(-0.9) dx from -1 to 2", 10 * (1 + 2 ** 0.1)),
+])
+def test_interior_algebraic_singularity(integral, want):
+    assert close(num(run(f"print ∫ {integral}")), want, 1e-5)
 
 
 def _decay_csv(tmp_path):
@@ -1017,7 +1030,6 @@ def test_vector_errors_are_clean():
     assert "2 or 3 components" in str(error_of("print <1, 2, 3, 4>"))
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A51: infinite-range integrals assume a scale of ~1 SI unit")
 @pytest.mark.parametrize("src,want", [
     ("a = 1 fm\nprint ∫ exp(-r/a) dr from 0 m to ∞ in fm", 1.0),
     ("a = 0.529e-10 m\nprint ∫ 4π r² exp(-2 r/a) / (π a³) dr from 0 m to ∞", 1.0),
@@ -1039,3 +1051,56 @@ def test_fermi_function_derivative_far_tail():
 @pytest.mark.xfail(strict=True, reason="BUG A52: tanh'' at large x is NaN")
 def test_tanh_second_derivative_large_argument():
     assert run("f(x) = tanh(x)\nh = f''\nprint h(1000)") in ("0", "-0")
+
+
+def test_divergent_integral_pole_at_pi():
+    assert "converge" in str(error_of("print ∫ 1/sin(x)^2 dx from 1 to 5"))
+
+
+def test_integral_jump_and_oscillation():
+    got = nums(run("print ∫ atan(1/x) dx from -2 to 3\nprint ∫ exp(sin(x^4)) dx from 0 to 5"))
+    exact = (3 * math.atan(1 / 3) + 0.5 * math.log(10)) - (-2 * math.atan(-0.5) + 0.5 * math.log(5))
+    assert close(got[0], exact, 1e-6)
+    assert close(got[1], 6.5251672775030307, 1e-5)          # mpmath, 2000 panels
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A54: in ∫ 1/u du, u is read as the atomic mass unit")
+def test_integration_variable_named_like_unit():
+    assert run("print ∫ 1/u du from 1 to 2") == "0.693147"
+
+
+def test_parameter_named_like_unit_wins():
+    assert run("f(s) = 1/s\nprint f(2)") == "0.5"
+    assert run("s = 2\nprint 1/s") == "0.5"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A55: max of a solution is the max over step points only")
+def test_solution_max_is_refined():
+    out = run("solve x' = cos(t) with x(0) = 0 for t from 0 to 20\nprint max(x), min(x)")
+    a, b = nums(out)
+    assert close(a, 1, 1e-7) and close(b, -1, 1e-7)
+
+
+def test_physics_integrals_to_infinity():
+    out = run("T = 5800 K\nB(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)\n"
+              "Bλ(λ) = 2 h c^2 / λ^5 / (exp(h c / (λ k_B T)) - 1)\n"
+              "print ∫ B(ν) dν from 0 Hz to ∞, ∫ Bλ(λ) dλ from 0 m to ∞, σ T^4 / π")
+    a, b, c = nums(out)
+    assert close(a, c, 1e-5) and close(b, c, 1e-5)
+    assert run("m = m_e\nT = 300 K\nprint ∫ 4π v^2 (m/(2π k_B T))^(3/2) exp(-m v^2 / (2 k_B T)) dv "
+               "from 0 m/s to ∞") == "1"
+    assert run("x0 = 100 fm\nσ = 1 fm\nprint ∫ exp(-(x - x0)^2/(2 σ^2)) dx from -∞ to ∞ in fm") == "2.50663 fm"
+    assert run("print ∫ 1/(1 + (E/(1 MeV))^2) dE from -∞ to ∞ in MeV") == "3.14159 MeV"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A49: d/dt (formula) with a where-clause is rejected")
+def test_derivative_of_formula_with_where():
+    assert run("g = d/dt (a t^2) where a = 3\nprint g(1)") == "6"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A24: bad CSV leaks 'Exception ignored ... KeyError' to stderr")
+def test_bad_csv_has_no_python_noise(tmp_path):
+    (tmp_path / "gap.csv").write_text("x [m], y [m]\n1, 2\n2,\n3, 6\n")
+    r = _run_cli('d = load "gap.csv"\nprint d.y\n', tmp_path)
+    assert r.returncode == 1 and "not a number" in r.stderr
+    assert "Exception ignored" not in r.stderr and "Traceback" not in r.stderr

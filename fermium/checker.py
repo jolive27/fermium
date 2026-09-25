@@ -588,11 +588,24 @@ class Checker(C.DiffContext):
     def loop_var(self, name, ty, ctx, node):
         b, _ = ctx.scope.lookup(name)
         if isinstance(b, I.Sym) and b.func is ctx.func and type(b.ty) is type(ty):
-            if isinstance(ty, NumTy) and self.U.unify(b.ty.dim, ty.dim):
+            if isinstance(ty, NumTy) and self.U.unify(b.ty.dim, ty.dim) or isinstance(ty, StrTy):
+                if getattr(b, "unset_msg", None) is not None:    # the variable of an earlier loop
+                    b.unset_msg = None
+                    b.fresh_loop_var = True
                 return b
         sym = self.new_sym(name, ty, ctx)
         ctx.scope.names[name] = sym
+        sym.fresh_loop_var = True
         return sym
+
+    @staticmethod
+    def _after_loop(sym, line):
+        # a loop variable that didn't exist before the loop has no value if the loop never ran
+        if getattr(sym, "fresh_loop_var", False):
+            sym.fresh_loop_var = False
+            sym.region = None
+            sym.unset_msg = f"{sym.name} might not have a value here: it is only set inside the for loop on line " \
+                            f"{line}, which may not run at all"
 
     def s_For(self, s, ctx):
         lo = self.expr(s.lo, ctx)
@@ -622,6 +635,7 @@ class Checker(C.DiffContext):
         finally:
             self._exit_region(ctx, reg)
         ctx.loop -= 1
+        self._after_loop(sym, s.line)
         return I.SFor(sym, lo, hi, st, body)
 
     def s_ForIn(self, s, ctx):
@@ -634,6 +648,7 @@ class Checker(C.DiffContext):
             ctx.loop += 1
             body = self.block(s.body, ctx)
             ctx.loop -= 1
+            self._after_loop(sym, s.line)
             return I.SForIn(sym, lst, body)
         if not isinstance(lst.ty, ListTy):
             raise self.err(f"can't loop over {type_desc(lst.ty, self.U)}; 'for x in ...' needs a list", s.iterable,
@@ -648,6 +663,7 @@ class Checker(C.DiffContext):
         finally:
             self._exit_region(ctx, reg)
         ctx.loop -= 1
+        self._after_loop(sym, s.line)
         return I.SForIn(sym, lst, body)
 
     def s_Return(self, s, ctx):
@@ -797,7 +813,7 @@ class Checker(C.DiffContext):
         """Reference a variable, marking it global or captured when used from another function."""
         msg = getattr(sym, "unset_msg", None)
         if msg and ctx.lam is None and (sym.func is ctx.func):
-            where = msg.split("inside ")[1]
+            where = msg.split("inside ")[1].split(",")[0]
             raise self.err(msg, node, hint=f"give {sym.name} a value before {where}, e.g.  {sym.name} = 0")
         if ctx.lam is not None:
             lam = ctx.lam

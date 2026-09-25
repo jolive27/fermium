@@ -157,7 +157,9 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     err_line = ln;
     switch (kind) {
     case 1:
-        if (a == a && a != floor(a))
+        if (a != a)
+            snprintf(err_msg, sizeof err_msg, "a list index must be a whole number (1, 2, 3, ...), not NaN");
+        else if (!isinf(a) && a != floor(a))
             snprintf(err_msg, sizeof err_msg, "a list index must be a whole number (1, 2, 3, ...), not %s", x);
         else if ((long long)b == 0)
             snprintf(err_msg, sizeof err_msg, "index %s is out of range: the list is empty", x);
@@ -174,12 +176,18 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near t = %s (SI units)", x); break;
     case 9: snprintf(err_msg, sizeof err_msg, "this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating (like sin(x) up to ∞)"); break;
     case 10: snprintf(err_msg, sizeof err_msg, "%s called itself too many times (the program ran out of stack) -- is a base case missing?", a >= 0 ? fm_texts[(int64_t)a] : "a function"); break;
+    case 11:
+        if (a != a) snprintf(err_msg, sizeof err_msg, "the length of a list must be a number, not NaN");
+        else snprintf(err_msg, sizeof err_msg, "not enough memory for a list of %s numbers (the most is 10⁹)", x);
+        break;
+    case 12: snprintf(err_msg, sizeof err_msg, "this for loop has no definite number of steps: it goes from %s to %s (NaN in the start, end or step)", x, y); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
 }
 
 static int cmp_double(const void *a, const void *b) {
     double x = *(const double *)a, y = *(const double *)b;
+    if (x != x || y != y) return (x != x) - (y != y);     /* NaN last */
     return (x > y) - (x < y);
 }
 

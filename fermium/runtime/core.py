@@ -182,7 +182,7 @@ class Runtime:
                 rt.error = ex.message
 
         def sort(p, n):
-            vals = sorted(p[i] for i in range(n))
+            vals = sorted((p[i] for i in range(n)), key=lambda v: (v != v, v if v == v else 0.0))  # NaN last
             for i, v in enumerate(vals):
                 p[i] = v
 
@@ -223,7 +223,9 @@ class Runtime:
     def describe_error(self, kind, a, b, fmt=-1):
         if kind == 1:
             n = int(b)
-            if a == a and a != int(a):
+            if a != a:
+                return "a list index must be a whole number (1, 2, 3, ...), not NaN"
+            if abs(a) < math.inf and a != int(a):
                 return f"a list index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
             if n == 0:
                 return f"index {format_number(a)} is out of range: the list is empty"
@@ -253,6 +255,13 @@ class Runtime:
         if kind == 9:
             return ("this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating "
                     f"(like sin(x) up to ∞) -- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
+        if kind == 11:
+            if a != a:
+                return "the length of a list must be a number, not NaN"
+            return f"not enough memory for a list of {format_number(a)} numbers (the most is 10⁹)"
+        if kind == 12:
+            return (f"this for loop has no definite number of steps: it goes from {format_number(a)} to "
+                    f"{format_number(b)} (NaN in the start, end or step)")
         return "runtime error"
 
     # ------------------------------------------------------------ data

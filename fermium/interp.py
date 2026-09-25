@@ -21,6 +21,7 @@ from .types import ListTy, VecTy, BoolTy
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
+ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
 
 
 class _Break(Exception):
@@ -359,6 +360,13 @@ def _qscan(f, base, sign):
     return bs
 
 
+def _count(nf):
+    """Mirrors FuncGen.list_count."""
+    if not (nf <= MAX_LIST):
+        raise _Fail(ERR_SIZE, nf, 0.0)
+    return max(0, int(nf))
+
+
 def quad(f, a, b, rtol=1e-10, atol=0.0):
     """Mirrors fm_quad / fm_quadcore / fm_qscan in codegen_llvm.py."""
     if a > b:
@@ -467,8 +475,10 @@ class Interpreter:
         lo, hi, st = self.eval(s.lo, fr), self.eval(s.hi, fr), self.eval(s.step, fr)
         if st == 0 or st != st:
             raise _Fail(ERR_STEP, st, 0.0)
-        cnt = math.floor(fdiv(hi - lo, st) + 1e-9) + 1.0 if math.isfinite(fdiv(hi - lo, st)) else 0
-        n = max(0, int(cnt))
+        span = fdiv(hi - lo, st)
+        if span != span:
+            raise _Fail(ERR_RANGE, lo, hi)
+        n = max(0, int(math.floor(span + 1e-9) + 1.0)) if abs(span) < math.inf else (2 ** 62 if span > 0 else 0)
         for i in range(n):
             fr.set(s.sym, lo + i * st)
             try:
@@ -849,11 +859,11 @@ class Interpreter:
                     res = ys[i - 1] + s * (ys[i] - ys[i - 1])
             return res
         if name in ("zeros", "ones"):
-            n = max(0, int(args[0]))
+            n = _count(args[0])
             return [0.0 if name == "zeros" else 1.0] * n
         if name == "linspace":
             a, c, nf = args
-            n = max(0, int(nf))
+            n = _count(nf)
             den = float(n - 1 if n >= 2 else 1)
             step = (c - a) / den
             return [a + i * step for i in range(n)]
@@ -861,15 +871,15 @@ class Interpreter:
             a, c, st = args
             if st == 0 or st != st:
                 raise _Fail(ERR_STEP, st, 0.0)
-            cnt = math.floor(fdiv(c - a, st) + 1e-9) + 1.0
-            n = max(0, int(cnt)) if math.isfinite(cnt) else 0
+            cnt = math.floor(fdiv(c - a, st) + 1e-9) + 1.0 if abs(fdiv(c - a, st)) < math.inf else fdiv(c - a, st)
+            n = _count(max(cnt, 0.0))
             return [a + i * st for i in range(n)]
         if name == "copy":
             return list(args[0])
         if name == "reverse":
             return list(reversed(args[0]))
         if name == "sort":
-            return sorted(args[0])
+            return sorted(args[0], key=lambda v: (v != v, v if v == v else 0.0))    # NaN last
         if name == "cumsum":
             out, acc = [], 0.0
             for x in args[0]:

@@ -36,6 +36,9 @@ MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
 ERR_DEEP = 10
+ERR_SIZE = 11               # a list too big for memory (or of NaN length)
+ERR_RANGE = 12              # a for loop over a range with a NaN end or step
+MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
 # Gauss–Kronrod 7-15 nodes/weights (from QUADPACK qk15)
@@ -101,6 +104,20 @@ class ModuleGen:
         self.errfmt.initializer = i64(-1)
         self.errfmt.linkage = "internal"
         self._kernels_built = set()
+        self._checked_malloc()
+
+    def _checked_malloc(self):
+        """Every allocation goes through fm_xalloc, which stops with 'not enough memory' instead of
+        handing back a null pointer (externs['malloc'] points at it)."""
+        real = self.externs["malloc"]
+        fn = ir.Function(self.module, ir.FunctionType(I8P, [I64]), "fm_xalloc")
+        fn.linkage = "internal"
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        p = b.call(real, [fn.args[0]])
+        with b.if_then(b.icmp_unsigned("==", p, ir.Constant(I8P, None)), likely=False):
+            self.raise_error(b, ERR_SIZE, b.fdiv(b.uitofp(fn.args[0], F64), f64(8)), f64(0))
+        b.ret(p)
+        self.externs["malloc"] = fn
 
     # ------------------------------------------------------------ declarations
     def extern(self, name, ret, args, var_arg=False, attrs=()):
@@ -965,6 +982,10 @@ class FuncGen:
         span = b.fdiv(b.fsub(hi, lo), st)
         cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(span, f64(1e-9))]), f64(1))
         cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
+        with b.if_then(b.fcmp_unordered("uno", cnt, cnt), likely=False):
+            self.fail(ERR_RANGE, lo, hi)
+        # a range to ∞ runs until a break
+        cnt = b.select(b.fcmp_ordered(">", cnt, f64(2.0 ** 62)), f64(2.0 ** 62), cnt)
         n = b.fptosi(cnt, I64)
         iv = self.alloca(I64)
         b.store(i64(0), iv)
@@ -1155,6 +1176,14 @@ class FuncGen:
 
     def e_IVar(self, e):
         return self.load(e.sym)
+
+    def list_count(self, nf):
+        """A list length computed from a number: NaN or more than MAX_LIST is an error, negative is 0."""
+        b = self.b
+        with b.if_then(b.fcmp_unordered(">", nf, f64(MAX_LIST)), likely=False):
+            self.fail(ERR_SIZE, nf, f64(0))
+        n = b.fptosi(nf, I64)
+        return b.select(b.icmp_signed("<", n, i64(0)), i64(0), n)
 
     def new_list(self, n):
         b = self.b
@@ -1377,10 +1406,10 @@ class FuncGen:
     def elem_ptr(self, lst, idx):
         b = self.b
         n = self.llen(lst)
-        i = b.fptosi(idx, I64)
-        # one unsigned compare covers i < 1 and i > n; the exactness check rejects 1.5 and NaN
-        bad = b.icmp_unsigned(">=", b.sub(i, i64(1)), n)
-        bad = b.or_(bad, b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
+        # check in floating point first: fptosi of NaN or of a number beyond 2^63 is undefined
+        inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, b.sitofp(n, F64)))
+        i = b.fptosi(b.select(inside, idx, f64(1)), I64)
+        bad = b.or_(b.not_(inside), b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
         with b.if_then(bad, likely=False):
             self.fail(ERR_INDEX, idx, b.sitofp(n, F64))
         return b.gep(self.ldata(lst), [b.sub(i, i64(1))])
@@ -1558,16 +1587,14 @@ class FuncGen:
                     b.store(b.fadd(ya, b.fmul(s, b.fsub(yb, ya))), res)
             return b.load(res)
         if name in ("zeros", "ones"):
-            n = b.fptosi(args[0], I64)
-            n = b.select(b.icmp_signed("<", n, i64(0)), i64(0), n)
+            n = self.list_count(args[0])
             out, data = self.new_list(n)
             with self.lp.range(i64(0), n) as i:
                 b.store(f64(0 if name == "zeros" else 1), b.gep(data, [i]))
             return out
         if name == "linspace":
             a, c, nf = args
-            n = b.fptosi(nf, I64)
-            n = b.select(b.icmp_signed("<", n, i64(0)), i64(0), n)
+            n = self.list_count(nf)
             out, data = self.new_list(n)
             den = b.sitofp(b.select(b.icmp_signed("<", n, i64(2)), i64(1), b.sub(n, i64(1))), F64)
             step = b.fdiv(b.fsub(c, a), den)
@@ -1580,7 +1607,7 @@ class FuncGen:
                 self.fail(ERR_STEP, st, f64(0))
             cnt = b.fadd(b.call(self.mg.intrinsic("floor"), [b.fadd(b.fdiv(b.fsub(c, a), st), f64(1e-9))]), f64(1))
             cnt = b.select(b.fcmp_ordered("<", cnt, f64(0)), f64(0), cnt)
-            n = b.fptosi(cnt, I64)
+            n = self.list_count(cnt)
             out, data = self.new_list(n)
             with self.lp.range(i64(0), n) as i:
                 b.store(b.fadd(a, b.fmul(b.sitofp(i, F64), st)), b.gep(data, [i]))

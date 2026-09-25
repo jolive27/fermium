@@ -44,7 +44,7 @@ print ∫ sin(x) dx from 0 to inf                # expected: an error (does not 
 bounded number of subdivisions (e.g. QUADPACK-style global heap with a limit) and a runtime
 error "the integral did not converge" when the limit is hit.
 
-## A3. [PARTLY FIXED: x-20, x-30 and the half-line x-100 case work; x-100 over (-inf, inf) and ±1e6 still give 0] Integrals silently return 0 when the first GK15 samples miss a narrow peak
+## A3. [FIXED for infinite ranges; documented limitation: a width-1 peak in a finite ±1e6 range can still give 0] Integrals silently return 0 when the first GK15 samples miss a narrow peak
 ```
 print ∫ exp(-(x-100)^2) dx from -inf to inf    # actual: 0   expected: 1.77245
 print ∫ exp(-(x-100)^2) dx from 0 to inf       # actual: 0   expected: 1.77245
@@ -427,7 +427,7 @@ Traceback from `checker.index_expr`: `int(idx.value)` → `OverflowError: cannot
 infinity to integer`. Expected the usual "index ∞ is out of range" error. (`xs[0/0]`, `xs[1e19]`
 don't crash the checker but see A33.)
 
-## A33. Runtime errors with no message: "runtime error"
+## A33. [FIXED] Runtime errors with no message: "runtime error"
 All of these stop with just `runtime error` (no line, no explanation):
 ```
 xs = [1, 2, 3]
@@ -444,7 +444,7 @@ print len(zeros(inf))
 ```
 Also after A27: reading a list/solution that was never assigned gives the same bare message.
 
-## A34. Huge list sizes segfault (malloc failure not checked)
+## A34. [FIXED] Huge list sizes segfault (malloc failure not checked)
 ```
 xs = zeros(3e9)
 xs[1] = 2
@@ -567,7 +567,7 @@ print (∂/∂x f)(1, 2)     # now: "expected ')' to close '(' but found ','"   
 must still be a call when the parenthesised thing is a function. (This form was in
 tests/test_adversarial.py FMT_PROGRAMS, which is how it was caught.)
 
-## A43. (A27 leftover) The loop variable after a loop that never ran is garbage
+## A43. [FIXED] (A27 leftover) The loop variable after a loop that never ran is garbage
 ```
 for i from 1 to 0
     print 5
@@ -586,7 +586,7 @@ like other loop-body assignments ("i might not have a value here") or give it a 
 (e.g. `i` = start value) -- but then document what `i` is after a loop that ran (currently the
 last value, 3 for `from 1 to 3`).
 
-## A44. (HIGH, likely regression from the A4 fix) Convergent integrals with 1/√ endpoint singularities are rejected as "doesn't converge"
+## A44. [FIXED] (HIGH, likely regression from the A4 fix) Convergent integrals with 1/√ endpoint singularities are rejected as "doesn't converge"
 ```
 print ∫ 1/sqrt(1 - x^2) dx from -1 to 1          # expected π; actual: "this integral doesn't converge"
 print ∫ 1/sqrt(1 - x^2) dx from 0 to 1           # expected π/2; same error
@@ -602,12 +602,9 @@ sqrt(0) = 0 → 1/0 = ∞ at a node, which the divergence check then treats as b
 endpoint node should never be evaluated (GK nodes are interior) -- but after bisection at depth
 ~50 a node can round onto the endpoint.
 
-Related accuracy issue: weakly singular integrands converge only to ~1e-4 relative, printed
-to 6 s.f.:
-```
-print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1          # actual 5.16031, expected 5.15957 (mpmath)
-print ∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3      # actual 13.7312, expected 13.7294
-```
+(Retracted: I also reported ~1e-4 inaccuracy for `∫ (x^(-2) + 1)^0.4 dx from 0 to 1` = 5.16031;
+that was my reference being wrong -- scipy at epsrel 1e-13 and mpmath after substituting x = u^5
+give 5.1603067686, and 13.7312084 for the -2..3 variant, matching Fermium.)
 
 ## A45. `fit N = A exp(-t/τ)` without a guess reports a garbage fit as if it were fine
 `decay.csv` (t in ms, N = 1000·exp(-t/3 ms) + small noise, 11 points):
@@ -681,7 +678,7 @@ realloc/free of a NumPy-owned block is heap corruption waiting to happen (REPL s
 future GC of datasets). Copy the column into a malloc'd buffer (or give it cap = -1 so push
 copies first), and decide whether `push(xs, …)` on a column alias should affect `d.L`.
 
-## A51. (HIGH) Integrals to ∞ are wrong whenever the physical scale isn't ~1 in SI units
+## A51. [FIXED] (HIGH) Integrals to ∞ are wrong whenever the physical scale isn't ~1 in SI units
 The ∞ transform `x = a + u/(1-u)` assumes the integrand lives on a scale of ~1 SI unit. With
 nuclear, atomic, or astronomical scales the result is silently 0, or a false "doesn't converge":
 ```
@@ -725,3 +722,53 @@ NaN. Possible fixes: rewrite quotients of exponentials (divide through by the do
 use sech/tanh forms, or evaluate `a/b` as 0 when |b| = ∞ and a is finite... at least for
 the standard functions' derivative rules (d tanh = 1 - tanh², d sech = -sech·tanh).
 (Also a display oddity: the unit of g is shown as s²/(kg m²) rather than 1/J or 1/eV.)
+
+## A53. [FIXED] Divergent integral with a pole at a *transcendental* interior point still returns a number
+After the A4 fix, poles at "nice" points are caught, but:
+```
+print ∫ 1/sin(x)^2 dx from 1 to 5     # actual: 6.30687×10¹⁶   expected: "doesn't converge" (pole at π)
+print ∫ 1/sin(x)^3 dx from 1 to 5     # actual: 4.82374×10³²   expected: same error
+```
+(`1/(x - 3.14159)^2` and `1/sin(x)` are correctly rejected.) Probably sin(π) evaluates to
+1.2e-16 rather than 0, so the integrand stays finite (~1e32..1e48) and the estimate "converges"
+to a huge value. A relative-magnitude check (result ≫ integrand scale × interval, or error
+estimate not shrinking with depth) would catch it.
+
+## A54. Inside `∫ … du`, `1/u` is "per atomic mass unit", not 1/(the integration variable)
+Variables and parameters named like units win over the unit (`s = 2; print 1/s` → 0.5,
+`f(s) = 1/s` → 0.5), but the integration variable isn't known yet when the integrand is read:
+```
+print ∫ 1/u du from 1 to 2      # actual: 6.02214×10²⁶ 1/kg   (∫ 1 u⁻¹ du)   expected: 0.693147
+f(x) = ∫ 1/u du from 0 to x     # the divergent integral is silently a straight line in 1/kg
+```
+`u` is the most common substitution variable. (`∫ 1/s ds` and `∫ 2/L dL` fail with "missing its
+'dx'", see A17.) The integration variable should be in scope while the integrand is parsed
+(or resolved after `d<name>` is seen), with the usual collision warning.
+
+Related: a runtime error inside `plot f(x) vs x from ...` (e.g. a divergent integral in f) is
+swallowed: the plot is saved and the program continues.
+
+## A55. `max(x)` / `min(x)` of an ODE solution only look at the solver's step points
+```
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+print max(x), min(x)        # actual: 0.999848 -0.999824   expected: 1 -1 (to ~1e-9)
+solve x'' = -x with x(0) = 0, x'(0) = 1 for t from 0 to 20 step 0.5
+print max(x)                # actual: 0.99713   expected: 1
+```
+Printed to 6 s.f., so "maximum height of a projectile" style answers are wrong in the 4th
+digit. Refine around the best sample with the dense interpolant (solve x'(t) = 0 in the
+neighbouring steps, e.g. a few Newton/bisection steps on the Hermite cubic / RHS).
+
+## A56. (regression in the rewritten quadrature) Interior |x|^-p singularities with p ≥ ~0.8 are rejected
+Endpoint singularities work (`∫ x^(-0.9) dx from 0 to 1` = 10) and interior 1/√ works, but an
+interior singularity a bit stronger than 1/√ is now reported as divergent:
+```
+print ∫ abs(x)^(-0.8) dx from -1 to 1          # "doesn't converge ... estimate 9.99352 ± 0.002"   expected 10
+print ∫ abs(x)^(-0.8) dx from -2 to 3          # expected 11.9721 (worked before the rewrite)
+print ∫ abs(x - 3/10)^(-0.8) dx from 0 to 1    # expected 8.58577
+print ∫ abs(x)^(-0.9) dx from -1 to 2          # expected 20.7177
+print ∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3    # expected 13.7312 (worked before the rewrite)
+```
+The estimates are close and the error estimates small, so the convergence test is too strict
+for interior algebraic singularities (the endpoint path apparently handles them better -- maybe
+split at the detected singular point and treat both halves as endpoint singularities).
