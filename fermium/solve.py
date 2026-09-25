@@ -465,7 +465,7 @@ def _finish_plot(ck, s, series):
         first = s.series[0]
         out = f"{clean(_label(ck, first.y))}_vs_{clean(_label(ck, first.x))}.png"
     full = out if os.path.isabs(out) else os.path.join(ck.base_dir, out)
-    info = {"out": out, "full": full,
+    info = {"out": out, "full": full, "options": getattr(s, "options", {}),
             "series": [{k: v for k, v in e.items() if k in ("ylabel", "xlabel", "kind", "ydim", "xdim", "yhint",
                                                           "xhint", "points")} for e in series]}
     ck.tables.plots.append(info)

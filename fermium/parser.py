@@ -341,12 +341,38 @@ class Parser:
                 continue
             break
         out = None
-        if self.at_kw("to"):
-            self.next()
-            if self.tok.kind != "STR":
-                raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
-            out = self.next().value
-        return self.span(A.Plot(series, out), t)
+        opts = {}
+        while self.at_kw("to") or self.at_kw("with"):
+            if self.at_kw("to"):
+                self.next()
+                if self.tok.kind != "STR":
+                    raise self.error("expected a file name in quotes after 'to', like \"orbit.png\"")
+                out = self.next().value
+                continue
+            self.next()      # with log y / with log / with title "..."
+            while True:
+                w = self.tok
+                if w.kind == "NAME" and w.value == "log":
+                    self.next()
+                    axes = "xy"
+                    if self.tok.kind == "NAME" and self.tok.value in ("x", "y"):
+                        axes = self.next().value
+                    for a in axes:
+                        opts["log" + a] = True
+                elif w.kind == "NAME" and w.value == "title":
+                    self.next()
+                    if self.tok.kind != "STR":
+                        raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
+                    opts["title"] = self.next().value
+                else:
+                    raise self.error("plot options are:  with log y,  with log x,  with log,  with title \"...\"")
+                if self.at_op(","):
+                    self.next()
+                    continue
+                break
+        p = self.span(A.Plot(series, out), t)
+        p.options = opts
+        return p
 
     def equation(self):
         st = self.tok
@@ -419,6 +445,18 @@ class Parser:
                 self.skip_newlines()
             if self.tok.kind == "DEDENT":
                 self.next()
+            # continuation clauses indented less than the equations (but still indented)
+            if self.tok.kind == "INDENT" and self.peek().kind == "KW" and self.peek().value in ("with", "for"):
+                self.next()
+                while self.tok.kind not in ("DEDENT", "EOF"):
+                    if not clause():
+                        raise self.error("expected 'with ...' or 'for ...' here" + self._found())
+                    while clause():
+                        pass
+                    self.end_statement()
+                    self.skip_newlines()
+                if self.tok.kind == "DEDENT":
+                    self.next()
         else:
             self.end_statement()
         if not eqs:

@@ -745,3 +745,62 @@ def test_variable_assigned_only_in_empty_loop():
 def test_function_local_assigned_only_in_untaken_branch():
     with pytest.raises(Exception):
         run("f(x) =\n    if x > 0\n        y = 2 x\n    y\nprint f(-1)")
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A29: `2(x+1)^2` applies ^2 to the product 2(x+1)")
+@pytest.mark.parametrize("src,want", [
+    ("x = 3\nprint 2(x+1)^2", "32"),
+    ("x = 3\nprint ½(x+1)^2", "8"),
+    ("k = 2\nx = 3\nprint k(x+1)^2", "32"),
+    ("x = 3\nprint (x+1)(x-1)^2", "16"),
+    ("x = 3 m\nprint 2(x)^2", "18 m²"),
+])
+def test_juxtaposed_parenthesis_then_power(src, want):
+    assert run(src) == want
+
+
+def test_spaced_juxtaposition_then_power():
+    assert run("x = 3\nprint 2 (x+1)^2, ½ (x+1)^2, 2x^2, 2*(x+1)^2") == "32 8 18 32"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A28: 2½ is read as 2 × ½")
+def test_mixed_number_two_and_a_half():
+    out = None
+    try:
+        out = run("print 2½")
+    except Exception:
+        return              # an error is acceptable too
+    assert out == "2.5"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A15: long integrations drift (absolute floor scales with the span)")
+def test_long_harmonic_integration_accuracy():
+    out = run("solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000\nprint x(100000)")
+    assert close(num(out), math.cos(1e5), 1e-4)
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A30: x'(t) linearly interpolates the stored slopes (O(h²))")
+def test_solution_derivative_between_steps():
+    src = """solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+ts = times(x)
+e = 0
+for i from 1 to len(ts) - 1
+    tm = (ts[i] + ts[i+1]) / 2
+    e = max(e, abs(x'(tm) - cos(tm)))
+print e"""
+    assert num(run(src)) < 1e-6
+
+
+def test_solution_value_at_steps_and_between():
+    src = """solve x' = y, y' = -x with x(0) = 0, y(0) = 1 for t from 0 to 20
+ts = times(x)
+xs = values(x)
+en = 0
+em = 0
+for i from 1 to len(ts) - 1
+    en = max(en, abs(xs[i] - sin(ts[i])))
+    tm = (ts[i] + ts[i+1]) / 2
+    em = max(em, abs(x(tm) - sin(tm)))
+print en, em"""
+    en, em = nums(run(src))
+    assert en < 1e-8 and em < 1e-6

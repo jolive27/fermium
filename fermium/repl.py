@@ -79,6 +79,29 @@ def opens_block(line):
     return bool(re.match(r"[^\s=]+\([^)]*\)\s*=\s*(#.*)?$", st))
 
 
+def describe_vars(session):
+    """One line per variable: name = value (numbers show their value and unit)."""
+    from . import ir as I
+    from .checker import FuncInfo, SolView
+    from .runtime.core import format_quantity
+    from .types import NumTy
+    lines = []
+    for name, b in sorted(session.checker.globals.names.items()):
+        if name.startswith("__") or "'" in name or "_∂" in name:
+            continue
+        if isinstance(b, I.Sym) and isinstance(b.ty, NumTy) and b.slot is not None:
+            dim = session.checker.U.resolve(b.ty.dim)
+            v = session.arena[b.slot]
+            lines.append(f"{name} = {format_quantity(v, dim, b.hint, b.sf, b.direct)}")
+        elif isinstance(b, I.Sym):
+            lines.append(f"{name}: {b.ty.kind}")
+        elif isinstance(b, FuncInfo):
+            lines.append(f"{name}(...): function")
+        elif isinstance(b, SolView):
+            lines.append(f"{name}: solution of an ODE")
+    return "\n".join(lines) if lines else "(no variables yet)"
+
+
 def main(stdin=None, stdout=None):
     from . import __version__
     from .driver import ReplSession
@@ -130,8 +153,7 @@ def main(stdin=None, stdout=None):
             out.write(HELP + "\n")
             continue
         if s == ":vars":
-            names = sorted(k for k in session.checker.globals.names if not k.startswith("__"))
-            out.write(", ".join(names) + "\n")
+            out.write(describe_vars(session) + "\n")
             continue
         text = line + "\n"
         block = opens_block(line) or needs_more(text, session)

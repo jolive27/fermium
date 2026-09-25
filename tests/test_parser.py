@@ -729,3 +729,16 @@ def test_vec_call_with_unit():
 def test_solution_range_error_has_units():
     e = error_of("solve x' = -x/(1 s) with x(0) = 1 m for t from 0 hr to 2 hr\nprint x(3 hr)")
     assert "at 3 hr" in e.message and "ends at 2 hr" in e.message
+
+
+def test_solve_clauses_indented_less_than_equations():
+    out = run("solve\n    x' = -x / (2 s)\n    y' = x / (2 s)\n  with x(0) = 1, y(0) = 0\n  for t from 0 s to 10 s\n"
+              "print y(10 s)")
+    assert out == "0.993262"
+
+
+def test_plot_options(tmp_path):
+    out = run('solve N\' = -N/(1 s) with N(0) = 1000 for t from 0 s to 10 s\n'
+              'plot N vs t to "n.png" with log y, title "decay"', base_dir=str(tmp_path))
+    assert out == "plot saved to n.png" and (tmp_path / "n.png").exists()
+    assert "plot options are" in str(error_of('xs = [1, 2]\nplot xs vs xs with sideways'))

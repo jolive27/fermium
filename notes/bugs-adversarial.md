@@ -361,3 +361,52 @@ f(x) =
 print f(-1)          # actual: 6.90214×10⁻³¹⁰   expected: an error
 ```
 (Globals defined *after* the call are correctly rejected: "z isn't defined".)
+
+## A29. (HIGH) `2(x+1)^2` squares the 2 as well: juxtaposition with a parenthesis binds tighter than `^`
+`number(expr)` / `name(expr)` (multiplication, D8) is parsed like a call, a postfix, so a
+following `^` applies to the whole product:
+```
+x = 3
+print 2(x+1)^2          # actual: 64   expected: 32   (2 (x+1)^2 with a space gives 32)
+print ½(x+1)^2          # actual: 4    expected: 8
+print 0.5(x - 1)^2      # actual: 1.0  expected: 2.0
+k = 2
+print k(x+1)^2          # actual: 64   expected: 32
+print 3(x)²             # actual: 81   expected: 27
+x = 3 m
+print 2(x)^2            # actual: 36 m²  expected: 18 m²
+```
+D8 says powers bind tighter than juxtaposition (`4π² L` = 4·π²·L), and the spaced form follows
+that; the unspaced form silently doesn't. `½(x - x₀)^2`-style formulas are everywhere in physics.
+Also: `(x+1)(x-1)^2` with x = 3 gives 64 (expected 16), and `xs = [1, 2]; print 2(xs)^2`
+gives [4, 16] (expected [2, 8]). Separately, `v = <1, 2> m; print 2(v)` is rejected ("this
+value must be a number, but it is a 2-vector") although `2 v` works.
+
+## A28. (low) `2½` is 2 × ½ = 1, not the mixed number 2.5
+```
+print 2½          # actual: 1     expected: 2.5, or an error suggesting 2.5 / 5/2
+print 1½ m        # actual: error "m isn't defined"
+```
+
+**A15 addendum — long integrations.** Because the floor scales with the *span*, long runs get
+looser:
+```
+solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000
+print x(100000)     # actual: -0.996591   expected: -0.999361 (cos 1e5)
+```
+scipy RK45 at the same rtol=1e-9 (atol=1e-12) gives -0.999349 (error 1.2e-5, vs Fermium's
+2.8e-3, i.e. ~200× worse), with Fermium printing 6 significant figures.
+
+## A30. `x'(t)` from a `solve` is only first-order accurate between steps (linear interpolation of slopes)
+`fm_sol_eval` evaluates `x'(t)` by *linear* interpolation of the stored derivatives, so its
+error is O(h²) — thousands of times larger than the solver's tolerance, while printed to 6 s.f.:
+```
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+# max over step midpoints tm of |x'(tm) - cos(tm)| = 0.0020349     (x(tm): 6.4e-6)
+solve x' = y, y' = -x with x(0) = 0, y(0) = 1 for t from 0 to 20
+# max |x'(tm) - cos(tm)| = 0.000370 while max |y(tm) - cos(tm)| = 2.9e-8 (y *is* x')
+```
+(e.g. `print x'(1.23)` can be wrong in the 4th digit.) Expected: differentiate the Hermite
+cubic (O(h³)), or better, evaluate the right-hand side at the interpolated state (exact to
+solver accuracy for first-order unknowns); consider DP45's own 4th/5th-order dense output for
+`x(t)` too (midpoint errors are ~1000× the node errors now).

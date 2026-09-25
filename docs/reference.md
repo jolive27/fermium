@@ -285,6 +285,7 @@ plot data.T vs data.L to "pendulum.png"
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
+  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas.
   - Several series: `plot a vs t, b vs t`.
 
 ## 12. Symbols and ASCII spellings

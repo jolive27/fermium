@@ -221,7 +221,11 @@ class Lexer:
                     while width < self.indents[-1]:
                         self.indents.pop()
                         self.add("DEDENT", width, self.pos, self.line, self.col, True)
-                    if width != self.indents[-1]:
+                    if width > self.indents[-1] and self._continuation_word():
+                        # a partial dedent, e.g. `  with ...` under an equation indented by 4: a new level
+                        self.indents.append(width)
+                        self.add("INDENT", width, self.pos, self.line, self.col, True)
+                    elif width != self.indents[-1]:
                         raise self.error("this line's indentation doesn't match any block above it",
                                          hint="line up the start of the line with the lines above it")
                 ws = True
@@ -296,6 +300,10 @@ class Lexer:
         self.add("EOF", None, self.pos, self.line, self.col, True)
         self._check_lookalikes()
         return self.tokens
+
+    def _continuation_word(self):
+        rest = self.src[self.pos:self.pos + 5]
+        return rest.startswith(("with ", "for ", "with\t", "for\t"))
 
     def _continues(self):
         """A line ending in a binary operator or comma continues on the next line."""

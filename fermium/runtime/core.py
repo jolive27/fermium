@@ -355,6 +355,13 @@ class Runtime:
         ax.set_ylabel(", ".join(dict.fromkeys(ylabels)))
         if len(series) > 1:
             ax.legend()
+        opts = info.get("options", {})
+        if opts.get("logx"):
+            ax.set_xscale("log")
+        if opts.get("logy"):
+            ax.set_yscale("log")
+        if opts.get("title"):
+            ax.set_title(opts["title"])
         ax.grid(True, alpha=0.3)
         if all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
                for s in info["series"]):
