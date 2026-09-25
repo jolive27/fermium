@@ -10,9 +10,16 @@ from .errors import FermiumError
 
 
 def _read(path):
+    if os.path.isdir(path):
+        sys.stderr.write(f"'{path}' is a folder, not a program file\n  hint: give the path of a .fm file inside it\n")
+        sys.exit(2)
     try:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
+    except UnicodeDecodeError:
+        sys.stderr.write(f"'{path}' isn't a text file Fermium can read (it must be saved as UTF-8 text)\n"
+                         f"  hint: in your editor use 'Save as' with the UTF-8 encoding\n")
+        sys.exit(2)
     except FileNotFoundError:
         sys.stderr.write(f"can't find the file '{path}'\n  hint: check the name, and that you're in the right "
                          f"folder (the command 'ls' lists the files here)\n")
@@ -121,7 +128,7 @@ def cmd_doctor(args):
 def main(argv=None):
     from . import __version__
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0].endswith(".fm") and os.path.exists(argv[0]):
+    if argv and argv[0].endswith(".fm"):
         argv = ["run"] + argv
     p = argparse.ArgumentParser(prog="fermium", description="Fermium: a programming language for physicists.")
     p.add_argument("--version", action="version", version=f"fermium {__version__}")
@@ -157,6 +164,11 @@ def entry():
     """Console-script entry point.  Exits with os._exit after flushing, because tearing down
     JIT engines during interpreter shutdown can crash (callback/engine destruction order)."""
     code = main()
+    try:
+        import atexit
+        atexit._run_exitfuncs()          # e.g. save the REPL history (os._exit below skips atexit)
+    except Exception:
+        pass
     sys.stdout.flush()
     sys.stderr.flush()
     os._exit(code or 0)

@@ -153,6 +153,7 @@ class Checker(C.DiffContext):
         self.cur_ctx = None
         self.new_funcs = []
         self.new_lambdas = []
+        self.future_funcs = {}
 
     # ============================================================ helpers
     def fresh_name(self, base):
@@ -209,7 +210,7 @@ class Checker(C.DiffContext):
         return CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
 
     def _prescan_functions(self, body, ctx):
-        pass
+        self.future_funcs = {s.name: s.line for s in body if isinstance(s, A.FuncDef)}
 
     def check_uncalled(self):
         """Check the bodies of functions that were never called, so their errors still show."""
@@ -671,7 +672,7 @@ class Checker(C.DiffContext):
     def s_Assert(self, s, ctx):
         c = self.cond(s.cond, ctx)
         msg = s.message or f"check failed: {C.to_source(s.cond)}"
-        return I.SAssert(c, self.text(f"line {s.line}: {msg}"))
+        return I.SAssert(c, self.text(msg))
 
     # ============================================================ expressions
     def need_num(self, v, node, what="this value"):
@@ -1150,6 +1151,8 @@ class Checker(C.DiffContext):
 
     def e_Digits(self, e, ctx):
         v = self.expr(e.value, ctx)
+        if not isinstance(v.ty, (NumTy, ListTy, VecTy)):
+            raise self.err("'to N digits' only works on numbers", e)
         if e.digits < 1 or e.digits > 17:
             raise self.err("the number of digits must be between 1 and 17", e)
         v.sf = e.digits
@@ -1306,6 +1309,8 @@ class Checker(C.DiffContext):
         f = e.func
         if isinstance(f, A.Name):
             b, _ = self.lookup(f.name, ctx, f)
+            if b is None and f.name in ("γ", "Γ"):
+                return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
             if b is None:
                 if f.name in BUILTINS:
                     return self.builtin(f.name, e, ctx)
@@ -1319,6 +1324,10 @@ class Checker(C.DiffContext):
                 return self.call_user(b, args, e)
             if isinstance(b, SolView):
                 return self.sol_eval(b, e, ctx)
+            later = self.future_funcs.get(f.name)
+            if isinstance(b, (I.Sym, ConstInfo)) and later and later > (e.line or 0) and ctx.is_main:
+                raise self.err(f"{f.name} is defined as a function on line {later}, after this line", e,
+                               hint=f"move the definition of {f.name}(...) above its first use")
             if isinstance(b, (I.Sym, ConstInfo)):
                 v = self.use_binding(b, f.name, f, ctx)
                 if isinstance(v, I.Expr) and isinstance(v.ty, NumTy) and len(e.args) == 1:
@@ -1464,6 +1473,8 @@ class Checker(C.DiffContext):
             return r
         inst = I.IFunc(self.fresh_name(info.name), [])
         inst.display = info.display_name
+        inst.name_text = self.text(info.display_name)
+        inst.def_line = f.line
         inst.ret_ty = None
         inst.ret_placeholder = NumTy(DExpr.fresh("ret"))
         if cache and concrete:
@@ -1519,6 +1530,9 @@ class Checker(C.DiffContext):
         if not rets:
             raise self.err(f"the function {info.display_name} never returns a value", f,
                            hint="end it with the value to return, or use  return value")
+        if all(isinstance(r, I.ICall) and r.func is inst for r in rets):
+            raise self.err(f"{info.display_name} always calls itself, so it would never finish", f,
+                           hint="add a case that returns without calling it, like  if n <= 0 then 1 else ...")
         rt = rets[0].ty
         for r in rets[1:]:
             if type(r.ty) is not type(rt) or (isinstance(rt, (NumTy, ListTy)) and not self.U.unify(rt.dim, r.ty.dim)):
@@ -1604,6 +1618,9 @@ class Checker(C.DiffContext):
         if name in SAME1:
             need(1)
             num_or_list(0)
+            if name != "abs" and not self.U.unify(args[0].ty.dim, DIMLESS):
+                raise self.err(f"{name} of {self.desc(args[0].ty.dim)} would depend on which unit you mean", e,
+                               hint=f"divide by a unit first, e.g.  {name}(x / (1 cm)) cm")
             r = self._bi(name, args, args[0].ty, args)
             r.hint = args[0].hint
             if name != "abs":

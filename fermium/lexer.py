@@ -363,6 +363,10 @@ class Lexer:
         self.adv(p - self.pos)
         clean = mantissa.replace("_", "")
         value = float(f"{clean}e{exp}") if exp else float(clean)
+        if not exp and "." not in clean and p < len(s) and s[p] in VULGAR:   # 2½ = 2.5 (a mixed number)
+            value += VULGAR[s[p]]
+            p += 1
+            self.adv(1)
         if value in (float("inf"),):
             raise FermiumError(f"the number {s[start:p]} is too large (bigger than about 1.8×10³⁰⁸)", line, col,
                                p - start)

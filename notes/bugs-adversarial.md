@@ -151,7 +151,7 @@ print f(-2)       # actual: 0 m   expected: a compile error ("f doesn't return a
 Same with `while x < 0` / `return 1 m` and `print f(5)` → `0 m`. (A function with *no*
 return at all is already rejected: "the function f never returns a value".)
 
-## A12. Failed `assert` prints the line number twice
+## A12. [FIXED] Failed `assert` prints the line number twice
 ```
 x = 1
 assert x > 2, "x too small"
@@ -168,7 +168,7 @@ print ∫ 1/x dx from 0 to 1
 ```
 `fermium run`: `line 1: this integral doesn't converge: ...`;  built executable: `line 1: runtime error`.
 
-## A14. `fmt --pretty` breaks `3 * 10^8 m/s` (a unit after `10⁸` isn't accepted)
+## A14. [FIXED] `fmt --pretty` breaks `3 * 10^8 m/s` (a unit after `10⁸` isn't accepted)
 `10^8 m` is 10⁸ metres, but the superscript spelling `10⁸ m` is an error, so `fmt --pretty`
 turns a working program into a broken one:
 ```
@@ -177,6 +177,7 @@ print 3 * 10^8 m/s       # works: 3×10⁸ m/s
 print 10⁸ m              # error: m isn't defined     expected 1×10⁸ m (same as 10^8 m)
 print 5² m²              # error                       expected 25 m²
 print 2⁻¹ m              # error                       expected 0.5 m
+print 1.5 × 10³ m        # error (with spaces; `1.5×10³ m` without spaces works)   expected 1500 m
 ```
 Either accept a unit after `number superscript` (like after `number ^ number`) or have
 `fmt --pretty` leave `^` alone in that position.
@@ -251,7 +252,7 @@ print r[end]     # error "r is a vector; use its components, like r.x" -- no "li
                  # and the final vector <cos 3, sin 3> would be a natural answer
 ```
 
-## A20. Deep or infinite recursion segfaults the whole process (also kills the REPL)
+## A20. [FIXED] Deep or infinite recursion segfaults the whole process (also kills the REPL)
 ```
 f(x) = x * f(x - 1)          # forgot the base case
 print f(3)                   # actual: "Segmentation fault" (exit 139)   expected: a one-line runtime error
@@ -264,7 +265,7 @@ Suggestion: a depth counter in each user function (runtime error "f called itsel
 N times -- is a base case missing?"), or a guard page/stack check. Related: `f(x) = f(x)`
 (never called) fails to compile with "this program is nested too deeply" and no line number.
 
-## A21. Calling a function before its definition silently uses a constant of the same name
+## A21. [FIXED] Calling a function before its definition silently uses a constant of the same name
 ```
 print h(2)
 h(x) = x^2
@@ -309,7 +310,7 @@ stderr shows `Exception ignored on calling ctypes callback function ... KeyError
 `Runtime.column`) and then the proper error `gap.csv, line 3: not a number: ['2', '']`. The
 column callback runs after the failed load; it should not be called (or should fail quietly).
 
-## A25. `gamma(x)` (listed in reference §13) is unusable: the lexer turns it into the Greek name γ
+## A25. [FIXED] `gamma(x)` (listed in reference §13) is unusable: the lexer turns it into the Greek name γ
 ```
 print gamma(5)      # actual: "line 1: γ isn't defined"   expected: 24
 print γ(5)          # same
@@ -382,7 +383,7 @@ Also: `(x+1)(x-1)^2` with x = 3 gives 64 (expected 16), and `xs = [1, 2]; print 
 gives [4, 16] (expected [2, 8]). Separately, `v = <1, 2> m; print 2(v)` is rejected ("this
 value must be a number, but it is a 2-vector") although `2 v` works.
 
-## A28. (low) `2½` is 2 × ½ = 1, not the mixed number 2.5
+## A28. [FIXED] (low) `2½` is 2 × ½ = 1, not the mixed number 2.5
 ```
 print 2½          # actual: 1     expected: 2.5, or an error suggesting 2.5 / 5/2
 print 1½ m        # actual: error "m isn't defined"
@@ -512,7 +513,7 @@ print g(1, 2)          # 8
 found '^'". Either accept `partial^2/partial x^2` in the parser (like `d^2/dt^2`) or emit
 another spelling.
 
-## A39. CLI: Python traceback for a file that isn't UTF-8, or a directory
+## A39. [FIXED] CLI: Python traceback for a file that isn't UTF-8, or a directory
 ```
 printf 'x = 5 \xb5m\nprint x\n' > latin1.fm     # a Latin-1 "µm", e.g. saved by an old Windows editor
 fermium run latin1.fm      # Traceback ... UnicodeDecodeError: 'utf-8' codec can't decode byte 0xb5
@@ -606,4 +607,61 @@ to 6 s.f.:
 ```
 print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1          # actual 5.16031, expected 5.15957 (mpmath)
 print ∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3      # actual 13.7312, expected 13.7294
+```
+
+## A45. `fit N = A exp(-t/τ)` without a guess reports a garbage fit as if it were fine
+`decay.csv` (t in ms, N = 1000·exp(-t/3 ms) + small noise, 11 points):
+```
+d = load "decay.csv"
+fit N = A exp(-t/τ) to d
+# actual:  A = 312.6 (standard error could not be estimated)
+#          τ = -4.885×10⁹ ms (standard error could not be estimated), rms residual = 299
+# expected: A = 1002 ± 1.5, τ = 2.993 ± 0.0075 ms (scipy curve_fit), rms 1.56
+```
+The same data fits fine as `A exp(-λ t)`, as `A exp(-t/τ) + B`, or with `with τ = 2 ms`.
+Exponential decay with a time constant is the most common fit in a physics lab.
+Expected: better automatic starting guesses (e.g. try the column scales: τ ~ span of t), and
+when the fit clearly failed (no standard errors, negative time constant, rms ≈ std of the data)
+say so ("the fit didn't converge; give a starting guess with `with τ = ...`") instead of
+printing the numbers as results.
+
+## A46. (design consequence of D6, but silent) `1 rev/min in Hz` = 0.10472 Hz, not 1/60 Hz
+```
+print 1 rev/min in Hz     # 0.10472 Hz   -- a rotation frequency of 1 rpm is 0.016667 Hz
+print 60 rpm              # 'rpm' isn't a unit
+```
+With rad = 1 and rev = 2π, converting a rotation rate to Hz is off by 2π. D6 accepts that Hz and
+rad/s can't be told apart, but here the user wrote `rev`, whose only purpose is counting turns.
+Suggestion: refuse `in Hz` for a value whose written unit contains rad/rev/° (or warn), and add
+`rpm` = 1/60 Hz (turns per minute), documenting the choice.
+
+## A47. `T - 20 °C` is rejected unless T was also written in °C (blocks Newton's law of cooling)
+```
+print 300 K - 20 °C            # error "can't subtract an absolute temperature (°C) from this"
+                               # expected 6.85 K (both are absolute temperatures)
+Ta = 20 °C
+solve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min
+print T(30 min)                # same error; expected 23.4851 °C (20 + 70 e⁻³)
+Ta = 20 °C
+f(T) = T - Ta
+print f(30 °C)                 # same error (the instance sees T as "temperature [K]")
+```
+`T = 30 °C` then `print T - 20 °C` works (10 K). An absolute temperature in K minus one in
+°C is a legitimate difference; only °C + °C, k·°C, etc. are meaningless. The ODE unknown gets
+its units from `T(0 s) = 90 °C`, so it should count as absolute too.
+
+## A48. Mapping a vector-valued function over a list crashes codegen (Python TypeError)
+```
+f(x) = <x, 2x>
+print f([1, 2])
+```
+Traceback from `codegen_llvm.map_list`: `TypeError: cannot store <2 x double> to double*`.
+Expected the checker's "lists of vectors aren't supported (yet)" error (D24 says lists of vectors
+are not done).
+
+## A49. (low) `g = d/dt (a t^2) where a = 3` is rejected
+```
+g = d/dt (a t^2) where a = 3
+print g(1)        # error "d/dt(...) is a function; give it an argument, like d/dt(...)(x)"
+                  # expected 6 (works without `where`, with a = 3 on its own line)
 ```

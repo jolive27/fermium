@@ -517,7 +517,6 @@ def test_reassignment_keeps_new_literal_precision():
     assert run("x = 1.20 m\nx = 2 m\nprint x") == "2 m"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A12: assert failure message repeats 'line N:'")
 def test_assert_message_has_line_once():
     e = error_of('x = 1\nassert x > 2, "x too small"')
     assert str(e).count("line 2") == 1
@@ -570,7 +569,6 @@ def test_fmt_round_trip_preserves_output(src):
     assert run(format_source(pretty, "ascii")) == base
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A14: `10⁸ m` rejects the unit, so fmt --pretty breaks 10^8 m/s")
 def test_fmt_pretty_power_of_ten_with_unit():
     from fermium.fmt import format_source
     src = "print 3 * 10^8 m/s"
@@ -672,13 +670,11 @@ def _run_cli(src, tmp_path, seconds=20):
                           timeout=seconds, cwd=ROOT)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A20: runaway recursion segfaults the process")
 def test_runaway_recursion_is_a_clean_error(tmp_path):
     r = _run_cli("f(x) = x * f(x - 1)\nprint f(3)\n", tmp_path)
     assert r.returncode == 1 and "line" in r.stderr
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A21: calling a function before its definition uses the constant h")
 def test_call_before_definition_does_not_use_constant():
     with pytest.raises(Exception):
         run("print h(2)\nh(x) = x^2")
@@ -704,7 +700,6 @@ def test_fit_matches_scipy_curve_fit(tmp_path):
     assert close(num(out.split("\n")[-1]), -49773.08, 1e-3)       # T column converted from °C to K
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A25: gamma(x) is rewritten to γ(x) and then undefined")
 def test_gamma_function():
     assert run("print gamma(5)") == "24"
 
@@ -753,7 +748,6 @@ def test_spaced_juxtaposition_then_power():
     assert run("x = 3\nprint 2 (x+1)^2, ½ (x+1)^2, 2x^2, 2*(x+1)^2") == "32 8 18 32"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A28: 2½ is read as 2 × ½")
 def test_mixed_number_two_and_a_half():
     out = None
     try:
@@ -880,7 +874,6 @@ def test_fmt_round_trip_more():
         assert run(format_source(a, "pretty")) == base
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A39: a non-UTF-8 source file gives a Python traceback")
 def test_cli_non_utf8_file(tmp_path):
     f = tmp_path / "latin1.fm"
     f.write_bytes(b"x = 5 \xb5m\nprint x\n")
@@ -968,3 +961,59 @@ def test_integrable_power_singularities():
 @pytest.mark.xfail(strict=True, reason="BUG A44: weakly singular integrand only accurate to ~1e-4")
 def test_weak_singularity_accuracy():
     assert close(num(run("print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1")), 5.15956720188266, 1e-5)
+
+
+def _decay_csv(tmp_path):
+    ts = [float(i) for i in range(11)]
+    noise = [3, -2, 1, 0, -1, 2, -3, 1, 0, 1, -1]
+    rows = "".join(f"{t}, {1000 * math.exp(-t / 3.0) + n}\n" for t, n in zip(ts, noise))
+    (tmp_path / "decay.csv").write_text("t [ms], N\n" + rows)
+
+
+def test_fit_decay_rate_form(tmp_path):
+    _decay_csv(tmp_path)
+    out = run('d = load "decay.csv"\nfit N = A exp(-λ t) to d\nprint 1/λ in ms', base_dir=str(tmp_path))
+    assert out.split("\n")[-1] == "2.99 ms"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A45: fit with a time constant in the denominator fails silently")
+def test_fit_decay_time_constant_form(tmp_path):
+    _decay_csv(tmp_path)
+    out = run('d = load "decay.csv"\nfit N = A exp(-t/τ) to d\nprint τ in ms', base_dir=str(tmp_path))
+    assert out.split("\n")[-1] == "2.99 ms"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A47: K minus °C rejected")
+def test_kelvin_minus_celsius():
+    assert run("print 300 K - 20 °C") == "6.85 K"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A47: Newton's law of cooling with a °C ambient is rejected")
+def test_newton_cooling_celsius():
+    out = run("Ta = 20 °C\nsolve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
+              "print T(30 min) in °C")
+    assert close(num(out), 20 + 70 * math.exp(-3), 1e-5)
+
+
+def test_newton_cooling_kelvin_ambient():
+    out = run("solve T' = -(T - 293.15 K) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min\n"
+              "print T(30 min) in °C")
+    assert close(num(out), 20 + 70 * math.exp(-3), 1e-5)
+
+
+def test_ode_in_milliseconds():
+    assert run("τ = 1 ms\nsolve V' = -V/τ with V(0 ms) = 5 V for t from 0 ms to 5 ms\n"
+               "print V(1 ms), times(V)[end]") == "1.8394 V 5 ms"
+
+
+@pytest.mark.xfail(strict=True, reason="BUG A48: mapping a vector-valued function over a list crashes codegen")
+def test_map_vector_function_over_list_is_a_fermium_error():
+    from fermium.errors import FermiumError
+    with pytest.raises(FermiumError):
+        run("f(x) = <x, 2x>\nprint f([1, 2])")
+
+
+def test_vector_errors_are_clean():
+    assert "2-vector and a 3-vector" in str(error_of("print <1,2> · <1,2,3>"))
+    assert "no component 3" in str(error_of("v = <1,2>\nprint v.z"))
+    assert "2 or 3 components" in str(error_of("print <1, 2, 3, 4>"))

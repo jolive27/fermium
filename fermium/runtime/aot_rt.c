@@ -162,8 +162,8 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
         else if ((long long)b == 0)
             snprintf(err_msg, sizeof err_msg, "index %s is out of range: the list is empty", x);
         else
-            snprintf(err_msg, sizeof err_msg, "index %s is out of range: the list has %lld elements (valid indexes are 1 to %lld)",
-                     x, (long long)b, (long long)b);
+            snprintf(err_msg, sizeof err_msg, "index %s is out of range: the list has %lld element%s (valid indexes are 1 to %lld)",
+                     x, (long long)b, (long long)b == 1 ? "" : "s", (long long)b);
         break;
     case 2: snprintf(err_msg, sizeof err_msg, "asked for the solution at %s%s, outside the range it was solved for (it ends at %s)", x, fmt >= 0 ? "" : " (SI units)", y); break;
     case 3: snprintf(err_msg, sizeof err_msg, "the ODE solver needed too many steps (reached t = %s in SI units)", x); break;
@@ -173,6 +173,7 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 7: snprintf(err_msg, sizeof err_msg, "the step must be a non-zero number that goes from the start towards the end"); break;
     case 8: snprintf(err_msg, sizeof err_msg, "the ODE solver's step became too small near t = %s (SI units)", x); break;
     case 9: snprintf(err_msg, sizeof err_msg, "this integral doesn't converge: the integrand may blow up (like 1/x at 0) or keep oscillating (like sin(x) up to ∞)"); break;
+    case 10: snprintf(err_msg, sizeof err_msg, "%s called itself too many times (the program ran out of stack) -- is a base case missing?", a >= 0 ? fm_texts[(int64_t)a] : "a function"); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
 }
@@ -190,8 +191,19 @@ double fm_clock(void) {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
+#include <pthread.h>
+static int run_result;
+static void *runner(void *arg) { (void)arg; run_result = fm_run(); return NULL; }
+
 int main(void) {
-    int r = fm_run();
+    /* run on a thread with a big stack, like `fermium run` (deep recursion is caught before 400 MB) */
+    pthread_attr_t attr;
+    pthread_t th;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, (size_t)512 << 20);
+    int r;
+    if (pthread_create(&th, &attr, runner, NULL) == 0) { pthread_join(th, NULL); r = run_result; }
+    else r = fm_run();
     if (line_len) fm_print_end();
     fflush(stdout);
     if (r != 0) {

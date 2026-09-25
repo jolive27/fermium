@@ -143,13 +143,39 @@ class Program:
         rt.error_line = None
         t0 = time.perf_counter()
         with _CtrlC(self.out):
-            code = self.entry()
+            code = call_with_big_stack(self.entry)
         self.timings["run"] = time.perf_counter() - t0
         if rt.line:
             self.out.write(" ".join(rt.line) + "\n")
             rt.line = []
         if code != 0 or rt.error:
             raise FermiumRuntimeError(rt.error or "runtime error", rt.error_line)
+
+
+def call_with_big_stack(fn):
+    """Run compiled code on a thread with a 512 MB stack (deep recursion is caught at 400 MB)."""
+    import threading
+    result = {}
+
+    def target():
+        try:
+            result["v"] = fn()
+        except BaseException as e:      # re-raised in the caller's thread
+            result["e"] = e
+    old = threading.stack_size()
+    try:
+        threading.stack_size(512 << 20)
+    except (ValueError, RuntimeError):
+        return fn()
+    try:
+        th = threading.Thread(target=target)
+        th.start()
+    finally:
+        threading.stack_size(old)
+    th.join()
+    if "e" in result:
+        raise result["e"]
+    return result["v"]
 
 
 def run_source(source, filename="<program>", out=None, base_dir=None, show_warnings=True, err=None):
@@ -228,7 +254,7 @@ class ReplSession:
         for w in self.diags.warnings:
             self.out.write(w.format(text) + "\n")
         with _CtrlC(self.out):
-            code = fn()
+            code = call_with_big_stack(fn)
         if self.runtime.line:
             self.out.write(" ".join(self.runtime.line) + "\n")
             self.runtime.line = []

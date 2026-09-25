@@ -90,6 +90,12 @@ class Parser:
 
     def error(self, msg, tok=None, hint=None):
         t = tok or self.tok
+        if t.kind in ("EOF", "NEWLINE", "DEDENT") and tok is None:
+            j = self.i - 1
+            while j > 0 and self.toks[j].kind in ("EOF", "NEWLINE", "DEDENT", "INDENT"):
+                j -= 1
+            prev = self.toks[j]
+            return FermiumError(msg, prev.line, prev.col + len(prev.raw), 1, hint)
         return FermiumError(msg, t.line, t.col, max(1, len(t.raw)), hint)
 
     def node(self, cls, tok, *args, **kw):
@@ -823,7 +829,12 @@ class Parser:
             e.extra_int = s.value
             if self.tok.kind in ("SUP",):
                 raise self.error("two exponents in a row")
-            return self.span(A.BinOp("^", base, e), t)
+            r = self.span(A.BinOp("^", base, e), t)
+            if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) \
+                    and self.tok.value not in self.known and not self._is_call_like():
+                u = self.unit_expr(explicit=False)      # 10⁸ m/s, like 10^8 m/s
+                r = self.span(A.Quantity(r, u), t)
+            return r
         if self.at_op("^"):
             self.next()
             ex = self.exponent()

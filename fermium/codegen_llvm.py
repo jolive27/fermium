@@ -35,6 +35,8 @@ MODEL_FN = ir.FunctionType(VOID, [F64P, F64PP, I64, F64P])
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
+ERR_DEEP = 10
+STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
 # Gauss–Kronrod 7-15 nodes/weights (from QUADPACK qk15)
 XGK = [0.991455371120812639206854697526329, 0.949107912342758524526189684047851,
@@ -92,6 +94,9 @@ class ModuleGen:
         self.curline = ir.GlobalVariable(self.module, I64, "fm.line")
         self.curline.initializer = i64(0)
         self.curline.linkage = "internal"
+        self.stackbase = ir.GlobalVariable(self.module, I64, "fm.stackbase")   # stack address at start
+        self.stackbase.initializer = i64(0)
+        self.stackbase.linkage = "internal"
         self.errfmt = ir.GlobalVariable(self.module, I64, "fm.errfmt")   # print format for error values
         self.errfmt.initializer = i64(-1)
         self.errfmt.linkage = "internal"
@@ -190,6 +195,7 @@ class ModuleGen:
         # trampoline with setjmp so runtime errors can unwind
         run = ir.Function(self.module, ir.FunctionType(I32, []), entry_name)
         b = ir.IRBuilder(run.append_basic_block("entry"))
+        b.store(b.ptrtoint(b.call(self.frameaddr(), [ir.Constant(I32, 0)]), I64), self.stackbase)
         buf = b.bitcast(self.jmpbuf, I8P)
         r = b.call(self.externs["_setjmp"], [buf])
         ok = b.icmp_signed("==", r, ir.Constant(I32, 0))
@@ -202,11 +208,26 @@ class ModuleGen:
         b.ret(res)
         self.flush()
 
+    def frameaddr(self):
+        if "llvm.frameaddress" not in self.externs:
+            self.externs["llvm.frameaddress"] = ir.Function(self.module, ir.FunctionType(I8P, [I32]),
+                                                            "llvm.frameaddress.p0")
+        return self.externs["llvm.frameaddress"]
+
+    def stack_check(self, g, name_id, line=None):
+        """Runaway recursion: stop with a clear error before the stack overflows (instead of a crash)."""
+        b = g.b
+        sp = b.ptrtoint(b.call(self.frameaddr(), [ir.Constant(I32, 0)]), I64)
+        used = b.sub(b.load(self.stackbase), sp)
+        with b.if_then(b.icmp_signed(">", used, i64(STACK_LIMIT)), likely=False):
+            self.raise_error(b, ERR_DEEP, f64(name_id), f64(0), line)
+
     def flush(self):
         while self.pending:
             item, fn = self.pending.pop()
             if isinstance(item, I.IFunc):
                 g = FuncGen(self, fn, item)
+                self.stack_check(g, getattr(item, "name_text", -1), getattr(item, "def_line", None))
                 for p, a in zip(item.params, fn.args):
                     slot = g.slot(p)
                     g.b.store(a, slot)

@@ -5,7 +5,7 @@ unchanged, so only spellings change -- never meaning.  Round-trips are tested.
 """
 from __future__ import annotations
 
-from .errors import Diagnostics
+from .errors import Diagnostics, FermiumError
 from .lexer import GREEK, GREEK_TO_ASCII, SUPERS, VULGAR_ASCII
 from .parser import parse_tokens
 from .units import UNIT_PRETTY, UNIT_ASCII, lookup_unit
@@ -73,7 +73,13 @@ def _unit_ascii(raw: str) -> str:
 def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> str:
     """mode: 'pretty' (ASCII -> symbols) or 'ascii' (symbols -> ASCII)."""
     diags = diags or Diagnostics()
-    _, toks = parse_tokens(source, diags)
+    try:
+        _, toks = parse_tokens(source, diags)
+    except FermiumError as e:
+        if "uncertainties" not in e.message:
+            raise
+        from .lexer import tokenize        # still format a file that uses the reserved ±
+        toks = tokenize(source, diags)
     src = toks[0].extra.get("src") if toks and toks[0].extra else None
     from .lexer import Lexer
     norm = Lexer(source).src if src is None else src

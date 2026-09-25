@@ -96,7 +96,7 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
         tab = os.path.join(tmp, "fm_tables.c")
         with open(tab, "w", encoding="utf-8") as fh:
             fh.write(tables_c(t))
-        cmd = [cc, "-O2", o, RT_C, tab, "-lm", "-o", output]
+        cmd = [cc, "-O2", o, RT_C, tab, "-lm", "-lpthread", "-o", output]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
             raise FermiumError("linking the executable failed:\n" + (r.stderr.strip()[:2000] or r.stdout.strip()))
