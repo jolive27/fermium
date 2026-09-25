@@ -185,6 +185,8 @@ def _ascii_token(toks, i, closers, diags):
             return t.raw
         if t.value == "∞":
             return "inf"
+        if t.value == "𝑖":           # the imaginary unit: 1i in ASCII (D90)
+            return "1i"
         text, ok = _ident_ascii(t.value)
         if not ok:
             diags.warn(f"'{t.raw}' has no plain-ASCII spelling, so it was left as is", tok=t,

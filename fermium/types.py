@@ -298,6 +298,8 @@ def type_desc(t: Ty, U: Unifier) -> str:
     if isinstance(t, ListTy):
         return f"a list of {U.describe(t.dim)}"
     if isinstance(t, ComplexTy):
+        if U.resolve(t.dim).dimensionless:
+            return "a complex number"
         return f"a complex number of {U.describe(t.dim)}"
     if isinstance(t, VecTy):
         if t.mixed:

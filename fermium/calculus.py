@@ -716,6 +716,8 @@ def _src(e, pretty):
         if e.op == "*":
             l, lp = _src(e.left, pretty)
             r, rp = _src(e.right, pretty)
+            if isinstance(e.left, A.Num) and isinstance(e.right, A.Name) and e.right.name == "𝑖" and lp >= PREC_JUXT:
+                return f"{l}i", PREC_JUXT              # the imaginary literal 4i (D90)
             if lp >= PREC_JUXT and rp >= PREC_JUXT and not r.startswith("-"):
                 sep = " "
                 if isinstance(e.right, (A.Num, A.Quantity)):
@@ -849,6 +851,8 @@ def to_sympy(e, symbols, positive=frozenset(), quantities=None):
         if isinstance(e, A.Name):
             if e.name == "π":
                 return sp.pi
+            if e.name == "𝑖":             # the imaginary unit (D90), not a real symbol
+                return sp.I
             if e.name not in symbols:
                 if e.name in positive:
                     symbols[e.name] = sp.Symbol(e.name, positive=True)
@@ -902,6 +906,8 @@ def from_sympy(x, back=None):
         return num(float(x))
     if x is sp.pi:
         return name("π")
+    if x is sp.I:
+        return name("𝑖")
     if x.is_Symbol:
         if back and x.name in back:
             return back[x.name]

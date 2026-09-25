@@ -319,3 +319,53 @@ def test_hover_describes_complex():
     src = "Z = (3 + 4i) [Ω]\nprint Z"
     text = hover_text(analyze(src), src, 0, 0)
     assert "complex" in text and "Ω" in text
+
+
+def test_fermium_build_prints_complex(tmp_path):
+    from fermium.aot import build, find_cc
+    if find_cc() is None:
+        pytest.skip("no C compiler")
+    import subprocess
+    src = ("Z = 3 Ω + 4i Ω\nprint Z, Z in kΩ, |Z|, arg(Z) in °\nprint exp(𝑖 π), (1.50 + 2.25i) [m], 0i / (0 + 0i)\n"
+           "solve 1i ψ' = 2 ψ with ψ(0) = 1 for t from 0 to 1\nprint ψ(1)\n"
+           "print ∫ exp(1i π t² / 2) dt from 0 to 2")
+    exe = str(tmp_path / "prog")
+    build(src, str(tmp_path / "prog.fm"), exe)
+    out = subprocess.run([exe], capture_output=True, text=True, timeout=60).stdout.strip()
+    assert out == run(src)
+
+
+def test_indefinite_integral_uses_the_imaginary_unit():
+    # SymPy sees 𝑖 as its I, not as a real symbol
+    out = run("F = ∫ exp(1i x) dx\nprint F\nprint F(π) - F(0)")
+    lines = out.split("\n")
+    assert "𝑖" in lines[0]
+    assert cnum(lines[1]) == pytest.approx(2j)
+
+
+def test_description_shows_the_literal():
+    assert run("g(x) = exp(1i x)\nprint g") == "g(x) = exp(1i x)"
+
+
+def test_standalone_imaginary_unit_splits_names():
+    assert run("E = 1.0 eV\nsolve 𝑖ħ ψ' = E ψ with ψ(0 s) = 1 for t from 0 s to 1 fs\nprint |ψ(1 fs)| to 6 digits") \
+        == "1.00000"
+
+
+def test_fmt_ascii_spells_the_imaginary_unit():
+    from fermium.fmt import format_source
+    assert format_source("z = 2𝑖 + 𝑖 x + 3i\n", "ascii") == "z = 2 1i + 1i x + 3i\n"
+    assert run("x = 2\nz = 2 1i + 1i x + 3i\nprint z") == "0 + 7i"
+
+
+def test_repl_keeps_complex_variables():
+    from fermium.repl import main
+    out = io.StringIO()
+    main(stdin=io.StringIO("Z = 3 Ω + 4i Ω\nprint Z\nprint |Z|\n"), stdout=out)
+    assert [ln for ln in out.getvalue().split("\n") if ln.strip()] == ["(3 + 4i) Ω", "5 Ω"]
+
+
+def test_lists_of_complex_are_refused_clearly():
+    assert "complex" in str(error_of("print [1i, 2]"))
+    e = error_of("solve 1i ψ' = ψ with ψ(0) = 1 for t from 0 to 1\nprint max(ψ)")
+    assert "lists of complex numbers aren't supported" in str(e)
