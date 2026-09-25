@@ -1151,7 +1151,8 @@ class Interpreter:
 
     def s_SFit(self, s, fr):
         lam = s.model
-        p = [self.eval(g, fr) if g is not None else math.nan for g in s.guesses] + [math.nan] * len(s.guesses)
+        p = [U.nominal(self.eval(g, fr)) if g is not None else math.nan for g in s.guesses] + \
+            [math.nan] * len(s.guesses)          # an uncertain starting guess: its value (D124)
         h = self.eval(s.data, fr)
         data = self.rt.datasets[h]
 
@@ -1163,7 +1164,11 @@ class Interpreter:
                     lf.vars[sym.id] = float(v)
                 for sym in lam.col_syms:
                     lf.vars[sym.id] = float(data[sym.col_index][i])
-                out[i] = self.eval(lam.body, lf)
+                v = self.eval(lam.body, lf)
+                if isinstance(v, UFloat):
+                    raise UncertainUse("a fit model can't use uncertain values (±) other than the parameters being "
+                                       "fitted; write value(x) in the model")
+                out[i] = v
             return out
         self.rt.fit(s.fit_id, h, p, model_fn=model)
         if self.rt.error:
@@ -1293,19 +1298,24 @@ class Interpreter:
             if not var > 0:
                 fr.set(sym, UFloat(mean, {}))
                 continue
+            # joint least squares on the sources: an output that is exactly linear in them (c = b + a) gets
+            # exact coefficients, so identities like c - b - a = 0 survive; the rest is the nonlinear part
+            dy = y - float(np.mean(y))
+            keys = list(zs)
             d = {}
-            dy = y - mean
-            for key, zk in zs.items():
-                zc = zk[:n] - zk[:n].mean()
-                c = float(np.dot(dy, zc) / np.dot(zc, zc))
-                if c != 0:
-                    d[src[key]] = c
-            lin = math.fsum(c * c for c in d.values())
-            if lin > var:
-                f = math.sqrt(var / lin)
-                d = {k: c * f for k, c in d.items()}
-            elif var - lin > 1e-12 * var:
-                d[U.new_source()] = math.sqrt(var - lin)       # the nonlinear part: its own source
+            r = dy
+            if keys:
+                Z = np.column_stack([zs[k][:n] for k in keys])
+                Zc = Z - Z.mean(axis=0)
+                beta = np.linalg.lstsq(Zc, dy, rcond=None)[0]
+                r = dy - Zc @ beta
+                # the value: the fitted linear model at z = 0 (the inputs' true values), i.e. the mean corrected
+                # with the sources as control variates; exact for a linear formula, less noisy otherwise
+                mean -= float(Z.mean(axis=0) @ beta)
+                d = {src[k]: float(b) for k, b in zip(keys, beta) if b != 0}
+            resid = float(np.dot(r, r)) / (n - 1)
+            if resid > 1e-20 * var:
+                d[U.new_source()] = math.sqrt(resid)       # the nonlinear part: its own source
             fr.set(sym, UFloat(mean, d))
 
     # ------------------------------------------------------------ expressions

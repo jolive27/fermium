@@ -1,43 +1,24 @@
-# Design: uncertainties (`5.0 ± 0.2 m`), planned for a future version
+# Uncertainties (`5.0 ± 0.2 m`): how they are implemented
 
-Spec §3.7 deferred error bars. This note records how they can be added **as an extension, not a rewrite**, and what is already in place.
+User documentation: [reference §21](reference.md#21-uncertainties--error-propagation-monte-carlo) and [bootcamp Lesson 12](../bootcamp/lesson12_lab_report.md). Design decisions: DECISIONS.md D120–D124. Tests: `tests/test_uncertainty.py`.
 
-## Current behaviour
+## Pieces
 
-`±` and its ASCII spelling `+-` are reserved operators. Any use gives:
-
-```
-line 1: uncertainties (±) are planned for a future version of Fermium
-    L = 1.20 ± 0.01 m
-             ^
-  hint: for now write the value without its uncertainty, e.g. 5.0 m
-```
-
-## What is already ready for it
-
-| Piece | Where | Why it helps |
+| Piece | Where | What it does |
 |---|---|---|
-| `±` token | `lexer.py` (`OP_CANON`: `±` → `+-`) | Both spellings already lex to one operator. |
-| AST node | `ast.Uncertain(value, err)` | Reserved in the AST. The parser only needs to build it instead of raising the error. |
-| Types are objects | `types.NumTy(dim)` | An uncertain number is a new flavour: `NumTy(dim, uncertain=True)`. The dimension algebra doesn't change: the value and its σ have the same dimension. |
-| Per-expression display info | `ir.Expr.sf`, `.hint` | Printing already chooses a unit and significant figures per expression. `±` printing adds "round σ to 2 significant figures and the value to the same decimal place". |
-| Code generation by type | `codegen_llvm.lltype` | An uncertain number becomes the LLVM struct `{double value, double sigma}`, like vectors became `<n x double>`. Arithmetic on it is a new branch in `FuncGen.e_IBin`. |
-| Fits | `runtime/fitting.py` already computes standard errors | `fit` can return uncertain parameters directly: `g = 9.806 ± 0.017 m/s²`. |
+| `±` / `+-` | `lexer.py` (`OP_CANON`), `parser.py` (`pm_term`) | Binds tighter than `+`/`-`, looser than `*`/`/`. `5.0 ± 0.2 m` gives the unit to the bare 5.0; `(5.0 ± 0.2) m` is a quantity; `x ± 3%` is relative. |
+| AST | `ast.Uncertain(value, err)`, `ast.Propagate(samples, body)` | |
+| Checker | `checker.e_Uncertain`, `unc_part`, `s_Propagate` | Unifies the two dimensions (so units stay checked), builds `IBuiltin("pm" / "pm_rel" / "unc_value" / "unc_uncertainty" / "unc_rel")` and `SPropagate`, and sets `CheckedModule.uses_unc`. |
+| Values | `uncertain.py::UFloat` | Nominal value + `{source id: ∂f/∂xᵢ·σᵢ}`; Python operators do first-order propagation with exact correlations. `__float__` raises `UncertainUse`, so nothing drops an uncertainty silently. |
+| Running | `driver.Program` → `interp.Interpreter` | A program with `uses_unc` runs in the reference interpreter (not LLVM). `fermium build` and the REPL refuse it. |
+| Monte Carlo | `interp.s_SPropagate`, `_Sampler` | Standard normals per source from the seeded generator (D80); the block runs once on NumPy arrays, or once per sample if it can't; results = mean ± std, linked back to the sources by regression. |
+| Printing | `uncertain.format_pm`, `runtime/core.py` `print_num`/`print_list` | σ to 2 significant figures, the value to the same decimal place; a shared power of ten when needed. |
+| Fit | `runtime/fitting.py` (covariance), `interp.s_SFit`, `uncertain.correlated` | In a `uses_unc` program the parameters get the full covariance (one source per eigenvector). |
+| Plot | `interp.s_SPlot`, `runtime/core.py` `make_plot` | Error bars for uncertain lists; a ±1σ band for an uncertain curve. |
 
-## Proposed semantics
+## Not done (yet)
 
-1. **Literals:** `5.0 ± 0.2 m` means value 5.0 m with σ = 0.2 m. The σ must have the same dimension as the value, and that is checked like `+`. Relative form: `5.0 m ± 4 %`.
-2. **Propagation:** first order (linear), assuming independent inputs:
-   - `a + b` and `a - b`: σ² = σa² + σb²
-   - `a·b` and `a/b`: (σ/|f|)² = (σa/a)² + (σb/b)²
-   - `f(a)`: σ = |f′(a)| σa, where f′ comes from the existing symbolic differentiator (`calculus.diff`) at compile time. That gives exact first-order propagation through user functions, which is Fermium's advantage over add-on packages.
-3. **Correlations:** a variable used twice (`x - x`) must give σ = 0. First version: track each uncertain value by a *source id*, and carry a sparse gradient vector {source → ∂f/∂source} instead of a single σ, as linear-uncertainty libraries do (for example Python's `uncertainties`). The IR type becomes `{value, grad[k]}`, where k is the number of independent uncertain inputs, which is known at compile time for straight-line code. Loops that create new uncertain values fall back to a runtime sparse map.
-4. **Printing:** `9.806 ± 0.017 m/s²`, and `(6.674 ± 0.015)×10⁻¹¹ m³/(kg s²)` in scientific form.
-5. **Built-ins:** `value(x)` and `sigma(x)` / `σ(x)` read the parts. `fit` returns uncertain parameters. `load` could read a `σT [s]` column.
-6. **Zero cost when unused:** plain numbers keep their `double` representation. Only expressions whose type is uncertain pay for the extra doubles.
-
-## Estimated work
-
-- Parser node and checker rules (unify the σ dimension, new type flavour): half a day.
-- Codegen for the `{value, sigma}` struct with independent-input propagation: half a day. The correlated version (gradients): 1–2 days.
-- Printing rules and tests against the Python `uncertainties` package on random expressions: half a day.
+- Native code: uncertain values would need a run-time sparse map in LLVM IR and in the C runtime of `fermium build`.
+- The REPL and the Jupyter kernel (their variables live in a native arena of doubles).
+- Vectors/matrices of uncertain values; integrals, ODEs and `solve … for x` with uncertain inputs outside `propagate montecarlo`.
+- Weighted fits (σ of each data point) and reading an uncertainty column from a CSV header automatically (write `data.T ± data.dT` instead).

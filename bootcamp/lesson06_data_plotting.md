@@ -58,7 +58,7 @@ print "mean g =", mean(g), "+/-", std(g) / sqrt(len(g))
 mean g = 9.81057 m/s² +/- 0.04668 m/s²
 ```
 
-(We printed the text `"+/-"` rather than the symbol `±`, which Fermium reserves for a future feature.)
+(We printed the text `"+/-"` here. [Lesson 12](lesson12_lab_report.md) shows how to make Fermium work with uncertainties directly: `mean(g) ± std(g) / √len(g)` is a measured value that carries its uncertainty through later formulas.)
 
 ## Plotting
 

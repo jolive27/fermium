@@ -153,7 +153,7 @@ On a Mac, holding **Option** (⌥) while pressing a key types a special characte
 
 π, √ and ∫ come up constantly, so these three are worth memorising.
 
-> ± is reserved for **uncertainties** (like `5.0 ± 0.2 m`), which are planned for a future version of Fermium. Right now using it gives a friendly error: `uncertainties (±) are planned for a future version of Fermium`.
+> ± is for **uncertainties**: `L = 5.0 ± 0.2 m` is a measurement with its uncertainty, and formulas that use it propagate the uncertainty. [Lesson 12](lesson12_lab_report.md) shows how.
 
 > The micro sign µ (Option + M) and the Greek letter μ look identical. Fermium treats them as the same letter, so `5 µm` and `5 μm` both work. (You can also just type `um`.)
 

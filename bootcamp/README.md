@@ -37,6 +37,7 @@ Each lesson takes roughly 30–60 minutes.
 | [9](lesson09_differential_equations.md) | Differential equations | Springs, decay, orbits with `solve` |
 | [10](lesson10_final_project.md) | Final project | Simulate a planet's orbit from scratch |
 | [11](lesson11_dimensional_analysis.md) | Bonus: dimensional analysis | `analyze`: guess a law from units alone (Buckingham Π) |
+| [12](lesson12_lab_report.md) | Bonus: lab reports | `5.0 ± 0.2 m`: uncertainties, error propagation, Monte Carlo, error bars |
 
 Extras:
 - [CHEATSHEET.md](CHEATSHEET.md): every symbol, how to type it, and the core commands, on one page.

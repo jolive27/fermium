@@ -203,4 +203,6 @@ Fermium writes the base units of every quantity as a column of exponents (the **
 
 Solutions: [solutions/lesson11.md](solutions/lesson11.md)
 
+**Bonus:** [Lesson 12 — Lab reports](lesson12_lab_report.md): measurements with uncertainties, error propagation and error bars.
+
 **Back to:** [the list of lessons](README.md)

@@ -12,7 +12,7 @@
 | ∫ | `integral` | `\int` | ⌥B |
 | ∂ | `partial` | `\partial` | ⌥D |
 | ∞ | `inf` | `\infty` `\inf` | ⌥5 |
-| ± | `+-` (reserved) | `\pm` | ⌥⇧= |
+| ± | `+-` (uncertainty: `1.20 ± 0.01 m`) | `\pm` | ⌥⇧= |
 | ħ | `hbar` | `\hbar` | |
 | ° | `deg` | `\deg` `\degree` | ⌥⇧8 |
 | °C | `degC` | `\celsius` `\degC` | |
