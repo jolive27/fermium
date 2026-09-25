@@ -106,7 +106,7 @@ seed(42)                        # reproducible rand(), randn(μ, σ)
 ### ⚠️ Gotchas
 1. **A unit name right after a number is a unit.** If you also have a variable with that name, Fermium stops you: `2 g h` with your `g` is an error (`'2 g' is ambiguous`); `x = 2 g` alone is 2 grams, with a warning. Write `2 * g * h`, `½ m v^2`, `0.5 * m * v^2`.
 2. **`/` right after a unit (no space) continues the unit:** `50 N/m`, `3 m/s`. With a space before the `/`, one of *your* variables wins: `20 m/s / g` divides by your `g`. If in doubt, use parentheses: `(20 m/s) / g`.
-3. `1/2 m v^2` means 1/(2mv²). Write `½ m v^2` or `(1/2) m v^2`.
+3. `1/2 mass v^2` means 1/(2·mass·v²), with a warning (with your own `m`, `1/2 m v^2` is the `'2 m' is ambiguous` error of gotcha 1). Write `½ m v^2` or `(1/2) m v^2`.
 4. `LT` is one name; `L T` is L × T. `ωt` is one name; write `ω t`.
 5. `e` is the elementary charge (so `e^2` is the charge squared): write `exp(x)`, not `e^x`. Angles are radians: `sin(30 deg)`.
 6. Lists start at 1. `hr` is hours (`h` is Planck's constant).

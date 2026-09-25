@@ -77,8 +77,7 @@ class UFloat:
         """a·self + b·other (other: UFloat) as contributions."""
         d = {k: a * c for k, c in self.d.items()} if a != 1 else dict(self.d)
         for k, c in other.d.items():
-            nv = d.get(k, 0.0) + b * c
-            d[k] = nv
+            d[k] = _sum2(d.get(k, 0.0), b * c)
         return {k: c for k, c in d.items() if c != 0 or c != c}
 
     def __add__(self, o):
@@ -201,10 +200,24 @@ def _scale(d, a):
     return {k: c * a for k, c in d.items() if c * a != 0 or a != a}
 
 
+NOISE = 1e-13    # a sum of two contributions this much smaller than its terms is rounding noise (D208)
+
+
+def _sum2(x, y):
+    """x + y for two contributions of one source; a cancellation down to rounding noise is exactly 0.
+    (L/g)^(1/2)/L^(1/2) or (y/3)·3 − y leave ~10⁻¹⁸ of the input's σ, which is 0 to double precision and
+    would otherwise set the printed digits: 2.0060666807106475318 ± 0.0000000000000000035 (red team round 4
+    #11, D208)."""
+    z = x + y
+    if z != 0 and abs(z) <= NOISE * (abs(x) + abs(y)):
+        return 0.0
+    return z
+
+
 def _scale_merge(d1, a, d2, b):
     out = {k: c * a for k, c in d1.items()}
     for k, c in d2.items():
-        out[k] = out.get(k, 0.0) + c * b
+        out[k] = _sum2(out.get(k, 0.0), c * b)
     return {k: c for k, c in out.items() if c != 0 or c != c}
 
 
@@ -349,7 +362,10 @@ def format_pm(x, s, sig=SIG):
     if not (math.isfinite(x) and math.isfinite(s)):
         return f"{format_number(x)} ± {format_number(s)}", False
     if s == 0:
-        return f"{format_number(x)} ± 0", False
+        # no uncertainty left (x − x, or a cancellation to rounding noise): the value by the default rule
+        # of plain numbers (D11), 2.01 ± 0, and 0 ± 0 for a value that is 0 up to rounding (D208)
+        from .units import format_default
+        return f"{format_default(x)} ± 0", False
     r, e = _round_sig(s, sig)
     last = e - sig + 1                       # the decimal place of the last digit shown
     xr = round(x, -last)
