@@ -1,5 +1,7 @@
 # Fermium
 
+**Experimental prototype designed by me and built by me with help from Claude Code. Expect rough edges, feedback welcome.**
+
 **Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
 
 ```fermium
