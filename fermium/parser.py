@@ -505,9 +505,27 @@ class Parser:
                     if self.tok.kind != "STR":
                         raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
                     opts["title"] = self.next().value
+                elif w.kind == "NAME" and w.value in ("xlabel", "ylabel"):
+                    self.next()             # with xlabel "T [MeV]", ylabel "mass fraction"  (D161)
+                    if self.tok.kind != "STR":
+                        raise self.error(f"expected the axis label in quotes, like  {w.value} \"mass fraction\"")
+                    opts[w.value] = self.next().value
+                elif w.kind == "NAME" and w.value in ("x", "y") and self.peek().kind == "KW" and \
+                        self.peek().value == "from":
+                    self.next()             # with y from 1e-12 to 1  (D161)
+                    self.next()
+                    lo = self.expr()
+                    self.expect_kw("to", f"(write:  {w.value} from 1e-12 to 1)")
+                    opts[w.value + "range"] = (lo, self.expr())
+                elif w.kind == "NAME" and w.value == "reversed":
+                    self.next()             # with reversed x  (D161)
+                    if not (self.tok.kind == "NAME" and self.tok.value in ("x", "y")):
+                        raise self.error("write  with reversed x  (or  reversed y)")
+                    opts["rev" + self.next().value] = True
                 else:
                     raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\",  "
-                                     "with animate over t")
+                                     "with xlabel \"...\",  with ylabel \"...\",  with y from a to b,  with x from a to b,  "
+                                     "with reversed x,  with animate over t")
                 if self.at_op(","):
                     self.next()
                     continue
@@ -546,12 +564,16 @@ class Parser:
         """After a ',' in a plot: does a plot option (title "…", log [x|y], points) follow rather than
         another series? Only when the word isn't one of the program's names and its shape fits."""
         w, nx = self.tok, self.peek()
+        if w.kind == "NAME" and w.value in ("x", "y") and nx.kind == "KW" and nx.value == "from":
+            return True          # `y from 1e-12 to 1`: no series starts like that, even with a variable y (D161)
         if w.kind != "NAME" or w.value in self.known:
             return False
         ends = nx.kind in ("NEWLINE", "EOF") or (nx.kind == "OP" and nx.value == ",") or \
             (nx.kind == "KW" and nx.value in ("to", "with"))
-        if w.value == "title":
+        if w.value in ("title", "xlabel", "ylabel"):
             return nx.kind == "STR"
+        if w.value == "reversed":
+            return nx.kind == "NAME" and nx.value in ("x", "y")
         if w.value == "log":
             return ends or (nx.kind == "NAME" and nx.value in ("x", "y"))
         return w.value in ("points", "dots", "markers") and ends
@@ -572,6 +594,7 @@ class Parser:
         var = lo = hi = step = None
         method = None
         tol_node = [None]
+        abs_nodes = [None]        # `absolute a[, b …]`: absolute tolerances, one per unit (D160)
         until = [None]
         m3 = {}                   # `lowest N` / `grid N` of an eigenvalue problem or a PDE (D82, D83)
         if self.tok.kind != "NEWLINE":
@@ -595,7 +618,7 @@ class Parser:
                 var = vt.value
                 self.expect_kw("from")
                 saved = self.no_juxt_names
-                self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
+                self.no_juxt_names = saved | {"tolerance", "absolute", "using", "method", "until", "lowest", "grid"}
                 lo = self.expr()
                 self.expect_kw("to")
                 hi = self.expr()
@@ -610,6 +633,8 @@ class Parser:
                     word = self.tok.value
                     if word == "tolerance":
                         key = "tolerance"
+                    elif word == "absolute" and "absolute" not in self.known:
+                        key = "absolute"
                     elif word in ("using", "method"):
                         key = "using"
                     elif word == "until" and "until" not in self.known:
@@ -622,6 +647,12 @@ class Parser:
                     self.next()
                     if key == "tolerance":
                         tol_node[0] = self.expr()
+                    elif key == "absolute":
+                        # absolute 1e-16  or  absolute 1e-16, 1e-20 MeV  (one value per unit, D160)
+                        abs_nodes[0] = [self.expr()]
+                        while self.at_op(",") and self.peek().kind == "NUM":
+                            self.next()
+                            abs_nodes[0].append(self.expr())
                     elif key == "using":
                         method = self.expect_name("a method name (rk4, rk45, radau or bdf)").value
                     else:
@@ -632,7 +663,7 @@ class Parser:
                     self.next()             # a second range: a PDE in x and t (D83)
                     m3["var2"] = self.next().value
                     self.expect_kw("from")
-                    self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
+                    self.no_juxt_names = saved | {"tolerance", "absolute", "using", "method", "until", "lowest", "grid"}
                     m3["lo2"] = self.expr()
                     self.expect_kw("to")
                     m3["hi2"] = self.expr()
@@ -664,15 +695,22 @@ class Parser:
                     self.next()
                     method = self.expect_name("a method name (matrix or shooting)").value
                 return True
-            # `tolerance 1e-12` on a line of its own, like `using bdf` (red team round 3 #13)
-            if self.tok.kind == "NAME" and self.tok.value == "tolerance" and "tolerance" not in self.known and \
-                    not (self.peek().kind == "OP" and self.peek().value == "="):
-                if tol_node[0] is not None:
-                    raise self.error("'tolerance' is given twice in this solve")
+            # `tolerance 1e-12` / `absolute 1e-16` on a line of its own, like `using bdf` (red team round 3 #13)
+            if self.tok.kind == "NAME" and self.tok.value in ("tolerance", "absolute") and \
+                    self.tok.value not in self.known and not (self.peek().kind == "OP" and self.peek().value == "="):
+                word = self.tok.value
+                if (tol_node if word == "tolerance" else abs_nodes)[0] is not None:
+                    raise self.error(f"'{word}' is given twice in this solve")
                 self.next()
                 saved = self.no_juxt_names
-                self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
-                tol_node[0] = self.expr()
+                self.no_juxt_names = saved | {"tolerance", "absolute", "using", "method", "until", "lowest", "grid"}
+                if word == "tolerance":
+                    tol_node[0] = self.expr()
+                else:
+                    abs_nodes[0] = [self.expr()]
+                    while self.at_op(",") and self.peek().kind == "NUM":
+                        self.next()
+                        abs_nodes[0].append(self.expr())
                 self.no_juxt_names = saved
                 return True
             # `using shooting` / `using explicit` on a line of its own, like `grid 400` (red team round 2 #11)
@@ -724,6 +762,7 @@ class Parser:
                                hint="add e.g.  for t from 0 s to 10 s")
         self._warn_divide_by_unknown(eqs)
         s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
+        s.absolute = abs_nodes[0]
         if until[0] is not None:
             s.until = until[0]
         s.lowest = m3.get("lowest")

@@ -132,6 +132,10 @@ Fermium and SciPy agree to 3×10⁻⁶ or better on all four (the test requires 
   the abundances. Fermium has no way to set an absolute tolerance (`tolerance r` is relative only), hence the two
   stages. The message also points the wrong way: nothing blows up, the error control asks for relative accuracy
   on numbers that are rounding noise.
+  *Update (FRICTION #82, DECISIONS D160):* `absolute 1e-16, 1e-16 MeV` after the range now gives the solver an
+  absolute tolerance, and the whole network runs from 10 MeV in one `using radau` solve, matching SciPy to 10⁻⁵
+  (tests/test_research.py); without it the message now says this is probably not a blow-up and suggests
+  `absolute`. `bbn.fm` keeps its two stages, as published.
 - **Every function call is computed again.** `n_b(T)` needs T_ν(T), which needs two quadratures, and it is called
   by nine reaction terms that each appear in 2–4 equations. So one evaluation of the right-hand side does dozens of
   adaptive integrals. There is no way to name an intermediate value once per evaluation inside a `solve` block

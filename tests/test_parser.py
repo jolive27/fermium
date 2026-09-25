@@ -596,7 +596,7 @@ def test_in_conversion():
 
 
 def test_to_function_same_as_in():
-    assert run("g = 9.81 m/s²\nprint to(g, km/hr^2) == g, to(g, km/hr^2)") == "true 127000 km/hr²"
+    assert run("g = 9.81 m/s²\nprint to(g, km/hr^2) == g, to(g, km/hr^2)") == "true 1.27×10⁵ km/hr²"   # 3 significant figures (D11)
 
 
 def test_in_with_label():

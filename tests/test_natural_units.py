@@ -100,7 +100,7 @@ def test_natural_print_shows_powers_of_MeV():
     out = run("units natural\nE = 939.6 MeV\nr = 1/(197.3 MeV)\nprint E\nprint r\nprint E^2\nprint m_e to 6 digits").splitlines()
     assert out[0] == "939.6 MeV"
     assert out[1] == "0.005068 MeV⁻¹"      # 4 significant figures, like 197.3
-    assert out[2] == "882800 MeV²"
+    assert out[2] == "8.828×10⁵ MeV²"      # 4 significant figures: a power of ten, not 882800 (D11)
     assert out[3] == "0.510999 MeV"
 
 

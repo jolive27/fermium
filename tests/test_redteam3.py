@@ -128,16 +128,15 @@ def test_8_negative_uncertainty_literal_says_negative():
 
 # ---- #9: rounded large numbers print with trailing zeros that aren't significant -------------------------
 
-@rt3(9)
-@pytest.mark.parametrize("src,bad", [
-    ("print 1000000 / 3", "333000"),
-    ("x = 123456.7 m\nprint x / 1.0", "120000 m"),
-    ("print 1.5 * 12345.0", "19000"),
-    ("print 2999.85 * 1 MeV to 1 digits", "3000 MeV"),
+@pytest.mark.parametrize("src,bad,good", [
+    ("print 1000000 / 3", "333000", "3.33×10⁵"),
+    ("x = 123456.7 m\nprint x / 1.0", "120000 m", "1.2×10⁵ m"),
+    ("print 1.5 * 12345.0", "19000", "1.9×10⁴"),
+    ("print 2999.85 * 1 MeV to 1 digits", "3000 MeV", "3×10³ MeV"),
 ])
-def test_9_rounded_large_numbers_dont_look_exact(src, bad):
+def test_9_rounded_large_numbers_dont_look_exact(src, bad, good):
     out = run(src)
-    assert out != bad                           # e.g. 3.33×10⁵, 1.2×10⁵ m, 1.9×10⁴, 3×10³ MeV
+    assert out != bad and out == good
 
 
 # ---- #10: the Schrödinger PDE doesn't accept the complex constant 𝑖 -------------------------------------
@@ -519,3 +518,13 @@ def test_14_hints_for_complex_values():
 def test_15_montecarlo_list_says_what_is_wrong():
     e = error_of("a = 1.0 ± 0.1\npropagate montecarlo 1000 samples\n    b = [a, 2 a]\nprint b")
     assert "b is a list" in e.message
+
+
+def test_13_absolute_on_its_own_line():
+    src = """solve x' = -x / (1 s) with x(0 s) = 1 m
+  for t from 0 s to 1 s
+  tolerance 1e-10
+  absolute 1e-12 m
+print x(1 s) to 8 digits
+"""
+    assert num(run(src)) == pytest.approx(0.36787944, rel=1e-8)

@@ -42,8 +42,8 @@ def _is_zero(v):
 def check_eigen(ck, s: A.Solve, ctx):
     from .solve import _find_derivs, _normalize_derivs
     x = s.var
-    if s.step is not None or s.tolerance is not None or getattr(s, "until", None) is not None:
-        raise ck.err("step, tolerance and until are for initial-value problems; an eigenvalue problem (lowest N) "
+    if s.step is not None or s.tolerance is not None or getattr(s, "until", None) is not None or s.absolute:
+        raise ck.err("step, tolerance, absolute and until are for initial-value problems; an eigenvalue problem (lowest N) "
                      "takes  grid N  and  using matrix / using shooting", s)
     if len(s.equations) != 1:
         raise ck.err("an eigenvalue problem (lowest N) has one equation, like  -ħ²/(2m) * ψ'' + V(x) ψ = E ψ",
@@ -338,8 +338,9 @@ def check_pde(ck, s: A.Solve, ctx):
     xv, tv = s.var, s.var2
     if s.step is not None:
         raise ck.err(f"in a PDE the time step goes after the time range:  {tv} from … to … step …", s.step)
-    if s.tolerance is not None or getattr(s, "until", None) is not None or getattr(s, "lowest", None) is not None:
-        raise ck.err("tolerance, until and lowest aren't used in a PDE; it takes  step,  grid N  and  using "
+    if s.tolerance is not None or getattr(s, "until", None) is not None or getattr(s, "lowest", None) is not None \
+            or s.absolute:
+        raise ck.err("tolerance, absolute, until and lowest aren't used in a PDE; it takes  step,  grid N  and  using "
                      "crank_nicolson / implicit / explicit", s)
     if len(s.equations) != 1:
         raise ck.err("a PDE solve has one equation, like  ∂u/∂t = D * ∂²u/∂x²", s)
@@ -586,6 +587,11 @@ def check_animate(ck, s, ctx):
     opts = getattr(s, "options", {})
     if len(s.series) != 1:
         raise ck.err("an animation shows one PDE solution:  plot u vs x animate over t", s)
+    extra = [k for k in ("xrange", "yrange", "xlabel", "ylabel", "revx", "revy", "logx", "logy", "points")
+             if opts.get(k)]
+    if extra:
+        raise ck.err("a PDE solution's plot takes only  title  and  animate over t [frames N]  (not axis ranges, "
+                     "labels, log or reversed axes)", s)
     sr = s.series[0]
     view = ctx.scope.lookup(sr.y.name)[0] if isinstance(sr.y, A.Name) else None
     if not getattr(view, "is_pde", False):

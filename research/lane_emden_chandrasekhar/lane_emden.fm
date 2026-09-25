@@ -58,6 +58,6 @@ K15 = (3π²)^(2/3) ħ² / (5 m_e (2 m_u)^(5/3))
 a3 = (5 K15 / (8π G))^(3/2)         # a³ ρ_c^(1/2), in m³ (kg/m³)^(1/2)
 ρc = (0.6 M☉ / (4π a3 ω15))^2
 R_wd = ξ1_15 (5 K15 / (8π G))^(1/2) ρc^(-1/6)
-print "n = 3/2 white dwarf of 0.6 M☉ (μ_e = 2): R =", R_wd in km to 3 digits, "  ρ_c =", ρc in g/cm³ to 3 digits
+print "n = 3/2 white dwarf of 0.6 M☉ (μ_e = 2): R =", R_wd in km to 4 digits, "  ρ_c =", ρc in g/cm³ to 3 digits
 
 plot θ1 vs ξ, θ15 vs ξ, θ3 vs ξ with title "Lane–Emden θ(ξ) for n = 1, 1.5, 3" to "lane_emden.png"

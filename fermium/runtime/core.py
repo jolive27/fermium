@@ -64,6 +64,16 @@ def display_unit(dim, hint):
     return preferred_unit(dim)
 
 
+def axis_label(name, unit_name, given=None):
+    """An axis label: the plotted name, or the label given with  xlabel "…" / ylabel "…"  (D161), then
+    the display unit in brackets, unless the unit is plain or the given label already has a '[' (it
+    names its own unit, like "T [MeV]").  Mirrored by fermium build (aot.py)."""
+    unit = unit_name not in ("", "1")
+    if given is not None:
+        return given + (f" [{unit_name}]" if unit and "[" not in given else "")
+    return name + (f" [{unit_name}]" if unit else "")
+
+
 def fit_sigfigs(val, err):
     """Digits for a fitted value: at least 4, and enough to reach the second digit of its standard error
     (0.69900, not 0.6990, when the error is 1.9×10⁻⁵) (gauntlet friction #35).  Mirrored in aot_data.c."""
@@ -276,9 +286,9 @@ class Runtime:
             for i, v in enumerate(vals):
                 p[i] = v
 
-        def stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out):
+        def stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol):
             try:
-                return rt.stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out)
+                return rt.stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol)
             except BaseException as ex:          # nothing may escape into the compiled code
                 rt.error = getattr(ex, "message", None) or f"the stiff ODE solver failed: {ex}"
                 return 1
@@ -341,7 +351,7 @@ class Runtime:
             "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
-                           c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
+                           c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p), DPTR)(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
             "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
             "fm_pde": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_double, c_double, c_double,
@@ -462,6 +472,12 @@ class Runtime:
         if kind == 8:
             return f"the ODE solver's step became too small near {self.tname(b)} = {self.fmt_value(a, fmt)}; " \
                    f"the solution may blow up there"
+        if kind == 34:
+            return f"the ODE solver's step became too small near {self.tname(b)} = {self.fmt_value(a, fmt)}; " \
+                   f"no unknown has grown there, so this is probably not a blow-up: the error control asks for " \
+                   f"relative accuracy on values that are tiny or rounding noise (like an abundance of 10⁻²³); " \
+                   f"add an absolute tolerance after the range, e.g.  tolerance 1e-9 absolute 1e-16  (in the " \
+                   f"units of the unknowns)"
         if kind == 16:
             v = self.fmt_value(a, fmt)
             return f"the right side of the equation is NaN or infinite at {self.tname(b)} = {v} (0/0? 1/0?); " \
@@ -517,7 +533,7 @@ class Runtime:
         return "runtime error"
 
     # ------------------------------------------------------------ stiff ODEs (D42)
-    def stiff(self, guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out):
+    def stiff(self, guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol=None):
         """`solve ... using radau` in compiled code: SciPy steps, calling the compiled right-hand side (and
         stop condition) through fm_ode_guard; the solution goes into a malloc'ed SolStruct at *out.
         Returns 0, 1 (a solver error: rt.error set here) or 2 (the right side stopped with its own error)."""
@@ -546,7 +562,7 @@ class Runtime:
                 return gf(t, y)[:1]
         try:
             ts, ys, dys = stiff_solve(f, y0[:n], t0, t1, rtol, "bdf" if method == 1 else "radau", g, tname,
-                                      evtext)
+                                      evtext, atol[:n] if atol else None)     # absolute tolerances (D160)
         except _Inner:
             return 2
         except StiffFail as fl:
@@ -687,8 +703,9 @@ class Runtime:
                 ax.plot(X, Y, "o", label=s["ylabel"], markersize=5)     # measured data: markers, not lines
             else:
                 ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
-            ylabels.append(f"{s['ylabel']}" + (f" [{yu.name}]" if yu.name not in ("", "1") else ""))
-            xlabels.append(f"{s['xlabel']}" + (f" [{xu.name}]" if xu.name not in ("", "1") else ""))
+            opts = info.get("options", {})
+            ylabels.append(axis_label(s["ylabel"], yu.name, opts.get("ylabel")))
+            xlabels.append(axis_label(s["xlabel"], xu.name, opts.get("xlabel")))
         ax.set_xlabel(xlabels[0] if xlabels else "")
         ax.set_ylabel(", ".join(dict.fromkeys(ylabels)))
         if len(series) > 1:
@@ -701,9 +718,19 @@ class Runtime:
         if opts.get("title"):
             ax.set_title(opts["title"])
         ax.grid(True, alpha=0.3)
-        if all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
-               for s in info["series"]):
-            ax.set_aspect("equal", adjustable="datalim")     # orbits look round
+        ranged = "xlim" in opts or "ylim" in opts
+        if not ranged and all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
+                              for s in info["series"]):
+            ax.set_aspect("equal", adjustable="datalim")     # orbits look round (not with a range given)
+        s0 = info["series"][0]
+        for which, setlim in (("x", ax.set_xlim), ("y", ax.set_ylim)):     # D161
+            if which + "lim" in opts:
+                u = display_unit(s0["r" + which + "dim"], s0.get(which + "hint"))
+                setlim(*[(v - u.offset) / u.factor for v in opts[which + "lim"]])
+        if opts.get("revx"):
+            ax.invert_xaxis()
+        if opts.get("revy"):
+            ax.invert_yaxis()
         fig.tight_layout()
         full = info["full"]
         d = os.path.dirname(full)

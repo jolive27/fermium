@@ -383,7 +383,7 @@ and the `uncertainties` package. Each finding has an `xfail(strict=True)` test i
 - **Likely location:** the parser's ± rule. The unit after σ is shared only when the value is a bare number, and
   the unary minus makes it not bare.
 
-### 9. Rounded large numbers print with trailing zeros that aren't significant (misleading display). Status: open
+### 9. Rounded large numbers print with trailing zeros that aren't significant (misleading display). Status: fixed (fixed in the main session: power of ten when rounding leaves 2+ non-significant zeros; D11)
 - **Repro:**
 
   | Program | Prints | Note |

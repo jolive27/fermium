@@ -20,6 +20,7 @@ from .errors import MODLINE_MAX, FermiumError, FermiumRuntimeError
 from .numerics import PyOps, quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from .types import ListTy, VecTy, MatTy, BoolTy, NumTy
 from . import linalg
+from .runtime.stiff import abs_tolerances, step_small_kind
 from . import special
 from .uncertain import UFloat, UncertainUse
 from . import uncertain as U
@@ -530,8 +531,9 @@ def _stiff_test(state, count, h, k6, k7, y6, y7, warn):
             state[0] = 0
 
 
-def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=None):
+def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=None, atol=None):
     n = len(y0)
+    atol = atol if atol is not None else [0.0] * n      # absolute tolerances per component (D160)
     y = list(y0)
     sol = Sol(n)
     span = t1 - t0
@@ -563,7 +565,7 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=Non
         land = hv >= rstop
         h = rstop if land else hv
         if h < 1e-15 * (abs(t) + aspan):
-            raise _Fail(ERR_ODE_H, t, float(tname))
+            raise _Fail(step_small_kind(y0, y), t, float(tname))
         tn = stop if land else t + dirn * h
         hs = stop - t if land else dirn * h
         ynew = None
@@ -587,7 +589,7 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=Non
                 if E_DP[m] != 0:
                     e = e + E_DP[m] * k[m][j]
             e = e * hs
-            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j])) + 5e-324
+            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j])) + atol[j] + 5e-324
             r = fdiv(e, sc)
             errsum = errsum + r * r
         errn = math.sqrt(errsum / n)
@@ -636,11 +638,11 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False, warn=Non
     return sol
 
 
-def _stiff(f, y0, t0, t1, rtol, method, ev, tname, evtext):
+def _stiff(f, y0, t0, t1, rtol, method, ev, tname, evtext, atol=None):
     """`solve ... using radau` / `using bdf`: the same SciPy stepping as the compiled code (D42)."""
     from .runtime.stiff import StiffFail, stiff_solve
     try:
-        ts, ys, dys = stiff_solve(f, y0, t0, t1, rtol, method, ev, float(tname), float(evtext))
+        ts, ys, dys = stiff_solve(f, y0, t0, t1, rtol, method, ev, float(tname), float(evtext), atol)
     except StiffFail as fl:
         raise _Fail(fl.kind, fl.a, fl.b) from None
     sol = Sol(len(y0))
@@ -1185,8 +1187,9 @@ class Interpreter:
         ev = self.ode_rhs(s.event, fr) if getattr(s, "event", None) is not None else None
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
         tname, evtext, fmt = getattr(s, "tname", -1), getattr(s, "evtext", -1), getattr(s, "tfmt", -1)
+        atol = abs_tolerances(getattr(s, "atol", None), t0, t1)
         if s.method in ("radau", "bdf"):
-            sol = self.kernel(lambda: _stiff(f, y0, t0, t1, s.rtol, s.method, ev, tname, evtext), fmt)
+            sol = self.kernel(lambda: _stiff(f, y0, t0, t1, s.rtol, s.method, ev, tname, evtext, atol), fmt)
         elif s.method == "rk4":
             h0 = self.eval(s.step, fr)
             sol = self.kernel(lambda: rk4(f, y0, t0, t1, h0, ev, tname, evtext), fmt)
@@ -1196,7 +1199,7 @@ class Interpreter:
         else:
             line = self.line
             sol = self.kernel(lambda: dp45(f, y0, t0, t1, s.rtol, ev, tname, evtext, getattr(s, "tdep", False),
-                                           lambda c: self.rt.warn(2, c, line, -1)), fmt)
+                                           lambda c: self.rt.warn(2, c, line, -1), atol), fmt)
         if getattr(s.sol_sym, "needs_rhs", False):
             # mirrors FuncGen.attach_rhs: the numbers the right side reads, as they are now (D46)
             lam = s.rhs
@@ -1870,6 +1873,22 @@ class Interpreter:
         if name == "mod":
             a, c = args
             return a - c * math.floor(fdiv(a, c)) if c != 0 else math.nan
+        if name in ("min_ew", "max_ew"):       # max(xs, 1e-12): element by element (D162)
+            lists = [a for a in args if isinstance(a, list)]
+            for a in lists[1:]:
+                if len(a) != len(lists[0]):
+                    raise _Fail(ERR_LEN, float(len(lists[0])), float(len(a)))
+            out = []
+            for k in range(len(lists[0])):
+                vals = [a[k] if isinstance(a, list) else a for a in args]
+                r = vals[0]
+                for v in vals[1:]:
+                    if name == "min_ew":
+                        r = v if (v < r or r != r) else r
+                    else:
+                        r = v if (v > r or r != r) else r
+                out.append(r)
+            return out
         if name == "min":
             r = args[0]
             for a in args[1:]:
