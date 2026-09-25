@@ -494,6 +494,7 @@ class Function:
         m, s = self._m, self._m._s
         n = len(m._calls)
         tag = f"{n}_{self.name}"
+        snap = s.snapshot()           # a call that doesn't check leaves nothing behind (D220)
         syms = []
         for k, (shape, dim) in enumerate(key[1:]):
             name = f"{_PREFIX}{tag}_a{k}"
@@ -508,6 +509,7 @@ class Function:
         try:
             fn = s.compile_input(text)
         except FermiumError as e:
+            s.rollback(snap)
             e.message = f"calling {self.name} from Python with ({_describe(key[1:])}): {e.message}"
             e.line = None
             raise
