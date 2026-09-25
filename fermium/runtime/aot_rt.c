@@ -4,6 +4,7 @@
  * exactly like the JIT'd program calls the Python callbacks in runtime/core.py.
  * Number formatting follows fermium.units.format_number.
  * The format and text tables are generated per program (fm_tables.c).
+ * `load`, `fit` and `plot` live in aot_data.c (included below).
  */
 #include <math.h>
 #include <stdint.h>
@@ -11,6 +12,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 typedef struct {
     double factor, offset;
@@ -198,6 +202,7 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
         fmt_num(b, 6, 1, y, sizeof y);
     }
     err_line = ln;
+    if (kind == -1) return;            /* ERR_PENDING: load/fit/plot already wrote err_msg */
     switch (kind) {
     case 1:
         if (a != a)
@@ -244,6 +249,8 @@ double fm_clock(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
+
+#include "aot_data.c"
 
 #include <pthread.h>
 static int run_result;

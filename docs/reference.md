@@ -35,7 +35,7 @@ fermium                      # interactive prompt (REPL)
 fermium check pendulum.fm    # check units without running
 fermium fmt pendulum.fm --pretty   # ASCII -> symbols;  --ascii for the reverse; -w rewrites the file
 fermium doctor               # check the installation
-fermium build pendulum.fm    # make a standalone executable ./pendulum (needs a C compiler; no plot/load/fit yet)
+fermium build pendulum.fm    # make a standalone executable ./pendulum (needs a C compiler)
 ```
 
 A program is a text file ending in `.fm`. Comments start with `#`.
@@ -510,7 +510,10 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
 - **REPL:** run `fermium`. It keeps history (the up arrow), saved between sessions in `~/.fermium_history`. Type `\theta` then Tab to get θ; `\name` is also replaced when you press Enter. `:help` shows help, `:quit` leaves.
 - **`fermium fmt file.fm --pretty` / `--ascii`:** converts between ASCII and symbols without changing the program's meaning.
 - **`fermium doctor`:** checks the installation and explains fixes. It also reports whether a C compiler is available, which only `fermium build` needs.
-- **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which is linked with a small C runtime. This needs a C compiler (on a Mac: `xcode-select --install`). Programs that use `plot`, `load` or `fit` can't be built yet, because those features use Python libraries.
+- **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which is linked with a small C runtime. This needs a C compiler (on a Mac: `xcode-select --install`). The executable prints exactly what `fermium run` prints, and doesn't need Python. `load`, `fit` and `plot` work too, with three differences:
+  - **Files are relative to the folder you run the program in**, not the folder of the `.fm` file. `load "data/pendulum.csv"` in a program built as `./pendulum` reads `data/pendulum.csv` from the current folder, and a plot is saved there too. The CSV is read when the program runs, so new measurements work without rebuilding; but the header must be the one the program was built with (the columns' units are compiled in), otherwise the program stops with a message saying so.
+  - **Plots are SVG files.** `plot ... to "decay.png"` writes `decay.svg` and prints `plot saved to decay.svg (standalone programs write SVG)`. The plot has axes, ticks, unit labels, a legend, log scales and the title, but it is simpler than the matplotlib one (no minor ticks). Open it in a web browser.
+  - **`fit`** uses Fermium's own Levenberg–Marquardt instead of SciPy. It starts from the same guesses and reports the same numbers to the printed digits. When the fit can't pin a parameter down (the warning *the fit may not have converged*), the value it stops at can differ from `fermium run`.
 - **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion.
 
 ## 18. Grammar summary
@@ -541,4 +544,4 @@ These are known and not yet fixed. None of them is silent about units.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
 - **Matrices** and lists of vectors don't exist yet.
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
-- **`fermium build`** can't build programs that use `plot`, `load` or `fit`.
+- **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
