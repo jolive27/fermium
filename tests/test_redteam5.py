@@ -38,7 +38,6 @@ def run_err(src):
 
 # ---- #1: a failed REPL input leaves its new variables half-defined: every later use is an internal error ------
 
-@rt5(1)
 def test_1_repl_failed_input_does_not_poison_its_variables():
     # the ± refusal (documented), then the same name used again
     out = repl("L = 1.20 +- 0.01 m\nL = 3 m\nprint L\n")
@@ -46,7 +45,6 @@ def test_1_repl_failed_input_does_not_poison_its_variables():
     assert "3 m" in out
 
 
-@rt5(1)
 def test_1_repl_compile_error_in_a_block_does_not_poison_its_variables():
     out = repl("if 1 > 0\n    ww = 1 m\n    ww2 = ww + 1 s\n\nprint ww\nww = 2 m\nprint ww\n")
     assert "can't add length [m] to time [s]" in out
@@ -91,7 +89,6 @@ def execute(kc, code, reply_timeout=20):
     return kc.get_shell_msg(timeout=reply_timeout)["content"]["status"], outs
 
 
-@rt5(2)
 def test_2_jupyter_cell_after_a_failed_cell_gets_a_reply(kernel):
     status, _ = execute(kernel, "a5 = 1 m\nb5 = a5 + 1 s")
     assert status == "error"
@@ -101,7 +98,6 @@ def test_2_jupyter_cell_after_a_failed_cell_gets_a_reply(kernel):
     assert "internal error" not in "".join(t for _, t in outs)
 
 
-@rt5(3)
 def test_3_jupyter_shows_run_time_warnings(kernel):
     status, outs = execute(kernel, "solve y'' = -(10/(1 s))^2 y with y(0) = 1 cm, y'(0) = 0 m/s "
                                    "for t from 0 s to 10 s step 0.1 s\nprint y(10 s)")
@@ -122,7 +118,6 @@ print(json.dumps(r))
 """
 
 
-@rt5(3)
 def test_3_playground_shows_run_time_warnings(tmp_path):
     code = f"ROOT = {ROOT!r}\nWEB = {os.path.join(ROOT, 'web')!r}\nBASE = {str(tmp_path)!r}\n" + PG
     p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
@@ -218,7 +213,6 @@ def test_9_celsius_product_warning_points_at_the_reading():
 
 # ---- #10: fermium check says "no problems found" and then prints warnings ------------------------------------
 
-@rt5(10)
 def test_10_check_with_warnings_doesnt_say_no_problems(tmp_path):
     f = tmp_path / "w.fm"
     f.write_text("m = 2 kg\nx = 3 m\n")
@@ -229,7 +223,6 @@ def test_10_check_with_warnings_doesnt_say_no_problems(tmp_path):
     assert "no problems found" not in both
 
 
-@rt5(10)
 def test_10_check_prints_warnings_in_line_order(tmp_path):
     f = tmp_path / "w.fm"
     f.write_text("c_w = 4186 J/(kg K)\nQ = c_w * 1 kg * 10 degC\nprint Q\n"
@@ -295,7 +288,6 @@ def test_14_lesson1_and_2b_prose_match_the_output():
     assert "fm> print sin(\\theta)\n0.5\n" not in _read("bootcamp/lesson02b_symbols.md")
 
 
-@rt5(15)
 def test_15_lesson2_where_gotcha_is_an_error_not_a_warning():
     e = error_of("v = 3 m/s\nE = 0.5 m v^2 where m = 2 kg\nprint E")
     assert "ambiguous" in e.message

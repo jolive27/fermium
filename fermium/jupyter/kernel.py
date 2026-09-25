@@ -17,22 +17,30 @@ from ..symbols import LATEX
 
 
 class _Sink:
-    """File-like object that collects what the session writes during one cell."""
+    """File-like object that collects what the session writes during one cell.  Two sinks (stdout and
+    stderr) can share one list of parts, so the cell's output keeps its order."""
 
-    def __init__(self):
-        self.parts = []
+    def __init__(self, name="stdout", parts=None):
+        self.name = name
+        self.parts = [] if parts is None else parts
 
     def write(self, s):
-        self.parts.append(s)
+        self.parts.append((self.name, s))
         return len(s)
 
     def flush(self):
         pass
 
     def take(self):
-        s = "".join(self.parts)
-        self.parts = []
-        return s
+        """[(stream name, text)] in order, with neighbouring pieces of the same stream joined."""
+        out = []
+        for name, s in self.parts:
+            if out and out[-1][0] == name:
+                out[-1] = (name, out[-1][1] + s)
+            else:
+                out.append((name, s))
+        self.parts.clear()
+        return out
 
 
 class FermiumKernel(Kernel):
@@ -48,7 +56,9 @@ class FermiumKernel(Kernel):
         super().__init__(**kw)
         from ..driver import ReplSession
         self.sink = _Sink()
-        self.fm = ReplSession(out=self.sink, base_dir=os.getcwd())
+        self.errsink = _Sink("stderr", self.sink.parts)
+        # warnings (compile-time and run-time) go to stderr, as `fermium run` shows them (red team 5 #3)
+        self.fm = ReplSession(out=self.sink, base_dir=os.getcwd(), err=self.errsink)
 
     def _stream(self, name, text):
         if text and not self.silent:
@@ -66,6 +76,19 @@ class FermiumKernel(Kernel):
                                    {"data": {"image/png": data, "text/plain": f"<plot {os.path.basename(path)}>"},
                                     "metadata": {}})
 
+    def _flush(self, before):
+        for name, text in self.sink.take():
+            if name == "stdout":
+                # plot lines ("plot saved to ...") are replaced by the inline picture
+                text = "".join(ln for ln in text.splitlines(True) if not ln.startswith("plot saved to "))
+            self._stream(name, text)
+        self._show_new_plots(before)
+
+    def _error(self, msg):
+        self._stream("stderr", msg + "\n")
+        return {"status": "error", "execution_count": self.execution_count,
+                "ename": "FermiumError", "evalue": msg, "traceback": [msg]}
+
     def do_execute(self, code, silent, store_history=True, user_expressions=None, allow_stdin=False):
         self.silent = silent
         if not code.strip():
@@ -74,17 +97,16 @@ class FermiumKernel(Kernel):
         try:
             self.fm.execute(code)
         except FermiumError as e:
-            out = self.sink.take()
-            # plot lines ("plot saved to ...") are replaced by the inline picture
-            self._stream("stdout", "".join(ln for ln in out.splitlines(True) if not ln.startswith("plot saved to ")))
-            self._show_new_plots(before)
-            msg = e.format(code)
-            self._stream("stderr", msg + "\n")
-            return {"status": "error", "execution_count": self.execution_count,
-                    "ename": type(e).__name__, "evalue": msg, "traceback": [msg]}
-        out = self.sink.take()
-        self._stream("stdout", "".join(ln for ln in out.splitlines(True) if not ln.startswith("plot saved to ")))
-        self._show_new_plots(before)
+            self._flush(before)
+            return self._error(e.format(code))
+        except RecursionError:
+            self._flush(before)
+            return self._error("this cell is nested too deeply for Fermium to compile")
+        except Exception as e:      # a bug in Fermium: still answer the cell, never leave it hanging (red team 5 #2)
+            self._flush(before)
+            return self._error(f"internal error in Fermium: {type(e).__name__}: {e}\n"
+                               f"  (this is a bug in Fermium, not in your program)")
+        self._flush(before)
         return {"status": "ok", "execution_count": self.execution_count, "payload": [], "user_expressions": {}}
 
     def do_complete(self, code, cursor_pos):

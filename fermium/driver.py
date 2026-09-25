@@ -209,8 +209,9 @@ class ReplSession:
     where = "the REPL or Jupyter"       # named in "doesn't work here yet" messages
     where_hint = "save the lines in a .fm file and run it"
 
-    def __init__(self, out=None, base_dir=None):
+    def __init__(self, out=None, base_dir=None, err=None):
         self.out = out or sys.stdout
+        self.err = err                 # where warnings go (None: `out`, as the REPL shows them); Jupyter: stderr
         self.base_dir = base_dir or os.getcwd()
         self.diags = Diagnostics()
         self.checker = Checker(self.diags, self.base_dir, repl=True)
@@ -218,6 +219,8 @@ class ReplSession:
         self.arena_base = ctypes.addressof(self.arena)
         self.next_slot = 0
         self.runtime = Runtime(self.out, self.base_dir)
+        if err is not None:
+            self.runtime.err = err     # run-time warnings (the coarse RK4 step, the zero integral)
         self.runtime.tables = self.checker.tables
         self.engines = []
         self.known = set()
@@ -232,11 +235,58 @@ class ReplSession:
             visit(sym)
 
     def execute(self, text):
-        """Compile and run one chunk of input.  Raises FermiumError on problems."""
-        fn = self.compile_input(text)
-        for w in self.diags.warnings:
-            self.out.write(w.format(text) + "\n")
-        self.run_entry(fn)
+        """Compile and run one chunk of input.  Raises FermiumError on problems.
+
+        A failed input leaves no names behind (D220): on any error the checker's scope is rolled back to what it
+        was before the input, so a variable the input half-defined can be used or defined again later."""
+        snap = self.snapshot()
+        try:
+            fn = self.compile_input(text)
+            for w in self.diags.warnings:
+                (self.err or self.out).write(w.format(text) + "\n")
+            self.run_entry(fn)
+        except BaseException:
+            self.rollback(snap)
+            raise
+
+    def snapshot(self):
+        """What the checker knows before an input: the global names, each name's own state, the dimension
+        substitution, and the per-function caches (D220)."""
+        ch = self.checker
+        names = dict(ch.globals.names)
+        states = {}
+        for b in names.values():
+            if isinstance(b, I.Sym):
+                states[id(b)] = (b, dict(b.__dict__))
+            elif hasattr(b, "instances") and hasattr(b, "derived"):
+                states[id(b)] = (b, {"instances": dict(b.instances), "derived": dict(b.derived),
+                                     "checked_generic": b.checked_generic})
+        mods = ch.__dict__.get("modules")
+        return {"names": names, "states": states, "subst": dict(ch.U.subst), "known": set(self.known),
+                "nat": ch.nat, "top_units": set(ch._top_units), "all_funcs": len(ch.all_funcs),
+                "all_lambdas": len(ch.all_lambdas), "modules": dict(mods) if mods is not None else None,
+                "future": dict(ch.future_funcs)}
+
+    def rollback(self, snap):
+        ch = self.checker
+        ch.globals.names.clear()
+        ch.globals.names.update(snap["names"])
+        for obj, state in snap["states"].values():
+            obj.__dict__.update(state)
+        ch.U.subst.clear()
+        ch.U.subst.update(snap["subst"])
+        self.known = snap["known"]
+        ch._set_system(snap["nat"])
+        ch._top_units = snap["top_units"]
+        del ch.all_funcs[snap["all_funcs"]:]
+        del ch.all_lambdas[snap["all_lambdas"]:]
+        if snap["modules"] is not None:
+            ch.__dict__["modules"].clear()
+            ch.__dict__["modules"].update(snap["modules"])
+            ch.__dict__["loading"].clear()
+        ch.future_funcs = snap["future"]
+        ch.par_stack.clear()
+        ch._estack.clear()
 
     def compile_input(self, text):
         """Compile one chunk of input into a callable entry point (without running it)."""
