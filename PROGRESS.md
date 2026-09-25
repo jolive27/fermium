@@ -91,16 +91,20 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 00:05–01:00 Phase 1 audit: AUDIT.md written; most AUDIT §4 items and most of A1–A53 fixed (see the hourly log and `git log`).
 - 01:10 Docs pass: README, reference, DECISIONS and the VS Code README corrected against the code; reference §19 "Known limitations"; bootcamp output boxes refreshed and now tested; `doctor` checks for a C compiler.
 
-## In progress (04:35 UTC)
-- **User request: 3 significant figures by default** when a result's precision is ambiguous or unspecified. Display only (D11). Done in the JIT, the interpreter and `fermium build`, with tests/test_default_sigfigs.py, the bootcamp boxes and the examples. Two agents are updating the ~130 older tests that compared 6-digit output.
-- Merging finished agents: M3 (seeded RNG, FFT, eigenvalue problems, PDEs), M7 (modules and stdlib), research batch 2–7.
-- Agents running: complex numbers (review priority 1), research-friction fixes.
+## In progress (05:40 UTC)
+- Agents: red-team round 2 fixes (14 findings), M5 performance (`parallel for`, optimisation pass), M6 Python interop, research #3 BBN network.
 
 ## Next
-- Review priority 3: warn when an integral comes out exactly 0 because every sample was 0 (a narrow peak missed); 7 initial panels so the middle of the range is a node. The patch is ready and will be applied after the sig-fig commit.
-- M4 uncertainties, M5 benchmarks (needs a quiet machine), M6 Python interop.
-- Red team round 2 (due about 05:00), BBN research reproduction, hourly quality pass.
+- Merge those as they finish; red team round 3 (~06:30); Phase 7 graduate gauntlet; hourly quality passes.
+- M5 final benchmark table on a quiet machine (stop agents first, ~11:30).
 - MORNING_REPORT.md and SHOWCASE.md at 12:30 UTC.
+
+## Moonshot status (05:40 UTC)
+- M1 natural units: done (D60). M2 dimensional analysis: done (D70, bootcamp lesson 11).
+- M3 numerics: done. Stiff solvers + stiffness warning, eigenvalue problems, 1-D PDEs with GIF output, FFT, root finding, Monte Carlo, seeded RNG (D42, D80–D83).
+- M4 uncertainties: done, interpreter-only (D120–D124, bootcamp lesson 12).
+- M5 performance: agent running. M6 Python interop: agent running.
+- M7 modules and stdlib: done (D100–D103). M8 self-hosting: done (the unit database written in Fermium).
 
 ## Blocked
 - (none)
