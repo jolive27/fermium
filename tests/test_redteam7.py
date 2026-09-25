@@ -1,9 +1,9 @@
-"""Findings of the independent red-team review, round 7 (REDTEAM.md, "Round 7 (11:15 UTC)"): silent wrong answers
+"""Findings of the independent red-team review, round 7 (dev-notes/REDTEAM.md, "Round 7 (11:15 UTC)"): silent wrong answers
 around the latest fixes (D230-D233), the printing rules (D11) and the research programs.
 
 Each test states the correct behaviour and is marked xfail(strict=True) until its finding is fixed:
 the fix agent flips a test by deleting its xfail mark.  Each test names its finding number.
-Reference values come from NumPy/SciPy or closed forms (see REDTEAM.md).
+Reference values come from NumPy/SciPy or closed forms (see dev-notes/REDTEAM.md).
 """
 import io
 import os

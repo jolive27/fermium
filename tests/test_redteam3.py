@@ -1,4 +1,4 @@
-"""Findings of the independent red-team review, round 3 (REDTEAM.md, "Round 3 (06:30 UTC)").
+"""Findings of the independent red-team review, round 3 (dev-notes/REDTEAM.md, "Round 3 (06:30 UTC)").
 
 Each test states the correct behaviour and is marked xfail(strict=True) until its finding is fixed:
 the fix agent flips a test by deleting its xfail mark.  Each test names its finding number.

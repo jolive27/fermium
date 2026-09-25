@@ -1,7 +1,7 @@
 """Adversarial tests: feature interactions checked against independent computations.
 
 Passing tests document verified-correct behaviour.  Known bugs are marked
-xfail(strict=True) with "BUG A<n>" (see notes/bugs-adversarial.md); when a bug is
+xfail(strict=True) with "BUG A<n>" (see dev-notes/notes/bugs-adversarial.md); when a bug is
 fixed its test XPASSes and the marker should be removed.
 """
 import io

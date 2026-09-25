@@ -50,7 +50,7 @@ zsh: command not found: fermium
 **Fix:**
 1. Quit the Terminal (⌘Q) and open it again.
 2. Run `python3 --version`. It must say 3.10 or higher (see [Lesson 0, Step 2](lesson00_setup.md#step-2-install-python-3)).
-3. `cd ~/fermium` and run `python3 -m pip install -e .` again. Read the last lines it prints: `Successfully installed` means it worked.
+3. `cd ~/fermium` and run `python3 -m pip install -e ".[full]"` again. Read the last lines it prints: `Successfully installed` means it worked.
 4. If pip warned that a script was installed in a folder "which is not on PATH", reinstall Python from python.org and repeat step 3.
 
 Also run `fermium doctor` whenever something seems wrong with the installation itself.

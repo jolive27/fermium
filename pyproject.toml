@@ -25,9 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-full = []  # kept so older instructions (`pip install -e ".[full]"`) still work; everything is in core now
+full = []  # the documented install is `pip install -e ".[full]"` (D234); every runtime dependency is already in core
 jupyter = ["jupyterlab"]
-dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "nbformat", "nbclient", "uncertainties"]
+dev = ["pytest", "pytest-cov", "pytest-xdist", "hypothesis", "ruff", "nbformat", "nbclient", "uncertainties"]
 
 [project.scripts]
 fermium = "fermium.cli:entry"

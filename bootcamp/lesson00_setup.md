@@ -79,20 +79,20 @@ You should see names like `bootcamp`, `fermium`, `pyproject.toml` and `README.md
 
 ## Step 4: Install Fermium
 
-Still in the `fermium` folder, type this (all one line, including the dot at the end):
+Still in the `fermium` folder, type this (all one line, including the dot and the quotes):
 
 ```
-python3 -m pip install -e .
+python3 -m pip install -e ".[full]"
 ```
 
 What this means, piece by piece:
 - `python3 -m pip` runs **pip**, Python's tool for installing software.
 - `install -e .` installs the program in the current folder (`.` means "this folder"). The `-e` means "editable": if the folder is updated later, you don't need to reinstall.
-- It also installs everything Fermium uses, including the libraries for fitting data, symbolic integrals and plots (SciPy, SymPy and Matplotlib).
+- `[full]` means "with everything": the libraries Fermium uses for fitting data, symbolic integrals and plots (SciPy, SymPy and Matplotlib), the Jupyter kernel and the editor support.
 
 You'll see a lot of text scroll by while it downloads things. That's normal. It should end with a line starting with `Successfully installed ...`.
 
-> **In the future:** once Fermium is published, the whole of Step 3 and Step 4 will be one line: `python3 -m pip install fermium`.
+> **In the future:** once Fermium is published, the whole of Step 3 and Step 4 will be one line: `python3 -m pip install "fermium[full]"`.
 
 ## Step 5: Check the installation with `fermium doctor`
 

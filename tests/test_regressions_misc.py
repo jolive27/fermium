@@ -1,4 +1,4 @@
-"""Regression tests for assorted adversarial bugs (notes/bugs-adversarial.md): A23, A24, A54."""
+"""Regression tests for assorted adversarial bugs (dev-notes/notes/bugs-adversarial.md): A23, A24, A54."""
 import io
 import os
 import subprocess

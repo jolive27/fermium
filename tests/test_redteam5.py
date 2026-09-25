@@ -1,4 +1,4 @@
-"""Findings of the independent red-team review, round 5 (REDTEAM.md, "Round 5 (08:45 UTC)"): tooling and the
+"""Findings of the independent red-team review, round 5 (dev-notes/REDTEAM.md, "Round 5 (08:45 UTC)"): tooling and the
 beginner journey (REPL, Jupyter kernel, language server, fmt, build, playground, check, bootcamp lessons 0-3).
 
 Each test states the correct behaviour and is marked xfail(strict=True) until its finding is fixed:

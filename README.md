@@ -1,8 +1,8 @@
 # Fermium
 
-**Experimental prototype designed by me and built by me with help from Claude Code. Expect rough edges, feedback welcome.**
+**Experimental prototype. Designed by John Oliver (physics, UTK) and built with Claude Code. Expect rough edges; feedback welcome.**
 
-See [PROGRESS.md](PROGRESS.md) for what works, what's partial and the known issues. MIT licensed ([LICENSE](LICENSE)).
+See [Known limitations](docs/reference.md#19-known-limitations) for what's partial, and [dev-notes/](dev-notes/) for the development logs. MIT licensed ([LICENSE](LICENSE)).
 
 **Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
 
@@ -46,7 +46,7 @@ Fermium is a small programming language for physicists.
 ```
 git clone <this repository>
 cd fermium
-python3 -m pip install -e .   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
+python3 -m pip install -e ".[full]"   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
 fermium doctor                   # checks everything and explains fixes
 ```
 
@@ -182,7 +182,7 @@ Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` down
 - [Bootcamp](bootcamp/README.md): a course for people who have never programmed
 - [Cheat sheet](bootcamp/CHEATSHEET.md)
 - [Standard library](docs/stdlib.md) and [uncertainties](docs/uncertainties.md)
-- [Research reproductions](research/README.md), [textbook gauntlet](gauntlet/FRICTION.md), [red team log](REDTEAM.md)
+- [Research reproductions](research/README.md), [textbook gauntlet](gauntlet/FRICTION.md), [red team log](dev-notes/REDTEAM.md)
 - [VS Code extension](editors/vscode/README.md)
 
 ## Development

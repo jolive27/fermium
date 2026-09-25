@@ -2,7 +2,7 @@
 
 Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item first. The Phase 2 feature list in CLAUDE.md ("Night plan, part 2") comes before the items here.
 
-## Bugs first (silent wrong answers; see PROGRESS "Known issues" and notes/bugs-adversarial.md)
+## Bugs first (silent wrong answers; see PROGRESS "Known issues" and dev-notes/notes/bugs-adversarial.md)
 - [x] A54: the integration variable must be in scope while the integrand is read. `∫ 1/u du`, `∫ 1/s ds` and `∫ 2/L dL` are silently wrong (u, s, L are read as units).
 - [ ] A narrow peak exactly at a subdivision point gives half the integral: `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` = 0.0886 (true 0.177).
 - [ ] A3 leftover: a narrow peak in a huge finite range (`∫ exp(-x²) dx from -1e6 to 1e6`) gives 0.

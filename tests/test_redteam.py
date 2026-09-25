@@ -1,4 +1,4 @@
-"""Findings of the independent red-team review (REDTEAM.md, round 1).  Each test names its finding."""
+"""Findings of the independent red-team review (dev-notes/REDTEAM.md, round 1).  Each test names its finding."""
 import io
 import math
 import os

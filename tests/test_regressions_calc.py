@@ -1,4 +1,4 @@
-"""Regression tests for calculus bugs found by the adversarial pass (notes/bugs-adversarial.md):
+"""Regression tests for calculus bugs found by the adversarial pass (dev-notes/notes/bugs-adversarial.md):
 A17, A18, A26, A35, A38, A49, A52."""
 import math
 

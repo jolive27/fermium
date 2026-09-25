@@ -1,5 +1,5 @@
 """Regression tests for adversarial bugs fixed in the checker, parser and fitting
-(A16, A19, A31, A32, A40, A42, A45, A46, A47, A48 in notes/bugs-adversarial.md)."""
+(A16, A19, A31, A32, A40, A42, A45, A46, A47, A48 in dev-notes/notes/bugs-adversarial.md)."""
 import math
 
 from conftest import run, error_of, warnings_of
