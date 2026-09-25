@@ -127,7 +127,7 @@ def animate(rt, aid, ts, Y, xa, xb):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        rt.out.write("(animation skipped: matplotlib is not installed -- run: pip install matplotlib)\n")
+        rt.out.write("(animation skipped: matplotlib is not installed -- in the fermium folder run: python3 -m pip install -e \".[full]\")\n")
         return
     m, ncomp = info["m"], info["ncomp"]
     ts = np.asarray(ts, dtype=float)

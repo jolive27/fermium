@@ -213,7 +213,7 @@ The most common setup problems:
 | `ERROR: ... does not appear to be a Python project` | You ran the install from the wrong folder | `cd ~/fermium`, check with `ls` that you see `pyproject.toml`, and try again. |
 | `requires a different Python: 3.9.6 not in '>=3.10'` | `python3` is still the old Apple Python | Quit and reopen the Terminal after installing Python from python.org. `python3 --version` must say 3.10 or more. |
 | `can't find the file 'hello.fm'` | The Terminal is in a different folder from your file (or the name is spelled differently) | `cd` into the folder where you saved the file, and `ls` to check the file is there. |
-| `fermium doctor` shows `✗ matplotlib is not installed` | The optional extras are missing | `python3 -m pip install matplotlib` (or redo Step 4). |
+| `fermium doctor` says `matplotlib is not installed` (or another package) | The install didn't finish | `cd ~/fermium` and run the one line `fermium doctor` prints: `python3 -m pip install -e ".[full]"` (Step 4 again). |
 
 If pip warns that a script was installed in a folder "which is not on PATH", your Terminal can't find the `fermium` command. The simplest fix is to reinstall Python from python.org (Step 2), quit the Terminal, reopen it, and redo Step 4.
 

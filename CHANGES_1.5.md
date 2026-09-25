@@ -28,3 +28,4 @@ What that changes:
 ## Tools
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.
+- `fermium doctor` prints one command to copy when packages are missing: `python3 -m pip install -e ".[full]"` (run it in the fermium folder), instead of one `pip install` per package (D250).

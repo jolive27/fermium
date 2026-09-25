@@ -909,3 +909,9 @@ The rule (spec §3.4.2), refined:
   - **Another pure number after the denominator asks:** `4/3 π r³` (a sphere: (4/3)·π·r³) and `1/2π √(k/m)` (1/(2π)·√(k/m)) have the same shape and differ only in spacing, which must not change meaning. Either guess is silently wrong for one of them, so it's an error: *'4/3 π' is ambiguous: is it (4/3)·π or 4/(3 π)?* with both spellings. A bracketed denominator is always clear: `1/(2π) √(k/m)`.
 - **Check:** every tracked .fm program prints exactly what Fermium 1 printed (outputs and warnings compared, tools as in D235).
 - **Alternatives:** gluing `2π` to the denominator only when written without a space (reads both forms naturally, but is a spacing rule); reading `4/3 π` as (4/3)·π always (silently wrong for `1/2π`); keeping D8 (the friction: nine warnings in two graduate problems).
+
+## D250. `fermium doctor` prints one install command (spec A6.1)
+- **What:** `doctor` lists every missing package on its own line (no per-package fix) and then prints one line to copy: `python3 -m pip install -e ".[full]"`, "in the fermium folder". It is printed once however many packages are missing, and never when nothing is missing. The other "needs X" messages (plot/animation skipped, `fit`, `using radau`, `fermium jupyter`, `fermium lsp`) give the same command.
+- **Why:** every runtime package is a core dependency (D234), so that one command fixes any missing package, and a beginner shouldn't have to choose between five `pip install X` lines. If llvmlite is missing, the failed test program doesn't print a second fix (the install fixes it).
+- **Kept:** a test program that fails for another reason still suggests reinstalling llvmlite; `use python X` keeps `pip install X` (X is the user's own module, not a Fermium dependency).
+- **Alternatives:** one fix per package (what it did: five commands on a bare machine); `sys.executable -m pip` (exact, but not what the docs teach).

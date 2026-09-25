@@ -95,7 +95,7 @@ def stiff_solve(f, y0, t0, t1, rtol, method="radau", g=None, tname=-1.0, evtext=
         import numpy as np
         from scipy.integrate import BDF, Radau
     except ImportError:
-        raise FermiumRuntimeError(f"`using {method}` needs SciPy: run  pip install scipy") from None
+        raise FermiumRuntimeError(f"`using {method}` needs SciPy: in the fermium folder run  python3 -m pip install -e \".[full]\"") from None
     n = len(y0)
     span = t1 - t0
     if not (span != 0):

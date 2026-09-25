@@ -778,7 +778,7 @@ class Runtime:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except ImportError:
-            self.out.write("(plot skipped: matplotlib is not installed -- run: pip install matplotlib)\n")
+            self.out.write("(plot skipped: matplotlib is not installed -- in the fermium folder run: python3 -m pip install -e \".[full]\")\n")
             return
         fig, ax = plt.subplots(figsize=(7, 4.5), dpi=110)
         ylabels, xlabels = [], []
