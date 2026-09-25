@@ -1,0 +1,67 @@
+# Mechanics 01 — A baseball with quadratic air drag
+#
+# (Taylor, Classical Mechanics, §2.4–2.5; Halliday ch. 4 and 6.)
+# A baseball (m = 0.145 kg, radius 3.7 cm, drag coefficient C_d = 0.35, air
+# density 1.20 kg/m³) is hit from ground level at v₀ = 40.0 m/s, 35.0° above
+# the horizontal. The drag force is F = −½ ρ C_d A |v| v.
+#
+#   (a) Without air: find the range, the maximum height and the time of flight.
+#   (b) With air: find the range, the maximum height, the time of flight and
+#       the speed at impact.
+#   (c) By what fraction does air shorten the range?
+
+m_ball = 0.145 kg
+radius = 3.7 cm
+C_d = 0.35
+ρ_air = 1.20 kg/m³
+v0 = 40.0 m/s
+θ = 35.0°
+g = 9.81 m/s²
+
+# (a) vacuum, closed form
+R_vac = v0² sin(2θ) / g
+H_vac = (v0 sin(θ))² / (2*g)
+T_vac = 2 v0 sin(θ) / g
+print "vacuum range:", R_vac to 6 digits
+print "vacuum height:", H_vac to 6 digits
+print "vacuum flight time:", T_vac to 6 digits
+
+# (b) with drag: Newton's second law in 2-D, a vector ODE
+A = π radius²
+k = ½ ρ_air C_d A / m_ball          # drag per unit mass [1/m]
+print "drag constant k:", k to 6 digits
+
+solve r'' = <0 m/s², -g> - k |r'| r'
+  with r(0) = <0, 0> m, r'(0) = v0 * <cos(θ), sin(θ)>
+  for t from 0 s to T_vac
+
+# There is no "stop when y = 0" in solve, so find the zeros by bisection.
+# Apex: vertical velocity crosses zero.  Landing: height crosses zero.
+lo = 0 s
+hi = T_vac
+mid = 0 s      # workaround: see FRICTION.md M2 (reusing `mid` in the second loop)
+while hi - lo > 1e-9 s
+    mid = (lo + hi) / 2
+    if r'(mid).y > 0 m/s
+        lo = mid
+    else
+        hi = mid
+t_apex = lo
+
+lo = t_apex
+hi = T_vac
+while hi - lo > 1e-9 s
+    mid = (lo + hi) / 2
+    if r(mid).y > 0 m
+        lo = mid
+    else
+        hi = mid
+t_land = lo
+
+print "drag range:", r(t_land).x to 6 digits
+print "drag height:", r(t_apex).y to 6 digits
+print "drag flight time:", t_land to 6 digits
+print "impact speed:", |r'(t_land)| to 6 digits
+
+# (c)
+print "range lost:", (1 - r(t_land).x / R_vac) in % to 4 digits

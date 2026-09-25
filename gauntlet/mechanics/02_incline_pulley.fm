@@ -1,0 +1,73 @@
+# Mechanics 02 — Block on a rough incline, pulled by a hanging mass
+#
+# (Halliday/Resnick ch. 5–6 and 10; Kleppner & Kolenkow ch. 2.)
+# A block m₁ = 4.00 kg sits on a 30.0° incline. A string runs from it, up the
+# slope, over a pulley (a uniform disk, M = 1.00 kg, R = 10.0 cm, the string
+# does not slip) to a hanging mass m₂ = 3.50 kg. The system starts from rest.
+#
+#   (a) With kinetic friction μ_k = 0.150: the acceleration and the two string
+#       tensions (on the incline side and on the hanging side).
+#   (b) The minimum static friction coefficient that would keep the system at rest.
+#   (c) Now the slope gets rougher as the block climbs: μ(x) = μ₀ + β x with
+#       μ₀ = 0.150 and β = 0.400 per metre. Using the work–energy theorem, find
+#       the speed after 0.50 m, the largest speed, and where the block stops.
+#   (d) Solve the equation of motion and check (c); the time to stop is half a
+#       period of a harmonic oscillator.
+
+m1 = 4.00 kg
+m2 = 3.50 kg
+θ = 30.0°
+M_pulley = 1.00 kg
+R = 10.0 cm
+μ_k = 0.150
+g = 9.81 m/s²
+
+I = ½ M_pulley R²
+M_eff = m1 + m2 + I / R²            # everything moves with the string
+
+# (a) constant friction
+F_net = m2 g - m1 g sin(θ) - μ_k m1 g cos(θ)
+a = F_net / M_eff
+T1 = m1 a + m1 g sin(θ) + μ_k m1 g cos(θ)     # incline side
+T2 = m2 g - m2 a                              # hanging side
+print "acceleration:", a to 6 digits
+print "tension, incline side:", T1 to 6 digits
+print "tension, hanging side:", T2 to 6 digits
+print "torque check (T2 - T1) R = I a/R:", (T2 - T1) R ~= I a / R
+
+# (b) static friction needed to hold it
+μ_s_min = (m2 - m1 sin(θ)) / (m1 cos(θ))
+print "minimum static coefficient:", μ_s_min to 6 digits
+
+# (c) position-dependent friction: work-energy theorem
+μ0 = 0.150
+β = 0.400 /m
+F(x) = m2 g - m1 g sin(θ) - (μ0 + β x) m1 g cos(θ)
+W(s) = ∫ F(x) dx from 0 m to s
+speed(s) = √(2 W(s) / M_eff)
+print "speed after 0.50 m:", speed(0.50 m) to 6 digits
+
+c_spring = β m1 g cos(θ)            # F(x) = F(0) - c x: a spring-like force
+x_vmax = F(0 m) / c_spring
+x_stop = 2 x_vmax
+print "largest speed:", speed(x_vmax) to 6 digits, "at", x_vmax to 6 digits
+print "stops after:", x_stop to 6 digits
+print "work done at the stop (should be 0):", W(x_stop)
+
+# (d) equation of motion
+t_half = π √(M_eff / c_spring)
+solve x'' = F(x) / M_eff
+  with x(0) = 0 m, x'(0) = 0 m/s
+  for t from 0 s to t_half
+print "time to stop:", t_half to 6 digits
+print "ODE position at that time:", x(t_half) to 6 digits
+# The speed at a given position: find the time when x = 0.50 m by bisection
+lo = 0 s
+hi = t_half / 2
+while hi - lo > 1e-10 s
+    mid = (lo + hi) / 2
+    if x(mid) < 0.50 m
+        lo = mid
+    else
+        hi = mid
+print "ODE speed after 0.50 m:", x'(lo) to 6 digits
