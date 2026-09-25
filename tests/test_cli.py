@@ -71,10 +71,10 @@ def test_run_syntax_error(prog):
 
 
 def test_run_warning_goes_to_stderr(prog):
-    r = fermium("run", str(prog("w.fm", "x = 4\nprint 1/2x\n")))
+    r = fermium("run", str(prog("w.fm", "x = 4\nprint 2/x (3)\n")))
     assert r.returncode == 0
-    assert r.stdout == "0.125\n"
-    assert "warning" in r.stderr and "a/(b c)" in r.stderr
+    assert r.stdout == "0.167\n"
+    assert "warning" in r.stderr
 
 
 def test_run_missing_file(tmp_path):

@@ -24,7 +24,7 @@ Below are the problems beginners meet most often, with the exact message Fermium
 8. [e is the elementary charge](#8-e-is-the-elementary-charge)
 9. [can't show … in …](#9-cant-show-in)
 10. ['0.5 m' is ambiguous (a unit name that is also your variable)](#10-05-m-is-ambiguous-a-unit-name-that-is-also-your-variable)
-11. [warning: this is read as a/(b c)](#11-warning-this-is-read-as-ab-c)
+11. [error: '4/3 π' is ambiguous](#11-error-43-π-is-ambiguous)
 12. [index 4 is out of range](#12-index-out-of-range)
 13. [expected ')' to close '('](#13-missing-parenthesis)
 14. [expected an indented block here](#14-expected-an-indented-block-here)
@@ -249,31 +249,29 @@ mass.fm, line 3: '0.5 m' is ambiguous: right after a number, m is a unit (metres
   hint: write  0.5*m  for 0.5 × your variable m, or  0.5 [m]  for the unit
 ```
 
-**Means:** right after a number, `m` is the unit metre, but you also have a variable `m`. Multiplied by something else (`0.5 m v^2`), Fermium can't tell which you meant, so it stops instead of guessing. On its own (`x = 0.5 m`) it would be the metre, with a warning.
+**Means:** right after a number, `m` is the unit metre, but you also have a variable `m`. Fermium can't tell which you meant, so it stops instead of guessing (on its own too: `x = 0.5 m`).
 
-**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or write `0.5 [m]` if you really meant half a metre. Giving the mass a longer name like `mass` avoids the question altogether. The same situation: `2 g h` (grams), `3 V I` (volts), `27 b²` (barns). After `/` the rule is kinder: `20 m/s / g` (with a space before `/`) divides by your variable `g`, but `20 m/s/g` (no spaces) would still mean *per gram*. When in doubt, use parentheses: `(20 m/s) / g`.
+**Fix:** put a `*` after the number (`0.5 * m * v^2`), or use `½` (`½ m v^2`), or write `0.5 [m]` if you really meant half a metre. Giving the mass a longer name like `mass` avoids the question altogether. The same situation: `2 g h` (grams), `3 V I` (volts), `27 b²` (barns), and a later name in a unit: `20 m/s/g` with your own `g` (write `(20 m/s)/g`), `k = 50 N/m` after your mass `m` (write `50 [N/m]`). `fermium fmt --fix yourfile.fm` adds the brackets for you.
 
-## 11. warning: this is read as a/(b c)
+## 11. error: '4/3 π' is ambiguous
 
-<!-- run as half.fm -->
+<!-- run as sphere.fm -->
 ```
-mass = 2 kg
-v = 3 m/s
-print 1/2 mass v^2
+r = 2 m
+print 4/3 π r^3
 ```
 
 <!-- output -->
 ```
-warning: line 3: this is read as a/(b c), i.e. 1/(2 ...): implicit multiplication binds tighter than '/'
-    print 1/2 mass v^2
+sphere.fm, line 2: '4/3 π' is ambiguous: is it (4/3)·π or 4/(3 π)?
+    print 4/3 π r^3
            ^
-  hint: if you meant (1/2) times the rest, write (1/2) with parentheses (or ½ for one half)
-0.0278 s²/(kg m²)
+  hint: write  (4/3) π  or  4/(3 π)
 ```
 
-**Means:** in Fermium, multiplication without `*` happens *before* division (so that `h c / λ k T` means (hc)/(λkT), as in textbooks). So `1/2 mass v^2` is 1/(2 · mass · v²).
+**Means:** a fraction of plain numbers is one coefficient (`1/2 mass v^2` is ½ · mass · v², `73/24 x²` is (73/24)·x²). But when another plain number like π follows, `4/3 π` could be (4/3)·π or 4/(3π), and `1/2π` has the same shape. Fermium asks instead of guessing.
 
-**Fix:** `½ mass v^2` or `(1/2) mass v^2` or `0.5 * mass * v^2`.
+**Fix:** `(4/3) π r^3` for the volume of a sphere, and `1/(2π) √(k/m)` for one over 2π.
 
 ## 12. index out of range
 

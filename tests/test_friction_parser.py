@@ -118,9 +118,9 @@ def test_unambiguous_divisions_do_not_warn(src):
     assert not warns(src, PRECEDENCE)
 
 
-def test_existing_one_half_warning_is_not_doubled():
-    w = [m for m in warnings_of("x = 2.0\nprint 1/2 x") if "binds tighter" in m]
-    assert len(w) == 1
+def test_one_half_x_is_a_coefficient_without_a_warning():
+    # A2 (D236): the D8 warning is gone because the reading changed
+    assert warnings_of("x = 2.0\nprint 1/2 x") == [] and run("x = 2.0\nprint 1/2 x") == "1.0"
 
 
 # ---------------------------------------------------------------- #10: 2 L is 2 litres: say so in unit errors

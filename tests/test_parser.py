@@ -25,11 +25,11 @@ def test_textbook_fraction_value():
     assert run("h = 2\nc = 3\nλ = 4\nk_B = 5\nT = 6\nprint h c / λ k_B T") == "0.0500"
 
 
-def test_one_over_2x_shape_and_warning():
-    assert sx_of("1/2x") == "(/ 1 (* 2 x))"
-    assert run("x = 4\nprint 1/2x") == "0.125"
-    w = warnings_of("x = 4\ny = 1/2x")
-    assert any("a/(b c)" in m for m in w)
+def test_one_over_2x_is_a_coefficient():
+    # A2 (D236): a fraction of pure numbers is one coefficient; D8 read 1/(2x) with a warning
+    assert sx_of("1/2x") == "(* (/ 1 2) x)"
+    assert run("x = 4\nprint 1/2x") == "2"
+    assert warnings_of("x = 4\ny = 1/2x") == []
 
 
 def test_half_written_with_parentheses_does_not_warn():
@@ -38,16 +38,14 @@ def test_half_written_with_parentheses_does_not_warn():
 
 
 def test_one_half_a_b_squared():
-    assert sx_of("1/2 a b²") == "(/ 1 (* (* 2 a) (^ b 2)))"
-    w = warnings_of("a = 2\nb = 3\ny = 1/2 a b²")
-    assert any("a/(b c)" in m for m in w)
+    assert sx_of("1/2 a b²") == "(* (* (/ 1 2) a) (^ b 2))"          # A2 (D236)
+    assert run("a = 2\nb = 3\nprint 1/2 a b²") == "9"
 
 
 def test_one_half_m_v_squared_is_ambiguous():
     # `2 m v²` with a mass m: `2 m` is ambiguous (the A1 rule, D235)
     assert "is ambiguous" in str(error_of("m = 2 kg\nv = 3 m/s\nE = 1/2 m v²"))
-    w = warnings_of("mass = 2 kg\nv = 3 m/s\nE = 1/2 mass v²")
-    assert any("a/(b c)" in m for m in w)
+    assert run("mass = 2 kg\nv = 3 m/s\nprint 1/2 mass v²") == "9 J"          # A2 (D236)
 
 
 def test_four_pi_squared_L():

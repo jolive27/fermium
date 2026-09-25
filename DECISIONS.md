@@ -67,7 +67,7 @@ The rule (spec §3.4.2), refined:
   - `d` for day: use `day`.
 - **Why:** This matches what physicists write on paper while keeping the rule predictable.
 
-## D8. Implicit multiplication binds tighter than `/` and `*`
+## D8. Implicit multiplication binds tighter than `/` and `*` — *the pure-number case superseded by D236*
 - **What:** `h c / λ k_B T` means (h c)/(λ k_B T), as in textbooks and papers. As a result, `1/2x` = 1/(2x) and `1/2 mass v²` = 1/(2 mass v²). When the numerator is a number and the denominator is a number times a variable (`1/2x`, `1/2 x`, `1/2 mass v²`), Fermium warns and suggests `(1/2)` or `½`.
   - **Not warned:** when the name after the number is a **unit**, D7 applies first: `2 m` is two metres, so `1/2 m` is 0.5 1/m and `1/2 kg` is 0.5 1/kg, with no precedence warning. If you also have a variable `m`, you get D7's unit-or-variable warning instead (rule 5), and the value is still 0.5 1/m. Write `½ m v²` for the kinetic energy.
 - **Powers bind tighter than juxtaposition:** `4π² L` = 4·π²·L and `x^2y` = x²·y.
@@ -901,3 +901,11 @@ The rule (spec §3.4.2), refined:
 - **Migration:** `fermium fmt --fix` rewrites each collision as a bracketed unit that keeps what Fermium 1 did there (`0.1 [m]`, `50 [N/m]`, `20 [m/s] / g` for the spaced form, `20 [m/s/g]` for the tight one, `[1, 2]*m` after a list); the language server offers the same edit as a quick fix. `tools/migrate_a1.py` ran it over every tracked .fm file and Markdown block (log: `dev-notes/A1_MIGRATION.md`: 25 edits in 16 files); `tools/fix_test_literals.py` did the same for programs inside tests. Each migrated program's output was compared with Fermium 1's on the original: only timing lines differ.
 - **Cost, measured on the repo:** the rule's sentence 3 fires on `k = 50 N/m` in any spring program that defines the mass `m` first, and on `m/s` in programs with a variable `s`: that is the price of spacing-independence (`50 N/m` and `20 m/s/g` have the same shape). The error costs two brackets.
 - **Alternatives:** keeping lone collisions a warning (passes Appendix 1, fails eight table rows); choosing the reading that type-checks (rejected in D7: meaning would depend on distant code); keeping `/` spacing-sensitive (the spec's main complaint).
+
+## D236. A fraction of pure numbers is one coefficient (spec A2, friction #73)
+- **What:** in `a / b rest`, when the numerator `a` is a pure number (digits, π, √ and powers of them, products of those, or any of them in brackets) and the denominator is an implicit product that starts with a pure number `b`, the product is (a/b)·rest: `73/24 e²` = (73/24)·e², `π²/12 t²`, `π⁴/80 t⁴`, `1/2 x` = x/2, and `1/2 kg` = 0.5 kg (D8 gave 0.5 1/kg: listed in CHANGES_1.5.md). `h / m_e v` is unchanged (the numerator is a name), and `1/2 m v²` with a mass m is the A1 question (D235) with the hint `½ m`. The D8 warning for `1/2x` is gone with the reading it warned about.
+- **Two refinements found by the tests:**
+  - **Dividing by exactly 1 is never a coefficient:** `k1 = 0.04 / 1 s` (per second; the stiff-solver tests, the van der Pol program) keeps meaning 0.04 1/s. Without this the Robertson and van der Pol programs changed value, which the spec says to stop and investigate.
+  - **Another pure number after the denominator asks:** `4/3 π r³` (a sphere: (4/3)·π·r³) and `1/2π √(k/m)` (1/(2π)·√(k/m)) have the same shape and differ only in spacing, which must not change meaning. Either guess is silently wrong for one of them, so it's an error: *'4/3 π' is ambiguous: is it (4/3)·π or 4/(3 π)?* with both spellings. A bracketed denominator is always clear: `1/(2π) √(k/m)`.
+- **Check:** every tracked .fm program prints exactly what Fermium 1 printed (outputs and warnings compared, tools as in D235).
+- **Alternatives:** gluing `2π` to the denominator only when written without a space (reads both forms naturally, but is a spacing rule); reading `4/3 π` as (4/3)·π always (silently wrong for `1/2π`); keeping D8 (the friction: nine warnings in two graduate problems).

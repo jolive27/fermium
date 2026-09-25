@@ -98,7 +98,8 @@ print E, p
   6. comparisons
   7. `not`, `and`, `or`
 
-  So `h c / λ k_B T` means (h c)/(λ k_B T). Also, `1/2 x` means 1/(2x), and Fermium warns you. Write `½ m v²` or `(1/2) m v²` for one half. Careful: in `1/2 m`, the `m` right after the number is the unit (§2), so it is 0.5 per metre (DECISIONS D8).
+  So `h c / λ k_B T` means (h c)/(λ k_B T).
+- **A fraction of plain numbers is one coefficient** (DECISIONS D236): `73/24 e²` is (73/24)·e², `π²/12 t²` is (π²/12)·t², `1/2 x` is x/2 and `1/2 kg` is 0.5 kg. A plain number is digits, π, √ and powers of them, or any of those in brackets: `1/(2π) √(k/m)`. Dividing by exactly 1 is never a coefficient (`0.04 / 1 s` is 0.04 per second). When another plain number follows the denominator (`4/3 π r³`, `1/2π`), Fermium asks: write `(4/3) π r³` or `1/(2π)`. With a mass `m`, `1/2 m v²` asks which `m` you mean (§2); write `½ m v²`.
 - **`a/b (c)` is a/(b c).** Fermium warns when the way a division is written suggests (a/b)·c: a tight `/` followed by factors with spaces between them (`c²/g (√(1 + x) − 1)`, `n R/(γ − 1) (T3 − T2)`, `μ₀ I/(4π) dl`), a bracket next to another factor after a space (`a / (b) c`), or dividing by the unknown of a `solve` (`ψ'' = -2 m E / ħ² ψ`). Write `(c²/g) (…)` or `c²/g * (…)` for the first meaning and `c²/(g (…))` for the second. `h c / λ k_B T`, `a/(b c)`, `x/2π` and `G M m / r²` are not warned about (DECISIONS D34).
 - **A variable keeps its units:** assigning a time to a variable that held a length is an error.
 - **Update in place:** `x += 1 m`, `x -= ...`, `x *= 2`, `x /= 2`.

@@ -1392,6 +1392,10 @@ class Parser:
                     last.div_info["divisor"] = r               # `∫ … to E / (2 P0)`: for the checker (D205)
                     r.limit_div_of = last
                     last.div_info["div_text"] = self._text(den_start, self.i)
+                coef = self._fraction_coefficient(e, r, op)
+                if coef is not None:            # `73/24 e²` is (73/24)·e², `1/2 kg` is 0.5 kg (A2, D236)
+                    e = coef
+                    continue
                 warned = self._check_ambiguous_division(e, r, op)
                 info = self._juxt_denominator(r, op, den_start, tight, warned)
             e = self.span(A.BinOp(op.value, e, r), t)
@@ -1469,6 +1473,84 @@ class Parser:
         self.diags.warn(f"this divides by all of '{den}'{why}: implicit multiplication binds tighter than '/'",
                         tok=op, hint=f"write …/{head} * {rest} if only {head} is below the line, "
                                      f"or …/({den}) if all of it is")
+
+    @classmethod
+    def _pure(cls, n):
+        """A pure number as written: digits, π, √ and powers of them, and products of those (A2, D236)."""
+        if isinstance(n, A.Num):
+            return True
+        if isinstance(n, A.Name):
+            return n.name == "π" and not getattr(n, "imag_literal", False)
+        if isinstance(n, A.Neg):
+            return cls._pure(n.operand)
+        if isinstance(n, A.Sqrt):
+            return cls._pure(n.operand)
+        if isinstance(n, A.BinOp):
+            if n.op == "^":
+                return cls._pure(n.left) and cls._pure(n.right)
+            if n.implicit or n.paren:
+                return cls._pure(n.left) and cls._pure(n.right)
+        return False
+
+    def _fraction_coefficient(self, left, right, op):
+        """A2: a fraction of pure numbers is one coefficient.  `73/24 e²` is (73/24)·e², `π²/12 t²` is (π²/12)·t²
+        and `1/2 kg` is 0.5 kg, although implicit multiplication binds tighter than '/' (D8: `h / m_e v` is
+        unchanged, its denominator starts with a name).  Returns the rewritten product, or None."""
+        if not self._pure(left):
+            return None
+        path, n = [], right
+        while isinstance(n, A.BinOp) and n.implicit and not n.paren:
+            path.append(n)
+            n = n.left
+        quantity = None
+        if isinstance(n, A.Quantity) and not n.bracket and not n.paren and isinstance(n.value, A.Num):
+            quantity, leaf = n, n.value
+        else:
+            leaf = n
+        if not isinstance(leaf, (A.Num, A.BinOp, A.Sqrt, A.Name)) or not self._pure(leaf) or \
+                (isinstance(leaf, A.BinOp) and leaf.op != "^" and not leaf.paren) or \
+                (isinstance(leaf, A.Name) and not leaf.paren):
+            return None                              # `1/(2π) √(k/m)`: a bracketed pure number counts too
+        if not path and quantity is None:
+            return None                              # a plain a/b
+        if isinstance(leaf, A.Num) and leaf.value == 1:
+            return None                              # `0.04 / 1 s` is 0.04 per second: dividing by one is no coefficient
+        if path and quantity is None and self._pure(path[-1].right) and not leaf.paren:
+            # `4/3 π r³` (a sphere) and `1/2π √(k/m)` have the same shape: which one?
+            a, b, c = (self._src_of(x) for x in (left, leaf, path[-1].right))
+            raise self.error(f"'{a}/{b} {c}' is ambiguous: is it ({a}/{b})·{c} or {a}/({b} {c})?", tok=op,
+                             hint=f"write  ({a}/{b}) {c}  or  {a}/({b} {c})")
+        frac = A.BinOp("/", left, leaf)
+        frac.line, frac.col = left.line, left.col
+        frac.length = max(1, (leaf.col or 0) + (leaf.length or 1) - (left.col or 0)) if leaf.line == left.line else 1
+        frac.paren = True
+        frac.coefficient = True
+        if quantity is not None:
+            nq = A.Quantity(frac, quantity.unit)
+            nq.line, nq.col, nq.length = frac.line, frac.col, quantity.length
+            new_leaf = nq
+        else:
+            new_leaf = frac
+        if not path:
+            return new_leaf
+        path[-1].left = new_leaf
+        for b in path:                               # the product now starts where the numerator starts
+            b.col = left.col if b.line == left.line else b.col
+        return right
+
+    def _src_of(self, n):
+        """The source text of a node on one line (for messages)."""
+        if isinstance(n, A.Num):
+            return A.num_text(n)
+        if isinstance(n, A.Name):
+            return n.name
+        k = next((j for j, tk in enumerate(self.toks) if tk.line == n.line and tk.col == n.col), None)
+        if k is None:
+            return "…"
+        j, end = k, (n.col or 0) + (n.length or 1)
+        while j + 1 < len(self.toks) and self.toks[j + 1].line == n.line and self.toks[j + 1].col < end:
+            j += 1
+        return self._text(k, j + 1)
 
     def _check_ambiguous_division(self, left, right, op):
         """Warn about `1/2 m v²` which Fermium reads as 1/(2 m v²)."""
@@ -1788,9 +1870,15 @@ class Parser:
         u = lookup_unit(f.name)
         what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
         whose = self._whose(f.name, where)
+        hint = f"write  {num}*{ut}  for {num} × {whose}, or  {num} [{ut}]  for the unit"
+        k = self.toks.index(first) - 1                   # `1/2 m v²` with a mass m: suggest ½ m v² (A2)
+        if k >= 2 and self.toks[k - 1].kind == "OP" and self.toks[k - 1].value == "/" and \
+                self.toks[k - 2].kind == "NUM" and self.toks[k].kind == "NUM":
+            a, b = self.toks[k - 2].raw, self.toks[k].raw
+            frac = {("1", "2"): "½", ("1", "3"): "⅓", ("1", "4"): "¼", ("3", "4"): "¾"}.get((a, b), f"({a}/{b})")
+            hint = f"write  {frac} {ut}  for {a}/{b} × {whose}, or  {a}/{b} [{ut}]  for the unit"
         e = self.error(f"'{num} {ut}' is ambiguous: right after a number, {f.name} is a unit ({what}), but "
-                       f"{f.name} is also {whose}", tok=first,
-                       hint=f"write  {num}*{ut}  for {num} × {whose}, or  {num} [{ut}]  for the unit")
+                       f"{f.name} is also {whose}", tok=first, hint=hint)
         e.fix = [fix]
         raise e
 
