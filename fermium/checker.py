@@ -20,7 +20,7 @@ from .errors import FermiumError, Diagnostics
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, TextListTy, BOOL, STR,
                     VOID, Ty,
                     type_desc)
-from .units import DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
+from .units import format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
 
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
          "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
@@ -317,6 +317,7 @@ class Checker(C.DiffContext):
             if v.info.display_name.startswith("<") or "'" in v.info.display_name or "∂" in v.info.display_name \
                     or v.info.display_name.startswith(("λ", "d/d", "∫d")):
                 v.info.display_name = s.name
+                v.info.anon_label = None
             return None
         if isinstance(v, SolRef):
             ctx.scope.names[s.name] = v.view
@@ -459,7 +460,8 @@ class Checker(C.DiffContext):
         params = ", ".join(p.name for p in f.params)
         if info.one_liner:
             body = C.to_source(info.body_expr())
-            s = f"{info.display_name}({params}) = {body}"
+            label = getattr(info, "anon_label", None)     # print d/dt (3t²) or ∫ x dx without a name
+            s = f"{label} = {body}" if label else f"{info.display_name}({params}) = {body}"
             units = self.function_units(info)
             if units:
                 s += f"   [{units}]"
@@ -932,9 +934,20 @@ class Checker(C.DiffContext):
             b = self.expr(e.right, ctx)
         finally:
             self._after_number = False
+        if e.implicit and isinstance(e.left, A.Num) and isinstance(e.right, A.Name) \
+                and e.right.name in self.UNIT_LOOKALIKE_CONSTANTS \
+                and not isinstance(ctx.scope.lookup(e.right.name)[0], I.Sym):
+            what, unit = self.UNIT_LOOKALIKE_CONSTANTS[e.right.name]
+            n = format_number(e.left.value)
+            self.diags.warn(f"{n} {e.right.name} means {n} × {what}; for {unit[0]} write {n} {unit[1]}",
+                            line=e.line, col=e.col)
         self.need_numlike(a, e.left, allow_vec=True)
         self.need_numlike(b, e.right, allow_vec=True)
         return self.arith(e.op, a, b, e)
+
+    # constants whose names look like units: `2 h` is 2 × Planck's constant, not 2 hours
+    UNIT_LOOKALIKE_CONSTANTS = {"h": ("Planck's constant h", ("hours", "hr")),
+                                "G": ("the gravitational constant G", ("gauss", "gauss"))}
 
     def arith(self, op, a, b, e):
         if isinstance(a.ty, VecTy) or isinstance(b.ty, VecTy):
@@ -1987,6 +2000,8 @@ class Checker(C.DiffContext):
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.display_name = f"d/d{e.var}(...)"
+        info.anon_label = f"d/d{e.var} ({C.to_source(op)})" if e.order == 1 else \
+            f"d^{e.order}/d{e.var}^{e.order} ({C.to_source(op)})"
         info.stable = True
         return FuncRef(info)
 
@@ -2036,6 +2051,7 @@ class Checker(C.DiffContext):
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("antideriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.display_name = f"∫d{e.var}"
+        info.anon_label = f"∫ {C.to_source(e.integrand)} d{e.var}"
         return FuncRef(info)
 
     # ------------------------------------------------------------ solve

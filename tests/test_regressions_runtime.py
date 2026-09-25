@@ -104,3 +104,17 @@ def test_decay_into_subnormals():
     out = both("solve x' = -x with x(0) = 1 for t from 0 to 700\nprint x(700)\n"
                "solve y' = -y with y(0) = 1e-300 for t from 0 to 30\nprint y(30)")
     assert out.split("\n") == ["9.85968×10⁻³⁰⁵", "9.35762×10⁻³¹⁴"]
+
+
+def test_unit_lookalike_constant_warns():
+    from conftest import warnings_of
+    assert any("for hours write 2 hr" in w for w in warnings_of("print 2 h"))
+    assert any("gauss" in w for w in warnings_of("x = 3 G\nprint x"))
+    assert not warnings_of("h = 2\nprint 3 h")
+    assert not warnings_of("E = h * 1 Hz\nprint E")
+
+
+def test_anonymous_calculus_results_print_readably():
+    assert run("print ∫ x dx") == "∫ x dx = x²/2"
+    assert run("print d/dt (3 t^2)") == "d/dt (3t²) = 6t"
+    assert run("F = ∫ x^2 dx\nprint F") == "F(x) = x³/3"
