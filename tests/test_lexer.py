@@ -61,7 +61,9 @@ def test_vulgar_fractions(src, value):
 
 def test_sigfigs_drive_printing():
     assert run("print 1.20 m") == "1.20 m"
-    assert run("x = 1.20 m\ny = 2.0 m\nprint x + y") == "3.2 m"
+    # a sum keeps the most precise operand's figures (D11, red team round 7 #4): 3.20, where the decimal-place rule
+    # would give 3.2; the fewest-figures rule it replaces printed 293.15 K + 0.5 K as 290 K
+    assert run("x = 1.20 m\ny = 2.0 m\nprint x + y") == "3.20 m"
     assert run("print 2 * 3") == "6"
 
 

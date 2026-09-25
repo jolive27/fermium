@@ -1,13 +1,17 @@
 # PROGRESS
 
-_Last updated: 2026-09-25 03:05 UTC_
+_Last updated: 2026-09-25 11:30 UTC_
 
-**How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**.
+**How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**. The whole night is summarised in MORNING_REPORT.md.
 
-## Status at a glance (02:00 UTC)
-- **Tests:** 2051 passed, 1 xfailed (A56 limitation), in about 3.5 min with the gauntlet, Jupyter, LSP and AOT suites.
-- Every ```` ```fermium ```` block in the docs, bootcamp and README runs in the tests, and every bootcamp output box is compared with the real output (`tests/test_bootcamp_outputs.py`).
-- 25 examples, all tested; 7 rosetta programs in Fermium, Julia and Python.
+## Status at a glance (11:30 UTC)
+- **Tests:** 3609 passed at the last full run, plus 2 strict xfails (red team 7 #2 and #5, documented limitations). About 15 min on 4 cores.
+- **Every example is checked:**
+  - every ```` ```fermium ```` block in the docs, bootcamp, README and SHOWCASE runs in the tests;
+  - every bootcamp output box is compared with the real output;
+  - the 31 examples, 11 research reproductions and 81 gauntlet problems are all tested.
+- **Moonshots:** all 8 done (M4 uncertainties only in the interpreter; M5 measured on a quiet machine: see MORNING_REPORT.md).
+- **Red team:** 7 rounds, 88 findings. All are fixed except 2, which are documented.
 
 ## Phase 2 (all six items done, 02:00 UTC)
 1. **Jupyter kernel:** `fermium jupyter install`; inline plots, errors, `\name` completion; `examples/notebook.ipynb` (tests/test_jupyter.py runs it with nbclient).
@@ -19,9 +23,9 @@ _Last updated: 2026-09-25 03:05 UTC_
 
 Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 
-## Gauntlet (Phase 3)
-- First pass done: 31 problems in 10 topics; second, harder pass done: 30 problems (`tests/test_gauntlet*.py`, all checked against closed forms or SciPy).
-- 59 friction items in gauntlet/FRICTION.md, 35 fixed in the language (root finding, `until`, backwards solve, ∇ of integrals, vector integrals, eigenvalues, higher-order functions, err(g), °C steps, parser warnings, …). Two agents are on the numerics and built-ins clusters; a stiff solver agent is running.
+## Gauntlet (Phases 3 and 7)
+- 81 problems: 31 in pass 1, 30 in pass 2 and 20 in pass 3 (graduate level). All are checked against closed forms, SciPy or published values.
+- 96 friction items in gauntlet/FRICTION.md, 86 fixed in the language.
 
 ## What works
 - **Units:** checked at compile time and erased before codegen. 7 base dimensions with rational exponents, SI prefixes, physics and astronomy units, °C/°F as absolute temperatures, `in` conversions, CODATA 2022 constants.
@@ -31,27 +35,30 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - **Tools:** `fermium run/check/fmt/doctor/build`, the REPL with `\name` Tab completion and history saved in `~/.fermium_history`, the VS Code extension (highlighting and `\name` completion). `fermium doctor` reports the C compiler that `fermium build` needs.
 - **Speed:** within 2× of Julia's compute time on 4 of the 5 benchmarks (benchmarks/RESULTS.md, 00:09 UTC run); whole-process times are shorter than Julia's.
 
-## Partial (checked 03:40 UTC)
-- **Adaptive-ODE benchmark:** the committed spring_adaptive benchmark is not matched in accuracy with Julia (Fermium's DP45 is purely relative; Julia uses rtol + atol). Red team round 1 measured it at about 7× slower at *far higher* accuracy, and about 0.8× Julia at matched pure-relative settings. A red-team fix agent is switching it to matched settings and re-measuring; until then the README row is not trustworthy.
-- **Derivatives, ∂ and ∇:** only of one-line functions and formulas (now including Σ sums and functions defined by integrals); not of multi-line functions.
-- **`fermium build`:** load/fit/plot work (plots as SVG), but not `using radau/bdf`; needs a C compiler.
-- **Matrices:** up to 4×4, one unit for all entries, not fillable in a loop; no lists of vectors or matrices.
-- **Complex numbers:** not yet (agent working, top priority from the review).
-- **Uncertainties:** `±` is reserved and gives a friendly error; not implemented (moonshot M4).
-- **VS Code:** the language server is tested over stdio; the extension itself only under Node with a stand-in for the VS Code API, not in a running VS Code.
-- **Browser playground:** runs the reference interpreter (slower than native); generated files need `python3 web/build.py`; plain textarea editor.
-- **Stiff solver:** `using radau`/`bdf` call SciPy (about 0.2 ms per step); RK45 only warns about stiffness, it doesn't switch.
-- **`stdlib/`:** empty. Constants and units live in `fermium/constants.py` and `fermium/units.py` (moonshot M7).
+## Partial (checked 11:30 UTC)
+- **Uncertainties (±):** run in the reference interpreter. They don't work in `fermium build`, the REPL or Jupyter, and there are no vectors of uncertain values (D122).
+- **Python-backed numerics:** eigenvalue problems, PDEs, stiff solvers (`using radau`/`bdf`) and FFT use NumPy/SciPy. `fermium build` refuses the first three.
+- **Matrices:** up to 16×16, with one unit per matrix. There are no lists of vectors, and `solve` can't take a list of unknowns.
+- **Derivatives, ∂ and ∇:** only of one-line functions and formulas (helpers may be nested one-liners).
+- **VS Code:** the extension is tested under Node with a stand-in for the VS Code API, not in a running VS Code.
+- **Browser playground:** runs the reference interpreter, which is slower than native code.
 
 ## Known issues
-- **Narrow peaks in integrals (silent wrong answers):** a peak much narrower than the range can be missed (prints 0) or counted half (a peak at the exact middle). Red team round 1 found more cases, including infinite ranges with a peak far from 0. Warnings for unreliable estimates are being added (review priority 3).
-- **Strong interior singularities away from 0** (`|x - 0.3|^-0.8`) fail; documented, with the workaround (shift the variable).
-- **Unit after a number vs a variable of the same name** (`2 g` with your own g): today a warning plus a note on unit errors; being replaced by a clearer rule (review priority 2).
-- **Hz and rad/s** are the same unit to the checker, so conversions between Hz and rev/rpm are off by 2π without a warning (red-team fix in progress).
-- **Fixed-step RK4** can give confidently wrong answers with a too-large step (red-team fix in progress: a step-doubling check).
-- `sqrt(-1)` is NaN and `factorial(-1)` is ∞, silently.
-- No garbage collection: list memory is only freed when the program ends.
-- Open gauntlet friction: see gauntlet/FRICTION.md (59 logged, 47 fixed).
+- **Integrals:**
+  - a narrow feature that is only partly sampled can be missed or counted half, with no warning; only the all-zero case warns (D110);
+  - a result at the integrand's rounding level shows more figures than are right (red team 7 #5).
+- **1-D PDEs right after a jump** in the initial or boundary data are inaccurate until diffusion reaches one grid cell (red team 7 #2).
+- **Strong interior singularities away from 0** (`|x - 0.3|^-0.8`) fail. This is documented, with a workaround.
+- **Significant figures of sums** use the most precise operand, so `1.00 m - 0.999 m` over-claims (D95, D11).
+- **Unit names that are also variables** (`2 g`, `8 K`, `2 b`) are caught by a family of rules (D7, D130, D170, D171, D180, D203, D222, D231, D232). They work, but a single unified rule would be easier to learn.
+- **Memory:** there is no garbage collection; list memory is freed only when the program ends.
+
+## In progress (11:30 UTC)
+- Final full test run; MORNING_REPORT.md and SHOWCASE.md final check.
+
+## Next
+- 12:30 UTC: stop new work; final MORNING_REPORT.md; push by 13:00 UTC.
+- After the run: see "What I would do next" in MORNING_REPORT.md.
 
 ## Done
 - 22:18 Read the spec. Wrote CLAUDE.md.
@@ -91,20 +98,12 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 00:05–01:00 Phase 1 audit: AUDIT.md written; most AUDIT §4 items and most of A1–A53 fixed (see the hourly log and `git log`).
 - 01:10 Docs pass: README, reference, DECISIONS and the VS Code README corrected against the code; reference §19 "Known limitations"; bootcamp output boxes refreshed and now tested; `doctor` checks for a C compiler.
 
-## In progress (05:40 UTC)
-- Agents: M5 performance (`parallel for`, optimisation pass), Phase 7 graduate gauntlet, research frictions (radau absolute tolerance, plot axes), red team round 3.
-
-## Next
-- Merge those as they finish; red team round 3 (~06:30); Phase 7 graduate gauntlet; hourly quality passes.
-- M5 final benchmark table on a quiet machine (stop agents first, ~11:30).
-- MORNING_REPORT.md and SHOWCASE.md at 12:30 UTC.
-
-## Moonshot status (05:40 UTC)
+## Moonshot status (final, 11:30 UTC)
 - M1 natural units: done (D60). M2 dimensional analysis: done (D70, bootcamp lesson 11).
-- M3 numerics: done. Stiff solvers + stiffness warning, eigenvalue problems, 1-D PDEs with GIF output, FFT, root finding, Monte Carlo, seeded RNG (D42, D80–D83).
-- M4 uncertainties: done, interpreter-only (D120–D124, bootcamp lesson 12).
-- M5 performance: done on the loaded machine (D150–D152, RESULTS.md); final quiet-machine numbers at ~11:30. M6 Python interop: done (D140–D142).
-- M7 modules and stdlib: done (D100–D103). M8 self-hosting: done (the unit database written in Fermium).
+- M3 numerics: done (D42, D80–D83, D131, D160, D190, D233).
+- M4 uncertainties: done, interpreter only (D120–D124, bootcamp lesson 12).
+- M5 performance: done (D150–D152). On a quiet machine it matches or beats Julia on 3 benchmarks and is slower on 3 (MORNING_REPORT.md).
+- M6 Python interop: done (D140–D142). M7 modules and stdlib: done (D100–D103). M8 self-hosting: done (unit database).
 
 ## Blocked
 - (none)
@@ -125,3 +124,4 @@ Also new: algebraic equations `solve lhs = rhs for x from a to b` (D32).
 - 08:35 UTC — Merged: red-team round 4 display fixes (integral rounding noise is 0, SI echo figures, written whole numbers; ties documented), open frictions #51/#56/#59/#70/#75/#80/#81 (matrices to 16×16, fourth-order eigenfunctions, list fits, nested helpers), research #10 nuclear shell model (magic numbers 2, 8, 20, 28, 50, 82, 126 from Woods–Saxon + spin–orbit) and #11 recombination (z_* = 1089.6 vs Planck 1089.9). 3495 tests pass. Running: red-team round 4 fixes, shell/recombination frictions.
 - 09:30 UTC — Merged: red-team round 4 fixes (all 18: D200–D209, including 3 silent wrong answers and 6 false positives from tonight's new rules), round 5 (tools: REPL/Jupyter rollback after errors, Jupyter/playground run-time warnings, d/dt f(point), LSP UTF-16 ranges, bootcamp transcripts; all 19 fixed, D220–D223). Running: shell/recombination frictions. Next: red team round 6 (~10:00), quiet-machine benchmarks (~11:30), final report (12:30).
 - 10:30 UTC — Red team round 6 (final): 7 silent wrong answers in the newest code; #1–#4 were display/step conveniences added tonight, reverted (D230); #5–#7 in a fix agent. Found and killed a stray process that had used one core since 00:27; benchmarks re-measured on the quiet machine: Fermium matches/beats Julia on 3 (nbody 0.95×, spring_adaptive 0.86×, forces 0.65× with 4 threads), slower on 3 (RK4 1.93×, blackbody 1.27×, unit loop 1.54×); faster in whole-process time on all. Merged: round 5 fixes (19), research frictions #87–#96. MORNING_REPORT complete except final counts.
+- 11:30 UTC — Red team round 6 #5–#7 fixed (D231–D233). Round 7 (cut short by a container restart; findings salvaged): #1 eigenpair symmetrisation on an asymmetric well, #3 Rutherford README, #4 sums lost significant figures (293.15 K + 0.5 K → 290 K) fixed; #2 (very early PDE times) and #5 (rounding-level integrals) documented. Found that the installed editable package pointed at an agent worktree since ~09:30; reinstalled. README tour comment fixed. Final report next.

@@ -82,7 +82,7 @@ Honest caveats:
 | 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
 | 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | all 19 (+3 of 4 nits) |
 | 6 (10:00) | 7, all silent wrong answers in the newest code | matrix/vector noise-zeroing hid real entries (a Minkowski metric), the integral noise snap zeroed real small integrals, the PDE start-up skip hid a 20 % error, a near-degenerate eigenpair mixed, `d/ds h(2 s)`, `∫ 3 s^2 ds` | all 7: #1–#4 reverted (D230), #5–#7 fixed (D231–D233) |
-| 7 (11:15) | TBD | TBD | TBD |
+| 7 (11:15; cut short by a container restart, findings salvaged) | 5 | eigenpair symmetrisation hid a small asymmetry (a tilted double well), `293.15 K + 0.5 K` printed `290 K`, very early PDE times, rounding-level integrals | #1, #3, #4 fixed; #2 and #5 documented as known limitations |
 
 ## Benchmarks
 The final table was measured at 10:21 UTC with nothing else running. Earlier runs had a stray process of mine using one of the 4 cores since 00:27; it was found and killed. The numbers are medians of 7 interleaved runs, with the same algorithms, tolerances and problem sizes in every language. Full table: benchmarks/RESULTS.md; reproduce with `python3 benchmarks/run.py --interleave -r 7 --langs fermium,fermium-base,julia,python,numpy`.
@@ -104,7 +104,9 @@ The final table was measured at 10:21 UTC with nothing else running. Earlier run
 ## Still weak (honest list)
 - **Uncertainties run in the reference interpreter** (slower than native), and aren't available in the REPL, Jupyter or `fermium build`. Vectors of uncertain values are refused.
 - **Eigenvalue problems, PDEs, stiff solvers and FFT are Python-backed** (NumPy/SciPy), so `fermium build` refuses the first three.
-- **Integration can still miss a narrow feature that is only partly sampled.** Only the all-zero case warns (D110).
+- **Integration can still miss a narrow feature that is only partly sampled.** Only the all-zero case warns (D110). A result at the integrand's rounding level prints more figures than are right (red team 7 #5).
+- **1-D PDEs right after a jump** in the initial or boundary data are inaccurate until diffusion reaches one grid cell (red team 7 #2): use a finer `grid`.
+- **Significant figures of sums** use the most precise operand, not the decimal-place rule, which would need the magnitudes at compile time. So `1.00 m - 0.999 m` over-claims (D95, D11).
 - **The unit-after-number rule is still the sharpest edge:** `2 g`, `8 K`, `2 b` and `0.25 T` collide with common variable names. They are caught (errors or warnings), but they cost time: 7 of 20 graduate problems hit one.
 - **Matrices go up to 16×16,** with one unit per matrix. There are no lists of vectors, and `solve` can't take a list of unknowns.
 - **The machine was heavily loaded all night,** so benchmark numbers need the quiet-machine re-run.
