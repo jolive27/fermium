@@ -136,6 +136,16 @@ def cmd_jupyter(args):
     return 0
 
 
+def cmd_lsp(args):
+    try:
+        from .lsp import serve
+    except ImportError:
+        sys.stderr.write("the language server needs pygls: python3 -m pip install pygls\n")
+        return 1
+    serve()
+    return 0
+
+
 def main(argv=None):
     from . import __version__
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -166,12 +176,13 @@ def main(argv=None):
     jup.add_argument("action", choices=["install"])
     jup.add_argument("--sys-prefix", action="store_true", help="install into this Python environment, not for the user")
     sub.add_parser("repl", help="start the interactive prompt (same as plain 'fermium')")
+    sub.add_parser("lsp", help="run the language server (used by editors, speaks LSP on stdin/stdout)")
     args = p.parse_args(argv)
     if args.cmd is None or args.cmd == "repl":
         from .repl import main as repl_main
         return repl_main()
     return {"run": cmd_run, "check": cmd_check, "fmt": cmd_fmt, "doctor": cmd_doctor,
-            "build": cmd_build, "jupyter": cmd_jupyter}[args.cmd](args)
+            "build": cmd_build, "jupyter": cmd_jupyter, "lsp": cmd_lsp}[args.cmd](args)
 
 
 def entry():

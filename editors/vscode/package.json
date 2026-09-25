@@ -1,25 +1,68 @@
 {
   "name": "fermium",
   "displayName": "Fermium",
-  "description": "Syntax highlighting and \\name symbol completion for the Fermium physics language",
+  "description": "Fermium physics language: live unit errors, hover shows units, \\name symbol completion, syntax highlighting",
   "version": "0.1.0",
   "publisher": "fermium",
   "license": "MIT",
-  "engines": { "vscode": "^1.60.0" },
-  "categories": ["Programming Languages"],
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onLanguage:fermium"],
+  "activationEvents": [
+    "onLanguage:fermium"
+  ],
   "contributes": {
-    "languages": [{
-      "id": "fermium",
-      "aliases": ["Fermium", "fermium"],
-      "extensions": [".fm"],
-      "configuration": "./language-configuration.json"
-    }],
-    "grammars": [{
-      "language": "fermium",
-      "scopeName": "source.fermium",
-      "path": "./syntaxes/fermium.tmLanguage.json"
-    }]
+    "languages": [
+      {
+        "id": "fermium",
+        "aliases": [
+          "Fermium",
+          "fermium"
+        ],
+        "extensions": [
+          ".fm"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "fermium",
+        "scopeName": "source.fermium",
+        "path": "./syntaxes/fermium.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Fermium",
+      "properties": {
+        "fermium.languageServer.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the Fermium language server (live errors, hover with units)."
+        },
+        "fermium.languageServer.command": {
+          "type": "string",
+          "default": "fermium",
+          "description": "Command that starts the language server."
+        },
+        "fermium.languageServer.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "lsp"
+          ],
+          "description": "Arguments for the language server command."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
   }
 }
