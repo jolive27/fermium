@@ -95,6 +95,16 @@ MATH = {"sin": math.sin, "cos": math.cos, "tan": math.tan, "asin": math.asin, "a
         "ceil": math.ceil}
 
 
+def _recip(fn):
+    """cot, sec, csc as 1/tan, 1/cos, 1/sin, with IEEE division like the compiled code (#63)."""
+    def g(x):
+        return fdiv(1.0, math1(fn, x))
+    return g
+
+
+MATH.update({"cot": _recip("tan"), "sec": _recip("cos"), "csc": _recip("sin")})
+
+
 def math1(name, x):
     if name == "round":
         return math.copysign(math.floor(abs(x) + 0.5), x) if math.isfinite(x) else x
@@ -1331,7 +1341,10 @@ class Interpreter:
 
     def e_ISolEval(self, e, fr):
         try:
-            return self.eval(e.sol, fr).eval(e.comp, self.eval(e.t, fr), e.use_dy)
+            sol, t = self.eval(e.sol, fr), self.eval(e.t, fr)
+            if isinstance(t, list):          # u(ts): the value at each time in a list (#62)
+                return [sol.eval(e.comp, x, e.use_dy) for x in t]
+            return sol.eval(e.comp, t, e.use_dy)
         except _Fail as f:
             f.fmt = getattr(e, "tfmt", -1)
             raise
@@ -1537,6 +1550,15 @@ class Interpreter:
             return [a + i * st for i in range(n)]
         if name == "copy":
             return list(args[0])
+        if name == "slice":        # mirrors codegen_llvm (D114)
+            lst, lo, hi = args
+            if hi == lo - 1:
+                return []
+            if hi < lo - 1:
+                raise _Fail(ERR_ASSERT, float(e.msg_id), 0.0)
+            i = self.index(lo, len(lst))
+            j = self.index(hi, len(lst))
+            return lst[i:j + 1]
         if name == "reverse":
             return list(reversed(args[0]))
         if name == "sort":

@@ -253,6 +253,7 @@ print ts
 - **Size:** a list holds at most 10⁹ numbers. Asking for more (`zeros(2e9)`, or a range that long) stops the program with `not enough memory for a list of 2×10⁹ numbers (the most is 10⁹)`.
 - **Sorting:** `sort(xs)` sorts from smallest to largest and puts `NaN` values last.
 - **Setting an element:** `xs[i] = value`.
+- **Slices:** `xs[a:b]` is a new list of the elements a to b, **both included** (counting from 1, like `xs[i]`): `[10, 20, 30, 40][2:3]` is `[20, 30]`. `xs[:b]` starts at the first element, `xs[a:]` runs to the last, and `end` works inside (`xs[2:end-1]` drops the first and last). `xs[a:a-1]` is the empty list, so `xs[k+1:end]` is empty when k is the length; any other b < a is an error (use `reverse(xs)` to reverse). Slices of an ODE solution's samples work too (`x[2:end]`). A slice can't be assigned to (DECISIONS D114).
 - **Looping:** `for x in xs`.
 
 ### Vectors
@@ -522,6 +523,7 @@ print len(times(N1)), "steps"
   - Inside a function, a solution can be used in `∫`, in an equation `solve … for T from a to b`, and at any time `x(t)`, but it can't be returned yet: return a number made from it (DECISIONS D48).
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
+  - `x(ts)` with a list of times gives the list of values, like a function applied to a list: `x(linspace(0 s, 1 s, 11))`. This works for `x'(ts)` too, but not for a vector unknown (lists of vectors aren't supported yet).
 - **Towards smaller t:** the range can go down, `for t from 5 s to 0 s`, with the initial conditions at the start (5 s). This works with both methods (a `step` is always written as a positive size). `times(x)` then decreases, `x[end]` is the value at the end of the range (0 s), and `x(t)` and `plot` work as usual.
 - **Stop condition, `until`:** `until lhs = rhs` on a line of its own stops the solve the first time the two sides cross (after the start), for example when a ball lands. The crossing is located to full precision on the solver's dense output (Dormand–Prince's 4th-order interpolant, or the cubic Hermite for RK4), and the solution ends there: `x[end]` is the value at the crossing and `times(x)[end]` the time. The range's end is then only a limit: if the condition never happens before it, that's an error (so a too-short range can't be mistaken for the answer). The condition can use `t`, the unknowns and their derivatives below the highest (`until y' = 0 m/s` for the top of a flight), in matching units. On one line, write it after the range (`… for t from 0 s to 10 s until y = 0 m`) or after the initial conditions.
 
@@ -594,7 +596,7 @@ plot data.T vs data.L to "pendulum.png"
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
   - `... to "file.png"` chooses the file name.
-  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas.
+  - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables.
   - Several series: `plot a vs t, b vs t`.
 
 ### Dimensional analysis: analyze
@@ -659,7 +661,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 
 | Function | Meaning |
 |---|---|
-| `sin cos tan asin acos atan sinh cosh tanh exp ln log log10 log2 erf gamma` | need plain numbers (angles are plain numbers) |
+| `sin cos tan cot sec csc asin acos atan sinh cosh tanh asinh acosh atanh exp ln log log10 log2 erf erfc gamma lgamma expm1 log1p` | need plain numbers (angles are plain numbers); `cot`, `sec`, `csc` are 1/tan, 1/cos, 1/sin, `expm1(x)` = eˣ − 1 and `log1p(x)` = ln(1 + x) accurate for tiny x |
 | `besselj(n, x) bessely(n, x)` | Bessel functions J_n and Y_n of whole-number order n (plain numbers; the C library's `jn`/`yn`) |
 | `besseli(n, x) besselk(n, x)` | modified Bessel functions I_n and K_n of whole-number order n (plain numbers) |
 | `ellipk(m) ellipe(m)` | complete elliptic integrals K(m) and E(m) with the **parameter m = k²**, as in SciPy and Abramowitz & Stegun (`ellipk(0.5)` = 1.8541; K(1) = ∞) |
@@ -822,13 +824,14 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | print items | plot series [to "file"] | fit eq to expr [with binds]
             | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
+              (tolerance, using and until in any order)
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
 expr       := if expr then expr [NEWLINE INDENT] else expr | or-expression
 comparison := sum (cmp sum)*          a < x < b means a < x and x < b
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
-postfix    := atom ( (args) | [index] | .name | ' )*
+postfix    := atom ( (args) | [index] | [a:b] | .name | ' )*
 atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|
             | √atom | ∫ … d x [from a to b] | d/dt atom | dx/dt | ∂/∂x atom | load "file"
             | Σ(expr for x from a to b [step s])

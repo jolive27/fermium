@@ -114,6 +114,13 @@ class Index(Node):
 
 
 @dataclass(eq=False)
+class Slice(Node):
+    """`a:b` inside xs[...]: elements a to b, both included (1-based, D114); a or b may be omitted (None)."""
+    lo: Node | None
+    hi: Node | None
+
+
+@dataclass(eq=False)
 class End(Node):
     """`end` inside an index: the last element."""
 
@@ -394,6 +401,8 @@ def children(n):
         return [n.func] + list(n.args)
     if isinstance(n, Index):
         return [n.target, n.index]
+    if isinstance(n, Slice):
+        return [x for x in (n.lo, n.hi) if x is not None]
     if isinstance(n, (Field, Prime)):
         return [n.target]
     if isinstance(n, Deriv):

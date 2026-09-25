@@ -38,7 +38,7 @@
     },
     "builtin": {
       "name": "support.function.builtin.fermium",
-      "match": "\\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|exp|ln|log|log10|log2|erf|gamma|abs|floor|ceil|round|sign|min|max|hypot|mod|clamp|len|sum|mean|std|first|last|cumsum|diff|reverse|sort|linspace|range|zeros|ones|push|append|dot|trapz|interp|values|times|factorial|rand|clock)(?=\\()"
+      "match": "\\b(sin|cos|tan|cot|sec|csc|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|ln|log|log10|log2|erf|gamma|abs|floor|ceil|round|sign|min|max|hypot|mod|clamp|len|sum|mean|std|first|last|cumsum|diff|reverse|sort|linspace|range|zeros|ones|push|append|dot|trapz|interp|values|times|factorial|rand|clock)(?=\\()"
     },
     "constant": {
       "name": "constant.language.physics.fermium",
