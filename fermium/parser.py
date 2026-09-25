@@ -873,8 +873,9 @@ class Parser:
         t = self.tok
         e = self.atom()
         while True:
+            # (x+1)(x-1) is a product, but (∂/∂x f)(1, 2) and (f')(3) are calls (A42)
             if self.at_op("(") and not self.tok.ws_before and not isinstance(e, (A.Num, A.Quantity)) and \
-                    not e.paren:
+                    (not e.paren or isinstance(e, (A.Deriv, A.Prime))):
                 self.next()
                 args = []
                 self.skip_newlines()

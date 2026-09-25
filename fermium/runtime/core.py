@@ -331,6 +331,10 @@ class Runtime:
         yu = display_unit(info["rydim"], None)
         unit = f" {yu.name}" if yu.name not in ("", "1") else ""
         lines.append(f"  rms residual = {format_number(rms / yu.factor, 3, trim=False)}{unit}")
+        bad = [nm for nm, e in zip(info["params"], errs) if e is None or not math.isfinite(e)]
+        if bad:          # A45: don't pass a failed fit off as a result
+            lines.append(f"  warning: the fit may not have converged; give a starting guess, like  "
+                         f"fit ... with {bad[0]} = ...")
         self.out.write("\n".join(lines) + "\n")
         self.out.flush()
 

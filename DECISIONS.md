@@ -94,6 +94,7 @@ The rule (spec §3.4.2), refined:
 ## D12. Temperatures with °C/°F are absolute
 - **What:** `20 °C` means 293.15 K, and `T in °C` subtracts 273.15. `°C` can't be combined with other units (`J/°C` is an error). Use K for temperature differences and in formulas.
 - **Why:** An affine unit is only well defined for absolute values.
+- **Differences (A47):** `a - b` with `b` in °C is always a temperature difference, shown in K, whatever unit `a` was written in. `300 K - 20 °C` is 6.85 K, and Newton's law of cooling `T' = -(T - Ta)/τ` works with `Ta = 20 °C` and `T(0) = 90 °C`. A value in K may be an absolute temperature or a difference, and both readings give the same number in K. Still errors: `°C + °C` and negating a °C value. `20 °C - 5 K` stays 15 °C (a change of 5 K). Alternative: tracking "absolute or difference" as part of the type. That is more precise, but it needs a new kind of type for one unit, so it was rejected for now.
 
 ## D13. Static typing: a variable keeps its dimension
 - **What:** Reassigning `x` with different units is an error ("x is length [m]; it can't now hold time [s]"). The REPL allows redefinition.
@@ -169,3 +170,8 @@ The rule (spec §3.4.2), refined:
 - **Growing:** `push` grows a list by allocating a new block and copying. The old block is never freed, so a loop that is still reading it stays valid. (The adversarial tester found that `realloc` caused a use-after-free.)
 - **Memory:** there is no garbage collector yet, so memory is only reclaimed when the program exits. That is fine for scripts, and is noted in the known issues.
 - **Alternative:** value semantics (copy on assignment) would surprise Python learners, and every function call would have to copy the list.
+
+## D27. `rev`, `rpm` and Hz (A46)
+- **What:** Angles stay plain numbers (D6), so `rev` = 2π and `rpm` = rev/min = 2π/60 1/s. `1 rev/min in Hz` is 0.10472 Hz, an angular frequency in rad/s, and **not** 1/60 Hz. When a value written with `rev`, `rpm`, `rad`, `°` or `arcmin`/`arcsec` is converted `in Hz` (or kHz, MHz, ...), the checker warns that angles are plain numbers and suggests `in rev/s` for counting turns. `60 rpm in rev/s` = 1 rev/s.
+- **Why:** With rad = 1, Hz and rad/s are the same dimension. If `rpm` meant 1/60 Hz, then `60 rpm in rad/s` would be 1 rad/s, off by 2π the other way. Keeping `rev` = 2π is self-consistent, and the warning fires only in the one case that is surprising.
+- **Alternatives:** Refuse `in Hz` for such values. This was rejected because `ω in Hz` from a variable would be refused or allowed depending on how it was written. Making the angle a base dimension was already rejected in D6.

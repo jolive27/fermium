@@ -362,7 +362,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Derived units:** `N J W Pa C V F Ω(ohm) S Wb T H Hz Bq Gy Sv lm lx kat`.
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
-- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev %`.
+- **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %` (`rev` = 2π, so `1 rev/min in Hz` is 2π/60 Hz; see DECISIONS D27).
 - **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12).
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
 
