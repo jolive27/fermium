@@ -18,6 +18,8 @@ from . import ir as I
 from .types import BOOL, ComplexTy, DExpr, ListTy, MatTy, NumTy, VecTy
 from .units import DIMLESS, format_number
 
+DEFAULT_SF = 3       # digits of each part when the inputs don't give a precision (D11, D94)
+
 # built-ins that only make sense for complex numbers (they also accept real numbers)
 COMPLEX_FUNCS = {"re", "im", "conj", "arg", "complex", "polar", "cis"}
 # built-ins that also take a complex argument
@@ -504,8 +506,14 @@ def format_complex(re_, im_, dim, hint, sf, direct):
 
     def f(v):
         if sf is None:
-            return format_number(v, 6, trim=True)
+            if direct:
+                return format_number(v, 15, trim=True)
+            if whole:
+                return str(int(v))
+            return format_number(v, DEFAULT_SF, trim=False)
         return format_number(v, sf if direct else max(sf, 2), trim=False)
+    # like a 2-vector: whole numbers print exactly only if both parts are whole (3 + 4i, but 0.500 + 1.00i)
+    whole = all(v == v and abs(v) < 1e7 and v == int(v) for v in (x, y))
     body = f"{f(x)} {'-' if y < 0 else '+'} {f(abs(y)) if y == y else 'NaN'}i"      # -0 prints as 0
     name = u.name
     if name in ("", "1"):

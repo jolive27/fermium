@@ -48,9 +48,12 @@ def interp(src):
     ("print complex(1, 2)", "1 + 2i"),
     ("print (3 + 4i) [Ω]", "(3 + 4i) Ω"),
     ("print 3 Ω + 4i Ω", "(3 + 4i) Ω"),
-    ("print (3 + 4i) [Ω] in kΩ", "(0.003 + 0.004i) kΩ"),
+    ("print (3 + 4i) [Ω] in kΩ", "(0.00300 + 0.00400i) kΩ"),
     ("print (1.50 + 2.25i) [m]", "(1.50 + 2.25i) m"),
     ("print 1e3i", "0 + 1000i"),
+    ("print exp(1i)", "0.540 + 0.841i"),
+    ("print 0.5 + 1i", "0.50 + 1.0i"),       # 0.5 has 1 s.f.; a computed value shows at least 2
+    ("print (0.5 + 1i) * 1", "0.50 + 1.0i"),
     ("z = 2 - 3i\nprint z", "2 - 3i"),
 ])
 def test_printing(src, want):
@@ -155,12 +158,12 @@ def test_equality_and_not_equal():
 def test_impedance_units():
     out = run("R = 3 Ω\nX = 4 Ω\nZ = R + 1i X\nprint Z\nprint |Z|\nprint re(Z), im(Z)\nprint Z + (1 + 1i) [Ω]\n"
               "V = (10 + 0i) [V]\nprint V / Z\nprint conj(Z)")
-    assert out.split("\n") == ["(3 + 4i) Ω", "5 Ω", "3 Ω 4 Ω", "(4 + 5i) Ω", "(1.2 - 1.6i) A", "(3 - 4i) Ω"]
+    assert out.split("\n") == ["(3 + 4i) Ω", "5 Ω", "3 Ω 4 Ω", "(4 + 5i) Ω", "(1.20 - 1.60i) A", "(3 - 4i) Ω"]
 
 
 def test_wavefunction_units():
-    out = run("ψ0 = 1 / √(1 nm) + 0i\nprint |ψ0|² in 1/nm")
-    assert out == "1 1/nm"
+    out = run("ψ0 = 1 / √(1 nm) + 0i\nprint |ψ0|² in 1/nm to 6 digits")
+    assert out == "1.00000 1/nm"
     out = run("ψ0 = (1 + 1i) / √(2 nm)\nprint ψ0 * conj(ψ0) in 1/nm")
     assert cnum(out) == pytest.approx(1 + 0j)
 
@@ -344,7 +347,8 @@ def test_indefinite_integral_uses_the_imaginary_unit():
 
 
 def test_description_shows_the_literal():
-    assert run("g(x) = exp(1i x)\nprint g") == "g(x) = exp(1i x)"
+    assert run("g(x) = exp(2i x)\nprint g") == "g(x) = exp(2i x)"
+    assert run("g(x) = exp(1i x)\nprint g") == "g(x) = exp(𝑖 x)"
 
 
 def test_standalone_imaginary_unit_splits_names():
@@ -354,7 +358,8 @@ def test_standalone_imaginary_unit_splits_names():
 
 def test_fmt_ascii_spells_the_imaginary_unit():
     from fermium.fmt import format_source
-    assert format_source("z = 2𝑖 + 𝑖 x + 3i\n", "ascii") == "z = 2 1i + 1i x + 3i\n"
+    assert format_source("z = 2𝑖 + 𝑖 x + 3i\n", "ascii") == "z = 2 1i + (1i) x + 3i\n"
+    assert format_source("a = 𝑖ħ\n", "ascii") == "a = (1i)hbar\n"
     assert run("x = 2\nz = 2 1i + 1i x + 3i\nprint z") == "0 + 7i"
 
 
@@ -385,5 +390,22 @@ def test_parts_of_a_complex_solution_are_real_solutions():
 
 def test_complex_ode_with_radau_and_until():
     out = run("solve 1i ψ' = 2 ψ with ψ(0) = 1 for t from 0 to 1 using radau\nprint |ψ(1) - exp(-2i)| < 1e-5\n"
-              "solve 1i φ' = 2 φ with φ(0) = 1 for t from 0 to 10 until re(φ) = 0\nprint φ[end]")
-    assert out.split("\n") == ["true", "0 - 1i"]
+              "solve 1i φ' = 2 φ with φ(0) = 1 for t from 0 to 10 until re(φ) = 0\nprint φ[end] to 9 digits")
+    lines = out.split("\n")
+    assert lines[0] == "true"
+    assert cnum(lines[1]) == pytest.approx(-1j, abs=1e-8)
+
+
+def test_parameter_with_unit_takes_complex():
+    unit = run("print 1 / (5 Ω)").split(" ", 1)[1]           # whatever unit a conductance is shown in
+    assert run("Y(Z [Ω]) = 1 / Z\nprint Y(3 Ω + 4i Ω)") == f"(0.120 - 0.160i) {unit}"
+    assert "expects Z in Ω" in str(error_of("Y(Z [Ω]) = 1 / Z\nprint Y(2 V + 1i V)"))
+
+
+def test_power_delivered_to_an_impedance():
+    assert run("P(V, Z) = re(V conj(V / Z)) / 2\nprint P((10 + 0i) [V], 3 Ω + 4i Ω) to 3 digits") == "6.00 W"
+
+
+def test_recursive_complex_function_is_refused_not_miscompiled():
+    e = error_of("f(n) = if n == 0 then 1 + 0i else 1i * f(n - 1)\nprint f(3)")
+    assert "calls itself" in str(e)

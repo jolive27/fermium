@@ -2225,6 +2225,8 @@ class Checker(C.DiffContext):
         args = [a for a in args if not isinstance(a, FuncRef)]      # what is passed at run time
         if cache and concrete and key in info.instances:
             inst = info.instances[key]
+            if inst.ret_ty is getattr(inst, "ret_placeholder", None):
+                inst.called_recursively = True       # its type is still the placeholder (a number)
             r = I.ICall(inst, args, inst.ret_ty)
             r.sf = self._minsf(*args, inst) if inst.sf is not None else self._minsf(*args)
             r.hint = getattr(inst, "ret_hint", None)
@@ -2268,7 +2270,7 @@ class Checker(C.DiffContext):
             sym.assigned = True
             if p.unit is not None:
                 u = self.resolve_unit(p.unit)
-                if not isinstance(ty, (NumTy, ListTy)) or not self.U.unify(ty.dim, u.dim):
+                if not isinstance(ty, (NumTy, ListTy, ComplexTy)) or not self.U.unify(ty.dim, u.dim):
                     raise self.err(f"{info.display_name} expects {p.name} in {u.name} ({dim_name(u.dim)}), "
                                    f"but got {type_desc(a.ty, self.U)}", node)
                 sym.hint = u
@@ -2324,6 +2326,11 @@ class Checker(C.DiffContext):
         if isinstance(rt, NumTy):
             if not self.U.unify(inst.ret_placeholder.dim, rt.dim):
                 raise self.err(f"the units of {info.display_name} don't work out recursively", f)
+        elif getattr(inst, "called_recursively", False):
+            info.instances.pop(key, None)
+            raise self.err(f"{info.display_name} calls itself and returns {type_desc(rt, self.U)}; a function that "
+                           f"calls itself must return a single real number", f,
+                           hint="write the recursion as a loop")
         inst.ret_ty = rt
         inst.sf = self._minsf(*rets)
         self.new_funcs.append(inst)
