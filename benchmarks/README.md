@@ -11,10 +11,20 @@ python benchmarks/run.py                          # all languages, R=5 (R=3 for 
 python benchmarks/run.py -r 3 --langs julia,python,numpy
 python benchmarks/run.py --langs fermium,julia --benchmarks nbody,unit_loop
 python benchmarks/run.py --quick                  # Python/NumPy nbody use 100k steps
+python benchmarks/run.py --interleave -r 7 --langs fermium,fermium-base,julia,python,numpy
+                                                  # the full M5 table: before/after, vs Julia
 ```
 
+`--interleave` runs the languages of each benchmark in turn (A B C A B C …) instead of all runs of
+one language and then the next, so a change in the machine's load hits every language alike; use it on
+a shared machine. `fermium-base` is Fermium with its M5 speed-ups switched off (`FERMIUM_DISABLE=all`:
+no integer loop counters, `parallel for` on one thread); with both `fermium` and `fermium-base` in
+`--langs`, RESULTS.md gets a "Before/after M5" table. `--threads T` sets the thread count of the
+parallel benchmark (`forces`) for Fermium (`FERMIUM_THREADS`) and Julia (`--threads`); default: all
+cores.
+
 Options: `-r/--repeats`, `--slow-repeats` (pure Python / NumPy), `--warmup`
-(untimed runs first, default 1), `--langs`, `--benchmarks`, `--timeout`.
+(untimed runs first, default 1), `--langs`, `--benchmarks`, `--timeout`, `--interleave`, `--threads`.
 The runner exits non-zero if any language's printed results disagree with Julia's.
 
 ### Requirements
@@ -58,6 +68,7 @@ compares result keys across languages with per-key tolerances (`TOLERANCE` in
 | spring_adaptive | `x_100s`, `accepted_steps` |
 | blackbody | `sum_integrals`, `ratio_5778K` |
 | unit_loop | `E_J` (Julia also `E_unitful_J` and `TIME_INNER_UNITFUL`) |
+| forces | `U_J`, `ax1`, `azN` (12 digits); Fermium and Julia also `TIME_INNER_SERIAL` |
 | startup | the number g (bare) |
 
 ## The benchmarks
@@ -94,7 +105,14 @@ c = 299792458 m/s, k_B = 1.380649e-23 J/K, σ = 5.670374419e-8 W m⁻² K⁻⁴.
    Julia has two versions in one process: plain `Float64` and type-stable
    Unitful.jl quantities (`TIME_INNER_UNITFUL`) — the "units cost nothing" bar
    Fermium is aiming for. NumPy is vectorized (`arange`, in-place scale, `v @ v`).
-5. **startup** — `g = 4π²·1.20/2.21²`; only whole-process wall time matters.
+5. **forces** (M5) — all-pairs gravity for N = 2000 bodies (4·10⁶ pair terms): each body's
+   acceleration and the total potential energy U = −½ Σ G mᵢ mⱼ / r. Fermium runs it as a
+   `parallel for` over i (D152) and again as a plain `for`; Julia as `Threads.@threads` over i and
+   again serially; both with `--threads` threads (TIME_INNER) and one thread (TIME_INNER_SERIAL,
+   the "1 thread" rows). Same formulas in the same order, so `ax1`, `azN` agree to all printed digits;
+   U is added up in a different order in each language (Fermium: 256 fixed blocks; Julia: one value
+   per body, then `sum`), so it agrees to ~1e-13. Pure Python and NumPy run one thread.
+6. **startup** — `g = 4π²·1.20/2.21²`; only whole-process wall time matters.
 
 ## Fairness notes
 

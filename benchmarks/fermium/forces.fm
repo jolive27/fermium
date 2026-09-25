@@ -1,0 +1,72 @@
+# All-pairs gravity for N bodies (O(N²)): each body's acceleration and the total potential energy.
+# The same loop twice: `parallel for` (the iterations over i on several threads; M5, D152) and a plain
+# `for` (one thread).  The runner sets FERMIUM_THREADS (and Julia's -t) to the same thread count.
+N = 2000
+x = zeros(N) [m]
+y = zeros(N) [m]
+z = zeros(N) [m]
+M = zeros(N) [kg]
+for k from 1 to N
+    x[k] = ∛k cos(2.4 k) * 1 m
+    y[k] = ∛k sin(2.4 k) * 1 m
+    z[k] = (k / N - 0.5) * 1 m
+    M[k] = (1 + mod(k, 7)) * 1e9 kg
+ax = zeros(N) [m/s²]
+ay = zeros(N) [m/s²]
+az = zeros(N) [m/s²]
+
+t0 = clock()
+U = 0 J
+parallel for i from 1 to N
+    fx = 0 m/s²
+    fy = 0 m/s²
+    fz = 0 m/s²
+    for j from 1 to N
+        if j != i
+            dx = x[j] - x[i]
+            dy = y[j] - y[i]
+            dz = z[j] - z[i]
+            r2 = dx² + dy² + dz²
+            r = √r2
+            g = G M[j] / (r2 r)
+            fx += g dx
+            fy += g dy
+            fz += g dz
+            U -= ½ G M[i] M[j] / r
+    ax[i] = fx
+    ay[i] = fy
+    az[i] = fz
+t1 = clock()
+
+bx = zeros(N) [m/s²]
+by = zeros(N) [m/s²]
+bz = zeros(N) [m/s²]
+t2 = clock()
+V = 0 J
+for i from 1 to N
+    fx = 0 m/s²
+    fy = 0 m/s²
+    fz = 0 m/s²
+    for j from 1 to N
+        if j != i
+            dx = x[j] - x[i]
+            dy = y[j] - y[i]
+            dz = z[j] - z[i]
+            r2 = dx² + dy² + dz²
+            r = √r2
+            g = G M[j] / (r2 r)
+            fx += g dx
+            fy += g dy
+            fz += g dz
+            V -= ½ G M[i] M[j] / r
+    bx[i] = fx
+    by[i] = fy
+    bz[i] = fz
+t3 = clock()
+
+print "U_J", U / (1 J) to 12 digits
+print "ax1", ax[1] / (1 m/s²) to 12 digits
+print "azN", az[N] / (1 m/s²) to 12 digits
+print "serial_same", abs(U - V) < 1e-12 abs(V) and ax[1] == bx[1] and az[N] == bz[N]
+print "TIME_INNER", (t1 - t0) / (1 s)
+print "TIME_INNER_SERIAL", (t3 - t2) / (1 s)

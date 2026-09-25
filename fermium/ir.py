@@ -243,6 +243,21 @@ class SFor(Stmt):
         self.sym, self.lo, self.hi, self.step, self.body = sym, lo, hi, step, body
 
 
+PAR_BLOCKS = 256     # a parallel for's range is cut into at most this many blocks (D152)
+ERR_PAR_ALIAS = 40   # a list written as xs[i] in a parallel for is also used there under another name
+
+
+def par_blocks(n):
+    """The blocks [start, end) of a parallel for with n iterations: the same for any number of threads, so
+    the sums (reductions) are added up in the same order on every machine and in the interpreter."""
+    nb = min(n, PAR_BLOCKS)
+    if nb == 0:
+        return []
+    q, r = divmod(n, nb)
+    start = [k * q + min(k, r) for k in range(nb + 1)]
+    return [(start[k], start[k + 1]) for k in range(nb)]
+
+
 class SForIn(Stmt):
     def __init__(self, sym, lst, body):
         self.sym, self.lst, self.body = sym, lst, body

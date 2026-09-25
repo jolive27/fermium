@@ -233,6 +233,48 @@ print u(1 s), u(3 s), u(7 s)
 
 - **`assert condition, "message"`** stops the program if the condition is false.
 
+### Parallel loops: `parallel for`
+
+`parallel for i from a to b [step s]` runs the iterations at the same time on all the processor's cores
+(set `FERMIUM_THREADS=n` to choose how many). Use it for a loop whose iterations don't depend on each
+other: one integral per temperature, the force on each body, one trajectory per starting angle.
+
+```fermium
+B(ν, T) = 2h ν³/c² / (exp(h ν/(k_B T)) - 1)
+n = 50
+Ts = linspace(2000 K, 8000 K, n)
+power = zeros(n) [W/m²]
+total = 0 W/m²
+parallel for i from 1 to n
+    T = Ts[i]
+    P = π ∫ B(ν, T) dν from 1e11 Hz to 1e16 Hz
+    power[i] = P
+    total += P
+print power[n], total / n
+```
+
+What each iteration may do, so that no two iterations can touch the same number (anything else is a
+compile-time error that says what went wrong):
+
+- **set its own variables** (`T`, `P` above: every iteration has its own copy; they have no value after the loop);
+- **write its own element** `xs[i]` of a list made before the loop (index with the loop variable itself),
+  and read `xs[i]` again; other lists can be read anywhere;
+- **add to a sum** made before the loop: `total += …` or `total -= …`. The sum can't be read inside the loop.
+
+Not allowed inside: `print`, `plot`, `solve`, `fit`, `push`, `break`, `return`, random numbers (`rand`, `randn`),
+setting a variable made before the loop in any other way, and calling a function that calls itself.
+If two names refer to the same list (`ys = xs`) and one is written, the loop stops with an error before it starts.
+
+**Sums are reproducible.** The range is cut into at most 256 blocks (the same blocks for any number of
+threads); each block adds up its terms in order, and the block totals are added in order at the end. So a
+parallel sum prints the same digits on every run, with any number of cores, in `fermium build` and in the
+reference interpreter. It can differ in the last digits from the same sum in a plain `for` loop, which
+adds in a different order (by about 10⁻¹⁵ relative for a sum of positive terms).
+
+Starting the threads costs about 0.1 ms, so a loop whose whole run takes less than that is faster as a
+plain `for`. If an iteration stops with a run-time error (an index out of range), the program stops with
+that error; when several iterations fail, which one is reported can change from run to run.
+
 ## 7. Lists and vectors
 
 ```fermium
@@ -944,7 +986,7 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | analyze [name:] q [unit] depends on q [unit], q [unit], ...
             | solve eqs [with eqs] for t from a to b [step h] [tolerance r] [using rk4|rk45|radau|bdf]
               (tolerance, using and until in any order)
-            | if expr block [else block] | for x from a to b [step s] block
+            | if expr block [else block] | [parallel] for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
             | import name [as name] | import "file.fm" [as name]

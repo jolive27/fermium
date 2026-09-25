@@ -985,6 +985,8 @@ class Interpreter:
         if span != span:
             raise _Fail(ERR_RANGE, lo, hi)
         n = max(0, int(math.floor(span + 1e-9) + 1.0)) if abs(span) < math.inf else (2 ** 62 if span > 0 else 0)
+        if getattr(s, "par", None) is not None:
+            return self.parallel_for(s, fr, lo, st, n)
         for i in range(n):
             fr.set(s.sym, lo + i * st)
             try:
@@ -993,6 +995,30 @@ class Interpreter:
                 break
             except _Continue:
                 continue
+
+    def parallel_for(self, s, fr, lo, st, n):
+        """A parallel for, run serially (D152): block by block (I.par_blocks, the blocks the compiled code
+        hands to its threads), each sum starting from 0 in each block and the blocks' sums added in order, so
+        the numbers are exactly those of the compiled, multi-threaded loop."""
+        info = s.par
+        for w, o, text in info["alias"]:
+            if fr.get(w) is fr.get(o):
+                raise _Fail(I.ERR_PAR_ALIAS, float(text), 0.0)
+        reds = info["reductions"]
+        acc = [fr.get(r) for r in reds]
+        for a, b in I.par_blocks(n):
+            for r in reds:
+                fr.set(r, 0.0)
+            for i in range(a, b):
+                fr.set(s.sym, lo + i * st)
+                try:
+                    self.block(s.body, fr)
+                except _Continue:
+                    continue
+            for k, r in enumerate(reds):
+                acc[k] = acc[k] + fr.get(r)
+        for k, r in enumerate(reds):
+            fr.set(r, acc[k])
 
     def s_SForIn(self, s, fr):
         lst = self.eval(s.lst, fr)

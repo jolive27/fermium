@@ -332,6 +332,7 @@ class For(Node):
     hi: Node
     step: Node | None
     body: list
+    parallel: bool = False       # parallel for (M5, D152)
 
 
 @dataclass(eq=False)
