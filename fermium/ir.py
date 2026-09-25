@@ -157,6 +157,13 @@ class IIntegral(Expr):
         self.lam, self.lo, self.hi, self.ty = lam, lo, hi, ty
 
 
+class IRoot(Expr):
+    """The x in [lo, hi] where lam(x) = 0 (solve lhs = rhs for x from lo to hi)."""
+
+    def __init__(self, lam, lo, hi, ty):
+        self.lam, self.lo, self.hi, self.ty = lam, lo, hi, ty
+
+
 class ISolEval(Expr):
     """Value of solution component `comp` at time t (use_dy: derivative array)."""
 

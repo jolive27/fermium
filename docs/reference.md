@@ -331,6 +331,24 @@ print y(1 s) to 10 digits
   - `plot x vs t` plots against time, and `plot y vs x` plots one unknown against another (an orbit or phase plot).
   - `values(x)` and `times(x)` give lists, and `x[end]` is the final value.
 
+### Equations: solve … for x from a to b
+
+Without derivatives and without `with`, `solve` finds where the two sides of an equation are equal, and stores the answer in the variable:
+
+```fermium
+solve cos(x) = x for x from 0 to 10
+print x
+
+g = 9.81 m/s²
+solve g t²/2 = 20 m for t from 0 s to 10 s
+print t
+```
+
+- It finds the **first** solution after `a`. If the two sides differ with the same sign at both ends, it looks for the first crossing at 200 points in between, then refines it to full double precision (Illinois regula falsi, which keeps the solution bracketed).
+- The answer has the units of the range. Inside a loop, each `solve` overwrites the variable.
+- If the sides never cross in the range, the error says so. A jump across (like `tan` at 90°) is reported as not a solution; narrow the range.
+- `step`, `tolerance` and `using` are only for differential equations.
+
 ## 11. Data: load, fit, plot
 
 ```

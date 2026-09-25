@@ -191,3 +191,8 @@ The rule (spec §3.4.2), refined:
 - **Why:** this is how the formulas look in a textbook (`E = -∇φ`), and making the result a function keeps it printable and differentiable again (`curl(∇φ)` is 0, `div(curl A)` is 0, and the tests check both). Units come for free: V over m gives V/m.
 - **Details:** a component that differentiates to exactly 0 is typed as a flexible 0, like a written `0`, so `∇×<-y, x, 0> T/m` is `<0, 0, 2> T/m`. SymPy tidying uses real (not positive) symbols, because coordinates can be negative.
 - **Alternatives:** `∇` applied to an expression in x, y, z (like `d/dt (formula)`) — left for later, since the coordinate names would have to be guessed. Curvilinear coordinates — out of scope; write the formulas out.
+
+## D32. Equations: `solve lhs = rhs for x from a to b`
+- **What:** a `solve` with no derivatives and no `with` clause is an algebraic equation. It finds the first x in [a, b] where lhs = rhs, and assigns it to x, the same way an ODE `solve` binds its unknowns. The search scans 200 points for the first sign change when the ends don't bracket a root, then refines with Illinois regula falsi to full precision. A jump across 0 (a pole) is reported, not returned.
+- **Why:** textbook problems keep needing roots: finite-well energies, shooting methods, Wien's law, projectile landing times. A `while` loop of bisection was the only way before. Re-using `solve` reads like the math ("solve tan z = … for z") and needs no new keyword.
+- **Alternatives:** a `root(f, a, b)` built-in would need a function value and couldn't take an equation; brentq would be marginally faster, but Illinois is simpler to mirror exactly in the reference interpreter.

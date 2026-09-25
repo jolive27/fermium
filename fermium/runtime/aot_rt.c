@@ -180,6 +180,8 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
         if (a != a) snprintf(err_msg, sizeof err_msg, "the length of a list must be a number, not NaN");
         else snprintf(err_msg, sizeof err_msg, "not enough memory for a list of %s numbers (the most is 10⁹)", x);
         break;
+    case 14: snprintf(err_msg, sizeof err_msg, "the two sides of this equation jump past each other near %s (like tan at 90 degrees) instead of crossing: that's not a solution; narrow the range", x); break;
+    case 13: snprintf(err_msg, sizeof err_msg, "this equation has no solution between %s and %s: the two sides never cross there (checked at 200 points)", x, y); break;
     case 12: snprintf(err_msg, sizeof err_msg, "this for loop has no definite number of steps: it goes from %s to %s (NaN in the start, end or step)", x, y); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }

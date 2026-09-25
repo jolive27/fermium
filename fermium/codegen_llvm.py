@@ -53,6 +53,8 @@ ERR_DEEP = 10
 ERR_SIZE = 11               # a list too big for memory (or of NaN length)
 ERR_RANGE = 12              # a for loop over a range with a NaN end or step
 ERR_PENDING = -1            # a runtime callback (plot, load, fit) failed and already set the message
+ERR_ROOT = 13               # solve lhs = rhs: no sign change in the search range
+ERR_POLE = 14               # solve lhs = rhs: the sign change is a jump (tan at 90°), not a root
 MAX_LIST = 1e9              # most numbers a list may hold (8 GB)
 STACK_LIMIT = 400 << 20     # bytes of stack a program may use (it runs on a thread with a 512 MB stack)
 
@@ -778,6 +780,87 @@ class ModuleGen:
         b.branch(cond_bb)
         b.position_at_end(end_bb)
         b.ret(sp)
+        return fn
+
+    ROOT_SCAN = 200          # sub-intervals searched for the first sign change
+
+    def _k_root(self):
+        """The first root of f in [a, b]: if f(a), f(b) have the same sign, scan ROOT_SCAN sub-intervals
+        for the first sign change; then Illinois (modified regula falsi), which keeps a bracket and
+        converges superlinearly, to full double precision."""
+        fn = self._new_fn("fm_root", F64, [SCALAR_FN.as_pointer(), F64P, F64, F64], inline=False)
+        f, env, a0, b0 = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        fabs = self.intrinsic("fabs")
+        a, c, fa, fc = b.alloca(F64), b.alloca(F64), b.alloca(F64), b.alloca(F64)
+        b.store(a0, a)
+        b.store(b0, c)
+        b.store(b.call(f, [a0, env]), fa)
+        b.store(b.call(f, [b0, env]), fc)
+        with b.if_then(b.fcmp_ordered("==", b.load(fa), f64(0))):
+            b.ret(a0)
+        with b.if_then(b.fcmp_ordered("==", b.load(fc), f64(0))):
+            b.ret(b0)
+
+        def opposite(x, y):
+            return b.fcmp_ordered("<", b.fmul(x, y), f64(0))
+        with b.if_then(b.not_(opposite(b.load(fa), b.load(fc)))):
+            # scan for the first sub-interval with a sign change (or an exact zero)
+            found = b.alloca(I64)
+            b.store(i64(0), found)
+            fprev = b.alloca(F64)
+            b.store(b.load(fa), fprev)
+            h = b.fdiv(b.fsub(b0, a0), f64(self.ROOT_SCAN))
+            with lp.range(i64(1), i64(self.ROOT_SCAN + 1)) as i:
+                with b.if_then(b.icmp_signed("==", b.load(found), i64(0))):
+                    xi = b.select(b.icmp_signed("==", i, i64(self.ROOT_SCAN)), b0,
+                                  b.fadd(a0, b.fmul(b.sitofp(i, F64), h)))
+                    fi = b.call(f, [xi, env])
+                    with b.if_then(b.fcmp_ordered("==", fi, f64(0))):
+                        b.ret(xi)
+                    with b.if_then(opposite(b.load(fprev), fi)):
+                        b.store(b.fsub(xi, h), a)
+                        b.store(b.load(fprev), fa)
+                        b.store(xi, c)
+                        b.store(fi, fc)
+                        b.store(i64(1), found)
+                    b.store(fi, fprev)
+            with b.if_then(b.icmp_signed("==", b.load(found), i64(0))):
+                self.raise_error(b, ERR_ROOT, a0, b0)
+        side = b.alloca(I64)          # which end was kept last time (Illinois halves the stale end)
+        b.store(i64(0), side)
+        m0 = b.call(self.intrinsic("maxnum"), [b.call(fabs, [b.load(fa)]), b.call(fabs, [b.load(fc)])])
+        with lp.range(i64(0), i64(300)):
+            xa, xc, ya, yc = b.load(a), b.load(c), b.load(fa), b.load(fc)
+            big = b.call(self.intrinsic("maxnum"), [b.call(fabs, [xa]), b.call(fabs, [xc])])
+            with b.if_then(b.fcmp_ordered("<=", b.call(fabs, [b.fsub(xc, xa)]), b.fmul(f64(4e-16), big))):
+                best = b.select(b.fcmp_ordered("<", b.call(fabs, [ya]), b.call(fabs, [yc])), xa, xc)
+                # a jump across 0 (a pole) instead of a crossing: |f| grew instead of shrinking
+                fb = b.call(fabs, [b.call(f, [best, env])])
+                with b.if_then(b.fcmp_ordered(">", fb, m0)):
+                    self.raise_error(b, ERR_POLE, best, f64(0))
+                b.ret(best)
+            x = b.fsub(xc, b.fdiv(b.fmul(yc, b.fsub(xc, xa)), b.fsub(yc, ya)))
+            mid = b.fmul(f64(0.5), b.fadd(xa, xc))
+            lo_, hi_ = b.call(self.intrinsic("minnum"), [xa, xc]), b.call(self.intrinsic("maxnum"), [xa, xc])
+            inside = b.and_(b.fcmp_ordered(">", x, lo_), b.fcmp_ordered("<", x, hi_))
+            x = b.select(inside, x, mid)
+            fx = b.call(f, [x, env])
+            with b.if_then(b.fcmp_unordered("==", fx, f64(0))):   # exact root (or NaN: stop there)
+                b.ret(x)
+            with b.if_else(opposite(fx, yc)) as (then, other):
+                with then:            # root between x and c: a <- c
+                    b.store(xc, a)
+                    b.store(yc, fa)
+                    b.store(i64(0), side)
+                with other:           # root between a and x: keep a, halve its value if kept twice
+                    with b.if_then(b.icmp_signed("==", b.load(side), i64(1))):
+                        b.store(b.fmul(f64(0.5), b.load(fa)), fa)
+                    b.store(i64(1), side)
+            b.store(x, c)
+            b.store(fx, fc)
+        b.ret(b.load(c))
         return fn
 
     def _k_sol_ext(self):
@@ -1556,6 +1639,14 @@ class FuncGen:
         self.mark_line()
         q = self.mg.kernel("fm_quad")
         return self.b.call(q, [fn, env, self.expr(e.lo), self.expr(e.hi), f64(1e-10), f64(0)])
+
+    def e_IRoot(self, e):
+        fn = self.mg.lambda_for(e.lam)
+        env = self.make_env(e.lam)
+        lo, hi = self.expr(e.lo), self.expr(e.hi)
+        self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)
+        self.mark_line()
+        return self.b.call(self.mg.kernel("fm_root"), [fn, env, lo, hi])
 
     def e_ISolEval(self, e):
         self.b.store(i64(getattr(e, "tfmt", -1)), self.mg.errfmt)

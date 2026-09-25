@@ -24,6 +24,7 @@ from .types import ListTy, VecTy, BoolTy
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
 ERR_QUAD = 9
 ERR_SIZE, ERR_RANGE, MAX_LIST = 11, 12, 1e9
+ERR_ROOT, ERR_POLE = 13, 14
 
 
 class _Break(Exception):
@@ -384,6 +385,52 @@ def _qscan(f, base, sign):
             best, bs = v, sc
         sc = sc * 10 ** 0.25
     return bs
+
+
+def root(f, a0, b0, scan=200):
+    """Mirrors fm_root in codegen_llvm.py."""
+    fa, fc = f(a0), f(b0)
+    if fa == 0:
+        return a0
+    if fc == 0:
+        return b0
+    a, c = a0, b0
+    if not fa * fc < 0:
+        h = (b0 - a0) / scan
+        fprev, found = fa, False
+        for i in range(1, scan + 1):
+            xi = b0 if i == scan else a0 + i * h
+            fi = f(xi)
+            if fi == 0:
+                return xi
+            if fprev * fi < 0:
+                a, fa, c, fc, found = xi - h, fprev, xi, fi, True
+                break
+            fprev = fi
+        if not found:
+            raise _Fail(ERR_ROOT, a0, b0)
+    side = 0
+    m0 = max(abs(fa), abs(fc))
+    for _ in range(300):
+        if abs(c - a) <= 4e-16 * max(abs(a), abs(c)):
+            best = a if abs(fa) < abs(fc) else c
+            if abs(f(best)) > m0:
+                raise _Fail(ERR_POLE, best, 0.0)
+            return best
+        x = c - fc * (c - a) / (fc - fa)
+        if not (min(a, c) < x < max(a, c)):
+            x = 0.5 * (a + c)
+        fx = f(x)
+        if fx == 0 or fx != fx:
+            return x
+        if fx * fc < 0:
+            a, fa, side = c, fc, 0
+        else:
+            if side == 1:
+                fa = 0.5 * fa
+            side = 1
+        c, fc = x, fx
+    return c
 
 
 def _count(nf):
@@ -782,6 +829,13 @@ class Interpreter:
 
     def e_IIntegral(self, e, fr):
         return quad(self.scalar_fn(e.lam, fr), self.eval(e.lo, fr), self.eval(e.hi, fr))
+
+    def e_IRoot(self, e, fr):
+        try:
+            return root(self.scalar_fn(e.lam, fr), self.eval(e.lo, fr), self.eval(e.hi, fr))
+        except _Fail as f:
+            f.fmt = getattr(e, "tfmt", -1)
+            raise
 
     def e_ISolEval(self, e, fr):
         try:
