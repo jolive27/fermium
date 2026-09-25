@@ -296,6 +296,27 @@ The first line is 20 m/s divided by your `g`: a time, 2.04 s, just as you meant.
 
 (The space only matters for names you've given a value yourself. `c` above is Fermium's own constant, so in `1 AU / c` it's still read as a unit.)
 
+## Bonus: natural units (ħ = c = 1)
+
+In nuclear and particle physics, people set ħ = c = 1. Then a mass is an energy, and a length is 1/energy. Fermium can work this way too. Put `units natural` (or `units nuclear`, which shows lengths in fm) on a line of its own, and `in` turns the answer back into SI:
+
+```fermium
+units natural
+a0 = 1/(α m_e)
+print a0 in fm
+print a0 in Å
+print 1/(139.57 MeV) in fm
+```
+
+<!-- output -->
+```
+52917.7 fm
+0.529177 Å
+1.4138 fm
+```
+
+Units are still checked. A mass plus an energy is fine, but an energy plus a length is still an error, because that is E + 1/E. There's more in the [reference](../docs/reference.md#natural-units-units-natural-units-nuclear-units-astro).
+
 ## Summary
 
 - `print` shows a value. `+ - * / ^` and parentheses work as in maths.

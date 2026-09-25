@@ -19,7 +19,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
-15. [Units](#15-units)
+15. [Units](#15-units) (and [natural units](#natural-units-units-natural-units-nuclear-units-astro))
 16. [Errors](#16-errors)
 17. [Tools](#17-tools)
 18. [Grammar summary](#18-grammar-summary)
@@ -712,6 +712,61 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
 - **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
+
+### Natural units: `units natural`, `units nuclear`, `units astro`
+
+Particle and nuclear physicists set ħ = c = 1: then a mass is an energy, and a length or a time is 1/energy.
+Write `units natural(ħ = c = 1)` (or just `units natural`) on its own line, and from there on Fermium
+works the same way. Units are still checked, and `in` gives the answer back in SI:
+
+```fermium
+units natural(ħ = c = 1)
+a0 = 1/(α m_e)          # the Bohr radius, as on paper
+print a0                # 268.173 MeV⁻¹
+print a0 in fm          # 52917.7 fm
+print a0 in Å           # 0.529177 Å
+m_π = 139.57 MeV
+print 1/m_π in fm       # range of the pion-exchange force: 1.4138 fm
+print ħ, c              # 1 1
+```
+
+- **What is checked:** "modulo ħ and c". A mass plus an energy is fine (`1 kg + 1 J`), and so is a length
+  plus a time (1 s is 2.998×10⁸ m). An energy plus a length is still an error, because it is E + 1/E:
+  `can't add energy or mass [MeV] to length or time (1/energy) [MeV⁻¹]`. `in` must match the power of energy too.
+- **Constants** take their natural-unit values: ħ and c are exactly 1, `m_e` is 0.511 MeV,
+  and `G` is 1/M_Planck² = 6.70883×10⁻³⁹ GeV⁻², so `2 G M☉ in km` is the Schwarzschild radius, 2.95325 km.
+- **Printing:** a value with no unit of its own is shown in powers of MeV. A unit you wrote is kept
+  (`m = 1 kg` prints as `1 kg`). Converting back is exact: `x in fm` multiplies by ħc = 197.327 MeV fm,
+  and `m in kg` divides by c². Fermium works out the powers of ħ and c for you.
+- **Other constants:** you can set any independent set of ħ, c, k_B, G and ε_0 to 1. With
+  `units natural(ħ = c = k_B = 1)` a temperature is an energy (`300 K in meV` is 25.852 meV).
+  `units natural(G = c = 1)` gives geometrized units (M☉ is 1476.63 m), and `units natural(ħ = c = G = 1)`
+  gives Planck units.
+- **`units nuclear`** is ħ = c = 1, with results shown in MeV, and in fm for 1/energy (fm² for cross
+  sections): `print 1/(139.57 MeV)` shows `1.4138 fm`.
+- **`units astro`** doesn't set anything to 1: it is ordinary SI checking. A value with no unit of its own
+  is shown in M☉, AU, yr, L☉ or km/s, so `print G` shows `39.4769 AU³/(M☉ yr²)` (that is 4π²).
+- **A region:** end the line with `:` and indent the lines under it. The natural units then hold for
+  those lines only. SI variables from before the region convert into it automatically. A value computed
+  inside the region leaves it only through `in`, because 1/MeV could be a length or a time:
+
+```fermium
+L = 2 m
+units nuclear:
+    E = 10 MeV
+    k = 1/(1 fm)
+    print E, k          # 10 MeV 197.327 MeV
+r = 1/k in fm           # an ordinary SI length again
+print r in m, E in J
+```
+
+- **Functions:** a function defined outside a region can be used inside it. It is checked again in natural
+  units, and it gives the same physics (`f(m) = m c²` gives the same joules). A function defined inside a
+  region can only be used where the same constants are 1.
+- **Rules:** a `units` line goes at the top level (not inside a function, loop or `if`), and `units SI`
+  switches back. A variable set outside a region can't be changed inside it. An ODE solution can't cross
+  a region boundary, and `load` isn't allowed inside a natural region. `fermium build` works as usual.
+  See DECISIONS D60 for the design.
 
 ## 16. Errors
 
