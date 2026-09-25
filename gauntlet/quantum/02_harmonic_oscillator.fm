@@ -31,7 +31,7 @@ for p from 0 to 1
     while found < 2
         E_hi = E_lo + 0.1 eV
         if psi_end(E_lo, p) * psi_end(E_hi, p) < 0
-            solve psi_end(E, p) = 0 nm^(-1/2) for E from E_lo to E_hi
+            solve psi_end(E, p) = 0 for E from E_lo to E_hi
             n = 2 found + p
             found += 1
             print "n =", n, " E_shoot =", E in eV to 10 digits, " ħω(n+½) =", ħω (n + ½) in eV to 10 digits

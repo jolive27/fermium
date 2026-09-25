@@ -31,6 +31,6 @@ for T in [10 min, 30 min, 60 min]
 # The peak is where dN3/dt = 0.  (`solve N3'(t_max) = 0 for t_max ...` is read
 # as a differential equation, so the derivative goes through a helper.)
 slope3(tt) = N3'(tt)
-solve slope3(t_max) = 0 / (1 s) for t_max from 1 min to 120 min
+solve slope3(t_max) = 0 for t_max from 1 min to 120 min
 print "Bi-214 activity peaks at", t_max in min to 8 digits, "with", λ3 N3(t_max) in Bq to 8 digits
 print "A(Po-214) / A(Bi-214) at 60 min =", λ4 N4(60 min) / (λ3 N3(60 min)) to 8 digits

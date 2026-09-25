@@ -34,7 +34,7 @@ while n < 3
     E_hi = E_lo + dE
     if psi_end(E_lo) * psi_end(E_hi) < 0
         n += 1
-        solve psi_end(E) = 0 nm^(-1/2) for E from E_lo to E_hi
+        solve psi_end(E) = 0 for E from E_lo to E_hi
         print "n =", n, " E_shoot =", E in eV to 10 digits, " E_exact =", exact(n) in eV to 10 digits
     E_lo = E_hi
 
