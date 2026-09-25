@@ -1023,6 +1023,12 @@ class Checker(C.DiffContext):
             if a in known and b in known:
                 hint = f"did you mean {a} {b} ({a} times {b})? Fermium reads {name} as one name; put a space between"
                 break
+        left = getattr(e, "unit_left", None)
+        if hint is None and lookup_unit(name) is not None and left is not None:
+            lt = C.to_source(left)
+            lt = lt if len(lt) <= 24 else "x"
+            hint = (f"{name} is a unit, and units go right after a number; to multiply {lt} by {name} write "
+                    f"{lt} * 1 {name} or {lt} [{name}]")
         if hint is None and lookup_unit(name) is not None:
             hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
         if hint is None:
@@ -1061,6 +1067,8 @@ class Checker(C.DiffContext):
         return None
 
     def e_BinOp(self, e, ctx):
+        if e.implicit and isinstance(e.right, A.Name) and not isinstance(e.left, A.Num):
+            e.right.unit_left = e.left        # `A_d u`: the hint suggests A_d * 1 u (#55)
         if e.op in ("*", "/") and isinstance(e.left, A.BinOp):
             e.left.in_product = True          # 2 h c² is Planck's law, not "2 hours": only a lone `2 h` warns
         if e.op == "^":
