@@ -1458,10 +1458,12 @@ class Interpreter:
         xa, xb = self.eval(s.xa, fr), self.eval(s.xb, fr)
         t0, t1 = self.eval(s.t0, fr), self.eval(s.t1, fr)
         step = self.eval(s.step, fr) if s.step is not None else None
+        line = self.line
         try:
             ts, ys, dys, ncomp, m = self.kernel(
                 lambda: pde_solve(f, xa, xb, t0, t1, grid=s.grid, order=s.order, method=PDE_METHOD_NAMES[s.pmethod],
-                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep), getattr(s, "tfmt", -1))
+                                  step=step, bc=s.bc, is_complex=s.is_complex, tdep=s.tdep,
+                                  warn=lambda kind, est: self.rt.warn(kind, est, line, -1)), getattr(s, "tfmt", -1))
         except PdeFail as ex:
             raise FermiumRuntimeError(ex.message, self.line) from None
         sol = Sol(ncomp * (m + 1))

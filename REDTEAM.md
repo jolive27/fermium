@@ -75,7 +75,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - Unit checking of lists, branches, `rand`, `linspace`, `ifft` and PDE boundary values.
 - Module errors.
 
-### 1. `2 c` is the speed of light even when `c` is your own variable (wrong-answer, silent). Status: open
+### 1. `2 c` is the speed of light even when `c` is your own variable (wrong-answer, silent). Status: fixed
+- **Fix:** the parser no longer exempts `c` from the D7 rule, so with your own c, `2 c * t` is the "ambiguous" error and `2 c` alone warns; `3 c` without your own c is still the speed of light (D130).
 - **Repro:**
   ```
   c = 340 m/s          # speed of sound
@@ -88,7 +89,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/parser.py, in `_colliding_unit` (line ~1204) and `_warn_bare_unit` (~1233, ~1236). Both skip the name `c` (`f.name != "c"`), probably so the built-in constant doesn't trigger them. The exemption should apply only while `c` is still the built-in constant.
 - **Tests:** `test_1_two_c_times_t_with_your_own_c_is_not_the_speed_of_light`, `test_1_two_c_alone_with_your_own_c_warns`.
 
-### 2. Crank–Nicolson with a coarse time step is silently wrong, even in sign (wrong-answer). Status: open
+### 2. Crank–Nicolson with a coarse time step is silently wrong, even in sign (wrong-answer). Status: fixed
+- **Fix:** step doubling checks CN/implicit: the default step is halved until the estimated error is under 0.1 % of the solution's largest value (up to 32 000 steps), and a step of your own that is too coarse warns, in the JIT and `--interp` (D131).
 - **Repro:**
   ```
   L = 1 m
@@ -106,7 +108,8 @@ was reproduced with `fermium run` (JIT), and where noted with `--interp` and `fe
 - **Where:** fermium/runtime/pde.py, `pde_solve`. There is no accuracy check on the time step. A step-doubling estimate, as for RK4, would catch this.
 - **Test:** `test_2_coarse_crank_nicolson_step_is_right_or_warns`.
 
-### 3. Crank–Nicolson keeps grid-scale wiggles from incompatible initial and boundary data, with default settings (wrong-answer). Status: open
+### 3. Crank–Nicolson keeps grid-scale wiggles from incompatible initial and boundary data, with default settings (wrong-answer). Status: fixed
+- **Fix:** Rannacher-style start-up: CN's first 4 steps on real equations use L-stable, second-order SDIRK2, which damps the grid-scale modes the jump excites; both repros now match the analytic answers (D131).
 - **Repro A (Neumann, the flux is wrong):**
   ```
   L = 1 m

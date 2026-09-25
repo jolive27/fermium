@@ -66,14 +66,15 @@ def eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out):
 PDE_METHOD_NAMES = {0: "crank_nicolson", 1: "implicit", 2: "explicit"}
 
 
-def pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out):
+def pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out, line=0):
     """fm_pde: 0 = ok, 1 = solver error (rt.error set), 2 = the equation stopped with its own error."""
     from .pde import PdeFail, pde_solve
     try:
         f = compiled_rhs(guard, fn, env, 6)
         ts, ys, dys, ncomp, m = pde_solve(f, xa, xb, t0, t1, grid=grid, order=order,
                                           method=PDE_METHOD_NAMES[method], step=None if step != step else step,
-                                          bc=(bcl, bcr), is_complex=bool(cx), tdep=bool(tdep))
+                                          bc=(bcl, bcr), is_complex=bool(cx), tdep=bool(tdep),
+                                          warn=lambda kind, est: rt.warn(kind, est, int(line) or None, -1))
     except _Inner:
         return 2
     except PdeFail as ex:

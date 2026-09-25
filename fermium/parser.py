@@ -1256,7 +1256,7 @@ class Parser:
         """The (quantity, factor) if e is `2 g` with a single bare unit that is also one of your variables."""
         if isinstance(e, A.Quantity) and not e.bracket and not e.paren and len(e.unit.factors) == 1:
             f = e.unit.factors[0]
-            if f.name in self.known and f.name != "c" and f.exp == 1:
+            if f.name in self.known and f.exp == 1:
                 return e, f
         return None
 
@@ -1285,10 +1285,10 @@ class Parser:
             q = q.right
         if isinstance(q, A.Quantity) and not q.bracket and len(q.unit.factors) == 1:
             f = q.unit.factors[0]
-            if f.name in self.known and f.name != "c":
+            if f.name in self.known:
                 self._note_collision(q, f)
             then_mul = e is q and self.tok.kind == "OP" and self.tok.value in ("*", "/", "×")   # product() errors
-            if f.name in self.known and f.name not in self.warned_units and f.name != "c" and not then_mul:
+            if f.name in self.known and f.name not in self.warned_units and not then_mul:
                 self.warned_units.add(f.name)
                 num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else "2"
                 self.diags.warn(f"'{num} {f.name}' is the unit {f.name}, not your variable {f.name}",

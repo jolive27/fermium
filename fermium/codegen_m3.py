@@ -310,13 +310,14 @@ def py_solve(g, s):
                               ir.Constant(I64, s.eig_method), out])
     else:
         ext = mg.extern("fm_pde", I64, [I8P, I8P, F64P, F64, F64, F64, F64, F64, I64, I64, I64, I64, I64, I64, I64,
-                                         SOLP.as_pointer()])
+                                         I64, SOLP.as_pointer()])
         step = g.expr(s.step) if s.step is not None else ir.Constant(F64, float("nan"))
         xa, xb = g.expr(s.xa), g.expr(s.xb)
         status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, xa, xb, t0, t1, step,
                               ir.Constant(I64, s.grid), ir.Constant(I64, s.order), ir.Constant(I64, s.pmethod),
                               ir.Constant(I64, s.bc[0]), ir.Constant(I64, s.bc[1]),
-                              ir.Constant(I64, 1 if s.is_complex else 0), ir.Constant(I64, 1 if s.tdep else 0), out])
+                              ir.Constant(I64, 1 if s.is_complex else 0), ir.Constant(I64, 1 if s.tdep else 0),
+                              ir.Constant(I64, getattr(g, "line", 0) or 0), out])
     with b.if_then(b.icmp_signed("!=", status, ir.Constant(I64, 0)), likely=False):
         with b.if_then(b.icmp_signed("==", status, ir.Constant(I64, 2))):
             b.call(mg.externs["longjmp"], [b.bitcast(mg.jmpbuf, I8P), ir.Constant(ir.IntType(32), 1)])

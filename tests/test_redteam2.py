@@ -4,6 +4,7 @@ Each test states the correct behaviour and is marked xfail(strict=True) until it
 the fix agent flips a test by deleting its xfail mark.  Each test names its finding number.
 """
 import io
+import math
 import os
 import subprocess
 import sys
@@ -31,7 +32,6 @@ def rt2(n):
 
 # ---- #1: `2 c` is the speed of light even when c is your variable -------------------------------------------
 
-@rt2(1)
 def test_1_two_c_times_t_with_your_own_c_is_not_the_speed_of_light():
     src = "c = 340 m/s\nt = 2 s\nd = 2 c * t\nprint d in m"
     try:
@@ -41,14 +41,12 @@ def test_1_two_c_times_t_with_your_own_c_is_not_the_speed_of_light():
     assert num(out) == pytest.approx(1360)      # today: 1.19917×10⁹ m, silently
 
 
-@rt2(1)
 def test_1_two_c_alone_with_your_own_c_warns():
     assert warnings_of("c = 340 m/s\nprint 2 c in m/s")     # `2 N`, `2 V`, `2 u` all warn; `2 c` doesn't
 
 
 # ---- #2: Crank–Nicolson with a coarse step: silently wrong ---------------------------------------------------
 
-@rt2(2)
 def test_2_coarse_crank_nicolson_step_is_right_or_warns():
     src = """L = 1 m
 D = 0.01 m²/s
@@ -64,7 +62,6 @@ print u(0.5 m, 1000 s) to 6 digits
 
 # ---- #3: Crank–Nicolson keeps grid-scale wiggles from incompatible initial/boundary data -----------------------
 
-@rt2(3)
 def test_3_neumann_slope_at_the_boundary_is_the_one_imposed():
     src = """L = 1 m
 D = 1 m²/s
@@ -76,7 +73,6 @@ print ∂u/∂x(0 m, 5 s) to 6 digits
     assert num(run(src)) == pytest.approx(-1, rel=1e-2)     # today -0.747629 K/m (-0.0100 K/m with grid 4000)
 
 
-@rt2(3)
 def test_3_step_initial_data_leaves_no_wiggle_at_the_wall():
     src = """L = 1 m
 D = 1 m²/s
@@ -219,3 +215,76 @@ def test_13_assigning_to_a_module_constant_has_a_sensible_hint():
 def test_14_bad_sample_counts_and_negative_sigma_are_errors(src):
     with pytest.raises(FermiumError):
         run(src)
+
+
+# ---- further tests added with the fixes ---------------------------------------------------------------------
+
+def test_1_three_c_without_your_own_c_is_still_the_speed_of_light():
+    assert num(run("print 3 c in m/s to 6 digits")) == pytest.approx(8.99377e8, rel=1e-6)
+    assert not warnings_of("v = 0.5 c\nprint v in m/s")
+
+
+def test_1_two_c_star_t_with_your_own_c_asks_which_you_mean():
+    e = error_of("c = 340 m/s\nt = 2 s\nd = 2 c * t\nprint d in m")
+    assert "2*c" in (e.hint or "")
+
+
+HEAT_1 = """L = 1 m
+D = 1 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 1 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 0.5 s{step}
+print u(0.5 m, 0.5 s) to 6 digits
+"""
+
+
+def test_2_a_step_of_your_own_that_is_too_coarse_warns_in_jit_and_interp():
+    from fermium.interp import run_interpreted
+    src = HEAT_1.format(step=" step 0.05 s")
+    out, err = run_err(src)
+    assert "time step is too coarse for this PDE" in err and "line 3" in err
+    import contextlib
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(buf_out), contextlib.redirect_stderr(buf_err):
+        run_interpreted(src, "<t>")
+    assert buf_out.getvalue().strip() == out
+    assert "time step is too coarse for this PDE" in buf_err.getvalue()
+
+
+def test_2_the_default_step_is_refined_until_it_is_accurate():
+    out, err = run_err(HEAT_1.format(step=""))
+    # the exact decay of this mode on the 400-interval grid (the time stepping is what's tested): λ_h = 4/h² sin²(πh/2)
+    lam = 4 * 400 ** 2 * math.sin(math.pi / 800) ** 2
+    assert num(out) == pytest.approx(math.exp(-lam * 0.5), rel=1e-4)
+    assert "warning" not in err
+
+
+def test_2_a_fine_step_of_your_own_does_not_warn():
+    out, err = run_err(HEAT_1.format(step=" step 0.001 s"))
+    assert num(out) == pytest.approx(math.exp(-math.pi ** 2 * 0.5), rel=1e-4)
+    assert "warning" not in err
+
+
+def test_3_wall_jump_keeps_the_middle_right_and_the_neumann_line_straight():
+    src = """L = 1 m
+D = 1 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 1 K, u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 2 s
+print u(0.5 m, 2 s) to 6 digits
+print u(0.0025 m, 2 s) to 6 digits
+solve ∂w/∂t = D * ∂²w/∂x²
+    with w(x, 0 s) = 0 K, ∂w/∂x(0 m, t) = -1 K/m, w(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 5 s
+print w(0 m, 5 s) to 6 digits
+print ∂w/∂x(0.01 m, 5 s) to 6 digits
+print ∂w/∂x(0.5 m, 5 s) to 6 digits
+"""
+    out = [num(v) for v in run(src).splitlines()]
+    # Fourier series: u(L/2, 2 s) = (4/π) Σ_odd (±1) e^(−n²π²·2)/n ≈ 3.40445×10⁻⁹ K
+    assert out[0] == pytest.approx(4 / math.pi * math.exp(-2 * math.pi ** 2), rel=1e-3)
+    assert abs(out[1]) < 1e-6
+    # w → 1 K − x·1 K/m; the slowest mode left is e^(−π²/4 · 5 s) ≈ 4×10⁻⁶
+    assert out[2] == pytest.approx(1, abs=2e-5)
+    assert out[3] == pytest.approx(-1, rel=1e-3)
+    assert out[4] == pytest.approx(-1, rel=1e-3)
