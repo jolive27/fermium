@@ -1,0 +1,36 @@
+# Nuclear 01 — The radon decay chain (Bateman equations)
+#
+# (Krane, "Introductory Nuclear Physics", §6.4 and Problem 6.?.)  A filter
+# that sampled radon-laden air holds, at t = 0, 1000 Bq of freshly collected
+# Po-218 and none of its daughters.  The chain is
+#
+#   Po-218 --3.098 min--> Pb-214 --26.8 min--> Bi-214 --19.9 min--> Po-214 --164.3 μs--> Pb-210
+#
+# (Pb-210, t½ = 22.2 yr, counts as stable here.)
+#  (a) Find the activity of every member at t = 10, 30 and 60 min.
+#  (b) When is the Bi-214 activity largest, and how large is it?
+#  (c) Show that Po-214 is in secular equilibrium with Bi-214 (equal activity).
+
+λ1 = ln(2) / (3.098 min)
+λ2 = ln(2) / (26.8 min)
+λ3 = ln(2) / (19.9 min)
+λ4 = ln(2) / (164.3 μs)
+N0 = 1000 Bq / λ1
+
+solve N1' = -λ1 N1,
+      N2' = λ1 N1 - λ2 N2,
+      N3' = λ2 N2 - λ3 N3,
+      N4' = λ3 N3 - λ4 N4
+  with N1(0) = N0, N2(0) = 0, N3(0) = 0, N4(0) = 0
+  for t from 0 min to 120 min
+
+for T in [10 min, 30 min, 60 min]
+    print "t =", T, " A(Po-218) =", λ1 N1(T) in Bq to 8 digits, " A(Pb-214) =", λ2 N2(T) in Bq to 8 digits,
+          " A(Bi-214) =", λ3 N3(T) in Bq to 8 digits, " A(Po-214) =", λ4 N4(T) in Bq to 8 digits
+
+# The peak is where dN3/dt = 0.  (`solve N3'(t_max) = 0 for t_max ...` is read
+# as a differential equation, so the derivative goes through a helper.)
+slope3(tt) = N3'(tt)
+solve slope3(t_max) = 0 / (1 s) for t_max from 1 min to 120 min
+print "Bi-214 activity peaks at", t_max in min to 8 digits, "with", λ3 N3(t_max) in Bq to 8 digits
+print "A(Po-214) / A(Bi-214) at 60 min =", λ4 N4(60 min) / (λ3 N3(60 min)) to 8 digits
