@@ -49,7 +49,7 @@ print 3e8
 ```
 6.674×10⁻¹¹
 6.674×10⁻¹¹
-3×10⁸
+300000000
 ```
 
 `e-11` means "× 10⁻¹¹". This is how almost every programming language writes it. (`*` also works: `6.674*10^-11`.)
@@ -274,7 +274,7 @@ print 1 AU / c in min
 
 <!-- output -->
 ```
-1 AU/c (= 499.005 s)
+1 AU/c (= 499 s)
 8.32 min
 ```
 

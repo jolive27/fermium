@@ -32,7 +32,7 @@ def both(src):
     ("print 4 * 5", "20"),                       # a whole number prints exactly
     ("print 1000 * 1000", "1000000"),
     ("x = 3.14159\nprint x", "3.14159"),         # a literal prints as written
-    ("print 12345678", "1.2345678×10⁷"),
+    ("print 12345678", "12345678"),                # a literal prints as written (red team round 4 #14)
     ("print 2.00 m * 3", "6.00 m"),              # an input with a stated precision decides
     ("print 0.5 * 9.81", "4.9"),                 # at least 2
     ("print 2 / 3 to 6 digits", "0.666667"),     # `to N digits` overrides
@@ -83,4 +83,18 @@ def test_fermium_build_prints_the_same(tmp_path):
     ("print 4186 J", "4186 J"),                      # a literal prints as written
 ])
 def test_large_rounded_numbers_use_powers_of_ten(src, out):
+    assert both(src) == out
+
+
+@pytest.mark.parametrize("src,out", [
+    ("print [1.2345, 2], [1.5, 9e1]", "[1.2345, 2] [1.5, 90]"),      # red team round 4 #14
+    ("print 10000000", "10000000"),
+    ("print [0.10, 0.20]", "[0.10, 0.20]"),
+    ("print 2 kg c^2", "2 kg c² (= 1.80×10¹⁷ J)"),                   # round 4 #13
+    ("print ∫ sin(x) dx from -π to π", "0"),                          # round 4 #12: rounding noise is 0
+    ("print ∫ <cos(x), sin(x), 0> dx from 0 to π/2", "<1, 1, 0>"),
+    ("print ∫ sin(x) + 1e-9 dx from -π to π", "6.28×10⁻⁹"),           # a real small value survives
+    ("print 0.125 * 1.0", "0.12"),                                    # round 4 #16: ties to even (documented)
+])
+def test_red_team_round_4_display(src, out):
     assert both(src) == out

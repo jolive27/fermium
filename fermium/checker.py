@@ -70,6 +70,16 @@ def _unit_name_suggestion(name):
     return ""
 
 
+def _written(items):
+    """`direct` of a list, vector or matrix written out in the program (D11): False if not every element is
+    a literal; 3 if some elements are exact whole numbers and others have a stated precision ([1.2345, 2]:
+    the 2 prints as written); else True ([1.0, 2.0] keeps its figures)."""
+    if not items or not all(getattr(it, "direct", False) for it in items):
+        return False
+    sfs = [getattr(it, "sf", None) for it in items]
+    return 3 if None in sfs and any(x is not None for x in sfs) else True
+
+
 class MixedHint(tuple):
     """Display units of a vector whose components have different units: one Unit (or None) each."""
     affine = False
@@ -1389,7 +1399,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err(f"this matrix already has units ({self.desc(v.ty.dim)}); write the unit once, "
                                f"after the ]]", e)
             r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), MatTy(DExpr.of(u.dim), v.ty.r, v.ty.c))
-            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit)
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit) and _written(getattr(v, "items", []))
             return r
         if isinstance(v.ty, VecTy):
             if u.affine:
@@ -1400,7 +1410,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
             self.U.unify(v.ty.dim, DIMLESS)
             r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), VecTy(DExpr.of(u.dim), v.ty.n))
-            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit)
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit) and _written(getattr(v, "items", []))
             return r
         if not isinstance(e.value, A.Num):
             vd = self.U.norm(v.ty.dim)
@@ -1976,7 +1986,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r = I.IVec(items, MatTy(dim, len(rows), ncol))
         r.hint = next((it.hint for it in items if it.hint is not None), None)
         r.sf = self._minsf(*items)
-        r.direct = all(getattr(it, "direct", False) for it in items)
+        r.direct = _written(items)
         return r
 
     def need_square(self, m, name, node):
@@ -2574,7 +2584,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r = I.IList(items, ListTy(dim))
         r.hint = items[0].hint if items else None
         r.sf = self._minsf(*items) if items else None
-        r.direct = bool(items) and all(getattr(it, "direct", False) for it in items)
+        r.direct = _written(items)
         return r
 
     def e_Load(self, e, ctx):
