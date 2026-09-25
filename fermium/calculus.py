@@ -811,6 +811,8 @@ def to_sympy(e, symbols):
             return -conv(e.operand)
         if isinstance(e, A.Sqrt):
             return conv(e.operand) ** sp.Rational(1, e.root)
+        if isinstance(e, A.Abs):
+            return sp.Abs(conv(e.operand))
         if isinstance(e, A.Call) and isinstance(e.func, A.Name):
             fns = {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "exp": sp.exp, "ln": sp.log, "log": sp.log,
                    "sinh": sp.sinh, "cosh": sp.cosh, "tanh": sp.tanh, "asin": sp.asin, "acos": sp.acos,
@@ -860,7 +862,28 @@ def from_sympy(x):
              sp.erf: "erf"}
     if x.func in names:
         return call(names[x.func], *[from_sympy(a) for a in x.args])
+    if isinstance(x, sp.Piecewise) and x.args[-1][1] is sp.true:
+        # e.g. ∫ |x| dx = -x²/2 for x <= 0, else x²/2  ->  if x <= 0 then ... else ...
+        out = from_sympy(x.args[-1][0])
+        for piece, cond in reversed(x.args[:-1]):
+            out = A.IfExpr(_cond_from_sympy(cond), from_sympy(piece), out)
+        return out
     raise FermiumError(f"SymPy returned something Fermium can't use yet: {x}")
+
+
+def _cond_from_sympy(c):
+    import sympy as sp
+    ops = {sp.StrictLessThan: "<", sp.LessThan: "<=", sp.StrictGreaterThan: ">", sp.GreaterThan: ">=",
+           sp.Equality: "==", sp.Unequality: "!="}
+    if type(c) in ops:
+        return A.Compare(ops[type(c)], from_sympy(c.lhs), from_sympy(c.rhs))
+    if isinstance(c, (sp.And, sp.Or)):
+        args = [_cond_from_sympy(a) for a in c.args]
+        out = args[0]
+        for a in args[1:]:
+            out = A.Logic("and" if isinstance(c, sp.And) else "or", out, a)
+        return out
+    raise FermiumError(f"SymPy returned something Fermium can't use yet: {c}")
 
 
 def integrate_symbolic(integrand, var):
@@ -869,7 +892,8 @@ def integrate_symbolic(integrand, var):
     syms = {}
     expr = to_sympy(inline_where(integrand), syms)
     v = syms.get(var) or sp.Symbol(var, real=True)
-    res = sp.integrate(expr, v)
+    # conds="none": the generic answer, ∫ cos(ω t) dt = sin(ω t)/ω, not a Piecewise for ω = 0
+    res = sp.integrate(expr, v, conds="none")
     if res.has(sp.Integral):
         raise FermiumError("SymPy couldn't find a formula for this integral",
                            hint="give limits (from a to b) to compute it numerically")

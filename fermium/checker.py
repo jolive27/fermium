@@ -314,7 +314,7 @@ class Checker(C.DiffContext):
         if isinstance(v, FuncRef):
             ctx.scope.names[s.name] = v.info
             if v.info.display_name.startswith("<") or "'" in v.info.display_name or "∂" in v.info.display_name \
-                    or v.info.display_name.startswith("λ"):
+                    or v.info.display_name.startswith(("λ", "d/d", "∫d")):
                 v.info.display_name = s.name
             return None
         if isinstance(v, SolRef):

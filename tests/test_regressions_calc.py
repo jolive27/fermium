@@ -72,3 +72,23 @@ def test_sign_of_a_vector_is_its_direction():
 
 def test_derivative_of_scalar_abs_still_sign():
     assert run("f(x) = |x - 1|\ng = f'\nprint g(0), g(3)") == "-1 1"
+
+
+# ---------------------------------------------------------------- A35: SymPy Piecewise
+def test_indefinite_integral_with_parameter():
+    out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s)")
+    assert close(num(out), math.sin(2) / 2)
+
+
+def test_indefinite_integrals_generic_branch():
+    assert close(num(run("k = 3\nF = ∫ exp(-k x) dx\nprint F(1) - F(0)")), (1 - math.exp(-3)) / 3)
+    assert close(num(run("a = 2\nF = ∫ x^a dx\nprint F(3) - F(0)")), 9)
+
+
+def test_indefinite_integral_of_abs():
+    assert close(num(run("F = ∫ abs(x) dx\nprint F(2) - F(-1)")), 2.5)
+    assert run("F = ∫ |x| dx\nprint F") == "F(x) = if x <= 0 then -x²/2 else x²/2"
+
+
+def test_indefinite_integral_is_printed_with_its_name():
+    assert run("F = ∫ x^2 dx\nprint F") == "F(x) = x³/3"
