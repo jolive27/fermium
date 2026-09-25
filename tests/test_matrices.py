@@ -156,8 +156,10 @@ def test_matrix_in_functions_and_if():
     out = run("rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]\nv = <1, 0> m\n"
               "print rot(π/2) v to 3 digits\nsq(A) = A A\nprint sq([[1, 1], [0, 1]])\n"
               "big = true\nM = if big then 2 identity(2) else identity(2)\nprint M")
-    # cos(90°) is 6.12×10⁻¹⁷ in double precision: rounding noise next to 1.00, printed as 0 since D197
-    assert out.split("\n") == ["<0, 1.00> m", "[[1, 2], [0, 1]]", "[[2, 0], [0, 2]]"]
+    # cos(90°) is 6.12×10⁻¹⁷ in double precision: rounding noise next to 1.00 (shown honestly since D230)
+    lines = out.split("\n")
+    assert lines[0].startswith("<6.12×10⁻¹⁷") and lines[0].endswith(", 1.00> m")
+    assert lines[1:] == ["[[1, 2], [0, 1]]", "[[2, 0], [0, 2]]"]
 
 
 def test_matrix_variable_can_be_reassigned():

@@ -716,10 +716,7 @@ class ModuleGen:
         b.store(f64(0), g)
         r = b.call(inner, [f, env, a, bb, rtol, atol, g])
         mine = b.load(g)
-        # a result at or below the rounding level of ∫|f| (D44) is 0 as far as the arithmetic can tell:
-        # ∫ sin(x) dx from -π to π is 0, not 3.19×10⁻¹⁶ (red team round 4 #12)
-        noise = b.fcmp_ordered("<=", b.call(self.intrinsic("fabs"), [r]), b.fmul(f64(self.QUAD_ROUND), mine))
-        r = b.select(noise, f64(0), r)
+        # (no snapping of tiny results to 0: ∫ 1e6 sin(x) + 4e-9 dx is 8×10⁻⁹, not rounding noise; red team 6 #3)
         zero = b.and_(b.fcmp_ordered("==", r, f64(0)), b.fcmp_ordered("==", mine, f64(0)))
         zero = b.and_(zero, b.fcmp_ordered("!=", a, bb))
         soft = b.fcmp_ordered("<", atol, f64(0))          # the quiet first try (D44): counted, not warned

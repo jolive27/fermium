@@ -126,19 +126,19 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 
 ## Speed
 
-Measured on the same machine (4 cores, shared with other jobs: load average 2–4, so ratios move by 10–30% between runs), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number.
+Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number.
 
 | Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|
-| N-body, 1M steps | 0.96× Julia (2.5× faster than before M5: integer loop counters, D150) | 1× | ~55× Julia |
-| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | 1.97× Julia | 1× | ~21× Julia |
-| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 0.83× Julia | 1× | ~21× Julia |
-| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | 1.29× Julia | 1× | ~22× Julia |
-| Loop with units | 1.05× Julia | 1× | ~76× Julia |
-| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 0.62× Julia (faster) | 1× | ~45× Julia's 1-thread time (Python runs one thread) |
-| the same, 1 thread | 0.96× Julia | 1× | |
+| N-body, 1M steps | 0.95× Julia (2.5× faster than before M5: integer loop counters, D150) | 1× | ~55× Julia |
+| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | 1.93× Julia | 1× | ~21× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 0.86× Julia | 1× | ~20× Julia |
+| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | 1.27× Julia | 1× | ~20× Julia |
+| Loop with units | 1.54× Julia | 1× | ~79× Julia |
+| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 0.65× Julia (faster) | 1× | ~54× Julia's 1-thread time (Python runs one thread) |
+| the same, 1 thread | 1.09× Julia | 1× | |
 
-Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.2–0.45 s against 0.9–2.9 s for the whole process on this busy machine), because Julia spends that time starting up: loading its runtime and packages, the untimed warm-up call each benchmark makes, and JIT-compiling. A program that computes one number takes 0.17 s in Fermium and 0.27 s in Julia (the `startup` row in RESULTS.md).
+Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.2–0.45 s against 0.9–2.9 s for the whole process), because Julia spends that time starting up: loading its runtime and packages, the untimed warm-up call each benchmark makes, and JIT-compiling. A program that computes one number takes 0.17 s in Fermium and 0.27 s in Julia (the `startup` row in RESULTS.md).
 
 ## Gauntlet
 

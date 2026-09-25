@@ -104,7 +104,7 @@ The rule (spec §3.4.2), refined:
     - When rounding leaves two or more non-significant zeros before the decimal point, the value is shown with a power of ten: `1000000/3` → `3.33×10⁵`, not `333000` (red team round 3 #9). One such zero stays in fixed notation (`9550 rpm`), and whole numbers still print exactly.
     - **Ties round half to even:** `0.125` to 2 figures is `0.12`, and `3.25×10⁶` is `3.2×10⁶`. This is the IEEE-754 rule that C's printf and Python's formatting use (NumPy and Julia too). Only values that are exactly a tie in binary are affected, so `0.135` shows `0.14`, because its double is slightly above the tie (red team round 4 #16: documented, not changed).
     - A written-out whole number prints as written, in a list too: `[1.2345, 2]` and `10000000`, not `2.0000` or `1×10⁷` (round 4 #14). The SI echo of a value written with a constant unit uses the value's own significant figures: `2 kg c²` gives `(= 1.80×10¹⁷ J)` (round 4 #13).
-    - An integral at or below its own rounding level (50 ε × ∫|f|, D44) is 0: `∫ sin(x) dx from -π to π` prints `0`, not `3.19×10⁻¹⁶` (round 4 #12).
+    - (Reverted by D230: an integral at or below its rounding level was printed as 0 for round 4 #12, but that also zeroed real small integrals. Rounding noise is shown as it is.)
     - `print x to N digits` overrides the default, for lists and vectors too (`[0.333333, 0.666667]`). Programs and tests that compare many digits say so explicitly.
     - Lists, vectors and matrices follow the same rule per element. The C runtime of `fermium build` mirrors it (`fmt_default`, `FM_DEFAULT_SF` in aot_rt.c; `format_default` in units.py).
     - **Why 3:** it is the textbook convention for answers given without a stated precision, and physics inputs are rarely known better. Six digits suggested a precision nobody asked for. **Alternatives considered:** 4 digits (Mathematica-like), or treating exact integers as infinitely precise and keeping 6. The user asked for 3.
@@ -845,3 +845,11 @@ The rule (spec §3.4.2), refined:
 - **Parse:** plot options may follow the file name without `with` (`plot y vs x to "a.png" title "…"`), as they may follow the last series.
 - **Messages:** `print ψ` after an eigenvalue problem says the states are ψ₁, ψ₂ … and how to write them in ASCII.
 - **Formatter:** `fmt --ascii` writes `2𝑖` as `2i` after a plain number (not after an exponent, where `2^3i` would mean 2^(3i), and not before a name).
+
+## D230. Three conveniences reverted because they hid real values (red team round 6 #1–#4)
+- **What:**
+  - The integral "rounding noise is 0" snap (red team 4 #12) is removed. `∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` is 8×10⁻⁹, not rounding noise, but it was printed as `0`.
+  - The vector/matrix noise-zeroing (D197) is disabled. The 1s of a Minkowski metric next to c², and 1 mm written in AU, were printed as 0.
+  - The PDE start-up skip after a jump between initial and boundary data (D206) is set to 0. It hid a 20 % error at early times (40.93 K where erfc gives 34.34 K).
+- **Why:** each one made some outputs prettier, and each one printed a plausible, wrong number with no warning in a case nobody had tested. Priority (1) in CLAUDE.md is correctness. `∫ sin(x) dx from -π to π` now shows its honest rounding noise (`3.19×10⁻¹⁶`), and `inverse(A) A` shows its noise off the diagonal. The step-change heat problem may warn that its step can't be made fine enough (round 4 #8), which is true of its early times.
+- **Alternatives considered:** a smarter noise test (per row and column scale, or tracking which entries came from cancellation). It may come later, but tonight there was no time to prove one never hides a real value.

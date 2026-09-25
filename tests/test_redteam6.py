@@ -30,7 +30,6 @@ def num(text):
 
 # ---- #1: D197 prints real entries of a computed matrix as 0 (the Minkowski metric with c²) ---------------------
 
-@rt6(1)
 def test_1_metric_with_c_squared_keeps_its_unit_diagonal():
     src = """one = 1 m²/s²
 z = 0 m²/s²
@@ -44,7 +43,6 @@ print inverse(h)
     assert "-1" in out.split("]")[0], out
 
 
-@rt6(1)
 def test_1_inverse_of_a_diagonal_matrix_keeps_the_small_entry():
     out = run("M = [[1, 0], [0, 1e-15]]\nprint inverse(M)\n")
     # NumPy: [[1, 0], [0, 1e15]]
@@ -54,7 +52,6 @@ def test_1_inverse_of_a_diagonal_matrix_keeps_the_small_entry():
 # ---- #2: D197 zeroes an entry written in the program, contradicting "entries written in the program are never
 #          changed" ---------------------------------------------------------------------------------------------
 
-@rt6(2)
 def test_2_written_vector_entry_is_not_printed_as_zero():
     out = run("p = <1 AU, 1 mm, 0 m>\nprint p\n")
     # 1 mm = 6.68×10⁻¹⁵ AU, written by the user; `print p[2]` shows it, `print p` shows 0
@@ -63,7 +60,6 @@ def test_2_written_vector_entry_is_not_printed_as_zero():
 
 # ---- #3: the integral noise snap zeroes integrals that are resolvable (SciPy gets them to 10⁻³) -----------------
 
-@rt6(3)
 def test_3_small_but_resolvable_integral_is_not_snapped_to_zero():
     out = run("print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1\n")
     # exact 8×10⁻⁹; scipy.integrate.quad gives 7.99×10⁻⁹ ± 1×10⁻⁸ (estimate); Fermium prints 0
@@ -71,7 +67,6 @@ def test_3_small_but_resolvable_integral_is_not_snapped_to_zero():
     assert abs(num(out) - 8e-9) < 1e-10, out
 
 
-@rt6(3)
 def test_3_constant_offset_on_an_odd_integrand():
     out = run("print ∫ sin(x) + 5e-15 dx from -1 to 1\n")
     # exact 1.0×10⁻¹⁴; SciPy quad: 9.99×10⁻¹⁵
@@ -80,7 +75,6 @@ def test_3_constant_offset_on_an_odd_integrand():
 
 # ---- #4: PDE results before t0 + 10 h²/D (the D206 skipped window) are silently wrong ----------------------------
 
-@rt6(4)
 def test_4_heat_step_early_times_are_accurate_or_warned():
     src = """D = 1e-4 m²/s
 solve ∂u/∂t = D * ∂²u/∂x²

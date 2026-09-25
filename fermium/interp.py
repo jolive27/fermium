@@ -902,8 +902,6 @@ def quad(f, a, b, rtol=1e-10, atol=0.0, name=-1, warn=None):
     try:
         r = _quad_in(f, a, b, rtol, atol, name)
         mine = _QABS[0]
-        if abs(r) <= QUAD_ROUND * mine:     # at the rounding level of ∫|f| (D44): 0 (red team round 4 #12)
-            r = 0.0
     finally:
         _QABS[0] = saved
     if r == 0 and mine == 0 and a != b:

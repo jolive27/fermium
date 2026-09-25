@@ -116,8 +116,8 @@ def test_8_heat_step_change_is_accurate_and_quiet():
            "print u(0.1 m, 1000 s) to 6 digits\n")
     out, err = run_err(src)
     assert num(out) == pytest.approx(65.8436, abs=1e-3)         # Fourier series: 65.84355 K; today 65.8435 K
-    # today: "could not be made fine enough: with 32000 steps the estimated error is still 0.8%"
-    assert "could not be made fine enough" not in err
+    # D230 (red team round 6 #4): the start-up skip that silenced this warning also hid a 20 % error at early
+    # times, so it is gone; the warning is honest (the early-time solution is that inaccurate). The value is right.
 
 
 # ---- #9: the hint for `8.5e28 m^-3` next to your own m suggests `8.5e+28 [m]` --------------------------------------
@@ -159,10 +159,12 @@ def test_11_rounding_noise_sigma_doesnt_print_twenty_digits(src, bad):
     ("f(x) = <cos(x), sin(x), 0>\nprint ∫ f(x) dx from 0 to π", "<0, 2, 0>"),
 ])
 def test_12_integral_rounding_noise_prints_as_zero(src, good):
-    # today: 3.19×10⁻¹⁶ and <1.67×10⁻¹⁶, 2.00, 0>; exp(1i π) already prints -1 + 0i
-    out = run(src)
-    assert "10⁻¹⁶" not in out
-    assert out.replace("2.00", "2") == good
+    # Reverted by D230 (red team round 6 #3): snapping results below 50 ε ∫|f| to 0 also zeroed real small
+    # integrals, so rounding noise is printed honestly again (3.19×10⁻¹⁶). The values must still be right:
+    got, want = _nums(run(src)), _nums(good)
+    assert len(got) == len(want)
+    for g, w in zip(got, want):
+        assert abs(g - w) < 1e-14
 
 
 # ---- #13: `2 kg c²` shows its SI value with 6 significant figures -------------------------------------------------
@@ -295,3 +297,17 @@ def test_17_the_hinted_table_of_sliced_columns_fits(tmp_path):
     src = ('data = load "p.csv"\nfit T = 2 π sqrt(L / g) to table(L = data.L[2:4], T = data.T[2:4])\n'
            'print g to 3 digits\n')
     assert run(src, base_dir=str(tmp_path)).splitlines()[-1] == "9.81 m/s²"
+
+def _nums(text):
+    """Every number in printed output (understands 3.19×10⁻¹⁶)."""
+    import re
+    sup = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+    out = []
+    for m in re.finditer(r"-?\d+(?:\.\d+)?(?:×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?", text):
+        t = m.group(0)
+        if "×10" in t:
+            a, e = t.split("×10")
+            out.append(float(a) * 10.0 ** int(e.translate(sup)))
+        else:
+            out.append(float(t))
+    return out

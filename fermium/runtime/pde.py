@@ -43,7 +43,7 @@ RHS, U0, PHASE0, V0, LEFT, RIGHT = range(6)
 MAX_SNAPSHOTS = 1000
 RANNACHER_STEPS = 4      # CN's first steps are done with L-stable SDIRK2 (D131)
 CHECKPOINTS = 8          # times at which step doubling compares two solutions (D130)
-JUMP_LAYER = 10.0         # with a jump between initial and boundary data, skip checks before t0 + this × h²/D (D206)
+JUMP_LAYER = 0.0          # no skip after a jump between initial and boundary data: skipping hid a 20 % error at early times (red team round 6 #4); was 10 h²/D (D206)
 PDE_TOL = 1e-3           # the estimated error allowed, relative to the solution's size (as RK4_WARN)
 PDE_MAX_STEPS = 32000    # the default step is halved at most until there are this many steps
 

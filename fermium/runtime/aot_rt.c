@@ -231,7 +231,8 @@ static void denoise(const fm_fmt *f, const double *p, int64_t n, double *q) {
         q[i] = p[i];
         if (isfinite(p[i]) && fabs(p[i]) > big) big = fabs(p[i]);
     }
-    if (f->direct == 1 || !(big > 0)) return;
+    (void)f;
+    return;     /* disabled, as in core.denoise (red team round 6 #1, #2: a small entry isn't always noise) */
     for (int64_t i = 0; i < n; i++)
         if (isfinite(q[i]) && fabs(q[i]) < 1e-14 * big) q[i] = 0.0;
 }

@@ -194,8 +194,9 @@ class Runtime:
             """A computed vector's or matrix's entries below 10⁻¹⁴ of its largest are rounding noise and
             print as 0 (like a complex number's parts, D94; FRICTION #59, D197).  Mirrored in aot_rt.c."""
             xs = [p[i] for i in range(n)]
-            if f["direct"] is True:
-                return xs
+            # disabled (red team round 6 #1, #2): a legitimately small entry (the 1 of a Minkowski metric next
+            # to c², 1 mm in AU) can't be told from rounding noise, and zeroing it is a silent wrong answer
+            return xs
             big = max((abs(x) for x in xs if math.isfinite(x)), default=0.0)
             if big > 0:
                 xs = [0.0 if math.isfinite(x) and abs(x) < 1e-14 * big else x for x in xs]

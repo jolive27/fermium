@@ -896,7 +896,7 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   state's 0.0083 outside (closed form 0.008272). (README's comment `# 3.52006 cm` doesn't match the printed `3.52 cm`;
   cosmetic.)
 
-### 1. D197 prints real entries of a computed matrix as 0: the Minkowski metric, and an inverse (silent). Status: open
+### 1. D197 prints real entries of a computed matrix as 0: the Minkowski metric, and an inverse (silent). Status: fixed (main session): D197 noise-zeroing disabled (D230)
 - **Repro:** `one = 1 m²/s²`, `z = 0 m²/s²`, `g = [[-c^2, z, z, z], [z, one, z, z], [z, z, one, z], [z, z, z, one]]`
   → `print g` is `[[-8.99×10¹⁶, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]] m²/s²` (a rank-1 matrix);
   `print g / c^2` is `[[-1, 0, 0, 0], [0, 0, 0, 0], …]`; `print inverse(g / c^2)` is `[[0, 0, 0, 0], [0, 8.99×10¹⁶,
@@ -907,14 +907,14 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   noise when a matrix mixes scales (c² next to 1 is the textbook metric in SI).
 - **Tests:** `test_1_metric_with_c_squared_keeps_its_unit_diagonal`, `test_1_inverse_of_a_diagonal_matrix_keeps_the_small_entry`.
 
-### 2. D197 zeroes an entry written in the program, contrary to its own rule (silent). Status: open
+### 2. D197 zeroes an entry written in the program, contrary to its own rule (silent). Status: fixed (main session): D197 noise-zeroing disabled (D230)
 - **Repro:** `p = <1 AU, 1 mm, 0 m>` / `print p` → `<1, 0, 0> AU`; `print p[2]` → `6.68×10⁻¹⁵ AU`; `print 1 p` and
   `print <1 AU, 0 m, 0 m> + <0 m, 1 mm, 0 m>` the same. JIT and `--interp` agree.
 - **Reference:** `<1, 6.68×10⁻¹⁵, 0> AU`. D197 and reference §Printing say "entries written in the program … are
   never changed"; here a written 1 mm prints as 0.
 - **Test:** `test_2_written_vector_entry_is_not_printed_as_zero`.
 
-### 3. The integral noise snap zeroes integrals that are resolvable (silent). Status: open
+### 3. The integral noise snap zeroes integrals that are resolvable (silent). Status: fixed (main session): the integral noise snap removed (D230)
 - **Repro:** `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` → `0`; `print ∫ sin(x) + 5e-15 dx from -1 to 1` → `0`
   (also `+ 1e-15` and `∫ x exp(-x^2) + 1e-16 dx from -5 to 5`). `interp.py:905` (and the LLVM mirror) replace any
   result |r| ≤ 50 ε ∫|f| (1.1×10⁻¹⁴ ∫|f|) by 0.
@@ -924,7 +924,7 @@ against NumPy/SciPy or a closed form. Each finding has an `xfail(strict=True)` t
   threshold near the actual error estimate, would keep the D44 intent.)
 - **Tests:** `test_3_small_but_resolvable_integral_is_not_snapped_to_zero`, `test_3_constant_offset_on_an_odd_integrand`.
 
-### 4. PDE values inside D206's skipped window are wrong by up to 19 %, with no warning (silent). Status: open
+### 4. PDE values inside D206's skipped window are wrong by up to 19 %, with no warning (silent). Status: fixed (main session): the PDE start-up skip removed (D230)
 - **Repro:** `D = 1e-4 m²/s`; `solve ∂u/∂t = D * ∂²u/∂x² with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(1 m, t) = 0 K
   for x from 0 m to 1 m, t from 0 s to 100 s`; `print u(2.5 mm, 0.05 s), u(5 mm, 0.2 s)` → `40.930 K 35.023 K`.
 - **Reference:** 80 K erfc(x / 2√(Dt)) = 34.336 K and 34.336 K (semi-infinite rod; the far end is 1 m away). The

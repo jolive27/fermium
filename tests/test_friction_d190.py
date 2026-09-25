@@ -330,9 +330,11 @@ def test_tight_binding_chain_16x16():
     out = both(TIGHT_BINDING).splitlines()
     for line in out[:17]:
         assert abs(num(line)) < 1e-12
-    # t has 2 significant figures, so the diagonal shows 1.0; the off-diagonal rounding noise shows 0
-    ident = "[" + ", ".join("[" + ", ".join("1.0" if i == j else "0" for j in range(16)) + "]" for i in range(16)) + "]"
-    assert out[17] == ident
+    # VᵀV = 1: the diagonal is 1 and the off-diagonal entries are rounding noise (shown honestly since D230)
+    vals = _nums(out[17])
+    assert len(vals) == 256
+    for k, v in enumerate(vals):
+        assert abs(v - (1.0 if k // 16 == k % 16 else 0.0)) < 1e-12
 
 
 def test_big_linear_algebra_matches_numpy():
@@ -418,7 +420,7 @@ def test_non_symmetric_big_matrix_is_an_error():
         assert "symmetric" in str(e.value)
 
 
-def test_rounding_noise_prints_as_zero():
+def test_rounding_noise_is_tiny():
     src = """A = [[4, 1, 2], [1, 3, 0], [2, 0, 5]] N/m
 print inverse(A) * A
 print eigenvectors([[2, 1, 0], [1, 2, 1], [0, 1, 2]])[2]
@@ -426,7 +428,7 @@ print [[1, 1e-20], [0, 1]]
 """
     out = both(src).splitlines()
     assert out[0] == "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"
-    assert "10⁻¹" not in out[1]                 # the middle mode's exact zero
+    assert abs(_nums(out[1])[1]) < 1e-15         # the middle mode's zero (rounding noise shown since D230)
     assert out[2] == "[[1, 1e-20], [0, 1]]" or "10⁻²⁰" in out[2]    # written entries are never cleaned
 
 
@@ -484,3 +486,17 @@ print y
     assert out[0].startswith("v'(h) = g/√(2·g h)")
     assert out[1].startswith("∂²term/∂x²(x, y) = ")
     assert "0.5·g t²" in out[2]
+
+def _nums(text):
+    """Every number in printed output (understands 3.19×10⁻¹⁶)."""
+    import re
+    sup = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+    out = []
+    for m in re.finditer(r"-?\d+(?:\.\d+)?(?:×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?", text):
+        t = m.group(0)
+        if "×10" in t:
+            a, e = t.split("×10")
+            out.append(float(a) * 10.0 ** int(e.translate(sup)))
+        else:
+            out.append(float(t))
+    return out
