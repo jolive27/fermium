@@ -297,3 +297,187 @@ def test_pp_cno_crossover_matches_brentq():
     t_kw = brentq(lambda t: np.log(pp_kw(t) / cno_kw(t)), 5, 50, xtol=1e-12)
     assert num(out, "crossover (Kippenhahn & Weigert rates): T =") == pytest.approx(t_kw, rel=1e-3)
     assert 17 < t_kw < 18.5
+
+
+def _bbn_model(weak_scale=1.0):
+    """The research/bbn_network model in NumPy: the same equations, constants and rate fits as bbn.fm.
+
+    Quadratures are 400-point Gauss–Legendre (smooth integrands on finite ranges). The state is
+    [T/MeV, Y_n, Y_p, Y_d, Y_3H, Y_3He, Y_4He, Y_7Li, Y_7Be]; weak_scale multiplies both weak rates."""
+    from scipy.constants import G, N_A, c, e, hbar, k, m_e, m_u, pi
+    MeV, hc, me = 1e6 * e, hbar * c, m_e * c ** 2
+    zeta3, q = 1.2020569031595942, 1.29333 * MeV / me
+    xg, wg = np.polynomial.legendre.leggauss(400)
+
+    def gl(f, a, b):
+        return 0.5 * (b - a) * np.dot(wg, f(0.5 * (b - a) * xg + 0.5 * (b + a)))
+
+    def fd(y):
+        return 1 / (1 + np.exp(y))
+
+    lam0 = gl(lambda x: x * np.sqrt(x * x - 1) * (q - x) ** 2, 1, q)
+
+    def epm(T):                                     # e± energy density, pressure, dρ/dT
+        x = me / T
+
+        def E(u):
+            return np.sqrt(u * u + x * x)
+        kk = 2 / pi ** 2 / hc ** 3
+        return (kk * T ** 4 * gl(lambda u: u * u * E(u) * fd(E(u)), 0, 60 + x),
+                kk * T ** 4 * gl(lambda u: u ** 4 / (3 * E(u)) * fd(E(u)), 0, 60 + x),
+                kk * T ** 3 * gl(lambda u: u * u * E(u) ** 2 * fd(E(u)) * fd(-E(u)), 0, 60 + x))
+
+    def rho_g(T):
+        return pi ** 2 / 15 * T ** 4 / hc ** 3
+
+    def Tnu(T):                                     # entropy conservation, s_γe = (11/4) s_γ(T_ν)
+        re, pe, _ = epm(T)
+        return ((4 / 3 * rho_g(T) + re + pe) / T / (11 / 4 * 4 * pi ** 2 / 45 / hc ** 3)) ** (1 / 3)
+
+    def H(T):
+        return np.sqrt(8 * pi * G * (rho_g(T) + epm(T)[0] + 3 * 7 / 8 * rho_g(Tnu(T))) / (3 * c ** 2))
+
+    def weak(sg, T):                                # λ(n→p) for sg = 1, λ(p→n) for sg = −1
+        z, zn = me / T, me / Tnu(T)
+
+        def f(w):
+            x = np.cosh(w)
+            return x * np.sinh(w) ** 2 * ((x - sg * q) ** 2 * fd(-x * z) * fd((x - sg * q) * zn)
+                                          + (x + sg * q) ** 2 * fd(x * z) * fd(-(x + sg * q) * zn))
+        return weak_scale * gl(f, 0, np.arccosh(q + 60 / z)) / (878.4 * lam0)
+
+    rhoc100 = 3 * (100e3 / 3.0856775814913673e22) ** 2 / (8 * pi * G)
+    eta = 0.0224 * rhoc100 / ((0.753 * 1.007825 + 0.247 * 4.002602 / 4) * m_u * 2 * zeta3 / pi ** 2 * (k * 2.7255 / hc) ** 3)
+
+    def n_b(T):
+        return eta * 11 / 4 * 2 * zeta3 / pi ** 2 * (Tnu(T) / hc) ** 3
+
+    def rates(T):                                   # N_A<σv> in cm³/(mol s) → <σv> in m³/s
+        t = min(T / (k * 1e9), 10.0)
+        t12, t13, t23, t32, t43, t53 = t ** .5, t ** (1 / 3), t ** (2 / 3), t ** 1.5, t ** (4 / 3), t ** (5 / 3)
+        a1, a2, a3, a4 = t / (1 + .0495 * t), t / (1 + .1378 * t), t / (1 + 13.076 * t), t / (1 + .759 * t)
+        ex = np.exp
+        r = [4.742e4 * (1 - .8504 * t12 + .4895 * t - .09623 * t32 + 8.471e-3 * t ** 2 - 2.80e-4 * t ** 2.5),
+             2.65e3 / t23 * ex(-3.720 / t13) * (1 + .112 * t13 + 1.99 * t23 + 1.56 * t + .162 * t43 + .324 * t53),
+             3.95e8 / t23 * ex(-4.259 / t13) * (1 + .098 * t13 + .765 * t23 + .525 * t + 9.61e-3 * t43 + .0167 * t53),
+             4.17e8 / t23 * ex(-4.258 / t13) * (1 + .098 * t13 + .518 * t23 + .355 * t - .010 * t43 - .018 * t53),
+             7.21e8 * (1 - .508 * t12 + .228 * t),
+             1.063e11 / t23 * ex(-4.559 / t13 - (t / .0754) ** 2)
+             * (1 + .092 * t13 - .375 * t23 - .242 * t + 33.82 * t43 + 55.42 * t53) + 8.047e8 / t23 * ex(-.4857 / t),
+             5.021e10 / t23 * ex(-7.144 / t13 - (t / .270) ** 2)
+             * (1 + .058 * t13 + .603 * t23 + .245 * t + 6.97 * t43 + 7.19 * t53) + 5.212e8 / t12 * ex(-1.762 / t),
+             4.817e6 / t23 * ex(-14.964 / t13) * (1 + .0325 * t13 - 1.04e-3 * t23 - 2.37e-4 * t - 8.11e-5 * t43
+                                                  - 4.69e-5 * t53) + 5.938e6 * a1 ** (5 / 6) / t32 * ex(-12.859 / a1 ** (1 / 3)),
+             3.032e5 / t23 * ex(-8.090 / t13) * (1 + .0516 * t13 + .0229 * t23 + 8.28e-3 * t - 3.28e-4 * t43
+                                                 - 3.01e-4 * t53) + 5.109e5 * a2 ** (5 / 6) / t32 * ex(-8.068 / a2 ** (1 / 3)),
+             2.675e9 * (1 - .560 * t12 + .179 * t - .0283 * t32 + 2.214e-3 * t ** 2 - 6.851e-5 * t ** 2.5)
+             + 9.391e8 * a3 ** 1.5 / t32 + 4.467e7 / t32 * ex(-.07486 / t),
+             1.096e9 / t23 * ex(-8.472 / t13) - 4.830e8 * a4 ** (5 / 6) / t32 * ex(-8.472 / a4 ** (1 / 3))
+             + 1.06e10 / t32 * ex(-30.442 / t) + 1.56e5 / t23 * ex(-8.472 / t13 - (t / 1.696) ** 2)
+             * (1 + .049 * t13 - 2.498 * t23 + .860 * t + 3.518 * t43 + 3.08 * t53) + 1.55e6 / t32 * ex(-4.478 / t)]
+        return [v * 1e-6 / N_A for v in r]
+
+    def saha(g, mu, Q, T):                          # photodisintegration factor, 1/m³
+        return g * (mu * m_u * c ** 2 * T / (2 * pi * hc ** 2)) ** 1.5 * np.exp(-Q * MeV / T)
+
+    def back(g, mr, Q, T):                          # <σv>_reverse / <σv>
+        return g * mr ** 1.5 * np.exp(-Q * MeV / T)
+
+    def dTdt(T):
+        re, pe, dre = epm(T)
+        return -3 * H(T) * (4 / 3 * rho_g(T) + re + pe) / (4 * rho_g(T) / T + dre)
+
+    def rhs(t, s):
+        T = s[0] * MeV
+        n, p, d, h3, he3, he4, li, be = s[1:]
+        nb = n_b(T)
+        r = rates(T)
+        F1 = weak(1, T) * n - weak(-1, T) * p
+        F2 = r[0] * (nb * n * p - saha(4 / 3, 1 / 2, 2.224573, T) * d)
+        F3 = r[1] * (nb * d * p - saha(3, 2 / 3, 5.493485, T) * he3)
+        F4 = nb * r[2] * (d * d / 2 - back(9 / 4, 4 / 3, 3.268914, T) / 2 * n * he3)
+        F5 = nb * r[3] * (d * d / 2 - back(9 / 4, 4 / 3, 4.032669, T) / 2 * p * h3)
+        F6 = nb * r[4] * (he3 * n - back(1, 1, 0.763763, T) * p * h3)
+        F7 = nb * r[5] * (h3 * d - back(3, 3 / 2, 17.589293, T) * n * he4)
+        F8 = nb * r[6] * (he3 * d - back(3, 3 / 2, 18.353053, T) * p * he4)
+        F9 = r[7] * (nb * he3 * he4 - saha(1 / 2, 12 / 7, 1.586627, T) * be)
+        F10 = r[8] * (nb * h3 * he4 - saha(1 / 2, 12 / 7, 2.467032, T) * li)
+        F11 = nb * r[9] * (be * n - back(1, 1, 1.644243, T) * li * p)
+        F12 = nb * r[10] * (li * p - 2 * back(8, 7 / 16, 17.346244, T) * he4 ** 2 / 2)
+        return [dTdt(T) / MeV, -F1 - F2 + F4 - F6 + F7 - F11, F1 - F2 - F3 + F5 + F6 + F8 + F11 - F12,
+                F2 - F3 - 2 * F4 - 2 * F5 - F7 - F8, F5 + F6 - F7 - F10, F3 + F4 - F6 - F8 - F9,
+                F7 + F8 - F9 - F10 + 2 * F12, F10 + F11 - F12, F9 - F11]
+
+    def weak_rhs(t, s):                             # the weak era: T and Y_n only
+        T = s[0] * MeV
+        return [dTdt(T) / MeV, -(weak(1, T) * s[1] - weak(-1, T) * (1 - s[1]))]
+
+    return dict(rhs=rhs, weak_rhs=weak_rhs, H=H, weak=weak, eta=eta, MeV=MeV, lam0=lam0)
+
+
+def test_bbn_network_matches_scipy_radau():
+    """BBN: Fermium's two-stage radau solve vs SciPy's Radau on the whole network from 10 MeV in one go."""
+    from scipy.integrate import solve_ivp
+    from scipy.optimize import brentq
+    out = run_prog("bbn_network", "bbn.fm")
+    M = _bbn_model()
+    MeV, Q = M["MeV"], 1.29333
+    assert num(out, "η₁₀ =") == pytest.approx(M["eta"] * 1e10, rel=1e-3)
+    T0 = 10.0
+    t0 = 1 / (2 * M["H"](T0 * MeV))
+    yn0 = 1 / (1 + np.exp(Q / T0))
+    assert num(line_of(out, "start:"), "t =") == pytest.approx(t0, rel=1e-3)
+    # the weak era (T and Y_n only), with the times T crosses 3, 1, 0.7, 0.5, 0.3 and 0.1 MeV
+    ev = [lambda t, s, Tq=Tq: s[0] - Tq for Tq in (3, 1, 0.7, 0.5, 0.3, 0.1)]
+    w = solve_ivp(M["weak_rhs"], [t0, 1000], [T0, yn0], method="Radau", rtol=1e-11, atol=1e-14,
+                  events=ev, dense_output=True)
+    t1, yn1 = w.t_events[5][0], w.y_events[5][0][1]
+    line = line_of(out, "weak era:")
+    assert num(line, "at t =") == pytest.approx(t1, rel=1e-5)
+    assert num(line, "n/p =") == pytest.approx(yn1 / (1 - yn1), rel=1e-5)
+    rows = [ln for ln in out.splitlines() if re.match(r"T = [\d.]+ MeV :", ln)]
+    for i, (Tq, row) in enumerate(zip((3, 1, 0.7, 0.5, 0.3), rows, strict=True)):
+        tq = w.t_events[i][0]
+        yq = w.sol(tq)[1]
+        assert num(row, "t =") == pytest.approx(tq, rel=1e-3), Tq
+        assert num(row, "n/p =") == pytest.approx(yq / (1 - yq), rel=1e-4), Tq
+        assert num(row, "exp(−Q/T) =") == pytest.approx(np.exp(-Q / Tq), rel=1e-4)
+        assert num(row, "λ(n→p)/H =") == pytest.approx(M["weak"](1, Tq * MeV) / M["H"](Tq * MeV), rel=1e-3)
+    Tf = brentq(lambda T: M["weak"](1, T * MeV) - M["H"](T * MeV), 0.3, 3, xtol=1e-12)
+    assert num(out, "λ(n→p) = H: T =") == pytest.approx(Tf, rel=1e-3)
+    # the whole network from 10 MeV in one solve (an absolute tolerance of 10⁻¹⁶ lets SciPy start there)
+    y0 = [T0, yn0, 1 - yn0, 0, 0, 0, 0, 0, 0]
+    sol = solve_ivp(M["rhs"], [t0, 1e4], y0, method="Radau", rtol=1e-10, atol=1e-16, first_step=1e-12,
+                    dense_output=True)
+    assert sol.success
+    T, n, p, d, h3, he3, he4, li, be = sol.y[:, -1]
+    assert num(line_of(out, "Y_p ="), "Y_p =") == pytest.approx(4 * he4, rel=1e-4)
+    assert num(line_of(out, "D/H ="), "D/H =") == pytest.approx(d / p, rel=1e-4)
+    assert num(line_of(out, "3He/H ="), "3He/H =") == pytest.approx((he3 + h3) / p, rel=1e-4)
+    assert num(line_of(out, "7Li/H ="), "7Li/H =") == pytest.approx((li + be) / p, rel=1e-4)
+    assert num(out, "Y_n =") == pytest.approx(n, rel=2e-2)
+    end = line_of(out, "network:")
+    assert num(end, "T =") == pytest.approx(T, rel=1e-3)
+    assert num(end, "T/T_ν =") == pytest.approx((11 / 4) ** (1 / 3), rel=1e-5)      # e± entropy went to the photons
+    assert abs(num(out, "Σ A Y − 1 =")) < 1e-10                                     # baryon number conserved
+    # the deuterium bottleneck: ⁴He half made; the D/H peak (read at the solver's steps, so to a few %)
+    th = brentq(lambda t: sol.sol(t)[6] - he4 / 2, 150, 400, xtol=1e-10)
+    line = line_of(out, "half of the ⁴He")
+    assert num(line, "by t =") == pytest.approx(th, rel=1e-3)
+    assert num(line, "T =") == pytest.approx(sol.sol(th)[0], rel=1e-3)
+    tt = np.linspace(150, 400, 5001)
+    dh = sol.sol(tt)[3] / sol.sol(tt)[2]
+    line = line_of(out, "deuterium peaks:")
+    assert num(line, "t =") == pytest.approx(tt[np.argmax(dh)], rel=3e-2)
+    assert num(line, "D/H =") == pytest.approx(dh.max(), rel=3e-2)
+    # physics sanity against the published standard-BBN values (Fields et al. 2020, PDG 2024)
+    assert 0.24 < 4 * he4 < 0.26
+    assert 2.5e-5 / 2 < d / p < 2.5e-5 * 2
+    assert 0.5e-5 < (he3 + h3) / p < 2e-5
+    assert 2.5e-10 < (li + be) / p < 1e-9
+    assert 0.6 < Tf < 0.8                                                            # freeze-out near 0.7 MeV
+    # README: Born rates normalised with the Coulomb-corrected λ₀ = 1.6887 (Dicus et al. 1982) instead of
+    # λ₀ = 1.636 are 3 % slower, and freeze out earlier: Y_p goes up by 0.0057 (to 0.2481)
+    slow = _bbn_model(weak_scale=M["lam0"] / 1.6887)
+    s2 = solve_ivp(slow["rhs"], [t0, 1e4], y0, method="Radau", rtol=1e-8, atol=1e-16, first_step=1e-12)
+    assert 4 * s2.y[6, -1] - 4 * he4 == pytest.approx(0.0057, abs=3e-4)
