@@ -240,3 +240,10 @@ def test_49_sum_errors():
     assert "needs a step" in error_of("print Σ(r for r from 1 m to 3 m)").message
     assert "finite number of terms" in error_of("print Σ(1/k² for k from 1 to ∞)").message
     assert "expected 'from'" in error_of("print Σ(k² for k in 1)").message
+
+
+def test_50_airy_pattern_with_besselj():
+    # the first bright ring of the Airy pattern: I'(x) = 0 with I = (2 J1(x)/x)², at x = 5.1356223
+    src = "I(x) = (2 besselj(1, x) / x)^2\nsolve I'(x) = 0 for x from 4 to 6\nprint x to 8 digits\n" \
+          "solve besselj(1, x) = 0 for x from 3 to 4.5\nprint x / π to 6 digits"
+    assert both(src).split("\n") == ["5.1356223", "1.21967"]

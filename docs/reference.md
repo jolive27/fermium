@@ -194,6 +194,7 @@ while n < 3
 print n
 
 y = if x > 0 m then x else -x
+print 1 m < x < 5 m                   # true: a chained comparison
 ```
 
 - **Ranges include both ends:** `for i from 1 to 10` runs 1, 2, …, 10. With units, a `step` is required.
@@ -213,6 +214,18 @@ print terms, total
 
 - **A variable must have a value on every path.** Using a variable after an `if` or a loop that is the only place it was set is a compile error, because the `if` may be false and the loop may not run at all: `y might not have a value here: it is only set inside the if on line 1`. The same goes for a loop variable read after its loop (`for i from 1 to n` … `print i`), even a `for n from 1 to inf` loop. Give the variable a value before the `if` or loop, or copy the loop variable into another variable inside the loop, as `terms` above.
 - **Conditions:** comparisons are `==`, `!=` (`≠`), `<`, `>`, `<=` (`≤`), `>=` (`≥`) and `~=` (`≈`, "equal to within 10⁻⁶ relative"). Combine them with `and`, `or` and `not`.
+- **Chained comparisons:** `a < x < b` means `a < x and x < b`, and `x` is computed only once; any number of `<`, `<=`, `>`, `>=` can be chained (`E1 < E2 <= E3 < E4`), or only `==`. Mixing `==` or `!=` with `<` is an error.
+- **An if-expression over several lines:** continue it on indented lines that start with `else`, as a piecewise function is written on paper:
+
+```fermium
+g = 9.8 m/s^2
+t1 = 2 s
+u(t) = if t < t1 then g t
+       else if t < 3 t1 then g t1
+       else g t1 - g (t - 3 t1)
+print u(1 s), u(3 s), u(7 s)
+```
+
 - **`assert condition, "message"`** stops the program if the condition is false.
 
 ## 7. Lists and vectors
@@ -253,7 +266,9 @@ print 2 v + <1, 1> m/s
 - **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2, 3 or 4 components). `vec(3, 4)` is the same as `<3, 4>`.
 - **A number times a vector** can be written side by side: `R <cos(φ), sin(φ), 0>`, `v0 <cos(θ), sin(θ)>`. This needs a space before `<` and none after it, and the `>` right after the last component; otherwise `<` is less-than (`a < b`, `x <y`). `R * <…>` always works.
 - **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D; not defined in 4-D).
-- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`.
+- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`. The index can be any whole number known only when the program runs, like a loop variable: `for i from 1 to 3` … `v[i]`; an index out of range stops the program (`index 4 is out of range: valid indexes here are 1 to 3`). A vector with a different unit on each component needs a fixed index.
+- **More functions:** `angle(a, b)` is the angle between two 2- or 3-vectors, computed as atan2(\|a × b\|, a · b) (accurate near 0 and π; the vectors may have different units). `abs(v)` takes the absolute value of each component (of a matrix too).
+- **A unit after a vector:** `<3, 4> m/s`, `<0, 0> /s` and `<1, 2> 1/s` all work, as after a number.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
 - **In `solve`:** unknowns can be vectors, in 2-D or 3-D (see §10 and `examples/26_orbit_3d.fm`).
 - **Not yet:** lists of vectors (push the components into separate lists instead).
@@ -291,7 +306,7 @@ print K[1, 2], K[2]
 - **Arithmetic:** `A + B`, `A - B` (same size, same units), `2 A`, `A / 2`, `-A`.
 - **Products:** `M v`, `M * v` or `M · v` is a matrix times a vector (a vector); `A B` or `A * B` is the matrix product. The units multiply: a stiffness matrix in N/m times a displacement in m gives a force in N. Write the matrix first; `v M` is an error.
 - **Functions:** `transpose(M)` (also `Mᵀ`), `det(M)` (units to the power n: a 2×2 in N/m has a determinant in N²/m²), `inverse(M)` (units to the power −1: m/N), `solve_linear(M, b)` solves M x = b (x has the units of b divided by those of M; Gaussian elimination with partial pivoting).
-- **Entries:** `M[i, j]` (1-based; also `M[i][j]`), and `M[i]` is row i as a vector. Indexes must be fixed numbers.
+- **Entries:** `M[i, j]` (1-based; also `M[i][j]`), and `M[i]` is row i as a vector. `row(M, i)` and `column(M, j)` are row i and column j as vectors, and `trace(M)` is the sum of the diagonal of a square matrix. Indexes can be loop variables (checked when the program runs).
 - **Errors:** sizes that don't fit (`a 2×2 matrix times a 3-vector`), mixed units in a literal, and a singular matrix passed to `inverse` or `solve_linear` (a runtime error: "this matrix is singular").
 - Matrices can be function arguments and results: `rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]`.
 
@@ -340,6 +355,8 @@ V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)^2 + y^2 + z^2)) ds from -L to L
 print -∇V(0.3 m, 0.4 m, 0 m)          # the field of a finite line charge
 print ∂/∂x V
 ```
+
+- **Sums** written in one line with `Σ(… for k from a to b)` are differentiated term by term (§9), so `f'` and `∇²φ` of a Fourier series work.
 
 ### Vector calculus: ∇
 
@@ -400,6 +417,27 @@ print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding 
 ```
 
 - **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
+
+### Sums: Σ
+
+```fermium
+print Σ(k² for k from 1 to 10)                          # 385
+print sum(1/k² for k from 1 to 1000) to 6 digits         # 1.64393
+square(x) = Σ(4/(n π) * sin(n x) for n from 1 to 99 step 2)
+print square(1) to 4 digits                              # a square wave: about 1
+print square'
+a = 1 m
+V0 = 10 V
+φ(x, y) = Σ(4 V0/(n π) * sin(n π x/a) sinh(n π y/a) / sinh(n π) for n from 1 to 61 step 2)
+lap = ∇²φ
+print φ(0.5 m, 0.5 m) to 6 digits, lap(0.3 m, 0.7 m)     # V₀/4, and 0: it solves Laplace's equation
+```
+
+- **Syntax:** `Σ(term for k from a to b)` or `Σ(term for k from a to b step s)`; ASCII `sum(…)` or `Sigma(…)`. The range counts exactly like `for k from a to b step s` (both ends included; an empty range gives 0). The ends can be variables or a function's parameters: `S(N) = Σ(k for k from 1 to N)`.
+- **Units:** the sum has the term's units. A range with units needs a `step` with units (`Σ(f(r) for r from 1 m to 3 m step 1 m)`). A vector term gives the vector of the sums.
+- **Derivatives:** d/dx of a sum is the sum of the derivatives, so `f'`, `∂/∂x`, `∇` and `∇²` of a one-line function defined by a sum work (not with respect to a variable in the limits).
+- **Only finite sums:** `Σ(1/k² for k from 1 to ∞)` is an error; sum a large fixed number of terms, or use a `for … to inf` loop with a `break` (§6).
+- `Σ(xs)` of a list is `sum(xs)`.
 
 ## 10. Differential equations: solve
 
@@ -548,6 +586,9 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | Function | Meaning |
 |---|---|
 | `sin cos tan asin acos atan sinh cosh tanh exp ln log log10 log2 erf gamma` | need plain numbers (angles are plain numbers) |
+| `besselj(n, x) bessely(n, x)` | Bessel functions J_n and Y_n of whole-number order n (plain numbers; the C library's `jn`/`yn`) |
+| `besseli(n, x) besselk(n, x)` | modified Bessel functions I_n and K_n of whole-number order n (plain numbers) |
+| `ellipk(m) ellipe(m)` | complete elliptic integrals K(m) and E(m) with the **parameter m = k²**, as in SciPy and Abramowitz & Stegun (`ellipk(0.5)` = 1.8541; K(1) = ∞) |
 | `sqrt cbrt abs sign` | keep or transform units |
 | `floor ceil round` | need plain numbers: `floor(270 cm)` is an error, because the answer depends on the unit. Write `floor(x / (1 cm)) cm` |
 | `atan2(y, x) hypot(a, b) mod(a, b) min(a, b, …) max(…) clamp(x, lo, hi)` | arguments in the same units |
@@ -556,13 +597,28 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `push(xs, x)` / `append` | add to a list |
 | `dot(a, b) trapz(ys, xs) interp(x, xs, ys)` | list maths |
 | `norm(v) unit(v) dot(a, b) cross(a, b) vec(x, y[, z])` | vectors (also `\|v\|`, `a · b`, `a × b`) |
+| `angle(a, b)` | the angle between two vectors, from 0 to π |
+| `abs(v)` `abs(M)` | the absolute value of each component or entry |
+| `Σ(term for k from a to b [step s])` / `sum(…)` | a sum written in one line (§9), differentiable term by term |
 | `sign(v)` of a vector | the unit vector v/\|v\|, the same as `unit(v)`: `sign(<3, 4> m/s)` is `<0.6, 0.8>` |
 | `transpose(M) det(M) inverse(M) identity(n) solve_linear(M, b)` | matrices (also `Mᵀ`, `M v`, `A B`) |
+| `trace(M) row(M, i) column(M, j)` | the sum of the diagonal; a row or a column as a vector |
 | `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
+
+```fermium
+print besselj(0, 2.404825557695773) to 3 digits    # a zero of J₀
+print besselj(1, 1) to 10 digits, bessely(0, 1) to 10 digits
+print besseli(1, 2) to 10 digits, besselk(0, 1) to 10 digits
+print ellipk(0.5) to 10 digits, ellipe(0.5) to 10 digits
+J1p = d/dx besselj(1, x)                              # (J₀ − J₂)/2
+print J1p(2) to 10 digits
+```
+
+- An order that isn't a whole number is an error when it is written as a number (`besselj(1.5, x)`); computed at run time, it gives NaN. The derivatives with respect to x (and m) are known to the differentiator: J′ₙ = (Jₙ₋₁ − Jₙ₊₁)/2, I′ₙ = (Iₙ₋₁ + Iₙ₊₁)/2, K′ₙ = −(Kₙ₋₁ + Kₙ₊₁)/2, dK/dm = (E − (1 − m)K)/(2m(1 − m)), dE/dm = (E − K)/(2m).
 
 ## 14. Constants
 
@@ -597,6 +653,7 @@ CODATA 2022 values (NIST), with units. You can override any of them by assigning
 - **Physics:** `eV` (`keV MeV GeV`), `u`/`amu`/`Da`, `b`/`barn`, `fm`, `Å`, `erg`, `dyn`, `gauss`, `c` (as a speed unit), `Ci`.
 - **Astronomy:** `au`/`AU`, `ly`, `pc` (`kpc Mpc`), `M☉ R☉ L☉` (`Msun Rsun Lsun`), `M_E R_E`, `yr`.
 - **Other:** `min hr day year`, `L`, `atm bar Torr mmHg psi`, `inch ft yd mi mph kph lb lbf hp cal`, `rad sr ° arcmin arcsec rev rpm %`.
+  - `rad` and `arcsec` take SI prefixes: `mrad`, `μrad`, `krad/s`; `mas` and `μas` are milli- and micro-arcseconds.
   - `rev` = 2π (angles are plain numbers) and `rpm` = rev/min. So `60 rpm in Hz` is 2π Hz = 6.28 Hz, an angular frequency, and Fermium warns about it. To count turns per second, write `in rev/s`: `60 rpm in rev/s` is 1 rev/s. See DECISIONS D27.
 - **Temperatures:** `K`, and `°C`/`°F` (absolute temperatures; see DECISIONS D12). The difference of two temperatures is shown in K (`in °C` shows it without the offset, with a warning). Inside a compound unit a degree is a step, so `2 °C/min` and `4.18 J/(g °C)` work.
 - **Names left out on purpose, because they collide with common variable names:** `h` for hour (use `hr`), `t` for tonne (use `tonne`), `G` for gauss (use `gauss`), `d` for day (use `day`).
@@ -636,11 +693,13 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | if expr block [else block] | for x from a to b [step s] block
             | for x in expr block | while expr block | return expr | break | continue
             | assert expr [, "message"] | expr
-expr       := if expr then expr else expr | or-expression
+expr       := if expr then expr [NEWLINE INDENT] else expr | or-expression
+comparison := sum (cmp sum)*          a < x < b means a < x and x < b
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
 postfix    := atom ( (args) | [index] | .name | ' )*
 atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|
             | √atom | ∫ … d x [from a to b] | d/dt atom | dx/dt | ∂/∂x atom | load "file"
+            | Σ(expr for x from a to b [step s])
 ```
 
 ## 19. Known limitations
@@ -650,7 +709,7 @@ These are known and not yet fixed. None of them is silent about units.
 - **A narrow peak in a huge finite range can be missed.** `∫ exp(-x²) dx from -1e6 to 1e6` prints `0` (the right answer is √π ≈ 1.77): the first samples of the quadrature all land where the integrand is 0. A peak that sits exactly in the middle of the range can come out as half its true value. Use a range that fits the peak, or split the range at the peak. Infinite ranges don't have this problem (§9).
 - **Strong blow-ups away from 0 fail.** `∫ abs(x - 0.3)^(-0.8) dx from -1 to 1` stops with "this integral doesn't converge", although it does (the same happens from 0.3 to 1). Shift the variable so that the blow-up is at 0: `∫ abs(u)^(-0.8) du from -1.3 to 0.7` gives the right answer, 9.9. Blow-ups at 0, and mild ones like 1/√|x − 0.3|, work.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
-- **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas.
+- **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).

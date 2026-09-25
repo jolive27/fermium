@@ -44,3 +44,24 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 36 | W | quantum (S2) | A root found in rounding noise is printed without a warning | Fixed: a run-time warning when lhs − rhs is rounding noise compared with the terms it adds up, near the root (D32) |
 | 37 | C | mechanics (M8) | The root takes the unit of the range's start (`141.506 cm`) | By design: the range's unit is the natural display unit |
 | 38 | C | oscillations (O8) | `print` always puts a space between items | By design |
+| 39 | W | electromagnetism (E9) | A nested integral inside a function read garbage for the function's parameter | Fixed: captures propagate through enclosing integrands |
+| 40 | W | astrophysics (A5) | The adaptive solver's first step (10⁻⁴ of the range) was accepted though far too big: w(1 s) = 6.17, not 1 | Fixed: dimensionally consistent Hairer–Wanner first step |
+| 41 | W | optics (O5) | A plain-number function result is shown in degrees when the argument was in degrees (`2 cos(θ)` prints 57.3°) | Fixed: a plain-number result no longer takes an argument's angle unit |
+| 42 | W | special relativity (S9) | `r'(t)` of a first-order unknown is only as accurate as the interpolant's derivative (~1e-6) | Open |
+| 43 | W | mechanics, oscillations, thermodynamics, nuclear (M10, O11, T11, T7, N12) | `2 g`, `2 m m2`, `3 V`, `3 b`, `2 l`: the unit-after-number rule keeps biting; the #10 note is missing when the error lands on a later line | Fixed: a unit error on a later line notes the earlier line where `2 g` was read as a unit |
+| 44 | B | mechanics (M9) | Two second derivatives in one equation (Lagrange's mass-matrix form) are refused with a misleading error | Open |
+| 45 | B | mechanics, thermodynamics, optics (M11, T10, O6) | An integrand that is 0/0 or overflows at a node gives "doesn't converge … NaN" | Open |
+| 46 | B | electromagnetism (E10) | An integral that is 0 by symmetry (a zero vector component) is reported as not converging | Open |
+| 47 | B | electromagnetism (E11) | `∇²term` for `term(n, x, y)` treats n as a coordinate and never finishes compiling | Fixed: parameters named x, y, z are the coordinates; others (like n) are held fixed |
+| 48 | B | quantum, astrophysics (Q16, A7, Q17) | An ODE solution made inside a function can't be used in `∫` or an algebraic `solve`, or returned; the error names `__sol.3` | Open |
+| 49 | A | electromagnetism (E12) | No one-line sum (Σ), so a Fourier series can't be written as a one-line function and differentiated | Fixed: `Σ(term for k from a to b [step s])` (ASCII `sum(…)`), differentiated term by term, so `f'` and `∇²φ` of a Fourier series work (D51) |
+| 50 | A | electromagnetism, optics (E16, O4) | No Bessel functions or elliptic integrals | Fixed: `besselj`, `bessely`, `besseli`, `besselk` (whole-number order) and `ellipk(m)`, `ellipe(m)` with m = k², with their derivatives (D52) |
+| 51 | A | optics, quantum (O7, Q18) | Matrices stop at 4×4, can't have a unit per entry and can't be filled in a loop | Open |
+| 52 | A | special relativity (S6) | No `mrad` (`rad` takes no prefixes) | Fixed: `rad` takes SI prefixes (`mrad`, `μrad`, `krad/s`) (D50) |
+| 53 | A | special relativity (S8) | An `if … then … else` expression can't continue on the next line | Fixed: an indented line starting with `else` continues an if-expression; otherwise the error says to indent it or use brackets (D50) |
+| 54 | A | special relativity, optics, oscillations, gravitation (S11, O10, G9) | No `trace(M)`, `angle(a, b)`, element-wise `abs` on vectors; a vector can't be indexed by a loop variable | Fixed: `trace(M)`, `angle(a, b)`, `row(M, i)`, `column(M, j)`, element-wise `abs`, and `v[i]`/`M[i, j]` with run-time indexes, bounds-checked (D53) |
+| 55 | A | nuclear, mechanics (N8, M12) | A unit after a name or a vector needs brackets (`A_d u`, `<0, 0> /s`) | Fixed: `<0, 0> /s` and `<1, 2> 1/s` take the unit; `A_d u` stays an error (units follow numbers) whose hint says `A_d * 1 u` or `A_d [u]` (D50) |
+| 56 | A | nuclear (N9, N10, N11) | Lists: no mapping over two lists, `fit` only takes loaded data, unknowns can't be lists, no unit after `[…]` | Open |
+| 57 | A | nuclear (N13) | No chained comparisons (`a < x < b`) | Fixed: `a < x < b` means `a < x and x < b`, with x evaluated once (D50) |
+| 58 | W | astrophysics (A9) | `2/(3H₀√Ω) asinh(…)` is warned about (#9) but still runs with the other meaning | Fixed: `a/(b) c` with a bracketed denominator followed by a spaced factor is an error showing both readings |
+| 59 | C | several (E14, M13, E15, O12, S13, T12, O14, Q19, Q20, N14, A10) | Cosmetics: `∂2f/∂x2`, printed formulas with `2 g·`, rounding noise in matrices, J/(m³ K⁴) shown in base SI, mixed 1/s and rad/s, unit-free error texts | Open |
