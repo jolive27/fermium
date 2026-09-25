@@ -299,6 +299,32 @@ fail:
     return 0;
 }
 
+/* table(x = xs, y = ys) (D193): copies the lists (already SI) into a new data set (Runtime.table) */
+int64_t fm_table(int64_t nc, double **ptrs, int64_t *lens) {
+    int64_t n = nc ? lens[0] : 0;
+    for (int64_t k = 1; k < nc; k++) {
+        if (lens[k] != n) {
+            snprintf(err_msg, sizeof err_msg, "the columns of this table have different lengths (%lld and %lld)",
+                     (long long)n, (long long)lens[k]);
+            return 0;
+        }
+    }
+    double **cols = xmalloc(sizeof(double *) * (size_t)(nc ? nc : 1));
+    for (int64_t k = 0; k < nc; k++) {
+        cols[k] = xmalloc(sizeof(double) * (size_t)(n ? n : 1));
+        if (n) memcpy(cols[k], ptrs[k], sizeof(double) * (size_t)n);
+    }
+    fm_dataset *nd = xmalloc(sizeof(fm_dataset) * (size_t)(ndatasets + 1));
+    if (ndatasets) memcpy(nd, datasets, sizeof(fm_dataset) * (size_t)ndatasets);
+    free(datasets);
+    datasets = nd;
+    datasets[ndatasets].ncols = (int)nc;
+    datasets[ndatasets].n = n;
+    datasets[ndatasets].cols = cols;
+    ndatasets++;
+    return ndatasets;
+}
+
 int64_t fm_column(int64_t h, int64_t col, double **out) {
     fm_dataset *d = &datasets[h - 1];
     *out = d->cols[col];

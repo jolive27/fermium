@@ -16,7 +16,7 @@ from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
 from .errors import MODLINE_MAX
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
-from . import linalg
+from . import linalg, linalg_big
 from . import special
 
 
@@ -140,6 +140,48 @@ class LLOps:
     def eq(self, x, y):
         return self.b.fcmp_ordered("==", x, y)
 
+    # ---- loops, arrays and index values, for matrices larger than 4×4 (fermium.linalg_big, D195)
+    @staticmethod
+    def _i(v):
+        return i64(v) if isinstance(v, int) else v
+
+    def array(self, n):
+        return self.gen.alloca(ir.ArrayType(F64, n))
+
+    def iarray(self, n):
+        return self.gen.alloca(ir.ArrayType(I64, n))
+
+    def ld(self, arr, i):
+        return self.b.load(self.b.gep(arr, [I32(0), self._i(i)]))
+
+    def st(self, arr, i, v):
+        self.b.store(v, self.b.gep(arr, [I32(0), self._i(i)]))
+
+    def loop(self, lo, hi, body):
+        with self.gen.lp.range(self._i(lo), self._i(hi)) as i:
+            body(i)
+
+    def iadd(self, a, b):
+        return self.b.add(self._i(a), self._i(b))
+
+    def isub(self, a, b):
+        return self.b.sub(self._i(a), self._i(b))
+
+    def imul(self, a, b):
+        return self.b.mul(self._i(a), self._i(b))
+
+    def ieq(self, a, b):
+        return self.b.icmp_signed("==", self._i(a), self._i(b))
+
+    def iselect(self, c, a, b):
+        return self.b.select(c, self._i(a), self._i(b))
+
+    def and_(self, a, b):
+        return self.b.and_(a, b)
+
+    def not_(self, a):
+        return self.b.not_(a)
+
 
 def i64(v):
     return ir.Constant(I64, int(v))
@@ -237,6 +279,7 @@ class ModuleGen:
         e("fm_plot_done", VOID, [I64])
         e("fm_load", I64, [I64])
         e("fm_column", I64, [I64, I64, F64PP])
+        e("fm_table", I64, [I64, F64PP, I64.as_pointer()])
         e("fm_fit", I64, [I64, I64, F64P])
         e("fm_sort", VOID, [F64P, I64])
         e("fm_clock", F64, [])
@@ -670,6 +713,10 @@ class ModuleGen:
         b.store(f64(0), g)
         r = b.call(inner, [f, env, a, bb, rtol, atol, g])
         mine = b.load(g)
+        # a result at or below the rounding level of ∫|f| (D44) is 0 as far as the arithmetic can tell:
+        # ∫ sin(x) dx from -π to π is 0, not 3.19×10⁻¹⁶ (red team round 4 #12)
+        noise = b.fcmp_ordered("<=", b.call(self.intrinsic("fabs"), [r]), b.fmul(f64(self.QUAD_ROUND), mine))
+        r = b.select(noise, f64(0), r)
         zero = b.and_(b.fcmp_ordered("==", r, f64(0)), b.fcmp_ordered("==", mine, f64(0)))
         zero = b.and_(zero, b.fcmp_ordered("!=", a, bb))
         soft = b.fcmp_ordered("<", atol, f64(0))          # the quiet first try (D44): counted, not warned
@@ -2619,6 +2666,22 @@ class FuncGen:
         xs = [b.extract_element(v, b.add(base, I32(o))) for o in e.offs]
         return xs[0] if len(xs) == 1 else self.pack(xs)
 
+    def e_IVecSet(self, e):
+        """M[i, j] = x, v[i] = x: insertelement at the checked flat index (D195)."""
+        b = self.b
+        v = self.expr(e.v)
+        x = self.expr(e.value)
+        base = i64(0)
+        for idx_e, size, stride in e.idxs:
+            idx = self.expr(idx_e)
+            inside = b.and_(b.fcmp_ordered(">=", idx, f64(1)), b.fcmp_ordered("<=", idx, f64(size)))
+            i = b.fptosi(b.select(inside, idx, f64(1)), I64)
+            bad = b.or_(b.not_(inside), b.fcmp_unordered("!=", b.sitofp(i, F64), idx))
+            with b.if_then(bad, likely=False):
+                self.fail(ERR_INDEX, idx, f64(-size))
+            base = b.add(base, b.mul(b.sub(i, i64(1)), i64(stride)))
+        return b.insert_element(v, x, b.trunc(base, I32))
+
     # ------------------------------------------------------------ matrices (D29)
     def unpack(self, v, n):
         return [self.b.extract_element(v, I32(k)) for k in range(n)]
@@ -2642,16 +2705,18 @@ class FuncGen:
         a = self.unpack(args[0], m.n)
         if name == "matmul":
             r, k, c = e.dims3
-            out = linalg.matmul(ops, a, r, k, self.unpack(args[1], k * c), c)
+            la = linalg_big if linalg_big.is_big(r, k, c) else linalg
+            out = la.matmul(ops, a, r, k, self.unpack(args[1], k * c), c)
             return out[0] if len(out) == 1 else self.pack(out)
+        la = linalg_big if linalg_big.is_big(m.r, m.c) else linalg      # loops beyond 4×4 (D195)
         if name == "det":
-            return linalg.det(ops, a, m.r)
+            return la.det(ops, a, m.r)
         if name in ("eigenvalues", "eigenvectors"):
             return self.eigen_op(e, args, ops, a, m.r)
         if name == "inverse":
-            out, piv = linalg.inverse(ops, a, m.r, f64(1), f64(0))
+            out, piv = la.inverse(ops, a, m.r, f64(1), f64(0))
         else:
-            out, piv = linalg.solve(ops, a, m.r, self.unpack(args[1], m.r), 1)
+            out, piv = la.solve(ops, a, m.r, self.unpack(args[1], m.r), 1)[:2]
         bad = None
         for p in piv:
             z = b.fcmp_ordered("==", p, f64(0))
@@ -2681,12 +2746,13 @@ class FuncGen:
             with b.if_then(bad, likely=False):
                 self.fail(kind)
             self.line = saved
+        la = linalg_big if linalg_big.is_big(n) else linalg      # loops beyond 4×4 (D195)
         for mat in mats:
-            check(linalg.asymmetry(ops, mat, n), "<", ERR_NOT_SYMMETRIC)
+            check(la.asymmetry(ops, mat, n), "<", ERR_NOT_SYMMETRIC)
         if len(mats) == 1:
-            vals, vecs = linalg.jacobi_eigen(ops, a, n)
+            vals, vecs = la.jacobi_eigen(ops, a, n)
         else:
-            vals, vecs, piv = linalg.generalized_eigen(ops, a, mats[1], n)
+            vals, vecs, piv = la.generalized_eigen(ops, a, mats[1], n)
             check(piv, "<=", ERR_NOT_POSDEF)
         return self.pack(vals if e.name == "eigenvalues" else vecs)
 
@@ -2857,11 +2923,20 @@ class FuncGen:
         fn = self.mg.func_for(e.func)
         args = [self.expr(a) for a in e.args]
         self.note_module_call(e.func)
-        lst = args[e.list_pos]
+        pos = e.positions
+        lst = args[pos[0]]
+        n0 = self.llen(lst)
+        for p in pos[1:]:                   # f(xs, ys): the lists must have the same length (D191)
+            ni = self.llen(args[p])
+            with b.if_then(b.icmp_signed("!=", n0, ni)):
+                self.fail(ERR_LEN, b.sitofp(n0, F64), b.sitofp(ni, F64))
+        datas = {p: self.ldata(args[p]) for p in pos[1:]}
 
         def elem(x, i):
             a2 = list(args)
-            a2[e.list_pos] = x
+            a2[pos[0]] = x
+            for p in pos[1:]:
+                a2[p] = b.load(b.gep(datas[p], [i]))
             return b.call(fn, a2)
         return self.map_list(lst, elem)
 
@@ -2992,6 +3067,23 @@ class FuncGen:
         h = self.b.call(self.mg.externs["fm_load"], [i64(e.load_id)])
         with self.b.if_then(self.b.icmp_signed("==", h, i64(0)), likely=False):
             self.fail(ERR_PENDING)          # a bad file: the loader set the message (A24)
+        return h
+
+    def e_ITable(self, e):
+        """table(x = xs, y = ys) (D193): the lists' data and lengths go to fm_table, which copies them into a
+        new data set and returns its handle (0, with the message set, when the lengths differ)."""
+        b = self.b
+        n = len(e.items)
+        ptrs = self.alloca(ir.ArrayType(F64P, n))
+        lens = self.alloca(ir.ArrayType(I64, n))
+        for k, it in enumerate(e.items):
+            lst = self.expr(it)
+            b.store(self.ldata(lst), b.gep(ptrs, [I32(0), I32(k)]))
+            b.store(self.llen(lst), b.gep(lens, [I32(0), I32(k)]))
+        h = b.call(self.mg.externs["fm_table"], [i64(n), b.gep(ptrs, [I32(0), I32(0)]),
+                                                  b.gep(lens, [I32(0), I32(0)])])
+        with b.if_then(b.icmp_signed("==", h, i64(0)), likely=False):
+            self.fail(ERR_PENDING)
         return h
 
     def e_IColumn(self, e):

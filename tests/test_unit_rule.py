@@ -33,7 +33,7 @@ def test_standing_alone_it_is_the_unit_with_a_warning(src, out):
 
 
 @pytest.mark.parametrize("src,out", [
-    ("g = 9.81 m/s²\nh = 10 m\nprint 2*g*h", "196 J/kg"),
+    ("g = 9.81 m/s²\nh = 10 m\nprint 2*g*h", "196 m²/s²"),     # a speed squared (D196; was J/kg)
     ("g = 9.81 m/s²\nprint 2 [g]", "2 g"),
     ("m = 0.5 kg\ng = 9.81 m/s²\nprint m g", "4.9 N"),
     ("m = 0.5 kg\nprint 9.81 m/s²", "9.81 m/s²"),                # compound units are never ambiguous

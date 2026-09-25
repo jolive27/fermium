@@ -87,7 +87,7 @@ print y
 ```
 after 1 s: 15.1 m 10.2 m/s
 after 3 s: 15.9 m -9.43 m/s
-y(t) = v0 t - 0.5 g t²   [m, for t in s]
+y(t) = v0 t - 0.5·g t²   [m, for t in s]
 ```
 
 `print y` (without calling it) shows the function's formula, and in brackets the units it returns (m) for the units it takes (s). Fermium worked out by itself that `t` must be a time: `v0 t - ½ g t²` only makes sense if `t` is in seconds.

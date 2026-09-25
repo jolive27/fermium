@@ -109,7 +109,7 @@ def map_children(e, f):
                      hi=f(e.hi) if e.hi is not None else None)
     if isinstance(e, A.Sum):
         return _copy(e, body=f(e.body), lo=f(e.lo), hi=f(e.hi), step=f(e.step) if e.step is not None else None)
-    if isinstance(e, (A.ListLit, A.VecLit)):
+    if isinstance(e, (A.ListLit, A.VecLit, A.Table)):
         return _copy(e, items=[f(x) for x in e.items])
     if isinstance(e, A.IfExpr):
         return _copy(e, cond=f(e.cond), then=f(e.then), other=f(e.other))
@@ -690,6 +690,20 @@ def _name(n, pretty):
     return "_".join(GREEK_TO_ASCII.get(p, p) for p in parts)
 
 
+def _ends_with_number(e):
+    """The printed text of e ends with a number (2, or the 3 of `x·3`), so a unit name may not follow."""
+    while isinstance(e, A.BinOp) and e.op == "*" and not getattr(e, "paren", False):
+        e = e.right
+    return isinstance(e, A.Num)
+
+
+def _starts_with_unit_name(e):
+    """The printed text of e starts with a name that is also a unit (g, m, s, …)."""
+    while isinstance(e, A.BinOp) and e.op in ("*", "^") and not getattr(e, "paren", False):
+        e = e.left
+    return isinstance(e, A.Name) and is_unit_name(e.name)
+
+
 def to_source(e, pretty=True) -> str:
     return _src(e, pretty)[0]
 
@@ -754,6 +768,9 @@ def _src(e, pretty):
                         isinstance(e.right, A.BinOp) and e.right.op == "^" and isinstance(e.right.left, A.Name)
                         and not is_unit_name(e.right.left.name)):
                     sep = ""
+                elif _ends_with_number(e.left) and _starts_with_unit_name(e.right):
+                    # your variable g after a number: `2 g` would read back as 2 grams (gauntlet M13, #59)
+                    sep = "·" if pretty else "*"
                 return f"{l}{sep}{r}", PREC_JUXT
             l, lp = _paren(l, lp, PREC_PROD)
             r, rp = _paren(r, rp, PREC_NEG + 1)
@@ -835,6 +852,9 @@ def _src(e, pretty):
         return f"{lo}:{hi}", PREC_ATOM
     if isinstance(e, A.Load):
         return f'load "{e.path}"', PREC_ATOM
+    if isinstance(e, A.Table):
+        cols = ", ".join(f"{n} = {_src(v, pretty)[0]}" for n, v in zip(e.names, e.items))
+        return f"table({cols})", PREC_ATOM
     return f"<{type(e).__name__}>", PREC_ATOM
 
 

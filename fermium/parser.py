@@ -274,16 +274,17 @@ class Parser:
                     name = self.next()
                     self.next()
                     idx = self.expr()
-                    if self.at_op(","):
-                        raise self.error("the entries of a matrix can't be changed one at a time; build the new "
-                                         "matrix instead, like M = M + [[1, 0], [0, 0]]")
+                    idx2 = None
+                    if self.at_op(","):                  # M[i, j] = … (D195)
+                        self.next()
+                        idx2 = self.expr()
                     if self.at_op(":"):
                         raise self.error("a slice xs[a:b] can be read but not assigned to; set the elements "
                                          "one at a time, like  for i from a to b  then  xs[i] = ...")
                     self.expect_op("]")
                     op = self.next().value
                     val = self.expr_where()
-                    s = self.span(A.IndexAssign(name.value, idx, val, op), name)
+                    s = self.span(A.IndexAssign(name.value, idx, val, op, idx2), name)
                     if end_line:
                         self.end_statement()
                     return s
@@ -1392,7 +1393,7 @@ class Parser:
             if isinstance(first, A.Quantity) and isinstance(first.value, A.Num) and not first.bracket:
                 first = first.value
             if isinstance(first, A.Num) and isinstance(left, A.Num) and not left.paren:
-                a, b = (f"{v:g}" for v in (left.value, first.value))
+                a, b = (A.num_text(v) for v in (left, first))
                 self.diags.warn(
                     f"this is read as a/(b c), i.e. {a}/({b} ...): implicit multiplication binds tighter than '/'",
                     tok=op, hint=f"if you meant ({a}/{b}) times the rest, write ({a}/{b}) with parentheses "
@@ -1501,10 +1502,7 @@ class Parser:
     def _num_text(self, q, default="2"):
         """The number of a quantity as it was written (`8.5e28`, not `8.5e+28`), for messages (round 4 #9)."""
         n = q.value if isinstance(q, A.Quantity) else q
-        if not isinstance(n, A.Num):
-            return default
-        tk = next((t for t in self.toks if t.line == n.line and t.col == n.col and t.kind == "NUM"), None)
-        return tk.raw if tk is not None else f"{n.value:g}"
+        return A.num_text(n) if isinstance(n, A.Num) else default
 
     def _drop_warnings_between(self, line, col0, col1):
         """An error about a token replaces the warnings the parser gave on the way to it (a lone-unit warning,
@@ -1517,7 +1515,7 @@ class Parser:
     def _note_collision(self, q, f):
         """Remember `2 L` (a unit after a number, while L is also a variable), so that a unit error on
         the same line can say why (FRICTION #10)."""
-        num = f"{q.value.value:g}" if isinstance(q.value, A.Num) else None
+        num = A.num_text(q.value) if isinstance(q.value, A.Num) else None
         if num is not None:
             lst = self.collisions.setdefault(f.line, [])
             if (num, f.name) not in lst:
@@ -1670,6 +1668,10 @@ class Parser:
             # (x+1)(x-1) is a product, but (∂/∂x f)(1, 2) and (f')(3) are calls (A42)
             if self.at_op("(") and not self.tok.ws_before and not isinstance(e, (A.Num, A.Quantity)) and \
                     (not e.paren or isinstance(e, (A.Deriv, A.Prime))):
+                if isinstance(e, A.Name) and e.name == "table" and "table" not in self.known and \
+                        self.peek().kind == "NAME" and self.at_op_at(self.i + 2, "="):
+                    e = self.table_args(e, t)
+                    continue
                 self.next()
                 args = []
                 self.skip_newlines()
@@ -1719,12 +1721,35 @@ class Parser:
             else:
                 return e
 
+    def table_args(self, e, t):
+        """table(x = xs, y = ys): named columns (D193)."""
+        self.next()
+        names, items = [], []
+        self.skip_newlines()
+        while not self.at_op(")"):
+            nt = self.expect_name("a column name, like  table(x = xs, y = ys)")
+            if nt.value in names:
+                raise self.error(f"the column {nt.value} appears twice in this table", tok=nt)
+            self.expect_op("=", "after the column name (write: table(x = xs, y = ys))")
+            names.append(nt.value)
+            items.append(self.expr_full())
+            self.skip_newlines()
+            if self.at_op(","):
+                self.next()
+                self.skip_newlines()
+            elif not self.at_op(")"):
+                raise self.error("expected ',' or ')' in this table" + self._found())
+        self.next()
+        return self.span(A.Table(names, items), t)
+
     def atom(self):
         t = self.tok
         if t.kind in ("NUM", "IMAG"):
             self.next()
             n = A.Num(t.value, t.sigfigs, t.digit)
             n.line, n.col, n.length = t.line, t.col, len(t.raw)
+            if t.kind == "NUM":
+                n.raw = t.raw                 # quoted as written in warnings (#81)
             if t.kind == "IMAG":             # 4i is 4 × 𝑖 and 1i is 𝑖 (D90); a unit may follow: 4i Ω
                 n = A.Name("𝑖").at(n) if t.value == 1 and t.sigfigs is None else \
                     A.BinOp("*", n, A.Name("𝑖").at(n)).at(n)
@@ -1840,9 +1865,10 @@ class Parser:
                         raise self.error("expected ',' or ']' in this list" + self._found())
                 self.next()
                 lst = self.span(A.ListLit(items), t)
-                if items and all(isinstance(x, A.ListLit) for x in items) and self.tok.kind == "NAME" and \
+                if items and self.tok.kind == "NAME" and \
                         is_unit_name(self.tok.raw) and self.tok.value not in self.known and not self._is_call_like():
-                    u = self.unit_expr(explicit=False)          # [[1, 2], [3, 4]] N/m  (a matrix, D29)
+                    # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
+                    u = self.unit_expr(explicit=False)
                     lst = self.span(A.Quantity(lst, u), t)
                 return lst
             if t.value == "<":
@@ -2043,8 +2069,8 @@ class Parser:
         if not self.at_op(">"):
             raise self.error("expected '>' to close this vector (written <x, y> or <x, y, z>)" + self._found())
         self.next()
-        if len(items) not in (2, 3, 4):
-            raise self.error(f"a vector needs 2, 3 or 4 components, not {len(items)}", tok=t)
+        if not 2 <= len(items) <= 16:
+            raise self.error(f"a vector needs 2 to 16 components, not {len(items)}", tok=t)
         v = self.span(A.VecLit(items), t)
         if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
             u = self.unit_expr(explicit=False)

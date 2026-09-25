@@ -41,20 +41,22 @@ def test_hydrogen_fine_structure():
     uev = K.e * 1e-6
     E2 = -me * k ** 2 / (2 * hbar ** 2) / 4
     a = lines_with(out, "(a)")[0]
-    # the eigenvalues: finite differences, Richardson-extrapolated, on 64 000 intervals
-    assert field(a, "E(2s) =") == pytest.approx(E2 / K.e, rel=2e-9)
-    assert field(a, "E(2p) =") == pytest.approx(E2 / K.e, rel=2e-9)
+    # the eigenvalues: Numerov's, extrapolated (D190), on the default grid (the problem used grid 32000
+    # before the eigenfunctions were fourth order, FRICTION #70)
+    assert field(a, "E(2s) =") == pytest.approx(E2 / K.e, rel=1e-9)
+    assert field(a, "E(2p) =") == pytest.approx(E2 / K.e, rel=1e-9)
     assert field(a, "Bohr =") == pytest.approx(E2 / K.e, rel=1e-9)
 
-    # (b) Griffiths 6.55, 6.56, 6.64 and |ψ200(0)|² = 1/(8π a0³); the eigenfunctions are O(h²): 3e-7
+    # (b) Griffiths 6.55, 6.56, 6.64 and |ψ200(0)|² = 1/(8π a0³); the eigenfunctions are O(h⁴) (D190):
+    # the printed 8 digits are all right at the default grid
     b = lines_with(out, "(b)")[0]
-    assert field(b, "<1/r> a0 =") == pytest.approx(0.25, rel=3e-7)
-    assert field(b, "<1/r²> a0² =") == pytest.approx(1 / (0.5 * 8), rel=3e-7)
-    assert field(b, "|psi(0)|² a0³ =") == pytest.approx(1 / (8 * math.pi), rel=3e-6)
+    assert field(b, "<1/r> a0 =") == pytest.approx(0.25, rel=5e-8)
+    assert field(b, "<1/r²> a0² =") == pytest.approx(1 / (0.5 * 8), rel=5e-8)
+    assert field(b, "|psi(0)|² a0³ =") == pytest.approx(1 / (8 * math.pi), rel=1e-6)
     b2 = out[2]
-    assert field(b2, "<1/r> a0 =") == pytest.approx(0.25, rel=3e-7)
-    assert field(b2, "<1/r²> a0² =") == pytest.approx(1 / (1.5 * 8), rel=3e-7)
-    assert field(b2, "<1/r³> a0³ =") == pytest.approx(1 / (1 * 1.5 * 2 * 8), rel=3e-7)
+    assert field(b2, "<1/r> a0 =") == pytest.approx(0.25, rel=5e-8)
+    assert field(b2, "<1/r²> a0² =") == pytest.approx(1 / (1.5 * 8), rel=5e-8)
+    assert field(b2, "<1/r³> a0³ =") == pytest.approx(1 / (1 * 1.5 * 2 * 8), rel=5e-8)
     assert a0 == pytest.approx(K.physical_constants["Bohr radius"][0], rel=1e-6)
 
     # (c) the fine-structure formula, and Dirac's energy (expanded exactly with mpmath-free

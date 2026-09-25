@@ -145,8 +145,9 @@ print speed(10 m)
 
 - **You don't write types or units:** each call is checked with the units of its arguments.
 - **Optional unit annotations:** `f(x [m]) = ...` requires x to be a length.
-- **Calling with a list** applies the function to each element: `F(xs)`.
+- **Calling with a list** applies the function to each element: `F(xs)`. With several lists, `f(xs, ys)` pairs them element by element (the lists must have the same length; a number argument is used for every pair).
 - **Functions can call each other and themselves.**
+- **Helpers inside a function:** a one-line function defined inside a function body, `envelope(u) = Ω0 exp(-(u/τ)²)`, can use the enclosing function's parameters and variables (here Ω0 and τ). Each call is checked with its own arguments' units. It can only be called there (not passed to another function, differentiated with `'` or given a `[unit]`), and it can't call itself; define a longer or recursive helper at the top level (DECISIONS D194).
 
 **Passing a function to a function.** A parameter can be a function: pass the function's name and
 call it inside, like `V(x)`. A derivative (`g'`, `d/dt (3 t²)`, `∇φ`) or a one-argument built-in
@@ -293,7 +294,7 @@ ts = linspace(0 s, 1 s, 5)
 print ts
 ```
 
-- **Elements share units:** all elements of a list have the same units.
+- **Elements share units:** all elements of a list have the same units. A unit after the list applies to every element: `[1, 2, 3] m` is `[1 m, 2 m, 3 m]` (unless m is one of your variables: then it is `[1, 2, 3] × m`; `[1, 2, 3] [m]` is always the unit).
 - **Indexing starts at 1:** `xs[1]` is the first element and `xs[end]` the last. An index out of range stops the program with a clear message.
 - **Arithmetic works element by element:** `xs + ys`, `2 xs` and `xs^2`. Functions such as `sin(xs)` work on each element.
 - **`max` and `min` with a list and numbers** work element by element: `max(Ys, 1e-12)` floors every element at 10⁻¹² (for a log plot), `min(xs, 1 m)` clamps at 1 m; lists given together must have the same length, and all arguments the same units (DECISIONS D162). `max(xs)` with one list is still its largest element.
@@ -315,10 +316,10 @@ print a · b, a × b, unit(v)
 print 2 v + <1, 1> m/s
 ```
 
-- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2, 3 or 4 components). `vec(3, 4)` is the same as `<3, 4>`.
+- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2 to 16 components; the longer ones are for matrices, below). `vec(3, 4)` is the same as `<3, 4>`.
 - **A number times a vector** can be written side by side: `R <cos(φ), sin(φ), 0>`, `v0 <cos(θ), sin(θ)>`. This needs a space before `<` and none after it, and the `>` right after the last component; otherwise `<` is less-than (`a < b`, `x <y`). `R * <…>` always works.
 - **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D; not defined in 4-D).
-- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`. The index can be any whole number known only when the program runs, like a loop variable: `for i from 1 to 3` … `v[i]`; an index out of range stops the program (`index 4 is out of range: valid indexes here are 1 to 3`). A vector with a different unit on each component needs a fixed index.
+- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`. The index can be any whole number known only when the program runs, like a loop variable: `for i from 1 to 3` … `v[i]`; an index out of range stops the program (`index 4 is out of range: valid indexes here are 1 to 3`). A vector with a different unit on each component needs a fixed index. `v[i] = x` (and `v[i] += x`) sets one component.
 - **More functions:** `angle(a, b)` is the angle between two 2- or 3-vectors, computed as atan2(\|a × b\|, a · b) (accurate near 0 and π; the vectors may have different units). `abs(v)` takes the absolute value of each component (of a matrix too).
 - **A unit after a vector:** `<3, 4> m/s`, `<0, 0> /s` and `<1, 2> 1/s` all work, as after a number.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
@@ -353,8 +354,22 @@ print solve_linear(K, <1, 0> N)
 print K[1, 2], K[2]
 ```
 
-- **Making a matrix:** a list of rows, `[[1, 2], [3, 4]] N/m`, or with a unit on every entry, `[[1 N/m, 0 N/m], [0 N/m, 2 N/m]]`. All entries share one unit. From 1 to 4 rows and 1 to 4 columns. `identity(n)` is the n×n identity matrix (n = 2, 3 or 4).
-- **Printing:** the rows on one line, `[[1, 2], [3, 4]] N/m`.
+- **Making a matrix:** a list of rows, `[[1, 2], [3, 4]] N/m`, or with a unit on every entry, `[[1 N/m, 0 N/m], [0 N/m, 2 N/m]]`. All entries share one unit. From 1 to 16 rows and 1 to 16 columns. `identity(n)` is the n×n identity matrix (n from 2 to 16), and `zeros(r, c)` an r×c matrix of zeros whose unit comes from the first entry you put in it.
+- **Filling a matrix in a loop:** `M[i, j] = value` (and `+=`, `-=`, …) sets one entry; the indexes can be loop variables (checked when the program runs), and the value's unit must be the matrix's. A chain of N masses and springs:
+
+```fermium
+k = 3 N/m
+K = zeros(8, 8)
+for i from 1 to 8
+    K[i, i] = 2 k
+    if i < 8
+        K[i, i + 1] = -k
+        K[i + 1, i] = -k
+print eigenvalues(K) / 0.5 kg          # ω² of the 8 normal modes
+```
+
+- **Printing:** the rows on one line, `[[1, 2], [3, 4]] N/m`. In a computed vector or matrix, an entry below 10⁻¹⁴ of the largest entry is rounding noise and prints as 0 (`inverse(A) A` prints the identity; D197).
+- **Sizes:** matrices up to 4×4 use straight-line code (fastest; `det` by cofactors is exact for whole numbers); from 5×5 to 16×16 the same operations run as loops (Gaussian elimination for `det`, `inverse` and `solve_linear`, and more Jacobi sweeps for eigenvalues), in native code and in `fermium build` executables alike (D195).
 - **Arithmetic:** `A + B`, `A - B` (same size, same units), `2 A`, `A / 2`, `-A`.
 - **Products:** `M v`, `M * v` or `M · v` is a matrix times a vector (a vector); `A B` or `A * B` is the matrix product. The units multiply: a stiffness matrix in N/m times a displacement in m gives a force in N. Write the matrix first; `v M` is an error.
 - **Functions:** `transpose(M)` (also `Mᵀ`), `det(M)` (units to the power n: a 2×2 in N/m has a determinant in N²/m²), `inverse(M)` (units to the power −1: m/N), `solve_linear(M, b)` solves M x = b (x has the units of b divided by those of M; Gaussian elimination with partial pivoting).
@@ -377,7 +392,7 @@ print √(ω2[1]), √(ω2[2])              # the normal-mode angular frequencie
 print eigenvectors(K, M)              # the mode shapes
 ```
 
-- `eigenvalues(M)` of a **symmetric** 2×2, 3×3 or 4×4 matrix is a vector of its eigenvalues, **sorted from smallest to largest**, in the matrix's units (a stiffness matrix in N/m has eigenvalues in N/m). `eigenvectors(M)` is a matrix whose **columns** are the matching unit eigenvectors (column j belongs to eigenvalue j; each one's largest entry is positive). Computed by Jacobi rotations, to machine precision.
+- `eigenvalues(M)` of a **symmetric** matrix (2×2 up to 16×16) is a vector of its eigenvalues, **sorted from smallest to largest**, in the matrix's units (a stiffness matrix in N/m has eigenvalues in N/m). `eigenvectors(M)` is a matrix whose **columns** are the matching unit eigenvectors (column j belongs to eigenvalue j; each one's largest entry is positive). Computed by Jacobi rotations, to machine precision.
 - `eigenvalues(K, M)` and `eigenvectors(K, M)` solve the **generalized** problem K v = λ M v with symmetric K and a symmetric, positive-definite M (a mass matrix). For springs and masses λ = ω², in 1/s². The mode shapes are scaled to unit length. Don't write `eigenvalues(inverse(M) K)`: M⁻¹K is not symmetric, so it is an error that points to `eigenvalues(K, M)`.
 - **Errors** (when the program runs): a matrix that isn't symmetric (entries may differ by at most 10⁻¹⁰ of the largest entry), and a second matrix that isn't positive definite.
 
@@ -685,6 +700,7 @@ plot data.T vs data.L to "pendulum.png"
 ```
 
 - **`load "file.csv"`:** reads a CSV whose header gives names and units, like `T [s]`. The header is read when the program is compiled, so the units are checked. Paths are relative to the program's folder.
+- **`table(L = Ls, T = Ts)`:** lists in memory as the named columns of a data set, for `fit` (`fit T = 2π √(L / g) to table(L = Ls, T = Ts)`), `data.T` and `print` (the lists must have the same length; DECISIONS D193).
 - **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
@@ -1230,7 +1246,7 @@ print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
 - **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
 - **Only interior points are used:** the equation is never evaluated at the two ends (ψ = 0 there), so a potential that is singular at an end works: the hydrogen radial equation with `V(r) = -k / r`, `solve -ħ²/(2*m_e) * u'' + V(r) u = E u with u(0 nm) = 0, u(5 nm) = 0 for r from 0 nm to 5 nm lowest 3`, gives −m k²/(2ħ² n²) (D172). A singular point inside the range is still an error.
 - **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
-  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
+  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. Each state is then refined to Numerov's fourth-order discretisation (inverse iteration), solved at three spacings and extrapolated, so smooth potentials give ~10⁻¹² relative accuracy in E and ~10⁻¹⁰ in expectation values like ⟨x²⟩; the Coulomb potential gives ~10⁻⁹ in both (hydrogen's ⟨1/r⟩ for 2s and 2p, D190). A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶ and the states are the finite-difference ones (second order).
   - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).
 - The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
 - These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.

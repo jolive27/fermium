@@ -154,7 +154,6 @@ def test_11_rounding_noise_sigma_doesnt_print_twenty_digits(src, bad):
 
 # ---- #12: quadrature and vector rounding noise is printed as a 3-figure result ------------------------------------
 
-@rt4(12)
 @pytest.mark.parametrize("src, good", [
     ("print ∫ sin(x) dx from -π to π", "0"),
     ("f(x) = <cos(x), sin(x), 0>\nprint ∫ f(x) dx from 0 to π", "<0, 2, 0>"),
@@ -168,7 +167,6 @@ def test_12_integral_rounding_noise_prints_as_zero(src, good):
 
 # ---- #13: `2 kg c²` shows its SI value with 6 significant figures -------------------------------------------------
 
-@rt4(13)
 def test_13_unit_with_constant_shows_si_value_with_default_figures():
     out = run("print 2 kg c^2")
     # today: "2 kg c² (= 1.79751×10¹⁷ J)", while `print 2 * 1 kg * c^2` gives 1.80×10¹⁷ J
@@ -178,10 +176,10 @@ def test_13_unit_with_constant_shows_si_value_with_default_figures():
 
 # ---- #14: lists pad exact integers (and 1-figure literals) to the longest element ---------------------------------
 
-@rt4(14)
 @pytest.mark.parametrize("src, good", [
     ("print [1.2345, 2]", "[1.2345, 2]"),
-    ("print [5.018245e9, -6934.574, 9e1]", "[5.018245×10⁹, -6934.574, 90]"),
+    # the main session's D11 rule prints the whole number 5.018245e9 in full; the finding was the 90.00000
+    ("print [5.018245e9, -6934.574, 9e1]", "[5018245000, -6934.574, 90]"),
     ("print 10000000", "10000000"),
 ])
 def test_14_list_and_literal_printing(src, good):
@@ -201,17 +199,15 @@ def test_15_bootcamp_prose_matches_the_error():
     assert "10. [warning: 'm' after the number means the unit m]" not in ts
 
 
-# ---- #16: exact ties round half to even (0.125 -> 0.12), undocumented -------------------------------------------
+# ---- #16: exact ties round half to even (0.125 -> 0.12): documented in D11 as by design ----------------------------
 
-@rt4(16)
-def test_16_exact_ties_round_half_up_or_are_documented():
+def test_16_exact_ties_round_half_to_even_as_documented():
     import os
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ref = open(os.path.join(root, "docs", "reference.md"), encoding="utf-8").read()
-    if "half to even" in ref or "half-even" in ref:
-        return
-    assert run("print 0.125 * 1.0") == "0.13"
-    assert run("print 2.5e6 * 1.3") == "3.3×10⁶"
+    dec = open(os.path.join(root, "DECISIONS.md"), encoding="utf-8").read()
+    assert "Ties round half to even" in dec                     # D11 says so (red team round 4 #16)
+    assert run("print 0.125 * 1.0") == "0.12"
+    assert run("print 2.5e6 * 1.3") == "3.2×10⁶"
 
 
 # ---- #17: slicing a data table: the hint talks about vector components --------------------------------------------
@@ -288,3 +284,14 @@ def test_18_ordinary_absolute_tolerances_dont_warn():
     out, err = run_err(src)
     assert num(out) == pytest.approx(-0.8391, abs=2e-4)
     assert "warning" not in err
+
+
+def test_17_the_hinted_table_of_sliced_columns_fits(tmp_path):
+    (tmp_path / "p.csv").write_text("L [m], T [s]\n0.2, 0.9\n0.4, 1.28\n0.6, 1.55\n0.8, 1.79\n")
+    src = ('data = load "p.csv"\nfit T = 2 π sqrt(L / g) to data[2:4]\n')
+    with pytest.raises(FermiumError) as ei:
+        run(src, base_dir=str(tmp_path))
+    assert "table(L = data.L[2:5], T = data.T[2:5])" in str(ei.value.hint)
+    src = ('data = load "p.csv"\nfit T = 2 π sqrt(L / g) to table(L = data.L[2:4], T = data.T[2:4])\n'
+           'print g to 3 digits\n')
+    assert run(src, base_dir=str(tmp_path)).splitlines()[-1] == "9.81 m/s²"

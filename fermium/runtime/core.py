@@ -85,9 +85,11 @@ def fit_sigfigs(val, err):
 DEFAULT_SF = 3     # output precision when the inputs don't say (DECISIONS D11)
 
 
-def format_written(x, sf):
+def format_written(x, sf, exact_items=False):
     """An element of a list written out in the program: with the list's (fewest) significant figures if
     that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
+    if exact_items and x == x and abs(x) < 1e15 and x == int(x):
+        return str(int(x))              # a whole number as written ([1.2345, 2], not 2.0000; red team round 4 #14)
     if x == x and abs(x) < math.inf and x != 0 and float(f"{x:.{max(sf, 1) - 1}e}") != x:
         return format_number(x, 15, trim=True)
     return format_number(x, sf, trim=False)
@@ -97,7 +99,10 @@ def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
     u = display_unit(dim, hint)
     x = (v - u.offset) / u.factor
     if sf is None:
-        s = format_number(x, 15, trim=True) if direct else format_default(x, DEFAULT_SF, whole_ok)
+        if direct:                      # a literal as written (10000000, not 1×10⁷; red team round 4 #14)
+            s = str(int(x)) if abs(x) < 1e15 and x == int(x) else format_number(x, 15, trim=True)
+        else:
+            s = format_default(x, DEFAULT_SF, whole_ok)
     else:
         s = format_number(x, sf if direct else max(sf, 2), trim=False)
     name = u.name
@@ -108,7 +113,8 @@ def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
     if echo and hint is not None and u is hint and direct and name != "c" and any(
             re.fullmatch(r"c([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\^-?\d+)?", tok) for tok in re.split(r"[\s/()·*]+", name)):
         si = preferred_unit(dim)
-        return f"{s} {name} (= {format_number(v, 6)} {si.name})"
+        # the SI value with the same significant figures as the value itself (red team round 4 #13)
+        return f"{s} {name} (= {format_number(v, (sf if direct else max(sf, 2)) if sf else DEFAULT_SF, trim=False)} {si.name})"
     return f"{s} {name}"
 
 
@@ -161,8 +167,8 @@ class Runtime:
                 sf = max(sf, 2)            # same rule as single numbers (DECISIONS D11)
             if n > 12:
                 vals = vals[:5] + vals[-3:]
-            if sf and f["direct"] is True:    # a list written out: each element as written ([0, 0.5, 1, 1.5])
-                shown = [format_written(x, sf) for x in vals]
+            if sf and f["direct"] in (True, 3):    # a list written out: each element as written ([0, 0.5, 1, 1.5])
+                shown = [format_written(x, sf, f["direct"] == 3) for x in vals]
             else:
                 shown = [format_number(x, sf, trim=False) for x in vals] if sf else format_default_seq(vals, DEFAULT_SF)
             if n > 12:
@@ -178,14 +184,26 @@ class Runtime:
             u = display_unit(f["rdim"], f["hint"])
             sf = f["sf"]
             xs = [p[i] / u.factor for i in idx]
-            vals = [format_written(x, sf) if f["direct"] is True else format_number(x, sf, trim=False)
+            vals = [format_written(x, sf, f["direct"] == 3) if f["direct"] in (True, 3) else format_number(x, sf, trim=False)
                     if f["direct"] else format_number(x, max(sf, 2), trim=False)
                     for x in xs] if sf \
                 else format_default_seq(xs, DEFAULT_SF)
             return vals, ("" if u.name in ("", "1") else " " + u.name)
 
+        def denoise(f, p, n):
+            """A computed vector's or matrix's entries below 10⁻¹⁴ of its largest are rounding noise and
+            print as 0 (like a complex number's parts, D94; FRICTION #59, D197).  Mirrored in aot_rt.c."""
+            xs = [p[i] for i in range(n)]
+            if f["direct"] is True:
+                return xs
+            big = max((abs(x) for x in xs if math.isfinite(x)), default=0.0)
+            if big > 0:
+                xs = [0.0 if math.isfinite(x) and abs(x) < 1e-14 * big else x for x in xs]
+            return xs
+
         def print_vec(fid, p, n):
-            vals, unit = seq_values(rt.tables.fmts[fid], p, range(n))
+            f = rt.tables.fmts[fid]
+            vals, unit = seq_values(f, denoise(f, p, n), range(n))
             rt.line.append("<" + ", ".join(vals) + ">" + unit)
 
         def print_mvec(fid, p, n):
@@ -202,7 +220,7 @@ class Runtime:
 
         def print_mat(fid, p, r, c):
             f = rt.tables.fmts[fid]
-            vals, unit = seq_values(f, p, range(r * c))        # one number style for the whole matrix
+            vals, unit = seq_values(f, denoise(f, p, r * c), range(r * c))   # one number style for the whole matrix
             rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
             rt.line.append("[" + ", ".join(rows) + "]" + unit)
 
@@ -267,6 +285,9 @@ class Runtime:
 
         def load(i):
             return rt.load(i)
+
+        def table(n, ptrs, lens):
+            return rt.table([ptrs[k][:lens[k]] for k in range(n)])
 
         def column(h, col, outp):
             arr = rt.datasets[h][col]
@@ -348,6 +369,7 @@ class Runtime:
             "fm_plot_done": CB(None, c_int64)(plot_done),
             "fm_load": CB(c_int64, c_int64)(load),
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
+            "fm_table": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64))(table),
             "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
@@ -616,6 +638,19 @@ class Runtime:
             data.append(np.ascontiguousarray(arr[:, k] * u.factor + u.offset))
         h = len(self.datasets) + 1
         self.datasets[h] = data
+        return h
+
+    def table(self, columns):
+        """table(x = xs, y = ys) (D193): the lists (already SI) as a new data set; 0 and a message if their
+        lengths differ."""
+        import numpy as np
+        n = len(columns[0]) if columns else 0
+        for c in columns[1:]:
+            if len(c) != n:
+                self.error = f"the columns of this table have different lengths ({n} and {len(c)})"
+                return 0
+        h = len(self.datasets) + 1
+        self.datasets[h] = [np.ascontiguousarray(np.array(c, dtype=float)) for c in columns]
         return h
 
     # ------------------------------------------------------------ fit

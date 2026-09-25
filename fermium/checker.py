@@ -25,6 +25,7 @@ from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy,
                     VOID, Ty, ComplexTy,
                     type_desc)
 from .linalg import transpose_index
+from .linalg_big import MAX_DIM
 from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
 
 MATH1 = {"sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
@@ -68,6 +69,16 @@ def _unit_name_suggestion(name):
     if close:
         return f"did you mean {close[0]}? (see the units list in docs/reference.md)"
     return ""
+
+
+def _written(items):
+    """`direct` of a list, vector or matrix written out in the program (D11): False if not every element is
+    a literal; 3 if some elements are exact whole numbers and others have a stated precision ([1.2345, 2]:
+    the 2 prints as written); else True ([1.0, 2.0] keeps its figures)."""
+    if not items or not all(getattr(it, "direct", False) for it in items):
+        return False
+    sfs = [getattr(it, "sf", None) for it in items]
+    return 3 if None in sfs and any(x is not None for x in sfs) else True
 
 
 class MixedHint(tuple):
@@ -215,6 +226,16 @@ class Ctx:
         c.loop = self.loop
         c.ret_types = self.ret_types
         return c
+
+
+class LocalFunc:
+    """A one-line function defined inside a function body (gauntlet #75, D194): each call is expanded in place,
+    like `body where s = arg`, with the other names resolved where the helper was defined (so it sees the
+    enclosing function's parameters and variables, and each call is unit-checked with its own arguments)."""
+
+    def __init__(self, fdef, scope, owner):
+        self.fdef, self.scope, self.owner = fdef, scope, owner
+        self.expanding = False
 
 
 class Tables:
@@ -524,7 +545,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if not dataclasses.is_dataclass(n):
                 continue
             for q in (getattr(n, "right", None), n):
-                if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and f"{q.value.value:g}" == num and \
+                if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and A.num_text(q.value) == num and \
                         len(q.unit.factors) == 1 and q.unit.factors[0].name == name and \
                         getattr(q, "line", line) == line:
                     shown = q.unit.text or name
@@ -666,6 +687,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def s_IndexAssign(self, s, ctx):
         b, _ = ctx.scope.lookup(s.target)
+        if isinstance(b, I.Sym) and isinstance(b.ty, (VecTy, MatTy)) and not isinstance(b.ty, ComplexTy):
+            return self.entry_assign(b, s, ctx)
+        if s.index2 is not None:
+            what = "a list" if isinstance(b, I.Sym) and isinstance(b.ty, ListTy) else "not a matrix"
+            raise self.err(f"{s.target}[i, j] = … sets an entry of a matrix, but {s.target} is {what}", s)
         if not isinstance(b, I.Sym) or not isinstance(b.ty, ListTy):
             raise self.err(f"{s.target} isn't a list, so you can't set {s.target}[...]", s)
         tgt = self.expr(A.Name(s.target).at(s), ctx)
@@ -682,7 +708,49 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                               f"{self.desc(v.ty.dim)} in it", s.value)
         return I.SIndexAssign(tgt.sym, idx, v, s.line)
 
+    def entry_assign(self, b, s, ctx):
+        """M[i, j] = x and v[i] = x (also +=, …): the variable gets a copy with that entry replaced, so a
+        matrix can be filled in a loop (D195).  Indexes may be known only at run time (checked then)."""
+        name = s.target
+        tgt = self.expr(A.Name(name).at(s), ctx)
+        if isinstance(b.ty, MatTy):
+            if s.index2 is None:
+                raise self.err(f"{name} is a matrix: set one entry at a time, like {name}[i, j] = …", s)
+            pieces = [(self.fixed_or_runtime_index(s.index, b.ty.r, ctx), b.ty.r, b.ty.c),
+                      (self.fixed_or_runtime_index(s.index2, b.ty.c, ctx), b.ty.c, 1)]
+            read = A.Index(A.Index(A.Name(name).at(s), s.index).at(s), s.index2).at(s)
+        else:
+            if s.index2 is not None:
+                raise self.err(f"{name} is a vector: set one component, like {name}[i] = …", s)
+            if b.ty.mixed:
+                raise self.err(f"the components of {name} have different units, so they can't be set one at a "
+                               f"time; build the new vector, like {name} = <…>", s)
+            pieces = [(self.fixed_or_runtime_index(s.index, b.ty.n, ctx), b.ty.n, 1)]
+            read = A.Index(A.Name(name).at(s), s.index).at(s)
+        if s.op != "=":
+            v = self.expr(A.BinOp(s.op[0], read, s.value).at(s), ctx)
+        else:
+            v = self.expr(s.value, ctx)
+        self.need_num(v, s.value, "a matrix entry" if isinstance(b.ty, MatTy) else "a vector component")
+        self.unify_or(b.ty.dim, v.ty.dim,
+                      lambda: f"the entries of {name} are {self.desc(b.ty.dim)}; can't put {self.desc(v.ty.dim)} "
+                              f"in it", s.value)
+        idxs = []
+        for k, size, stride in pieces:
+            if isinstance(k, int):
+                if not 0 <= k < size:
+                    raise self.err(f"there is no index {k + 1} here: valid indexes are 1 to {size}", s)
+                k = I.IConst(k + 1, NumTy(DIMLESS))
+            idxs.append((k, size, stride))
+        r = I.IVecSet(tgt, idxs, v, b.ty, s.line)
+        r.hint = tgt.hint if tgt.hint is not None else v.hint
+        r.sf = self._minsf(tgt, v) if tgt.sf is not None else v.sf
+        r.direct = False
+        return self.assign_to(name, r, s, ctx)
+
     def s_FuncDef(self, s, ctx):
+        if not ctx.is_main and ctx.lam is None and getattr(ctx.func, "name", None) is not None:
+            return self.local_funcdef(s, ctx)
         if not ctx.is_main or ctx.lam is not None:
             raise self.err("functions must be defined at the top level of the program (not inside a block)", s)
         info = FuncInfo(s.name, s, ctx.scope)
@@ -703,6 +771,67 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                 f"argument is ignored", line=val.line or s.line, col=val.col,
                                 hint=f"rename the where-variable, or drop {name} from {s.name}(...)")
         return None
+
+    def local_funcdef(self, s, ctx):
+        """g(s) = … inside a function (D194): a helper that sees the enclosing function's names."""
+        owner = re.sub(r"\.\d+$", "", str(getattr(ctx.func, "name", "this function")))
+        if isinstance(s.body, list):
+            raise self.err(f"a function defined inside another function must fit on one line, like  "
+                           f"{s.name}(x) = …  (define a longer one at the top level)", s)
+        if s.where:
+            raise self.err(f"'where' isn't supported on a function defined inside another function; define "
+                           f"the helper value first, then {s.name}(…) = …", s)
+        for p in s.params:
+            if getattr(p, "unit", None) is not None:
+                raise self.err("a function defined inside another function takes its parameters' units from "
+                               "each call; leave out the [unit]", s)
+        b, _ = ctx.scope.lookup(s.name)
+        if b is not None and ctx.scope.names.get(s.name) is b:
+            raise self.err(f"{s.name} is already defined here", s)
+        ctx.scope.names[s.name] = LocalFunc(s, ctx.scope, owner)
+        return None
+
+    def call_local(self, lf, e, ctx):
+        """g(a, b) of a LocalFunc: `body where s = a, t = b`, the body's other names seen from g's definition."""
+        fd = lf.fdef
+        if len(e.args) != len(fd.params):
+            n = len(fd.params)
+            raise self.err(f"{fd.name} takes {n} argument{'s' if n != 1 else ''} but was given {len(e.args)}", e)
+        if lf.expanding:
+            raise self.err(f"{fd.name} calls itself; a function defined inside another function can't be "
+                           f"recursive (define it at the top level)", e)
+        args = []
+        for a in e.args:
+            v = self.expr(a, ctx)
+            if not isinstance(v, I.Expr):
+                raise self.err(f"the arguments of {fd.name} must be values (a function defined inside another "
+                               f"function can't take a function)", a)
+            args.append(v)
+        scope = Scope(lf.scope)
+        c2 = ctx.child(scope)
+        binds = []
+        for p, v in zip(fd.params, args):
+            sym = self.new_sym(self.fresh_name(p.name), v.ty, c2)
+            sym.sf, sym.hint, sym.direct = getattr(v, "sf", None), getattr(v, "hint", None), getattr(v, "direct", False)
+            sym.assigned = True
+            scope.names[p.name] = sym
+            binds.append((sym, v))
+        lf.expanding = True
+        try:
+            body = self.expr(fd.body, c2)
+        except FermiumError as ex:
+            if e.line and ex.line and ex.line != e.line and not getattr(ex, "local_noted", False):
+                desc = ", ".join(f"{p.name} = {type_desc(v.ty, self.U)}" for p, v in zip(fd.params, args))
+                note = f"this happened when calling {fd.name} on line {e.line} (with {desc})"
+                ex.hint = f"{ex.hint}; {note}" if ex.hint else note
+                ex.local_noted = True
+            raise
+        finally:
+            lf.expanding = False
+        r = I.ILet(binds, body)
+        r.ty = body.ty
+        r.hint, r.sf, r.direct = getattr(body, "hint", None), getattr(body, "sf", None), False
+        return r
 
     def s_Analyze(self, s, ctx):
         """`analyze pendulum: T depends on L, m, g`: Buckingham Π groups, printed; defines pendulum(L, g) (D70)."""
@@ -1261,10 +1390,13 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         sym = self.loop_var(s.var, NumTy(lst.ty.dim), ctx, s)
         sym.hint = lst.hint
         # for E in [0.50 eV, 0.75 eV] keeps the elements' precision when they all share it (friction #30)
-        sfs = {getattr(it, "sf", None) for it in getattr(lst, "items", [None])}
+        src = lst
+        if isinstance(src, I.IBin) and src.op == "*" and isinstance(src.a, I.IList):
+            src = src.a                  # [0.50, 0.75] eV (D192): the written list inside the unit
+        sfs = {getattr(it, "sf", None) for it in getattr(src, "items", [None])}
         sym.sf = sfs.pop() if len(sfs) == 1 else None
         # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11)
-        items = getattr(lst, "items", None)
+        items = getattr(src, "items", None)
         sym.direct = sym.sf is None and bool(items) and all(getattr(it, "direct", False) for it in items)
         sym.assigned = True
         ctx.loop += 1
@@ -1389,7 +1521,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err(f"this matrix already has units ({self.desc(v.ty.dim)}); write the unit once, "
                                f"after the ]]", e)
             r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), MatTy(DExpr.of(u.dim), v.ty.r, v.ty.c))
-            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit)
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit) and _written(getattr(v, "items", []))
             return r
         if isinstance(v.ty, VecTy):
             if u.affine:
@@ -1400,7 +1532,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
             self.U.unify(v.ty.dim, DIMLESS)
             r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), VecTy(DExpr.of(u.dim), v.ty.n))
-            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit)
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit) and _written(getattr(v, "items", []))
             return r
         if not isinstance(e.value, A.Num):
             vd = self.U.norm(v.ty.dim)
@@ -1467,6 +1599,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                f"here", e, hint=f"solve the equation inside the region (or outside, and use it there)")
             self.var_ref(b.sol_sym, ctx, e)   # marks capture/global as needed
             return SolRef(b)
+        if isinstance(b, LocalFunc):
+            raise self.err(f"{name} is a function defined inside {b.owner}; it can only be called, like "
+                           f"{name}({', '.join(p.name for p in b.fdef.params)})", e,
+                           hint=f"to pass it to another function, or to differentiate or integrate it by name, "
+                                f"define {name} at the top level")
         if isinstance(b, ModuleRef):
             raise self.module_as_value(b, name, e)
         if isinstance(b, PyModRef):
@@ -1963,9 +2100,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         ncol = len(rows[0])
         if any(len(r) != ncol for r in rows):
             raise self.err("every row of a matrix needs the same number of entries", e)
-        if len(rows) > 4 or ncol > 4 or ncol == 0 or len(rows) * ncol < 2:
-            raise self.err(f"a matrix can have 1 to 4 rows and 1 to 4 columns (at most 4×4), not "
-                           f"{len(rows)}×{ncol}", e)
+        if len(rows) > MAX_DIM or ncol > MAX_DIM or ncol == 0 or len(rows) * ncol < 2:
+            raise self.err(f"a matrix can have 1 to {MAX_DIM} rows and 1 to {MAX_DIM} columns (at most "
+                           f"{MAX_DIM}×{MAX_DIM}), not {len(rows)}×{ncol}", e)
         dim = DExpr.fresh("mat")
         items = []
         for row, rnode in zip(rows, e.items):
@@ -1977,8 +2114,25 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r = I.IVec(items, MatTy(dim, len(rows), ncol))
         r.hint = next((it.hint for it in items if it.hint is not None), None)
         r.sf = self._minsf(*items)
-        r.direct = all(getattr(it, "direct", False) for it in items)
+        r.direct = _written(items)
         return r
+
+    def zero_matrix(self, args, e):
+        """zeros(r, c): an r×c matrix of zeros whose unit comes from its first use, like a plain 0 (so
+        `K = zeros(8, 8)` then `K[i, j] = 2 k` in a loop fills a stiffness matrix; D195)."""
+        dims = []
+        for a, node in zip(args, e.args):
+            if not isinstance(a, I.IConst) or not isinstance(a.ty, NumTy) or a.value != int(a.value) or \
+                    not 1 <= a.value <= MAX_DIM or not self.U.unify(a.ty.dim, DIMLESS):
+                raise self.err(f"zeros(r, c) makes an r×c matrix; r and c must be fixed whole numbers from 1 to "
+                               f"{MAX_DIM}, like zeros(8, 8)", node)
+            dims.append(int(a.value))
+        r, c = dims
+        if r * c < 2:
+            raise self.err("zeros(1, 1) would be a single number; write 0", e)
+        m = I.IVec([I.IConst(0.0, NumTy(DIMLESS)) for _ in range(r * c)], MatTy(DExpr.fresh("zeros"), r, c))
+        m.hint, m.sf, m.direct = None, None, False
+        return m
 
     def need_square(self, m, name, node):
         if not isinstance(m.ty, MatTy):
@@ -2030,8 +2184,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         for m in args:
             self.need_square(m, name, e)
         k = args[0]
-        if not 2 <= k.ty.r <= 4:
-            raise self.err(f"{name} needs a 2×2, 3×3 or 4×4 matrix, not {k.ty.r}×{k.ty.c}", e)
+        if not 2 <= k.ty.r <= MAX_DIM:
+            raise self.err(f"{name} needs a square matrix from 2×2 to {MAX_DIM}×{MAX_DIM}, not {k.ty.r}×{k.ty.c}", e)
         if len(args) == 2 and args[1].ty.r != k.ty.r:
             raise self.err(f"{name}(K, M) needs K and M of the same size, but they are {k.ty.r}×{k.ty.r} and "
                            f"{args[1].ty.r}×{args[1].ty.r}", e)
@@ -2557,7 +2711,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r = I.IList(items, ListTy(dim))
         r.hint = items[0].hint if items else None
         r.sf = self._minsf(*items) if items else None
-        r.direct = bool(items) and all(getattr(it, "direct", False) for it in items)
+        r.direct = _written(items)
         return r
 
     def e_Load(self, e, ctx):
@@ -2574,6 +2728,34 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         info = {"path": path, "full": os.path.abspath(full), "columns": cols}
         self.tables.loads.append(info)
         return I.ILoad(len(self.tables.loads) - 1, DataTy(info))
+
+    def e_Table(self, e, ctx):
+        """table(x = xs, y = ys): lists of the same length as the named columns of a data set, for fit,
+        data.x and print (D193).  The values are already SI, so each column's unit is only its display unit."""
+        from .units import preferred_unit
+        if not e.items:
+            raise self.err("a table needs at least one column, like  table(x = xs, y = ys)", e)
+        items, cols = [], []
+        for nm, node in zip(e.names, e.items):
+            v = self.expr(node, ctx)
+            if not isinstance(v, I.Expr) or not isinstance(v.ty, ListTy):
+                raise self.err(f"the column {nm} of a table must be a list of numbers, like  {nm} = [1, 2, 3] m",
+                               node)
+            d = self.U.norm(v.ty.dim)
+            if not d.concrete:
+                raise self.err(f"the units of the column {nm} aren't known here", node,
+                               hint=f"give the list its unit, like  {nm} = [1, 2, 3] m")
+            hint = getattr(v, "hint", None)
+            if isinstance(hint, Unit) and hint.dim == d.const and not hint.offset:
+                u = hint
+            elif d.const.dimensionless:
+                u = Unit("1", d.const, 1.0)
+            else:
+                u = preferred_unit(d.const)
+            cols.append({"name": nm, "unit": u})
+            items.append(v)
+        info = {"path": C.to_source(e), "columns": cols, "table": True}
+        return I.ITable(items, DataTy(info))
 
     def e_Field(self, e, ctx):
         pref = self.py_ref_of(e.target, ctx)
@@ -2728,10 +2910,10 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             t = self.sol_values(t.view, e)
         if isinstance(t, I.Expr) and isinstance(t.ty, DataTy):
             # `fit … to data[2:5]` (red team round 4 #17, D209)
-            raise self.err("a data table can't be sliced with [a:b] (fitting or plotting part of a table isn't "
-                           "supported yet); its columns are lists, and a column can be sliced", e.target,
-                           hint="slice a column, like  data.L[2:5],  or put the rows you want in a CSV file of "
-                                "their own and load that")
+            raise self.err("a data table can't be sliced with [a:b]; its columns are lists, and those can be",
+                           e.target,
+                           hint="to fit some of the rows, slice the columns and make a table of them:  "
+                                "fit … to table(L = data.L[2:5], T = data.T[2:5])")
         if not isinstance(t, I.Expr) or not isinstance(t.ty, ListTy):
             what = "a vector" if isinstance(t, I.Expr) and isinstance(t.ty, (VecTy, MatTy)) else "this"
             raise self.err(f"only lists can be sliced with [a:b], and {what} isn't a list", e.target,
@@ -2767,7 +2949,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             raise self.err("a complex number can't be indexed with [...]", e,
                            hint="its parts are re(z) and im(z) (or z.re and z.im)")
         if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
-            if not 2 <= t.ty.c <= 4:
+            if not 2 <= t.ty.c <= MAX_DIM:
                 raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
                                e.index)
             ri = self.fixed_or_runtime_index(e.index, t.ty.r, ctx)
@@ -2861,6 +3043,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                     self._calling = False
             if isinstance(b, FuncInfo):
                 return self.call_user(b, self.call_args(e.args, ctx), e)
+            if isinstance(b, LocalFunc):
+                return self.call_local(b, e, ctx)
             if isinstance(b, SolView):
                 return self.sol_eval(b, e, ctx)
             later = self.future_funcs.get(f.name)
@@ -3015,11 +3199,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                            f"but was given {len(args)}", node)
         list_args = [i for i, a in enumerate(args) if isinstance(a, I.Expr) and isinstance(a.ty, ListTy)]
         if list_args and not self._takes_lists(info):
-            if len(list_args) > 1:
-                raise self.err("can't apply a function element-wise over two lists at once", node)
-            i = list_args[0]
             scalar_args = list(args)
-            scalar_args[i] = I.IConst(0, NumTy(args[i].ty.dim))
+            for j in list_args:          # f(xs, ys): element by element, lists of the same length (D191)
+                scalar_args[j] = I.IConst(0, NumTy(args[j].ty.dim))
             call = self.instantiate(info, scalar_args, node)
             if not isinstance(call.ty, NumTy):       # f(x) = <x, 2x>; f([1, 2]) (A48)
                 what = "a vector" if isinstance(call.ty, VecTy) else "something other than a number"
@@ -3027,7 +3209,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                                f"of a list (lists of vectors aren't supported yet)", node,
                                hint="loop over the list and push the components into separate lists")
             rt_args = [a for a in args if isinstance(a, I.Expr)]
-            r = I.IMap(call.func, rt_args, rt_args.index(args[i]), ListTy(call.ty.dim))
+            pos = [sum(1 for a in args[:j] if isinstance(a, I.Expr)) for j in list_args]
+            r = I.IMap(call.func, rt_args, pos[0] if len(pos) == 1 else pos, ListTy(call.ty.dim))
             r.sf = call.sf
             return r
         return self.instantiate(info, args, node)
@@ -3471,8 +3654,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err("cross(a, b) needs two vectors", e)
             return self.vec_arith("×", args[0], args[1], e)
         if name == "vec":
-            if n not in (2, 3, 4):
-                raise self.err("vec(...) takes 2, 3 or 4 components", e)
+            if not 2 <= n <= MAX_DIM:
+                raise self.err(f"vec(...) takes 2 to {MAX_DIM} components", e)
             return self.e_VecLit(A.VecLit(e.args).at(e), ctx)
         if name == "dot" and n == 2 and all(isinstance(a.ty, VecTy) for a in args):
             return self.vec_arith("*", args[0], args[1], e)
@@ -3483,8 +3666,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             k = args[0]
             if not isinstance(k, I.IConst) or not isinstance(k.ty, NumTy):
                 raise self.err("identity(n) needs a fixed whole number, like identity(3)", e.args[0])
-            if k.value not in (2, 3, 4):
-                raise self.err("identity(n) needs n = 2, 3 or 4 (matrices are at most 4×4)", e.args[0])
+            if k.value != int(k.value) or not 2 <= k.value <= MAX_DIM:
+                raise self.err(f"identity(n) needs a whole number n from 2 to {MAX_DIM} (matrices are at most "
+                               f"{MAX_DIM}×{MAX_DIM})", e.args[0])
             m = int(k.value)
             return I.IVec([I.IConst(1.0 if i == j else 0.0, NumTy(DIMLESS)) for i in range(m) for j in range(m)],
                           MatTy(DIMLESS, m, m))
@@ -3518,6 +3702,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             r = self._bi(name, args, ListTy(args[0].ty.dim), args)
             r.hint = args[0].hint or args[1].hint
             return r
+        if name == "zeros" and n == 2:
+            return self.zero_matrix(args, e)
         if name in ("zeros", "ones"):
             need(1)
             self.need_num(args[0], e.args[0])
@@ -3584,7 +3770,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             raise self.err(f"{name}(M, k) needs a matrix, like [[1, 2], [3, 4]]", e.args[0])
         r_, c_ = m.ty.r, m.ty.c
         length, size = (c_, r_) if name == "row" else (r_, c_)
-        if not 2 <= length <= 4:
+        if not 2 <= length <= MAX_DIM:
             raise self.err(f"a {name} of a {r_}×{c_} matrix has {length} entr{'y' if length == 1 else 'ies'}, so it "
                            f"isn't a vector; pick an entry with M[i, j]", e)
         k = self.fixed_or_runtime_index(e.args[1], size, ctx)
@@ -3838,7 +4024,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             self.cur_ctx = saved
         suffix = "'" * order if len(f.params) == 1 else f"_∂{pname}" * order
         pretty = (info.display_name + "'" * order) if len(f.params) == 1 else \
-            (f"∂{info.display_name}/∂{pname}" if order == 1 else f"∂{order}{info.display_name}/∂{pname}{order}")
+            (f"∂{info.display_name}/∂{pname}" if order == 1 else
+             f"∂{_sup(order)}{info.display_name}/∂{pname}{_sup(order)}")        # ∂²f/∂x², not ∂2f/∂x2 (#59)
         nm = info.name + suffix
         fd = A.FuncDef(nm, f.params, body)
         fd.line, fd.col = f.line, f.col
@@ -4351,6 +4538,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             for p in self.tables.plots[n0:]:
                 p["nat"] = self.nat
         return r
+
+
+def _sup(n):
+    """A whole number as a superscript: 2 → ², 10 → ¹⁰."""
+    return str(n).translate(str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹"))
 
 
 def _stmts_in(st):

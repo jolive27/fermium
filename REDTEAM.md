@@ -601,7 +601,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
 - **Likely location:** fermium/uncertain.py (a σ below ~10⁻¹⁴ of the value, or of the inputs' σ, should count as
   0) and the ± formatter in fermium/units.py.
 
-### 12. Quadrature and vector rounding noise prints as a 3-figure result (misleading display). Status: open
+### 12. Quadrature and vector rounding noise prints as a 3-figure result (misleading display). Status: fixed in the main session (D11, D197): integral noise below 50ε·∫|f| prints 0, vector noise too.
 - **Repro:**
   - `print ∫ sin(x) dx from -π to π` → `3.19×10⁻¹⁶`;
   - `f(x) = <cos(x), sin(x), 0>`, `print ∫ f(x) dx from 0 to π` → `<1.67×10⁻¹⁶, 2.00, 0>`;
@@ -615,13 +615,13 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   quadrature's accuracy. For vectors, the component-wise formatter could drop components below ~10⁻¹⁴ × |v|, as
   the complex formatter does.
 
-### 13. `2 kg c²` shows its SI value with 6 significant figures (display). Status: open
+### 13. `2 kg c²` shows its SI value with 6 significant figures (display). Status: fixed in the main session (D11): the SI echo uses the value's own significant figures, `(= 1.80×10¹⁷ J)`.
 - **Repro:** `print 2 kg c^2`; also `print 1 MeV/c^2` → `1 MeV/c² (= 1.78266×10⁻³⁰ kg)`.
 - **Expected:** `(= 1.80×10¹⁷ J)`, the D11 default of 3 figures. `print 2 * 1 kg * c^2` gives `1.80×10¹⁷ J`.
 - **Actual:** `2 kg c² (= 1.79751×10¹⁷ J)`. The parenthetical still uses the old 6-figure rule.
 - **Likely location:** the unit-with-constant display in fermium/units.py (and its mirrors in core.py and aot_rt.c).
 
-### 14. Lists pad exact integers and 1-figure literals to the longest element, and `10000000` prints as `1×10⁷` (display). Status: open
+### 14. Lists pad exact integers and 1-figure literals to the longest element, and `10000000` prints as `1×10⁷` (display). Status: fixed in the main session (D11): written whole numbers print as written, in lists too (`[1.2345, 2]`, `90`, `10000000`).
 - **Repro:**
   - `print [1.2345, 2]` → `[1.2345, 2.0000]`;
   - `print [5.018245e9, -6934.574, 9e1]` → `[5.018245×10⁹, -6934.574, 90.00000]`;
@@ -645,7 +645,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
     section shows the error.
 - **Expected:** the prose says what the output boxes show (the boxes are right).
 
-### 16. Exact ties round half to even: `0.125` → `0.12`, `2.5e6 × 1.3` → `3.2×10⁶` (display/docs). Status: open
+### 16. Exact ties round half to even: `0.125` → `0.12`, `2.5e6 × 1.3` → `3.2×10⁶` (display/docs). Status: documented in the main session (D11: ties round half to even, as C's printf, NumPy and Julia do); the test now asserts the documented behaviour.
 - **Repro:** `print 0.125 * 1.0`, `print 2.5e6 * 1.3`, `print [0.125, 0.375] * 1.0` → `[0.12, 0.38]`.
 - **Expected:** either school rounding (`0.13`, `3.3×10⁶`), which is what a student's calculator and textbook give,
   or a sentence in reference §4 saying that ties go to the even digit (ISO 80000-1's rule B).
@@ -653,7 +653,7 @@ feature interactions and printing. Every finding was reproduced with the JIT, an
   last digit.
 - **Likely location:** `format_number` in fermium/units.py, `fmt_default` in aot_rt.c, and docs/reference.md §4.
 
-### 17. Slicing a data table: the error calls it "not a list" and suggests vector components (message). Status: fixed (D209): slicing a table is an error about tables, with a hint to slice a column or load a smaller CSV.
+### 17. Slicing a data table: the error calls it "not a list" and suggests vector components (message). Status: fixed (D209): slicing a table is an error about tables, whose hint shows `fit … to table(L = data.L[2:5], T = data.T[2:5])`.
 - **Repro:** `data = load "pendulum.csv"`, `fit T = 2 π sqrt(L / g) to data[2:5]`.
 - **Expected:** a message about tables (fit a subset by slicing the columns, or "fitting part of a table isn't
   supported yet").
