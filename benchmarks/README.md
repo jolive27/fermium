@@ -84,7 +84,9 @@ c = 299792458 m/s, k_B = 1.380649e-23 J/K, σ = 5.670374419e-8 W m⁻² K⁻⁴.
    Fermium at a pure-relative 1e-10 with the others at rtol 1e-8 + atol 1e-10,
    which is not a like-for-like setting.)
 3. **blackbody** — ∫ B_ν(ν, T) dν over 1e11–1e16 Hz for 1000 temperatures
-   1000–10000 K, adaptive Gauss–Kronrod with rtol = 1e-8: Julia `QuadGK.quadgk`
+   1000–10000 K, adaptive Gauss–Kronrod with rtol = 1e-10 (the tolerance of every
+   Fermium integral, which has no per-integral setting; until M5 the others used
+   1e-8 and so did ~25% fewer integrand evaluations): Julia `QuadGK.quadgk`
    (GK 7/15), SciPy `quad` (QUADPACK QAGS, GK 10/21, `epsabs=0`), pure Python a
    hand-written globally adaptive GK 7/15 with QuadGK's strategy. Prints the sum
    over T and ∫B_ν(5778 K) / (σT⁴/π) (≈ 1; the truncated band misses ~3e-11).
