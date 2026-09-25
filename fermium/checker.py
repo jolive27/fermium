@@ -40,6 +40,7 @@ class FuncInfo:
         self.derived = {}
         self.display_name = name
         self.checked_generic = False
+        self.stable = False           # a derivative: evaluate C.stabilize(body) (A52)
 
     @property
     def one_liner(self):
@@ -1501,7 +1502,7 @@ class Checker(C.DiffContext):
         inst.ret_ty = inst.ret_placeholder
         try:
             if info.one_liner:
-                v = self.expr(info.body_expr(), fctx)
+                v = self.expr(C.stabilize(info.body_expr()) if info.stable else info.body_expr(), fctx)
                 if not isinstance(v, I.Expr):
                     raise self.err("a function must produce a value", f)
                 inst.body = [I.SReturn(v)]
@@ -1840,6 +1841,7 @@ class Checker(C.DiffContext):
         fd.line, fd.col = f.line, f.col
         d = FuncInfo(nm, fd, info.scope)
         d.display_name = pretty
+        d.stable = True
         d.parent = (info if getattr(info, "parent", None) is None else info.parent[0], i,
                     order + (info.parent[2] if getattr(info, "parent", None) else 0))
         info.derived[key] = d
@@ -1889,12 +1891,13 @@ class Checker(C.DiffContext):
         for _ in range(e.order):
             body = C.diff(body, e.var, self._diffctx(ctx.scope))
         if isinstance(bound, I.Sym):
-            return self.expr(body, ctx)
+            return self.expr(C.stabilize(body), ctx)
         # d/dt (formula in t) with t not defined -> a new function of t
         fd = A.FuncDef(f"λ{self.counter}", [A.Param(e.var)], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.display_name = f"d/d{e.var}(...)"
+        info.stable = True
         return FuncRef(info)
 
     def e_Integral(self, e, ctx):

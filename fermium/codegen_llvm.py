@@ -14,6 +14,19 @@ from llvmlite import ir
 from . import ir as I
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, TextListTy
 
+
+def odd_root_numerator(p):
+    """For an exponent p = n/q with q odd and > 1 (1/3, 2/3, -2/3, 1/5, ...) return n, else None.
+
+    Such powers have a real value for negative bases: (-8)^(2/3) = 4, (-8)^(1/3) = -2."""
+    if not math.isfinite(p) or p == int(p):
+        return None
+    from fractions import Fraction
+    f = Fraction(p).limit_denominator(99)
+    if f.denominator % 2 == 0 or abs(float(f) - p) > 1e-12 * max(1.0, abs(p)):
+        return None
+    return f.numerator
+
 F64 = ir.DoubleType()
 I64 = ir.IntType(64)
 I32 = ir.IntType(32)
@@ -1198,6 +1211,10 @@ class FuncGen:
             return b.fdiv(f64(1), b.fmul(x, b.call(self.mg.intrinsic("sqrt"), [x])))
         if abs(p - 1 / 3) < 1e-15:
             return b.call(self.mg.libm("cbrt"), [x])
+        n = odd_root_numerator(p)
+        if n is not None:           # x^(n/q), q odd: the real root, also for x < 0 (like cbrt)
+            r = b.call(self.mg.intrinsic("pow"), [b.call(self.mg.intrinsic("fabs"), [x]), f64(p)])
+            return b.call(self.mg.intrinsic("copysign"), [r, x]) if n % 2 else r
         if p == int(p) and abs(p) <= 16:
             return b.call(self.mg.intrinsic("powi") if False else self.mg.intrinsic("pow"), [x, f64(p)])
         return b.call(self.mg.intrinsic("pow"), [x, f64(p)])
