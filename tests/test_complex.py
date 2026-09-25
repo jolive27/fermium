@@ -358,9 +358,11 @@ def test_standalone_imaginary_unit_splits_names():
 
 def test_fmt_ascii_spells_the_imaginary_unit():
     from fermium.fmt import format_source
-    assert format_source("z = 2𝑖 + 𝑖 x + 3i\n", "ascii") == "z = 2 1i + (1i) x + 3i\n"
+    # 2𝑖 after a plain number is the literal 2i (red team 5 nit; was "2 1i", which reads oddly)
+    assert format_source("z = 2𝑖 + 𝑖 x + 3i\n", "ascii") == "z = 2i + (1i) x + 3i\n"
     assert format_source("a = 𝑖ħ\n", "ascii") == "a = (1i)hbar\n"
     assert run("x = 2\nz = 2 1i + 1i x + 3i\nprint z") == "0 + 7i"
+    assert run("x = 2\nz = 2i + (1i) x + 3i\nprint z") == "0 + 7i"
 
 
 def test_repl_keeps_complex_variables():
