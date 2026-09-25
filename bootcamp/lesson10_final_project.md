@@ -138,7 +138,7 @@ while t < 2 yr
         period = t
 
 E_end = energy(x, y, vx, vy)
-print "energy per kg at start:", E_start
+print "energy per kg at start:", E_start in J/kg
 print "relative energy change after 2 years:", (E_end - E_start) / E_start
 print "period:", period in day
 ```

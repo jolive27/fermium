@@ -241,11 +241,11 @@ print sqrt(2 * g * h)
 
 <!-- output -->
 ```
-196 J/kg
+196 m²/s²
 14.0 m/s
 ```
 
-(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. `J/kg` is the same as m²/s²: Fermium picked a standard unit to display it.)
+(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. 2gh is a speed squared, so it is shown in m²/s²; `print 2 * g * h in J/kg` would show the same value as an energy per kilogram.)
 
 What if you write `2 g` after making your own `g`? Right after a number, `g` could mean grams (the rule above) or your variable. When `2 g` is multiplied by something else, like `2 g * h` or `2 g h`, you almost certainly meant your variable, so Fermium won't guess: it stops and asks you to say which one you mean.
 

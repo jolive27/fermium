@@ -281,8 +281,10 @@ _PREFERRED_SPECS = [
     "m", "kg", "s", "A", "K", "mol", "cd",
     "m/s", "m/s²", "m²", "m³", "kg/m³", "kg m/s", "N", "J", "W", "Pa", "C", "V", "Ω", "F", "T", "Wb", "H",
     "N/m", "J/K", "J s", "N m²/kg²", "W/m²", "W/(m² K⁴)", "J/(kg K)", "J/(mol K)", "1/mol", "F/m", "H/m",
-    "kg m²", "m²/s", "m³/(kg s²)", "V/m", "A/m", "kg/s", "J/kg", "Pa s", "C/kg", "W/m³", "C²", "C m",
+    "kg m²", "m²/s", "m³/(kg s²)", "V/m", "A/m", "kg/s", "m²/s²", "Pa s", "C/kg", "W/m³", "C²", "C m",
     "J/T", "C/m²", "C/m³", "1/m", "1/m²", "1/m³", "kg/m²", "J/m³", "N/m²",
+    "S/m",          # a conductivity, not F/(m s) (gauntlet #80, D196); a speed squared is m²/s², not J/kg
+    "J/(m³ K⁴)",    # the radiation constant a = 4σ/c, not kg/(m s² K⁴) (gauntlet T12, #59)
 ]
 _PREFERRED = None
 

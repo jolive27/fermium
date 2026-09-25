@@ -24,24 +24,21 @@ k = e² / (4π ε_0)
 #  2 × the compound unit 'm c²' (metre times c², since c is also a unit), with no error)
 E_bohr2 = -m_e k² / (2 ħ²) / 4
 r_max = 4 nm
-# Workaround: the eigenvalue solver evaluates the equation at the end points too, so
-# −k/r at r = 0 stops it ("can't be evaluated at x = 0"). Put the inner wall at
-# r_in = 10⁻²⁰ m instead: that moves E(2s) by (ħ²/2m) u'(0)² r_in ≈ 4×10⁻¹⁰ E.
-# The eigenvalues are Richardson-extrapolated, but the eigenfunctions are only
-# second-order accurate: with the default grid ⟨1/r⟩ is 1.5×10⁻⁵ off, so use grid 32000
-# (64 000 intervals: ~6×10⁻⁸).
+# (Written when the solver still evaluated the equation at the ends; since D172 the wall
+# can be at r = 0 exactly. With r_in = 10⁻²⁰ m, E(2s) moves by (ħ²/2m) u'(0)² r_in ≈ 4×10⁻¹⁰ E.)
+# The eigenfunctions were only second-order accurate, which needed grid 32000 for ⟨1/r⟩ to
+# 10⁻⁷ (FRICTION #70); they are now Numerov's (fourth order, D190), and the default grid
+# gives ~10⁻⁹.
 r_in = 1e-11 nm
 
 solve -ħ²/(2*m_e) * ψ'' - k / r * ψ = E ψ
     with ψ(r_in) = 0, ψ(r_max) = 0
     for r from r_in to r_max
     lowest 2
-    grid 32000
 solve -ħ²/(2*m_e) * φ'' + (ħ² / (m_e r²) - k / r) φ = W φ
     with φ(r_in) = 0, φ(r_max) = 0
     for r from r_in to r_max
     lowest 1
-    grid 32000
 E2s = E[2]
 E2p = W[1]
 print "(a) E(2s) =", E2s in eV to 10 digits, " E(2p) =", E2p in eV to 10 digits, " Bohr =", E_bohr2 in eV to 10 digits

@@ -190,8 +190,20 @@ class Runtime:
                 else format_default_seq(xs, DEFAULT_SF)
             return vals, ("" if u.name in ("", "1") else " " + u.name)
 
+        def denoise(f, p, n):
+            """A computed vector's or matrix's entries below 10⁻¹⁴ of its largest are rounding noise and
+            print as 0 (like a complex number's parts, D94; FRICTION #59, D197).  Mirrored in aot_rt.c."""
+            xs = [p[i] for i in range(n)]
+            if f["direct"] is True:
+                return xs
+            big = max((abs(x) for x in xs if math.isfinite(x)), default=0.0)
+            if big > 0:
+                xs = [0.0 if math.isfinite(x) and abs(x) < 1e-14 * big else x for x in xs]
+            return xs
+
         def print_vec(fid, p, n):
-            vals, unit = seq_values(rt.tables.fmts[fid], p, range(n))
+            f = rt.tables.fmts[fid]
+            vals, unit = seq_values(f, denoise(f, p, n), range(n))
             rt.line.append("<" + ", ".join(vals) + ">" + unit)
 
         def print_mvec(fid, p, n):
@@ -208,7 +220,7 @@ class Runtime:
 
         def print_mat(fid, p, r, c):
             f = rt.tables.fmts[fid]
-            vals, unit = seq_values(f, p, range(r * c))        # one number style for the whole matrix
+            vals, unit = seq_values(f, denoise(f, p, r * c), range(r * c))   # one number style for the whole matrix
             rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
             rt.line.append("[" + ", ".join(rows) + "]" + unit)
 
@@ -273,6 +285,9 @@ class Runtime:
 
         def load(i):
             return rt.load(i)
+
+        def table(n, ptrs, lens):
+            return rt.table([ptrs[k][:lens[k]] for k in range(n)])
 
         def column(h, col, outp):
             arr = rt.datasets[h][col]
@@ -354,6 +369,7 @@ class Runtime:
             "fm_plot_done": CB(None, c_int64)(plot_done),
             "fm_load": CB(c_int64, c_int64)(load),
             "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
+            "fm_table": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64))(table),
             "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
             "fm_sort": CB(None, DPTR, c_int64)(sort),
             "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
@@ -622,6 +638,19 @@ class Runtime:
             data.append(np.ascontiguousarray(arr[:, k] * u.factor + u.offset))
         h = len(self.datasets) + 1
         self.datasets[h] = data
+        return h
+
+    def table(self, columns):
+        """table(x = xs, y = ys) (D193): the lists (already SI) as a new data set; 0 and a message if their
+        lengths differ."""
+        import numpy as np
+        n = len(columns[0]) if columns else 0
+        for c in columns[1:]:
+            if len(c) != n:
+                self.error = f"the columns of this table have different lengths ({n} and {len(c)})"
+                return 0
+        h = len(self.datasets) + 1
+        self.datasets[h] = [np.ascontiguousarray(np.array(c, dtype=float)) for c in columns]
         return h
 
     # ------------------------------------------------------------ fit

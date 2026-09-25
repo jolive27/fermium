@@ -1013,7 +1013,8 @@ def test_map_vector_function_over_list_is_a_fermium_error():
 def test_vector_errors_are_clean():
     assert "2-vector and a 3-vector" in str(error_of("print <1,2> · <1,2,3>"))
     assert "no component 3" in str(error_of("v = <1,2>\nprint v.z"))
-    assert "2, 3 or 4 components" in str(error_of("print <1, 2, 3, 4, 5>"))
+    # vectors go up to 16 components since D195 (matrices up to 16×16 act on them); it was 4
+    assert "2 to 16 components" in str(error_of("print <" + ", ".join(["1"] * 17) + ">"))
 
 
 @pytest.mark.parametrize("src,want", [

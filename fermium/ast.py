@@ -181,6 +181,13 @@ class ListLit(Node):
 
 
 @dataclass(eq=False)
+class Table(Node):
+    """table(x = xs, y = ys): lists as the named columns of a data set, like a loaded file (D193)."""
+    names: list
+    items: list
+
+
+@dataclass(eq=False)
 class VecCalc(Node):
     """∇f (grad), ∇·F (div), ∇×F (curl), ∇²f (lap) of a one-line function; a function itself."""
     kind: str
@@ -253,6 +260,7 @@ class IndexAssign(Node):
     index: Node
     value: Node
     op: str = "="
+    index2: object = None      # M[i, j] = … : the column (D195)
 
 
 @dataclass(eq=False)
@@ -408,6 +416,13 @@ class Program(Node):
 
 
 # ---------------------------------------------------------------- utilities
+def num_text(n):
+    """A number as written in the source (`2.50e19`, not Python's `2.5e+19`) for messages (gauntlet #81);
+    a number the parser made itself has no spelling, so it is formatted."""
+    raw = getattr(n, "raw", None)
+    return raw if raw else f"{n.value:g}"
+
+
 def children(n):
     """Direct child nodes of an expression node (for generic walks)."""
     if isinstance(n, (Num, Str, Bool, Name, End, Load)):
@@ -432,7 +447,7 @@ def children(n):
         return [x for x in (n.integrand, n.lo, n.hi) if x is not None]
     if isinstance(n, Sum):
         return [x for x in (n.body, n.lo, n.hi, n.step) if x is not None]
-    if isinstance(n, (ListLit, VecLit)):
+    if isinstance(n, (ListLit, VecLit, Table)):
         return list(n.items)
     if isinstance(n, IfExpr):
         return [n.cond, n.then, n.other]
