@@ -1,6 +1,6 @@
 # Morning report: Fermium, the overnight run of Sep 24–25, 2026
 
-> **DRAFT (07:35 UTC).** The final version, with M5 benchmark numbers, red team round 4 and the final test count,
+> **DRAFT (10:10 UTC; complete except the final benchmark table).** The final version, with M5 benchmark numbers, red team round 4 and the final test count,
 > will be written at 12:30 UTC. Everything below is backed by tests in `tests/` unless it says otherwise.
 
 ## In one paragraph
@@ -11,11 +11,11 @@ Fermium is a physics programming language:
 - programs compile to native code through LLVM.
 
 Overnight it went from a spec to:
-- 3403 passing tests;
+- 3597 passing tests;
 - 61 + 20 textbook problems;
-- 9 research reproductions compared with published numbers;
-- 4 red-team rounds;
-- all 8 moonshots attempted: 7 done, and M5 (performance) is in progress.
+- 11 research reproductions compared with published numbers;
+- 6 red-team rounds;
+- all 8 moonshots done (M4 only in the interpreter; M5's numbers are waiting for the final quiet-machine benchmark).
 
 ## User requests during the night
 
@@ -45,7 +45,7 @@ Jupyter kernel and notebook; language server with unit hover, live errors and `\
 | M2 | Dimensional analysis (`analyze …: T [s] depends on …`) | Done (D70), bootcamp lesson 11 | tests/test_dimensional_analysis.py |
 | M3 | Serious numerics: stiff solvers + stiffness warning, eigenvalue problems, 1-D PDEs (heat, wave, Schrödinger; GIF), FFT, root finding, Monte Carlo, seeded RNG | Done (D42, D80–D83, D131, D160) | tests/test_m3_*.py, test_stiff.py; all validated against SciPy/NumPy or closed forms |
 | M4 | Uncertainties (`5.0 ± 0.2 m`, correlations, `propagate montecarlo`, uncertain fit parameters, error bars), bootcamp lesson 12 | Done, **interpreter only** (D120–D124) | tests/test_uncertainty.py, checked against the `uncertainties` package and SciPy `curve_fit` covariances |
-| M5 | Performance: `parallel for`, optimisation pass, match Julia on ≥ 2 benchmarks | **TBD at 12:30** | RESULTS.md |
+| M5 | Performance: integer loop counters, `parallel for` (pthreads, reproducible sums), fair benchmarks | Done (D150–D152); on the loaded machine it matched or beat Julia on 4 rows (nbody 0.96×, forces 0.96×/0.62× with 4 threads, spring_adaptive 0.83×); final quiet-machine table below | RESULTS.md, tests/test_parallel.py |
 | M6 | Python interop: `use python numpy as np` with unit contracts; `fermium.compile()` from Python | Done (D140–D142) | tests/test_python_interop.py |
 | M7 | Modules (`import`, `from … import`), stdlib (mechanics, em, nuclear, astro, quantum, stats), `fermium.toml` | Done (D100–D103) | tests/test_modules.py, test_stdlib.py; docs/stdlib.md |
 | M8 | Self-hosting: the unit database is written in Fermium and generates the compiler's factor table | Done | fermium/selfhost/, tests/test_selfhost.py. It found that M☉ was rounded and that the parsec wasn't the IAU definition. |
@@ -71,7 +71,7 @@ Honest caveats:
 
 ## Phase 3 and 7: textbook gauntlet
 - 81 problems in all: 31 in pass 1, 30 in pass 2 and 20 in pass 3 (graduate: Kapitza pendulum, Hulse–Taylor decay, hydrogen fine structure, deuteron, TOV, Gamow peak, …). Each is checked against closed forms, SciPy or published values.
-- Friction: 86 items logged, 74 fixed in the language (gauntlet/FRICTION.md). The remaining open ones: see "Still weak".
+- Friction: 96 items logged, 86 fixed in the language (gauntlet/FRICTION.md). The rest are by design, partly fixed, or open: see "Still weak".
 
 ## Phase 8: red team (REDTEAM.md)
 | Round | Findings | Silent wrong answers | Fixed |
@@ -80,7 +80,8 @@ Honest caveats:
 | 2 (05:00) | 14 | `2 c` with your own c, Crank–Nicolson coarse step and sawtooth, `std` of one value, cyclotron frequency, Bateman NaN | all 14 |
 | 3 (06:30) | 15 | `36 km/h` read as km / Planck's h, °C in products, `°C ± %`, early PDE transients, vector zero integrals | all 15 |
 | 4 (07:30) | 18 (6 false positives from tonight's new rules) | `absolute 1e-6 °C` read as 274 K, rpm through a Python unit contract, `1.5 kT` as kilotesla | all 18 (#16 documented: ties round half to even) |
-| 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | fixes in progress |
+| 5 (08:45) | 19 (tools: REPL, Jupyter, LSP, fmt, build, playground, bootcamp journey) | Jupyter/playground dropping run-time warnings, `d/dt x(2 s)` = 0, `[1, 2, 3] m` with your own m | all 19 (+3 of 4 nits) |
+| 6 (10:00) | TBD | TBD | TBD |
 
 ## Benchmarks
 TBD at 12:30 (M5): measured on a quiet machine, Fermium vs Julia vs Python, same algorithms and tolerances.
