@@ -123,7 +123,7 @@ such line, although dividing the whole integral is intended and is what happens.
 silence it is to rewrite as `(1/π) ∫ …` or `(∫ …) / π`. Acceptable, but three warnings for three
 correct lines is noisy.
 Fix: don't warn when the divisor is a constant such as π, or when the limit already ends in the
-same name (`π / π`), or offer `∫ … from 0 to π, / π`-free advice in the docs.
+same name (`π / π`); or mention `(1/π) ∫ …` in the hint.
 
 ### O10. No `trace(M)` — cosmetic
 
