@@ -80,7 +80,7 @@ print "activity at t = 0:", decay_constant N0 in 1/min
 <!-- output -->
 ```
 fit counts = N0 exp(-t/τ)   (13 data points from ../data/decay.csv)
-  N0 = 1196   (standard error 9.4)
+  N0 = 1195.6   (standard error 9.4)
   τ = 20.10 min   (standard error 0.26 min)
   rms residual = 10.8
 0.000829 1/s

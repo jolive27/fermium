@@ -548,7 +548,13 @@ int64_t fm_fit(int64_t fid, int64_t h, double *p) {
     char val[200], se[100];
     for (int i = 0; i < k; i++) {
         const fm_paraminfo *P = &F->params[i];
-        quantity(best[i] / P->factor, 4, P->unit, val, sizeof val);
+        int sig = 4;          /* fit_sigfigs in runtime/core.py */
+        if (ok[i] && isfinite(errs[i]) && errs[i] > 0 && isfinite(best[i]) && best[i] != 0) {
+            sig = (int)floor(log10(fabs(best[i]))) - (int)floor(log10(errs[i])) + 2;
+            if (sig < 4) sig = 4;
+            if (sig > 12) sig = 12;
+        }
+        quantity(best[i] / P->factor, sig, P->unit, val, sizeof val);
         if (ok[i] && isfinite(errs[i])) {
             fmt_num(errs[i] / P->factor, 2, 0, se, sizeof se);
             int has_unit = P->unit[0] && strcmp(P->unit, "1");

@@ -514,7 +514,8 @@ class Checker(C.DiffContext):
         return len(self.tables.texts) - 1
 
     def fmt(self, v):
-        self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct})
+        self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct,
+                                 "echo": getattr(v, "echo", True)})
         return len(self.tables.fmts) - 1
 
     def fmt_components(self, v):
@@ -743,6 +744,9 @@ class Checker(C.DiffContext):
                            hint="to count, write  for i from 1 to 10")
         sym = self.loop_var(s.var, NumTy(lst.ty.dim), ctx, s)
         sym.hint = lst.hint
+        # for E in [0.50 eV, 0.75 eV] keeps the elements' precision when they all share it (friction #30)
+        sfs = {getattr(it, "sf", None) for it in getattr(lst, "items", [None])}
+        sym.sf = sfs.pop() if len(sfs) == 1 else None
         sym.assigned = True
         ctx.loop += 1
         reg = self._enter_region(ctx, "for", s.line)
@@ -1545,6 +1549,7 @@ class Checker(C.DiffContext):
             raise self.err("the number of digits must be between 1 and 17", e)
         v.sf = e.digits
         v.direct = True
+        v.echo = False          # no "(= … SI)" echo for a value printed to chosen digits (friction #31)
         return v
 
     def e_Where(self, e, ctx):

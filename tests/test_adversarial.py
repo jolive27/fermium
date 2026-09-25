@@ -692,7 +692,7 @@ def test_fit_matches_scipy_curve_fit(tmp_path):
     (tmp_path / "pend.csv").write_text("L [cm], T [ms]\n10, 634\n20, 897\n40, 1269\n80, 1794\n")
     (tmp_path / "temp.csv").write_text("T [°C], P [kPa]\n-10, 90\n0, 100\n25, 110\n")
     out = run('data = load "pend.csv"\nfit T = 2π √(L / g) to data\nprint g in m/s^2', base_dir=str(tmp_path))
-    assert "g = 9.812 m/s²" in out and "standard error 0.0023 m/s²" in out
+    assert "g = 9.8118 m/s²" in out and "standard error 0.0023 m/s²" in out
     out = run('d = load "temp.csv"\nfit P = a + b T to d\nprint a in Pa', base_dir=str(tmp_path))
     assert close(num(out.split("\n")[-1]), -49773.08, 1e-3)       # T column converted from °C to K
 

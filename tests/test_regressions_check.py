@@ -130,7 +130,7 @@ def test_fit_decay_time_constant_without_guess(tmp_path):
     _decay_csv(tmp_path)
     out = run('d = load "decay.csv"\nfit N = A exp(-t/τ) to d\nprint τ in ms', base_dir=str(tmp_path))
     assert "warning" not in out
-    assert "A = 1002   (standard error 1.5)" in out
+    assert "A = 1001.7   (standard error 1.5)" in out
     assert out.split("\n")[-1] == "2.99 ms"
 
 

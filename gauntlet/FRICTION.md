@@ -22,7 +22,7 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 14 | A | special relativity (S3) | `m_π` can't be a variable name | Open |
 | 15 | B | nuclear (N3) | `15.3 / min / g` fails with "min is a built-in function" | Open |
 | 16 | A | astrophysics (A2) | No `mas`/`μas`; `arcsec` takes no prefixes | Fixed: `mas`, `μas` (`uas`) units; `arcsec` takes SI prefixes |
-| 17 | C | oscillations, quantum (O3, Q12) | The look-alike-names warning repeats many times, across unrelated functions | Open |
+| 17 | C | oscillations, quantum (O3, Q12) | The look-alike-names warning repeats many times, across unrelated functions | Fixed: warned once per pair of names |
 | 18 | A | electromagnetism (E1) | ∇ or d/dx of a function defined by an integral isn't supported | Open |
 | 19 | A | electromagnetism (E2) | Integrals of vectors aren't supported (one integral per component) | Open |
 | 20 | B | electromagnetism (E7) | Indefinite integrals that SymPy answers with `asinh(Abs(…))` fail, without a line number | Open |
@@ -34,13 +34,13 @@ Severity: **W** wrong answer or silent surprise, **B** bug or misleading error, 
 | 26 | A | nuclear (N4) | `fit` standard errors aren't available as values | Open |
 | 27 | A | gravitation (G5) | No `GM_sun` / `GM_earth` constants | Fixed: `GM_sun` (`GM☉`, IAU nominal) and `GM_earth` constants |
 | 28 | C | gravitation (G3) | `h² = …` gets the hint "use == to compare" | Open |
-| 29 | C | several (E8, T6, O3, M6, O2) | Derived units print in base SI (`kg/(s³ A)` for V/m²), `1/s` for rad/s | Open |
-| 30 | C | quantum (Q14) | List elements lose their significant figures | Open |
-| 31 | C | special relativity (S5) | The "(= … SI)" echo appears after an explicit `in` | Open |
+| 29 | C | several (E8, T6, O3, M6, O2) | Derived units print in base SI (`kg/(s³ A)` for V/m²), `1/s` for rad/s | Fixed: composite display units (V/m², T m, W/(m² K), …) instead of base SI; `1/s` stays |
+| 30 | C | quantum (Q14) | List elements lose their significant figures | Partly fixed: `for E in [0.50 eV, 0.75 eV]` keeps the elements' precision when they share it |
+| 31 | C | special relativity (S5) | The "(= … SI)" echo appears after an explicit `in` | Fixed: no "(= … SI)" echo for a value printed `to N digits` |
 | 32 | B | astrophysics (A1) | 0/0 at an ODE's start gives "too many steps (reached t = 0)" | Open |
 | 33 | A | mechanics (M1, G4) | `solve` has no "stop when" condition | Open |
 | 34 | A | gravitation (G6) | `e`, `h`, `c` can be redefined silently | Fixed: redefining a constant that the program already used as the constant warns (a fresh `h = 10 m` doesn't) |
-| 35 | C | nuclear (N6) | The `fit` report rounds the value more coarsely than its standard error | Open |
+| 35 | C | nuclear (N6) | The `fit` report rounds the value more coarsely than its standard error | Fixed: fitted values are shown to the second digit of their standard error (`A = 1001.7 (standard error 1.5)`) |
 | 36 | W | quantum (S2) | A root found in rounding noise is printed without a warning | Open |
 | 37 | C | mechanics (M8) | The root takes the unit of the range's start (`141.506 cm`) | By design: the range's unit is the natural display unit |
 | 38 | C | oscillations (O8) | `print` always puts a space between items | By design |

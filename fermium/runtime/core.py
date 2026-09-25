@@ -46,7 +46,15 @@ def display_unit(dim, hint):
     return preferred_unit(dim)
 
 
-def format_quantity(v, dim, hint, sf, direct):
+def fit_sigfigs(val, err):
+    """Digits for a fitted value: at least 4, and enough to reach the second digit of its standard error
+    (0.69900, not 0.6990, when the error is 1.9×10⁻⁵) (gauntlet friction #35).  Mirrored in aot_data.c."""
+    if err is None or not (math.isfinite(err) and err > 0) or not (math.isfinite(val) and val != 0):
+        return 4
+    return max(4, min(12, math.floor(math.log10(abs(val))) - math.floor(math.log10(err)) + 2))
+
+
+def format_quantity(v, dim, hint, sf, direct, echo=True):
     u = display_unit(dim, hint)
     x = (v - u.offset) / u.factor
     if sf is None:
@@ -58,7 +66,7 @@ def format_quantity(v, dim, hint, sf, direct):
         return s
     if name in ("°", "%", "′", "″"):
         return f"{s}{name}"
-    if hint is not None and u is hint and direct and name != "c" and any(
+    if echo and hint is not None and u is hint and direct and name != "c" and any(
             re.fullmatch(r"c([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\^-?\d+)?", tok) for tok in re.split(r"[\s/()·*]+", name)):
         si = preferred_unit(dim)
         return f"{s} {name} (= {format_number(v, 6)} {si.name})"
@@ -89,7 +97,7 @@ class Runtime:
 
         def print_num(fid, v):
             f = rt.tables.fmts[fid]
-            rt.line.append(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"]))
+            rt.line.append(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"], f.get("echo", True)))
 
         def print_list(fid, p, n):
             f = rt.tables.fmts[fid]
@@ -365,7 +373,7 @@ class Runtime:
             dim = info["rdims"][i]
             hint = info.get("col_units", {}).get(dim)   # e.g. show a time constant in the data's minutes
             u = display_unit(dim, hint)
-            val = format_quantity(best[i], dim, hint, 4, False)
+            val = format_quantity(best[i], dim, hint, fit_sigfigs(best[i], errs[i]), False)
             if errs[i] is not None and math.isfinite(errs[i]):
                 se = format_number(errs[i] / u.factor, 2, trim=False)
                 unit = f" {u.name}" if u.name not in ("", "1") else ""
