@@ -232,6 +232,8 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 13: snprintf(err_msg, sizeof err_msg, "this equation has no solution between %s and %s: the two sides never cross there (checked at 200 points)", x, y); break;
     case 12: snprintf(err_msg, sizeof err_msg, "this for loop has no definite number of steps: it goes from %s to %s (NaN in the start, end or step)", x, y); break;
     case 15: snprintf(err_msg, sizeof err_msg, "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no unique solution"); break;
+    case 21: snprintf(err_msg, sizeof err_msg, "eigenvalues and eigenvectors need a symmetric matrix (M[i, j] = M[j, i]), like a stiffness or mass matrix; for K v = ω² M v write eigenvalues(K, M) rather than eigenvalues(inverse(M) K)"); break;
+    case 22: snprintf(err_msg, sizeof err_msg, "in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix (positive masses on the diagonal)"); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
 }

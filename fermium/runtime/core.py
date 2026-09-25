@@ -297,6 +297,12 @@ class Runtime:
         if kind == 15:
             return "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no " \
                    "unique solution"
+        if kind == 21:
+            return ("eigenvalues and eigenvectors need a symmetric matrix (M[i, j] = M[j, i]), like a stiffness or "
+                    "mass matrix; for K v = ω² M v write eigenvalues(K, M) rather than eigenvalues(inverse(M) K)")
+        if kind == 22:
+            return ("in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix "
+                    "(positive masses on the diagonal)")
         return "runtime error"
 
     # ------------------------------------------------------------ data
