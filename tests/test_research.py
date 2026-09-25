@@ -535,3 +535,113 @@ def test_bbn_whole_network_from_10_mev_with_an_absolute_tolerance():
     assert num(out, "7Li/H =") == pytest.approx((li + be) / p, rel=1e-5)
     assert num(out, "Y_n =") == pytest.approx(n, rel=1e-3)
     assert num(out, "T =") == pytest.approx(T, rel=1e-5)
+
+
+# ---- nuclear shell model: Woods–Saxon + spin–orbit (Bohr & Mottelson Vol. I, eqs. 2-181, 2-182) -----------
+WS_R0, WS_A, WS_BOX = 1.27, 0.67, 40.0          # fm
+
+
+def _ws_potential(N, Z, l, j, so):
+    """V(r) + centrifugal term in MeV (r in fm) and ħ²/2m_n in MeV fm², for neutrons."""
+    from scipy.constants import e, hbar, m_n
+    h2m = hbar ** 2 / (2 * m_n) / (1e6 * e) * 1e30
+    A = N + Z
+    V0 = 51 - 33 * (N - Z) / A
+    R = WS_R0 * A ** (1 / 3)
+    ls = so * (j * (j + 1) - l * (l + 1) - 0.75) / 2
+
+    def V(r):
+        f = 1 / (1 + np.exp((r - R) / WS_A))
+        return -V0 * f + 0.44 * V0 * WS_R0 ** 2 * ls * (-f * (1 - f) / WS_A) / r + h2m * l * (l + 1) / r ** 2
+    return V, h2m
+
+
+def _ws_fd_levels(N, Z, l, j, so, n=6000):
+    """Bound levels by finite differences at n and 2n intervals, Richardson-extrapolated (O(h²) error)."""
+    from scipy.linalg import eigh_tridiagonal
+    V, h2m = _ws_potential(N, Z, l, j, so)
+    res = []
+    for m in (n, 2 * n):
+        h = WS_BOX / m
+        r = np.arange(1, m) * h
+        w = eigh_tridiagonal(2 * h2m / h ** 2 + V(r), -h2m / h ** 2 * np.ones(m - 2), select="i",
+                             select_range=(0, 5), eigvals_only=True)
+        res.append(w)
+    return (4 * res[1] - res[0]) / 3
+
+
+def _ws_shoot(N, Z, l, j, so, E0):
+    """The eigenvalue near E0 by shooting u(r_box) = 0 with solve_ivp (DOP853) and brentq."""
+    from scipy.integrate import solve_ivp
+    from scipy.optimize import brentq
+    V, h2m = _ws_potential(N, Z, l, j, so)
+    r_start = 1e-4
+
+    def u_end(E):
+        s = solve_ivp(lambda r, y: [y[1], (V(r) - E) / h2m * y[0]], [r_start, WS_BOX],
+                      [r_start ** (l + 1), (l + 1) * r_start ** l], method="DOP853", rtol=1e-12, atol=1e-300)
+        return s.y[0, -1]
+    return brentq(u_end, E0 - 1e-3, E0 + 1e-3, xtol=1e-13, rtol=1e-14)
+
+
+def _ws_spectrum(N, Z, so):
+    """(E, n, l, j, 2j+1 or 2(2l+1)) for every bound level, in order of energy (finite differences)."""
+    out = []
+    for l in range(8):
+        for j in ([l + 0.5] if l == 0 or not so else [l + 0.5, l - 0.5]):
+            for k, E in enumerate(_ws_fd_levels(N, Z, l, j, so)):
+                if E < 0:
+                    out.append((E, k + 1, l, j, int(2 * j + 1) if so else 2 * (2 * l + 1)))
+    return sorted(out)
+
+
+def test_shell_model_levels_and_magic_numbers():
+    """²⁰⁸Pb neutron levels vs solve_ivp shooting (1e-6); the gap scan along the stability line vs finite
+    differences; the largest gaps are 2, 8, 20, 28, 50, 82, 126 with spin–orbit and 2, 8, 20, 40, 70 without."""
+    from scipy.optimize import brentq
+    out = run_prog("shell_model_magic_numbers", "shell.fm")
+    L = "spdfghij"
+    no_so, with_so = out.split("WITH spin–orbit (V_ls")[0], out.split("WITH spin–orbit (V_ls")[1].split("N = 126 shell gap")[0]
+    for text, so in ((no_so, 0), (with_so, 1)):
+        rows = re.findall(r"^\s+(\d+) ([spdfghij])(\d+/2)? : E = (-[\d.]+) MeV\s+filled (\d+)", text, re.M)
+        ref = _ws_spectrum(126, 82, so)
+        assert len(rows) == len(ref), so
+        for (n, l, j2, E, filled), (Er, nr, lr, jr, _) in zip(rows, ref, strict=True):
+            assert (int(n), L.index(l)) == (nr, lr)
+            if so:
+                assert j2 == f"{int(2 * jr)}/2"
+            E = float(E)
+            assert E == pytest.approx(Er, rel=1e-6, abs=1e-7)
+            assert E == pytest.approx(_ws_shoot(126, 82, lr, jr, so, Er), rel=1e-6, abs=1e-7), (n, l, j2)
+        assert [int(r[4]) for r in rows] == list(np.cumsum([d for *_, d in ref]))
+    assert num(out, "shell gap (3p1/2 → 2g9/2):") == pytest.approx(3.536, abs=1e-3)
+    assert num(out, "rms difference over 13 levels:") == pytest.approx(0.476, abs=1e-3)
+
+    # the scan: the gap at N in the nucleus (N, Z on the stability line), N stepping through level-filling numbers
+    def z_stable(N):
+        return round(brentq(lambda A: A - A / (1.98 + 0.0155 * A ** (2 / 3)) - N, N, 3 * N + 2) - N)
+
+    for so, head in ((1, "shell gaps WITH"), (0, "shell gaps WITHOUT")):
+        text = out.split(head)[1].split("shell gaps WITHOUT" if so else "the 7 largest")[0]
+        rows = re.findall(r"N = (\d+)\s+Z = (\d+) : gap ([\d.]+) MeV\s+gap/ħω = ([\d.]+)", text)
+        ref, N = [], 2
+        while 0 < N <= 130:
+            Z = z_stable(N)
+            lv = _ws_spectrum(N, Z, so)
+            filled, N_next = 0, 0
+            for i, (E, *_, deg) in enumerate(lv):
+                filled += deg
+                if filled == N and i + 1 < len(lv):
+                    ref.append((N, Z, lv[i + 1][0] - E, (lv[i + 1][0] - E) / (41 * (N + Z) ** (-1 / 3))))
+                if filled > N and N_next == 0:
+                    N_next = filled
+            N = N_next
+        assert [(int(a), int(b)) for a, b, *_ in rows] == [(a, b) for a, b, *_ in ref], so
+        for row, r in zip(rows, ref, strict=True):
+            assert float(row[2]) == pytest.approx(r[2], rel=1e-5, abs=1e-6)
+            assert float(row[3]) == pytest.approx(r[3], rel=1e-5, abs=1e-6)
+        gaps = sorted(ref, key=lambda x: -x[3])
+        top = sorted(g[0] for g in gaps[:7 if so else 5])
+        assert top == ([2, 8, 20, 28, 50, 82, 126] if so else [2, 8, 20, 40, 70])
+    assert "the 7 largest gaps WITH spin–orbit are at N = [2, 8, 20, 28, 50, 82, 126]" in out
+    assert "the 5 largest gaps WITHOUT spin–orbit are at N = [2, 8, 20, 40, 70]" in out
