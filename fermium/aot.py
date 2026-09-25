@@ -201,5 +201,8 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
         cmd = [cc, "-O2", o, RT_C, tab, "-lm", "-lpthread", "-o", output]
         r = subprocess.run(cmd, capture_output=True, text=True)
         if r.returncode != 0:
-            raise FermiumError("linking the executable failed:\n" + (r.stderr.strip()[:2000] or r.stdout.strip()))
+            out = r.stderr.strip() or r.stdout.strip()
+            errs = [ln for ln in out.splitlines() if "error" in ln or "undefined reference" in ln or "ld: " in ln]
+            # the errors first: the C compiler's warnings can fill the message and hide them
+            raise FermiumError("linking the executable failed:\n" + "\n".join(errs[:20] + ["", out[:2000]]).strip())
     return output

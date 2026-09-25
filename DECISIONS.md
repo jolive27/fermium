@@ -101,6 +101,7 @@ The rule (spec §3.4.2), refined:
     - A value within 10⁻¹³ (relative) of a whole number counts as whole. So rounding in the last bits doesn't turn `∛(27 m³)` into `3.00 m`, or M☉ in astro units into `1.00 M☉`.
     - A loop variable prints as written when it runs over a `from … to … step …` grid (`0.07 s`, not `0.0700 s`) or over a written-out list (`for n in [0, 1, 1.5]` shows `1.5`).
     - One style per list, vector (including one with a unit per component) or matrix. NaN and ∞ don't count when choosing it (`[1, 2, 3, NaN]`).
+    - When rounding leaves two or more non-significant zeros before the decimal point, the value is shown with a power of ten: `1000000/3` → `3.33×10⁵`, not `333000` (red team round 3 #9). One such zero stays in fixed notation (`9550 rpm`), and whole numbers still print exactly.
     - `print x to N digits` overrides the default, for lists and vectors too (`[0.333333, 0.666667]`). Programs and tests that compare many digits say so explicitly.
     - Lists, vectors and matrices follow the same rule per element. The C runtime of `fermium build` mirrors it (`fmt_default`, `FM_DEFAULT_SF` in aot_rt.c; `format_default` in units.py).
     - **Why 3:** it is the textbook convention for answers given without a stated precision, and physics inputs are rarely known better. Six digits suggested a precision nobody asked for. **Alternatives considered:** 4 digits (Mathematica-like), or treating exact integers as infinitely precise and keeping 6. The user asked for 3.

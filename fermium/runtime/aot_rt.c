@@ -67,7 +67,7 @@ static void fmt_num(double x, int sig, int trim, char *out, size_t cap) {
     double r = strtod(tmp, NULL);
     char *epos = strchr(tmp, 'e');
     int ex = atoi(epos + 1);
-    if (ex >= -4 && ex < 6) {
+    if (ex >= -4 && ex < 6 && (trim || ex <= sig)) {   /* units.format_number: 3.33×10⁵, not 333000 */
         int dec = sig - 1 - ex;
         if (dec < 0) dec = 0;
         snprintf(out, cap, "%.*f", dec, r);

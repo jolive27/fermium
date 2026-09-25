@@ -24,7 +24,7 @@ def both(src):
 # ---------------------------------------------------------------- #52 prefixes on rad
 def test_52_mrad_and_urad():
     assert both("θ = 2.5 mrad\nprint θ in μrad\nprint 3 μrad in mrad\nprint 1 krad/s in rad/s").split("\n") == \
-        ["2500 μrad", "0.00300 mrad", "1000 rad/s"]
+        ["2.5×10³ μrad", "0.00300 mrad", "1000 rad/s"]   # 2 significant figures (D11: power of ten)
 
 
 # ---------------------------------------------------------------- #57 chained comparisons
