@@ -11,6 +11,7 @@ import math
 
 from llvmlite import ir
 
+from .numerics import quintic_hermite
 from . import ir as I
 from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, TextListTy
 
@@ -740,7 +741,7 @@ class ModuleGen:
             # passes through zero
             dlt = b.call(fabs, [b.fsub(b.load(b.gep(ynew, [j])), b.load(b.gep(y, [j])))])
             sc = b.fmul(rtol, b.fadd(b.call(fmax, [yo, yn]), dlt))
-            sc = b.fadd(sc, f64(1e-300))
+            sc = b.fadd(sc, f64(5e-324))   # smallest subnormal: only guards 0/0 (A37)
             r = b.fdiv(e, sc)
             b.store(b.fadd(b.load(errsum), b.fmul(r, r)), errsum)
         errn = b.call(self.intrinsic("sqrt"), [b.fdiv(b.load(errsum), b.sitofp(n, F64))])
@@ -776,6 +777,61 @@ class ModuleGen:
         b.branch(cond_bb)
         b.position_at_end(end_bb)
         b.ret(sp)
+        return fn
+
+    def _k_sol_ext(self):
+        """max (sgn = 1) or -min (sgn = -1) of a solution component: the best step point, refined on
+        the quintic Hermite through the three nearest step points (values and exact slopes, O(h⁶))."""
+        fn = self._new_fn("fm_sol_ext", F64, [SOLP, I64, F64], inline=False)
+        sp, comp, sgn = fn.args
+        b = ir.IRBuilder(fn.append_basic_block("e"))
+        lp = LoopHelper(b, fn)
+        n = b.load(b.gep(sp, [I32(0), I32(0)]))
+        dim = b.load(b.gep(sp, [I32(0), I32(1)]))
+        tp = b.load(b.gep(sp, [I32(0), I32(3)]))
+        yp = b.load(b.gep(sp, [I32(0), I32(4)]))
+        dp = b.load(b.gep(sp, [I32(0), I32(5)]))
+
+        def at(ptr, k):
+            return b.load(b.gep(ptr, [b.add(b.mul(k, dim), comp)]))
+        best, bk = b.alloca(F64), b.alloca(I64)
+        b.store(b.fmul(sgn, at(yp, i64(0))), best)
+        b.store(i64(0), bk)
+        with lp.range(i64(1), n) as i:
+            v = b.fmul(sgn, at(yp, i))
+            with b.if_then(b.fcmp_ordered(">", v, b.load(best))):
+                b.store(v, best)
+                b.store(i, bk)
+        with b.if_then(b.icmp_signed("<", n, i64(3))):
+            b.ret(b.load(best))
+        k = b.load(bk)
+        k = b.select(b.icmp_signed("<", k, i64(1)), i64(1), k)
+        k = b.select(b.icmp_signed(">", k, b.sub(n, i64(2))), b.sub(n, i64(2)), k)
+        ks = [b.sub(k, i64(1)), k, b.add(k, i64(1))]
+        t = [b.load(b.gep(tp, [kk])) for kk in ks]
+        y = [b.fmul(sgn, at(yp, kk)) for kk in ks]
+        d = [b.fmul(sgn, at(dp, kk)) for kk in ks]
+        coef = quintic_hermite(_IROps(b), t, y, d)
+        z = [t[0], t[0], t[1], t[1], t[2], t[2]]
+
+        def poly(x):
+            acc = coef[5]
+            for j in range(4, -1, -1):
+                acc = b.fadd(coef[j], b.fmul(b.fsub(x, z[j]), acc))
+            return acc
+        lo, hi = b.alloca(F64), b.alloca(F64)
+        b.store(t[0], lo)
+        b.store(t[2], hi)
+        g = (math.sqrt(5) - 1) / 2
+        with lp.range(i64(0), i64(80)):       # golden-section search for the peak of the quintic
+            l_, h_ = b.load(lo), b.load(hi)
+            x1 = b.fsub(h_, b.fmul(f64(g), b.fsub(h_, l_)))
+            x2 = b.fadd(l_, b.fmul(f64(g), b.fsub(h_, l_)))
+            left = b.fcmp_ordered(">", poly(x1), poly(x2))
+            b.store(b.select(left, l_, x1), lo)
+            b.store(b.select(left, x2, h_), hi)
+        pm = poly(b.fmul(f64(0.5), b.fadd(b.load(lo), b.load(hi))))
+        b.ret(b.call(self.intrinsic("maxnum"), [b.load(best), pm]))
         return fn
 
     def _k_sol_eval(self):
@@ -849,6 +905,17 @@ class ModuleGen:
         r = b.fadd(b.fadd(b.fmul(h00, ya), b.fmul(h10, ma)), b.fadd(b.fmul(h01, yb), b.fmul(h11, mb)))
         b.ret(r)
         return fn
+
+
+class _IROps:
+    def __init__(self, b):
+        self.b = b
+
+    def sub(self, x, y):
+        return self.b.fsub(x, y)
+
+    def div(self, x, y):
+        return self.b.fdiv(x, y)
 
 
 class LoopHelper:
@@ -1542,6 +1609,10 @@ class FuncGen:
     def e_IBuiltin(self, e):
         b = self.b
         name = e.name
+        if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
+            sg = f64(1 if name == "max_list" else -1)      # refined between step points (A55)
+            r = b.call(self.mg.kernel("fm_sol_ext"), [self.expr(e.args[0].sol), i64(e.args[0].comp), sg])
+            return b.fmul(sg, r)
         args = [self.expr(a) for a in e.args]
         if name in ("vdot", "norm", "unit", "cross"):
             n = e.args[0].ty.n

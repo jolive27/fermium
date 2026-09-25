@@ -16,7 +16,9 @@ import time
 import numpy as np
 
 from .codegen_llvm import XGK, WGK, WG, odd_root_numerator
+from . import ir as I
 from .errors import FermiumRuntimeError
+from .numerics import PyOps, quintic_hermite
 from .types import ListTy, VecTy, BoolTy
 
 ERR_INDEX, ERR_SOLRANGE, ERR_ODE_STEPS, ERR_ASSERT, ERR_LEN, ERR_EMPTY, ERR_STEP, ERR_ODE_H = 1, 2, 3, 4, 5, 6, 7, 8
@@ -270,7 +272,7 @@ def dp45(f, y0, t0, t1, rtol):
                 if E_DP[m] != 0:
                     e = e + E_DP[m] * k[m][j]
             e = e * h
-            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j]))
+            sc = rtol * (max(abs(y[j]), abs(ynew[j])) + abs(ynew[j] - y[j])) + 5e-324
             r = fdiv(e, sc)
             errsum = errsum + r * r
         errn = math.sqrt(errsum / n)
@@ -786,6 +788,40 @@ class Interpreter:
             f.fmt = getattr(e, "tfmt", -1)
             raise
 
+    @staticmethod
+    def sol_ext(sol, comp, sg):
+        """Mirrors fm_sol_ext in codegen_llvm.py."""
+        n, dim = sol.n, sol.dim
+        ys = [sg * sol.y[i * dim + comp] for i in range(n)]
+        k = 0
+        for i in range(1, n):
+            if ys[i] > ys[k]:
+                k = i
+        best = ys[k]
+        if n < 3:
+            return sg * best
+        k = min(max(k, 1), n - 2)
+        ks = [k - 1, k, k + 1]
+        t = [sol.t[j] for j in ks]
+        coef = quintic_hermite(PyOps, t, [ys[j] for j in ks], [sg * sol.dy[j * dim + comp] for j in ks])
+        z = [t[0], t[0], t[1], t[1], t[2], t[2]]
+
+        def poly(x):
+            acc = coef[5]
+            for j in range(4, -1, -1):
+                acc = coef[j] + (x - z[j]) * acc
+            return acc
+        lo, hi = t[0], t[2]
+        g = (math.sqrt(5) - 1) / 2
+        for _ in range(80):
+            x1, x2 = hi - g * (hi - lo), lo + g * (hi - lo)
+            if poly(x1) > poly(x2):
+                hi = x2
+            else:
+                lo = x1
+        pm = poly(0.5 * (lo + hi))
+        return sg * (pm if pm > best or best != best else best)
+
     def e_ISolList(self, e, fr):
         sol = self.eval(e.sol, fr)
         if e.what == "t":
@@ -804,6 +840,8 @@ class Interpreter:
 
     def e_IBuiltin(self, e, fr):
         name = e.name
+        if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":
+            return self.sol_ext(self.eval(e.args[0].sol, fr), e.args[0].comp, 1.0 if name == "max_list" else -1.0)
         args = [self.eval(a, fr) for a in e.args]
         if name in ("vdot", "norm", "unit", "cross"):
             a = args[0]

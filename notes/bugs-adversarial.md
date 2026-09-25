@@ -493,7 +493,7 @@ print sum(T)            # actual: 696.3 °C      expected: an error, or 969.45 K
 Realistic case: `d = load "data.csv"` with a `T [°C]` column, then `print std(d.T)`.
 (`mean`, `min`, `max`, `interp`, `trapz` are right.)
 
-## A37. (low, after the A15 fix) Decay below ~1e-300 stalls
+## A37. [FIXED] (low, after the A15 fix) Decay below ~1e-300 stalls
 ```
 solve x' = -x with x(0) = 1 for t from 0 to 700
 print x(700)            # actual: 7.99895×10⁻³⁰²   expected: 9.85968×10⁻³⁰⁵
@@ -748,7 +748,7 @@ f(x) = ∫ 1/u du from 0 to x     # the divergent integral is silently a straigh
 Related: a runtime error inside `plot f(x) vs x from ...` (e.g. a divergent integral in f) is
 swallowed: the plot is saved and the program continues.
 
-## A55. `max(x)` / `min(x)` of an ODE solution only look at the solver's step points
+## A55. [FIXED] `max(x)` / `min(x)` of an ODE solution only look at the solver's step points
 ```
 solve x' = cos(t) with x(0) = 0 for t from 0 to 20
 print max(x), min(x)        # actual: 0.999848 -0.999824   expected: 1 -1 (to ~1e-9)

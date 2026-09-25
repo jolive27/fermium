@@ -1058,7 +1058,6 @@ def test_parameter_named_like_unit_wins():
     assert run("s = 2\nprint 1/s") == "0.5"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A55: max of a solution is the max over step points only")
 def test_solution_max_is_refined():
     out = run("solve x' = cos(t) with x(0) = 0 for t from 0 to 20\nprint max(x), min(x)")
     a, b = nums(out)

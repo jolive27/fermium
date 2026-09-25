@@ -88,3 +88,19 @@ def test_loop_variable_after_loop_that_may_not_run(src):
 def test_loop_variable_reused_and_predeclared():
     assert run("for i from 1 to 2\n    print i\nfor i from 1 to 2\n    print i") == "1\n2\n1\n2"
     assert run("i = 0\nfor i from 1 to 3\n    n = 1\nprint i") == "3"
+
+
+def test_solution_max_min_refined_between_steps():
+    out = both("solve x' = cos(t) with x(0) = 0 for t from 0 to 20\nprint max(x) to 12 digits, min(x) to 12 digits")
+    a, b = (float(v) for v in out.split())
+    assert abs(a - 1) < 1e-8 and abs(b + 1) < 1e-8
+
+
+def test_solution_max_of_time_list_is_plain():
+    assert both("solve x' = cos(t) with x(0) = 0 for t from 0 to 20\nprint max(times(x))") == "20"
+
+
+def test_decay_into_subnormals():
+    out = both("solve x' = -x with x(0) = 1 for t from 0 to 700\nprint x(700)\n"
+               "solve y' = -y with y(0) = 1e-300 for t from 0 to 30\nprint y(30)")
+    assert out.split("\n") == ["9.85968×10⁻³⁰⁵", "9.35762×10⁻³¹⁴"]
