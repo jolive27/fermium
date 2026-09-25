@@ -369,3 +369,21 @@ def test_lists_of_complex_are_refused_clearly():
     assert "complex" in str(error_of("print [1i, 2]"))
     e = error_of("solve 1i ψ' = ψ with ψ(0) = 1 for t from 0 to 1\nprint max(ψ)")
     assert "lists of complex numbers aren't supported" in str(e)
+
+
+def test_parts_of_a_complex_solution_are_real_solutions():
+    src = ("solve 1i ψ' = 2 ψ with ψ(0) = 1 for t from 0 to 1\n"
+           "print ψ.re(1) to 12 digits, ψ.im(1) to 12 digits\nprint min(ψ.im) to 12 digits\n"
+           "print len(values(ψ.re)) > 3")
+    for runner in (run, interp):
+        out = runner(src).split("\n")
+        a, b = map(float, out[0].split())
+        assert a == pytest.approx(math.cos(2), abs=1e-8) and b == pytest.approx(-math.sin(2), abs=1e-8)
+        assert float(out[1]) == pytest.approx(-1, abs=1e-8)
+        assert out[2] == "true"
+
+
+def test_complex_ode_with_radau_and_until():
+    out = run("solve 1i ψ' = 2 ψ with ψ(0) = 1 for t from 0 to 1 using radau\nprint |ψ(1) - exp(-2i)| < 1e-5\n"
+              "solve 1i φ' = 2 φ with φ(0) = 1 for t from 0 to 10 until re(φ) = 0\nprint φ[end]")
+    assert out.split("\n") == ["true", "0 - 1i"]

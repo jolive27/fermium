@@ -11,7 +11,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 4. [Printing](#4-printing)
 5. [Functions](#5-functions)
 6. [Conditions and loops](#6-conditions-and-loops)
-7. [Lists and vectors](#7-lists-and-vectors)
+7. [Lists and vectors](#7-lists-and-vectors) (and [complex numbers](#complex-numbers))
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
@@ -329,6 +329,53 @@ print eigenvectors(K, M)              # the mode shapes
 - `eigenvalues(K, M)` and `eigenvectors(K, M)` solve the **generalized** problem K v = λ M v with symmetric K and a symmetric, positive-definite M (a mass matrix). For springs and masses λ = ω², in 1/s². The mode shapes are scaled to unit length. Don't write `eigenvalues(inverse(M) K)`: M⁻¹K is not symmetric, so it is an error that points to `eigenvalues(K, M)`.
 - **Errors** (when the program runs): a matrix that isn't symmetric (entries may differ by at most 10⁻¹⁰ of the largest entry), and a second matrix that isn't positive definite.
 
+### Complex numbers
+
+```fermium
+z = 3 + 4i
+print z, |z|, arg(z) in °, conj(z)
+print re(z), im(z), z.re, z.im
+print (1 + 2i) * (3 - 1i), 2 / (1 + 1i), (1 + 1i)^2
+print exp(𝑖 π) ≈ -1 + 0i                # Euler's identity
+print sqrt(-4 + 0i), ln(1i), cis(π/3), polar(2, 45°)
+
+R = 100 Ω
+L = 0.5 H
+C = 10 μF
+ω = 2π × 50 Hz
+Z = R + 1i ω L + 1 / (1i ω C)           # an impedance: a complex number in Ω
+print Z, |Z|, arg(Z) in °
+print (230 + 0i) [V] / Z                # the current, in A
+```
+
+- **Writing them:** a number followed directly by `i` is imaginary: `4i`, `2.5i`, `1e3i` (no space; `4 i` is 4 times a variable `i`, so `for i from 1 to n` is unaffected). `𝑖` (Tab: `\imag`) is the imaginary unit on its own (`𝑖ħ ψ'` is 𝑖 · ħ · ψ'). `complex(a, b)` is a + bi, `polar(r, θ)` is r(cos θ + i sin θ), `cis(θ)` is cos θ + i sin θ.
+- **Units:** a complex number has one unit for both parts: an impedance Z = R + iωL in Ω, a wavefunction in m^(-1/2). Write `4i Ω`, `3 Ω + 4i Ω` or `(3 + 4i) [Ω]` (units follow a number, or come in brackets after an expression). Adding Ω to V is an error, as for real numbers.
+- **Printing:** `3 + 4i`, `3 - 4i`, and `(3 + 4i) Ω` with a unit; `in`, `to(z, unit)` and `to N digits` work as for real numbers. A part smaller than 10⁻¹⁴ of |z| is floating-point rounding and prints as 0 (`exp(𝑖 π)` prints `-1 + 0i`).
+- **Arithmetic:** `+ - * /` between complex and real numbers; `z^n` for a whole number n (repeated multiplication), `z^p` for another fixed number p (the principal value, units to the power p), and `z^w`, `2^(1i)` with a complex or variable exponent (plain numbers only). `exp ln log sqrt sin cos tan sinh cosh tanh` take complex plain numbers (`sqrt` keeps units to the power ½; √z also works); these are the principal branches (the cut of `ln` and `sqrt` is the negative real axis).
+- **Parts:** `abs(z)` or `|z|` and `re(z)`, `im(z)` (also `z.re`, `z.im`) keep the units; `arg(z)` is the angle from −π to π; `conj(z)` is the complex conjugate.
+- **Comparisons:** `==`, `!=` and `≈` work; `<`, `>`, `<=`, `>=` are an error (complex numbers aren't ordered; compare `|z|` or `re(z)`).
+- **A variable keeps its kind:** `z = 0` then `z += 1i` is an error; start with `z = 0i`.
+
+```fermium
+# the time-dependent Schrödinger equation for a free particle: ψ(t) = exp(−iEt/ħ)
+E = 1.0 eV
+T = 2 fs
+solve 𝑖ħ ψ' = E ψ with ψ(0 s) = 1 for t from 0 s to T
+print ψ(T), exp(-1i E T / ħ)
+print |ψ(T)| to 6 digits
+print ψ.re(T), ψ.im(T)
+
+# complex integrals and sums: one quadrature per part
+print ∫ exp(1i π t² / 2) dt from 0 to 2          # Fresnel integrals C(2) + i S(2)
+print Σ(cis(2π k / 3) for k from 1 to 2)       # -1
+g(x) = exp(1i k x) where k = 2 /m
+print g'(0 m)
+```
+
+- **Differential equations:** an unknown is complex when its initial value is (`ψ(0) = 1 + 0i`), or when the equation is (`𝑖ħ ψ' = E ψ` with `ψ(0) = 1` is complex). It takes two real state slots (real and imaginary parts), so `rk45`, `rk4`, `radau`/`bdf`, `until` and backward ranges work unchanged. `ψ(t)` and `ψ'(t)` are complex; `ψ.re` and `ψ.im` are real solutions (for `plot ψ.re vs t`, `max(ψ.im)`, `values(ψ.re)`).
+- **Integrals and sums** of a complex expression are computed part by part, each with its own adaptive quadrature. **Derivatives** of functions with complex values work (`𝑖` is a constant to the differentiator), and indefinite integrals hand `𝑖` to SymPy as its imaginary unit.
+- **Not yet:** lists, vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+
 ## 8. Derivatives
 
 ```fermium
@@ -596,6 +643,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | Mᵀ | `transpose(M)` | `\transpose` |
 | ≤ ≥ ≠ ≈ | `<=` `>=` `!=` `~=` | `\le` `\ge` `\ne` `\approx` |
 | ∞ | `inf` | `\infty` |
+| 𝑖 (imaginary unit) | `1i` | `\imag` |
 | ε₀ | `epsilon_0` | `\epsilon\_0` |
 | Å, μm, M☉ | `angstrom`, `um`, `Msun` | `\AA`, `\mu`, `\Msun` |
 
@@ -626,6 +674,8 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `trace(M) row(M, i) column(M, j)` | the sum of the diagonal; a row or a column as a vector |
 | `eigenvalues(M) eigenvectors(M) eigenvalues(K, M) eigenvectors(K, M)` | symmetric matrices: eigenvalues sorted ascending, unit eigenvectors as columns; K v = λ M v for normal modes |
 | `values(sol) times(sol)` | samples of an ODE solution |
+| `complex(a, b) polar(r, θ) cis(θ)` | make a complex number: a + bi, r(cos θ + i sin θ), cos θ + i sin θ (§7) |
+| `re(z) im(z) abs(z) arg(z) conj(z)` | parts of a complex number (re, im and abs keep its units); also `z.re`, `z.im`, `\|z\|` |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
@@ -732,6 +782,6 @@ These are known and not yet fixed. None of them is silent about units.
 - **No garbage collection.** Memory for lists (including the old blocks left behind when `push` grows a list) is only given back when the program ends. A program that makes many large lists in a loop can run out of memory.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
-- **Lists of vectors or matrices** don't exist yet. `eigenvalues` needs a symmetric matrix (or the pair K, M).
+- **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
 - **Uncertainties** (`±`) are reserved but not implemented yet (see `docs/uncertainties.md`).
 - **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).

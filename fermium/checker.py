@@ -1771,11 +1771,13 @@ class Checker(C.DiffContext):
         t = self.expr(e.target, ctx, allow_func=True)
         if isinstance(t, SolRef):
             v = t.view
-            if e.name in ("x", "y", "z") and v.n > 1:
-                k = "xyz".index(e.name)
+            if (e.name in ("x", "y", "z") and v.n > 1 and not getattr(v, "cplx", False)) or \
+                    (e.name in ("re", "im") and getattr(v, "cplx", False)):
+                k = "xyz".index(e.name) if e.name in ("x", "y", "z") else ("re", "im").index(e.name)
                 if k >= v.n:
                     raise self.err(f"{v.name} is a {v.n}-vector, so it has no .{e.name}", e)
                 nv = SolView(v.sol_sym, v.comp + k, v.top + k, v.dim, v.tdim, v.tname, f"{v.name}.{e.name}")
+                nv.cplx = False
                 nv.n, nv.stride = 1, v.stride
                 nv.hint, nv.thint, nv.sf = getattr(v, "hint", None), getattr(v, "thint", None), getattr(v, "sf", None)
                 return SolRef(nv)
@@ -1809,7 +1811,8 @@ class Checker(C.DiffContext):
     def sol_values(self, v: SolView, node=None):
         if getattr(v, "cplx", False):
             raise self.err(f"{v.name} is complex, and lists of complex numbers aren't supported yet", node,
-                           hint=f"use values at single times, like re({v.name}(t)) or |{v.name}(t)|")
+                           hint=f"use its real or imaginary part, {v.name}.re or {v.name}.im (plot {v.name}.re vs "
+                                f"{v.tname}), or values at single times like |{v.name}({v.tname})|")
         if v.n > 1:
             raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", node)
         s = self._ivar(v.sol_sym)
