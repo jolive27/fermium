@@ -87,8 +87,9 @@ def test_tov_ideal_neutron_gas_matches_scipy():
     assert num(out, "radius at maximum mass:") == pytest.approx(rmax, rel=2e-3)
     assert num(out, "central Fermi momentum x_c =") == pytest.approx(best.x, rel=2e-2)   # the maximum is flat
     assert abs(mmax - 0.71) < 0.005                                    # Oppenheimer & Volkoff (1939)
-    for xc in (0.2, 0.5, 1.0, 2.0):
-        line = line_of(out, f"x_c = {xc:g} :")
+    rows = [ln for ln in out.splitlines() if ln.startswith("x_c =")]
+    for xc, line in zip((0.2, 0.5, 1.0, 2.0), rows, strict=True):
+        assert num(line, "x_c =") == pytest.approx(xc)
         m, r = floats(line.split(":")[1])
         ms, rs = star(xc)
         assert m == pytest.approx(ms, rel=1e-3) and r == pytest.approx(rs, rel=1e-3), xc
@@ -156,8 +157,8 @@ def test_u238_chain_matches_analytic_bateman():
         return mp.fprod(lams[:n + 1]) * s
 
     names = {"Th-234": 1, "U-234": 3, "Th-230": 4, "Ra-226": 5, "Rn-222": 6, "Po-214": 10, "Po-210": 13}
-    for T in (1, 1000, 100000, 3000000):
-        line = line_of(out, f"t = {T} yr :")
+    rows = [ln for ln in out.splitlines() if ln.startswith("t = ")]
+    for T, line in zip((1, 1000, 100000, 3000000), rows, strict=True):
         for name, i in names.items():
             v = num(line, name)
             exact = float(activity(i, T * yr) / activity(0, T * yr))
@@ -182,10 +183,10 @@ def test_hydrogen_levels_match_bohr_with_reduced_mass():
     out = run_prog("hydrogen_levels", "hydrogen.fm")
     ry = physical_constants["Rydberg constant times hc in eV"][0]
     mu = m_e * m_p / (m_e + m_p)
-    levels = re.findall(r"n = (\d)  l = (\d) : E = (-[\d.]+) eV", out)
-    assert sorted((int(n), int(l)) for n, l, _ in levels) == [(n, l) for n in range(1, 5) for l in range(n)]
+    levels = re.findall(r"n = ([\d.]+)\s+l = ([\d.]+) : E = (-[\d.]+) eV", out)
+    assert sorted((round(float(n)), round(float(l))) for n, l, _ in levels) == [(n, l) for n in range(1, 5) for l in range(n)]
     for n, l, E in levels:
-        assert float(E) == pytest.approx(-ry * mu / m_e / int(n) ** 2, rel=1e-7), (n, l)
+        assert float(E) == pytest.approx(-ry * mu / m_e / round(float(n)) ** 2, rel=1e-7), (n, l)
     assert num(out, "largest relative difference from Bohr:") < 1e-7
     lya = h * c / (0.75 * ry * mu / m_e * e) * 1e9
     assert num(out, "Lyman α (2p → 1s):") == pytest.approx(lya, rel=1e-6)
@@ -228,3 +229,35 @@ def test_friedmann_planck2018_matches_quad():
     assert num(out, "age of the universe at z = 1100:") == pytest.approx(age(1 / 1101) / yr, rel=1e-3)
     ph = c * quad(lambda a: 1 / (a * a * H(a)), 0, 1, epsrel=1e-12, limit=200)[0]
     assert num(out, "particle horizon today (comoving):") == pytest.approx(ph / gly, rel=1e-3)
+
+
+def test_rutherford_monte_carlo_statistics():
+    """MC histogram vs the exact Rutherford bin contents; rand() has no seed, so the bounds are statistical (5σ)."""
+    from scipy.constants import e, epsilon_0, pi
+    from scipy.stats import chi2
+    out = run_prog("rutherford_mc", "rutherford.fm")
+    d = 2 * 79 * e ** 2 / (4 * pi * epsilon_0 * 5e6 * e)
+    assert num(out, "distance of closest approach d =") == pytest.approx(d * 1e15, rel=1e-3)
+    bmax = d / 2 / np.tan(np.radians(2.5))
+    assert num(out, "σ =") == pytest.approx(pi * bmax ** 2 / 1e-28, rel=1e-3)
+    assert num(out, "exact bin contents:") < chi2.ppf(1 - 1e-6, 35)            # χ² with 35 dof
+    N = 2e7
+    p = (d / 2) ** 2 / bmax ** 2                                                 # b(90°)² / b_max²
+    frac = num(out, "backward (θ > 90°) fraction:")
+    assert abs(frac - p) < 5 * np.sqrt(p / N) and num(out, "exact:") == pytest.approx(p, rel=1e-5)
+    gm = {150: 33.1, 135: 43.0, 120: 51.9, 105: 69.5, 75: 211, 60: 477, 45: 1435, 37.5: 3300, 30: 7800,
+          22.5: 27300, 15: 132000}
+    mean = np.mean([n * np.sin(np.radians(a) / 2) ** 4 for a, n in gm.items()])
+    rows = re.findall(r"θ = ([\d.]+) °: MC dσ/dΩ sin⁴\(θ/2\)/\(d/4\)² = ([\d.]+)\s+\( ([\d.]+(?:×10[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?) α; exact bin average ([\d.]+) \)"
+                      r"\s+Geiger–Marsden N sin⁴\(θ/2\) / mean = ([\d.]+)", out)
+    assert len(rows) == 11
+    for a, ratio, n, exact, gmr in rows:
+        a, ratio, n, exact, gmr = float(a), float(ratio), num(n, ""), float(exact), float(gmr)
+        lo, hi = np.radians(a - 2.5), np.radians(a + 2.5)
+        dOmega = 2 * pi * (np.cos(lo) - np.cos(hi))
+        ex = pi * (d / 2) ** 2 * (1 / np.tan(lo / 2) ** 2 - 1 / np.tan(hi / 2) ** 2) / dOmega * np.sin(np.radians(a) / 2) ** 4 / (d / 4) ** 2
+        assert exact == pytest.approx(ex, abs=0.006), a
+        assert abs(ratio - ex) < 5 * ex / np.sqrt(n) + 0.006, a                 # Poisson, 5σ (+ printed rounding)
+        assert gmr == pytest.approx(gm[a] * np.sin(np.radians(a) / 2) ** 4 / mean, abs=0.006)
+        assert 0.8 < gmr < 1.25                                                 # Geiger–Marsden: N sin⁴ ≈ constant
+    assert num(out, "Rutherford dσ/dΩ at 90°:") == pytest.approx((d / 4) ** 2 / np.sin(pi / 4) ** 4 / 1e-28, rel=1e-3)
