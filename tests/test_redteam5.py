@@ -130,7 +130,6 @@ def test_3_playground_shows_run_time_warnings(tmp_path):
 
 # ---- #4: d/dt x(2 s) and ∂/∂x f(1, 2) are silently 0 -------------------------------------------------------
 
-@rt5(4)
 def test_4_derivative_of_a_function_value_is_not_silently_zero():
     src = "x(t) = 3 m * t / 1 s\nprint d/dt x(2 s)"
     try:
@@ -324,7 +323,6 @@ def test_17_plot_option_after_file_name_without_with(tmp_path):
 
 # ---- #18: ∂/∂x ∂/∂y f is refused although the two steps work -----------------------------------------------
 
-@rt5(18)
 def test_18_mixed_partial_derivative():
     out = run("f(x, y) = x^3 y^2\nh = partial/partial x partial/partial y f\nprint h(1, 2)")
     assert out == "12"

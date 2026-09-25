@@ -4084,8 +4084,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def e_Deriv(self, e, ctx):
         op = e.operand
-        if isinstance(op, A.Name):
-            b, _ = ctx.scope.lookup(op.name)
+        inner = None
+        if isinstance(op, A.Deriv) and isinstance(op.operand, (A.Name, A.Deriv)):
+            # ∂/∂x ∂/∂y f: differentiate the function ∂f/∂y again (mixed partials, red team 5 #18)
+            v = self.expr(op, ctx, allow_func=True)
+            if isinstance(v, FuncRef):
+                inner = v.info
+        if isinstance(op, A.Name) or inner is not None:
+            b = inner if inner is not None else ctx.scope.lookup(op.name)[0]
             if isinstance(b, FuncInfo):
                 params = [p.name for p in b.fdef.params]
                 if e.var in params:
@@ -4097,6 +4103,31 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 return FuncRef(self.derived_info(b, i, e.order, e))
             if isinstance(b, SolView):
                 return self.e_Prime(A.Prime(op, e.order).at(e), ctx)
+        if isinstance(op, A.Call) and isinstance(op.func, A.Name) and \
+                not any(C.depends_on(a, e.var) for a in op.args):
+            # d/dt x(2 s), ∂/∂x f(1, 2): a function called at a point that doesn't involve the variable. As a
+            # formula that is a constant with derivative 0, but it is read as "the derivative of x at 2 s", so
+            # that is what it means: (d/dt x)(2 s) (red team 5 #4, D221)
+            b, _ = ctx.scope.lookup(op.func.name)
+            if isinstance(b, (FuncInfo, SolView)):
+                fname = op.func.name
+                if isinstance(b, FuncInfo):
+                    params = [p.name for p in b.fdef.params]
+                    if e.var not in params and not (len(params) == 1 and not e.partial):
+                        ops = "∂/∂" if e.partial else "d/d"
+                        raise self.err(f"{fname} has no parameter called {e.var}, so {ops}{e.var} "
+                                       f"{C.to_source(op)} would be 0", e,
+                                       hint=f"{fname}'s parameters are {', '.join(params)}; differentiate with "
+                                            f"respect to one of them, e.g. ({ops}{params[0]} {fname})"
+                                            f"({', '.join(C.to_source(a) for a in op.args)})")
+                    inner = A.Deriv(e.var, e.order, op.func, e.partial).at(e)
+                else:
+                    inner = A.Prime(op.func, e.order).at(e)
+                call = A.Call(inner, op.args).at(op)
+                for k, v in vars(op).items():
+                    if k not in ("func", "args") and not hasattr(call, k):
+                        setattr(call, k, v)
+                return self.expr(call, ctx)
         # derivative of a formula
         bound, _ = ctx.scope.lookup(e.var)
         body = op
@@ -4109,9 +4140,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.nat = self.nat if self.nat.natural else None
-        info.display_name = f"d/d{e.var}(...)"
-        info.anon_label = f"d/d{e.var} ({C.to_source(op)})" if e.order == 1 else \
-            f"d^{e.order}/d{e.var}^{e.order} ({C.to_source(op)})"
+        from .units import SUPERSCRIPTS
+        dd = "∂" if e.partial else "d"           # ∂/∂x prints as ∂/∂x, not d/dx (red team 5 #4)
+        sup = "" if e.order == 1 else str(e.order).translate(SUPERSCRIPTS)
+        info.display_name = f"{dd}/{dd}{e.var}(...)"
+        info.anon_label = f"{dd}{sup}/{dd}{e.var}{sup} ({C.to_source(op)})"
         info.stable = True
         return FuncRef(info)
 
