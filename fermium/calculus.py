@@ -225,6 +225,115 @@ def factor_common(e):
     return simplify(out)
 
 
+def _terms(e):
+    """The terms of a sum, even if it was written in parentheses."""
+    if isinstance(e, A.BinOp) and e.op in "+-":
+        return _sum_terms(e.left) + _sum_terms(e.right, 1 if e.op == "+" else -1)
+    return [(1, e)]
+
+
+def _from_terms(terms):
+    out = None
+    for s, t in terms:
+        if out is None:
+            out = neg(t) if s < 0 else t
+        else:
+            out = sub(out, t) if s < 0 else add(out, t)
+    return out if out is not None else num(0)
+
+
+def _base_pow(f):
+    if isinstance(f, A.BinOp) and f.op == "^" and is_num(f.right):
+        return f.left, f.right.value
+    return f, 1.0
+
+
+def _is_call(e, fname):
+    return isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == fname and len(e.args) == 1
+
+
+def _stable_product(c, factors):
+    """Cancel the growth of exp(u)/(exp(u) + r)^k and sinh(u)/cosh(u)^k before evaluation.
+
+    Returns the rewritten product, or None if no pattern applies."""
+    fs = [list(_base_pow(f)) for f in factors]
+    changed = False
+    for i, (bi, pi) in enumerate(fs):
+        if pi <= 0:
+            continue
+        for j, (bj, pj) in enumerate(fs):
+            if pj >= 0 or fs[i][1] <= 0:
+                continue
+            n = min(fs[i][1], -pj)
+            if n != int(n):
+                continue
+            new = None
+            if _is_call(bi, "sinh") and _is_call(bj, "cosh") and key(bi.args[0]) == key(bj.args[0]):
+                new = call("tanh", bi.args[0])              # sinh/cosh = tanh stays finite
+            elif _is_call(bi, "exp"):
+                terms = _terms(bj)
+                hit = [k for k, (_, t) in enumerate(terms) if key(t) == key(bi)]
+                if len(terms) > 1 and hit:
+                    s = terms[hit[0]][0]
+                    rest = _from_terms(terms[:hit[0]] + terms[hit[0] + 1:])
+                    # exp(u)/(s exp(u) + r) = 1/(s + r exp(-u))
+                    new = div(num(1), add(num(s), mul(rest, call("exp", neg(bi.args[0])))))
+            if new is None:
+                continue
+            fs[i][1] -= n
+            fs[j][1] += n
+            fs.append([new, n])
+            changed = True
+    if not changed:
+        return None
+    return _build_product(c, [b if p == 1 else pw(b, num(p)) for b, p in fs if p != 0])
+
+
+def _expand_factors(c, factors):
+    """(a b)^n -> a^n b^n for whole n, so every factor is a single base."""
+    out = []
+    for f in factors:
+        b, p = _base_pow(f)
+        if p == int(p) and p != 1 and isinstance(b, (A.BinOp, A.Neg)) and (isinstance(b, A.Neg) or b.op in "*/"):
+            cb, fb = _expand_factors(*_factors(b))
+            c *= cb ** p
+            for g in fb:
+                gb, gp = _base_pow(g)
+                out.append(pw(gb, num(gp * p)))
+        else:
+            out.append(f)
+    return c, out
+
+
+def stabilize(e):
+    """Rewrite a derivative for *evaluation* (the printed form is unchanged) so that it doesn't
+    overflow to ∞/∞ = NaN where the true value is finite: exp(u)/(exp(u) + 1)² -> 1/((exp(u) + 1)
+    (1 + exp(-u))), sinh(u)/cosh(u)³ -> tanh(u)/cosh(u)², and a sum over such a denominator is
+    split into one fraction per term."""
+    e = map_children(e, stabilize)
+    if not (isinstance(e, A.BinOp) and e.op in "*/" or isinstance(e, A.Neg)):
+        return e
+    c, fs = _expand_factors(*_factors(e))
+    if not any(p < 0 for _, p in map(_base_pow, fs)):
+        return e
+    r = _stable_product(c, fs)
+    if r is not None:
+        return r
+    sums = [k for k, f in enumerate(fs) if _base_pow(f)[1] == 1 and len(_terms(f)) > 1]
+    if len(sums) == 1:
+        # (a exp(x) + b)/(exp(x) - 1)^2  ->  a exp(x)/(exp(x) - 1)^2 + b/(exp(x) - 1)^2, each made stable
+        others = fs[:sums[0]] + fs[sums[0] + 1:]
+        parts, hit = [], False
+        for s, t in _terms(fs[sums[0]]):
+            ct, ft = _factors(t)
+            p = _stable_product(s * c * ct, ft + others)
+            hit = hit or p is not None
+            parts.append((1, p if p is not None else _build_product(s * c * ct, ft + others)))
+        if hit:
+            return _from_terms(parts)
+    return e
+
+
 def _d(e, var, ctx):
     if isinstance(e, (A.Num, A.Str, A.Bool)):
         return num(0)
@@ -593,6 +702,11 @@ def _src(e, pretty):
             l, lp = _paren(l, lp, PREC_POW + 1)
             if is_num(e.right) and e.right.value == int(e.right.value) and pretty:
                 return l + str(int(e.right.value)).translate(SUPER), PREC_POW
+            if is_num(e.right) and e.right.value != int(e.right.value):
+                from fractions import Fraction
+                fr = Fraction(e.right.value).limit_denominator(99)
+                if abs(float(fr) - e.right.value) < 1e-12:      # x^(2/3), not x^0.666666666667
+                    return f"{l}^({fr.numerator}/{fr.denominator})", PREC_POW
             r, rp = _src(e.right, pretty)
             r, rp = _paren(r, rp, PREC_ATOM)
             return f"{l}^{r}", PREC_POW
@@ -697,6 +811,8 @@ def to_sympy(e, symbols):
             return -conv(e.operand)
         if isinstance(e, A.Sqrt):
             return conv(e.operand) ** sp.Rational(1, e.root)
+        if isinstance(e, A.Abs):
+            return sp.Abs(conv(e.operand))
         if isinstance(e, A.Call) and isinstance(e.func, A.Name):
             fns = {"sin": sp.sin, "cos": sp.cos, "tan": sp.tan, "exp": sp.exp, "ln": sp.log, "log": sp.log,
                    "sinh": sp.sinh, "cosh": sp.cosh, "tanh": sp.tanh, "asin": sp.asin, "acos": sp.acos,
@@ -746,7 +862,28 @@ def from_sympy(x):
              sp.erf: "erf"}
     if x.func in names:
         return call(names[x.func], *[from_sympy(a) for a in x.args])
+    if isinstance(x, sp.Piecewise) and x.args[-1][1] is sp.true:
+        # e.g. ∫ |x| dx = -x²/2 for x <= 0, else x²/2  ->  if x <= 0 then ... else ...
+        out = from_sympy(x.args[-1][0])
+        for piece, cond in reversed(x.args[:-1]):
+            out = A.IfExpr(_cond_from_sympy(cond), from_sympy(piece), out)
+        return out
     raise FermiumError(f"SymPy returned something Fermium can't use yet: {x}")
+
+
+def _cond_from_sympy(c):
+    import sympy as sp
+    ops = {sp.StrictLessThan: "<", sp.LessThan: "<=", sp.StrictGreaterThan: ">", sp.GreaterThan: ">=",
+           sp.Equality: "==", sp.Unequality: "!="}
+    if type(c) in ops:
+        return A.Compare(ops[type(c)], from_sympy(c.lhs), from_sympy(c.rhs))
+    if isinstance(c, (sp.And, sp.Or)):
+        args = [_cond_from_sympy(a) for a in c.args]
+        out = args[0]
+        for a in args[1:]:
+            out = A.Logic("and" if isinstance(c, sp.And) else "or", out, a)
+        return out
+    raise FermiumError(f"SymPy returned something Fermium can't use yet: {c}")
 
 
 def integrate_symbolic(integrand, var):
@@ -755,7 +892,8 @@ def integrate_symbolic(integrand, var):
     syms = {}
     expr = to_sympy(inline_where(integrand), syms)
     v = syms.get(var) or sp.Symbol(var, real=True)
-    res = sp.integrate(expr, v)
+    # conds="none": the generic answer, ∫ cos(ω t) dt = sin(ω t)/ω, not a Piecewise for ω = 0
+    res = sp.integrate(expr, v, conds="none")
     if res.has(sp.Integral):
         raise FermiumError("SymPy couldn't find a formula for this integral",
                            hint="give limits (from a to b) to compute it numerically")

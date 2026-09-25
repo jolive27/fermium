@@ -96,6 +96,9 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
             i += 1
             continue
         gap = norm[pos:t.start]
+        if mode == "pretty" and gap == " " and t.kind == "NAME" and i >= 2 and toks[i - 1].raw == "partial" \
+                and toks[i - 2].raw == "/":
+            gap = ""                # partial^2/partial x^2 -> ∂²/∂x², not ∂²/∂ x²
         out.append(gap)
         pos = t.end
         if i in skip:

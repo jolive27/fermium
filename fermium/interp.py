@@ -15,7 +15,7 @@ import time
 
 import numpy as np
 
-from .codegen_llvm import XGK, WGK, WG
+from .codegen_llvm import XGK, WGK, WG, odd_root_numerator
 from .errors import FermiumRuntimeError
 from .types import ListTy, VecTy, BoolTy
 
@@ -128,6 +128,10 @@ def powc(x, p):
         return fdiv(1.0, x * math.sqrt(x)) if x >= 0 else math.nan
     if abs(p - 1 / 3) < 1e-15:
         return math.copysign(abs(x) ** (1 / 3), x) if math.isfinite(x) else x
+    n = odd_root_numerator(p)
+    if n is not None and x < 0:     # real odd root of a negative number, as in codegen
+        r = fpow(-x, p)
+        return -r if n % 2 else r
     return fpow(x, p)
 
 

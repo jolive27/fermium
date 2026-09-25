@@ -41,6 +41,7 @@ class FuncInfo:
         self.derived = {}
         self.display_name = name
         self.checked_generic = False
+        self.stable = False           # a derivative: evaluate C.stabilize(body) (A52)
 
     @property
     def one_liner(self):
@@ -314,7 +315,7 @@ class Checker(C.DiffContext):
         if isinstance(v, FuncRef):
             ctx.scope.names[s.name] = v.info
             if v.info.display_name.startswith("<") or "'" in v.info.display_name or "∂" in v.info.display_name \
-                    or v.info.display_name.startswith("λ"):
+                    or v.info.display_name.startswith(("λ", "d/d", "∫d")):
                 v.info.display_name = s.name
             return None
         if isinstance(v, SolRef):
@@ -1217,6 +1218,10 @@ class Checker(C.DiffContext):
         return v
 
     def e_Where(self, e, ctx):
+        if isinstance(e.value, A.Deriv) and not any(
+                n == e.value.var or C.depends_on(v, e.value.var) for n, v in e.bindings):
+            # g = d/dt (a t^2) where a = 3: substitute, so the derivative can still be a function of t
+            return self.expr(C.inline_where(e), ctx, allow_func=True)
         scope = Scope(ctx.scope)
         c2 = ctx.child(scope)
         binds = []
@@ -1583,7 +1588,7 @@ class Checker(C.DiffContext):
         inst.ret_ty = inst.ret_placeholder
         try:
             if info.one_liner:
-                v = self.expr(info.body_expr(), fctx)
+                v = self.expr(C.stabilize(info.body_expr()) if info.stable else info.body_expr(), fctx)
                 if not isinstance(v, I.Expr):
                     raise self.err("a function must produce a value", f)
                 inst.body = [I.SReturn(v)]
@@ -1709,6 +1714,9 @@ class Checker(C.DiffContext):
             if name != "abs":
                 r.sf = None      # a whole number: print it exactly
             return r
+        if name == "sign" and n == 1 and isinstance(args[0].ty, VecTy):
+            # sign(v) = v/|v|, the direction; d|u|/dt = sign(u)·u' then works for vectors too (A18)
+            return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
         if name == "sign" or name == "isnan":
             need(1)
             num_or_list(0)
@@ -1923,6 +1931,7 @@ class Checker(C.DiffContext):
         fd.line, fd.col = f.line, f.col
         d = FuncInfo(nm, fd, info.scope)
         d.display_name = pretty
+        d.stable = True
         d.parent = (info if getattr(info, "parent", None) is None else info.parent[0], i,
                     order + (info.parent[2] if getattr(info, "parent", None) else 0))
         info.derived[key] = d
@@ -1972,12 +1981,13 @@ class Checker(C.DiffContext):
         for _ in range(e.order):
             body = C.diff(body, e.var, self._diffctx(ctx.scope))
         if isinstance(bound, I.Sym):
-            return self.expr(body, ctx)
+            return self.expr(C.stabilize(body), ctx)
         # d/dt (formula in t) with t not defined -> a new function of t
         fd = A.FuncDef(f"λ{self.counter}", [A.Param(e.var)], body)
         fd.line, fd.col = e.line, e.col
         info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
         info.display_name = f"d/d{e.var}(...)"
+        info.stable = True
         return FuncRef(info)
 
     def e_Integral(self, e, ctx):

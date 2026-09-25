@@ -207,7 +207,7 @@ or floor = rtol·|y| with |y| replaced by |h·y'| when y == 0), or expose `atol`
 silent wrong answer; at minimum the quadrature could refuse to accept a zero estimate with
 zero error on an infinite or very wide interval without sampling further, or warn.)
 
-## A16. A function whose only list use is `v[i] = ...` is treated as scalar
+## A16. [FIXED] A function whose only list use is `v[i] = ...` is treated as scalar
 ```
 f(v) =
     v[1] = 42
@@ -243,7 +243,7 @@ The user never wrote `sign`. Related gaps (clear error, but documented operation
 `d/dt (r(t) × a)`, `d/dt r(t).y`, `d/dt unit(...)` all say "can't differentiate this
 expression symbolically".
 
-## A19. (low) Vector ODE solutions: `r''(t)` refused, `r[end]` error has no line number
+## A19. [FIXED] (low) Vector ODE solutions: `r''(t)` refused, `r[end]` error has no line number
 ```
 solve r'' = -r with r(0) = <1, 0>, r'(0) = <0, 1> for t from 0 to 3
 print r''(3)     # error "can't take that many derivatives of the solution r''"
@@ -412,13 +412,13 @@ cubic (O(h³)), or better, evaluate the right-hand side at the interpolated stat
 solver accuracy for first-order unknowns); consider DP45's own 4th/5th-order dense output for
 `x(t)` too (midpoint errors are ~1000× the node errors now).
 
-## A31. (low) A `where` binding silently shadows a function parameter
+## A31. [FIXED] (low) A `where` binding silently shadows a function parameter
 ```
 f(x) = 2 x where x = 5 s
 print f(1 s)        # 10 s -- the argument is ignored, no warning
 ```
 
-## A32. Python crash (OverflowError) for an infinite constant index
+## A32. [FIXED] Python crash (OverflowError) for an infinite constant index
 ```
 xs = [1, 2, 3]
 print xs[inf]
@@ -523,7 +523,7 @@ mkdir dir.fm; fermium run dir.fm   # Traceback ... IsADirectoryError
 Expected one-line errors ("latin1.fm isn't a UTF-8 text file (byte 0xB5 on line 1); save it as
 UTF-8", "dir.fm is a folder, not a file"). `cli._read` only handles FileNotFoundError.
 
-## A40. (low, cosmetic) The unit of an *argument* is lost through a function call
+## A40. [FIXED] (low, cosmetic) The unit of an *argument* is lost through a function call
 ```
 f(x) = 2 x
 print 2 * (1 km), f(1 km)      # 2 km 2000 m
@@ -558,7 +558,7 @@ that occurs twice in a term (here `exp(x)·exp(x)`) is collapsed; then
 is multiplied back in front. Count multiplicities (take the minimum count across terms, remove
 that many).
 
-## A42. (regression from the A29 fix) `(∂/∂x f)(1, 2)` no longer parses
+## A42. [FIXED] (regression from the A29 fix) `(∂/∂x f)(1, 2)` no longer parses
 ```
 f(x, y) = x^2 y
 print (∂/∂x f)(1, 2)     # now: "expected ')' to close '(' but found ','"   (worked before; expected 4)
@@ -606,7 +606,7 @@ endpoint node should never be evaluated (GK nodes are interior) -- but after bis
 that was my reference being wrong -- scipy at epsrel 1e-13 and mpmath after substituting x = u^5
 give 5.1603067686, and 13.7312084 for the -2..3 variant, matching Fermium.)
 
-## A45. `fit N = A exp(-t/τ)` without a guess reports a garbage fit as if it were fine
+## A45. [FIXED] `fit N = A exp(-t/τ)` without a guess reports a garbage fit as if it were fine
 `decay.csv` (t in ms, N = 1000·exp(-t/3 ms) + small noise, 11 points):
 ```
 d = load "decay.csv"
@@ -632,7 +632,7 @@ rad/s can't be told apart, but here the user wrote `rev`, whose only purpose is 
 Suggestion: refuse `in Hz` for a value whose written unit contains rad/rev/° (or warn), and add
 `rpm` = 1/60 Hz (turns per minute), documenting the choice.
 
-## A47. `T - 20 °C` is rejected unless T was also written in °C (blocks Newton's law of cooling)
+## A47. [FIXED] `T - 20 °C` is rejected unless T was also written in °C (blocks Newton's law of cooling)
 ```
 print 300 K - 20 °C            # error "can't subtract an absolute temperature (°C) from this"
                                # expected 6.85 K (both are absolute temperatures)
@@ -647,7 +647,7 @@ print f(30 °C)                 # same error (the instance sees T as "temperatur
 °C is a legitimate difference; only °C + °C, k·°C, etc. are meaningless. The ODE unknown gets
 its units from `T(0 s) = 90 °C`, so it should count as absolute too.
 
-## A48. Mapping a vector-valued function over a list crashes codegen (Python TypeError)
+## A48. [FIXED] Mapping a vector-valued function over a list crashes codegen (Python TypeError)
 ```
 f(x) = <x, 2x>
 print f([1, 2])

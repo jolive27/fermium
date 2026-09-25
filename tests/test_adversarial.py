@@ -628,12 +628,10 @@ def test_index_assignment_makes_list_parameter():
     assert run("f(v) =\n    v[1] = 42\n    0\nxs = [1, 2, 3]\nprint f(xs), xs") == "0 [42, 2, 3]"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A17: `2 dm` after a number is decimetres, not the differential")
 def test_constant_integrand_with_unit_like_differential():
     assert run("print ∫ 2 dm from 0 kg to 1 kg") == "2 kg"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A18: d|r(t)|/dt uses the scalar sign() rule")
 def test_derivative_of_vector_length():
     out = run("r(t) = <t^2, t^3, 1>\ns(t) = |r(t)|\ng = s'\nprint g(1)")
     assert close(num(out), 10 / (2 * math.sqrt(3)))
@@ -703,7 +701,6 @@ def test_gamma_function():
     assert run("print gamma(5)") == "24"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A26: derivative of x^(1/3) at negative x is NaN though f(-8) = -2")
 def test_cube_root_derivative_negative():
     assert close(num(run("f(x) = x^(1/3)\ng = f'\nprint g(-8)")), 1 / 12)
 
@@ -830,7 +827,6 @@ def test_indefinite_integrals():
     assert run("F = ∫ exp(-x) sin(x) dx\nprint F(1) - F(0)") == "0.245837"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A35: SymPy Piecewise for ∫ cos(ω t) dt")
 def test_indefinite_integral_with_parameter():
     out = run("ω = 2 1/s\nF = ∫ cos(ω t) dt\nprint F(1 s) - F(0 s)")
     assert close(num(out), math.sin(2) / 2)
@@ -849,7 +845,6 @@ def test_celsius_list_mean_min_max_interp():
     assert run("T = [0 °C, 100 °C]\nprint interp(50 °C, T, [1 m, 2 m])") == "1.5 m"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A38: fmt --ascii writes partial^2/partial x^2, which doesn't parse")
 def test_fmt_ascii_second_partial():
     from fermium.fmt import format_source
     src = "f(x, y) = x^2 y^2\ng = ∂²/∂x² f\nprint g(1, 2)"
@@ -1032,13 +1027,11 @@ def test_infinite_integral_physical_scales(src, want):
     assert close(num(run(src)), want, 1e-5)
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A52: derivative of the Fermi function is NaN far above μ")
 def test_fermi_function_derivative_far_tail():
     out = run("kT = 0.025 eV\nμ = 5 eV\nf(E) = 1/(exp((E - μ)/kT) + 1)\ng = f'\nprint g(30 eV)")
     assert "NaN" not in out
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A52: tanh'' at large x is NaN")
 def test_tanh_second_derivative_large_argument():
     assert run("f(x) = tanh(x)\nh = f''\nprint h(1000)") in ("0", "-0")
 
@@ -1083,7 +1076,6 @@ def test_physics_integrals_to_infinity():
     assert run("print ∫ 1/(1 + (E/(1 MeV))^2) dE from -∞ to ∞ in MeV") == "3.14159 MeV"
 
 
-@pytest.mark.xfail(strict=True, reason="BUG A49: d/dt (formula) with a where-clause is rejected")
 def test_derivative_of_formula_with_where():
     assert run("g = d/dt (a t^2) where a = 3\nprint g(1)") == "6"
 
