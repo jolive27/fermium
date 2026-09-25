@@ -36,6 +36,11 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
 
 class MixedHint(tuple):
     """Display units of a vector whose components have different units: one Unit (or None) each."""
+    affine = False
+
+    @property
+    def name(self):
+        return ", ".join(u.name if u is not None else "?" for u in self)
 
 
 _SUP_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
@@ -1973,6 +1978,11 @@ class Checker(C.DiffContext):
             ue = A.UnitExpr([A.UnitFactor(text)], text)
             del ue
             v = self.expr(e.args[0], ctx)
+            if isinstance(v.ty, VecTy) and v.ty.mixed:
+                raise self.err(f"can't show a vector with different units per component in {u.name}", e,
+                               hint="convert one component at a time, like to(s.x, cm)")
+            if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
+                raise self.err("to(x, unit) needs a number", e)
             if not self.U.unify(v.ty.dim, u.dim):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
             v.hint = u
@@ -2141,8 +2151,7 @@ class Checker(C.DiffContext):
             if not isinstance(k, I.IConst) or not isinstance(k.ty, NumTy):
                 raise self.err("identity(n) needs a fixed whole number, like identity(3)", e.args[0])
             if k.value not in (2, 3, 4):
-                raise self.err("identity(n) needs n = 1 to 4 (matrices are at most 4×4; identity(1) is just 1)",
-                               e.args[0])
+                raise self.err("identity(n) needs n = 2, 3 or 4 (matrices are at most 4×4)", e.args[0])
             m = int(k.value)
             return I.IVec([I.IConst(1.0 if i == j else 0.0, NumTy(DIMLESS)) for i in range(m) for j in range(m)],
                           MatTy(DIMLESS, m, m))

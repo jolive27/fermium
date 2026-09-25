@@ -224,6 +224,9 @@ class Parser:
                     name = self.next()
                     self.next()
                     idx = self.expr()
+                    if self.at_op(","):
+                        raise self.error("the entries of a matrix can't be changed one at a time; build the new "
+                                         "matrix instead, like M = M + [[1, 0], [0, 0]]")
                     self.expect_op("]")
                     op = self.next().value
                     val = self.expr_where()

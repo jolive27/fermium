@@ -177,7 +177,8 @@ def test_matrix_variable_can_be_reassigned():
     ("print 1 / [[1, 2], [3, 4]]", "can't divide by a matrix"),
     ("print det([[1, 2, 3], [4, 5, 6]])", "square"),
     ("print inverse([[1, 2, 3], [4, 5, 6]])", "square"),
-    ("print identity(5)", "identity(n) needs n = 1 to 4"),
+    ("print identity(5)", "identity(n) needs n = 2, 3 or 4"),
+    ("M = identity(2)\nM[1, 1] = 5", "can't be changed one at a time"),
     ("n = 3\nprint identity(n)", "a fixed whole number"),
     ("M = identity(2)\nprint M[3, 1]", "row 3"),
     ("M = identity(2)\nprint M[1, 3]", "column 3"),
@@ -197,6 +198,11 @@ def test_state_vector_keeps_a_unit_per_component():
     out = run("s = <1 m, 2 m/s>\nprint s\nprint s.x, s.y, s[2]\nprint s * 2\nprint 2 kg * s\nprint s / (2 s)")
     assert out.split("\n") == ["<1 m, 2 m/s>", "1 m 2 m/s 2 m/s", "<2 m, 4 m/s>", "<2 kg m, 4 kg m/s>",
                                "<0.5 m/s, 1 m/s²>"]
+
+
+def test_state_vector_negation_and_if():
+    out = run("q = <1 m, 2 m/s>\nprint -q\nprint if q.x > 0 m then q else -q")
+    assert out.split("\n") == ["<-1 m, -2 m/s>", "<1 m, 2 m/s>"]
 
 
 def test_state_vectors_add_component_by_component():
@@ -223,6 +229,7 @@ def test_state_vector_in_a_function():
     ("print identity(2) * <1 m, 2 m/s>", "same units"),
     ("s = <1 m, 2 m/s>\ns = <1 m, 2 m>", "s is"),
     ("print <1 m, 2 m/s> + 1 m", "can't add a vector and a single number"),
+    ("print to(<1 m, 2 m/s>, cm)", "different units per component"),
     ("solve x'' = -x / (1 s²)\n  with x(0) = <1 m, 2 s>, x'(0) = <0, 0> m/s\n  for t from 0 s to 1 s",
      "same units"),
 ])
