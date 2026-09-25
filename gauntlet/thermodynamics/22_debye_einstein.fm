@@ -1,0 +1,40 @@
+# Thermodynamics 22 — Heat capacity of a solid: Debye against Einstein, and the entropy
+#
+# (Kittel & Kroemer, Thermal Physics, ch. 4; Kittel, Solid State Physics, ch. 5;
+#  Ashcroft & Mermin ch. 23; Reif §10.2.)
+# Copper has a Debye temperature θ_D = 343 K. Per mole,
+#     C_D(T) = 9R (T/θ_D)³ ∫₀^{θ_D/T} x⁴ eˣ / (eˣ − 1)² dx          (Debye)
+#     C_E(T) = 3R (θ_E/T)² e^{θ_E/T} / (e^{θ_E/T} − 1)²               (Einstein)
+#
+#   (a) Choose θ_E so that the two agree at high T: expanding both,
+#       C ≈ 3R(1 − θ_D²/(20T²)) and C ≈ 3R(1 − θ_E²/(12T²)), so θ_E = √(3/5) θ_D.
+#   (b) Tabulate C_D and C_E at 5, 20, 100, 300 and 1000 K. Compare C_D with the T³
+#       law (12π⁴/5) R (T/θ_D)³ at low T and with Dulong–Petit 3R at high T.
+#   (c) Find the temperature at which C_D = 3R/2 (half the classical value).
+#   (d) The entropy at 300 K, S = ∫₀^T C_D(T')/T' dT', against the closed form
+#       S = R [4 D₃(θ/T) − 3 ln(1 − e^{−θ/T})], D₃(y) = (3/y³) ∫₀^y t³/(eᵗ − 1) dt.
+
+θ_D = 343 K
+R = R_gas
+θ_E = √(3/5) θ_D
+print "matched Einstein temperature:", θ_E to 6 digits
+
+# The integrand is written with exp(−x): as x⁴ eˣ/(eˣ − 1)² it is ∞/∞ = NaN for x > 709, which the
+# entropy integral in (d) reaches as T → 0 (FRICTION T10). The limit needs brackets (FRICTION T9).
+C_D(T) = 9 R (T / θ_D)³ ∫ x^4 exp(-x) / (1 - exp(-x))² dx from 0 to (θ_D / T)
+C_E(T) = 3 R (θ_E / T)² exp(θ_E / T) / (exp(θ_E / T) - 1)²
+T3_law(T) = 12 π^4 / 5 * R (T / θ_D)³
+
+for T in [5 K, 20 K, 100 K, 300 K, 1000 K]
+    print "T =", T, "| Debye:", C_D(T) to 6 digits, "| Einstein:", C_E(T) to 6 digits, "| T³ law:", T3_law(T) to 6 digits, "| C_D/3R:", C_D(T) / (3 R) to 6 digits
+
+# (c) half the classical value
+solve C_D(T_half) = 3 R / 2 for T_half from 1 K to θ_D
+print "C_D = 3R/2 at:", T_half to 6 digits, " = θ_D ×", T_half / θ_D to 6 digits
+
+# (d) entropy at 300 K
+S_D(T) = ∫ C_D(u) / u du from 0 K to T
+D3(y) = 3 / y³ * ∫ t³ exp(-t) / (1 - exp(-t)) dt from 0 to y
+S_closed(T) = R (4 D3(θ_D / T) - 3 ln(1 - exp(-θ_D / T)))
+print "entropy at 300 K, ∫ C/T dT:", S_D(300 K) to 6 digits
+print "entropy at 300 K, closed form:", S_closed(300 K) to 6 digits
