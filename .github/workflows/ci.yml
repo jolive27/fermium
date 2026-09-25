@@ -29,6 +29,8 @@ jobs:
       - name: Install (fresh, as a tester would)
         run: python3 -m pip install -e ".[full,dev]"
       - run: fermium doctor
+      - name: Julia packages for the rosetta comparisons (if the runner has Julia)
+        run: if command -v julia >/dev/null; then julia -e 'using Pkg; Pkg.add(["Unitful", "QuadGK"])'; fi
       - name: make check
         run: make check
 

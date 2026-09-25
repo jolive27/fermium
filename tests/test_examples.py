@@ -446,6 +446,8 @@ def test_rosetta_python(name):
 @pytest.mark.parametrize("name", ROSETTA_NAMES)
 def test_rosetta_julia(name):
     code, out, err = other_outputs("julia")[name]
+    if code != 0 and "is required but does not seem to be installed" in err:
+        pytest.skip("Julia is installed without Unitful/QuadGK")
     assert code == 0, err
     assert_same_numbers(rosetta_fermium(name), out, name + ".jl")
 
