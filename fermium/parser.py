@@ -444,6 +444,7 @@ class Parser:
         method = None
         tol_node = [None]
         until = [None]
+        m3 = {}                   # `lowest N` / `grid N` of an eigenvalue problem or a PDE (D82, D83)
         if self.tok.kind != "NEWLINE":
             eqs.append(self.equation())
             while self.at_op(",") or self.at_kw("and"):
@@ -465,7 +466,7 @@ class Parser:
                 var = vt.value
                 self.expect_kw("from")
                 saved = self.no_juxt_names
-                self.no_juxt_names = saved | {"tolerance", "using", "method", "until"}
+                self.no_juxt_names = saved | {"tolerance", "using", "method", "until", "lowest", "grid"}
                 lo = self.expr()
                 self.expect_kw("to")
                 hi = self.expr()
@@ -482,6 +483,19 @@ class Parser:
                 if self.tok.kind == "NAME" and self.tok.value == "until" and "until" not in self.known:
                     self.next()              # for t from 0 s to 9 s until y = 0 m  (D39)
                     until[0] = self.equation()
+                return True
+            if self.tok.kind == "NAME" and self.tok.value in ("lowest", "grid") and self.tok.value not in self.known \
+                    and self.peek().kind == "NUM":
+                word = self.next().value      # lowest 3 [states]  /  grid 400  (D82, D83)
+                saved = self.no_juxt_names
+                self.no_juxt_names = saved | {"states", "levels", "state", "grid", "lowest", "using", "method"}
+                m3[word] = self.expr()
+                self.no_juxt_names = saved
+                if self.tok.kind == "NAME" and self.tok.value in ("states", "levels", "state") and word == "lowest":
+                    self.next()
+                if self.tok.kind == "NAME" and self.tok.value in ("using", "method") and method is None:
+                    self.next()
+                    method = self.expect_name("a method name (matrix or shooting)").value
                 return True
             return False
 
@@ -525,6 +539,8 @@ class Parser:
         s = A.Solve(eqs, initial, var, lo, hi, step, method, tol_node[0])
         if until[0] is not None:
             s.until = until[0]
+        s.lowest = m3.get("lowest")
+        s.grid = m3.get("grid")
         s.line, s.col, s.length = t.line, t.col, 5
         for eq in eqs:
             for n in A.walk(eq.lhs):

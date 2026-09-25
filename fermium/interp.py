@@ -924,6 +924,8 @@ class Interpreter:
         return f
 
     def s_SSolve(self, s, fr):
+        if s.method == "eigen":                 # D82
+            return self.m3_eigen(s, fr)
         y0 = []
         for e in s.y0:
             v = self.eval(e, fr)
@@ -1239,6 +1241,21 @@ class Interpreter:
                 self.line = e.line
             raise _Fail(ERR_SINGULAR)
         return tuple(out)
+
+    def m3_eigen(self, s, fr):
+        """solve … lowest N: the same Python solver the compiled code calls (runtime/eigen.py)."""
+        from .runtime.eigen import EigenFail, eigen_solve
+        f = self.ode_rhs(s.rhs, fr)
+        a, b = self.eval(s.t0, fr), self.eval(s.t1, fr)
+        try:
+            xs, ys, dys, _ = self.kernel(lambda: eigen_solve(f, a, b, s.nstates, s.grid,
+                                                             "shooting" if s.eig_method == 1 else "matrix"),
+                                         getattr(s, "tfmt", -1))
+        except EigenFail as ex:
+            raise FermiumRuntimeError(ex.message, self.line) from None
+        sol = Sol(3 * s.nstates)
+        sol.t, sol.y, sol.dy = list(xs), list(ys), list(dys)
+        fr.set(s.sol_sym, sol)
 
     def m3_fourier(self, name, args):
         """Mirrors codegen_m3.fft / frequencies / argmax (D81)."""

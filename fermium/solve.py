@@ -148,6 +148,9 @@ def check_root(ck, s: A.Solve, ctx):
 
 
 def check_solve(ck, s: A.Solve, ctx):
+    if getattr(s, "lowest", None) is not None:        # an eigenvalue problem (D82)
+        from .m3solve import check_eigen
+        return check_eigen(ck, s, ctx)
     t = s.var
     src_eqs, initial, until = _take_until(ck, s, ctx)
     eqs = [A.Equation(_normalize_derivs(q.lhs, t), _normalize_derivs(q.rhs, t)).at(q) for q in src_eqs]

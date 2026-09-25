@@ -746,3 +746,30 @@ print back[10], xs[10]
 - Any length works (not only powers of two). A frequency between two bins shows up in the nearest bins, spread out ("leakage"); a longer signal gives finer bins, Δf = 1/(n dt).
 - `fermium run` and the interpreter use NumPy's FFT; `fermium build` executables use a built-in C FFT (radix 2, and Bluestein's algorithm for other lengths), which agrees to rounding.
 
+### Bound states: solve … lowest N
+
+An equation that is linear in an unknown function ψ, with one undefined constant (the eigenvalue), zero boundary conditions at both ends and `lowest N`, is an **eigenvalue problem**: `solve` finds the N lowest eigenvalues and their eigenfunctions.
+
+```fermium
+m = m_e
+ħω = 1 eV
+ω = ħω / ħ
+V(x) = m ω² x² / 2
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 4
+for n from 1 to 4
+    print "E", n, "=", E[n] in eV, "  (ħω(n - ½) =", ħω (n - 0.5), ")"
+print ψ₁(0 nm), ∫ ψ₁(x)^2 dx from -3 nm to 3 nm
+```
+
+- **The eigenvalue** is the one name in the equation that has no value yet (`E` here). Afterwards it is a list, `E[1] < E[2] < …`, with the units the equation gives it (energy).
+- **The states** are `ψ₁ … ψ_N` (ASCII `psi_1`): functions of x like an ODE solution, with `ψ₁'(x)`, `ψ₁''(x)`, `values(ψ₁)`, `times(ψ₁)` (the grid) and `plot ψ₁ vs x, ψ₂ vs x`. Each is normalised, ∫ψ² dx = 1 (so ψ has units 1/√length), and its first lobe (from the left) is positive.
+- **Boundary conditions:** ψ = 0 at both ends of the range (a hard wall, or far enough into the forbidden region that ψ has died away: check that the energies don't change when you widen the range).
+- **Methods:** `using matrix` (the default) and `using shooting`, after `lowest N`:
+  - *matrix*: finite differences on a grid of 2 × 2000 intervals (set with `grid 4000`, which doubles it), a symmetric tridiagonal matrix, and LAPACK for the N lowest eigenvalues. The grid is solved at three spacings and Richardson-extrapolated, so smooth potentials give ~10⁻¹⁰ relative accuracy. A jump in V between grid points (a finite well) is located and averaged over its cell; there the accuracy is ~10⁻⁶.
+  - *shooting*: Numerov's method from the left end, counting nodes to pick the n-th state, and a root finder for ψ(b) = 0. An independent method, useful as a cross-check (slower).
+- The equation may be written in any linear form (`ψ'' = 2m(V - E)/ħ² ψ` works too). A term with ψ' isn't supported yet (for a radial equation, use u = r R), and the eigenvalue must multiply ψ with a coefficient of one sign (`E ψ`, as in Schrödinger's equation).
+- These run in Python (NumPy and SciPy, like `using radau`), so `fermium build` refuses them for now.
+

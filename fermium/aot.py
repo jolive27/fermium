@@ -163,6 +163,9 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
         raise FermiumError(f"fermium build can't compile  using {method}  yet: the stiff solvers run in Python "
                            f"(SciPy); use  fermium run  for this program", line,
                            hint="or, if the equation isn't stiff, leave out  using …  to use rk45")
+    for line, what in getattr(t, "python_only", []):     # eigenvalue problems and PDEs (D82, D83)
+        raise FermiumError(f"fermium build can't compile {what} yet: it runs in Python (NumPy/SciPy); use  "
+                           f"fermium run  for this program", line)
     finalize_tables(t, ck.U)
     mg = ModuleGen()
     mg.emit_main(mod.main, "fm_run")

@@ -1737,6 +1737,8 @@ class FuncGen:
         b.call(ex["fm_print_end"], [])
 
     def s_SSolve(self, s):
+        if s.method in codegen_m3.PY_SOLVES:           # eigenvalue problems, PDEs (D82, D83)
+            return codegen_m3.py_solve(self, s)
         b = self.b
         n = sum(getattr(e.ty, "n", 1) for e in s.y0)
         y0 = self.alloca(ir.ArrayType(F64, n))

@@ -204,3 +204,35 @@ def attach(ModuleGen):
     ModuleGen._k_randn = k_randn
     ModuleGen._k_seed = k_seed
 
+
+PY_SOLVES = {"eigen"}
+
+
+def py_solve(g, s):
+    """An eigenvalue problem (D82) or PDE (D83): a Python solver (runtime/m3rt.py) calls the compiled right-hand
+    side back through fm_ode_guard and returns a SolStruct; status 1: it stopped with a message, 2: the right
+    side stopped with its own error (already reported, so just unwind)."""
+    b = g.b
+    mg = g.mg
+    from .codegen_llvm import SOLP, I8P, F64P, ODE_FN  # noqa: F401
+    fn = mg.lambda_for(s.rhs)
+    env = g.make_env(s.rhs)
+    t0 = g.expr(s.t0)
+    t1 = g.expr(s.t1)
+    fmt = getattr(s, "tfmt", -1)
+    b.store(ir.Constant(I64, fmt), mg.errfmt)
+    g.mark_line()
+    guard = mg.kernel("fm_ode_guard")
+    out = g.alloca(SOLP)
+    if s.method == "eigen":
+        ext = mg.extern("fm_eigen", I64, [I8P, I8P, F64P, F64, F64, I64, I64, I64, SOLP.as_pointer()])
+        status = b.call(ext, [b.bitcast(guard, I8P), b.bitcast(fn, I8P), env, t0, t1,
+                              ir.Constant(I64, s.nstates), ir.Constant(I64, s.grid),
+                              ir.Constant(I64, s.eig_method), out])
+    with b.if_then(b.icmp_signed("!=", status, ir.Constant(I64, 0)), likely=False):
+        with b.if_then(b.icmp_signed("==", status, ir.Constant(I64, 2))):
+            b.call(mg.externs["longjmp"], [b.bitcast(mg.jmpbuf, I8P), ir.Constant(ir.IntType(32), 1)])
+            b.unreachable()
+        g.fail(ERR_PENDING)
+    g.store(s.sol_sym, b.load(out))
+

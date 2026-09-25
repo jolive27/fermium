@@ -454,3 +454,28 @@ def test_electrostatics_nabla():
     out = run_example("27_electrostatics_nabla").splitlines()
     assert out[0] == "field on the axis, 10 cm away: <0, 0, 180.653> V/m"
     assert out[2:4] == ["∇×E = 0: true", "∇²φ = 0 away from the charges: true"]
+
+
+def test_quantum_bound_states():
+    """examples/40: box, finite well (against its transcendental equations) and oscillator (D82)."""
+    out = run_example("40_quantum_bound_states")
+    assert num(out, "box: E1 =") == pytest.approx(num(out, "exact"), rel=1e-6)
+    assert num(out, "box: E1 =") == pytest.approx(0.376030, rel=1e-5)
+    assert num(out, "E2/E1 =") == pytest.approx(4, rel=1e-6)
+    from scipy.optimize import brentq
+    hbar, me, ev, a, v0 = 6.62607015e-34 / (2 * math.pi), 9.1093837139e-31, 1.602176634e-19, 0.5e-9, 5.0
+    k = lambda E: math.sqrt(2 * me * E * ev) / hbar                 # noqa: E731
+    q = lambda E: math.sqrt(2 * me * (v0 - E) * ev) / hbar          # noqa: E731
+    even = lambda E: k(E) * math.sin(k(E) * a) - q(E) * math.cos(k(E) * a)      # noqa: E731
+    odd = lambda E: -k(E) * math.cos(k(E) * a) - q(E) * math.sin(k(E) * a)      # noqa: E731
+    grid = [v0 * i / 5000 for i in range(1, 5000)]
+    levels = sorted(brentq(f, p, r) for f in (even, odd) for p, r in zip(grid, grid[1:]) if f(p) * f(r) < 0)
+    for n in (1, 2, 3):
+        assert num(out, f"finite well: level {n} at") == pytest.approx(levels[n - 1], rel=1e-4)
+    assert 0.005 < num(out, "probability outside the well in the ground state:") < 0.012
+    for n in (1, 2, 3, 4):
+        line = line_with(out, f"oscillator: E {n} / ħω =")
+        vals = numbers(line.split("=", 1)[1])
+        assert vals[0] == pytest.approx(n - 0.5, abs=1e-8)
+        assert vals[1] == pytest.approx(n - 0.5, abs=1e-8)
+    assert os.path.exists(os.path.join(EXAMPLES, "gallery", "bound_states.png"))

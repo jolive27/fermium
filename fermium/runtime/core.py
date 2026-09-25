@@ -256,6 +256,10 @@ class Runtime:
                 rt.error = f"the Fourier transform failed: {ex}"
                 return 1
 
+        def eigen(guard, fn, env, a, b, nstates, grid, method, out):
+            from .m3rt import eigen_cb
+            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out)
+
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat,
@@ -284,6 +288,8 @@ class Runtime:
                            c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p))(stiff),
             "fm_clock": CB(c_double)(time.perf_counter),
             "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
+            "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
+                           ctypes.POINTER(c_void_p))(eigen),
         }
         if llvm is not None:
             for name, cb in self.callbacks.items():
