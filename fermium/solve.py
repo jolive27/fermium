@@ -637,7 +637,8 @@ def _plot_series(ck, sr, ctx, s):
                                  f"with a range)", node,
                                  hint="e.g.  plot v vs t from 0 s to 5 s   or   plot ys vs xs")
             entry.update(kind="lists", y=yv, x=xv, ydim=yv.ty.dim, xdim=xv.ty.dim, yhint=yv.hint, xhint=xv.hint,
-                         points=isinstance(yv, I.IColumn) or isinstance(xv, I.IColumn))
+                         points=isinstance(yv, I.IColumn) or isinstance(xv, I.IColumn)
+                         or bool(getattr(s, "options", {}).get("points")))
     return entry
 
 

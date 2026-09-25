@@ -412,13 +412,16 @@ class Parser:
                         axes = self.next().value
                     for a in axes:
                         opts["log" + a] = True
+                elif w.kind == "NAME" and w.value in ("points", "dots", "markers"):
+                    self.next()
+                    opts["points"] = True        # scatter: markers, no lines (research/semf_ame2020)
                 elif w.kind == "NAME" and w.value == "title":
                     self.next()
                     if self.tok.kind != "STR":
                         raise self.error("expected the title in quotes, like title \"Decay of Ba-137m\"")
                     opts["title"] = self.next().value
                 else:
-                    raise self.error("plot options are:  with log y,  with log x,  with log,  with title \"...\"")
+                    raise self.error("plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\"")
                 if self.at_op(","):
                     self.next()
                     continue

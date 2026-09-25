@@ -102,7 +102,7 @@ def tables_c(tables) -> str:
         lines.append(f"extern void fm_model_{i}(double *, double **, int64_t, double *);")
     lines.append("const fm_fitinfo fm_fits[] = {")
     for i, info in enumerate(tables.fits):
-        yu = display_unit(info["rydim"], None)
+        yu = display_unit(info["rydim"], info.get("col_units", {}).get(info["rydim"]))
         lines.append(f"  {{{cs(info['text'])}, {cs(info['path'])}, {len(info['params'])}, fm_fit{i}_params, "
                      f"{len(info['cols'])}, fm_fit{i}_cols, {yu.factor!r}, {cs(_unit_name(yu))}, fm_model_{i}}},")
     lines.append("  {0}};")

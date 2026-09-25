@@ -422,6 +422,8 @@ class Checker(C.DiffContext):
         self.need_num(v, e.args[1], "the value to push")
         self.unify_or(lst.ty.dim, v.ty.dim, lambda: f"can't add {self.desc(v.ty.dim)} to a list of "
                       f"{self.desc(lst.ty.dim)}", e.args[1])
+        if lst.sym.hint is None and v.hint is not None and not v.hint.affine:
+            lst.sym.hint = v.hint        # a list filled by push shows the pushed values' unit (MeV, not J)
         return I.SPush(lst.sym, v)
 
     def s_Assign(self, s, ctx):

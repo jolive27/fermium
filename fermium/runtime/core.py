@@ -504,7 +504,7 @@ class Runtime:
                 lines.append(f"  {name} = {val}   (standard error {se}{unit})")
             else:
                 lines.append(f"  {name} = {val}   (standard error could not be estimated)")
-        yu = display_unit(info["rydim"], None)
+        yu = display_unit(info["rydim"], info.get("col_units", {}).get(info["rydim"]))   # the data's unit
         unit = f" {yu.name}" if yu.name not in ("", "1") else ""
         lines.append(f"  rms residual = {format_number(rms / yu.factor, 3, trim=False)}{unit}")
         bad = [nm for nm, e in zip(info["params"], errs) if e is None or not math.isfinite(e)]
