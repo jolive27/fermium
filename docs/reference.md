@@ -15,7 +15,7 @@ Every program example on this page is tested: `tests/test_docs.py` runs each blo
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules) and [Python interop](#python-interop)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -741,6 +741,118 @@ modules = ["lib", "../shared"]     # folders searched for modules, relative to f
 ```
 
 See DECISIONS.md D100–D103 for the design.
+
+## Python interop
+
+Fermium can call Python functions (NumPy, SciPy, your own `.py` files), and Python can call compiled
+Fermium functions. Python knows nothing about units, so **the units are checked at the boundary**.
+
+### Calling Python from Fermium: `use python`
+
+```fermium
+use python numpy as np
+use python scipy.special as sp
+r = 2.5 m
+print sp.jv(0, r / (1 m)) to 6 digits       # Bessel J₀ of a plain number
+print np.sinc(0.25), np.pi
+xs = [0, 0.5, 1, 2]
+print np.sqrt(xs)                            # a list goes in as a NumPy array, and comes back as a list
+```
+
+- **`use python numpy as np`** at the top level imports the module (`import numpy as np` in Python). A
+  dotted module needs a short name: `use python scipy.special as sp`. The module and the function names
+  are looked up when the program is checked, so `np.sincc(1)` is an error before anything runs
+  (*the Python module numpy has no sincc; did you mean np.sinc?*). A Python file in the program's folder
+  can be used too: `use python mylib as ml` finds `mylib.py`.
+- **Plain numbers only, unless declared:** a Python function takes and returns plain numbers, so an
+  argument with a unit is a compile-time error that says how to fix it:
+  `sp.jv(0, r)` → *sp.jv is a Python function, which takes plain numbers, but argument 2 is length [m]*,
+  hint *divide by a unit, like r / (1 m)*. The result is a plain number.
+- **Declaring units:** list the functions after a `:`, one per line, with a unit for each parameter that
+  has one and for the result. Each argument must then have that dimension and is passed **as a number in
+  the declared unit**; the result is read in the declared unit and converted to SI:
+
+```fermium
+use python numpy as np:
+    hypot(x [m], y [m]) -> [m]
+    sum(xs) -> number
+    linspace(a, b, n: int) -> list
+print np.hypot(3 m, 400 cm)                  # 5 m; passing 3 s would be a unit error
+print np.sum([1, 2, 3.5]), np.linspace(0, 1, 5)
+```
+
+  Declare a function with a Python file of your own the same way: `use python mylib as ml:` then
+  `energy(m [kg], v [km/s]) -> [J]` gives `energy` the mass in kilograms and the speed in km/s, and reads
+  its answer as joules (examples/42_python_interop.fm).
+- **Lists:** a Fermium list is passed as a NumPy array (of float64, in the declared unit). The result is a
+  list when an argument is a list, else a number; `-> list` or `-> number` in the signature says otherwise
+  (`np.sum(xs) -> number`, `np.linspace(a, b, n: int) -> list`). Python may return any sequence or 1-D
+  array for a list, and a float, int or NumPy scalar for a number.
+- **Whole numbers:** numbers are passed as Python floats. A parameter marked `n: int` is passed as an int
+  (and must be a whole number), for functions like `np.linspace` and `sp.jn_zeros` that insist on ints.
+- **Numbers from a module:** an attribute that is a number, like `np.pi`, is read when the program is
+  checked, as a plain number.
+- **Where it works:** anywhere an expression does: in functions (generic functions are checked per call,
+  so `f(x) = np.sin(x)` called with `2 m` is a unit error at that call), integrands, ODE right-hand sides
+  and loops. A Python function can't be differentiated symbolically (`d/dx np.sin(x)` is an error that
+  suggests a finite difference), can't be passed to a Fermium function as a function, and can't be
+  called inside `units natural`.
+- **Errors at run time:** an exception raised by the Python function stops the program with its message
+  and the line (*the Python function ml.fails failed: ValueError: x must be positive*), and so does a
+  result of the wrong kind (None, text, a complex number, a list where a number was expected, a table).
+- **Cost:** each call goes from compiled code to Python and back (about 10 µs on the test machine, plus the function's
+  own time), so a Python function in a tight loop is much slower than the same formula in Fermium.
+- **`fermium build`** refuses a program that uses Python: *fermium build can't compile a call into Python
+  (np.sqrt): an executable doesn't carry Python*. `fermium run`, the REPL and Jupyter all support it.
+- **Trust:** `use python` imports and runs Python code, exactly like `import` in a Python script, when the
+  program is checked (also by `fermium check` and the editor's language server).
+
+### Calling compiled Fermium from Python: `fermium.compile`
+
+```python
+import fermium
+from fermium import Q
+
+mod = fermium.compile("""
+g = 9.81 m/s²
+period(L [m]) = 2π √(L / g)
+double(x) = 2 x
+""")
+T = mod.period(1.0)          # a plain float is in SI units: 1.0 m
+print(T, T.unit)             # 2.00607 s  s
+print(mod.period(Q(50, "cm")).to("s"))
+print(mod.double(Q(3, "km")))    # 6000 m: generic functions are compiled for the units they get
+print(mod["g"])              # 9.81 m/s²  (also mod.g)
+```
+
+- **`fermium.compile(source)`** checks and compiles a program (a FermiumError, with the line, if it has
+  an error); **`fermium.load("file.fm")`** does the same for a file. The program's top level (prints,
+  variables) runs once, the first time a function is called or a variable is read, or when you call
+  `mod.run()`. Its output goes to `sys.stdout`, or to `out=`.
+- **Calling:** `mod.f(…)` calls the function `f`. Arguments are **plain numbers in SI units** (with the
+  dimension the parameter declares, or dimensionless if it declares none), `fermium.Q(value, "unit")` for
+  any other unit, or lists / NumPy arrays of either (a Fermium list).
+- **Generic functions** (`double(x) = 2 x`, D43) are compiled for the units and shapes of the arguments on
+  the first call with those units, like a call in a Fermium program, and the compiled code is reused after
+  that. A unit mistake is a FermiumError when the function is called: `mod.period(Q(1, "s"))` → *calling
+  period from Python with (time [s]): period expects L in m (length [m]), but got time [s]*.
+- **Results:** a number comes back as a `fermium.Quantity`, a Python float (holding the SI value) with a
+  `.unit` (the unit Fermium would print, like `'m/s²'`), `.value` (the number in that unit) and
+  `.to("unit")`. A list or a vector comes back as a `fermium.QuantityArray`, a NumPy array of SI values
+  with `.unit` and `.to()`. Arithmetic in Python gives plain floats and arrays, so a unit is never
+  carried along wrongly.
+- **Variables:** `mod["x"]` (or `mod.x`) reads a top-level variable of the program after it has run;
+  `mod.functions` and `mod.variables` list the names.
+- **Speed:** the function runs as compiled machine code; one call costs roughly 0.1 ms on top of the
+  function itself (the arguments are written into the program's memory and the code runs on a thread
+  with a large stack, as `fermium run` does). A loop-heavy function is much faster than the same loop in pure
+  Python: 11× for a Leibniz series with `(-1)^k` on the (shared) test machine; tests/test_python_interop.py
+  prints the measured ratio.
+- **Limits:** arguments are numbers and lists (not vectors, matrices, functions or text); results are
+  numbers, lists, vectors, matrices or booleans. The program is compiled like a REPL session: each new
+  argument signature compiles a small extra piece of code (tens of milliseconds).
+
+See DECISIONS.md D140–D142 for the design.
 
 ## 12. Symbols and ASCII spellings
 

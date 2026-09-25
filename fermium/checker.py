@@ -20,6 +20,7 @@ from .constants import all_constants
 from .natural import SI, make_system, canonical_const_name
 from .errors import FermiumError, Diagnostics
 from .importer import ImportMixin, ModuleRef
+from .pyinterop import PythonMixin, PyModRef
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
                     VOID, Ty, ComplexTy,
                     type_desc)
@@ -193,12 +194,13 @@ class CheckedModule:
         self.U = unifier
 
 
-class Checker(ImportMixin, C.DiffContext):
+class Checker(ImportMixin, PythonMixin, C.DiffContext):
     def __init__(self, diags=None, base_dir=".", repl=False, source_name="<program>"):
         self.diags = diags or Diagnostics()
         self.U = Unifier()
         self.base_dir = base_dir
         self.repl = repl
+        self.arena = repl         # top-level variables live in an arena of slots (REPL, Python API D142)
         self.tables = Tables()
         self.root = Scope(kind="root")
         for name, (val, unit, desc) in all_constants().items():
@@ -309,6 +311,15 @@ class Checker(ImportMixin, C.DiffContext):
                     msg = str(e.message)
                     if "isn't defined" in msg or "used before" in msg:
                         continue
+                    if "needs a list" in msg:
+                        # total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some
+                        # parameters are numbers), it is checked at each call instead (D142)
+                        try:
+                            self.instantiate(b, [I.IList([], ListTy(DExpr.fresh())) for _ in b.fdef.params],
+                                             b.fdef, cache=False)
+                        except FermiumError:
+                            pass
+                        continue
                     raise
                 finally:
                     self.new_funcs, self.new_lambdas = saved
@@ -330,7 +341,7 @@ class Checker(ImportMixin, C.DiffContext):
     # ============================================================ statements
     def new_sym(self, name, ty, ctx):
         storage = "local"
-        if ctx.is_main and self.repl and ctx.lam is None:
+        if ctx.is_main and (self.repl or self.arena) and ctx.lam is None:
             storage = "arena"
         sym = I.Sym(name, ty, storage, ctx.func)
         sym.nat = self.nat
@@ -1151,6 +1162,9 @@ class Checker(ImportMixin, C.DiffContext):
             return SolRef(b)
         if isinstance(b, ModuleRef):
             raise self.module_as_value(b, name, e)
+        if isinstance(b, PyModRef):
+            raise self.err(f"{name} is the Python module {b.module}, not a value; call its functions, like "
+                           f"{name}.f(x)", e)
         raise self.err(f"can't use {name} here", e)
 
     def _export_example(self, sym, system):
@@ -2161,6 +2175,9 @@ class Checker(ImportMixin, C.DiffContext):
         return I.ILoad(len(self.tables.loads) - 1, DataTy(info))
 
     def e_Field(self, e, ctx):
+        pref = self.py_ref_of(e.target, ctx)
+        if pref is not None:                          # np.pi (D140)
+            return self.python_value(pref, e, ctx)
         mod = self.module_of(e.target, ctx)
         if mod is not None:                   # mechanics.pendulum_period (D100)
             return self.module_member(mod, e, ctx)
@@ -2396,6 +2413,10 @@ class Checker(ImportMixin, C.DiffContext):
     # ------------------------------------------------------------ calls
     def e_Call(self, e, ctx):
         f = e.func
+        if isinstance(f, A.Field) and not f.paren:
+            pref = self.py_ref_of(f.target, ctx)
+            if pref is not None:                      # np.sinc(x): a Python function (D140)
+                return self.python_call(pref, e, ctx)
         if isinstance(f, A.Deriv) and isinstance(f.operand, A.Name) and \
                 getattr(ctx.scope.lookup(f.operand.name)[0], "is_pde", False):
             from .m3solve import pde_call            # ∂u/∂x(x, t) of a PDE solution (D83)

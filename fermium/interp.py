@@ -1542,6 +1542,16 @@ class Interpreter:
         rng.seed(st, args[0])
         return 0.0
 
+    def e_IPyCall(self, e, fr):
+        """A call into Python (D140): the same conversion code as the compiled fm_pycall callback."""
+        from .runtime.pycall import call, PyCallError
+        args = [self.eval(a, fr) for a in e.args]
+        try:
+            return call(self.rt.tables.pycalls[e.call_id], args, self.rt.base_dir)
+        except PyCallError as ex:
+            self.rt.error = str(ex)
+            raise FermiumRuntimeError(str(ex), self.line or None) from None
+
     def e_IBuiltin(self, e, fr):
         name = e.name
         if name in ("min_list", "max_list") and isinstance(e.args[0], I.ISolList) and e.args[0].what == "y":

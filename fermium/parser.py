@@ -223,6 +223,8 @@ class Parser:
             if end_line:
                 self.end_statement()
             return s
+        if t.kind == "NAME" and t.value == "use" and self.peek().kind == "NAME" and self.peek().value == "python":
+            return self.use_python_stmt(end_line)
         if t.kind == "NAME" and t.value == "analyze" and self._is_analyze():
             s = self.analyze_stmt()
             if end_line:
@@ -738,6 +740,93 @@ class Parser:
                 break
             self.next()
         return self.span(A.Import(module, is_path, None, names), t)
+
+    def use_python_stmt(self, end_line=True):
+        """use python numpy [as np] [: signatures]   (D140).  Signatures, one per line in an indented block
+        (or on the same line after ':', separated by ';'):  f(x [m], n: int) -> list [J]"""
+        t = self.next()
+        self.next()                                  # python
+        parts = [self.expect_name("the name of a Python module (like  use python numpy as np)").raw]
+        while self.at_op(".") and not self.tok.ws_before:
+            self.next()
+            parts.append(self.expect_name("the rest of the Python module's name (like scipy.special)").raw)
+        module = ".".join(parts)
+        alias = None
+        if self.tok.kind == "NAME" and self.tok.value == "as":
+            self.next()
+            alias = self.expect_name("a name after 'as' (like  use python numpy as np)").value
+        elif len(parts) > 1:
+            raise self.error(f"give the Python module {module} a short name with as",
+                             hint=f"write  use python {module} as {parts[-1][:2]}")
+        self.known.add(alias or module)
+        sigs = []
+        if self.at_op(":"):
+            self.next()
+            if self.tok.kind != "NEWLINE":
+                sigs.append(self.py_signature())
+                while self.at_op(";"):
+                    self.next()
+                    sigs.append(self.py_signature())
+            else:
+                self.next()
+                self.skip_newlines()
+                if self.tok.kind != "INDENT":
+                    raise self.error("expected the signatures of the Python functions, indented on the next lines",
+                                     hint="like\n    use python mylib as ml:\n        energy(m [kg], v [m/s]) -> [J]")
+                self.next()
+                while self.tok.kind not in ("DEDENT", "EOF"):
+                    sigs.append(self.py_signature())
+                    if self.tok.kind == "NEWLINE":
+                        self.next()
+                    elif self.tok.kind not in ("DEDENT", "EOF"):
+                        raise self.error("expected one signature per line" + self._found())
+                    self.skip_newlines()
+                if self.tok.kind == "DEDENT":
+                    self.next()
+                return self.span(A.UsePython(module, alias, sigs), t)
+        if end_line:
+            self.end_statement()
+        return self.span(A.UsePython(module, alias, sigs), t)
+
+    def py_signature(self):
+        """f(x [m], xs [s], n: int) -> list [J]   (the result part is optional)."""
+        nt = self.tok
+        if nt.kind not in ("NAME", "KW"):
+            raise self.error("expected a Python function's signature, like  energy(m [kg], v [m/s]) -> [J]" +
+                             self._found())
+        self.next()
+        self.expect_op("(", f"after {nt.raw} (write the signature like  {nt.raw}(x [m]) -> [J])")
+        params = []
+        while not self.at_op(")"):
+            pt = self.expect_name("a parameter name")
+            unit, is_int = None, False
+            if self.at_op("["):
+                unit = self.bracket_unit()
+            elif self.at_op(":"):
+                self.next()
+                kt = self.expect_name("int after ':' (a whole number passed to Python as an int)")
+                if kt.value != "int":
+                    raise self.error(f"a parameter can be marked  : int  (a whole number), not : {kt.raw}", kt,
+                                     hint="give a unit in brackets instead, like  x [m]")
+                is_int = True
+            params.append((pt.raw, unit, is_int))
+            if self.at_op(","):
+                self.next()
+            elif not self.at_op(")"):
+                raise self.error("expected ',' or ')' in the list of parameters" + self._found())
+        self.expect_op(")")
+        shape, runit = None, None
+        if self.at_op("-") and self.peek().kind == "OP" and self.peek().value == ">":
+            self.next()
+            self.next()
+            if self.tok.kind == "NAME" and self.tok.value in ("list", "number"):
+                shape = self.next().value
+            if self.at_op("["):
+                runit = self.bracket_unit()
+            elif shape is None:
+                raise self.error("expected the result's unit in brackets, or list / number, after ->" + self._found(),
+                                 hint=f"like  {nt.raw}(x [m]) -> [J]   or  -> list [m]")
+        return self.span(A.PySig(nt.raw, params, shape, runit), nt)
 
     def _is_analyze(self):
         """`analyze [title:] T depends on ...`: 'depends' follows on the same line (so `analyze` stays a name)."""
@@ -1425,10 +1514,13 @@ class Parser:
             elif self.at_op("[") and self.tok.ws_before and not isinstance(e, A.Num) and self._bracket_is_unit():
                 u = self.bracket_unit()
                 e = self.span(A.Quantity(e, u, bracket=True), t)
-            elif self.at_op(".") and self.peek().kind == "NAME" and not self.tok.ws_before:
+            elif self.at_op(".") and not self.tok.ws_before and (self.peek().kind == "NAME" or (
+                    self.peek().kind == "KW" and self.peek(2).kind == "OP" and self.peek(2).value == "("
+                    and not self.peek(2).ws_before)):      # np.sqrt(x): a Python function named like a keyword
                 self.next()
                 name = self.next()
                 e = self.span(A.Field(e, name.value), t)
+                e.raw = name.raw             # the spelling as written (np.pi, not np.π) for Python calls (D140)
             elif self.tok.kind == "PRIME":
                 p = self.next()
                 e = self.span(A.Prime(e, p.value), t)

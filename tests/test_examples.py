@@ -510,3 +510,23 @@ def test_pde_heat_waves_tunnelling():
     assert num(out, "total probability (Crank–Nicolson keeps it):") == pytest.approx(1, abs=1e-4)
     assert "animation saved to gallery/tunnelling.gif (40 frames)" in out
     assert os.path.exists(os.path.join(EXAMPLES, "gallery", "heat_pde.png"))
+
+
+def test_python_interop_example():
+    """Example 42 (use python, D140): SciPy's jn_zeros / j1 and a Python helper with declared units."""
+    import numpy as np
+    import scipy.special as sp
+    out = run_example("42_python_interop")
+    z1 = sp.jn_zeros(1, 1)[0]
+    assert num(out, "first zero of J1:") == pytest.approx(z1, rel=1e-7)
+    theta = math.asin(z1 * 550e-9 / (math.pi * 0.2e-3))
+    assert num(out, "first dark ring:") == pytest.approx(math.degrees(theta), rel=1e-4)
+    x = z1 / 2
+    assert num(out, "intensity halfway to the ring:") == pytest.approx((2 * sp.j1(x) / x) ** 2, rel=1e-5)
+    h, c, kb = 6.62607015e-34, 299792458.0, 1.380649e-23
+    B = 2 * h * c ** 2 / 500e-9 ** 5 / math.expm1(h * c / (500e-9 * kb * 5772))
+    assert num(out, "Planck at 500 nm (Python):") == pytest.approx(B, rel=1e-5)
+    assert num(out, "Planck at 500 nm (Fermium):") == pytest.approx(B, rel=1e-5)
+    lams = np.linspace(200e-9, 2000e-9, 1801)
+    peak = lams[np.argmax(2 * h * c ** 2 / lams ** 5 / np.expm1(h * c / (lams * kb * 5772)))]
+    assert num(out, "peak of the spectrum:") == pytest.approx(peak * 1e9, abs=0.05)

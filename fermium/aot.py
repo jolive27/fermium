@@ -164,6 +164,10 @@ def build(source: str, filename: str, output: str, diags: Diagnostics | None = N
                            f"(SciPy); use  fermium run  for this program", line,
                            hint="or, if the equation isn't stiff, leave out  using …  to use rk45")
     for line, what in getattr(t, "python_only", []):     # eigenvalue problems and PDEs (D82, D83)
+        if what.startswith("a call into Python"):          # use python (D140)
+            raise FermiumError(f"fermium build can't compile {what}: an executable doesn't carry Python; use  "
+                               f"fermium run  for this program", line,
+                               hint="or write the function in Fermium, so it compiles into the executable")
         raise FermiumError(f"fermium build can't compile {what} yet: it runs in Python (NumPy/SciPy); use  "
                            f"fermium run  for this program", line)
     finalize_tables(t, ck.U)
