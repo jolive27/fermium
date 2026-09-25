@@ -229,6 +229,33 @@ def _start(f, t0, y0, tname):
     return k0
 
 
+def _first_step(f, t0, y, k0, dirn, aspan, rtol):
+    """Mirrors ModuleGen._emit_first_step (Hairer–Wanner first step, gauntlet A5)."""
+    d0 = d1 = cnt = 0.0
+    for yj, fj in zip(y, k0):
+        if abs(yj) > 0:
+            sc = rtol * abs(yj)
+            d0 += (abs(yj) / sc) ** 2
+            d1 += (fj / sc) ** 2
+            cnt += 1.0
+    hv = aspan * 1e-4
+    if cnt > 0 and 0 < d1 < math.inf:
+        h0 = min(0.01 * math.sqrt(d0 / d1), aspan)
+        k1 = f(t0 + dirn * h0, [yj + (dirn * h0) * fj for yj, fj in zip(y, k0)])
+        d2 = 0.0
+        for yj, fj, gj in zip(y, k0, k1):
+            if abs(yj) > 0:
+                d2 += ((gj - fj) / (rtol * abs(yj))) ** 2
+        dd1 = math.sqrt(d1 / cnt)
+        dd2 = math.sqrt(d2 / cnt) / h0
+        m = max(dd1, dd2) if dd2 == dd2 else dd2
+        h1 = fpow(0.01 / m, 0.2) if m > 1e-15 else max(1e-6, h0 * 1e-3)
+        h = min(min(100 * h0, h1), aspan)
+        if h == h:
+            hv = h
+    return hv
+
+
 def _illinois(g, a, ga, c, gc):
     """A sign change of g between a and c (ga, gc of opposite signs): Illinois to full precision.
     Mirrors the loop in ModuleGen._k_event_locate."""
@@ -388,10 +415,10 @@ def dp45(f, y0, t0, t1, rtol, ev=None, tname=-1, evtext=-1, tdep=False):
     dirn = 1.0 if span > 0 else -1.0       # towards smaller t for a decreasing range (D39)
     aspan = abs(span)
     t = t0
-    hv = aspan * 1e-4
     count = 0
     k = [None] * 7
     k[0] = _start(f, t0, y, tname)
+    hv = _first_step(f, t0, y, k[0], dirn, aspan, rtol)
     sol.push(t0, y, k[0])
     event = _Event(ev, t0, y) if ev is not None else None
     rej, first_rej = 0, 0.0

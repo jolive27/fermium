@@ -916,6 +916,52 @@ class ModuleGen:
         b.ret(sp)
         return fn
 
+    def _emit_first_step(self, b, lp, f, env, n, y, k, tmp, t0, dirn, aspan, rtol, hv):
+        """The first trial step (Hairer–Wanner, gauntlet A5): about 1% of the time over which the solution
+        changes by itself (|y|/|y'|), refined by a probe of y''; the old 10⁻⁴ of the range when all y are 0.
+        Mirrored by _first_step in interp.py."""
+        fabs = self.intrinsic("fabs")
+        sq = self.intrinsic("sqrt")
+        d0, d1, cnt = b.alloca(F64), b.alloca(F64), b.alloca(F64)
+        for v in (d0, d1, cnt):
+            b.store(f64(0), v)
+        with lp.range(i64(0), n) as j:
+            yj = b.call(fabs, [b.load(b.gep(y, [j]))])
+            with b.if_then(b.fcmp_ordered(">", yj, f64(0))):
+                sc = b.fmul(rtol, yj)
+                r0 = b.fdiv(yj, sc)
+                r1 = b.fdiv(b.load(b.gep(k[0], [j])), sc)
+                b.store(b.fadd(b.load(d0), b.fmul(r0, r0)), d0)
+                b.store(b.fadd(b.load(d1), b.fmul(r1, r1)), d1)
+                b.store(b.fadd(b.load(cnt), f64(1)), cnt)
+        b.store(b.fmul(aspan, f64(1e-4)), hv)
+        ok = b.and_(b.fcmp_ordered(">", b.load(cnt), f64(0)), b.fcmp_ordered(">", b.load(d1), f64(0)))
+        ok = b.and_(ok, b.fcmp_ordered("<", b.load(d1), f64(math.inf)))
+        with b.if_then(ok):
+            h0 = b.fmul(f64(0.01), b.call(sq, [b.fdiv(b.load(d0), b.load(d1))]))
+            h0 = b.call(self.intrinsic("minnum"), [h0, aspan])
+            with lp.range(i64(0), n) as j:
+                b.store(b.fadd(b.load(b.gep(y, [j])), b.fmul(b.fmul(dirn, h0), b.load(b.gep(k[0], [j])))),
+                        b.gep(tmp, [j]))
+            b.call(f, [b.fadd(t0, b.fmul(dirn, h0)), tmp, k[1], env])
+            d2 = b.alloca(F64)
+            b.store(f64(0), d2)
+            with lp.range(i64(0), n) as j:
+                yj = b.call(fabs, [b.load(b.gep(y, [j]))])
+                with b.if_then(b.fcmp_ordered(">", yj, f64(0))):
+                    r2 = b.fdiv(b.fsub(b.load(b.gep(k[1], [j])), b.load(b.gep(k[0], [j]))), b.fmul(rtol, yj))
+                    b.store(b.fadd(b.load(d2), b.fmul(r2, r2)), d2)
+            dd1 = b.call(sq, [b.fdiv(b.load(d1), b.load(cnt))])
+            dd2 = b.fdiv(b.call(sq, [b.fdiv(b.load(d2), b.load(cnt))]), h0)
+            m = b.call(self.intrinsic("maxnum"), [dd1, dd2])
+            h1 = b.select(b.fcmp_ordered(">", m, f64(1e-15)),
+                          b.call(self.intrinsic("pow"), [b.fdiv(f64(0.01), m), f64(0.2)]),
+                          b.call(self.intrinsic("maxnum"), [f64(1e-6), b.fmul(h0, f64(1e-3))]))
+            h = b.call(self.intrinsic("minnum"), [b.fmul(f64(100), h0), h1])
+            h = b.call(self.intrinsic("minnum"), [h, aspan])
+            with b.if_then(b.fcmp_ordered("==", h, h)):       # not NaN (a NaN probe keeps the default)
+                b.store(h, hv)
+
     def _k_dp45(self):
         push = self.kernel("fm_sol_push")
         fn = self._new_fn("fm_dp45", SOLP, [ODE_FN.as_pointer(), F64P, I64, F64P, F64, F64, F64,
@@ -960,6 +1006,7 @@ class ModuleGen:
         b.store(i64(0), nsteps)
         b.call(f, [t0, y, k[0], env])
         self._emit_nan_check(b, lp, n, k[0], t0, tname)
+        self._emit_first_step(b, lp, f, env, n, y, k, tmp, t0, dirn, aspan, rtol, hv)
         b.call(push, [sp, t0, y, k[0]])
         has_ev = b.icmp_unsigned("!=", b.ptrtoint(ev, I64), i64(0))
         evsgn = b.alloca(F64)

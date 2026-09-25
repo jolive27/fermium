@@ -971,6 +971,16 @@ class Checker(C.DiffContext):
                     raise self.err(f"{sym.name} can't be used inside this integral/equation (only numbers, vectors "
                                    f"and matrices can be captured from a function)", node)
                 lam.captures.append(sym)
+                # an enclosing integrand / equation must capture it too, to pass it on (gauntlet E9)
+                p = getattr(ctx, "parent", None)
+                while p is not None and getattr(p, "lam", None) is not None:
+                    pl = p.lam
+                    if sym in pl.locals or sym in pl.params or sym in pl.state or sym in pl.param_syms \
+                            or sym in pl.col_syms:
+                        break
+                    if sym not in pl.captures:
+                        pl.captures.append(sym)
+                    p = getattr(p, "parent", None)
             return self._ivar(sym)
         if sym.func is not ctx.func and sym.storage == "local":
             if self._is_main_sym(sym):
