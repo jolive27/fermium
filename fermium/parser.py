@@ -42,6 +42,12 @@ VEC_CALC_WORDS ={"grad": "grad", "div": "div", "curl": "curl", "laplacian": "lap
 KEYWORD_SPELLED = {"integral": "∫", "partial": "∂", "sqrt": "√", "cbrt": "∛", "nabla": "∇"}
 
 
+UNIT_WORDS = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
+              "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
+              "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals", "u": "atomic mass units",
+              "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
+
+
 class Parser:
     def __init__(self, tokens: list[Token], diags: Diagnostics | None = None, known=None):
         self.toks = tokens
@@ -1536,11 +1542,7 @@ class Parser:
         from .units import lookup_unit, dim_name
         num = self._num_text(q)
         u = lookup_unit(f.name)
-        words = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
-                 "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
-                 "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals", "u": "atomic mass units",
-                 "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
-        what = words.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
         whose = f"the {f.name} from 'where'" if where else f"your variable {f.name}"
         self._drop_warnings_between(f.line, q.col or 0, max(self.tok.col or 0, f.col or 0) if
                                     self.tok.line == f.line else 10 ** 9)
@@ -1548,6 +1550,31 @@ class Parser:
                          f"but {f.name} is also {whose}",
                          tok=next((t for t in self.toks if t.line == f.line and t.col == f.col), None),
                          hint=f"write  {num}*{f.name}  for {num} × {whose}, or  {num} [{f.name}]  for the unit")
+
+    def _list_unit_collision(self, open_tok):
+        """D7 rule 5 for list and matrix literals (red team 5 #5, D222): `[1, 2, 3] m` when m is also your
+        variable.  D192 keeps the product reading (as for matrices, D29), but not silently: standing alone it
+        warns, and combined with other factors (`[1, 2] m v`) it is an error that asks which you mean."""
+        from .units import lookup_unit, dim_name
+        f = self.tok
+        j = self.toks.index(open_tok)
+        text = "".join((" " if tk.ws_before and k > j else "") + tk.raw for k, tk in
+                       enumerate(self.toks[j:self.i], start=j))
+        if len(text) > 24:
+            text = "[…]"
+        nxt = self.peek()
+        alone = nxt.kind in ("NEWLINE", "EOF", "KW") or (nxt.kind == "OP" and nxt.value in
+                                                          (",", ")", "]", "}", "+", "-", "=", "==", "<", ">",
+                                                           "<=", ">=", "!=", ":", "+-", "±"))
+        u = lookup_unit(f.value)
+        what = UNIT_WORDS.get(f.value) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
+        if not alone:
+            raise self.error(f"'{text} {f.raw}' is ambiguous: after a list, {f.raw} could be the unit ({what}), "
+                             f"but {f.raw} is also your variable {f.raw}", tok=f,
+                             hint=f"write  {text}*{f.raw}  for your variable, or  {text} [{f.raw}]  for the unit")
+        self.diags.warn(f"'{text} {f.raw}' multiplies by your variable {f.raw}, not the unit {f.raw} ({what})",
+                        tok=f, hint=f"that's fine if you meant your variable (write {text}*{f.raw} to say so); "
+                                    f"for the unit write {text} [{f.raw}]")
 
     def _warn_bare_unit(self, e):
         """Spec §3.4.2: a bare unit after a number that is also a variable name gets a warning (once per name)."""
@@ -1870,6 +1897,9 @@ class Parser:
                     # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
                     u = self.unit_expr(explicit=False)
                     lst = self.span(A.Quantity(lst, u), t)
+                elif items and self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and \
+                        self.tok.value in self.known and not self._is_call_like():
+                    self._list_unit_collision(t)
                 return lst
             if t.value == "<":
                 return self.vector_literal()

@@ -1243,10 +1243,24 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         private = {p.id for p in par["private"]} | {isym.id}
         reductions, written, red_ops = [], [], set()
 
+        # where each statement of the body starts, so an error points at the statement, not at column 1
+        # (red team 5 #6)
+        starts = {}
+
+        def note(ss):
+            for st in ss if isinstance(ss, list) else ():
+                ln, col = getattr(st, "line", None), getattr(st, "col", None)
+                if ln and col and ln not in starts:
+                    starts[ln] = (col, getattr(st, "length", None) or 1)
+                for k in ("body", "then", "other"):
+                    note(getattr(st, k, None))
+        note(getattr(node, "body", None))
+
         def err(msg, line=None, hint=None):
             e = self.err(msg, node, hint=hint)
             if line and line != getattr(node, "line", None):
-                e.line, e.col, e.length = line, 1, 1
+                col, length = starts.get(line, (1, 1))
+                e.line, e.col, e.length = line, col, length
             return e
 
         def is_i(ix):
@@ -1556,6 +1570,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.direct = isinstance(e.value, A.Num)
         if u.affine and isinstance(e.value, A.Num):
             r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
+            r.abs_at = e                             # where it is written (the warning points there, #9)
         return r
 
     def lookup(self, name, ctx, node):
@@ -2270,8 +2285,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             return
         u = a.hint
         x, k = format_number(lit[0]), format_number(float(lit[0]) * u.factor + u.offset)
+        at = getattr(a, "abs_at", None) or e      # the `10 °C` itself, not the start of the formula (red team 5 #9)
         self.diags.warn(f"{x} {u.name} is an absolute temperature, so it enters this formula as {k} K",
-                        line=e.line, col=e.col,
+                        line=at.line or e.line, col=at.col or e.col, length=getattr(at, "length", None) or 1,
                         hint=f"for a temperature change (ΔT in Q = m c ΔT) write {format_number(lit[0] * u.factor, 3)} "
                              f"K; for an absolute temperature (p V = n R T) write {k} K to make it clear")
 

@@ -142,7 +142,6 @@ def test_4_derivative_of_a_function_value_is_not_silently_zero():
 
 # ---- #5: [1, 2, 3] m with your own m is silently a mass ---------------------------------------------------
 
-@rt5(5)
 def test_5_list_unit_colliding_with_a_variable_is_not_silent():
     try:
         out, err = run_err("m = 2 kg\nxs = [1, 2, 3] m\nprint xs")
@@ -155,7 +154,6 @@ def test_5_list_unit_colliding_with_a_variable_is_not_silent():
 
 # ---- #6: parallel for errors point at column 1 --------------------------------------------------------------
 
-@rt5(6)
 def test_6_parallel_for_errors_point_at_the_statement():
     from fermium.lsp import analyze
     an = analyze("xs = zeros(3)\nparallel for i from 1 to 3\n    print i\n")
@@ -165,7 +163,6 @@ def test_6_parallel_for_errors_point_at_the_statement():
 
 # ---- #7: language-server columns are code points, not UTF-16 -----------------------------------------------
 
-@rt5(7)
 def test_7_lsp_ranges_are_utf16_after_the_imaginary_unit(tmp_path):
     pytest.importorskip("pygls")
     sys.path.insert(0, os.path.join(ROOT, "tests"))
@@ -191,7 +188,6 @@ def test_7_lsp_ranges_are_utf16_after_the_imaginary_unit(tmp_path):
 
 # ---- #8: hover on a qualified module member ------------------------------------------------------------------
 
-@rt5(8)
 def test_8_hover_on_module_member():
     from fermium.lsp import analyze, hover_text
     src = "import mechanics\nT = mechanics.pendulum_period(1 m, 9.81 m/s^2)\n"
@@ -201,7 +197,6 @@ def test_8_hover_on_module_member():
 
 # ---- #9: the °C-in-a-product warning points at the start of the expression ----------------------------------
 
-@rt5(9)
 def test_9_celsius_product_warning_points_at_the_reading():
     from fermium.lsp import analyze
     src = "c_w = 4186 J/(kg K)\nQ = c_w * 1 kg * 10 degC\n"
