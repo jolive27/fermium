@@ -14,7 +14,7 @@ LATEX = {
     "infty": "∞", "inf": "∞", "deg": "°", "degree": "°", "celsius": "°C", "degC": "°C",
     "cdot": "·", "times": "×", "le": "≤", "leq": "≤", "ge": "≥", "geq": "≥", "ne": "≠", "neq": "≠",
     "approx": "≈", "AA": "Å", "angstrom": "Å", "sun": "☉", "odot": "☉", "Msun": "M☉", "half": "½",
-    "micro": "μ", "prime": "′",
+    "micro": "μ", "prime": "′", "transpose": "ᵀ",
     # superscripts and subscripts
     "^0": "⁰", "^1": "¹", "^2": "²", "^3": "³", "^4": "⁴", "^5": "⁵", "^6": "⁶", "^7": "⁷", "^8": "⁸",
     "^9": "⁹", "^-": "⁻", "^-1": "⁻¹", "^-2": "⁻²", "^-3": "⁻³",

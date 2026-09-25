@@ -288,6 +288,12 @@ def test_vectors_and_matrices_captured_by_an_integral():
                   "print f(2)") == "20 m²"
 
 
+def test_vector_captured_by_an_ode_inside_a_function():
+    src = ("f(k) =\n    F = <k, 2 k>\n    solve x'' = F · <1, 1> / (1 kg)\n      with x(0) = 0 m, x'(0) = 0 m/s\n"
+           "      for t from 0 s to 1 s\n    return x(1 s)\nprint f(1 N) to 6 digits")
+    assert run(src) == interp(src) == "1.50000 m"
+
+
 def test_fmt_ascii_warns_about_transpose():
     from fermium.fmt import format_source
     from fermium.errors import Diagnostics

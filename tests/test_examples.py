@@ -343,6 +343,26 @@ def test_rocket():
     assert num(out, "speed at burnout with gravity:") == pytest.approx(dv - 9.80665 * 168 / 1000, abs=0.01)
 
 
+def test_orbit_3d():
+    """A vector ODE in 3-D: energy and angular momentum r × v are conserved; checked against
+    closed-form Kepler results for the same initial conditions."""
+    out = run_example("26_orbit_3d")
+    gm = 6.6743e-11 * 1.98841e30          # G M☉ as the example uses them (CODATA 2018, IAU nominal)
+    au = 1.495978707e11
+
+    e0 = 0.5 * (25e3**2 + 12e3**2) - gm / au
+    lvec = [0.0, -au * 12e3, au * 25e3]          # r0 × v0
+    assert num(out, "energy at the start:") == pytest.approx(e0 / 1e6, rel=1e-5)
+    assert num(out, "relative energy drift after 3 years:") < 1e-6
+    assert num(out, "relative change in L after 3 years:") < 1e-6
+    shown = numbers(line_with(out, "angular momentum at the start:").split(":", 1)[1])
+    assert shown[:3] == pytest.approx(lvec, rel=1e-5, abs=1.0)
+    assert num(out, "tilt of the orbit:") == pytest.approx(math.degrees(math.atan2(12, 25)), rel=1e-5)
+    a = -gm / (2 * e0)
+    assert num(out, "semi-major axis:") == pytest.approx(a / au, rel=1e-5)
+    assert num(out, "period:") == pytest.approx(2 * math.pi * math.sqrt(a**3 / gm) / (365.25 * 86400), rel=1e-5)
+
+
 # --- Rosetta page: the same programs in Fermium, Python and Julia ---------------------------
 
 ROSETTA_NAMES = sorted(os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(ROSETTA, "*.fm")))
