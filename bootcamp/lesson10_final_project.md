@@ -273,7 +273,7 @@ print "distance after 0.25 yr:", r(0.25 yr) in AU to 3 digits
 
 <!-- output -->
 ```
-closest approach (solve): -0.291056 AU
+closest approach (solve): -0.29105 AU
 distance after 0.25 yr: 0.302 AU
 ```
 

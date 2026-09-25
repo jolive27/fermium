@@ -109,7 +109,7 @@ plot x vs t to "driven.png"
 
 <!-- output -->
 ```
-largest amplitude: 0.249985 m
+largest amplitude: 0.249987 m
 theory at resonance, F0 / (b omega): 0.25 m
 plot saved to driven.png
 ```

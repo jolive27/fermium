@@ -91,6 +91,22 @@ def test_doctor(capsys):
     assert cli.main(["doctor"]) == 0
 
 
+def test_doctor_reports_c_compiler(monkeypatch, capsys):
+    monkeypatch.setattr("fermium.aot.find_cc", lambda: "/usr/bin/cc")
+    assert doctor() == 0
+    out = capsys.readouterr().out
+    assert "C compiler" in out and "/usr/bin/cc" in out and "fermium build" in out
+
+
+def test_doctor_missing_c_compiler_is_not_a_problem(monkeypatch, capsys):
+    monkeypatch.setattr("fermium.aot.find_cc", lambda: None)
+    assert doctor() == 0          # only `fermium build` needs it, so it isn't counted as a problem
+    out = capsys.readouterr().out
+    assert "no C compiler" in out and "only needed for  fermium build" in out
+    assert "xcode-select --install" in out
+    assert "Everything looks good" in out
+
+
 def test_repl_subcommand(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("print 2 m\n"))
     assert cli.main(["repl"]) == 0
