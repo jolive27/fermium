@@ -1,0 +1,40 @@
+# 18 — Fitting lab data: the half-life of barium-137m
+#
+# A classic undergraduate lab: a Cs-137 "isotope generator" is washed with an
+# acid that carries away a little barium-137m, an excited nucleus that decays
+# by emitting a 662 keV gamma ray with a half-life of about 2.55 minutes.
+# A Geiger counter records the count rate every 30 seconds.
+#
+# The data file data/ba137m_decay.csv has units in its header:
+#     t [s], rate [1/s]
+# Fermium reads the header when it compiles the program, so it knows `t` is a
+# time and `rate` a rate before anything runs.
+#
+# The model: an exponentially decaying source plus a constant background B
+# (cosmic rays, radioactivity in the building):
+#
+#     rate = R0 exp(−ln 2 · t / t½) + B
+#
+# `fit` adjusts R0, t½ and B (the names in the model that aren't columns) to
+# minimise the squared differences, and reports them with units.
+# (The data are simulated with Poisson noise, using t½ = 153.12 s.)
+
+data = load "data/ba137m_decay.csv"
+print "number of measurements:", len(data.t)
+print "first and last rate:", data.rate[1], data.rate[end]
+
+fit rate = R0 exp(-ln(2) t / t_half) + B to data with R0 = 80 s⁻¹, t_half = 100 s, B = 1 s⁻¹
+
+print "half-life:", t_half in min, "  (accepted value 2.552 min)"
+print "background:", B
+
+# Quick look without a fit: log-linear slope between two early points
+λ_rough = ln(data.rate[1] / data.rate[5]) / (data.t[5] - data.t[1])
+print "rough half-life from two points:", ln(2) / λ_rough to 3 digits
+
+# Compare the model with the data at a few times
+model(tt) = R0 exp(-ln(2) tt / t_half) + B
+for i in [1, 10, 20, 40]
+    print "t =", data.t[i], "  measured", data.rate[i], "  model", model(data.t[i]) to 3 digits
+
+plot data.rate vs data.t, model(data.t) vs data.t to "gallery/ba137m_fit.png"

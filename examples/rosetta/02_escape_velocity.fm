@@ -1,0 +1,11 @@
+# Escape velocity, and the work needed to escape as an integral to infinity
+v_esc(M, R) = √(2 G M / R)
+
+print "Earth:", v_esc(M_earth, R_earth) in km/s to 4 digits
+print "Moon:", v_esc(7.342e22 kg, 1737.4 km) in km/s to 4 digits
+print "Sun:", v_esc(M_sun, R_sun) in km/s to 4 digits
+
+F(r) = G M_earth (1 kg) / r²
+W_esc = ∫ F(r) dr from R_earth to ∞
+print "work per kg:", W_esc in MJ to 4 digits
+print "Schwarzschild radius of the Sun:", 2 G M_sun / c² in km to 4 digits

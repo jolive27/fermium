@@ -1,0 +1,51 @@
+# Quantum 03 — Tunnelling through a rectangular barrier
+#
+# (Griffiths Problem 2.33.)  Electrons of energy E hit a rectangular barrier
+# of height V₀ = 5.00 eV and width a = 0.500 nm (V = V₀ for 0 < x < a, 0
+# elsewhere).  Find the transmission coefficient T(E) by integrating the
+# Schrödinger equation numerically, and compare with the textbook result
+#
+#     E < V₀:  T = 1 / (1 + V₀² sinh²(κa) / (4E(V₀ − E))),   κ = √(2m(V₀−E))/ħ
+#     E > V₀:  T = 1 / (1 + V₀² sin²(k'a) / (4E(E − V₀))),   k' = √(2m(E−V₀))/ħ
+#
+# Method: on the far side only the transmitted wave ψ = exp(ik(x−a)) exists.
+# Start there with that value and slope and integrate backwards, through the
+# barrier, to its left edge x = 0.  There ψ = A e^{ikx} + B e^{−ikx}
+# (continuous with ψ, ψ' at x = 0) and the incoming amplitude is A = ½(ψ + ψ'/(ik)), so T = 1/|A|².
+#
+# ψ is complex: the solve carries its real and imaginary parts as two state slots.
+# We integrate in the distance s = a − x from the right edge (d²/ds² = d²/dx²,
+# d/ds = −d/dx), so the start is where the transmitted wave is known.
+
+V0 = 5.00 eV
+a = 0.500 nm
+
+# The solve stops exactly at x = 0: carrying it on into the free region puts the
+# step in V inside the range, and then the adaptive solver loses accuracy
+# (see FRICTION.md).  The ends are included so the last stage still sees V₀.
+V(x) = if x >= 0 nm and x <= a then V0 else 0 eV
+
+transmission(E) =
+    k = √(2 m_e E) / ħ
+    # on the far side ψ = e^{ik(x−a)}: ψ = 1 and dψ/dx = ik, so dψ/ds = −ik
+    solve ψ'' = (2 m_e / ħ²) (V(a - s) - E) ψ
+      with ψ(0 nm) = 1 + 0i, ψ'(0 nm) = -1i k
+      for s from 0 nm to a tolerance 1e-12
+    # at x = 0: the incoming amplitude A = ½ (ψ + (dψ/dx)/(ik)), and dψ/dx = −ψ'(s)
+    A = ½ (ψ(a) - ψ'(a) / (1i k))
+    return 1 / |A|²
+
+exact(E) =
+    if E < V0
+        κ = √(2 m_e (V0 - E)) / ħ
+        return 1 / (1 + V0² sinh(κ a)² / (4 E (V0 - E)))
+    else
+        k2 = √(2 m_e (E - V0)) / ħ
+        return 1 / (1 + V0² sin(k2 a)² / (4 E (E - V0)))
+
+for E in [0.50 eV, 1.00 eV, 2.00 eV, 3.00 eV, 4.00 eV, 4.90 eV, 5.50 eV, 7.00 eV, 10.0 eV]
+    print "E =", E, " T_numeric =", transmission(E) to 10 digits, " T_exact =", exact(E) to 10 digits
+
+# Above the barrier T = 1 when a whole number of half-wavelengths fits: k'a = π
+E_res = V0 + π² ħ² / (2 m_e a²)
+print "resonance E =", E_res in eV to 10 digits, " T_numeric =", transmission(E_res) to 10 digits

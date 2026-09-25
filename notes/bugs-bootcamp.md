@@ -1,0 +1,297 @@
+# Bugs and confusing behaviour found while writing the bootcamp
+
+**Status (bootcamp agent, re-checked at the end):** B1–B14 were reported fixed by the compiler owner; I re-ran the repros and B1, B2, B3, B4, B5, B6, B7, B8, B9 (partly: `pritn` and `furlongs` are fixed, but `print foo(3)` now hints "did you mean floor?" and `omega = 2; print omegat` still gives the generic `omegat = 1.0 m` hint), B10 (line numbers, `(` errors, reserved words), B11, B12, B13 and B14 now behave as expected. **Still open:** B15 (Ctrl+C), B16, B17 (`%` hint), B18 (`20 m/s / g` still silently divides by grams: prints `20 m/(s g)`, no warning), B19, B20, B21, B22, B23, B24, B25, B26, B27, B28, B29.
+
+Written by the bootcamp agent. Each entry: minimal repro, expected, actual. Workarounds used in the lessons are noted.
+
+## B1. `x^2 L` : a number in an exponent grabs the following name as a unit (ASCII spelling breaks)
+
+```
+L = 1.20 m
+T = 2.21 s
+print 4 pi^2 L / T^2
+```
+- **Expected:** `9.70 m/s²` — the same as `4π² L / T²` (spec §3.4.3: the ASCII form is first-class).
+- **Actual:**
+```
+e.fm, line 3: an exponent must be a plain number, but this is a quantity with units [m³ s⁴ A²/kg²]
+    print 4 pi^2 L / T^2
+               ^^^^^^^^^
+```
+  `^2 L / T^2` is read as `^(2 litres / tesla^2)`. Same for `v^2 m` (→ 2 metres) and `pi^2 L`. `x^2 k` works only because `k` is not a unit.
+- **Suggested fix:** a number directly after `^` should never take a unit (the exponent is a bare number; `x^2 L` should be `x² · L`, as DECISIONS D8 says for `x^2y`).
+- **Workaround in lessons:** write `4 pi^2 * L / T^2` or use `²`.
+
+## B2. "unit after number" warning fires once per name, on the harmless line, and not on the dangerous one
+
+```
+m = 2 kg
+v = 3 m/s
+E = 0.5 m v^2
+print E
+```
+- **Actual:** one warning on line 2 (`3 m/s`, which obviously means metres per second), then **no warning** on line 3, where `0.5 m v^2` silently means 0.5 metres × v² and prints `4.5 m³/s²`.
+- **Expected:** at least warn on line 3 (the case that actually changes meaning). Ideally don't warn for `3 m/s` at all: `m/s` is unambiguous. Every beginner will define `m = ... kg` and then write speeds in m/s, so the current warning trains them to ignore warnings.
+- **Workaround in lessons:** teach `½ m v²` / `0.5 * m * v^2`, and the gotcha explicitly.
+
+## B3. `plot f(x) vs x from a to b` fails unless `x` already has a value (docs/reference.md §11 form)
+
+```
+f(x) = 50 N/m * x
+plot f(x) vs x from 0 m to 1 m to "f.png"
+```
+- **Expected:** a plot of f over 0–1 m (reference.md §11 lists this form).
+- **Actual:** `line 2: x isn't defined` (caret on the `x` inside `f(x)`). Also fails for `plot sin(x) vs x from 0 to 6`. Works only if a variable `x` was defined earlier (`x = 1`), which it shouldn't need.
+- **Workaround in lessons:** `xs = linspace(0 m, 1 m, 100)` then `plot f(xs) vs xs`.
+
+## B4. The unit Fermium prints can't always be typed back in: `1/s`
+
+```
+print 0.1 1/s
+```
+- **Actual:** `line 1: s isn't defined` / hint `s is a unit; units go right after a number`. But Fermium itself prints angular frequencies as `10 1/s` (DECISIONS D11), so a beginner copying the output back gets an error. `0.1 / s` gives the same error.
+- **Expected:** `0.1 1/s` (or at least `0.1 /s`) accepted, or the hint says "write `0.1 s^-1`".
+- **Workaround in lessons:** `s^-1`.
+
+(B1 addendum: the REPL's own `:help` text says `(or ASCII: g = 4 pi^2 L / T^2)`, which is exactly the line that fails.)
+
+## B5. REPL runs a block after its first indented line, so multi-line blocks and `else` don't work
+
+Typed into `fermium` (the REPL):
+```
+fm> for i from 1 to 3
+...     print i
+1
+2
+3
+fm>     print i^2
+line 1: this line is indented but isn't inside a block
+```
+and
+```
+fm> if x > 2
+...     print "big"
+fm> else
+line 1: didn't expect 'else' here
+```
+- **Expected:** like Python, keep reading `...` lines until an empty line, then run the whole block.
+- **Workaround in lessons:** lessons put loops/ifs in `.fm` files; the REPL is used for one-liners only.
+
+(B2 addendum: `E = 0.5 m v^2 where m = 2 kg, v = 3 m/s` silently prints `4.5 m³/s²` with **no warning at all** — the `where` variable `m` isn't known yet when the unit rule runs.)
+
+## B6. A Python warning leaks out of `fit` when no starting guesses are given
+
+With `bootcamp/data/decay.csv` (header `t [min], counts`):
+```
+d = load "data/decay.csv"
+fit counts = N0 exp(-t / tau) to d
+```
+- **Actual:** the fit is right, but first prints
+```
+/home/user/fermium/fermium/runtime/fitting.py:16: RuntimeWarning: overflow encountered in dot
+  v = float(np.dot(r, r))
+```
+- **Expected:** no Python internals on screen (spec: no tracebacks/Python noise for users). Suppress with `np.errstate(over="ignore")` in the powers-of-ten scan.
+- **Workaround in lessons:** give starting guesses: `... to d with N0 = 1000, tau = 10 min`.
+- Minor: τ is reported as `1206 s` although the column is in minutes; `min` would be friendlier.
+
+## B7. `round` and `floor` print with decimals
+
+```
+print round(2.567), floor(2.7)
+```
+- **Actual:** `3.000 2.0`
+- **Expected:** `3 2` — rounding to a whole number and then printing `3.000` confuses beginners (it looks like it didn't round). Similarly `factorial`-style integer results print as `3.6288×10⁶` instead of `3628800` (`fact(n) = if n <= 1 then 1 else n * fact(n - 1); print fact(10)`).
+
+## B8. `%` is listed as a unit (reference.md §15) but is rejected
+
+```
+x = 5 %
+```
+- **Actual:** `line 1: unexpected character '%' (Percent Sign)`.
+- **Expected:** 0.05 (or remove `%` from the reference).
+
+## B9. "isn't defined" hint is unhelpful for typos, unknown units and functions
+
+- `pritn 5` → `pritn isn't defined` / `hint: give it a value first, e.g.  pritn = 1.0 m`. Expected: "did you mean print?".
+- `print 2 furlongs` → hint suggests `furlongs = 1.0 m`. Expected: "furlongs isn't a unit Fermium knows" (it's right after a number, so it was surely meant as a unit).
+- `print foo(3)` → hint suggests `foo = 1.0 m`; for a call it should suggest defining a function `foo(x) = ...`.
+- `omega = 2` then `print omegat` (or `ωt`) → no "did you mean ω t?" hint, although DECISIONS D9 says the error suggests it (it works for `LT`).
+
+## B10. Small oddities (low priority)
+
+- `print 3 m m` prints `3 m m` (not `3 m²`).
+- `print 3.0.1` prints `0.30` (typo silently read as 3.0 × .1).
+- Runtime errors have no line number: `xs = [1,2,3]` / `print xs[4]` → `index 4 is out of range: ...` (compile errors do have `file, line N:`). Same for `these two lists have different lengths (3 and 2)`.
+- `print (2 + 3` reports the error at `line 2` (a line that doesn't exist in a 1-line file) with an empty source line.
+- `print integral x^2 dx` prints `∫dx(x) = 0.333333333333 x³` (odd name, 12 digits); `print d/dx (x^2)` prints `d/dx(...)(x) = 2x`.
+- `print sqrt(-1)` prints `NaN` and `print 1/0` prints `∞` with no error or warning.
+- The warning for `2 g h` says "the unit g (metres, grams, ...)" — "metres" is wrong for g.
+- `vs`, `step`, `to`, `from`, `in`, `with`, `where`, `fit`, `load`, `plot`, `solve` are reserved words; `vs = [3.0 m/s, 4.0 m/s]` gives just `didn't expect 'vs' here` — a hint "vs is a reserved word, pick another name" would help.
+- REPL `:vars` lists names only, not values.
+
+## B11. `3 * 10^8 m/s` fails (after the B1 fix)
+
+```
+print 3 * 10^8 m/s
+```
+- **Actual:** `line 1: m isn't defined` with hint `m is a unit; units go right after a number, like 1 m` — but it *is* right after a number, so the hint is baffling.
+- `3×10^8 m/s` and `3e8 m/s` work. Physicists will write `3*10^8 m/s` all the time.
+- **Expected:** either accept it (a unit after a `^`-exponent literal belongs to the whole product, as for `3×10^8 m/s`), or a hint "write 3e8 m/s or 3×10^8 m/s".
+
+## B12. `c` right after a number is the speed-of-light *unit*, which surprises
+
+```
+print 1 AU / c          # prints: 1 AU / c
+print 1 kg * c^2        # prints: 1 kg * c^2
+```
+- Correct by the rules (`AU/c` is a unit of time), but a beginner expects a number of seconds / joules. The printout looks like the program was echoed back. Maybe warn when a unit expression is printed unconverted and contains `c`? Or print `1 AU/c (499.005 s)`.
+- **In lessons:** taught as part of the "unit right after a number" gotcha; `print 1 AU / c in s` works.
+
+## B13. `where` still bypasses the new B2 warning
+
+`E = 0.5 m v^2 where m = 2 kg, v = 3 m/s` → prints `4.5 m³/s²`, no warning (B2 fix works for ordinary variables).
+
+## B14. A function's result loses the unit you wrote (eV → J)
+
+```
+energy(n) = -13.6 eV / n^2
+print energy(1), energy(2)
+print -13.6 eV / 2^2
+```
+- **Actual:** `-2.18×10⁻¹⁸ J -5.45×10⁻¹⁹ J` then `-3.4 eV`.
+- **Expected:** `-13.6 eV -3.4 eV` (DECISIONS D11: the written unit is kept through scaling by plain numbers; it works outside a function but not through a function call).
+- **Workaround in lessons:** `print energy(2) in eV`.
+- Similar: `10°` prints as `10 °` (with a space), and `fmt --pretty` turns `10 deg` into `10 °`.
+
+## B15. Control+C doesn't stop an infinite loop
+
+```
+x = 1
+while x > 0
+    x += 1
+```
+Run with `fermium run`, then press Ctrl+C (SIGINT): **nothing happens**; the process keeps using 100% CPU (tested with `timeout -s INT 3`; it was still running 2 minutes later). Control+\ (SIGQUIT) does kill it. Beginners *will* write infinite `while` loops. Expected: Ctrl+C stops the program with a one-line message ("stopped by Ctrl+C"). (Probably the JIT code never returns to Python so the KeyboardInterrupt is never raised; a signal handler that sets a flag checked on loop back-edges, or restoring SIG_DFL for SIGINT while native code runs, would fix it.)
+- **In lessons:** TROUBLESHOOTING tells people to press Control+\ (or close the Terminal window) if Control+C doesn't work.
+
+## B16. Text can be stored in a variable but not printed
+
+```
+label = "hi"
+print label
+```
+- **Actual:** `line 2: can't print this` (also for `label = if x > 1 m then "long" else "short"`).
+- **Expected:** `hi` — or an error at line 1 saying text can't be stored in variables yet. The message "can't print this" doesn't say why.
+
+## B17. `%` for remainder gives "unexpected character"
+
+`if n % 2 == 0` → `unexpected character '%' (Percent Sign)` / `hint: remove it, or check the cheat sheet`. Python users will try this; a hint "for the remainder use mod(n, 2)" would help (and see B8: `%` is also documented as a unit).
+
+## B18. `20 m/s / g` divides by *grams*, silently (HIGH: wrong physics, no warning)
+
+```
+g = 9.81 m/s^2
+print 20 m/s / g        # prints: 20 m/s / g
+print 2 * 20 m/s / g    # prints: 40 m/s / g
+x = 20 m / g            # even with spaces around /
+print x                 # prints: 20 m / g
+```
+- Wanted: v₀/g = 2.04 s. Got: a speed per gram. DECISIONS D7 rule 4 says "`/` followed by a unit name continues the unit even if a variable has that name. **You get a warning when it does**" — but no warning is printed in any of these cases.
+- This is the most natural way to write t = v₀/g (or `2 v0/g` with numbers plugged in). I hit it by accident in Lesson 4.
+- **Expected:** at minimum the promised warning. Better: when a variable with that name exists and there are spaces around `/` (`20 m / g`), treat it as division by the variable.
+- **Workaround in lessons:** `(20 m/s) / g`, or a variable `v0 = 20 m/s` then `v0 / g`. Taught as part of the gotcha.
+
+## B19. `len` of a list of decimals prints as `5.00`
+
+```
+times = [2.21 s, 2.19 s, 2.24 s, 2.20 s, 2.23 s]
+print len(times)
+```
+- **Actual:** `5.00` (significant figures of the elements leak into the count). `len([1, 2])` prints `2`.
+- **Expected:** `5` — a count is exact.
+
+## B20. (confusing, maybe by design) `ys = xs` makes both names refer to the same list
+
+```
+xs = [1 m, 2 m]
+ys = xs
+ys[1] = 5 m
+print xs        # [5, 2] m
+```
+Same as Python, but a surprise for a beginner who thinks of `=` as "copy the value" (which is what it does for numbers). A `copy(xs)` builtin (or copy-on-assign semantics) would be good; I mention it in Lesson 5.
+
+## B21. Lists print with 1 significant figure when an element has 1 (the "at least 2" floor is missing)
+
+```
+ts = [0 s, 0.5 s, 1 s, 1.5 s, 2 s]
+print 20 m/s * ts - ½ * 9.81 m/s^2 * ts^2     # [0, 9, 20, 20, 20] m
+masses = [1.0 kg, 2.0 kg, 0.5 kg]
+speeds = [3.0 m/s, 4.0 m/s, 10 m/s]
+print ½ masses speeds^2                        # [4, 20, 20] J   (true: 4.5, 16, 25)
+```
+- **Expected:** at least 2 significant figures (D11), e.g. `[0, 8.8, 15, 19, 20] m` and `[4.5, 16, 25] J`. Scalars do get the floor (`print 20 m/s * 0.5 s - ...` prints 2 sf). `[4, 20, 20]` for 4.5/16/25 looks simply wrong to a student.
+- Also: a literal list element prints with fewer digits than written: `planets = [0.387 AU, 0.723 AU, 1.000 AU]; print planets[3]` → `1.00 AU` (written `1.000`).
+- **Workaround in lessons:** `linspace` / more digits in the literals.
+
+## B22. Plot / fit polish (suggestions)
+
+- `plot data.T vs data.L` draws measured data as a connected line. Lab data is normally shown as **points** (markers); a physics student will expect dots, especially when a fitted curve is drawn on top (`plot data.T vs data.L, 2 pi sqrt(Ls / g) vs Ls`). Suggest: columns from `load` plot as markers, computed lists as lines (or `plot ... with points`).
+- Axis label with two series reads `data.T [s], 2π √(Ls/g) [s]`; fine but long.
+- After `fit` reports `τ = 20.10 min`, `print tau` shows `1210 s` (the fitted variable doesn't keep the column's unit for display).
+- `fit T^2 = k L to data` → "the left side of a fit must be a column of the data". Linearising (T² vs L) is the classic undergrad lab analysis; allowing an expression of a column on the left would be nice.
+
+## B23. Derivatives: a constant's derivative loses its units; results could be simpler
+
+```
+r(t) = 1 AU
+print r'           # r'(t) = 0   [no units]      expected [m/s, for t in s]
+```
+Readability of printed derivatives (not wrong, but a beginner can't check them against their notes):
+- `N(t) = 1000 exp(-t / 5 s)` → `N'(t) = 1000 exp(-(t/(5 s)))·(-1/(5 s))`; hoped for `-200 exp(-t/(5 s)) 1/s` or `-(1000/(5 s)) exp(-t/(5 s))`.
+- `f(x) = exp(-x^2)` → `f''(x) = -(2 exp(-x²) - 4 x² exp(-x²))`; hoped for `(4x² - 2) exp(-x²)`.
+- `U(x) = 4 * 1 J * ((1 m / x)^12 - (1 m / x)^6)` → `U'(x) = 4·1 J·(-(12 (1 m/x)¹¹·(1 m/x²)) + 6 (1 m/x)⁵·(1 m/x²))`.
+- `print ∂/∂x f` for `f(x, y) = x^2 y + sin(y)` prints `f_∂x(x, y) = 2x y` with no `[units]` bracket, while `∂/∂y` has one; the name `f_∂x` is odd (maybe `∂f/∂x`).
+- `x(t) = 3 m/s^3 * t^3` → `x'(t) = 3 t²·3 m/s^3` (no `[units]` bracket, and 3·3 not folded to 9).
+
+## B24. `inf s` / `∞ Hz` as an integral limit is an error
+
+`print integral exp(-t / 1 s) dt from 0 s to inf s` → `s isn't defined` (hint: "units go right after a number"). `to inf` (no unit) and `to inf [s]` both work. Physicists will write `∞ s` / `inf Hz`; either accept a unit after `inf`/`∞` or hint "write just `inf`".
+
+## B25. (grammar trap) `... from 0 m to 2 m / M` divides the upper limit
+
+`xcm = integral x rho(x) dx from 0 m to 2 m / M` parses as upper limit `2 m / M` and reports "the limits of this integral are length [m] and a quantity with units [m/kg]". The error is good; it might add the hint "put the integral in parentheses: (∫ ... ) / M". Taught in Lesson 8.
+
+## B26. Orbit plots from lists are stretched (no equal aspect)
+
+`plot y vs x` of an ODE solution uses equal axis scales (a circle looks round), but `plot ys in AU vs xs in AU` of two **lists** in the same units does not, so an orbit simulated with a loop (Lesson 10) looks squashed. Suggest: equal aspect whenever both axes have the same dimension, as for solutions. (Also nice: a way to plot single points, e.g. to mark the Sun; and markers for data, see B22.)
+
+## B27. `solve` with equations on their own lines: `with` indented less than the equations gives a confusing error
+
+```
+solve
+    x' = -x / 2 s
+    y' = x / 2 s
+  with x(0) = 1, y(0) = 0
+  for t from 0 s to 10 s
+```
+→ `line 4: this line's indentation doesn't match any block above it`. With `with` at column 0 → `solve needs a range for the independent variable`. Works only when `with`/`for` are at the same indentation as the equations. For one-line equations, `  with` (2 spaces) is fine, so beginners will copy that style. Suggest accepting any indentation > 0 for `with`/`for` continuation lines.
+
+(B18 addendum, even more common case: Wien's law with a function parameter named T for temperature:
+```
+peak(T) = 2.898e-3 m K / T
+print peak(5778 K) in nm
+```
+→ `can't show a quantity with units [m s² A K/kg] in nm` — `K / T` became kelvin per **tesla**; no warning. At least the `in nm` caught it; `print peak(5778 K)` alone would print nonsense. Any temperature called `T` after a `... K / T` will do this.)
+
+## B28. `N = 2 N` (N a count) gives a warning whose hint says "that's usually what you want"
+
+```
+N = 1
+N = 2 N
+```
+→ `warning: 'N' right after a number is the unit N, not your variable N` / `hint: that's usually what you want; ...` followed by the error `N is a plain number (no units); it can't now hold force [N]`. The error is good, but the hint text is wrong in this situation (it is clearly *not* what the user wanted, since the next thing reported is a unit clash with the very same variable). Suggest dropping "that's usually what you want" when the statement assigns to that same variable, or when the unit reading causes a dimension error.
+- B7 addendum: `N = 1` doubled 20 times prints `1.04858×10⁶` instead of `1048576` (a whole number built from whole numbers).
+
+## B29. A list literal with mixed units prints every element in the first one's unit
+
+`for dt in [1 day, 6 hr, 1 hr, 10 min]` / `print dt` → `1 day`, `0.25 day`, `0.0416667 day`, `0.00694444 day`. Understandable (a list has one display unit) but a beginner expects `6 hr`, `1 hr`, `10 min`. Maybe keep per-element display units for literal lists, or pick the unit that makes most elements ≥ 1.

@@ -1,0 +1,4902 @@
+"""Name resolution, type checking and dimension checking: AST -> typed IR.
+
+This is where "can't add length [m] to time [s]" comes from.  All unit logic
+lives here; the IR produced contains plain SI numbers only.
+"""
+from __future__ import annotations
+
+import csv
+import math
+import os
+import re
+from difflib import get_close_matches
+from fractions import Fraction
+
+from . import ast as A
+from . import calculus as C
+from . import cplx
+from . import ir as I
+from .constants import all_constants
+from .natural import SI, make_system, canonical_const_name
+from .errors import FermiumError, Diagnostics
+from .importer import ImportMixin, ModuleRef
+from .pyinterop import PythonMixin, PyModRef
+from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
+                    VOID, Ty, ComplexTy,
+                    type_desc)
+from .linalg import transpose_index
+from .linalg_big import MAX_DIM
+from .units import SPELLED_UNITS, UNIT_NAMES_LONG, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM
+
+MATH1 = {"sin", "cos", "tan", "cot", "sec", "csc", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
+         "exp", "ln", "log", "log10", "log2", "erf", "erfc", "gamma", "lgamma", "expm1", "log1p"}
+SAME1 = {"abs", "floor", "ceil", "round"}
+SPECIAL2 = {"besselj", "bessely", "besseli", "besselk"}      # (n, x): whole-number order n (#50)
+SPECIAL1 = {"ellipk", "ellipe"}                              # (m): parameter m = k²
+LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "reverse", "sort"}
+BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
+    "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
+    "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
+    "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues", "eigenvectors",
+    "trace", "angle", "row", "column", "str",
+} | SPECIAL2 | SPECIAL1
+UNC_FUNCS = {"value", "uncertainty", "rel"}         # parts of an uncertain value (D121)
+BUILTINS |= UNC_FUNCS
+M3_FUNCS = {"randn", "seed", "sample", "fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum",
+            "frequencies", "argmax", "argmin"}          # seeded random numbers (D80); FFT built-ins join below (D81)
+BUILTINS |= M3_FUNCS
+BUILTINS.update(cplx.COMPLEX_FUNCS)       # re, im, conj, arg, complex, polar, cis (D90)
+
+
+def _loose(name):
+    """A spelling key that ignores case and underscores, with ☉/⊕ spelled out: M_sun, m_sun, Msun, M☉."""
+    return name.lower().replace("_", "").replace("☉", "sun").replace("⊕", "earth")
+
+
+def _unit_name_suggestion(name):
+    """The hint for `in M_sun` and other near-miss unit names (gauntlet #79)."""
+    from .units import _UNITS, UNIT_ASCII
+    same = [u for u in _UNITS if _loose(u) == _loose(name)]
+    if same:
+        pretty = next((u for u in same if u in UNIT_ASCII), same[0])
+        ascii_ = UNIT_ASCII.get(pretty)
+        spelled = f"{pretty} (ASCII {ascii_})" if ascii_ and ascii_ != pretty else pretty
+        if name in all_constants():
+            return (f"{name} is the constant; the unit is {spelled}: write  in {pretty}  (or divide by the "
+                    f"constant: x / {name})")
+        return f"did you mean the unit {spelled}?"
+    close = get_close_matches(name, [u for u in _UNITS if len(u) > 1], n=1, cutoff=0.8)
+    if close:
+        return f"did you mean {close[0]}? (see the units list in docs/reference.md)"
+    return ""
+
+
+def _written(items):
+    """`direct` of a list, vector or matrix written out in the program (D11): False if not every element is
+    a literal; 3 if some elements are exact whole numbers and others have a stated precision ([1.2345, 2]:
+    the 2 prints as written); else True ([1.0, 2.0] keeps its figures)."""
+    if not items or not all(getattr(it, "direct", False) for it in items):
+        return False
+    sfs = [getattr(it, "sf", None) for it in items]
+    return 3 if None in sfs and any(x is not None for x in sfs) else True
+
+
+class MixedHint(tuple):
+    """Display units of a vector whose components have different units: one Unit (or None) each."""
+    affine = False
+
+    @property
+    def name(self):
+        return ", ".join(u.name if u is not None else "?" for u in self)
+
+
+_SUP_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+_TO_SUP = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
+
+
+def hint_power(u, p):
+    """The display unit u^p for a whole number p, written out: (N/m)² -> N²/m², (N/m)⁻¹ -> m/N.
+    None if u isn't a simple product of units (then the result is shown in SI)."""
+    if u is None or isinstance(u, MixedHint) or u.affine:
+        return None
+    num, _, den = u.name.partition("/")
+    powers = {}
+    for part, sign in ((num, 1), (den, -1)):
+        for tok in part.split():
+            m = re.fullmatch(r"([^\s⁰¹²³⁴⁵⁶⁷⁸⁹⁻^()]+)([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]*)", tok)
+            if m is None or "/" in tok:
+                return None
+            e = int(m.group(2).translate(_SUP_DIGITS)) if m.group(2) else 1
+            powers[m.group(1)] = powers.get(m.group(1), 0) + sign * e * p
+    top = [f"{k}{str(v).translate(_TO_SUP) if v != 1 else ''}" for k, v in powers.items() if v > 0]
+    bot = [f"{k}{str(-v).translate(_TO_SUP) if v != -1 else ''}" for k, v in powers.items() if v < 0]
+    if not top and not bot:
+        return None
+    name = (" ".join(top) or "1") + ("/" + " ".join(bot) if len(bot) == 1 else
+                                     "/(" + " ".join(bot) + ")" if bot else "")
+    try:
+        return parse_unit_string(name)
+    except (UnitSyntaxError, Exception):
+        return None
+
+
+
+class FuncInfo:
+    def __init__(self, name, fdef: A.FuncDef, scope):
+        self.name = name
+        self.fdef = fdef
+        self.scope = scope            # defining scope
+        self.instances = {}
+        self.derived = {}
+        self.display_name = name
+        self.checked_generic = False
+        self.stable = False           # a derivative: evaluate C.stabilize(body) (A52)
+        self.nat = None               # the unit system it was defined in (None: SI, callable anywhere; D60)
+
+    @property
+    def one_liner(self):
+        return isinstance(self.fdef.body, A.Node)
+
+    def body_expr(self):
+        b = self.fdef.body
+        if self.fdef.where:
+            b = A.Where(b, self.fdef.where)
+        return b
+
+
+def _kind_of(ty):
+    """'a list', 'a complex number', … for messages."""
+    from .types import ComplexTy
+    if isinstance(ty, ListTy):
+        return "a list"
+    if isinstance(ty, ComplexTy):
+        return "a complex number"
+    if isinstance(ty, VecTy):
+        return "a vector"
+    if isinstance(ty, MatTy):
+        return "a matrix"
+    return "not a number"
+
+
+def _delta_name(name):
+    """ΔT, Δθ, δT, delta_T (which the lexer spells δ_T), dT: a name that says "a change" (D181)."""
+    return name.startswith(("Δ", "δ")) or name.lower().startswith("delta") or name in ("dT", "dθ", "d_T")
+
+
+class SolView:
+    n = 1          # vector length (1 = a plain number)
+    stride = 1     # slots between successive derivatives
+
+    def __init__(self, sol_sym, comp, top, dim, tdim, tname, name):
+        self.sol_sym = sol_sym        # Sym holding the solution handle
+        self.comp = comp              # component index of this derivative
+        self.top = top                # index of the var's highest stored derivative
+        self.dim = dim                # DExpr of this derivative
+        self.tdim = tdim
+        self.tname = tname
+        self.name = name
+
+
+# constants whose names are also common variables (the Hubble h, an eccentricity e, G = 1 units): overriding
+# one with a plain number, or a value in the constant's own units, warns once at the assignment (D213)
+WELL_KNOWN_CONSTANTS = {"h": "Planck's constant", "c": "the speed of light", "G": "the gravitational constant",
+                        "e": "the elementary charge", "k_B": "Boltzmann's constant"}
+
+
+class ConstInfo:
+    def __init__(self, name, value, unit, desc):
+        self.name, self.value, self.unit, self.desc = name, value, unit, desc
+
+
+class FuncRef:
+    def __init__(self, info, name=None, param=False):
+        self.info = info
+        self.name = name or info.display_name    # the name it was used by (V inside shoot(V, E))
+        self.param = param                       # bound as a function parameter of an instance (D43)
+
+
+class SolRef:
+    def __init__(self, view):
+        self.view = view
+
+
+class Scope:
+    def __init__(self, parent=None, kind="block"):
+        self.parent = parent
+        self.names = {}
+        self.kind = kind
+
+    def lookup(self, name):
+        s = self
+        while s is not None:
+            if name in s.names:
+                return s.names[name], s
+            s = s.parent
+        return None, None
+
+
+class Ctx:
+    """Where we are: which function (or lambda) owns new locals, and its scope."""
+
+    def __init__(self, func, scope, is_main=False, parent=None, lam=None):
+        self.func = func
+        self.scope = scope
+        self.is_main = is_main
+        self.parent = parent
+        self.lam = lam
+        self.loop = 0
+        self.ret_types = []
+
+    def child(self, scope):
+        c = Ctx(self.func, scope, self.is_main, self.parent, self.lam)
+        c.loop = self.loop
+        c.ret_types = self.ret_types
+        return c
+
+
+class LocalFunc:
+    """A one-line function defined inside a function body (gauntlet #75, D194): each call is expanded in place,
+    like `body where s = arg`, with the other names resolved where the helper was defined (so it sees the
+    enclosing function's parameters and variables, and each call is unit-checked with its own arguments)."""
+
+    def __init__(self, fdef, scope, owner):
+        self.fdef, self.scope, self.owner = fdef, scope, owner
+        self.expanding = False
+
+
+class Tables:
+    """Runtime tables shared with the Python side of the runtime (printing, plots, data, fits)."""
+
+    def __init__(self):
+        self.fmts = []      # print formats
+        self.texts = []     # constant strings
+        self.plots = []
+        self.loads = []
+        self.fits = []
+        self.stiff = []     # (line, method) of each `solve ... using radau/bdf` (fermium build refuses them)
+
+
+class CheckedModule:
+    def __init__(self, main, funcs, lambdas, tables, unifier):
+        self.main = main
+        self.funcs = funcs
+        self.lambdas = lambdas
+        self.tables = tables
+        self.U = unifier
+        self.uses_unc = False      # uses ±, uncertainty(), propagate montecarlo: runs in the interpreter (D122)
+
+
+class Checker(ImportMixin, PythonMixin, C.DiffContext):
+    def __init__(self, diags=None, base_dir=".", repl=False, source_name="<program>"):
+        self.diags = diags or Diagnostics()
+        self.U = Unifier()
+        self._estack = []          # the expressions being checked, outermost first (for error hints, D163)
+        self.base_dir = base_dir
+        self.repl = repl
+        self.uses_unc = False
+        self.arena = repl         # top-level variables live in an arena of slots (REPL, Python API D142)
+        self.par_stack = []       # the parallel for loops being checked (M5, D152)
+        self.tables = Tables()
+        self.root = Scope(kind="root")
+        for name, (val, unit, desc) in all_constants().items():
+            self.root.names[name] = ConstInfo(name, val, unit, desc)
+        # the imaginary unit 𝑖 (also written as the literal 1i); use_binding gives it its complex value (D90)
+        self.root.names["𝑖"] = ConstInfo("𝑖", math.nan, parse_unit_string("1"), "the imaginary unit, 𝑖² = -1")
+        self.globals = Scope(self.root, kind="global")
+        self.all_funcs = []
+        self.all_lambdas = []
+        self.counter = 0
+        self.main_count = 0
+        self.cur_ctx = None
+        self.new_funcs = []
+        self.new_lambdas = []
+        self.future_funcs = {}
+        self.nat = SI                 # the unit system in force (`units natural(ħ = c = 1)`, D60)
+        self._top_units = set()
+
+    # ============================================================ helpers
+    def _set_system(self, system):
+        self.nat = system
+        self.U.namer = system.describe if system.natural else None
+
+    def fresh_name(self, base):
+        self.counter += 1
+        return f"{base}.{self.counter}"
+
+    def err(self, msg, node=None, hint=None):
+        if node is not None:
+            return FermiumError(msg, node.line or None, node.col or None, getattr(node, "length", 1), hint)
+        return FermiumError(msg, hint=hint)
+
+    def desc(self, d):
+        return self.U.describe(d)
+
+    def unify_or(self, a, b, msg_fn, node, hint=None):
+        if not self.U.unify(a, b):
+            raise self.err(msg_fn(), node, hint)
+
+    def resolve_unit(self, uexpr: A.UnitExpr) -> Unit:
+        return self.nat.canon_unit(self.resolve_unit_si(uexpr))
+
+    def resolve_unit_si(self, uexpr: A.UnitExpr) -> Unit:
+        """The unit in SI dimensions, whatever system is in force (resolve_unit maps it into that system)."""
+        total = None
+        for f in uexpr.factors:
+            u = lookup_unit(f.name)
+            if u is None:
+                sugg = ""
+                if f.name in ("h",):
+                    sugg = "h is Planck's constant, not the hour; for hours write hr"
+                elif f.name in ("t",):
+                    sugg = "for metric tons write tonne"
+                elif f.name in SPELLED_UNITS:
+                    sugg = f"Fermium writes units as symbols: {SPELLED_UNITS[f.name]}"
+                else:
+                    sugg = _unit_name_suggestion(f.name)
+                raise FermiumError(f"'{f.name}' is not a unit Fermium knows", f.line, f.col, len(f.name),
+                                   hint=sugg or "see the units list in docs/reference.md")
+            if u.affine:
+                if len(uexpr.factors) > 1 or f.exp != 1:
+                    # in a compound unit (°C/min, J/(g °C)) a degree is a temperature step: K-sized, no offset
+                    # (gauntlet friction #21)
+                    u = Unit(u.name, u.dim, u.factor)
+                    u = u ** f.exp if f.exp != 1 else u
+            else:
+                u = u ** f.exp if f.exp != 1 else u
+            total = u if total is None else total * u
+        if total is None:
+            total = Unit("1", DIMLESS, 1.0)
+        total.name = canonical_unit_name(uexpr) or total.name
+        return total
+
+    # ============================================================ program
+    def check_program(self, prog: A.Program, name="main") -> CheckedModule:
+        self.main_count += 1
+        self.uses_unc = False
+        fname = name if self.main_count == 1 else f"{name}.{self.main_count}"
+        main = I.IFunc(fname, [], VOID)
+        ctx = Ctx(main, self.globals, is_main=True)
+        self.new_funcs = []
+        self.new_lambdas = []
+        self._prescan_functions(prog.body, ctx)
+        self._top_units |= {id(s) for s in prog.body if isinstance(s, A.Units)}
+        self.note_program(prog, self.globals)
+        self.unit_collisions = getattr(prog, "unit_collisions", {})
+        self._prog_ast = prog
+        self.positive_names = set() if self.repl else _positive_names(prog)
+        main.body = self.block(prog.body, ctx, new_scope=False)
+        self.check_uncalled()
+        m = CheckedModule(main, self.new_funcs, self.new_lambdas, self.tables, self.U)
+        m.uses_unc = self.uses_unc
+        return m
+
+    def _prescan_functions(self, body, ctx):
+        self.future_funcs = {s.name: s.line for s in body if isinstance(s, A.FuncDef)}
+
+    def check_uncalled(self):
+        """Check the bodies of functions that were never called, so their errors still show."""
+        for name, b in list(self.globals.names.items()):
+            if isinstance(b, FuncInfo) and not b.instances and not b.checked_generic and \
+                    getattr(b, "module", None) is None:
+                b.checked_generic = True
+                if b.fdef is None:
+                    continue
+                if not b.one_liner and not b.fdef.params:
+                    continue
+                if self._func_param_uses(b):     # takes a function: checked per call instead (D43)
+                    continue
+                args = [I.IConst(0, NumTy(DExpr.fresh())) for _ in b.fdef.params]
+                saved_nat = self.nat
+                self._set_system(b.nat or SI)
+                try:
+                    saved = (self.new_funcs, self.new_lambdas)
+                    self.new_funcs, self.new_lambdas = [], []
+                    self.instantiate(b, args, b.fdef, cache=False)
+                except FermiumError as e:
+                    msg = str(e.message)
+                    if "isn't defined" in msg or "used before" in msg:
+                        continue
+                    if "needs a list" in msg:
+                        # total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some
+                        # parameters are numbers), it is checked at each call instead (D142)
+                        try:
+                            self.instantiate(b, [I.IList([], ListTy(DExpr.fresh())) for _ in b.fdef.params],
+                                             b.fdef, cache=False)
+                        except FermiumError:
+                            pass
+                        continue
+                    raise
+                finally:
+                    self.new_funcs, self.new_lambdas = saved
+                    self._set_system(saved_nat)
+
+    def block(self, stmts, ctx, new_scope=True):
+        out = []
+        for s in stmts:
+            r = self.stmt(s, ctx)
+            if r is None:
+                continue
+            if isinstance(r, list):
+                out.extend(r)
+            else:
+                r.line = getattr(s, "line", 0)
+                out.append(r)
+        return out
+
+    # ============================================================ statements
+    def _par_here(self, ctx):
+        """The parallel for being checked, if new variables made here belong to its iterations."""
+        if self.par_stack and ctx.lam is None and ctx.func is self.par_stack[-1]["func"]:
+            return self.par_stack[-1]
+        return None
+
+    def new_sym(self, name, ty, ctx):
+        storage = "local"
+        par = self._par_here(ctx)
+        if ctx.is_main and (self.repl or self.arena) and ctx.lam is None and par is None:
+            storage = "arena"
+        sym = I.Sym(name, ty, storage, ctx.func)
+        if par is not None:          # a variable set inside a parallel for: each iteration has its own
+            sym.par_private = True
+            par["private"].append(sym)
+        sym.nat = self.nat
+        if ctx.lam is None:
+            ctx.func.locals.append(sym)
+        else:
+            ctx.lam.locals.append(sym)
+        return sym
+
+    def stmt(self, s, ctx):
+        self.cur_ctx = ctx
+        m = getattr(self, "s_" + type(s).__name__, None)
+        if m is None:
+            raise self.err(f"this kind of statement ({type(s).__name__}) isn't supported here", s)
+        try:
+            r = m(s, ctx)
+        except FermiumError as e:
+            self._explain_unit_collision(e, s)
+            raise
+        self._track_collision_taint(s)
+        return r
+
+    @staticmethod
+    def _stmt_names(s):
+        """Every Name used anywhere in a statement (A.walk only follows expressions)."""
+        import dataclasses
+        out, todo = set(), [s]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, A.Name):
+                out.add(n.name)
+            if isinstance(n, (list, tuple)):
+                todo.extend(n)
+            elif dataclasses.is_dataclass(n):
+                todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
+        return out
+
+    def _track_collision_taint(self, s):
+        """Remember names computed on a line where `2 g` was read as a unit though g is a variable, so a unit
+        error on a later line can point back to it (gauntlet #43)."""
+        tainted = self.__dict__.setdefault("collision_taint", {})
+        target = getattr(s, "name", None) if isinstance(s, (A.Assign, A.FuncDef)) else None
+        if not target:
+            return
+        coll = getattr(self, "unit_collisions", {})
+        if s.line in coll:
+            tainted[target] = s.line
+            return
+        for nm in self._stmt_names(s):
+            if nm in tainted and nm != target:
+                tainted[target] = tainted[nm]
+                return
+
+    def _explain_unit_collision(self, e, stmt=None):
+        """A unit error on a line where `2 L` was read as 2 litres though L is also a variable: say so
+        (FRICTION #10; the reading itself is the spec §3.4.2 rule and doesn't change).  For a later line,
+        name the variable computed from such a line (gauntlet #43)."""
+        found = getattr(self, "unit_collisions", {}).get(e.line)
+        if not found and stmt is not None and not getattr(e, "collision_noted", False):
+            tainted = getattr(self, "collision_taint", {})
+            names = sorted(nm for nm in self._stmt_names(stmt) if nm in tainted)
+            msg = str(e.message)
+            if names and ("[" in msg or "unit" in msg):
+                e.collision_noted = True
+                ln = tainted[names[0]]
+                nums = ", ".join(f"'{num} {nm}'" for num, nm in self.unit_collisions.get(ln, []))
+                note = (f"note: {names[0]} depends on line {ln}, where {nums} was read as a unit (a unit right after "
+                        f"a number); if you meant your variable there, write the * (like 2*g)")
+                e.hint = f"{e.hint}\n  {note}" if e.hint else note
+            return
+        if not found or getattr(e, "collision_noted", False):
+            return
+        msg = str(e.message)
+        if "[" not in msg and "unit" not in msg:
+            return
+        e.collision_noted = True
+        notes = []
+        for num, name in found:
+            u = lookup_unit(name)
+            what = f", {self.desc(u.dim)}" if u is not None else ""
+            notes.append(f"note: '{num} {name}' here is {num} {name}{what} (a unit right after a number); "
+                         f"for {num} × your variable {name} write {num}*{name}")
+        if stmt is not None and u is not None and ("can't add" in msg or "units" in msg or "[" in msg):
+            # the reading is the cause, so it is the message; the mismatch it led to is a note (D164)
+            num, name = found[0]
+            u = lookup_unit(name)
+            word = next((w for w, sym in SPELLED_UNITS.items() if sym == name), None)
+            unit = f"the unit {word} ({name})" if word else (
+                f"the unit {name} ({UNIT_NAMES_LONG[name]})" if name in UNIT_NAMES_LONG
+                else f"the unit {name} ({self.desc(u.dim)})")
+            fix = self._collision_fix(getattr(self, "_prog_ast", stmt), num, name, e.line)
+            unknown = (e.line, name) in getattr(getattr(self, "_prog_ast", None), "unknown_collisions", ())
+            who = f"the unknown {name} of this solve" if unknown else f"your variable {name}"
+            e.message = (f"{name} here is read as {unit}, not {who}: '{num} {name}' is a unit right "
+                         f"after a number; write {fix}")
+            called = [h for h in (e.hint or "").split("; ") if h.startswith("this happened when")]
+            e.hint = "\n  ".join([f"the units then don't match: {msg}" + "".join(f"; {h}" for h in called)]
+                                 + notes[1:])
+            return
+        if e.hint:
+            e.hint = "\n  ".join([e.hint] + notes)
+        else:
+            e.hint = "\n  ".join([notes[0].removeprefix("note: ")] + notes[1:])
+
+    @staticmethod
+    def _collision_fix(stmt, num, name, line):
+        """How to write `num × your variable name` where the statement has `num name` read as a unit:
+        `4/3 * T` for `4/3 T`, `π²/15 * T⁴` for `π²/15 T⁴`, else `3 * T` (D164)."""
+        import dataclasses
+        todo = [stmt]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, (list, tuple)):
+                todo.extend(n)
+                continue
+            if not dataclasses.is_dataclass(n):
+                continue
+            for q in (getattr(n, "right", None), n):
+                if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and A.num_text(q.value) == num and \
+                        len(q.unit.factors) == 1 and q.unit.factors[0].name == name and \
+                        getattr(q, "line", line) == line:
+                    shown = q.unit.text or name
+                    if q is not n and isinstance(n, A.BinOp) and n.op == "/":
+                        return f"{C.to_source(n.left)}/{num} * {shown}"
+                    return f"{num} * {shown}"
+            todo.extend(getattr(n, f.name) for f in dataclasses.fields(n))
+        return f"{num}*{name}"
+
+    def s_ExprStmt(self, s, ctx):
+        e = s.value
+        if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name in ("push", "append"):
+            return self.push_stmt(e, ctx)
+        if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == "clear" and \
+                ctx.scope.lookup("clear")[0] is None:
+            if len(e.args) != 1 or not isinstance(e.args[0], A.Name):
+                raise self.err("clear needs a list variable: clear(xs)", e)
+            lst = self.expr(e.args[0], ctx)
+            if not isinstance(lst, I.IVar) or not isinstance(lst.ty, (ListTy, TextListTy)):
+                raise self.err(f"clear empties a list, and {e.args[0].name} is {type_desc(lst.ty, self.U)}", e.args[0])
+            return I.SClear(lst.sym)
+        if isinstance(e, A.Call) and isinstance(e.func, A.Name) and e.func.name == "seed" and \
+                ctx.scope.lookup("seed")[0] is None:
+            return self.seed_stmt(e, ctx)
+        v = self.expr(e, ctx, allow_func=True)
+        if ctx.is_main and self.repl and ctx.lam is None:
+            return self.print_items([v], [e], ctx)
+        if isinstance(v, (FuncRef, SolRef)):
+            return None
+        if isinstance(v, I.ICall) or isinstance(v, I.IMap):
+            return I.SExpr(v)
+        self.diags.warn("this line computes a value but doesn't use it", line=s.line, col=s.col,
+                        hint="use print to show it, or store it:  name = ...")
+        return I.SExpr(v)
+
+    def push_stmt(self, e, ctx):
+        if len(e.args) != 2 or not isinstance(e.args[0], A.Name):
+            raise self.err("push needs a list variable and a value: push(xs, x)", e)
+        lst = self.expr(e.args[0], ctx)
+        if isinstance(lst, I.IVar) and isinstance(lst.ty, TextListTy):
+            v = self.expr(e.args[1], ctx)
+            if not isinstance(v.ty, StrTy):
+                raise self.err("this list holds text, so you can only push text onto it", e.args[1])
+            return I.SPush(lst.sym, v)
+        if not isinstance(lst, I.IVar) or not isinstance(lst.ty, ListTy):
+            raise self.err(f"push needs a list as its first argument, not {type_desc(lst.ty, self.U)}", e.args[0])
+        v = self.expr(e.args[1], ctx)
+        self.need_num(v, e.args[1], "the value to push")
+        self.unify_or(lst.ty.dim, v.ty.dim, lambda: f"can't add {self.desc(v.ty.dim)} to a list of "
+                      f"{self.desc(lst.ty.dim)}", e.args[1])
+        if lst.sym.hint is None and v.hint is not None and not v.hint.affine:
+            lst.sym.hint = v.hint        # a list filled by push shows the pushed values' unit (MeV, not J)
+        return I.SPush(lst.sym, v)
+
+    def s_Assign(self, s, ctx):
+        if s.op != "=":
+            target = A.Name(s.name).at(s)
+            op = s.op[0]
+            val_ast = A.BinOp(op, target, s.value)
+            val_ast.line, val_ast.col, val_ast.length = s.line, s.col, s.length
+            v = self.expr(val_ast, ctx)
+            b, _ = ctx.scope.lookup(s.name)
+            if not isinstance(b, I.Sym):
+                raise self.err(f"{s.name} needs a value before you can use {s.op} on it", s)
+            return self.assign_to(s.name, v, s, ctx)
+        if not ctx.is_main and isinstance(s.value, A.ListLit) and not s.value.items:
+            b, _ = ctx.scope.lookup(s.name)
+            if isinstance(b, I.Sym) and isinstance(b.ty, (ListTy, TextListTy)) and b.func is not ctx.func and \
+                    s.name not in self.__dict__.setdefault("warned_local_lists", set()):
+                # `xs = []` in a function makes a new list there; the program's xs is unchanged (D216)
+                self.warned_local_lists.add(s.name)
+                self.diags.warn(f"{s.name} = [] here makes a new list {s.name} inside this function; the "
+                                f"program's list {s.name} is unchanged", line=s.line, col=s.col,
+                                hint=f"to empty the program's list from here, write  clear({s.name})")
+        v = self.expr(s.value, ctx, allow_func=True)
+        if isinstance(v, FuncRef):
+            ctx.scope.names[s.name] = v.info
+            if v.info.display_name.startswith("<") or "'" in v.info.display_name or "∂" in v.info.display_name \
+                    or v.info.display_name.startswith(("λ", "d/d", "∫d")):
+                v.info.display_name = s.name
+                v.info.anon_label = None
+            return None
+        if isinstance(v, SolRef):
+            ctx.scope.names[s.name] = v.view
+            return None
+        return self.assign_to(s.name, v, s, ctx)
+
+    def assign_to(self, name, v, node, ctx):
+        if isinstance(v.ty, type(VOID)) or v.ty is None:
+            raise self.err("this doesn't produce a value to store", node)
+        if _delta_name(name) and self._abs_temp(v):
+            self._delta_abs_temp_error(name, v, getattr(node, "value", node) or node)
+        b, scope = ctx.scope.lookup(name)
+        owned = isinstance(b, I.Sym) and (b.func is ctx.func or (b.storage == "arena" and ctx.is_main)) \
+            and (ctx.lam is None or b in getattr(ctx.lam, "locals", []))
+        if owned and getattr(b, "nat", SI).key != self.nat.key:
+            raise self.err(f"{name} was set outside this {self.nat.label()} region, so it can't be changed here "
+                           f"(its units mean something different there)", node,
+                           hint=f"use a new name for the value in {self.nat.name} units")
+        if owned:
+            sym = b
+            if type(sym.ty) is not type(v.ty):
+                hint = "use a different name for the new value"
+                if isinstance(sym.ty, NumTy) and isinstance(v.ty, ComplexTy):
+                    hint = f"to let {name} become complex, start it as a complex number, e.g.  {name} = 0i"
+                raise self.err(f"{name} holds {type_desc(sym.ty, self.U)}; it can't now hold "
+                               f"{type_desc(v.ty, self.U)}", node, hint=hint)
+            if isinstance(sym.ty, VecTy) and sym.ty.n != v.ty.n:
+                raise self.err(f"{name} holds a {sym.ty.n}-vector; it can't now hold a {v.ty.n}-vector", node)
+            if isinstance(sym.ty, MatTy) and (sym.ty.r, sym.ty.c) != (v.ty.r, v.ty.c):
+                raise self.err(f"{name} holds a {sym.ty.r}×{sym.ty.c} matrix; it can't now hold a "
+                               f"{v.ty.r}×{v.ty.c} matrix", node)
+            if isinstance(sym.ty, VecTy) and (sym.ty.mixed or v.ty.mixed):
+                if self.vec_unify(sym.ty, v.ty) is not None:
+                    raise self.err(f"{name} is {type_desc(sym.ty, self.U)}; it can't now hold "
+                                   f"{type_desc(v.ty, self.U)}", node,
+                                   hint="each variable keeps its units; use a new name for a different quantity")
+            elif isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)):
+                if not self.U.unify(sym.ty.dim, v.ty.dim):
+                    if self.repl and ctx.is_main:
+                        sym = self.new_sym(name, v.ty, ctx)
+                        ctx.scope.names[name] = sym
+                    else:
+                        raise self.err(
+                            f"{name} is {self.desc(sym.ty.dim)}; it can't now hold {self.desc(v.ty.dim)}",
+                            node, hint="each variable keeps its units; use a new name for a different quantity")
+            if ctx.loop == 0 and not getattr(ctx, "branch", 0):
+                # straight-line code: the variable now shows the new value's precision and unit
+                sym.sf, sym.direct = v.sf, v.direct
+                if v.hint is not None:
+                    sym.hint = v.hint
+            else:
+                if v.sf is not None:
+                    sym.sf = v.sf if sym.sf is None else min(sym.sf, v.sf)
+                sym.direct = False
+                if v.hint is not None and sym.hint is None:
+                    sym.hint = v.hint
+        else:
+            if isinstance(v.ty, SolTy):
+                raise self.err("can't store an ODE solution in a variable this way", node)
+            if isinstance(b, ConstInfo) and not self.repl and name in getattr(self, "used_consts", ()):
+                # redefining a constant the program already used as the constant (gauntlet friction #34)
+                self.diags.warn(f"{name} is the built-in {b.desc}; from here on, {name} means your value",
+                                line=getattr(node, "line", None), col=getattr(node, "col", None),
+                                hint=f"pick another name if you still need the constant {name}")
+            elif isinstance(b, ConstInfo) and not self.repl and name in WELL_KNOWN_CONSTANTS and \
+                    isinstance(v.ty, NumTy) and self.U.is_concrete(v.ty.dim) and \
+                    self.U.resolve(v.ty.dim) in (DIMLESS, b.unit.dim) and \
+                    name not in self.__dict__.setdefault("warned_consts", set()):
+                # `h = 0.6736` (the Hubble h): a plain number, or a value with the constant's own units, now
+                # holds a well-known constant's name; say so once, at the assignment (D213)
+                self.warned_consts.add(name)
+                what = WELL_KNOWN_CONSTANTS[name]
+                self.diags.warn(f"{name} ({what}) is now your variable: from here on, {name} means your value",
+                                line=getattr(node, "line", None), col=getattr(node, "col", None),
+                                hint=f"that's fine if you don't need {what} below; otherwise pick another name, "
+                                     f"like {name}_0 or {name}2")
+            ty = v.ty
+            sym = self.new_sym(name, ty, ctx)
+            ctx.scope.names[name] = sym
+            sym.sf = v.sf
+            sym.hint = v.hint
+            sym.direct = v.direct
+            sym.tdelta = getattr(v, "tdelta", False)
+        sym.assigned = True
+        self._note_assign(ctx, sym, not owned)
+        return I.SAssign(sym, v)
+
+    def s_IndexAssign(self, s, ctx):
+        b, _ = ctx.scope.lookup(s.target)
+        if isinstance(b, I.Sym) and isinstance(b.ty, (VecTy, MatTy)) and not isinstance(b.ty, ComplexTy):
+            return self.entry_assign(b, s, ctx)
+        if s.index2 is not None:
+            what = "a list" if isinstance(b, I.Sym) and isinstance(b.ty, ListTy) else "not a matrix"
+            raise self.err(f"{s.target}[i, j] = … sets an entry of a matrix, but {s.target} is {what}", s)
+        if not isinstance(b, I.Sym) or not isinstance(b.ty, ListTy):
+            raise self.err(f"{s.target} isn't a list, so you can't set {s.target}[...]", s)
+        tgt = self.expr(A.Name(s.target).at(s), ctx)
+        idx = self.index_expr(s.index, tgt, ctx)
+        if s.op != "=":
+            cur = A.Index(A.Name(s.target).at(s), s.index).at(s)
+            val_ast = A.BinOp(s.op[0], cur, s.value).at(s)
+            v = self.expr(val_ast, ctx)
+        else:
+            v = self.expr(s.value, ctx)
+        self.need_num(v, s.value, "a list element")
+        self.unify_or(b.ty.dim, v.ty.dim,
+                      lambda: f"{s.target} is a list of {self.desc(b.ty.dim)}; can't put "
+                              f"{self.desc(v.ty.dim)} in it", s.value)
+        return I.SIndexAssign(tgt.sym, idx, v, s.line)
+
+    def entry_assign(self, b, s, ctx):
+        """M[i, j] = x and v[i] = x (also +=, …): the variable gets a copy with that entry replaced, so a
+        matrix can be filled in a loop (D195).  Indexes may be known only at run time (checked then)."""
+        name = s.target
+        tgt = self.expr(A.Name(name).at(s), ctx)
+        if isinstance(b.ty, MatTy):
+            if s.index2 is None:
+                raise self.err(f"{name} is a matrix: set one entry at a time, like {name}[i, j] = …", s)
+            pieces = [(self.fixed_or_runtime_index(s.index, b.ty.r, ctx), b.ty.r, b.ty.c),
+                      (self.fixed_or_runtime_index(s.index2, b.ty.c, ctx), b.ty.c, 1)]
+            read = A.Index(A.Index(A.Name(name).at(s), s.index).at(s), s.index2).at(s)
+        else:
+            if s.index2 is not None:
+                raise self.err(f"{name} is a vector: set one component, like {name}[i] = …", s)
+            if b.ty.mixed:
+                raise self.err(f"the components of {name} have different units, so they can't be set one at a "
+                               f"time; build the new vector, like {name} = <…>", s)
+            pieces = [(self.fixed_or_runtime_index(s.index, b.ty.n, ctx), b.ty.n, 1)]
+            read = A.Index(A.Name(name).at(s), s.index).at(s)
+        if s.op != "=":
+            v = self.expr(A.BinOp(s.op[0], read, s.value).at(s), ctx)
+        else:
+            v = self.expr(s.value, ctx)
+        self.need_num(v, s.value, "a matrix entry" if isinstance(b.ty, MatTy) else "a vector component")
+        self.unify_or(b.ty.dim, v.ty.dim,
+                      lambda: f"the entries of {name} are {self.desc(b.ty.dim)}; can't put {self.desc(v.ty.dim)} "
+                              f"in it", s.value)
+        idxs = []
+        for k, size, stride in pieces:
+            if isinstance(k, int):
+                if not 0 <= k < size:
+                    raise self.err(f"there is no index {k + 1} here: valid indexes are 1 to {size}", s)
+                k = I.IConst(k + 1, NumTy(DIMLESS))
+            idxs.append((k, size, stride))
+        r = I.IVecSet(tgt, idxs, v, b.ty, s.line)
+        r.hint = tgt.hint if tgt.hint is not None else v.hint
+        r.sf = self._minsf(tgt, v) if tgt.sf is not None else v.sf
+        r.direct = False
+        return self.assign_to(name, r, s, ctx)
+
+    def s_FuncDef(self, s, ctx):
+        if not ctx.is_main and ctx.lam is None and getattr(ctx.func, "name", None) is not None:
+            return self.local_funcdef(s, ctx)
+        if not ctx.is_main or ctx.lam is not None:
+            raise self.err("functions must be defined at the top level of the program (not inside a block)", s)
+        info = FuncInfo(s.name, s, ctx.scope)
+        info.nat = self.nat if self.nat.natural else None
+        ctx.scope.names[s.name] = info
+        params = {p.name for p in s.params}
+        binds = list(s.where or [])
+        stmts = list(s.body) if isinstance(s.body, list) else [s.body]
+        while stmts:          # every where-binding in the body, at any depth
+            n = stmts.pop()
+            if isinstance(n, A.Where):
+                binds += n.bindings
+            for v in vars(n).values():
+                stmts += [x for x in (v if isinstance(v, list) else [v]) if isinstance(x, A.Node)]
+        for name, val in binds:      # f(x) = 2 x where x = 5 s ignores the argument (A31)
+            if name in params:
+                self.diags.warn(f"'where {name} = ...' hides the parameter {name} of {s.name}, so the "
+                                f"argument is ignored", line=val.line or s.line, col=val.col,
+                                hint=f"rename the where-variable, or drop {name} from {s.name}(...)")
+        return None
+
+    def local_funcdef(self, s, ctx):
+        """g(s) = … inside a function (D194): a helper that sees the enclosing function's names."""
+        owner = re.sub(r"\.\d+$", "", str(getattr(ctx.func, "name", "this function")))
+        if isinstance(s.body, list):
+            raise self.err(f"a function defined inside another function must fit on one line, like  "
+                           f"{s.name}(x) = …  (define a longer one at the top level)", s)
+        if s.where:
+            raise self.err(f"'where' isn't supported on a function defined inside another function; define "
+                           f"the helper value first, then {s.name}(…) = …", s)
+        for p in s.params:
+            if getattr(p, "unit", None) is not None:
+                raise self.err("a function defined inside another function takes its parameters' units from "
+                               "each call; leave out the [unit]", s)
+        b, _ = ctx.scope.lookup(s.name)
+        if b is not None and ctx.scope.names.get(s.name) is b:
+            raise self.err(f"{s.name} is already defined here", s)
+        ctx.scope.names[s.name] = LocalFunc(s, ctx.scope, owner)
+        return None
+
+    def call_local(self, lf, e, ctx):
+        """g(a, b) of a LocalFunc: `body where s = a, t = b`, the body's other names seen from g's definition."""
+        fd = lf.fdef
+        if len(e.args) != len(fd.params):
+            n = len(fd.params)
+            raise self.err(f"{fd.name} takes {n} argument{'s' if n != 1 else ''} but was given {len(e.args)}", e)
+        if lf.expanding:
+            raise self.err(f"{fd.name} calls itself; a function defined inside another function can't be "
+                           f"recursive (define it at the top level)", e)
+        args = []
+        for a in e.args:
+            v = self.expr(a, ctx)
+            if not isinstance(v, I.Expr):
+                raise self.err(f"the arguments of {fd.name} must be values (a function defined inside another "
+                               f"function can't take a function)", a)
+            args.append(v)
+        scope = Scope(lf.scope)
+        c2 = ctx.child(scope)
+        binds = []
+        for p, v in zip(fd.params, args):
+            sym = self.new_sym(self.fresh_name(p.name), v.ty, c2)
+            sym.sf, sym.hint, sym.direct = getattr(v, "sf", None), getattr(v, "hint", None), getattr(v, "direct", False)
+            sym.assigned = True
+            scope.names[p.name] = sym
+            binds.append((sym, v))
+        lf.expanding = True
+        try:
+            body = self.expr(fd.body, c2)
+        except FermiumError as ex:
+            if e.line and ex.line and ex.line != e.line and not getattr(ex, "local_noted", False):
+                desc = ", ".join(f"{p.name} = {type_desc(v.ty, self.U)}" for p, v in zip(fd.params, args))
+                note = f"this happened when calling {fd.name} on line {e.line} (with {desc})"
+                ex.hint = f"{ex.hint}; {note}" if ex.hint else note
+                ex.local_noted = True
+            raise
+        finally:
+            lf.expanding = False
+        r = I.ILet(binds, body)
+        r.ty = body.ty
+        r.hint, r.sf, r.direct = getattr(body, "hint", None), getattr(body, "sf", None), False
+        return r
+
+    def s_Analyze(self, s, ctx):
+        """`analyze pendulum: T depends on L, m, g`: Buckingham Π groups, printed; defines pendulum(L, g) (D70)."""
+        from .dimanalysis import AnalysisError, analyze, pi_name, product_text, report
+        if not ctx.is_main or ctx.lam is not None or getattr(ctx, "branch", 0) or ctx.loop:
+            raise self.err("analyze must be at the top level of the program (not inside a block)", s)
+        raw = s.raw or {}
+        kinds = {}
+        natural = self.nat.natural      # analyze in SI dimensions even then (red team round 2 #8, D132)
+
+        def dim_of(p):
+            show = raw.get(p.name, p.name)
+            if p.unit is not None:
+                kinds[p.name] = "var"
+                return self.resolve_unit_si(p.unit).dim
+            b, _ = ctx.scope.lookup(p.name)
+            if isinstance(b, ConstInfo):
+                kinds[p.name] = "const"
+                return b.unit.dim
+            if isinstance(b, I.Sym) and isinstance(b.ty, NumTy):
+                if not self.U.is_concrete(b.ty.dim):
+                    raise self.err(f"the units of {show} aren't known yet", p,
+                                   hint=f"give its unit here:  {show} [m]")
+                if natural and getattr(b, "nat", None) is not None and b.nat.natural:
+                    raise self.err(f"{show} was computed in natural units, so its SI dimension (which analyze "
+                                   f"works with) isn't known", p, hint=f"give its unit here instead:  {show} [m]")
+                kinds[p.name] = "var"
+                return self.U.resolve(b.ty.dim)
+            if b is None:
+                raise self.err(f"{show} has no units yet: analyze needs to know what it is", p,
+                               hint=f"give its unit, like  {show} [m], or define it first, like  {show} = 1.0 m")
+            raise self.err(f"{show} isn't a number with units, so it can't be analyzed", p,
+                           hint=f"give its unit instead, like  {show} [m]")
+        tdim = dim_of(s.target)
+        inputs = [(p, dim_of(p)) for p in s.inputs]
+        disp = {p.name: raw.get(p.name, p.name) for p in [s.target] + s.inputs}
+        canon = {v: k for k, v in disp.items()}
+        if s.title and s.title in disp:
+            raise self.err(f"the analysis can't be called {s.title}: that's one of its quantities", s,
+                           hint=f"pick another name, e.g.  analyze {s.title}_law: ...")
+        try:
+            an = analyze(disp[s.target.name], tdim, [(disp[p.name], d) for p, d in inputs])
+        except AnalysisError as e:
+            node = s if e.index is None else ([s.target] + s.inputs)[e.index]
+            raise self.err(e.message, node, hint=e.hint)
+        lines = report(an, title=s.title)
+        if natural:
+            lines.insert(2, f"  (in SI dimensions: under {self.nat.label()} those constants are pure numbers, so "
+                            f"length, mass and time would collapse into powers of "
+                            f"{'energy' if 'ħ' in self.nat.consts else 'fewer dimensions'} and hide the groups)")
+        stmts = [I.SPrint([("text", None, self.text(line))]) for line in lines]
+        if not (s.title and an.prefactor):
+            return stmts
+        # make the result usable: pendulum(L, g) = √(L/g), for  fit T = C pendulum(L, g) to data
+        pre = {canon[k]: v for k, v in an.prefactor.items()}
+        params = [p for p in s.inputs if pre.get(p.name, 0) != 0 and kinds[p.name] == "var"]
+        body = None
+        for p in s.inputs:
+            e = pre.get(p.name, 0)
+            if e == 0:
+                continue
+            f = A.Name(p.name).at(s)
+            if e != 1:
+                k = abs(e)
+                ex = A.Num(float(k.numerator)).at(s) if k.denominator == 1 else \
+                    A.BinOp("/", A.Num(float(k.numerator)).at(s), A.Num(float(k.denominator)).at(s)).at(s)
+                if e < 0:
+                    ex = A.Neg(ex).at(s)
+                f = A.BinOp("^", f, ex).at(s)
+            body = f if body is None else A.BinOp("*", body, f).at(s)
+        text = product_text(an.prefactor, [disp[p.name] for p in s.inputs])
+        if params:
+            fdef = A.FuncDef(s.title, [A.Param(p.name, p.unit).at(p) for p in params], body).at(s)
+            self.s_FuncDef(fdef, ctx)
+            sig = f"{s.title}({', '.join(disp[p.name] for p in params)})"
+            rest = ", ".join(pi_name(i) for i in range(2, len(an.groups) + 1))
+            law = f"C {sig}" if len(an.groups) == 1 else f"{sig} · f({rest})"
+            stmts.append(I.SPrint([("text", None, self.text(
+                f"  defined {sig} = {text}, so {an.target} = {law}"))]))
+            return stmts
+        # only constants: a plain value, printed (planck = √(G ħ/c³) = 1.6×10⁻³⁵ m)
+        out = self.assign_to(s.title, self.expr(body, ctx), s, ctx)
+        out = out if isinstance(out, list) else [out]
+        v = self.expr(A.Name(s.title).at(s), ctx)
+        stmts += out
+        stmts.append(I.SPrint([("text", None, self.text(f"  defined {s.title} = {text} =")), ("num", v, self.fmt(v))]))
+        return stmts
+
+    def s_Print(self, s, ctx):
+        vals = [self.expr(it, ctx, allow_func=True) for it in s.items]
+        return self.print_items(vals, s.items, ctx)
+
+    def print_items(self, vals, asts, ctx):
+        items = []
+        for v, a in zip(vals, asts):
+            if isinstance(v, FuncRef):
+                items.append(("text", None, self.text(self.describe_function(v.info))))
+            elif isinstance(v, SolRef):
+                sv = v.view
+                items.append(("text", None, self.text(
+                    f"{sv.name}({sv.tname}): solution of an ODE (use {sv.name}({sv.tname}) for a value, "
+                    f"or plot {sv.name} vs {sv.tname})")))
+            elif isinstance(v.ty, NumTy):
+                items.append(("num", v, self.fmt(v)))
+            elif isinstance(v.ty, ListTy):
+                items.append(("list", v, self.fmt(v)))
+            elif isinstance(v.ty, ComplexTy):
+                items.append(("cplx", v, self.fmt(v)))
+            elif isinstance(v.ty, VecTy) and v.ty.mixed:
+                items.append(("mvec", v, self.fmt_components(v)))
+            elif isinstance(v.ty, VecTy):
+                items.append(("vec", v, self.fmt(v)))
+            elif isinstance(v.ty, MatTy):
+                items.append(("mat", v, self.fmt(v)))
+            elif isinstance(v.ty, TextListTy):
+                items.append(("textlist", v, None))
+            elif isinstance(v.ty, BoolTy):
+                items.append(("bool", v, None))
+            elif isinstance(v.ty, StrTy):
+                if isinstance(v, I.IStr):
+                    items.append(("text", None, self.text(v.value)))
+                else:
+                    items.append(("textvar", v, None))
+            elif isinstance(v.ty, DataTy):
+                info = v.ty.info
+                cols = ", ".join(f"{c['name']} [{c['unit'].name}]" if c['unit'].name != "1" else c['name']
+                                 for c in info["columns"])
+                items.append(("data", v, self.text(f"data from {info['path']}: columns {cols}")))
+            else:
+                raise self.err("can't print this", a)
+        return I.SPrint(items)
+
+    def text(self, s):
+        self.tables.texts.append(s)
+        return len(self.tables.texts) - 1
+
+    def fmt(self, v):
+        self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct,
+                                 "echo": getattr(v, "echo", True) and not self.nat.natural})
+        if self.nat is not SI:
+            self.tables.fmts[-1]["nat"] = self.nat
+        return len(self.tables.fmts) - 1
+
+    def fmt_components(self, v):
+        """One print format per component of a mixed vector (consecutive ids); returns the first id."""
+        hints = v.hint if isinstance(v.hint, MixedHint) else (None,) * v.ty.n
+        first = len(self.tables.fmts)
+        for d, h in zip(v.ty.dims, hints):
+            self.tables.fmts.append({"dim": d, "hint": h, "sf": v.sf, "direct": v.direct})
+            if self.nat is not SI:
+                self.tables.fmts[-1]["nat"] = self.nat
+        return first
+
+    def describe_function(self, info: FuncInfo):
+        f = info.fdef
+        params = ", ".join(p.name for p in f.params)
+        if info.one_liner:
+            body = C.to_source(info.body_expr())
+            label = getattr(info, "anon_label", None)     # print d/dt (3t²) or ∫ x dx without a name
+            s = f"{label} = {body}" if label else f"{info.display_name}({params}) = {body}"
+            units = self.function_units(info)
+            if units:
+                s += f"   [{units}]"
+            return s
+        return f"{info.display_name}({params}): a function defined over several lines"
+
+    def function_units(self, info):
+        parent = getattr(info, "parent", None)
+        if parent is not None:          # a derivative: units of f / units of the variable^order
+            base, i, order = parent
+            target = base
+            try:
+                args = [I.IConst(1, NumTy(DExpr.fresh(p.name))) for p in target.fdef.params]
+                saved = (self.new_funcs, self.new_lambdas)
+                self.new_funcs, self.new_lambdas = [], []
+                try:
+                    call = self.instantiate(target, args, target.fdef, cache=False)
+                finally:
+                    self.new_funcs, self.new_lambdas = saved
+                if isinstance(call.ty, NumTy):
+                    from .units import preferred_unit
+                    res = self.U.norm(call.ty.dim / (args[i].ty.dim ** order))
+                    pds = [self.U.norm(a.ty.dim) for a in args]
+                    if res.concrete and all(d.concrete for d in pds):
+                        if res.const.dimensionless and all(d.const.dimensionless for d in pds):
+                            return ""
+                        parts = [preferred_unit(res.const).name or "no units"]
+                        parts += [f"for {p.name} in {preferred_unit(d.const).name or 'plain numbers'}"
+                                  for p, d in zip(target.fdef.params, pds)]
+                        return ", ".join(parts)
+            except FermiumError:
+                pass
+        try:
+            args = [I.IConst(1, NumTy(DExpr.fresh(p.name))) for p in info.fdef.params]
+            saved = (self.new_funcs, self.new_lambdas, len(self.U.subst))
+            self.new_funcs, self.new_lambdas = [], []
+            try:
+                call = self.instantiate(info, args, info.fdef, cache=False)
+            finally:
+                self.new_funcs, self.new_lambdas = saved[0], saved[1]
+            from .units import preferred_unit
+            if not isinstance(call.ty, NumTy):
+                return ""
+            res = self.U.norm(call.ty.dim)
+            parts = []
+            if res.terms:
+                return ""
+            parts.append(preferred_unit(res.const).name or "no units")
+            all_plain = res.const.dimensionless
+            for p, a in zip(info.fdef.params, args):
+                d = self.U.norm(a.ty.dim)
+                if not d.terms:
+                    all_plain = all_plain and d.const.dimensionless
+                    parts.append(f"for {p.name} in {preferred_unit(d.const).name or 'plain numbers'}")
+            if all_plain:
+                return ""
+            return ", ".join(parts)
+        except FermiumError:
+            return ""
+
+    # ---- definite assignment: a variable first set inside an if/loop may have no value afterwards
+    def _enter_region(self, ctx, kind, line):
+        reg = {"kind": kind, "line": line, "new": [], "assigned": [set()], "parent": None}
+        regs = ctx.__dict__.setdefault("regions", [])
+        reg["parent"] = regs[-1] if regs else None
+        regs.append(reg)
+        return reg
+
+    def _exit_region(self, ctx, reg):
+        ctx.regions.pop()
+        both = None
+        if reg["kind"] == "if" and len(reg["assigned"]) == 2:
+            both = reg["assigned"][0] & reg["assigned"][1]      # set on both sides of if/else
+        for sym in reg["new"]:
+            sym.region = reg["parent"]
+            if both is not None and sym.id in both:
+                continue
+            if getattr(sym, "unset_msg", None) is None:
+                what = {"if": "the if", "while": "the while loop", "for": "the for loop"}[reg["kind"]]
+                sym.unset_msg = f"{sym.name} might not have a value here: it is only set inside {what} on line " \
+                                f"{reg['line']}"
+            if reg["parent"] is not None:
+                reg["parent"]["new"].append(sym)
+        parent = reg["parent"]
+        if parent is not None:
+            ids = set().union(*reg["assigned"]) if reg["kind"] == "if" and len(reg["assigned"]) == 2 and False \
+                else (reg["assigned"][0] & reg["assigned"][1] if reg["kind"] == "if" and len(reg["assigned"]) == 2
+                      else set())
+            parent["assigned"][-1] |= ids
+
+    def _note_assign(self, ctx, sym, new):
+        regs = getattr(ctx, "regions", [])
+        if new:
+            sym.region = regs[-1] if regs else None
+            if regs:
+                regs[-1]["new"].append(sym)
+        else:
+            cur = regs[-1] if regs else None
+            # assigning at the level where the variable lives (or outside all regions) gives it a value
+            r = cur
+            while r is not None and r is not getattr(sym, "region", None):
+                r = r["parent"]
+            if cur is None or r is getattr(sym, "region", "none"):
+                if cur is getattr(sym, "region", None) or cur is None:
+                    sym.unset_msg = None
+        if regs:
+            regs[-1]["assigned"][-1].add(sym.id)
+
+    def s_If(self, s, ctx):
+        c = self.cond(s.cond, ctx)
+        ctx.branch = getattr(ctx, "branch", 0) + 1
+        reg = self._enter_region(ctx, "if", s.line)
+        try:
+            then = self.block(s.then, ctx)
+            reg["assigned"].append(set())
+            other = self.block(s.other, ctx) if s.other else []
+            if not s.other:
+                reg["assigned"].pop()
+        finally:
+            ctx.branch -= 1
+            self._exit_region(ctx, reg)
+        return I.SIf(c, then, other)
+
+    def cond(self, e, ctx):
+        c = self.expr(e, ctx)
+        if not isinstance(c.ty, BoolTy):
+            raise self.err(f"a condition must be true or false, but this is {type_desc(c.ty, self.U)}", e,
+                           hint="compare values, e.g.  if x > 0 m")
+        return c
+
+    def s_While(self, s, ctx):
+        c = self.cond(s.cond, ctx)
+        ctx.loop += 1
+        reg = self._enter_region(ctx, "while", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
+        ctx.loop -= 1
+        return I.SWhile(c, body)
+
+    def loop_var(self, name, ty, ctx, node):
+        b, _ = ctx.scope.lookup(name)
+        if isinstance(b, I.Sym) and self._par_here(ctx) is not None and not getattr(b, "par_private", False):
+            b = None         # inside a parallel for, an inner loop gets its own variable (D152)
+        if isinstance(b, I.Sym) and b.func is ctx.func and type(b.ty) is type(ty):
+            if isinstance(ty, NumTy) and self.U.unify(b.ty.dim, ty.dim) or isinstance(ty, StrTy):
+                if getattr(b, "unset_msg", None) is not None:    # the variable of an earlier loop
+                    b.unset_msg = None
+                    b.fresh_loop_var = True
+                return b
+        sym = self.new_sym(name, ty, ctx)
+        ctx.scope.names[name] = sym
+        sym.fresh_loop_var = True
+        return sym
+
+    @staticmethod
+    def _after_loop(sym, line):
+        # a loop variable that didn't exist before the loop has no value if the loop never ran
+        if getattr(sym, "fresh_loop_var", False):
+            sym.fresh_loop_var = False
+            sym.region = None
+            sym.unset_msg = f"{sym.name} might not have a value here: it is only set inside the for loop on line " \
+                            f"{line}, which may not run at all"
+
+    def s_For(self, s, ctx):
+        lo = self.expr(s.lo, ctx)
+        hi = self.expr(s.hi, ctx)
+        self.need_num(lo, s.lo, "the start of the range")
+        self.need_num(hi, s.hi, "the end of the range")
+        self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the range goes from {self.desc(lo.ty.dim)} to "
+                      f"{self.desc(hi.ty.dim)}; both ends need the same units", s)
+        if s.step is not None:
+            st = self.expr(s.step, ctx)
+            self.need_num(st, s.step, "the step")
+            self.unify_or(lo.ty.dim, st.ty.dim, lambda: f"the step is {self.desc(st.ty.dim)} but the range is "
+                          f"{self.desc(lo.ty.dim)}", s.step)
+        else:
+            if not self.U.unify(lo.ty.dim, DIMLESS):
+                raise self.err(f"this range is {self.desc(lo.ty.dim)}, so it needs a step with units", s,
+                               hint="add e.g.  step 0.1 s")
+            st = I.IConst(1, NumTy(DIMLESS))
+        if getattr(s, "parallel", False):
+            return self.parallel_for(s, lo, hi, st, ctx)
+        sym = self.loop_var(s.var, NumTy(lo.ty.dim), ctx, s)
+        sym.hint = lo.hint
+        sym.sf = None
+        sym.direct = True       # grid values print as written (0.07 s, not 0.0700 s; D11)
+        sym.assigned = True
+        ctx.loop += 1
+        reg = self._enter_region(ctx, "for", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
+        ctx.loop -= 1
+        self._after_loop(sym, s.line)
+        return I.SFor(sym, lo, hi, st, body)
+
+    # ------------------------------------------------------------ parallel for (M5, D152)
+    PAR_NO_STMT = ((I.SPrint, "print"), (I.SPlot, "plot"), (I.SSolve, "solve"), (I.SFit, "fit"),
+                   (I.SPush, "push"), (I.SClear, "clear"), (I.SAnimate, "plot ... animate"), (I.SReturn, "return"), (I.SBreak, "break"))
+    PAR_NO_BUILTIN = {"rand", "rand2", "randn", "randn2", "seed", "sample"}
+
+    def parallel_for(self, s, lo, hi, st, ctx):
+        """`parallel for i from a to b`: the iterations run at the same time on several threads.  Each
+        iteration may set its own variables, write xs[i] (its own element) of lists made before the loop,
+        and add to sums (s += …, s -= …), which are added up in a fixed order (D152).  Anything else that two
+        iterations could both touch is a compile-time error."""
+        if self._par_here(ctx) is not None:
+            raise self.err("a parallel for can't be inside another parallel for", s,
+                           hint="make the inner loop a plain for; the outer loop already uses every core")
+        if ctx.lam is not None:
+            raise self.err("a parallel for can't be used here (inside an integral or equation)", s)
+        par = {"func": ctx.func, "private": [], "line": s.line}
+        before = dict(ctx.scope.names)
+        self.par_stack.append(par)
+        try:
+            # always a new variable: each iteration has its own i, which has no value after the loop
+            sym = self.new_sym(s.var, NumTy(lo.ty.dim), ctx)
+            ctx.scope.names[s.var] = sym
+            sym.hint = lo.hint
+            sym.sf = None
+            sym.direct = True
+            sym.assigned = True
+            ctx.loop += 1
+            reg = self._enter_region(ctx, "for", s.line)
+            try:
+                body = self.block(s.body, ctx)
+            finally:
+                self._exit_region(ctx, reg)
+            ctx.loop -= 1
+        finally:
+            self.par_stack.pop()
+        for p in par["private"]:
+            p.region = None
+            p.unset_msg = f"{p.name} has no value here: it belongs to the iterations of the parallel for on line " \
+                          f"{s.line}, so it isn't kept after the loop"
+            if ctx.scope.names.get(p.name) is p and p.name in before:
+                ctx.scope.names[p.name] = before[p.name]     # the variable of that name from before the loop
+        out = I.SFor(sym, lo, hi, st, body)
+        out.par = self.parallel_info(sym, body, par, s)
+        return out
+
+    def parallel_info(self, isym, body, par, node):
+        """Check that the iterations of a parallel for can't interfere; returns what the back ends need:
+        the sums (reductions), the lists written as xs[i], and the other lists read (checked at run time not
+        to be the same list as a written one)."""
+        private = {p.id for p in par["private"]} | {isym.id}
+        reductions, written, red_ops = [], [], set()
+
+        # where each statement of the body starts, so an error points at the statement, not at column 1
+        # (red team 5 #6)
+        starts = {}
+
+        def note(ss):
+            for st in ss if isinstance(ss, list) else ():
+                ln, col = getattr(st, "line", None), getattr(st, "col", None)
+                if ln and col and ln not in starts:
+                    starts[ln] = (col, getattr(st, "length", None) or 1)
+                for k in ("body", "then", "other"):
+                    note(getattr(st, k, None))
+        note(getattr(node, "body", None))
+
+        def err(msg, line=None, hint=None):
+            e = self.err(msg, node, hint=hint)
+            if line and line != getattr(node, "line", None):
+                col, length = starts.get(line, (1, 1))
+                e.line, e.col, e.length = line, col, length
+            return e
+
+        def is_i(ix):
+            return isinstance(ix, I.IVar) and ix.sym is isym
+
+        def banned(st, line, who=None):
+            for cls, what in self.PAR_NO_STMT:
+                if isinstance(st, cls) and not (who and cls is I.SReturn):
+                    if who:
+                        raise err(f"{who} uses {what}, so it can't be called inside a parallel for", line)
+                    why = "the loop has to run to the end" if cls in (I.SBreak, I.SReturn) else \
+                        "the iterations run at the same time, in no fixed order"
+                    raise err(f"{what} can't be used inside a parallel for: {why}", line,
+                              hint="keep the values in a list with xs[i] = …, then use them after the loop")
+
+        def stmts(ss):
+            for st in ss:
+                line = getattr(st, "line", 0) or None
+                banned(st, line)
+                if isinstance(st, I.SFor) and getattr(st, "par", None):
+                    raise err("a parallel for can't be inside another parallel for", line)
+                if isinstance(st, (I.SFor, I.SForIn)) and st.sym.id not in private:
+                    raise err(f"{st.sym.name} is shared by all the iterations of this parallel for, so it can't "
+                              f"be a loop variable inside it", line, hint="use a new name for the inner loop")
+                if isinstance(st, I.SAssign) and st.sym.id not in private:
+                    v = st.value
+                    ok = isinstance(st.sym.ty, NumTy) and isinstance(v, I.IBin) and v.op in "+-" and \
+                        isinstance(v.a, I.IVar) and v.a.sym is st.sym and \
+                        all(x is not st.sym for x in self._par_syms(v.b))
+                    if not ok:
+                        raise err(f"{st.sym.name} is shared by all the iterations of this parallel for, so it "
+                                  f"can't be set inside it", line,
+                                  hint=f"only sums are allowed:  {st.sym.name} += …  (added up in a fixed order);"
+                                       f" or give each iteration its own new variable")
+                    red_ops.add(id(v))
+                    if st.sym not in reductions:
+                        reductions.append(st.sym)
+                if isinstance(st, I.SIndexAssign):
+                    if st.sym.id in private:
+                        raise err(f"{st.sym.name} is made inside the parallel for; changing its elements there "
+                                  f"isn't supported", line, hint="build it with a formula instead")
+                    if not is_i(st.idx):
+                        raise err(f"each iteration of a parallel for may only write its own element, "
+                                  f"{st.sym.name}[{isym.name}]", line,
+                                  hint=f"two iterations writing the same element would race; index with the loop "
+                                       f"variable {isym.name}")
+                    if st.sym not in written:
+                        written.append(st.sym)
+                for sub in (getattr(st, "body", None), getattr(st, "then", None), getattr(st, "other", None)):
+                    if isinstance(sub, list):
+                        stmts(sub)
+        stmts(body)
+        red_ids = {r.id for r in reductions}
+        w_ids = {w.id for w in written}
+        lists = []
+
+        def walk(x, line, fstack):
+            if isinstance(x, (list, tuple)):
+                for y in x:
+                    walk(y, line, fstack)
+                return
+            if not isinstance(x, (I.Expr, I.Stmt, I.ILambda)):
+                return
+            if isinstance(x, I.Stmt) and getattr(x, "line", 0):
+                line = x.line
+            if isinstance(x, I.SIndexAssign) and x.sym.id in w_ids:
+                walk(x.value, line, fstack)
+                return
+            if isinstance(x, I.IIndex) and isinstance(x.lst, I.IVar) and x.lst.sym.id in w_ids and not fstack:
+                if not is_i(x.idx):
+                    raise err(f"{x.lst.sym.name} is written by the iterations ({x.lst.sym.name}[{isym.name}] = …), "
+                              f"so inside the loop it can only be read as {x.lst.sym.name}[{isym.name}]", line)
+                return
+            if isinstance(x, I.IBin) and id(x) in red_ops:
+                walk(x.b, line, fstack)
+                return
+            if isinstance(x, I.IVar):
+                sy = x.sym
+                if sy.id in red_ids:
+                    raise err(f"the sum {sy.name} can't be read inside the parallel for: its value is only known "
+                              f"after the loop", line)
+                if sy.id in w_ids:
+                    raise err(f"{sy.name} is written by the iterations ({sy.name}[{isym.name}] = …), so inside "
+                              f"the loop it can only be read as {sy.name}[{isym.name}]", line)
+                if isinstance(sy.ty, ListTy) and sy.id not in private and sy not in lists and \
+                        (sy.func is par["func"] or sy.storage in ("global", "arena")):
+                    lists.append(sy)
+                return
+            if isinstance(x, I.IBuiltin) and x.name in self.PAR_NO_BUILTIN:
+                raise err("random numbers can't be drawn inside a parallel for: the iterations run in a different "
+                          "order each time, so the results would change from run to run", line,
+                          hint="draw them before the loop, into a list")
+            if isinstance(x, (I.ICall, I.IMap)):
+                f = x.func
+                who = f.name.split(".")[0]
+                if f in fstack:
+                    raise err(f"{who} calls itself; a recursive function can't be used inside a parallel for", line)
+                for st in f.body:
+                    banned(st, line, who)
+                walk(f.body, line, fstack + [f])
+            for v in vars(x).values():
+                walk(v, line, fstack)
+        walk(body, getattr(node, "line", 0), [])
+        pairs, seen = [], set()
+        for w in written:
+            for o in written + lists:
+                if o is not w and frozenset((w.id, o.id)) not in seen:
+                    seen.add(frozenset((w.id, o.id)))
+                    pairs.append((w, o, self.text(f"{w.name} and {o.name}")))
+        return {"reductions": reductions, "written": written, "lists": lists, "alias": pairs}
+
+    @staticmethod
+    def _par_syms(e):
+        out = []
+        stack = [e]
+        while stack:
+            x = stack.pop()
+            if isinstance(x, I.IVar):
+                out.append(x.sym)
+            elif isinstance(x, (I.Expr, I.ILambda)):
+                stack.extend(vars(x).values())
+            elif isinstance(x, (list, tuple)):
+                stack.extend(x)
+        return out
+
+    def s_ForIn(self, s, ctx):
+        lst = self.expr(s.iterable, ctx, allow_func=True)
+        if isinstance(lst, SolRef):
+            lst = self.sol_values(lst.view, s.iterable)
+        if isinstance(lst.ty, TextListTy):
+            sym = self.loop_var(s.var, STR, ctx, s)
+            sym.assigned = True
+            ctx.loop += 1
+            body = self.block(s.body, ctx)
+            ctx.loop -= 1
+            self._after_loop(sym, s.line)
+            return I.SForIn(sym, lst, body)
+        if not isinstance(lst.ty, ListTy):
+            raise self.err(f"can't loop over {type_desc(lst.ty, self.U)}; 'for x in ...' needs a list", s.iterable,
+                           hint="to count, write  for i from 1 to 10")
+        sym = self.loop_var(s.var, NumTy(lst.ty.dim), ctx, s)
+        sym.hint = lst.hint
+        # for E in [0.50 eV, 0.75 eV] keeps the elements' precision when they all share it (friction #30)
+        src = lst
+        if isinstance(src, I.IBin) and src.op == "*" and isinstance(src.a, I.IList):
+            src = src.a                  # [0.50, 0.75] eV (D192): the written list inside the unit
+        sfs = {getattr(it, "sf", None) for it in getattr(src, "items", [None])}
+        sym.sf = sfs.pop() if len(sfs) == 1 else None
+        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11)
+        items = getattr(src, "items", None)
+        sym.direct = sym.sf is None and bool(items) and all(getattr(it, "direct", False) for it in items)
+        sym.assigned = True
+        ctx.loop += 1
+        reg = self._enter_region(ctx, "for", s.line)
+        try:
+            body = self.block(s.body, ctx)
+        finally:
+            self._exit_region(ctx, reg)
+        ctx.loop -= 1
+        self._after_loop(sym, s.line)
+        return I.SForIn(sym, lst, body)
+
+    def s_Return(self, s, ctx):
+        if ctx.is_main:
+            raise self.err("return can only be used inside a function", s)
+        if s.value is None:
+            raise self.err("return needs a value", s)
+        v = self.expr(s.value, ctx, allow_func=True)
+        if isinstance(v, SolRef):        # Q17 (D48)
+            n, tn = v.view.name, v.view.tname
+            raise self.err(f"a function can't return the ODE solution {n} yet; return a number made from it instead, "
+                           f"like {n}(…), ∫ {n}({tn}) d{tn} or a root found with solve", s.value,
+                           hint="or solve the ODE at the top level, where its solution stays available")
+        if isinstance(v, FuncRef):
+            v = self.expr(s.value, ctx)      # the usual message for a function used as a value
+        ctx.ret_types.append(v)
+        return I.SReturn(v)
+
+    def s_Break(self, s, ctx):
+        if ctx.loop == 0:
+            raise self.err("break can only be used inside a loop", s)
+        return I.SBreak()
+
+    def s_Continue(self, s, ctx):
+        if ctx.loop == 0:
+            raise self.err("continue can only be used inside a loop", s)
+        return I.SContinue()
+
+    def s_Assert(self, s, ctx):
+        c = self.cond(s.cond, ctx)
+        msg = s.message or f"check failed: {C.to_source(s.cond)}"
+        return I.SAssert(c, self.text(msg))
+
+    # ============================================================ expressions
+    def need_num(self, v, node, what="this value"):
+        if isinstance(v, (FuncRef, SolRef)) or not isinstance(v.ty, NumTy):
+            got = "a function" if isinstance(v, (FuncRef, SolRef)) else type_desc(v.ty, self.U)
+            raise self.err(f"{what} must be a number, but it is {got}", node)
+
+    def need_numlike(self, v, node, what="this value", allow_vec=False):
+        if allow_vec and isinstance(v, I.Expr) and isinstance(v.ty, (VecTy, MatTy)):
+            return
+        if isinstance(v, (FuncRef, SolRef)) or not isinstance(v.ty, (NumTy, ListTy)):
+            got = "a function" if isinstance(v, FuncRef) else ("an ODE solution" if isinstance(v, SolRef)
+                                                              else type_desc(v.ty, self.U))
+            hint = None
+            if isinstance(v, FuncRef):
+                hint = f"call it with an argument, e.g. {v.name}(x)"
+            if isinstance(v, SolRef):
+                hint = f"use {v.view.name}({v.view.tname}) for its value at a time"
+            raise self.err(f"{what} must be a number, but it is {got}", node, hint)
+
+    def expr(self, e, ctx, allow_func=False):
+        m = getattr(self, "e_" + type(e).__name__, None)
+        if m is None:
+            raise self.err(f"this kind of expression ({type(e).__name__}) isn't supported here", e)
+        st = self._estack
+        st.append(e)
+        try:
+            r = m(e, ctx)
+        finally:
+            st.pop()
+        if isinstance(r, (FuncRef, SolRef)):
+            if not allow_func:
+                if isinstance(r, FuncRef):
+                    if r.param:
+                        raise self.err(f"{r.name} is a function here; call it like {r.name}(x)", e)
+                    raise self.err(f"{r.info.display_name} is a function; give it an argument, "
+                                   f"like {r.info.display_name}(x)", e)
+                v = r.view
+                raise self.err(f"{v.name} is the solution of an ODE (a function of {v.tname}); "
+                               f"use {v.name}({v.tname}) for its value at a time", e,
+                               hint=f"e.g. {v.name}(1 s), or values({v.name}) for all computed values")
+            return r
+        r.line = e.line
+        return r
+
+    def e_Num(self, e, ctx):
+        if e.value == 0 and e.digit:
+            r = I.IConst(0, NumTy(DExpr.fresh("0")))   # a plain 0 fits any units
+        else:
+            r = I.IConst(e.value, NumTy(DIMLESS))
+        r.sf = e.sigfigs
+        r.direct = True
+        return r
+
+    def e_Str(self, e, ctx):
+        r = I.IStr(e.value, STR)
+        r.text_id = self.text(e.value)
+        return r
+
+    def e_Bool(self, e, ctx):
+        return I.IBool(e.value, BOOL)
+
+    def e_Quantity(self, e, ctx):
+        u = self.resolve_unit(e.unit)
+        v = self.expr(e.value, ctx)
+        self.need_numlike(v, e.value, allow_vec=True)
+        if isinstance(v.ty, ComplexTy):
+            return cplx.quantity(self, v, u, e)
+        if isinstance(v.ty, VecTy) and v.ty.mixed:
+            raise self.err("this vector already has units (a different unit on each component)", e,
+                           hint="write the unit on each component, like <1 m, 2 m/s>")
+        if isinstance(v.ty, MatTy):
+            if u.affine:
+                raise self.err("°C/°F can't be used for matrices", e)
+            if not isinstance(e.value, A.ListLit):
+                vd = self.U.norm(v.ty.dim)
+                if vd.concrete and not vd.const.dimensionless:
+                    raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
+            elif not self.U.unify(v.ty.dim, DIMLESS):
+                raise self.err(f"this matrix already has units ({self.desc(v.ty.dim)}); write the unit once, "
+                               f"after the ]]", e)
+            r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), MatTy(DExpr.of(u.dim), v.ty.r, v.ty.c))
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit) and _written(getattr(v, "items", []))
+            return r
+        if isinstance(v.ty, VecTy):
+            if u.affine:
+                raise self.err("°C/°F can't be used for vectors", e)
+            if not isinstance(e.value, A.VecLit):
+                vd = self.U.norm(v.ty.dim)
+                if vd.concrete and not vd.const.dimensionless:
+                    raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
+            self.U.unify(v.ty.dim, DIMLESS)
+            r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), VecTy(DExpr.of(u.dim), v.ty.n))
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.VecLit) and _written(getattr(v, "items", []))
+            return r
+        if getattr(e, "times_unit", False) and isinstance(v.ty, (NumTy, ListTy)) and not u.affine:
+            vd = self.U.norm(v.ty.dim)
+            if not (vd.concrete and vd.const.dimensionless):
+                # `(a + b) MeV`, `100 h km/s/Mpc` with h Planck's: times 1 unit, like `* 1 MeV` (D215)
+                dim = DExpr.of(v.ty.dim) * DExpr.of(u.dim)
+                ty = NumTy(dim) if isinstance(v.ty, NumTy) else ListTy(dim)
+                r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), ty)
+                r.hint, r.sf, r.direct = None, v.sf, False
+                return r
+        if not isinstance(e.value, A.Num):
+            vd = self.U.norm(v.ty.dim)
+            if vd.concrete and not vd.const.dimensionless:
+                raise self.err(f"this already has units ({self.desc(v.ty.dim)}), so [{e.unit.text}] would "
+                               f"multiply them", e, hint=f"to show it in {e.unit.text}, write:  ... in {e.unit.text}")
+            self.U.unify(v.ty.dim, DIMLESS)
+        dim = DExpr.of(u.dim)
+        ty = NumTy(dim) if isinstance(v.ty, NumTy) else ListTy(dim)
+        if isinstance(v, I.IConst):
+            r = I.IConst(v.value * u.factor + u.offset, ty)
+        else:
+            r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), ty) if u.factor != 1 else v
+            if u.offset:
+                r = I.IBin("+", r, I.IConst(u.offset, NumTy(DIMLESS)), ty)
+            if r is v:
+                r = I.IBin("*", v, I.IConst(1.0, NumTy(DIMLESS)), ty)
+        r.ty = ty
+        r.hint = u
+        r.sf = v.sf
+        r.direct = isinstance(e.value, A.Num)
+        if u.affine and isinstance(e.value, A.Num):
+            r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
+            r.abs_at = e                             # where it is written (the warning points there, #9)
+        return r
+
+    def lookup(self, name, ctx, node):
+        b, scope = ctx.scope.lookup(name)
+        return b, scope
+
+    def e_Name(self, e, ctx):
+        name = e.name
+        b, scope = self.lookup(name, ctx, e)
+        if b is None:
+            raise self.undefined(name, e, ctx)
+        if getattr(b, "is_pde", False):
+            raise self.err(f"{name} is a solution of a PDE, a function of {b.xname} and {b.tname}: write "
+                           f"{name}({b.xname}, {b.tname}), like {name}(0.5 m, 1 s)", e)
+        if isinstance(b, FuncInfo) and scope is not None and scope.kind == "func":
+            return FuncRef(b, name, param=True)      # a function passed in as an argument (D43)
+        return self.use_binding(b, name, e, ctx)
+
+    def use_binding(self, b, name, e, ctx):
+        if isinstance(b, I.Sym):
+            return self._from_system(b, self.var_ref(b, ctx, e), e)
+        if isinstance(b, ConstInfo):
+            self.__dict__.setdefault("used_consts", set()).add(name)
+            if name == "∞":
+                r = I.IConst(math.inf, NumTy(DExpr.fresh("∞")))
+            elif name == "𝑖" and b.desc.startswith("the imaginary unit"):
+                r = I.IVec([I.IConst(0, NumTy(DIMLESS)), I.IConst(1, NumTy(DIMLESS))], ComplexTy(DIMLESS))
+            elif self.nat.natural:        # its value in natural units, e.g. ħ = c = 1, m_e = 0.511 MeV (D60)
+                r = I.IConst(self.nat.const_value(canonical_const_name(b.name), b.value, b.unit.dim),
+                             NumTy(self.nat.canon_dim(b.unit.dim)))
+            else:
+                r = I.IConst(b.value, NumTy(b.unit.dim))
+                r.hint = b.unit if b.unit.name not in ("1",) and self.nat.display != "astro" else None
+            return r
+        if isinstance(b, FuncInfo):
+            return FuncRef(b)
+        if isinstance(b, SolView):
+            other = getattr(b.sol_sym, "nat", SI)
+            if other.key != self.nat.key:
+                raise self.err(f"{name} was solved for outside this {self.nat.label()} region, so it can't be used "
+                               f"here", e, hint=f"solve the equation inside the region (or outside, and use it there)")
+            self.var_ref(b.sol_sym, ctx, e)   # marks capture/global as needed
+            return SolRef(b)
+        if isinstance(b, LocalFunc):
+            raise self.err(f"{name} is a function defined inside {b.owner}; it can only be called, like "
+                           f"{name}({', '.join(p.name for p in b.fdef.params)})", e,
+                           hint=f"to pass it to another function, or to differentiate or integrate it by name, "
+                                f"define {name} at the top level")
+        if isinstance(b, ModuleRef):
+            raise self.module_as_value(b, name, e)
+        if isinstance(b, PyModRef):
+            raise self.err(f"{name} is the Python module {b.module}, not a value; call its functions, like "
+                           f"{name}.f(x)", e)
+        raise self.err(f"can't use {name} here", e)
+
+    def _export_example(self, sym, system):
+        """A unit to suggest for taking sym out of its natural-units region: fm for 1/energy, MeV for energy..."""
+        if isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)) and getattr(sym.ty, "dim", None) is not None:
+            d = self.U.norm(sym.ty.dim)
+            if d.concrete and "ħ" in system.consts:
+                _, beta = system.split(d.const)
+                if all(b == 0 for b in beta[1:]):
+                    return {1: "MeV  (or kg for a mass)", -1: "fm  (or s for a time)", 0: "1",
+                            -2: "fm²  (or barn)"}.get(beta[0], system.display_unit(d.const).name)
+        return "fm  (or MeV, s, kg, ...)"
+
+    def _from_system(self, sym, r, node):
+        """A variable set under another unit system (D60).  SI values (or those of a system with fewer constants
+        set to 1) convert uniquely into the current natural units; the other way is ambiguous (is 1/MeV a length
+        or a time?), so it needs an explicit  x in unit."""
+        other = getattr(sym, "nat", None)
+        if other is None or other.key == self.nat.key:
+            return r
+        cur = self.nat
+        if not other.key <= cur.key:
+            what = f"{sym.name} was computed in {other.name} units ({' = '.join(other.consts)} = 1)"
+            hint = f"say which unit you want, like  {sym.name} in {self._export_example(sym, other)}"
+            raise self.err(f"{what}, so its units here are ambiguous", node, hint=hint)
+        if not isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)) or (isinstance(sym.ty, VecTy) and sym.ty.mixed):
+            if isinstance(sym.ty, (BoolTy, StrTy, TextListTy)):
+                return r
+            raise self.err(f"{sym.name} was set outside this {cur.label()} region and can't be used here", node)
+        d = self.U.norm(sym.ty.dim)
+        if not d.concrete:
+            raise self.err(f"the units of {sym.name} aren't known yet, so it can't be converted into "
+                           f"{cur.name} units here", node, hint=f"give {sym.name} a unit where it is set")
+        f = cur.factor(d.const)
+        nd = DExpr.of(cur.canon_dim(d.const))
+        if isinstance(sym.ty, NumTy):
+            ty = NumTy(nd)
+        elif isinstance(sym.ty, ListTy):
+            ty = ListTy(nd)
+        elif isinstance(sym.ty, VecTy):
+            ty = VecTy(nd, sym.ty.n)
+        else:
+            ty = MatTy(nd, sym.ty.r, sym.ty.c)
+        out = I.IBin("*", r, I.IConst(f, NumTy(DIMLESS)), ty) if f != 1.0 or nd.const != d.const else r
+        if out is r:
+            return r
+        out.sf, out.direct = r.sf, r.direct
+        out.hint = cur.canon_unit(r.hint) if isinstance(r.hint, Unit) else None
+        return out
+
+    def var_ref(self, sym, ctx, node):
+        """Reference a variable, marking it global or captured when used from another function."""
+        msg = getattr(sym, "unset_msg", None)
+        if msg and any(sym.id in reg["assigned"][-1] for reg in getattr(ctx, "regions", [])):
+            msg = None          # set earlier in this same loop body / branch (gauntlet friction #4)
+        if msg and ctx.lam is None and (sym.func is ctx.func) and getattr(sym, "par_private", False):
+            raise self.err(msg, node, hint="to keep values from the loop, write them to a list made before it "
+                                           "(ys[i] = …) or add them up (s += …)")
+        if msg and ctx.lam is None and (sym.func is ctx.func):
+            where = msg.split("inside ")[1].split(",")[0]
+            raise self.err(msg, node, hint=f"give {sym.name} a value before {where}, e.g.  {sym.name} = 0")
+        if ctx.lam is not None:
+            lam = ctx.lam
+            if sym in lam.locals or sym in lam.params or sym in lam.state or sym in lam.param_syms \
+                    or sym in lam.col_syms:
+                return I.IVar(sym)
+            # symbol from an enclosing function
+            if sym.storage in ("global", "arena"):
+                return self._ivar(sym)
+            if getattr(sym, "par_private", False):
+                pass        # private to a parallel for: passed in the env, never a shared global (D152)
+            elif sym.func is not None and getattr(sym.func, "is_main", False) or self._is_main_sym(sym):
+                sym.storage = "global"
+                return self._ivar(sym)
+            if sym not in lam.captures:
+                # an ODE solution made in the function is passed as a pointer in the env (D48)
+                if not isinstance(sym.ty, (NumTy, BoolTy, VecTy, MatTy, SolTy)):
+                    what = self.user_name(sym, node)
+                    raise self.err(f"{what} can't be used inside this integral/equation yet (only numbers, vectors, "
+                                   f"matrices and ODE solutions can be taken in from the function)", node)
+                lam.captures.append(sym)
+                # an enclosing integrand / equation must capture it too, to pass it on (gauntlet E9)
+                p = getattr(ctx, "parent", None)
+                while p is not None and getattr(p, "lam", None) is not None:
+                    pl = p.lam
+                    if sym in pl.locals or sym in pl.params or sym in pl.state or sym in pl.param_syms \
+                            or sym in pl.col_syms:
+                        break
+                    if sym not in pl.captures:
+                        pl.captures.append(sym)
+                    p = getattr(p, "parent", None)
+            return self._ivar(sym)
+        if sym.func is not ctx.func and sym.storage == "local":
+            if getattr(sym, "par_private", False):
+                raise self.err(f"{sym.name} belongs to one iteration of a parallel for and can't be used in "
+                               f"another function", node)
+            if self._is_main_sym(sym):
+                sym.storage = "global"
+            else:
+                raise self.err(f"{self.user_name(sym)} belongs to another function and can't be used here", node)
+        return self._ivar(sym)
+
+    @staticmethod
+    def user_name(sym, node=None):
+        """How to name a variable in a message: an ODE solution's handle (__sol.3) by its unknowns."""
+        if isinstance(sym.ty, SolTy):
+            names = sym.ty.info.get("names", [])
+            return "the solution " + ", ".join(names) if names else "this ODE solution"
+        if isinstance(sym.ty, ListTy):
+            return f"the list {sym.name}"
+        return sym.name
+
+    def _ivar(self, sym):
+        r = I.IVar(sym)
+        r.sf = sym.sf
+        r.hint = sym.hint
+        r.direct = sym.direct
+        r.tdelta = getattr(sym, "tdelta", False)
+        return r
+
+    def _is_main_sym(self, sym):
+        return sym.func is not None and sym.func.name.startswith("main")
+
+    def _unit_only_ancestor(self, e, known):
+        """The largest expression around the name e (being checked) made only of units that aren't
+        program names, `*`, `/` and whole-number powers, like cm³/(mol s); e itself if none is larger."""
+        def unit_only(n):
+            if isinstance(n, A.Name):
+                return n.name not in known and lookup_unit(n.name) is not None
+            if isinstance(n, A.BinOp) and n.op in ("*", "/"):
+                return unit_only(n.left) and unit_only(n.right)
+            if isinstance(n, A.BinOp) and n.op == "^":
+                return unit_only(n.left) and (isinstance(n.right, A.Num) or isinstance(n.right, A.Neg) and
+                                              isinstance(n.right.operand, A.Num))
+            return False
+        st = self._estack
+        if not st or st[-1] is not e:
+            return e
+        best = e
+        for n in reversed(st[:-1]):
+            if not unit_only(n):
+                break
+            best = n
+        return best
+
+    def undefined(self, name, e, ctx):
+        # collect known names for suggestions
+        known = set()
+        s = ctx.scope
+        while s is not None:
+            known |= set(s.names)
+            s = s.parent
+        hint = None
+        from .lexer import canonical_name, KEYWORDS
+        # LT -> L T ?  (also omegat -> ω t)
+        for i in range(1, len(name)):
+            a, b = canonical_name(name[:i]), canonical_name(name[i:])
+            if a in known and b in known:
+                hint = f"did you mean {a} {b} ({a} times {b})? Fermium reads {name} as one name; put a space between"
+                break
+        left = getattr(e, "unit_left", None)
+        if hint is None:
+            hint = self.module_hint(name, ctx)
+        if hint is None and lookup_unit(name) is not None and left is not None:
+            lt = C.to_source(left)
+            hint = (f"{name} is a unit, and units go right after a number; to multiply {lt} by {name} write "
+                    f"{lt} * 1 {name} or {lt} [{name}]") if len(lt) <= 24 else \
+                (f"{name} is a unit, and units go right after a number; to multiply by it write * 1 {name} or "
+                 f"[{name}] after the value")
+        if hint is None and lookup_unit(name) is not None:
+            whole = self._unit_only_ancestor(e, known)
+            if whole is not e:          # rate = cm³/(mol s): a whole unit, used as a value (D163)
+                text = C.to_source(whole)
+                return self.err(f"{text} is a unit, not a value", e,
+                                hint=f"for the quantity write  1 {text}  (a number, then its unit)")
+            hint = f"{name} is a unit; units go right after a number, like 1 {name}, or in brackets [{name}]"
+        if hint is None and getattr(self, "_after_number", False) and name in SPELLED_UNITS:
+            # `3 sec`: the spelled unit, even though sec is also a built-in function (#63)
+            return self.err(f"'{name}' isn't a unit Fermium knows (or a variable you've defined)", e,
+                            hint=f"Fermium writes units as symbols: {SPELLED_UNITS[name]}")
+        if hint is None:
+            cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(
+                BUILTINS - (set() if getattr(self, "_calling", False) else M3_FUNCS))  # speed ≠ seed (as a value)
+            # `m_sun` is M_sun, not R_sun: a match up to case and underscores comes first (gauntlet #79)
+            close = [k for k in cands if k.lower() == name.lower()] or \
+                [k for k in cands if _loose(k) == _loose(name)] or \
+                get_close_matches(name, cands, n=1, cutoff=0.7)
+            if close:
+                hint = f"did you mean {close[0]}?"
+        if hint is None and getattr(self, "_after_number", False):
+            return self.err(f"'{name}' isn't a unit Fermium knows (or a variable you've defined)", e,
+                            hint=f"Fermium writes units as symbols: {SPELLED_UNITS[name]}" if name in SPELLED_UNITS
+                            else "see the list of units in docs/reference.md §15")
+        if hint is None and getattr(self, "_calling", False):
+            hint = f"define the function first, e.g.  {name}(x) = 2 x"
+        if name == "%":
+            return self.err("% is the percent unit in Fermium (5 % = 0.05)", e,
+                            hint="for the remainder of a division use mod(n, 2)")
+        if name in BUILTINS:
+            return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
+        states = sorted((k for k in known if k.startswith(name + "_") and k[len(name) + 1:].isdigit()),
+                        key=lambda k: int(k[len(name) + 1:]))
+        if states:          # after an eigenvalue problem the states are ψ₁ … ψ_N (§20, red team 5 #12)
+            sub = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+            pretty = [name + k[len(name) + 1:].translate(sub) for k in states]
+            from .lexer import GREEK_TO_ASCII
+            ascii1 = "".join(GREEK_TO_ASCII.get(c, c) for c in states[0])
+            return self.err(f"{name} isn't defined: the eigenvalue problem's states are "
+                            f"{', '.join(pretty[:3])}{' … ' + pretty[-1] if len(pretty) > 3 else ''}", e,
+                            hint=f"use {pretty[0]} (ASCII: {ascii1}) for the lowest state, {pretty[0]}(x) for its "
+                                 f"value at x")
+        return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
+
+    # ------------------------------------------------------------ arithmetic
+    def _leibniz(self, e, ctx):
+        """dx/dt written as a fraction: a derivative when dx and dt aren't variables but x is a function."""
+        from .lexer import canonical_name
+        right, args = e.right, None
+        if isinstance(right, A.Call) and isinstance(right.func, A.Name):      # dx/dt(2 s)
+            right, args = right.func, right.args
+        if e.op == "/" and isinstance(e.left, A.Name) and isinstance(right, A.Name) and not e.left.paren:
+            ln, rn = e.left.name, right.name
+            if len(ln) > 1 and len(rn) > 1 and ln.startswith("d") and rn.startswith("d"):
+                if ctx.scope.lookup(ln)[0] is None and ctx.scope.lookup(rn)[0] is None:
+                    x, t = canonical_name(ln[1:]), canonical_name(rn[1:])
+                    if isinstance(ctx.scope.lookup(x)[0], (FuncInfo, SolView)):
+                        d = A.Deriv(t, 1, A.Name(x).at(e.left)).at(e)
+                        return A.Call(d, args).at(e) if args is not None else d
+        return None
+
+    def e_BinOp(self, e, ctx):
+        if e.op in ("*", "/") and isinstance(e.left, A.BinOp):
+            e.left.in_product = True          # 2 h c² is Planck's law, not "2 hours": only a lone `2 h` warns
+        if e.op == "^":
+            return self.power(e, ctx)
+        lz = self._leibniz(e, ctx)
+        if lz is not None:
+            return self.expr(lz, ctx, allow_func=True)
+        a = self.expr(e.left, ctx, allow_func=e.implicit)
+        if isinstance(a, (FuncRef, SolRef)):
+            if e.implicit and e.right.paren:
+                return self.e_Call(A.Call(e.left, [e.right]).at(e), ctx)
+            self.need_numlike(a, e.left, allow_vec=True)
+        self._after_number = e.implicit and isinstance(e.left, (A.Num, A.Quantity)) and isinstance(e.right, A.Name)
+        try:
+            b = self.expr(e.right, ctx)
+        finally:
+            self._after_number = False
+        self._warn_limit_division(e, b)
+        if e.implicit and isinstance(e.left, A.Num) and isinstance(e.right, A.Name) \
+                and not getattr(e, "in_product", False) \
+                and e.right.name in self.UNIT_LOOKALIKE_CONSTANTS \
+                and not isinstance(ctx.scope.lookup(e.right.name)[0], I.Sym):
+            what, unit = self.UNIT_LOOKALIKE_CONSTANTS[e.right.name]
+            n = format_number(e.left.value)
+            self.diags.warn(f"{n} {e.right.name} means {n} × {what}; for {unit[0]} write {n} {unit[1]}",
+                            line=e.line, col=e.col)
+        if isinstance(a.ty, StrTy) or isinstance(b.ty, StrTy):
+            return self.text_op(e, a, b)
+        self.need_numlike(a, e.left, allow_vec=True)
+        self.need_numlike(b, e.right, allow_vec=True)
+        return self.arith(e.op, a, b, e)
+
+    def text_op(self, e, a, b):
+        """"3p" + "1/2" joins two texts (D216); two written texts are joined here, others when the program
+        runs.  A number must be turned into text first: str(x)."""
+        if e.op != "+" or e.implicit:
+            raise self.err("text can only be joined with +, like  \"3p\" + \"1/2\"", e)
+        if not (isinstance(a.ty, StrTy) and isinstance(b.ty, StrTy)):
+            num = e.right if isinstance(a.ty, StrTy) else e.left
+            raise self.err("can't add text and a number", num,
+                           hint=f"turn the number into text first:  str({C.to_source(num)})")
+        if isinstance(a, I.IStr) and isinstance(b, I.IStr):
+            r = I.IStr(a.value + b.value, STR)
+            r.text_id = self.text(r.value)
+            return r
+        return I.IBuiltin("text_concat", [a, b], STR)
+
+    # constants whose names look like units: `2 h` is 2 × Planck's constant, not 2 hours
+    UNIT_LOOKALIKE_CONSTANTS = {"h": ("Planck's constant h", ("hours", "hr")),
+                                "G": ("the gravitational constant G", ("gauss", "gauss"))}
+
+    def arith(self, op, a, b, e):
+        if isinstance(a.ty, ComplexTy) or isinstance(b.ty, ComplexTy):
+            return cplx.arith(self, op, a, b, e)
+        if isinstance(a.ty, MatTy) or isinstance(b.ty, MatTy):
+            return self.mat_arith(op, a, b, e)
+        if isinstance(a.ty, VecTy) or isinstance(b.ty, VecTy):
+            return self.vec_arith(op, a, b, e)
+        if op == "×":
+            op = "*"
+        is_list = isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy)
+        mk = ListTy if is_list else NumTy
+        if op in ("+", "-"):
+            if not self.U.unify(a.ty.dim, b.ty.dim):
+                da, db = self.desc(a.ty.dim), self.desc(b.ty.dim)
+                if op == "+":
+                    msg = f"can't add {da} to {db}"
+                else:
+                    msg = f"can't subtract {db} from {da}"
+                raise self.err(msg, e, hint=self.mismatch_hint(a, b))
+            r = I.IBin(op, a, b, mk(a.ty.dim))
+            self._warn_confusable_sum(op, a, b, e)
+            aff_a = a.hint is not None and a.hint.affine
+            aff_b = b.hint is not None and b.hint.affine
+            if op == "+" and aff_a and aff_b:
+                raise self.err(f"can't add two absolute temperatures ({a.hint.name} + {b.hint.name})", e,
+                               hint="to add a temperature change, write it in K, e.g. 20 °C + 5 K")
+            if op == "-" and aff_b:
+                # the difference of two temperatures is a difference: shown in K. The left side may be
+                # in K (300 K - 20 °C, or T - Ta in Newton's law of cooling), since K is absolute too (A47)
+                r.hint = None
+                r.tdelta = True
+            else:
+                r.hint = a.hint if a.hint is not None else b.hint
+        elif op == "*":
+            r = I.IBin("*", a, b, mk(a.ty.dim * b.ty.dim))
+            r.hint = self._keep_hint(a, b)
+            if r.hint is not None:
+                self._drop_turn_hint(r, a, b, "*")
+            if r.hint is not None and r.hint.affine:
+                k = b if a.hint is r.hint else a
+                self._warn_scaled_temperature(r.hint, "×", k, e)
+            else:
+                self._warn_absolute_in_product(a, b, e)
+                self._warn_absolute_in_product(b, a, e)
+        elif op == "/":
+            r = I.IBin("/", a, b, mk(a.ty.dim / b.ty.dim))
+            r.hint = a.hint if self._dimless(b) and a.hint is not None and b.hint is None else None
+            if r.hint is not None:
+                self._drop_turn_hint(r, a, b, "/")
+            if r.hint is not None and r.hint.affine:
+                self._warn_scaled_temperature(r.hint, "/", b, e)
+            else:
+                self._warn_absolute_in_product(a, b, e)      # ΔT/Δx; b / T (Wien) is absolute by nature
+        else:
+            raise self.err(f"unknown operator {op}", e)
+        r.sf = self._sumsf(a, b) if op in ("+", "-") else self._minsf(a, b)
+        return r
+
+    def vec_arith(self, op, a, b, e):
+        va, vb = isinstance(a.ty, VecTy), isinstance(b.ty, VecTy)
+        if isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy):
+            raise self.err("can't mix vectors and lists in arithmetic", e)
+        if op in ("+", "-"):
+            if not (va and vb):
+                raise self.err(f"can't {'add' if op == '+' else 'subtract'} a vector and a single number", e,
+                               hint="both sides must be vectors, e.g. <1, 2> m + <3, 4> m")
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't {'add' if op == '+' else 'subtract'} a {a.ty.n}-vector and a "
+                               f"{b.ty.n}-vector", e)
+            verb = 'add' if op == '+' else 'subtract'
+            if a.ty.mixed or b.ty.mixed:
+                k = self.vec_unify(a.ty, b.ty)
+                if k is not None:
+                    da, db = self.desc(a.ty.comp_dims()[k]), self.desc(b.ty.comp_dims()[k])
+                    raise self.err(f"can't {verb} these vectors: component {k + 1} is {da} on one side and {db} "
+                                   f"on the other", e, hint="vectors add component by component, and each pair "
+                                   "must have the same units")
+                r = I.IBin(op, a, b, a.ty if a.ty.mixed else b.ty)
+                r.hint = a.hint if isinstance(a.hint, MixedHint) else b.hint if isinstance(b.hint, MixedHint) \
+                    else None
+                r.sf = self._minsf(a, b)
+                return r
+            if not self.U.unify(a.ty.dim, b.ty.dim):
+                da, db = self.desc(a.ty.dim), self.desc(b.ty.dim)
+                raise self.err(f"can't {verb} vectors of {da} and {db}", e,
+                               hint=self.mismatch_hint(a, b))
+            r = I.IBin(op, a, b, VecTy(a.ty.dim, a.ty.n))
+            self._warn_confusable_sum(op, a, b, e)
+            r.hint = a.hint or b.hint
+        elif op == "*" and va and vb:
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't take the dot product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
+            da = self.shared_dim(a, "the dot product", e)
+            db = self.shared_dim(b, "the dot product", e)
+            r = I.IBuiltin("vdot", [a, b], NumTy(da * db))
+        elif op == "×" and va and vb:
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't take the cross product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
+            if a.ty.n == 4:
+                raise self.err("the cross product needs 3-vectors (or 2-vectors), not 4-vectors", e)
+            da = self.shared_dim(a, "the cross product", e)
+            db = self.shared_dim(b, "the cross product", e)
+            ty = VecTy(da * db, 3) if a.ty.n == 3 else NumTy(da * db)
+            r = I.IBuiltin("cross", [a, b], ty)
+        elif op in ("*", "×"):
+            if op == "×":
+                raise self.err("× between a vector and a number: use * (or a space) to scale a vector", e)
+            v, k = (a, b) if va else (b, a)
+            r = I.IBin("*", a, b, self.vec_ty_map(v.ty, lambda d: d * k.ty.dim))
+            r.hint = v.hint if self._dimless(k) else None
+        elif op == "/":
+            if vb:
+                raise self.err("can't divide by a vector", e)
+            r = I.IBin("/", a, b, self.vec_ty_map(a.ty, lambda d: d / b.ty.dim))
+            r.hint = a.hint if self._dimless(b) else None
+        else:
+            raise self.err(f"unknown operator {op}", e)
+        r.sf = self._minsf(a, b)
+        return r
+
+    def e_VecLit(self, e, ctx):
+        items = [self.expr(x, ctx) for x in e.items]
+        for it, node in zip(items, e.items):
+            self.need_num(it, node, "a vector component")
+        known = [self.U.norm(it.ty.dim) for it in items]
+        known = [d.const for d in known if d.concrete]
+        if any(d != known[0] for d in known):
+            # components in different units, like the state vector <1 m, 2 m/s>: each keeps its own (D29)
+            r = I.IVec(items, VecTy(None, len(items), dims=[it.ty.dim for it in items]))
+            hints = MixedHint(it.hint for it in items)
+            r.hint = hints if any(h is not None for h in hints) else None
+            r.sf = self._minsf(*items)
+            return r
+        dim = DExpr.fresh("vec")
+        for it, node in zip(items, e.items):
+            self.U.unify(dim, it.ty.dim)
+        r = I.IVec(items, VecTy(dim, len(items)))
+        r.hint = next((it.hint for it in items if it.hint is not None), None)
+        r.sf = self._minsf(*items)
+        return r
+
+    # ------------------------------------------------------------ vectors with a unit per component
+    def vec_unify(self, ta, tb):
+        """Unify two vector types component by component; the index of the first mismatch, or None."""
+        for k, (da, db) in enumerate(zip(ta.comp_dims(), tb.comp_dims())):
+            if not self.U.unify(da, db):
+                return k
+        return None
+
+    @staticmethod
+    def vec_ty_map(ty, f):
+        if ty.mixed:
+            return VecTy(None, ty.n, dims=[f(d) for d in ty.dims])
+        return VecTy(f(ty.dim), ty.n)
+
+    def shared_dim(self, v, what, node):
+        """The one dimension all components of vector v share (an error for <1 m, 2 m/s>)."""
+        if not v.ty.mixed:
+            return v.ty.dim
+        ds = v.ty.dims
+        if all(self.U.unify(ds[0], d) for d in ds[1:]):
+            return ds[0]
+        raise self.err(f"{what} needs all components of the vector in the same units, but this one has "
+                       f"{', '.join(self.desc(d) for d in ds)}", node,
+                       hint="a state vector like <x, v> can be added and scaled, but it has no length or "
+                            "direction")
+
+    # ------------------------------------------------------------ matrices (D29)
+    def mat_arith(self, op, a, b, e):
+        ma, mb = isinstance(a.ty, MatTy), isinstance(b.ty, MatTy)
+        if isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy):
+            raise self.err("can't mix matrices and lists in arithmetic", e)
+
+        def shape(t):
+            return f"{t.r}×{t.c} matrix"
+        if op in ("+", "-"):
+            verb = 'add' if op == '+' else 'subtract'
+            if not (ma and mb):
+                what = "vector" if isinstance((b if ma else a).ty, VecTy) else "single number"
+                raise self.err(f"can't {verb} a matrix and a {what}", e,
+                               hint="both sides must be matrices of the same size")
+            if (a.ty.r, a.ty.c) != (b.ty.r, b.ty.c):
+                raise self.err(f"can't {verb} a {shape(a.ty)} and a {shape(b.ty)}", e)
+            if not self.U.unify(a.ty.dim, b.ty.dim):
+                raise self.err(f"can't {verb} matrices of {self.desc(a.ty.dim)} and {self.desc(b.ty.dim)}", e,
+                               hint=self.mismatch_hint(a, b))
+            r = I.IBin(op, a, b, MatTy(a.ty.dim, a.ty.r, a.ty.c))
+            r.hint = a.hint or b.hint
+        elif op == "×":
+            raise self.err("× is the cross product of vectors; multiply matrices with * or a space: A B", e)
+        elif op == "*" and ma and mb:
+            if a.ty.c != b.ty.r:
+                raise self.err(f"can't multiply a {shape(a.ty)} times a {shape(b.ty)}: the first needs as many "
+                               f"columns as the second has rows", e)
+            if a.ty.r * b.ty.c == 1:
+                ty = NumTy(a.ty.dim * b.ty.dim)
+            else:
+                ty = MatTy(a.ty.dim * b.ty.dim, a.ty.r, b.ty.c)
+            r = I.IBuiltin("matmul", [a, b], ty)
+            r.dims3 = (a.ty.r, a.ty.c, b.ty.c)
+            if a.hint is not None and b.hint is not None and a.hint.name == b.hint.name:
+                r.hint = hint_power(a.hint, 2)          # K K in N/m is shown in N²/m²
+            else:
+                r.hint = self._keep_hint(a, b)
+        elif op == "*" and ma and isinstance(b.ty, VecTy):
+            if a.ty.c != b.ty.n:
+                raise self.err(f"can't multiply a {shape(a.ty)} times a {b.ty.n}-vector: the matrix needs one "
+                               f"column per component", e)
+            db = self.shared_dim(b, "a matrix times a vector", e)
+            if a.ty.r == 1:
+                r = I.IBuiltin("matmul", [a, b], NumTy(a.ty.dim * db))
+            else:
+                r = I.IBuiltin("matmul", [a, b], VecTy(a.ty.dim * db, a.ty.r))
+            r.dims3 = (a.ty.r, a.ty.c, 1)
+        elif op == "*" and mb and isinstance(a.ty, VecTy):
+            raise self.err("a vector times a matrix isn't defined here; write the matrix first (M v), or use "
+                           "transpose(M) v for the row-vector product", e)
+        elif op == "*":
+            m, k = (a, b) if ma else (b, a)
+            r = I.IBin("*", a, b, MatTy(m.ty.dim * k.ty.dim, m.ty.r, m.ty.c))
+            r.hint = m.hint if self._dimless(k) else None
+        elif op == "/":
+            if mb:
+                raise self.err("can't divide by a matrix", e, hint="multiply by inverse(M) instead")
+            r = I.IBin("/", a, b, MatTy(a.ty.dim / b.ty.dim, a.ty.r, a.ty.c))
+            r.hint = a.hint if self._dimless(b) else None
+        else:
+            raise self.err(f"unknown operator {op}", e)
+        r.sf = self._minsf(a, b)
+        return r
+
+    def matrix_literal(self, e, ctx):
+        """[[a, b], [c, d]]: a matrix, all entries in one unit, stored row by row."""
+        rows = [[self.expr(x, ctx) for x in row.items] for row in e.items]
+        ncol = len(rows[0])
+        if any(len(r) != ncol for r in rows):
+            raise self.err("every row of a matrix needs the same number of entries", e)
+        if len(rows) > MAX_DIM or ncol > MAX_DIM or ncol == 0 or len(rows) * ncol < 2:
+            raise self.err(f"a matrix can have 1 to {MAX_DIM} rows and 1 to {MAX_DIM} columns (at most "
+                           f"{MAX_DIM}×{MAX_DIM}), not {len(rows)}×{ncol}", e)
+        dim = DExpr.fresh("mat")
+        items = []
+        for row, rnode in zip(rows, e.items):
+            for it, node in zip(row, rnode.items):
+                self.need_num(it, node, "a matrix entry")
+                self.unify_or(dim, it.ty.dim, lambda: f"all entries of a matrix need the same units; this one is "
+                              f"{self.desc(it.ty.dim)} but the others are {self.desc(dim)}", node)
+                items.append(it)
+        r = I.IVec(items, MatTy(dim, len(rows), ncol))
+        r.hint = next((it.hint for it in items if it.hint is not None), None)
+        r.sf = self._minsf(*items)
+        r.direct = _written(items)
+        return r
+
+    def zero_matrix(self, args, e):
+        """zeros(r, c): an r×c matrix of zeros whose unit comes from its first use, like a plain 0 (so
+        `K = zeros(8, 8)` then `K[i, j] = 2 k` in a loop fills a stiffness matrix; D195)."""
+        dims = []
+        for a, node in zip(args, e.args):
+            if not isinstance(a, I.IConst) or not isinstance(a.ty, NumTy) or a.value != int(a.value) or \
+                    not 1 <= a.value <= MAX_DIM or not self.U.unify(a.ty.dim, DIMLESS):
+                raise self.err(f"zeros(r, c) makes an r×c matrix; r and c must be fixed whole numbers from 1 to "
+                               f"{MAX_DIM}, like zeros(8, 8)", node)
+            dims.append(int(a.value))
+        r, c = dims
+        if r * c < 2:
+            raise self.err("zeros(1, 1) would be a single number; write 0", e)
+        m = I.IVec([I.IConst(0.0, NumTy(DIMLESS)) for _ in range(r * c)], MatTy(DExpr.fresh("zeros"), r, c))
+        m.hint, m.sf, m.direct = None, None, False
+        return m
+
+    def need_square(self, m, name, node):
+        if not isinstance(m.ty, MatTy):
+            raise self.err(f"{name} needs a matrix, like [[1, 2], [3, 4]]", node)
+        if m.ty.r != m.ty.c:
+            raise self.err(f"{name} needs a square matrix, but this one is {m.ty.r}×{m.ty.c}", node)
+
+    def mat_builtin(self, name, args, e):
+        n = len(args)
+        k = 2 if name == "solve_linear" else 1
+        if name in ("eigenvalues", "eigenvectors"):
+            return self.eigen_builtin(name, args, e)
+        if n != k:
+            raise self.err(f"{name} takes {k} argument{'s' if k != 1 else ''} but was given {n}", e)
+        m = args[0]
+        if name == "transpose":
+            if not isinstance(m.ty, MatTy):
+                raise self.err("transpose needs a matrix, like [[1, 2], [3, 4]]", e)
+            r = I.IBuiltin("shuffle", [m], MatTy(m.ty.dim, m.ty.c, m.ty.r))
+            r.idx = transpose_index(m.ty.r, m.ty.c)
+            r.hint, r.sf, r.direct = m.hint, m.sf, m.direct
+            return r
+        self.need_square(m, name, e)
+        if name == "det":
+            r = I.IBuiltin("det", [m], NumTy(m.ty.dim ** m.ty.r))
+            r.hint = hint_power(m.hint, m.ty.r)          # det of N/m entries is in N²/m² (2×2)
+        elif name == "inverse":
+            r = I.IBuiltin("inverse", [m], MatTy(m.ty.dim ** -1, m.ty.r, m.ty.c))
+            r.hint = hint_power(m.hint, -1)              # and its inverse in m/N
+        else:
+            b = args[1]
+            if not isinstance(b.ty, VecTy):
+                raise self.err("solve_linear(M, b) needs a matrix and a vector, like solve_linear(K, <1, 2> N)", e)
+            if b.ty.n != m.ty.r:
+                raise self.err(f"solve_linear(M, b) got a {m.ty.r}×{m.ty.c} matrix and a {b.ty.n}-vector; b needs "
+                               f"one component per row", e)
+            db = self.shared_dim(b, "solve_linear(M, b)", e)
+            r = I.IBuiltin("solve_linear", [m, b], VecTy(db / m.ty.dim, b.ty.n))
+        r.sf = self._minsf(*args)
+        r.line = e.line
+        return r
+
+    def eigen_builtin(self, name, args, e):
+        """eigenvalues(M) / eigenvectors(M) of a symmetric matrix, and eigenvalues(K, M) /
+        eigenvectors(K, M) for K v = λ M v (normal modes: λ = ω²).  Jacobi rotations (D38)."""
+        if len(args) not in (1, 2):
+            raise self.err(f"{name} takes a matrix, like {name}(K), or two, like {name}(K, M) for K v = λ M v, "
+                           f"but was given {len(args)} arguments", e)
+        for m in args:
+            self.need_square(m, name, e)
+        k = args[0]
+        if not 2 <= k.ty.r <= MAX_DIM:
+            raise self.err(f"{name} needs a square matrix from 2×2 to {MAX_DIM}×{MAX_DIM}, not {k.ty.r}×{k.ty.c}", e)
+        if len(args) == 2 and args[1].ty.r != k.ty.r:
+            raise self.err(f"{name}(K, M) needs K and M of the same size, but they are {k.ty.r}×{k.ty.r} and "
+                           f"{args[1].ty.r}×{args[1].ty.r}", e)
+        n = k.ty.r
+        if name == "eigenvalues":
+            dim = k.ty.dim if len(args) == 1 else k.ty.dim / args[1].ty.dim
+            r = I.IBuiltin(name, list(args), VecTy(dim, n))
+            r.hint = k.hint if len(args) == 1 else None      # eigenvalues of a matrix in N/m are in N/m
+        else:
+            r = I.IBuiltin(name, list(args), MatTy(DIMLESS, n, n))
+        r.sf = self._minsf(*args)
+        r.line = e.line
+        return r
+
+    def mismatch_hint(self, a, b):
+        return "both sides of + and - must have the same units"
+
+    def _dimless(self, v):
+        d = self.U.norm(v.ty.dim)
+        return d.concrete and d.const.dimensionless
+
+    @classmethod
+    def _const_value(cls, x):
+        """The value of a constant expression built from numbers (2π, 1/2), or None."""
+        if isinstance(x, I.IConst):
+            return x.value if isinstance(x.value, float) or isinstance(x.value, int) else None
+        if isinstance(x, I.IBin) and x.op in ("*", "/", "+", "-"):
+            a, b = cls._const_value(x.a), cls._const_value(x.b)
+            if a is None or b is None:
+                return None
+            try:
+                return {"*": a * b, "/": a / b if b else None, "+": a + b, "-": a - b}[x.op]
+            except (OverflowError, TypeError):
+                return None
+        return None
+
+    def _drop_turn_hint(self, r, a, b, op):
+        """2π f with f in Hz is an angular frequency, and ω/(2π) with ω in rad/s a frequency: don't keep
+        showing the old unit (redteam #2)."""
+        src = a if a.hint is r.hint else b
+        k = b if src is a else a
+        v = self._const_value(k)
+        if v is None or v == 0:
+            return
+        two_pi = 2 * math.pi
+        kind = self._unit_kind(r.hint)
+        up = (op == "*" and abs(v / two_pi - 1) < 1e-12) or (op == "/" and abs(v * two_pi - 1) < 1e-12)
+        down = (op == "/" and abs(v / two_pi - 1) < 1e-12) or (op == "*" and abs(v * two_pi - 1) < 1e-12)
+        if (kind == "cycles" and up) or (kind == "angular" and down):
+            r.hint = None
+
+    def _abs_temp(self, v):
+        """Is v an absolute temperature written in °C/°F (not a difference, D12)?"""
+        h = getattr(v, "hint", None)
+        return isinstance(v, I.Expr) and isinstance(v.ty, (NumTy, ListTy)) and h is not None and \
+            getattr(h, "affine", False) and not getattr(v, "tdelta", False)
+
+    def _delta_abs_temp_error(self, name, v, node):
+        """ΔT = 10 °C, or 10 °C passed as ΔT: a Δ name says "a change", °C says "a reading" (red team round 3 #2,
+        D181)."""
+        u = v.hint
+        lit = getattr(v, "abs_literal", None)
+        if lit is None:
+            raise self.err(f"{name} looks like a temperature change, but this value in {u.name} is an absolute "
+                           f"temperature (Fermium reads {u.name} values as absolute temperatures in K)", node,
+                           hint="write a change of temperature in K, or as a difference like T2 - T1")
+        x = format_number(lit[0])
+        k = format_number(float(lit[0]) * u.factor + u.offset)
+        step = format_number(float(lit[0]) * u.factor, 3)
+        raise self.err(f"{name} looks like a temperature change, but a value in {u.name} is an absolute temperature "
+                       f"({x} {u.name} is {k} K)", node,
+                       hint=f"write a change of temperature in K ({x} {u.name} → {step} K), or as a difference like "
+                            f"T2 - T1")
+
+    def _warn_absolute_in_product(self, a, b, e):
+        """`4186 J/(kg K) * 10 °C`: a °C/°F number written out and multiplied by a quantity with units enters as
+        the absolute temperature (283.15 K), which is right in p V = n R T and 28× wrong in Q = m c ΔT (red team
+        round 3 #2, D181).  A variable in °C (T = 25 °C; k_B T) is not warned about: that is the usual way to
+        write an absolute temperature."""
+        lit = getattr(a, "abs_literal", None)
+        if lit is None or not self._abs_temp(a) or self._dimless(b):
+            return
+        u = a.hint
+        x, k = format_number(lit[0]), format_number(float(lit[0]) * u.factor + u.offset)
+        at = getattr(a, "abs_at", None) or e      # the `10 °C` itself, not the start of the formula (red team 5 #9)
+        self.diags.warn(f"{x} {u.name} is an absolute temperature, so it enters this formula as {k} K",
+                        line=at.line or e.line, col=at.col or e.col, length=getattr(at, "length", None) or 1,
+                        hint=f"for a temperature change (ΔT in Q = m c ΔT) write {format_number(lit[0] * u.factor, 3)} "
+                             f"K; for an absolute temperature (p V = n R T) write {k} K to make it clear")
+
+    def _warn_scaled_temperature(self, u, op, k, e):
+        """2 T or T / 2 with T in °C/°F scales the absolute temperature (in K) (D12, redteam #6)."""
+        f = self._const_value(k)
+        if f == 1.0:
+            return            # T * 1 changes nothing
+        ex = 20.0 if u.name == "°C" else 68.0
+        kelvin = ex * u.factor + u.offset
+        if f is not None and f != 0 and math.isfinite(f):
+            res = (kelvin * f if op == "×" else kelvin / f)
+            shown = (res - u.offset) / u.factor
+            fs, ks = format_number(f), format_number(kelvin)
+            example = (f"{fs} × {format_number(ex)} {u.name} is {fs} × {ks} K = {format_number(shown)} {u.name}"
+                       if op == "×" else
+                       f"{format_number(ex)} {u.name} / {fs} is {ks} K / {fs} = {format_number(shown)} {u.name}")
+        else:
+            example = f"{format_number(ex)} {u.name} is {format_number(kelvin)} K, and that is what gets scaled"
+        verb = "multiplied" if op == "×" else "divided"
+        self.diags.warn(f"this scales an absolute temperature: {u.name} values are {verb} as kelvins ({example})",
+                        line=e.line, col=e.col, hint="to scale a temperature change, write it in K")
+
+    def _keep_hint(self, a, b):
+        """Scaling by a plain number keeps the unit the user wrote (2 × 3 eV = 6 eV)."""
+        if a.hint is not None and self._dimless(b) and b.hint is None:
+            return a.hint
+        if b.hint is not None and self._dimless(a) and a.hint is None:
+            return b.hint
+        return None
+
+    def _arg_hint(self, r, args):
+        """f(E) = E; f(3 MeV) shows MeV: a result with no unit of its own takes the unit of the first
+        argument of the same dimension (hints are per call site; the instance is shared) (A40)."""
+        if r.hint is not None or not isinstance(r.ty, NumTy):
+            return
+        d = self.U.norm(r.ty.dim)
+        if not d.concrete or d.const.dimensionless:
+            return          # 2 cos(θ) with θ in degrees is a plain number, not an angle (gauntlet O5)
+        for a in args:
+            if isinstance(a.ty, NumTy) and a.hint is not None and not a.hint.affine:
+                da = self.U.norm(a.ty.dim)
+                if da.concrete and tuple(da.const.e) == tuple(d.const.e):
+                    r.hint = a.hint
+                    return
+
+    def _minsf(self, *vs):
+        s = [v.sf for v in vs if getattr(v, "sf", None) is not None]
+        return min(s) if s else None
+
+    def _sumsf(self, *vs):
+        """Significant figures of a sum or difference: those of the most precise operand. The textbook rule counts
+        decimal places, which needs the magnitudes (known only at run time); the fewest significant figures made
+        293.15 K + 0.5 K print as 290 K (red team round 7 #4). This never shows a value less precisely than its
+        inputs, at the price of sometimes showing more (1.00 m - 0.999 m, D95)."""
+        s = [v.sf for v in vs if getattr(v, "sf", None) is not None]
+        return max(s) if s else None
+
+    def const_value(self, e):
+        """Evaluate a compile-time constant exponent; returns Fraction or None."""
+        if isinstance(e, A.Num):
+            return Fraction(e.value).limit_denominator(10000)
+        if isinstance(e, A.Neg):
+            v = self.const_value(e.operand)
+            return -v if v is not None else None
+        if isinstance(e, A.BinOp) and e.op in "+-*/":
+            a, b = self.const_value(e.left), self.const_value(e.right)
+            if a is None or b is None:
+                return None
+            if e.op == "/" and b == 0:
+                return None
+            return {"+": a + b, "-": a - b, "*": a * b, "/": a / b if b else None}[e.op]
+        return None
+
+    def power(self, e, ctx):
+        # k(x + 1)^2 with a number k means k·(x + 1)², not (k·(x + 1))²
+        if isinstance(e.left, A.Call) and isinstance(e.left.func, A.Name) and len(e.left.args) == 1 and \
+                not e.left.paren:
+            b, _ = ctx.scope.lookup(e.left.func.name)
+            if isinstance(b, (I.Sym, ConstInfo)):
+                inner = A.BinOp("^", e.left.args[0], e.right).at(e)
+                return self.e_BinOp(A.BinOp("*", e.left.func, inner, implicit=True).at(e), ctx)
+        pconst = self.const_value(e.right)
+        if isinstance(e.left, A.Name) and e.left.name == "e" and (pconst is None or pconst <= 0):
+            b, _ = ctx.scope.lookup("e")
+            if isinstance(b, ConstInfo):
+                raise self.err("e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium", e.left,
+                               hint="for the exponential function write exp(x)")
+        a = self.expr(e.left, ctx)
+        if cplx.is_c(a):
+            return cplx.power(self, e, a, ctx)
+        self.need_numlike(a, e.left, "the base of a power")
+        p = self.const_value(e.right)
+        mk = ListTy if isinstance(a.ty, ListTy) else NumTy
+        if p is not None:
+            r = I.IPowC(a, float(p), mk(a.ty.dim ** p))
+            r.sf = a.sf
+            if a.hint is not None and p == 1:
+                r.hint = a.hint
+            return r
+        b = self.expr(e.right, ctx)
+        if cplx.is_c(b):
+            return cplx.power(self, e, a, ctx, b)       # 2^(1i): a complex exponent
+        self.need_num(b, e.right, "the exponent")
+        if not self.U.unify(b.ty.dim, DIMLESS):
+            raise self.err(f"an exponent must be a plain number, but this is {self.desc(b.ty.dim)}", e.right)
+        if not self.U.unify(a.ty.dim, DIMLESS):
+            raise self.err(f"can't raise {self.desc(a.ty.dim)} to a power that isn't a fixed number", e,
+                           hint="with units, the exponent must be a number written in the program, like x^2 or x^(1/3)")
+        r = I.IPow(a, b, mk(DIMLESS))
+        r.sf = self._minsf(a, b)
+        return r
+
+    def e_Neg(self, e, ctx):
+        q = e.operand
+        if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and not q.paren:
+            u = self.resolve_unit(q.unit)
+            if u.affine:        # -40 °C is minus forty degrees, not -(313.15 K)
+                neg = A.Quantity(A.Num(-q.value.value, q.value.sigfigs, q.value.digit).at(q.value), q.unit,
+                                 q.bracket).at(e)
+                return self.e_Quantity(neg, ctx)
+        a = self.expr(e.operand, ctx)
+        self.need_numlike(a, e.operand, allow_vec=True)
+        if a.hint is not None and a.hint.affine:
+            raise self.err(f"can't negate an absolute temperature ({a.hint.name})", e,
+                           hint="write the negative number directly, like -5 °C, or use K")
+        r = I.INeg(a)
+        r.hint, r.sf, r.direct = a.hint, a.sf, a.direct
+        return r
+
+    def e_Compare(self, e, ctx):
+        a = self.expr(e.left, ctx)
+        b = self.expr(e.right, ctx)
+        if isinstance(a.ty, BoolTy) and isinstance(b.ty, BoolTy) and e.op in ("==", "!="):
+            return I.ICmp(e.op, a, b, BOOL)
+        if cplx.is_c(a) or cplx.is_c(b):
+            return cplx.compare(self, e.op, a, b, e)
+        self.need_num(a, e.left, "each side of a comparison")
+        self.need_num(b, e.right, "each side of a comparison")
+        if not self.U.unify(a.ty.dim, b.ty.dim):
+            raise self.err(f"can't compare {self.desc(a.ty.dim)} with {self.desc(b.ty.dim)}", e)
+        return I.ICmp(e.op, a, b, BOOL)
+
+    def e_Logic(self, e, ctx):
+        a = self.cond(e.left, ctx)
+        b = self.cond(e.right, ctx)
+        return I.ILogic(e.op, a, b, BOOL)
+
+    def e_Not(self, e, ctx):
+        return I.INot(self.cond(e.operand, ctx), BOOL)
+
+    def e_Sqrt(self, e, ctx):
+        a = self.expr(e.operand, ctx)
+        if cplx.is_c(a):
+            if e.root != 2:
+                raise self.err("∛ of a complex number isn't supported; write z^(1/3) for the principal root", e)
+            return cplx.builtin(self, "sqrt", [a], A.Call(A.Name("sqrt"), [e.operand]).at(e))
+        self.need_numlike(a, e.operand, "the value under the root")
+        mk = ListTy if isinstance(a.ty, ListTy) else NumTy
+        r = I.IPowC(a, 0.5 if e.root == 2 else 1 / 3, mk(a.ty.dim ** Fraction(1, e.root)))
+        r.sf = a.sf
+        return r
+
+    def e_Abs(self, e, ctx):
+        a = self.expr(e.operand, ctx)
+        if cplx.is_c(a):
+            return cplx.builtin(self, "abs", [a], A.Call(A.Name("abs"), [e.operand]).at(e))
+        self.need_numlike(a, e.operand, allow_vec=True)
+        if isinstance(a.ty, VecTy):
+            r = I.IBuiltin("norm", [a], NumTy(self.shared_dim(a, "|v|", e)))
+            r.hint, r.sf = a.hint, a.sf
+            return r
+        if isinstance(a.ty, MatTy):
+            raise self.err("the value inside |...| must be a number, but it is a matrix", e,
+                           hint="for the determinant write det(M)")
+        r = I.IBuiltin("abs", [a], a.ty)
+        r.hint, r.sf = a.hint, a.sf
+        return r
+
+    def e_IfExpr(self, e, ctx):
+        c = self.cond(e.cond, ctx)
+        a = self.expr(e.then, ctx)
+        b = self.expr(e.other, ctx)
+        if type(a.ty) is not type(b.ty):
+            raise self.err("both branches of an if-expression must give the same kind of value", e)
+        if isinstance(a.ty, VecTy) and a.ty.n != b.ty.n:
+            raise self.err("both branches of an if-expression must give vectors of the same length", e)
+        if isinstance(a.ty, MatTy) and (a.ty.r, a.ty.c) != (b.ty.r, b.ty.c):
+            raise self.err("both branches of an if-expression must give matrices of the same size", e)
+        if isinstance(a.ty, VecTy) and (a.ty.mixed or b.ty.mixed):
+            if self.vec_unify(a.ty, b.ty) is not None:
+                raise self.err(f"the two branches give {type_desc(a.ty, self.U)} and {type_desc(b.ty, self.U)}; "
+                               f"they must match", e)
+        elif isinstance(a.ty, (NumTy, ListTy, VecTy, MatTy)):
+            self.unify_or(a.ty.dim, b.ty.dim, lambda: f"the two branches give {self.desc(a.ty.dim)} and "
+                          f"{self.desc(b.ty.dim)}; they must match", e)
+        r = I.IIf(c, a, b, a.ty)
+        r.hint = a.hint or b.hint
+        r.sf = self._minsf(a, b)
+        return r
+
+    def e_Convert(self, e, ctx):
+        exported = self._export(e, ctx)
+        if exported is not None:
+            return exported
+        v = self.expr(e.value, ctx)
+        self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
+        u = self.resolve_unit(e.unit)
+        if isinstance(v.ty, VecTy) and v.ty.mixed:
+            raise self.err(f"can't show a vector with different units per component in {u.name}", e,
+                           hint="convert one component at a time, like s.x in cm")
+        if not self.U.unify(v.ty.dim, u.dim):
+            hint = "the units you convert to must measure the same kind of quantity"
+            if self.nat.natural:
+                hint = (f"in {self.nat.name} units ({' = '.join(self.nat.consts)} = 1) a length or time is 1/energy "
+                        f"and a mass is an energy; check the powers of energy")
+            raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e, hint=hint)
+        if not self._warn_angle_in_hz(v, u, e):
+            self._warn_omega_in_hz(e.value, v, u, e)
+        if u.affine and getattr(v, "tdelta", False):
+            # a difference of temperatures shown in °C/°F: no offset (gauntlet friction #6)
+            u = Unit(u.name, u.dim, u.factor, 0.0)
+            self.diags.warn(f"this is a difference of two temperatures, so it is shown in {u.name} without the "
+                            f"offset (a change of 1 °C is 1 K)", line=e.line, col=e.col,
+                            hint="write it  in K  to make that clear")
+        v.hint = u
+        v.direct = False
+        return v
+
+    def _export(self, e, ctx):
+        """`x in fm` (or `2 x/y in fm`) using variables computed under a natural system that doesn't hold here
+        (outside their region): the one place where natural units turn back into SI.  The expression is checked
+        in that system; the target unit fixes the SI dimension, and the split D = Σ aᵢ Cᵢ + Σ βⱼ Bⱼ (natural.py)
+        gives the unique factor Π Cᵢ^aᵢ (D60)."""
+        foreign = {}
+        for n in A.free_names(e.value):
+            b, _ = ctx.scope.lookup(n)
+            other = getattr(b, "nat", None) if isinstance(b, I.Sym) else None
+            if other is not None and not other.key <= self.nat.key:
+                foreign.setdefault(other.key, (other, n))
+        if not foreign:
+            return None
+        if len(foreign) > 1:
+            names = " and ".join(f"{n} ({o.name} units)" for o, n in foreign.values())
+            raise self.err(f"this mixes values from different unit systems: {names}", e,
+                           hint="convert each one on its own first, like  x_si = x in fm")
+        other, name = next(iter(foreign.values()))
+        saved = self.nat
+        self._set_system(SI)
+        try:
+            u_si = self.resolve_unit(e.unit)
+        finally:
+            self._set_system(saved)
+        self._set_system(other)
+        try:
+            r = self.expr(e.value, ctx)
+        finally:
+            self._set_system(saved)
+        self.need_numlike(r, e.value, "the value to convert", allow_vec=True)
+        if isinstance(r.ty, VecTy) and r.ty.mixed:
+            raise self.err(f"can't show a vector with different units per component in {u_si.name}", e)
+        if u_si.affine:
+            raise self.err(f"can't convert from {other.name} units to {u_si.name}; use K", e)
+        what = name if isinstance(e.value, A.Name) else "this"
+        want = other.canon_dim(u_si.dim)
+        if not self.U.unify(r.ty.dim, want):
+            raise self.err(f"{what} is {other.describe(self.U.resolve(r.ty.dim))} in {other.name} units, so it "
+                           f"can't be shown in {u_si.name} ({other.describe(want)})", e,
+                           hint=f"in {other.name} units a length or time is 1/energy and a mass is an energy")
+        # SI value = canonical value / factor(D); then into the current system's representation
+        f = self.nat.factor(u_si.dim) / other.factor(u_si.dim)
+        d = DExpr.of(self.nat.canon_dim(u_si.dim))
+        if isinstance(r.ty, VecTy):
+            nty = VecTy(d, r.ty.n)
+        elif isinstance(r.ty, MatTy):
+            nty = MatTy(d, r.ty.r, r.ty.c)
+        elif isinstance(r.ty, ListTy):
+            nty = ListTy(d)
+        else:
+            nty = NumTy(d)
+        out = I.IBin("*", r, I.IConst(f, NumTy(DIMLESS)), nty)
+        out.hint = self.nat.canon_unit(u_si)
+        out.sf, out.direct = r.sf, False
+        return out
+
+    ANGLE_WORDS = {"rev", "rpm", "rad", "°", "deg", "arcmin", "arcsec"}
+
+    @staticmethod
+    def _unit_words(unit):
+        name = getattr(unit, "name", None)
+        return set(re.findall(r"[^\s/·*^()⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+", name)) if name else set()
+
+    def _unit_kind(self, unit):
+        """A light tag on a unit the user wrote, for mix-ups that share an SI dimension (D95, redteam #2, #10):
+        'cycles' (Hz), 'angular' (rad/s, rev/s, rpm, °/s), 'Gy', 'Sv', 'Bq', 'energy' (J), 'torque' (N m)."""
+        w = self._unit_words(unit)
+        if not w:
+            return None
+        if any(x in self.ANGLE_WORDS or x.endswith("rad") for x in w):
+            return "angular"
+        if any(re.fullmatch(r"[kMGTPm]?Hz", x) for x in w):
+            return "cycles"
+        for tag in ("Gy", "Sv", "Bq"):
+            if any(re.fullmatch(r"[a-zA-Zμ]?" + tag, x) for x in w) and len(w) == 1:
+                return tag
+        if len(w) == 1 and re.fullmatch(r"[kMGTmμn]?J", next(iter(w))):
+            return "energy"
+        if len(w) == 2 and "m" in w and any(re.fullmatch(r"[kMm]?N", x) for x in w):
+            return "torque"
+        return None
+
+    def _warn_angle_in_hz(self, v, u, e, where=""):
+        """Converting between Hz and rev, rpm, rad/s or °/s (either way): angles are plain numbers, so Hz is
+        rad/s, and 1 Hz is 9.55 rpm, not 60 (D6, D27, D95; A46, redteam #2).  `where` prefixes the message
+        (a Python boundary, red team round 4 #2)."""
+        got = hz_angle_mixup(self, v.hint, u)
+        if got is None:
+            return False
+        msg, hint = got
+        self.diags.warn(where + msg, line=e.line, col=e.col, hint=hint)
+        return True
+
+    CONFUSABLE = {
+        frozenset(("cycles", "angular")): ("a value in {a} and one in {b}: Fermium treats rad as 1, so Hz and "
+                                           "rad/s are the same unit and they add as if 1 Hz were 1 rad/s",
+                                           "if the Hz value counts cycles per second, multiply it by 2π first"),
+        frozenset(("Bq", "cycles")): ("a value in {a} and one in {b}: both are 1/s in SI, but becquerels count "
+                                      "decays and hertz count cycles", "check that both mean the same thing"),
+        frozenset(("Bq", "angular")): ("a value in {a} and one in {b}: both are 1/s in SI, but becquerels count "
+                                       "decays and {b} is an angular rate", "check that both mean the same thing"),
+        frozenset(("Gy", "Sv")): ("a value in {a} and one in {b}: both are J/kg in SI, but grays measure absorbed "
+                                  "dose and sieverts equivalent dose (weighted by the radiation type)",
+                                  "convert the absorbed dose with the radiation weighting factor first "
+                                  "(H = w_R D)"),
+        frozenset(("energy", "torque")): ("a value in {a} and one in {b}: both are kg m²/s² in SI, but J is "
+                                          "an energy and N m a torque", "check that both mean the same thing"),
+    }
+
+    def _warn_confusable_sum(self, op, a, b, e):
+        """1 Gy + 1 Sv, 1 Bq + 1 Hz, 1 Hz + 1 rad/s: the same SI dimension, different things (redteam #2, #10)."""
+        ka, kb = self._unit_kind(a.hint), self._unit_kind(b.hint)
+        if ka is None or kb is None or ka == kb:
+            return
+        entry = self.CONFUSABLE.get(frozenset((ka, kb)))
+        if entry is None:
+            return
+        verb = "adding" if op == "+" else "subtracting"
+        msg, hint = entry
+        self.diags.warn(f"{verb} " + msg.format(a=a.hint.name, b=b.hint.name), line=e.line, col=e.col, hint=hint)
+
+    OMEGA_NAMES = re.compile(r"^(ω|Ω|omega|Omega)")
+
+    def _warn_omega_in_hz(self, node, v, u, e):
+        """`ω in Hz` shows ω itself (rad/s and Hz are both 1/s), not ω/2π: warn (gauntlet friction #5)."""
+        if not re.search(r"(^|[^A-Za-z])[kMGT]?Hz\b", u.name):
+            return
+        name = node.name if isinstance(node, A.Name) else None
+        hname = getattr(v.hint, "name", "") or ""
+        if (name and self.OMEGA_NAMES.match(name)) or "rad" in hname:
+            what = name or "this angular frequency"
+            self.diags.warn(f"{what} in {u.name} shows the angular frequency itself (Fermium treats rad as 1, so "
+                            f"rad/s and Hz are the same unit), not the frequency {what}/2π", line=e.line, col=e.col,
+                            hint=f"for the frequency in cycles per second write  {what}/(2π) in {u.name}  "
+                                 f"(or  {what} in rad/s  to keep it angular)")
+
+    def e_Digits(self, e, ctx):
+        v = self.expr(e.value, ctx)
+        if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
+            raise self.err("'to N digits' only works on numbers", e)
+        if e.digits < 1 or e.digits > 17:
+            raise self.err("the number of digits must be between 1 and 17", e)
+        v.sf = e.digits
+        v.direct = 2            # asked for (2), not written as a literal (True): lists use exactly sf digits
+        v.echo = False          # no "(= … SI)" echo for a value printed to chosen digits (friction #31)
+        return v
+
+    def e_Where(self, e, ctx):
+        if isinstance(e.value, A.Deriv) and not any(
+                n == e.value.var or C.depends_on(v, e.value.var) for n, v in e.bindings):
+            # g = d/dt (a t^2) where a = 3: substitute, so the derivative can still be a function of t
+            return self.expr(C.inline_where(e), ctx, allow_func=True)
+        scope = Scope(ctx.scope)
+        c2 = ctx.child(scope)
+        binds = []
+        for name, val in e.bindings:
+            v = self.expr(val, c2)
+            sym = self.new_sym(name, v.ty, c2)
+            sym.sf, sym.hint, sym.direct = v.sf, v.hint, v.direct
+            scope.names[name] = sym
+            binds.append((sym, v))
+        body = self.expr(e.value, c2)
+        r = I.ILet(binds, body)
+        r.hint, r.sf, r.direct = body.hint, body.sf, False
+        return r
+
+    def e_Uncertain(self, e, ctx):
+        """a ± b: a new independent error source (D120); `x ± 3%` is relative."""
+        self.uses_unc = True
+        v = self.expr(e.value, ctx)
+        self.need_numlike(v, e.value, "the value before ±")
+        rel = isinstance(e.err, A.Quantity) and e.err.unit.text.strip() == "%" and not (
+            v.hint is not None and getattr(v.hint, "name", "") == "%")
+        s = self.expr(e.err, ctx)
+        self.need_numlike(s, e.err, "the uncertainty after ±")
+        if isinstance(s.ty, ListTy) and not isinstance(v.ty, ListTy):
+            raise self.err("a single value needs a single uncertainty after ±, not a list", e.err)
+        if rel:
+            if not self.U.unify(s.ty.dim, DIMLESS):
+                raise self.err("a relative uncertainty is a plain number, like  x ± 3%", e.err)
+        else:
+            if s.hint is not None and getattr(s.hint, "affine", False):
+                # 20.0 ± 0.5 °C: the uncertainty is a temperature difference, 0.5 K, not 273.65 K
+                s = I.IBin("-", s, I.IConst(s.hint.offset, NumTy(s.ty.dim)), s.ty)
+            if not self.U.unify(v.ty.dim, s.ty.dim):
+                raise self.err(f"the uncertainty after ± is {self.desc(s.ty.dim)} but the value is "
+                               f"{self.desc(v.ty.dim)}; both need the same units", e.err,
+                               hint="write the unit once at the end, like  L = 1.20 ± 0.01 m")
+        ty = ListTy(v.ty.dim) if isinstance(v.ty, ListTy) else NumTy(v.ty.dim)
+        args = [v, s]
+        if rel and v.hint is not None and getattr(v.hint, "affine", False) and not getattr(v, "tdelta", False):
+            # 20.0 °C ± 3%: 3 % of the reading as written (0.60 K), not of 293.15 K (red team round 3 #3, D182)
+            args.append(I.IConst(v.hint.offset, NumTy(v.ty.dim)))
+        r = I.IBuiltin("pm_rel" if rel else "pm", args, ty)
+        h = v.hint if v.hint is not None else (None if rel else s.hint)
+        r.hint = h if h is None or not getattr(h, "affine", False) or v.hint is h else None
+        r.sf = None
+        return r
+
+    def e_ListLit(self, e, ctx):
+        if e.items and all(isinstance(x, A.ListLit) for x in e.items):
+            return self.matrix_literal(e, ctx)
+        if any(isinstance(x, A.ListLit) for x in e.items):
+            raise self.err("a matrix is written as a list of rows, like [[1, 2], [3, 4]]; lists of lists "
+                           "aren't supported otherwise", e)
+        items = [self.expr(x, ctx) for x in e.items]
+        if items and all(isinstance(it.ty, StrTy) for it in items):
+            return I.IList(items, TextListTy())
+        if any(isinstance(it.ty, StrTy) for it in items):
+            raise self.err("a list can hold numbers or text, but not both", e)
+        dim = DExpr.fresh("list")
+        for it, node in zip(items, e.items):
+            self.need_num(it, node, "a list element")
+            self.unify_or(dim, it.ty.dim, lambda: f"all elements of a list need the same units; this one is "
+                          f"{self.desc(it.ty.dim)} but earlier ones are {self.desc(dim)}", node)
+        r = I.IList(items, ListTy(dim))
+        r.hint = items[0].hint if items else None
+        r.sf = self._minsf(*items) if items else None
+        r.direct = _written(items)
+        return r
+
+    def e_Load(self, e, ctx):
+        if self.nat.natural:
+            raise self.err(f"data files can't be loaded inside a {self.nat.label()} region (their columns are in "
+                           f"SI units)", e, hint="load the file before the  units  line; its columns then convert "
+                           "into natural units when you use them")
+        path = e.path
+        full = path if os.path.isabs(path) else os.path.join(self.base_dir, path)
+        if not os.path.exists(full):
+            raise self.err(f"can't find the file '{path}'", e,
+                           hint=f"looked in {os.path.abspath(os.path.dirname(full) or '.')}")
+        cols = read_csv_header(full, e)
+        info = {"path": path, "full": os.path.abspath(full), "columns": cols}
+        self.tables.loads.append(info)
+        return I.ILoad(len(self.tables.loads) - 1, DataTy(info))
+
+    def e_Table(self, e, ctx):
+        """table(x = xs, y = ys): lists of the same length as the named columns of a data set, for fit,
+        data.x and print (D193).  The values are already SI, so each column's unit is only its display unit."""
+        from .units import preferred_unit
+        if not e.items:
+            raise self.err("a table needs at least one column, like  table(x = xs, y = ys)", e)
+        items, cols = [], []
+        for nm, node in zip(e.names, e.items):
+            v = self.expr(node, ctx)
+            if not isinstance(v, I.Expr) or not isinstance(v.ty, ListTy):
+                raise self.err(f"the column {nm} of a table must be a list of numbers, like  {nm} = [1, 2, 3] m",
+                               node)
+            d = self.U.norm(v.ty.dim)
+            if not d.concrete:
+                raise self.err(f"the units of the column {nm} aren't known here", node,
+                               hint=f"give the list its unit, like  {nm} = [1, 2, 3] m")
+            hint = getattr(v, "hint", None)
+            if isinstance(hint, Unit) and hint.dim == d.const and not hint.offset:
+                u = hint
+            elif d.const.dimensionless:
+                u = Unit("1", d.const, 1.0)
+            else:
+                u = preferred_unit(d.const)
+            cols.append({"name": nm, "unit": u})
+            items.append(v)
+        info = {"path": C.to_source(e), "columns": cols, "table": True}
+        return I.ITable(items, DataTy(info))
+
+    def e_Field(self, e, ctx):
+        pref = self.py_ref_of(e.target, ctx)
+        if pref is not None:                          # np.pi (D140)
+            return self.python_value(pref, e, ctx)
+        mod = self.module_of(e.target, ctx)
+        if mod is not None:                   # mechanics.pendulum_period (D100)
+            return self.module_member(mod, e, ctx)
+        t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, SolRef):
+            v = t.view
+            if (e.name in ("x", "y", "z") and v.n > 1 and not getattr(v, "cplx", False)) or \
+                    (e.name in ("re", "im") and getattr(v, "cplx", False)):
+                k = "xyz".index(e.name) if e.name in ("x", "y", "z") else ("re", "im").index(e.name)
+                if k >= v.n:
+                    raise self.err(f"{v.name} is a {v.n}-vector, so it has no .{e.name}", e)
+                nv = SolView(v.sol_sym, v.comp + k, v.top + k, v.dim, v.tdim, v.tname, f"{v.name}.{e.name}")
+                nv.cplx = False
+                nv.n, nv.stride = 1, v.stride
+                nv.hint, nv.thint, nv.sf = getattr(v, "hint", None), getattr(v, "thint", None), getattr(v, "sf", None)
+                return SolRef(nv)
+            if e.name in ("t", "time", "times"):
+                return I.ISolList(v.sol_sym and self.var_ref(v.sol_sym, ctx, e), v.comp, "t", ListTy(v.tdim))
+            if e.name in ("values", "v"):
+                return self.sol_values(v, e)
+        if cplx.is_c(t) or (isinstance(t, I.Expr) and isinstance(t.ty, NumTy) and e.name in ("re", "im")):
+            if e.name not in ("re", "im"):
+                raise self.err(f"a complex number's parts are .re and .im (not .{e.name})", e,
+                               hint="or write re(z) and im(z)")
+            return cplx.builtin(self, e.name, [t], A.Call(A.Name(e.name), [e.target]).at(e))
+        if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
+            if e.name not in ("x", "y", "z"):
+                raise self.err(f"a vector's components are .x, .y and .z (not .{e.name})", e)
+            return self.vec_elem(t, "xyz".index(e.name), e)
+        if not isinstance(t, I.Expr) or not isinstance(t.ty, DataTy):
+            if isinstance(t, I.Expr) and isinstance(t.ty, NumTy) and e.name in ("x", "y", "z"):
+                raise self.err(f"this is a single number ({self.desc(t.ty.dim)}), not a vector, so it has no "
+                               f".{e.name}", e, hint="a vector is written <3, 4> m/s")
+            raise self.err(f"'.{e.name}' only works on vectors (v.x) and data loaded from a file (data.{e.name})", e)
+        cols = t.ty.info["columns"]
+        for i, c in enumerate(cols):
+            if c["name"] == e.name:
+                r = I.IColumn(t, i, ListTy(c["unit"].dim))
+                r.hint = c["unit"] if c["unit"].name != "1" else None
+                return r
+        names = ", ".join(c["name"] for c in cols)
+        raise self.err(f"the data has no column called {e.name} (columns: {names})", e)
+
+    def sol_values(self, v: SolView, node=None):
+        if getattr(v, "cplx", False):
+            raise self.err(f"{v.name} is complex, and lists of complex numbers aren't supported yet", node,
+                           hint=f"use its real or imaginary part, {v.name}.re or {v.name}.im (plot {v.name}.re vs "
+                                f"{v.tname}), or values at single times like |{v.name}({v.tname})|")
+        if v.n > 1:
+            raise self.err(f"{v.name} is a vector; use its components, like {v.name}.x", node)
+        s = self._ivar(v.sol_sym)
+        if self.cur_ctx is not None:
+            s = self.var_ref(v.sol_sym, self.cur_ctx, None)
+        r = I.ISolList(s, v.top, "dy", ListTy(v.dim)) if v.comp > v.top else I.ISolList(s, v.comp, "y", ListTy(v.dim))
+        r.tdim = v.tdim
+        return r
+
+    def index_expr(self, idx_ast, target, ctx):
+        if isinstance(idx_ast, A.End):
+            return I.IBuiltin("len", [target], NumTy(DIMLESS))
+        idx = self._with_end(idx_ast, target, ctx)
+        self.need_num(idx, idx_ast, "a list index")
+        if isinstance(idx, I.IConst) and not math.isfinite(idx.value):     # xs[inf], xs[0/0] (A32)
+            shown = "NaN" if math.isnan(idx.value) else ("∞" if idx.value > 0 else "-∞")
+            raise self.err(f"a list index must be a whole number (1, 2, 3, ...), not {shown}", idx_ast)
+        if isinstance(idx, I.IConst) and idx.value != int(idx.value):
+            raise self.err(f"a list index must be a whole number (1, 2, 3, ...), not {idx.value:g}", idx_ast)
+        if not self.U.unify(idx.ty.dim, DIMLESS):
+            raise self.err(f"a list index must be a plain number (1, 2, 3, ...), not {self.desc(idx.ty.dim)}",
+                           idx_ast)
+        return idx
+
+    def _with_end(self, idx_ast, target, ctx):
+        if any(isinstance(n, A.End) for n in A.walk(idx_ast)):
+            scope = Scope(ctx.scope)
+            c2 = ctx.child(scope)
+            sym = self.new_sym("end", NumTy(DIMLESS), c2)
+            scope.names["end"] = sym
+
+            def repl(n):
+                if isinstance(n, A.End):
+                    return A.Name("end").at(n)
+                return C.map_children(n, repl)
+            body = self.expr(repl(idx_ast), c2)
+            return I.ILet([(sym, I.IBuiltin("len", [target], NumTy(DIMLESS)))], body)
+        return self.expr(idx_ast, ctx)
+
+    def fixed_or_runtime_index(self, idx_ast, size, ctx):
+        """An index into a vector or matrix of known size: an int (0-based) when it is a fixed number,
+        otherwise an IR expression (1-based, checked at run time; #54)."""
+        if isinstance(idx_ast, A.End):
+            return size - 1
+        n = I.IConst(size, NumTy(DIMLESS))
+        idx = self.index_expr(idx_ast, n, ctx)
+        if isinstance(idx, I.ILet):
+            if isinstance(idx.value, I.IConst):
+                idx = idx.value
+            else:          # v[end - 1]: `end` is the size, known here
+                idx = I.ILet([(sym, n) for sym, _ in idx.binds], idx.value)
+        if isinstance(idx, I.IConst):
+            return int(idx.value) - 1
+        return idx
+
+    def runtime_index(self, t, pieces, offs, ty, node):
+        """t's entries at flat base Σ (i − 1)·stride + offs; pieces: [(index int-or-expr, size, stride)]."""
+        if isinstance(t.ty, VecTy) and t.ty.mixed:
+            raise self.err("this vector's components have different units, so pick one with a fixed number, "
+                           "like v[1]", node)
+        idxs = []
+        for k, size, stride in pieces:
+            if isinstance(k, int):
+                if not 0 <= k < size:
+                    raise self.err(f"there is no index {k + 1} here: valid indexes are 1 to {size}", node)
+                k = I.IConst(k + 1, NumTy(DIMLESS))
+            idxs.append((k, size, stride))
+        r = I.IVecIndex(t, idxs, offs, ty, node.line)
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
+    def mat_index(self, idx_ast, size, what, ctx):
+        if isinstance(idx_ast, A.End):
+            return size - 1
+        idx = self.index_expr(idx_ast, I.IConst(size, NumTy(DIMLESS)), ctx)
+        if isinstance(idx, I.ILet) and isinstance(idx.value, I.IConst):
+            idx = idx.value
+        if not isinstance(idx, I.IConst):
+            raise self.err("a matrix entry must be picked with fixed numbers, like M[1, 2]", idx_ast)
+        k = int(idx.value)
+        if not 1 <= k <= size:
+            raise self.err(f"this matrix has {size} {what}s, so there is no {what} {k}", idx_ast)
+        return k - 1
+
+    def vec_elem(self, t, k, node):
+        if not 0 <= k < t.ty.n:
+            raise self.err(f"this vector has {t.ty.n} components, so there is no component {k + 1}", node)
+        r = I.IVecElem(t, k, NumTy(t.ty.comp_dims()[k]))
+        r.hint, r.sf = (t.hint[k] if isinstance(t.hint, MixedHint) else t.hint), t.sf
+        return r
+
+    def e_Slice(self, e, ctx):
+        raise self.err("a:b can only be used inside [...] to take part of a list, like xs[2:5]", e)
+
+    def slice_expr(self, e, ctx):
+        """xs[a:b]: a new list of elements a to b, both included (1-based, D114)."""
+        t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, SolRef) and t.view.n == 1:
+            t = self.sol_values(t.view, e)
+        if isinstance(t, I.Expr) and isinstance(t.ty, DataTy):
+            # `fit … to data[2:5]` (red team round 4 #17, D209)
+            raise self.err("a data table can't be sliced with [a:b]; its columns are lists, and those can be",
+                           e.target,
+                           hint="to fit some of the rows, slice the columns and make a table of them:  "
+                                "fit … to table(L = data.L[2:5], T = data.T[2:5])")
+        if not isinstance(t, I.Expr) or not isinstance(t.ty, ListTy):
+            what = "a vector" if isinstance(t, I.Expr) and isinstance(t.ty, (VecTy, MatTy)) else "this"
+            raise self.err(f"only lists can be sliced with [a:b], and {what} isn't a list", e.target,
+                           hint="pick single components with v[1], v[2], ...")
+        sl = e.index
+        lo = self.index_expr(sl.lo, t, ctx) if sl.lo is not None else I.IConst(1, NumTy(DIMLESS))
+        hi = self.index_expr(sl.hi, t, ctx) if sl.hi is not None else I.IBuiltin("len", [t], NumTy(DIMLESS))
+        r = I.IBuiltin("slice", [t, lo, hi], ListTy(t.ty.dim))
+        r.msg_id = self.text("a slice xs[a:b] runs from a up to b, so b can't be smaller than a − 1 "
+                             "(xs[a:a-1] is the empty list); to reverse a list use reverse(xs)")
+        r.line = e.line
+        r.hint, r.sf = t.hint, t.sf
+        return r
+
+    def e_Index(self, e, ctx):
+        if isinstance(e.index, A.Slice):
+            return self.slice_expr(e, ctx)
+        if isinstance(e.target, A.Index):             # M[i, j] (parsed as M[i][j]) or M[i][j]
+            inner = self.expr(e.target.target, ctx, allow_func=True)
+            if isinstance(inner, I.Expr) and isinstance(inner.ty, MatTy):
+                ri = self.fixed_or_runtime_index(e.target.index, inner.ty.r, ctx)
+                ci = self.fixed_or_runtime_index(e.index, inner.ty.c, ctx)
+                if not isinstance(ri, int) or not isinstance(ci, int):
+                    return self.runtime_index(inner, [(ri, inner.ty.r, inner.ty.c), (ci, inner.ty.c, 1)], [0],
+                                              NumTy(inner.ty.dim), e)
+                i = self.mat_index(e.target.index, inner.ty.r, "row", ctx)
+                j = self.mat_index(e.index, inner.ty.c, "column", ctx)
+                r = I.IVecElem(inner, i * inner.ty.c + j, NumTy(inner.ty.dim))
+                r.hint, r.sf = inner.hint, inner.sf
+                return r
+        t = self.expr(e.target, ctx, allow_func=True)
+        if cplx.is_c(t):
+            raise self.err("a complex number can't be indexed with [...]", e,
+                           hint="its parts are re(z) and im(z) (or z.re and z.im)")
+        if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
+            if not 2 <= t.ty.c <= MAX_DIM:
+                raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
+                               e.index)
+            ri = self.fixed_or_runtime_index(e.index, t.ty.r, ctx)
+            if not isinstance(ri, int):
+                return self.runtime_index(t, [(ri, t.ty.r, t.ty.c)], list(range(t.ty.c)),
+                                          VecTy(t.ty.dim, t.ty.c), e)
+            i = self.mat_index(e.index, t.ty.r, "row", ctx)
+            r = I.IBuiltin("shuffle", [t], VecTy(t.ty.dim, t.ty.c))
+            r.idx = [i * t.ty.c + j for j in range(t.ty.c)]
+            r.hint, r.sf = t.hint, t.sf
+            return r
+        if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
+            idx = self.index_expr(e.index, I.IConst(t.ty.n, NumTy(DIMLESS)), ctx) \
+                if not isinstance(e.index, A.End) else I.IConst(t.ty.n, NumTy(DIMLESS))
+            if not isinstance(idx, I.IConst):
+                k = self.fixed_or_runtime_index(e.index, t.ty.n, ctx)
+                if not isinstance(k, int):          # v[i] in a loop: checked at run time (#54)
+                    return self.runtime_index(t, [(k, t.ty.n, 1)], [0], NumTy(t.ty.dim), e)
+                return self.vec_elem(t, k, e.index)
+            return self.vec_elem(t, int(idx.value) - 1, e.index)
+        if isinstance(t, SolRef) and t.view.n > 1:      # r[end] of a vector solution is a vector (A19)
+            v = t.view
+            comps = []
+            for k in range(v.n):
+                sub = SolView(v.sol_sym, v.comp + k, v.top + k, v.dim, v.tdim, v.tname, v.name)
+                sub.stride = v.stride
+                vals = self.sol_values(sub, e)
+                r = I.IIndex(vals, self.index_expr(e.index, vals, ctx), NumTy(v.dim), e.line)
+                r.hint = getattr(v, "hint", None)
+                comps.append(r)
+            r = I.IVec(comps, ComplexTy(v.dim) if getattr(v, "cplx", False) else VecTy(v.dim, v.n))
+            r.hint = getattr(v, "hint", None)
+            return r
+        if isinstance(t, SolRef):
+            t = self.sol_values(t.view, e)
+        if isinstance(t, I.Expr) and isinstance(t.ty, TextListTy):
+            return I.IIndex(t, self.index_expr(e.index, t, ctx), STR, e.line)
+        if isinstance(t, FuncRef) or not isinstance(t.ty, ListTy):
+            raise self.err("only lists can be indexed with [...]", e.target,
+                           hint="to call a function use parentheses: f(x)")
+        idx = self.index_expr(e.index, t, ctx)
+        r = I.IIndex(t, idx, NumTy(t.ty.dim), e.line)
+        r.hint = t.hint
+        r.sf = t.sf
+        return r
+
+    def e_End(self, e, ctx):
+        raise self.err("'end' can only be used inside [...] to mean the last element", e)
+
+    # ------------------------------------------------------------ calls
+    def e_Call(self, e, ctx):
+        f = e.func
+        if isinstance(f, A.Field) and not f.paren:
+            pref = self.py_ref_of(f.target, ctx)
+            if pref is not None:                      # np.sinc(x): a Python function (D140)
+                return self.python_call(pref, e, ctx)
+        if isinstance(f, A.Deriv) and isinstance(f.operand, A.Name) and \
+                getattr(ctx.scope.lookup(f.operand.name)[0], "is_pde", False):
+            from .m3solve import pde_call            # ∂u/∂x(x, t) of a PDE solution (D83)
+            return pde_call(self, ctx.scope.lookup(f.operand.name)[0], e, ctx, deriv=f)
+        if isinstance(f, A.Name):
+            b, _ = self.lookup(f.name, ctx, f)
+            if b is None and f.name == "Σ":
+                return self.builtin("sum", e, ctx)         # Σ(xs) is sum(xs)
+            if getattr(b, "is_pde", False):
+                from .m3solve import pde_call        # u(x, t) of a PDE solution (D83)
+                return pde_call(self, b, e, ctx)
+            if b is None and f.name in ("γ", "Γ"):
+                return self.builtin("gamma", e, ctx)      # `gamma(x)` is spelled γ after ASCII→Greek
+            if b is None and f.name == "err":           # err(g): the standard error of a fitted parameter
+                a0 = e.args[0] if len(e.args) == 1 else None
+                pb = self.lookup(a0.name, ctx, a0)[0] if isinstance(a0, A.Name) else None
+                es = getattr(pb, "err_sym", None)
+                if es is None and a0 is not None and self._maybe_uncertain(a0, ctx):
+                    return self.builtin("uncertainty", e, ctx)      # err(x) of any uncertain value (D121)
+                if es is None:
+                    raise self.err("err(x) gives the standard error of a parameter found by fit, like err(g) after "
+                                   "fit T = 2π √(L/g) to data", e)
+                return self.var_ref(es, ctx, e)
+            if b is None and f.name in ("grad", "div", "curl", "laplacian") and len(e.args) == 1 \
+                    and isinstance(e.args[0], A.Name):          # ASCII for ∇f, ∇·F, ∇×F, ∇²f
+                kind = "lap" if f.name == "laplacian" else f.name
+                return self.e_VecCalc(A.VecCalc(kind, e.args[0]).at(e), ctx)
+            if b is None:
+                if f.name in BUILTINS:
+                    return self.builtin(f.name, e, ctx)
+                self._calling = True
+                try:
+                    raise self.undefined(f.name, f, ctx)
+                finally:
+                    self._calling = False
+            if isinstance(b, FuncInfo):
+                return self.call_user(b, self.call_args(e.args, ctx), e)
+            if isinstance(b, LocalFunc):
+                return self.call_local(b, e, ctx)
+            if isinstance(b, SolView):
+                return self.sol_eval(b, e, ctx)
+            later = self.future_funcs.get(f.name)
+            if isinstance(b, (I.Sym, ConstInfo)) and later and later > (e.line or 0) and ctx.is_main:
+                raise self.err(f"{f.name} is defined as a function on line {later}, after this line", e,
+                               hint=f"move the definition of {f.name}(...) above its first use")
+            if isinstance(b, (I.Sym, ConstInfo)):
+                v = self.use_binding(b, f.name, f, ctx)
+                if isinstance(v, I.Expr) and isinstance(v.ty, NumTy) and len(e.args) == 1:
+                    # k(x + 1) means k × (x + 1)
+                    arg = self.expr(e.args[0], ctx)
+                    self.need_numlike(arg, e.args[0])
+                    return self.arith("*", v, arg, e)
+                raise self.err(f"{f.name} isn't a function, so it can't be called with ( )", f)
+        if isinstance(f, A.Prime):
+            target = self.expr(f, ctx, allow_func=True)
+            if isinstance(target, FuncRef):
+                return self.call_user(target.info, self.call_args(e.args, ctx), e)
+            if isinstance(target, SolRef):
+                return self.sol_eval(target.view, e, ctx)
+            raise self.err("only functions can be called", f)
+        if isinstance(f, (A.Deriv, A.Field, A.VecCalc, A.Call)):
+            target = self.expr(f, ctx, allow_func=True)
+            if isinstance(target, FuncRef):
+                return self.call_user(target.info, self.call_args(e.args, ctx), e)
+            if isinstance(target, SolRef):
+                return self.sol_eval(target.view, e, ctx)
+        if isinstance(f, (A.Num, A.Quantity)) or f.paren:
+            v = self.expr(f, ctx)
+            if len(e.args) == 1:
+                arg = self.expr(e.args[0], ctx)
+                self.need_numlike(v, f)
+                self.need_numlike(arg, e.args[0])
+                return self.arith("*", v, arg, e)
+        raise self.err("this can't be called like a function", e)
+
+    def sol_eval(self, view: SolView, e, ctx):
+        if len(e.args) != 1:
+            raise self.err(f"{view.name} takes one argument ({view.tname})", e)
+        t = self.expr(e.args[0], ctx)
+        self.need_numlike(t, e.args[0])     # a list of times gives the list of values, like f(xs) (#62)
+        self.unify_or(t.ty.dim, view.tdim, lambda: f"{view.name} is a function of {view.tname}, which is "
+                      f"{self.desc(view.tdim)}, not {self.desc(t.ty.dim)}", e.args[0])
+        if isinstance(t.ty, ListTy) and view.n > 1 and getattr(view, "cplx", False):
+            raise self.err(f"{view.name} is complex, so it can't be evaluated at each element of a list "
+                           f"(lists of complex numbers aren't supported yet)", e,
+                           hint=f"loop over the list, or take the real or imaginary part, like {view.name}.re")
+        if isinstance(t.ty, ListTy) and view.n > 1:
+            raise self.err(f"{view.name} is a vector, so it can't be evaluated at each element of a list "
+                           f"(lists of vectors aren't supported yet)", e,
+                           hint=f"loop over the list, or take one component, like {view.name}.x or "
+                                f"{view.name}[1]")
+        sol = self.var_ref(view.sol_sym, ctx, e)
+        r = self._sol_eval_node(view, sol, t, e)
+        tf = I.IConst(0, NumTy(view.tdim))
+        tf.hint = getattr(view, "thint", None)
+        tfmt = self.fmt(tf)
+        for node in ([r] + list(getattr(r, "items", []))):
+            node.tfmt = tfmt
+        r.sf = self._minsf(t, view) if getattr(view, "sf", None) is not None else t.sf
+        if getattr(view, "hint", None) is not None:
+            r.hint = view.hint
+        return r
+
+    def _sol_eval_node(self, view, sol, t, e):
+        if view.n > 1:
+            comps = []
+            for k in range(view.n):
+                sub = SolView(view.sol_sym, view.comp + k, view.top + k, view.dim, view.tdim, view.tname, view.name)
+                sub.stride = view.stride      # so r''(t) of a vector solution uses the ODE's right side (A19)
+                comps.append(self._sol_eval_node(sub, sol, t, e))
+            if getattr(view, "cplx", False):
+                return I.IVec(comps, ComplexTy(view.dim))
+            return I.IVec(comps, VecTy(view.dim, view.n))
+        ty = ListTy(view.dim) if isinstance(t.ty, ListTy) else NumTy(view.dim)
+        if view.comp <= view.top:
+            r = I.ISolEval(sol, view.comp, t, False, ty)
+        elif view.comp == view.top + view.stride:
+            r = I.ISolEval(sol, view.top, t, True, ty)
+            view.sol_sym.needs_rhs = True       # keep the right-hand side with the solution (D46)
+        else:
+            raise self.err(f"can't take that many derivatives of the solution {view.name}", e)
+        return r
+
+    # one-argument built-ins that can be passed to a function: simpson(sin, 0, π, 100) (D43)
+    PASSABLE_BUILTINS = ("sin", "cos", "tan", "cot", "sec", "csc", "exp", "ln", "log", "log10", "log2", "sinh", "cosh", "tanh",
+                         "asin", "acos", "atan", "sqrt", "cbrt", "abs")
+
+    def call_args(self, arg_asts, ctx):
+        """The arguments of a call of a user function: numbers, lists, vectors, or functions (a FuncRef:
+        a function's name, f', ∇φ, d/dt (...)), which are bound at compile time (D43)."""
+        out = []
+        for a in arg_asts:
+            if isinstance(a, A.Name) and ctx.scope.lookup(a.name)[0] is None \
+                    and a.name in self.PASSABLE_BUILTINS and a.name in BUILTINS:
+                out.append(FuncRef(self._builtin_info(a.name)))
+                continue
+            v = self.expr(a, ctx, allow_func=True)
+            if isinstance(v, SolRef):
+                raise self.err(f"{v.view.name} is the solution of an ODE; it can't be passed to a function yet",
+                               a, hint=f"pass a value, like {v.view.name}(1 s), or values({v.view.name}) for "
+                                       f"all computed values")
+            out.append(v)
+        return out
+
+    def _builtin_info(self, name):
+        cache = self.__dict__.setdefault("_builtin_infos", {})
+        if name not in cache:
+            fd = A.FuncDef(name, [A.Param("x")], A.Call(A.Name(name), [A.Name("x")]))
+            fd.line, fd.col = 0, 0
+            cache[name] = FuncInfo(f"builtin.{name}", fd, self.root)
+            cache[name].display_name = name
+        return cache[name]
+
+    def _func_param_uses(self, info: FuncInfo):
+        """Parameters the body uses like functions: {name: (sure, example)}.  sure: p'(x), d/dx p,
+        ∇p, p(a, b); not sure: p(x) (with a number for p, that means p × x)."""
+        if hasattr(info, "_fp_uses"):
+            return info._fp_uses
+        names = {p.name for p in info.fdef.params}
+        uses = {}
+        body = info.fdef.body if isinstance(info.fdef.body, list) else [info.fdef.body]
+        todo = list(body) + [v for _, v in (info.fdef.where or [])]
+        while todo:
+            n = todo.pop()
+            if isinstance(n, (list, tuple)):
+                todo += [x for x in n if isinstance(x, (A.Node, list, tuple))]
+                continue
+            if not isinstance(n, A.Node):
+                continue
+            if isinstance(n, A.Prime) and isinstance(n.target, A.Name) and n.target.name in names:
+                uses[n.target.name] = (True, n.target.name + "'" * n.order)
+            elif isinstance(n, A.Deriv) and isinstance(n.operand, A.Name) and n.operand.name in names:
+                uses[n.operand.name] = (True, f"d/d{n.var} {n.operand.name}")
+            elif isinstance(n, A.VecCalc) and isinstance(n.func, A.Name) and n.func.name in names:
+                uses[n.func.name] = (True, f"∇{n.func.name}")
+            elif isinstance(n, A.Call) and isinstance(n.func, A.Name) and n.func.name in names:
+                sure = len(n.args) != 1
+                args = ", ".join(C.to_source(x) for x in n.args)
+                if sure or n.func.name not in uses:
+                    uses[n.func.name] = (sure, f"{n.func.name}({args})")
+            for v in vars(n).values():
+                if isinstance(v, (A.Node, list, tuple)):
+                    todo.append(v)
+        info._fp_uses = uses
+        return uses
+
+    def call_user(self, info: FuncInfo, args, node):
+        nparams = len(info.fdef.params)
+        if len(args) != nparams:
+            raise self.err(f"{info.display_name} takes {nparams} argument{'s' if nparams != 1 else ''} "
+                           f"but was given {len(args)}", node)
+        list_args = [i for i, a in enumerate(args) if isinstance(a, I.Expr) and isinstance(a.ty, ListTy)]
+        if list_args and not self._takes_lists(info):
+            scalar_args = list(args)
+            for j in list_args:          # f(xs, ys): element by element, lists of the same length (D191)
+                scalar_args[j] = I.IConst(0, NumTy(args[j].ty.dim))
+            call = self.instantiate(info, scalar_args, node)
+            if not isinstance(call.ty, NumTy):       # f(x) = <x, 2x>; f([1, 2]) (A48)
+                what = "a vector" if isinstance(call.ty, VecTy) else "something other than a number"
+                raise self.err(f"{info.display_name} returns {what}, so it can't be applied to each element "
+                               f"of a list (lists of vectors aren't supported yet)", node,
+                               hint="loop over the list and push the components into separate lists")
+            rt_args = [a for a in args if isinstance(a, I.Expr)]
+            pos = [sum(1 for a in args[:j] if isinstance(a, I.Expr)) for j in list_args]
+            r = I.IMap(call.func, rt_args, pos[0] if len(pos) == 1 else pos, ListTy(call.ty.dim))
+            r.sf = call.sf
+            return r
+        return self.instantiate(info, args, node)
+
+    def _takes_lists(self, info):
+        f = info.fdef
+        names = {p.name for p in f.params}
+        body = f.body if isinstance(f.body, list) else [A.ExprStmt(f.body)]
+        found = False
+
+        def visit(n):
+            nonlocal found
+            if isinstance(n, A.Index) and isinstance(n.target, A.Name) and n.target.name in names:
+                found = True
+            if isinstance(n, A.Call) and isinstance(n.func, A.Name) and n.func.name in (LIST_FUNCS | {"push", "append", "max", "min", "dot"}):
+                for a in n.args:
+                    if isinstance(a, A.Name) and a.name in names:
+                        if n.func.name in ("max", "min") and len(n.args) > 1:
+                            continue
+                        found = True
+                    elif n.func.name in ("sum", "mean", "std") and len(n.args) == 1 and \
+                            names & set(A.free_names(a)):
+                        found = True        # sum(xs / σs²): a reduction of the list parameters (M7)
+            for c in A.children(n):
+                visit(c)
+
+        def visit_stmt(s):
+            nonlocal found
+            for v in vars(s).values():
+                if isinstance(v, A.Node):
+                    if isinstance(v, (A.ForIn,)):
+                        pass
+                    visit(v) if not isinstance(v, list) else None
+                elif isinstance(v, list):
+                    for x in v:
+                        if isinstance(x, A.Node) and not isinstance(x, tuple):
+                            if hasattr(x, "body") or isinstance(x, (A.Assign, A.ExprStmt, A.Return, A.If, A.For,
+                                                                      A.ForIn, A.While, A.Print, A.IndexAssign)):
+                                visit_stmt(x)
+                            else:
+                                visit(x)
+            if isinstance(s, A.ForIn) and isinstance(s.iterable, A.Name) and s.iterable.name in names:
+                found = True
+            if isinstance(s, A.IndexAssign) and s.target in names:     # v[i] = ... (A16)
+                found = True
+        for s in body:
+            visit_stmt(s)
+        return found
+
+    def instantiate(self, info: FuncInfo, args, node, cache=True):
+        if getattr(info, "module", None) is not None and not getattr(info, "in_call", 0):
+            return self.module_call(info, args, node, cache)     # a module's function (D101)
+        f = info.fdef
+        keyparts = []
+        concrete = True
+        for a in args:
+            if isinstance(a, FuncRef):
+                keyparts.append(("fn", a.info))       # one instance per passed function (D43)
+            elif isinstance(a.ty, (NumTy, ListTy, ComplexTy)):
+                d = self.U.norm(a.ty.dim)
+                if not d.concrete:
+                    concrete = False
+                keyparts.append((a.ty.kind, tuple(d.const.e)))
+            else:
+                keyparts.append((a.ty.kind,))
+        fnat = info.nat or SI
+        if not fnat.key <= self.nat.key:
+            raise self.err(f"{info.display_name} was defined in {fnat.name} units ({' = '.join(fnat.consts)} = 1), so "
+                           f"it can only be used where those units hold", node,
+                           hint=f"define {info.display_name} outside the  units  region to use it everywhere")
+        keyparts.append(("units", self.nat.key))      # checked again in each unit system it is used in (D60)
+        key = tuple(keyparts)
+        fargs = args
+        args = [a for a in args if not isinstance(a, FuncRef)]      # what is passed at run time
+        if cache and concrete and key in info.instances:
+            inst = info.instances[key]
+            if inst.ret_ty is getattr(inst, "ret_placeholder", None):
+                inst.called_recursively = True       # its type is still the placeholder (a number)
+            r = I.ICall(inst, args, inst.ret_ty)
+            r.sf = self._minsf(*args, inst) if inst.sf is not None else self._minsf(*args)
+            r.hint = getattr(inst, "ret_hint", None)
+            self._arg_hint(r, args)
+            return r
+        for p, a in zip(f.params, fargs):
+            if not isinstance(a, FuncRef) and _delta_name(p.name) and self._abs_temp(a):
+                self._delta_abs_temp_error(p.name, a, node)
+        uses = self._func_param_uses(info)
+        for p, a in zip(f.params, fargs):
+            if not isinstance(a, FuncRef) and uses.get(p.name, (False,))[0]:
+                raise self.err(f"{info.display_name} uses {p.name} as a function ({uses[p.name][1]}), but was "
+                               f"given {type_desc(a.ty, self.U)}", node,
+                               hint=f"pass a function's name, like {info.display_name}(g, ...) after g(x) = ...")
+            if not isinstance(a, FuncRef) and p.name in uses and isinstance(a.ty, NumTy) and node is not None \
+                    and node is not f:
+                self.diags.warn(f"{p.name} is a number here, so {uses[p.name][1]} in {info.display_name} means "
+                                f"{p.name} × (...)", line=node.line, col=node.col,
+                                hint=f"to pass a function, give its name: {info.display_name}(g, ...) after "
+                                     f"g(x) = ...; to multiply, write {p.name}*(...)")
+        inst = I.IFunc(self.fresh_name(info.name), [])
+        inst.display = info.display_name
+        inst.name_text = self.text(info.display_name)
+        inst.def_line = f.line
+        inst.ret_ty = None
+        inst.ret_placeholder = NumTy(DExpr.fresh("ret"))
+        if cache and concrete:
+            info.instances[key] = inst
+        scope = Scope(info.scope, kind="func")
+        fctx = Ctx(inst, scope, is_main=False)
+        for p, a in zip(f.params, fargs):
+            if isinstance(a, FuncRef):
+                if p.unit is not None:
+                    raise self.err(f"{info.display_name} expects {p.name} in {p.unit.text}, but got the "
+                                   f"function {a.name}", node)
+                scope.names[p.name] = a.info        # V(x) in the body calls the function passed in
+                continue
+            ty = a.ty
+            if isinstance(ty, NumTy):
+                ty = NumTy(DExpr.of(a.ty.dim))
+            elif isinstance(ty, ListTy):
+                ty = ListTy(DExpr.of(a.ty.dim))
+            sym = I.Sym(p.name, ty, "local", inst)
+            sym.assigned = True
+            if p.unit is not None:
+                u = self.resolve_unit(p.unit)
+                if not isinstance(ty, (NumTy, ListTy, ComplexTy)) or not self.U.unify(ty.dim, u.dim):
+                    raise self.err(f"{info.display_name} expects {p.name} in {u.name} ({self.desc(u.dim)}), "
+                                   f"but got {type_desc(a.ty, self.U)}", node)
+                sym.hint = u
+            inst.params.append(sym)
+            scope.names[p.name] = sym
+        # recursion: calls to this instance while checking use the placeholder type
+        inst.ret_ty = inst.ret_placeholder
+        try:
+            if info.one_liner:
+                v = self.expr(C.stabilize(info.body_expr()) if info.stable else info.body_expr(), fctx)
+                if not isinstance(v, I.Expr):
+                    raise self.err("a function must produce a value", f)
+                inst.body = [I.SReturn(v)]
+                fctx.ret_types.append(v)
+            else:
+                stmts = list(f.body)
+                if stmts and isinstance(stmts[-1], A.ExprStmt):
+                    last = stmts[-1]
+                    stmts[-1] = A.Return(last.value).at(last)
+                inst.body = self.block(stmts, fctx)
+                if fctx.ret_types and not _always_returns(inst.body):
+                    raise self.err(f"{info.display_name} doesn't return a value on every path (for example when "
+                                   f"an if is false, or a loop doesn't run)", f,
+                                   hint="make sure the function ends with a value or a return that always runs")
+        except FermiumError as e:
+            info.instances.pop(key, None)
+            if e.line is None and node is not None:
+                e.line, e.col = node.line, node.col
+            elif node is not None and node.line and e.line != node.line and not getattr(e, "call_noted", False):
+                argd = ", ".join(f"{p.name} = " + (f"the function {a.name}" if isinstance(a, FuncRef)
+                                                   else type_desc(a.ty, self.U)) for p, a in zip(f.params, fargs))
+                note = f"this happened when calling {info.display_name} on line {node.line} (with {argd})"
+                num_called = [p.name for p, a in zip(f.params, fargs) if not isinstance(a, FuncRef)
+                              and p.name in uses and isinstance(a.ty, NumTy)]
+                if num_called:
+                    q = num_called[0]
+                    note += (f"; {q} was given a number, so {uses[q][1]} means {q} × (...); to pass a function, "
+                             f"give its name")
+                e.hint = f"{e.hint}; {note}" if e.hint else note
+                e.call_noted = True
+            if getattr(info, "module", None) is not None:
+                self.module_body_error(e, info, node)
+            raise
+        rets = fctx.ret_types
+        if not rets:
+            raise self.err(f"the function {info.display_name} never returns a value", f,
+                           hint="end it with the value to return, or use  return value")
+        if all(isinstance(r, I.ICall) and r.func is inst for r in rets):
+            raise self.err(f"{info.display_name} always calls itself, so it would never finish", f,
+                           hint="add a case that returns without calling it, like  if n <= 0 then 1 else ...")
+        rt = rets[0].ty
+        for r in rets[1:]:
+            if type(r.ty) is not type(rt) or (isinstance(rt, (NumTy, ListTy)) and not self.U.unify(rt.dim, r.ty.dim)):
+                raise self.err(f"{info.display_name} returns different kinds of values in different places", f)
+        if isinstance(rt, NumTy):
+            if not self.U.unify(inst.ret_placeholder.dim, rt.dim):
+                raise self.err(f"the units of {info.display_name} don't work out recursively", f)
+        elif getattr(inst, "called_recursively", False):
+            info.instances.pop(key, None)
+            raise self.err(f"{info.display_name} calls itself and returns {type_desc(rt, self.U)}; a function that "
+                           f"calls itself must return a single real number", f,
+                           hint="write the recursion as a loop")
+        inst.ret_ty = rt
+        inst.sf = self._minsf(*rets)
+        self.new_funcs.append(inst)
+        self.all_funcs.append(inst)
+        inst.ret_hint = rets[0].hint if len(rets) == 1 else None
+        r = I.ICall(inst, args, rt)
+        r.hint = inst.ret_hint
+        self._arg_hint(r, args)
+        r.sf = self._minsf(*args, inst)
+        if len(rets) == 1 and isinstance(rets[0], I.Expr) and rets[0].hint is not None and \
+                isinstance(rets[0], I.IVar) is False and info.one_liner and False:
+            r.hint = rets[0].hint
+        return r
+
+    # ------------------------------------------------------------ builtins
+    def builtin(self, name, e, ctx):
+        if name in ("sin", "cos", "tan", "cot", "sec", "csc") and len(e.args) == 1 and isinstance(e.args[0], A.Num) and e.args[0].digit \
+                and e.args[0].value >= 10 and e.args[0].value == int(e.args[0].value):
+            v = int(e.args[0].value)
+            self.diags.warn(f"{name}({v}) is the {name} of {v} radians", line=e.line, col=e.col,
+                            length=e.length, hint=f"for degrees write {name}({v}°)")
+        if name in ("push", "append"):
+            raise self.err(f"{name}(list, value) changes a list and doesn't give a value; "
+                           f"write it on its own line", e)
+        if name == "to":
+            if len(e.args) != 2:
+                raise self.err("to needs a value and a unit: to(x, eV)", e)
+            u_ast = e.args[1]
+            text = C.to_source(u_ast)
+            try:
+                u = self.nat.canon_unit(parse_unit_string(text.replace(" ", " ")))
+            except UnitSyntaxError as ex:
+                raise self.err(str(ex), u_ast)
+            ue = A.UnitExpr([A.UnitFactor(text)], text)
+            del ue
+            v = self.expr(e.args[0], ctx)
+            if isinstance(v.ty, VecTy) and v.ty.mixed:
+                raise self.err(f"can't show a vector with different units per component in {u.name}", e,
+                               hint="convert one component at a time, like to(s.x, cm)")
+            if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
+                raise self.err("to(x, unit) needs a number", e)
+            if not self.U.unify(v.ty.dim, u.dim):
+                raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e)
+            v.hint = u
+            return v
+        if name in ("row", "column"):
+            return self.row_column(name, e, ctx)
+        if name in UNC_FUNCS:
+            return self.unc_part(name, e, ctx)
+        if name == "times" and len(e.args) == 1:
+            v = self.expr(e.args[0], ctx, allow_func=True)
+            if isinstance(v, SolRef):
+                sol = self.var_ref(v.view.sol_sym, ctx, e)
+                r = I.ISolList(sol, v.view.comp, "t", ListTy(v.view.tdim))
+                r.hint = getattr(v.view, "thint", None)
+                return r
+        args = []
+        for a in e.args:
+            v = self.expr(a, ctx, allow_func=True)
+            if isinstance(v, SolRef):
+                v = self.sol_values(v.view, a)
+            if isinstance(v, FuncRef):
+                raise self.err(f"{v.info.display_name} is a function; give it an argument", a)
+            args.append(v)
+        n = len(args)
+        if name == "str":
+            # str(x): a number as text, as print shows it (its unit and digits), for labels (D216)
+            if n != 1:
+                raise self.err(f"str takes 1 argument but was given {n}", e)
+            v = args[0]
+            if isinstance(v.ty, StrTy):
+                return v
+            if not isinstance(v.ty, NumTy):
+                raise self.err(f"str(x) turns a single number into text, not {type_desc(v.ty, self.U)}", e.args[0])
+            fid = self.fmt(v)
+            return I.IBuiltin("text_num", [I.IConst(float(fid), NumTy(DIMLESS)), v], STR)
+        if name in cplx.COMPLEX_FUNCS or any(cplx.is_c(a) for a in args):
+            return cplx.builtin(self, name, args, e)
+
+        def need(k):
+            if n != k:
+                raise self.err(f"{name} takes {k} argument{'s' if k != 1 else ''} but was given {n}", e)
+
+        def num_or_list(i, what="argument"):
+            self.need_numlike(args[i], e.args[i], f"the {what} of {name}")
+
+        if name in MATH1:
+            need(1)
+            num_or_list(0)
+            if not self.U.unify(args[0].ty.dim, DIMLESS):
+                d = self.desc(args[0].ty.dim)
+                hint = "divide by a reference value first, e.g. ln(p / (1 atm))" if name in ("ln", "log", "log10",
+                                                                                          "log2") else \
+                    "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)"
+                raise self.err(f"{name} needs a plain number, but got {d}", e.args[0], hint=hint)
+            return self._bi(name, args, args[0].ty.__class__(DIMLESS), args)
+        if name in ("sqrt", "cbrt"):
+            need(1)
+            num_or_list(0)
+            p = Fraction(1, 2) if name == "sqrt" else Fraction(1, 3)
+            r = I.IPowC(args[0], float(p) if name == "sqrt" else 1 / 3, args[0].ty.__class__(args[0].ty.dim ** p))
+            r.sf = args[0].sf
+            return r
+        if name in SPECIAL2 or name in SPECIAL1:
+            k = 2 if name in SPECIAL2 else 1
+            need(k)
+            what = ["the order n", "x"] if k == 2 else ["m"]
+            for i in range(k):
+                self.need_num(args[i], e.args[i], f"{what[i]} in {name}")
+                if not self.U.unify(args[i].ty.dim, DIMLESS):
+                    raise self.err(f"{name} needs plain numbers, but {what[i]} is {self.desc(args[i].ty.dim)}",
+                                   e.args[i], hint="divide by a unit or a scale first, like besselj(1, k r) with "
+                                                   "k in 1/m and r in m")
+            if k == 2 and isinstance(args[0], I.IConst) and args[0].value != int(args[0].value):
+                raise self.err(f"{name}(n, x) needs a whole-number order n, not {args[0].value:g}", e.args[0])
+            return self._bi(name, args, NumTy(DIMLESS), args[k - 1:])
+        if name == "abs" and n == 1 and isinstance(args[0].ty, (VecTy, MatTy)):
+            return self.map_entries(args[0], lambda x: self._bi("abs", [x], x.ty, [x]), ctx)
+        if name == "trace":
+            need(1)
+            self.need_square(args[0], "trace", e)
+            m = args[0]
+            k = m.ty.r
+            r = self.map_entries(m, None, ctx, reduce=[i * k + i for i in range(k)])
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        if name == "angle":
+            need(2)
+            a, c = args
+            for x, node in zip(args, e.args):
+                if not isinstance(x.ty, VecTy):
+                    raise self.err("angle(a, b) needs two vectors, like angle(<1, 0> m, <1, 1> m)", node)
+                self.shared_dim(x, "angle(a, b)", node)
+            if a.ty.n != c.ty.n or a.ty.n not in (2, 3):
+                raise self.err(f"angle(a, b) needs two 2-vectors or two 3-vectors, but got a {a.ty.n}-vector and a "
+                               f"{c.ty.n}-vector", e)
+            sa, sc = self.new_sym("·a", a.ty, ctx), self.new_sym("·b", c.ty, ctx)
+            cr = self.vec_arith("×", self._ivar(sa), self._ivar(sc), e)
+            y = self._bi("norm" if a.ty.n == 3 else "abs", [cr], NumTy(cr.ty.dim), [cr])
+            x = self.vec_arith("*", self._ivar(sa), self._ivar(sc), e)
+            r = I.ILet([(sa, a), (sc, c)], self._bi("atan2", [y, x], NumTy(DIMLESS), args))
+            r.sf = self._minsf(*args)
+            return r
+        if name in SAME1:
+            need(1)
+            num_or_list(0)
+            if name != "abs" and not self.U.unify(args[0].ty.dim, DIMLESS):
+                raise self.err(f"{name} of {self.desc(args[0].ty.dim)} would depend on which unit you mean", e,
+                               hint=f"divide by a unit first, e.g.  {name}(x / (1 cm)) cm")
+            r = self._bi(name, args, args[0].ty, args)
+            r.hint = args[0].hint
+            if name != "abs":
+                r.sf = None      # a whole number: print it exactly
+            return r
+        if name == "sign" and n == 1 and isinstance(args[0].ty, VecTy):
+            # sign(v) = v/|v|, the direction; d|u|/dt = sign(u)·u' then works for vectors too (A18)
+            self.shared_dim(args[0], "sign(v)", e)
+            return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
+        if name == "sign" or name == "isnan":
+            need(1)
+            num_or_list(0)
+            return self._bi(name, args, NumTy(DIMLESS) if name == "sign" else BOOL, args)
+        if name in ("atan2",):
+            need(2)
+            for i in range(2):
+                self.need_num(args[i], e.args[i])
+            self.unify_or(args[0].ty.dim, args[1].ty.dim, lambda: "atan2(y, x) needs y and x in the same units", e)
+            return self._bi(name, args, NumTy(DIMLESS), args)
+        if name in ("hypot", "mod"):
+            need(2)
+            for i in range(2):
+                self.need_num(args[i], e.args[i])
+            self.unify_or(args[0].ty.dim, args[1].ty.dim,
+                          lambda: f"{name} needs both values in the same units", e)
+            r = self._bi(name, args, NumTy(args[0].ty.dim), args)
+            r.hint = args[0].hint
+            return r
+        if name == "clamp":
+            need(3)
+            for i in range(3):
+                self.need_num(args[i], e.args[i])
+                self.unify_or(args[0].ty.dim, args[i].ty.dim, lambda: "clamp needs all values in the same units", e)
+            r = self._bi(name, args, NumTy(args[0].ty.dim), args)
+            r.hint = args[0].hint
+            return r
+        if name in ("min", "max"):
+            if n == 1:
+                if not isinstance(args[0].ty, ListTy):
+                    raise self.err(f"{name} of a single value needs a list", e)
+                r = self._bi(name + "_list", args, NumTy(args[0].ty.dim), args)
+                r.hint = args[0].hint
+                return r
+            if n < 2:
+                raise self.err(f"{name} needs at least one argument", e)
+            if any(isinstance(a, I.Expr) and isinstance(a.ty, ListTy) for a in args):
+                # max(xs, 1e-12): element by element, lists of one length and numbers mixed (D162)
+                for i in range(n):
+                    self.need_numlike(args[i], e.args[i], f"an argument of {name}")
+                    self.unify_or(args[0].ty.dim, args[i].ty.dim,
+                                  lambda i=i: f"{name} needs all values in the same units (here "
+                                  f"{self.desc(args[0].ty.dim)} and {self.desc(args[i].ty.dim)})", e.args[i])
+                r = self._bi(name + "_ew", args, ListTy(args[0].ty.dim), args)
+                r.hint = next((a.hint for a in args if isinstance(a.ty, ListTy)), None)
+                return r
+            for i in range(n):
+                self.need_num(args[i], e.args[i])
+                self.unify_or(args[0].ty.dim, args[i].ty.dim,
+                              lambda: f"{name} needs all values in the same units", e.args[i])
+            r = self._bi(name, args, NumTy(args[0].ty.dim), args)
+            r.hint = args[0].hint
+            return r
+        if name in ("factorial", "gamma"):
+            need(1)
+            self.need_num(args[0], e.args[0])
+            self.U.unify(args[0].ty.dim, DIMLESS)
+            return self._bi(name, args, NumTy(DIMLESS), args)
+        if name == "len" and n == 1 and isinstance(args[0].ty, TextListTy):
+            r = self._bi("len", args, NumTy(DIMLESS), args)
+            r.sf = None
+            return r
+        if name in LIST_FUNCS or name in ("values", "times"):
+            need(1)
+            a = args[0]
+            if not isinstance(a.ty, ListTy):
+                raise self.err(f"{name} needs a list, but got {type_desc(a.ty, self.U)}", e.args[0])
+            if name == "len":
+                r = self._bi("len", args, NumTy(DIMLESS), args)
+                r.sf = None    # a count is exact
+                return r
+            if name in ("sum", "cumsum") and a.hint is not None and a.hint.affine:
+                raise self.err(f"can't add absolute temperatures: {name} of a list in {a.hint.name} would add "
+                               f"them as kelvins (10 {a.hint.name} + 20 {a.hint.name} isn't 30 {a.hint.name})",
+                               e, hint="mean(...) works; to add temperature changes, write them in K")
+            if name in ("sum", "mean", "first", "last"):
+                r = self._bi(name, args, NumTy(a.ty.dim), args)
+                r.hint = a.hint
+                return r
+            if name == "std":
+                r = self._bi(name, args, NumTy(a.ty.dim), args)
+                r.hint = a.hint if not (a.hint is not None and a.hint.affine) else None   # a spread: K, not °C
+                return r
+            if name in ("cumsum", "diff", "reverse", "sort", "values"):
+                r = self._bi(name if name != "values" else "copy", args, ListTy(a.ty.dim), args)
+                r.hint = a.hint
+                if name in ("diff", "cumsum") and a.hint is not None and a.hint.affine:
+                    r.hint = None     # differences of temperatures are shown in K
+                return r
+            if name == "times":
+                if isinstance(a, I.ISolList):
+                    return I.ISolList(a.sol, a.comp, "t", ListTy(getattr(a, "tdim", None) or DExpr.of(TIME_DIM)))
+                raise self.err("times(...) needs an ODE solution", e)
+        if name in ("norm", "unit", "hat"):
+            need(1)
+            if not isinstance(args[0].ty, VecTy):
+                raise self.err(f"{name} needs a vector, like <3, 4> m", e.args[0])
+            d = self.shared_dim(args[0], f"{name}(v)", e)
+            if name == "norm":
+                r = self._bi("norm", args, NumTy(d), args)
+                r.hint = args[0].hint
+                return r
+            return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
+        if name == "cross":
+            need(2)
+            if not all(isinstance(a.ty, VecTy) for a in args):
+                raise self.err("cross(a, b) needs two vectors", e)
+            return self.vec_arith("×", args[0], args[1], e)
+        if name == "vec":
+            if not 2 <= n <= MAX_DIM:
+                raise self.err(f"vec(...) takes 2 to {MAX_DIM} components", e)
+            return self.e_VecLit(A.VecLit(e.args).at(e), ctx)
+        if name == "dot" and n == 2 and all(isinstance(a.ty, VecTy) for a in args):
+            return self.vec_arith("*", args[0], args[1], e)
+        if name in ("transpose", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
+            return self.mat_builtin(name, args, e)
+        if name == "identity":
+            need(1)
+            k = args[0]
+            if not isinstance(k, I.IConst) or not isinstance(k.ty, NumTy):
+                raise self.err("identity(n) needs a fixed whole number, like identity(3)", e.args[0])
+            if k.value != int(k.value) or not 2 <= k.value <= MAX_DIM:
+                raise self.err(f"identity(n) needs a whole number n from 2 to {MAX_DIM} (matrices are at most "
+                               f"{MAX_DIM}×{MAX_DIM})", e.args[0])
+            m = int(k.value)
+            return I.IVec([I.IConst(1.0 if i == j else 0.0, NumTy(DIMLESS)) for i in range(m) for j in range(m)],
+                          MatTy(DIMLESS, m, m))
+        if name == "trapz":
+            need(2)
+            for i in range(2):
+                if not isinstance(args[i].ty, ListTy):
+                    raise self.err("trapz(ys, xs) needs two lists", e)
+            return self._bi(name, args, NumTy(args[0].ty.dim * args[1].ty.dim), args)
+        if name == "dot":
+            need(2)
+            for i in range(2):
+                if not isinstance(args[i].ty, ListTy):
+                    raise self.err("dot(a, b) needs two lists", e)
+            return self._bi(name, args, NumTy(args[0].ty.dim * args[1].ty.dim), args)
+        if name == "interp":
+            need(3)
+            x, xs, ys = args
+            self.need_num(x, e.args[0])
+            if not isinstance(xs.ty, ListTy) or not isinstance(ys.ty, ListTy):
+                raise self.err("interp(x, xs, ys) needs a value and two lists", e)
+            self.unify_or(x.ty.dim, xs.ty.dim, lambda: "interp: x and xs need the same units", e)
+            return self._bi(name, args, NumTy(ys.ty.dim), args)
+        if name == "linspace":
+            need(3)
+            for i in range(3):
+                self.need_num(args[i], e.args[i])
+            self.unify_or(args[0].ty.dim, args[1].ty.dim, lambda: "linspace(a, b, n): a and b need the same units",
+                          e)
+            self.unify_or(args[2].ty.dim, DIMLESS, lambda: "linspace(a, b, n): n must be a plain number", e.args[2])
+            r = self._bi(name, args, ListTy(args[0].ty.dim), args)
+            r.hint = args[0].hint or args[1].hint
+            return r
+        if name == "zeros" and n == 2:
+            return self.zero_matrix(args, e)
+        if name in ("zeros", "ones"):
+            need(1)
+            self.need_num(args[0], e.args[0])
+            self.unify_or(args[0].ty.dim, DIMLESS, lambda: f"{name}(n): n must be a plain number", e.args[0])
+            return self._bi(name, args, ListTy(DExpr.fresh(name) if name == "zeros" else DIMLESS), args)
+        if name == "range":
+            if n not in (2, 3):
+                raise self.err("range needs a start and an end: range(a, b) or range(a, b, step)", e,
+                               hint="to count, write  for i from 1 to 10")
+            for i in range(n):
+                self.need_num(args[i], e.args[i])
+                self.unify_or(args[0].ty.dim, args[i].ty.dim, lambda: "range: all values need the same units", e)
+            if n == 2:
+                args.append(I.IConst(1, NumTy(args[0].ty.dim)))
+            return self._bi(name, args, ListTy(args[0].ty.dim), args)
+        if name == "clock":
+            if n != 0:
+                raise self.err("clock() takes no arguments", e)
+            r = self._bi(name, args, NumTy(TIME_DIM), args)
+            if self.nat.natural:        # seconds -> natural units (D60)
+                r = I.IBin("*", r, I.IConst(self.nat.factor(TIME_DIM), NumTy(DIMLESS)),
+                           NumTy(self.nat.canon_dim(TIME_DIM)))
+            return r
+        if name in ("rand", "randn"):
+            return self.m3_random(name, args, e)
+        if name == "seed":
+            raise self.err("seed(n) is a statement on its own line, like  seed(42)", e)
+        if name == "sample":
+            return self.m3_sample(e, ctx)
+        if name in ("fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum", "frequencies", "argmax",
+                    "argmin"):
+            return self.m3_fourier(name, args, e)
+        raise self.err(f"{name} can't be used this way", e)
+
+    def map_entries(self, t, fn, ctx, reduce=None):
+        """Apply fn to every entry of vector or matrix t (evaluated once), giving one of the same shape;
+        with reduce=[flat indexes], the sum of those entries instead (the trace)."""
+        sym = self.new_sym("·m", t.ty, ctx)
+        dims = t.ty.comp_dims() if isinstance(t.ty, VecTy) else [t.ty.dim] * (t.ty.r * t.ty.c)
+        hints = t.hint if isinstance(t.hint, MixedHint) else [t.hint] * len(dims)
+
+        def entry(k):
+            x = I.IVecElem(self._ivar(sym), k, NumTy(dims[k]))
+            x.hint, x.sf = hints[k], t.sf
+            return x
+        if reduce is not None:
+            body = entry(reduce[0])
+            for k in reduce[1:]:
+                body = I.IBin("+", body, entry(k), NumTy(t.ty.dim))
+            body.hint, body.sf = t.hint, t.sf
+        else:
+            items = [fn(entry(k)) for k in range(len(dims))]
+            body = I.IVec(items, t.ty)
+            body.hint, body.sf = t.hint, t.sf
+        r = I.ILet([(sym, t)], body)
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
+    def row_column(self, name, e, ctx):
+        if len(e.args) != 2:
+            raise self.err(f"{name}(M, {'i' if name == 'row' else 'j'}) takes a matrix and a number", e)
+        m = self.expr(e.args[0], ctx)
+        if not isinstance(m.ty, MatTy):
+            raise self.err(f"{name}(M, k) needs a matrix, like [[1, 2], [3, 4]]", e.args[0])
+        r_, c_ = m.ty.r, m.ty.c
+        length, size = (c_, r_) if name == "row" else (r_, c_)
+        if not 2 <= length <= MAX_DIM:
+            raise self.err(f"a {name} of a {r_}×{c_} matrix has {length} entr{'y' if length == 1 else 'ies'}, so it "
+                           f"isn't a vector; pick an entry with M[i, j]", e)
+        k = self.fixed_or_runtime_index(e.args[1], size, ctx)
+        stride, offs = (c_, list(range(c_))) if name == "row" else (1, [i * c_ for i in range(r_)])
+        if isinstance(k, int):
+            if not 0 <= k < size:
+                raise self.err(f"this matrix has {size} {name}s, so there is no {name} {k + 1}", e.args[1])
+            r = I.IBuiltin("shuffle", [m], VecTy(m.ty.dim, length))
+            r.idx = [k * stride + o for o in offs]
+            r.hint, r.sf = m.hint, m.sf
+            return r
+        return self.runtime_index(m, [(k, size, stride)], offs, VecTy(m.ty.dim, length), e)
+
+    # ------------------------------------------------------------ random numbers (D80)
+    def m3_random(self, name, args, e):
+        """rand(), rand(a, b) (uniform in [a, b), same units), randn(), randn(μ, σ) (normal, same units)."""
+        n = len(args)
+        if n == 0:
+            r = self._bi(name, args, NumTy(DIMLESS), args)
+            r.sf = None
+            return r
+        if n != 2:
+            what = "rand() or rand(a, b)" if name == "rand" else "randn() or randn(μ, σ)"
+            raise self.err(f"{name} takes no arguments or two: {what}", e)
+        for i in range(2):
+            self.need_num(args[i], e.args[i])
+        a, b = args
+        self.unify_or(a.ty.dim, b.ty.dim, lambda: (
+            f"rand(a, b): a is {self.desc(a.ty.dim)} but b is {self.desc(b.ty.dim)}; they need the same units"
+            if name == "rand" else
+            f"randn(μ, σ): μ is {self.desc(a.ty.dim)} but σ is {self.desc(b.ty.dim)}; they need the same units"), e)
+        r = I.IBuiltin(name + "2", args, NumTy(a.ty.dim))
+        r.sf = None
+        r.hint = a.hint or b.hint
+        return r
+
+    def m3_sample(self, e, ctx):
+        """sample(expr, N): a list of N values of expr, evaluated afresh each time (so each rand() in it
+        draws new numbers) -- the building block of a Monte Carlo estimate (D80)."""
+        if len(e.args) != 2:
+            raise self.err("sample takes an expression and a count: sample(randn(0 m, 1 m), 1000)", e)
+        cnt = self.expr(e.args[1], ctx)
+        self.need_num(cnt, e.args[1], "the number of samples")
+        self.unify_or(cnt.ty.dim, DIMLESS, lambda: "the number of samples must be a plain number", e.args[1])
+        lam = I.ILambda("scalar", self.fresh_name("sample"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        k = I.Sym("__k", NumTy(DIMLESS), "local", lam)
+        k.assigned = True
+        lam.params = [k]
+        body = self.expr(e.args[0], lctx)
+        self.need_num(body, e.args[0], "the thing to sample")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.IBuiltin("sample", [cnt], ListTy(body.ty.dim))
+        r.lam = lam
+        r.hint = getattr(body, "hint", None)
+        r.sf = None
+        return r
+
+    # ------------------------------------------------------------ Fourier transforms (D81)
+    def m3_fourier(self, name, args, e):
+        n = len(args)
+        usage = {"fft_re": "fft_re(xs)", "fft_im": "fft_im(xs)", "ifft": "ifft(re, im)",
+                 "amplitude_spectrum": "amplitude_spectrum(xs)", "power_spectrum": "power_spectrum(xs, dt)",
+                 "frequencies": "frequencies(xs, dt) or frequencies(n, dt)", "argmax": "argmax(xs)",
+                 "argmin": "argmin(xs)"}[name]
+        want = {"ifft": 2, "power_spectrum": 2, "frequencies": 2}.get(name, 1)
+        if n != want:
+            raise self.err(f"{name} takes {want} argument{'s' if want > 1 else ''}: {usage}", e)
+
+        def need_list(i):
+            if not isinstance(args[i].ty, ListTy):
+                raise self.err(f"{usage}: {'xs' if i == 0 else 'the second argument'} must be a list, not "
+                               f"{type_desc(args[i].ty, self.U)}", e.args[i])
+
+        def need_step(i):
+            self.need_num(args[i], e.args[i], "the time step (spacing) between samples")
+        if name in ("argmax", "argmin"):
+            need_list(0)
+            r = self._bi(name, args, NumTy(DIMLESS), [])
+            r.sf = None
+            return r
+        if name == "frequencies":
+            need_step(1)
+            if isinstance(args[0].ty, ListTy):
+                cnt = self._bi("len", [args[0]], NumTy(DIMLESS), [])
+            else:
+                self.need_num(args[0], e.args[0], "the number of samples")
+                self.unify_or(args[0].ty.dim, DIMLESS, lambda: "frequencies(n, dt): n must be a plain number",
+                              e.args[0])
+                cnt = args[0]
+            d = DExpr.of(DIMLESS) / args[1].ty.dim
+            r = I.IBuiltin("frequencies", [cnt, args[1]], ListTy(d))
+            r.sf = None
+            if self.U.is_concrete(d) and self.U.resolve(d) == DIMLESS / TIME_DIM:
+                r.hint = lookup_unit("Hz")       # shown in Hz, not 1/s
+            return r
+        need_list(0)
+        if name == "ifft":
+            need_list(1)
+            self.unify_or(args[0].ty.dim, args[1].ty.dim, lambda: "ifft(re, im): the real and imaginary parts "
+                          "need the same units", e)
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim))
+        elif name == "power_spectrum":
+            need_step(1)
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim * args[0].ty.dim * args[1].ty.dim))
+            hp = hint_power(args[0].hint, 2)            # V -> V²/Hz, the usual unit of a spectral density
+            if hp is not None and self.U.is_concrete(args[1].ty.dim) and \
+                    self.U.resolve(args[1].ty.dim) == TIME_DIM:
+                try:
+                    u = parse_unit_string(f"{hp.name}/Hz")
+                    if self.U.is_concrete(r.ty.dim) and u.dim == self.U.resolve(r.ty.dim):
+                        r.hint = u
+                except (UnitSyntaxError, Exception):
+                    pass
+        else:
+            r = I.IBuiltin(name, args, ListTy(args[0].ty.dim))
+            r.hint = args[0].hint if not (args[0].hint is not None and args[0].hint.affine) else None
+        r.sf = None
+        return r
+
+    def seed_stmt(self, e, ctx):
+        if len(e.args) != 1:
+            raise self.err("seed takes one whole number: seed(42)", e)
+        v = self.expr(e.args[0], ctx)
+        self.need_num(v, e.args[0], "the seed")
+        self.unify_or(v.ty.dim, DIMLESS, lambda: f"the seed must be a plain number, not {self.desc(v.ty.dim)}",
+                      e.args[0])
+        return I.SExpr(I.IBuiltin("seed", [v], NumTy(DIMLESS)))
+
+    def unc_part(self, name, e, ctx):
+        """value(x), uncertainty(x), rel(x) (D121): plain numbers (lists for a list)."""
+        if len(e.args) != 1:
+            raise self.err(f"{name} takes 1 argument but was given {len(e.args)}", e)
+        self.uses_unc = True
+        a = self.expr(e.args[0], ctx)
+        self.need_numlike(a, e.args[0], f"the argument of {name}")
+        if name == "rel":
+            r = I.IBuiltin("unc_rel", [a], a.ty.__class__(DIMLESS))
+            r.sf = 2
+            return r
+        r = I.IBuiltin("unc_" + name, [a], a.ty)
+        r.hint = a.hint if a.hint is None or not getattr(a.hint, "affine", False) or name == "value" else None
+        r.sf = 2 if name == "uncertainty" else a.sf
+        return r
+
+    def _maybe_uncertain(self, node, ctx):
+        """err(x) outside a fit: only in a program that already uses uncertainties (else the fit message)."""
+        return self.uses_unc
+
+    def s_Propagate(self, s, ctx):
+        """propagate montecarlo [N samples] + formulas (D123)."""
+        self.uses_unc = True
+        n = None
+        if s.samples is not None:
+            n = self.expr(s.samples, ctx)
+            self.need_num(n, s.samples, "the number of samples")
+            if not self.U.unify(n.ty.dim, DIMLESS):
+                raise self.err("the number of samples must be a plain number", s.samples)
+        bad = (A.Print, A.Plot, A.Fit, A.FuncDef, A.Propagate, A.Import, A.Units, A.Return)
+        for st in s.body:
+            for x in _stmts_in(st):
+                if isinstance(x, bad):
+                    raise self.err("only formulas (name = …) go inside  propagate montecarlo; print or plot the "
+                                   "results after the block", x)
+        body = self.block(s.body, ctx)
+        outs, seen = [], set()
+        for st in body:
+            if isinstance(st, I.SAssign) and isinstance(st.sym.ty, NumTy) and st.sym.id not in seen:
+                seen.add(st.sym.id)
+                outs.append(st.sym)
+                st.sym.sf, st.sym.direct = None, False
+        if not outs:
+            other = next((st for st in body if isinstance(st, I.SAssign)), None)
+            if other is not None:       # b = [a, 2 a]: a formula, but not for a number (red team round 3 #15)
+                raise self.err(f"propagate montecarlo gives uncertainties to plain numbers, but "
+                               f"{other.sym.name} is {_kind_of(other.sym.ty)}; give each number its own formula, like "
+                               f"{other.sym.name}1 = …, {other.sym.name}2 = …", s)
+            raise self.err("propagate montecarlo needs at least one formula (name = …) in its block", s)
+        r = I.SPropagate(n, body, outs)
+        return r
+
+    def _bi(self, name, args, ty, sfargs):
+        r = I.IBuiltin(name, args, ty)
+        r.sf = self._minsf(*sfargs)
+        return r
+
+    # ------------------------------------------------------------ calculus
+    def e_Prime(self, e, ctx):
+        # inside an ODE right-hand side, x' is a state variable
+        if isinstance(e.target, A.Name):
+            key = e.target.name + "'" * e.order
+            b, _ = ctx.scope.lookup(key)
+            if isinstance(b, I.Sym):
+                return self.var_ref(b, ctx, e)
+            t = self.expr(e.target, ctx, allow_func=True)
+        else:
+            t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, FuncRef):
+            info = t.info
+            if len(info.fdef.params) != 1:
+                raise self.err(f"{info.display_name}' is ambiguous: {info.display_name} has several parameters",
+                               e, hint="use ∂/∂x to say which one")
+            return FuncRef(self.derived_info(info, 0, e.order, e))
+        if isinstance(t, SolRef):
+            v = t.view
+            nv = SolView(v.sol_sym, v.comp + e.order * v.stride, v.top, v.dim / (DExpr.of(v.tdim) ** e.order),
+                         v.tdim, v.tname, v.name + "'" * e.order)
+            nv.n, nv.stride = v.n, v.stride
+            nv.cplx = getattr(v, "cplx", False)
+            nv.sf = getattr(v, "sf", None)
+            nv.thint = getattr(v, "thint", None)
+            k = (v.comp - v.top) // v.stride + e.order + (v.top // v.stride if False else 0)
+            hints = getattr(v, "hints", {})
+            order = v.name.count("'") + e.order
+            nv.hints = hints
+            nv.hint = hints.get(order)
+            del k
+            return SolRef(nv)
+        raise self.err("' (prime) means a derivative; it only works on functions and ODE solutions", e,
+                       hint="to differentiate a formula write d/dt (formula)")
+
+    def derived_info(self, info: FuncInfo, i, order, node):
+        key = (i, order)
+        if key in info.derived:
+            return info.derived[key]
+        if not info.one_liner:
+            raise self.err(f"can only differentiate one-line functions like f(x) = ..., and "
+                           f"{info.display_name} is defined over several lines", node)
+        f = info.fdef
+        pname = f.params[i].name
+        body = info.body_expr()
+        for _ in range(order):
+            saved = self.cur_ctx
+            try:
+                body = C.diff(body, pname, self._diffctx(info.scope))
+            except FermiumError as ex:
+                if ex.line is None and getattr(node, "line", None):
+                    ex.line, ex.col = node.line, node.col
+                elif getattr(node, "line", None) and ex.line != node.line and \
+                        f"line {node.line}" not in (ex.hint or ""):
+                    # `d/dT N` where N calls a multi-line F: the error points at the call to F; say where
+                    # the derivative was asked for too (gauntlet #71)
+                    ex.hint = (ex.hint + "; " if ex.hint else "") + \
+                        f"(needed for the derivative of {info.display_name} on line {node.line})"
+                raise
+            self.cur_ctx = saved
+        suffix = "'" * order if len(f.params) == 1 else f"_∂{pname}" * order
+        pretty = (info.display_name + "'" * order) if len(f.params) == 1 else \
+            (f"∂{info.display_name}/∂{pname}" if order == 1 else
+             f"∂{_sup(order)}{info.display_name}/∂{pname}{_sup(order)}")        # ∂²f/∂x², not ∂2f/∂x2 (#59)
+        nm = info.name + suffix
+        fd = A.FuncDef(nm, f.params, body)
+        fd.line, fd.col = f.line, f.col
+        d = FuncInfo(nm, fd, info.scope)
+        d.nat = info.nat
+        d.display_name = pretty
+        d.stable = True
+        d.parent = (info if getattr(info, "parent", None) is None else info.parent[0], i,
+                    order + (info.parent[2] if getattr(info, "parent", None) else 0))
+        info.derived[key] = d
+        return d
+
+    def _diffctx(self, scope):
+        checker = self
+
+        class DC(C.DiffContext):
+            def user_function(self, fname):
+                b, _ = scope.lookup(fname)
+                if isinstance(b, FuncInfo):
+                    if not b.one_liner:
+                        raise FermiumError(f"can't differentiate through {fname}: it's defined over several lines",
+                                           hint=f"symbolic derivatives need one-line functions: write {fname} on "
+                                                f"one line (with  where  for helper names), or use a finite "
+                                                f"difference, (f(x + h) - f(x - h)) / (2h)")
+                    return ([p.name for p in b.fdef.params], b.body_expr())
+                return None
+
+            def derived_function(self, fname, i, order=1):
+                b, sc = scope.lookup(fname)
+                d = checker.derived_info(b, i, order, b.fdef)
+                sc.names[d.name] = d
+                return d.name
+
+            def is_solution(self, fname):
+                b, _ = scope.lookup(fname)
+                return isinstance(b, SolView)
+
+            def field_function(self, f):
+                """`mechanics.pendulum_period` in a formula being differentiated (red team round 2 #7): the
+                module's function, bound here under a private name (not exported, can't clash with a user name)
+                so it and its derivatives can be called from this scope like `from … import` names."""
+                class _Ctx:
+                    pass
+                c = _Ctx()
+                c.scope = scope
+                mod = checker.module_of(f.target, c)
+                if mod is None or f.name.startswith("_"):
+                    return None
+                b = mod.scope.names.get(f.name)
+                if not isinstance(b, FuncInfo):
+                    return None
+                key = "_" + C.to_source(f)
+                scope.names.setdefault(key, b)
+                return key
+        return DC()
+
+    def e_Deriv(self, e, ctx):
+        op = e.operand
+        inner = None
+        if isinstance(op, A.Deriv) and isinstance(op.operand, (A.Name, A.Deriv)):
+            # ∂/∂x ∂/∂y f: differentiate the function ∂f/∂y again (mixed partials, red team 5 #18)
+            v = self.expr(op, ctx, allow_func=True)
+            if isinstance(v, FuncRef):
+                inner = v.info
+        if isinstance(op, A.Name) or inner is not None:
+            b = inner if inner is not None else ctx.scope.lookup(op.name)[0]
+            if isinstance(b, FuncInfo):
+                params = [p.name for p in b.fdef.params]
+                if e.var in params:
+                    i = params.index(e.var)
+                elif len(params) == 1 and not e.partial:
+                    i = 0
+                else:
+                    raise self.err(f"{b.display_name} has no parameter called {e.var}", e)
+                return FuncRef(self.derived_info(b, i, e.order, e))
+            if isinstance(b, SolView):
+                return self.e_Prime(A.Prime(op, e.order).at(e), ctx)
+        if isinstance(op, A.Call) and isinstance(op.func, A.Name) and \
+                not any(C.depends_on(a, e.var) for a in op.args):
+            # d/dt x(2 s), ∂/∂x f(1, 2): a function called at a point that doesn't involve the variable. As a
+            # formula that is a constant with derivative 0, but it is read as "the derivative of x at 2 s", so
+            # that is what it means: (d/dt x)(2 s) (red team 5 #4, D221)
+            b, _ = ctx.scope.lookup(op.func.name)
+            if isinstance(b, (FuncInfo, SolView)):
+                fname = op.func.name
+                if isinstance(b, FuncInfo):
+                    params = [p.name for p in b.fdef.params]
+                    if e.var not in params and not (len(params) == 1 and not e.partial):
+                        ops = "∂/∂" if e.partial else "d/d"
+                        raise self.err(f"{fname} has no parameter called {e.var}, so {ops}{e.var} "
+                                       f"{C.to_source(op)} would be 0", e,
+                                       hint=f"{fname}'s parameters are {', '.join(params)}; differentiate with "
+                                            f"respect to one of them, e.g. ({ops}{params[0]} {fname})"
+                                            f"({', '.join(C.to_source(a) for a in op.args)})")
+                    inner = A.Deriv(e.var, e.order, op.func, e.partial).at(e)
+                else:
+                    inner = A.Prime(op.func, e.order).at(e)
+                call = A.Call(inner, op.args).at(op)
+                for k, v in vars(op).items():
+                    if k not in ("func", "args") and not hasattr(call, k):
+                        setattr(call, k, v)
+                return self.expr(call, ctx)
+        # derivative of a formula
+        bound, _ = ctx.scope.lookup(e.var)
+        body = op
+        for _ in range(e.order):
+            body = C.diff(body, e.var, self._diffctx(ctx.scope))
+        if isinstance(bound, I.Sym):
+            return self.expr(C.stabilize(body), ctx)
+        # d/dt (formula in t) with t not defined -> a new function of t; `d/dr f(r, R)` with R not defined
+        # either -> a function of (r, R), ∂/∂r with R kept as a parameter (D212)
+        params = [e.var]
+        if isinstance(op, A.Call):
+            loose = [n for n in dict.fromkeys(A.free_names(op))
+                     if n != e.var and n not in BUILTINS and ctx.scope.lookup(n)[0] is None]
+            argn = [a.name for a in op.args if isinstance(a, A.Name)]
+            if loose and len(argn) == len(op.args) and e.var in argn and set(loose) <= set(argn):
+                params = [n for n in dict.fromkeys(argn) if n == e.var or n in loose]
+            elif loose:
+                fn = C.to_source(op.func)
+                raise self.err(f"d/d{e.var} {C.to_source(op)}: {', '.join(loose)} "
+                               f"{'is' if len(loose) == 1 else 'are'}n't defined, so this can't be a function of "
+                               f"{e.var} alone", e,
+                               hint=f"for the partial derivative with the other arguments kept as parameters, write "
+                                    f"∂/∂{e.var} {fn}  (a function of the same arguments as {fn})")
+        fd = A.FuncDef(f"λ{self.counter}", [A.Param(p) for p in params], body)
+        fd.line, fd.col = e.line, e.col
+        info = FuncInfo(self.fresh_name("deriv"), fd, ctx.scope if ctx.is_main else self.globals)
+        info.nat = self.nat if self.nat.natural else None
+        from .units import SUPERSCRIPTS
+        dd = "∂" if e.partial else "d"           # ∂/∂x prints as ∂/∂x, not d/dx (red team 5 #4)
+        sup = "" if e.order == 1 else str(e.order).translate(SUPERSCRIPTS)
+        info.display_name = f"{dd}/{dd}{e.var}(...)"
+        info.anon_label = f"{dd}{sup}/{dd}{e.var}{sup} ({C.to_source(op)})"
+        info.stable = True
+        return FuncRef(info)
+
+    VEC_CALC_NAMES = {"grad": "∇{}", "div": "∇·{}", "curl": "∇×{}", "lap": "∇²{}"}
+
+    def e_VecCalc(self, e, ctx):
+        """∇f, ∇·F, ∇×F, ∇²f of a one-line function of 2 or 3 coordinates: a new function of the same
+        coordinates, found by symbolic differentiation (so it prints as a formula)."""
+        name = e.func.name
+        b, _ = ctx.scope.lookup(name)
+        sym = {"grad": "∇", "div": "∇·", "curl": "∇×", "lap": "∇²"}[e.kind]
+        if not isinstance(b, FuncInfo):
+            raise self.err(f"{sym} works on a function of the coordinates, like φ(x, y, z) = ..., and {name} "
+                           f"isn't a function", e.func)
+        key = ("veccalc", e.kind)
+        if key in b.derived:
+            return FuncRef(b.derived[key])
+        if not b.one_liner:
+            raise self.err(f"{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and {name} is "
+                           f"defined over several lines", e.func)
+        allp = [p.name for p in b.fdef.params]
+        # with parameters named x, y, z those are the coordinates, and the others (like a mode number n)
+        # are held fixed: ∇²term for term(n, x, y) (gauntlet #47)
+        xyz = [p for p in allp if p in ("x", "y", "z")]
+        params = xyz if len(xyz) >= 2 else allp
+        if not 2 <= len(params) <= 3 or (e.kind == "curl" and len(params) != 3):
+            need = "3 coordinates, like B(x, y, z)" if e.kind == "curl" else "2 or 3 coordinates, like φ(x, y, z)"
+            raise self.err(f"{sym}{name} needs a function of {need}; {name} has {len(params)}", e.func,
+                           hint="name the coordinate parameters x, y (and z); other parameters are then held fixed"
+                           if len(allp) > 3 else None)
+        dc = self._diffctx(b.scope)
+        body = b.body_expr()
+
+        def d(expr, p):
+            saved = self.cur_ctx
+            try:
+                return C.diff(expr, p, dc)
+            finally:
+                self.cur_ctx = saved
+
+        def add(terms):
+            out = terms[0]
+            for t in terms[1:]:
+                out = A.BinOp("+", out, t)
+            return C.simplify(out)
+        if e.kind in ("grad", "lap"):
+            if e.kind == "grad":
+                new = A.VecLit([d(body, p) for p in params])
+            else:
+                new = add([d(d(body, p), p) for p in params])
+        else:
+            comps = self._vector_components(C.inline_where(body), b.scope)
+            if comps is None:
+                raise self.err(f"{sym}{name} needs {name} to be a vector formula, like {name}(x, y, z) = <-y, x, 0> T",
+                               e.func)
+            if len(comps) != len(params):
+                raise self.err(f"{name} has {len(comps)} components but {len(params)} coordinates; {sym} needs "
+                               f"them to match", e.func)
+            if e.kind == "div":
+                new = add([d(c, p) for c, p in zip(comps, params)])
+            else:
+                x, y, z = params
+                fx, fy, fz = comps
+                new = A.VecLit([C.simplify(A.BinOp("-", d(fz, y), d(fy, z))),
+                                C.simplify(A.BinOp("-", d(fx, z), d(fz, x))),
+                                C.simplify(A.BinOp("-", d(fy, x), d(fx, y)))])
+        new = A.VecLit([C.sympy_tidy(c) for c in new.items]) if isinstance(new, A.VecLit) else C.sympy_tidy(new)
+        if isinstance(new, A.VecLit):      # a component that differentiates to 0 fits the others' units
+            new.items = [A.Num(0.0, None, True) if isinstance(c, A.Num) and c.value == 0 else c for c in new.items]
+        nm = f"{b.name}_{e.kind}"
+        fd = A.FuncDef(nm, b.fdef.params, new)
+        fd.line, fd.col = b.fdef.line, b.fdef.col
+        info = FuncInfo(nm, fd, b.scope)
+        info.nat = b.nat
+        info.display_name = self.VEC_CALC_NAMES[e.kind].format(b.display_name)
+        info.stable = True
+        b.derived[key] = info
+        b.scope.names[nm] = info
+        return FuncRef(info)
+
+    def _vector_components(self, body, scope, depth=0):
+        """The component formulas of a vector-valued formula: <a, b, c>, vec(a, b, c), <…> unit, -F, k F, F/k,
+        F ± G, a call of a one-line vector function, or ∇φ(…) / ∇×A(…).  None if it isn't one."""
+        if depth > 20:
+            return None
+        rec = lambda x: self._vector_components(x, scope, depth + 1)  # noqa: E731
+        if isinstance(body, A.Where):
+            return rec(C.inline_where(body))
+        if isinstance(body, A.VecLit):
+            return list(body.items)
+        if isinstance(body, A.Call) and isinstance(body.func, A.Name) and body.func.name == "vec":
+            return list(body.args)
+        if isinstance(body, A.Quantity):
+            inner = rec(body.value)
+            if inner is not None:
+                one = A.Quantity(A.Num(1.0), body.unit)
+                return [A.BinOp("*", c, one) for c in inner]
+            return None
+        if isinstance(body, A.Neg):
+            inner = rec(body.operand)
+            return None if inner is None else [A.Neg(c) for c in inner]
+        if isinstance(body, A.BinOp):
+            L, R = rec(body.left), rec(body.right)
+            if body.op in ("+", "-") and L is not None and R is not None and len(L) == len(R):
+                return [A.BinOp(body.op, a, b) for a, b in zip(L, R)]
+            if body.op == "*" and (L is None) != (R is None):
+                return [A.BinOp("*", body.left, c) for c in R] if L is None else [A.BinOp("*", c, body.right) for c in L]
+            if body.op == "/" and L is not None and R is None:
+                return [A.BinOp("/", c, body.right) for c in L]
+            return None
+        if isinstance(body, A.Call):
+            f = body.func
+            info = None
+            if isinstance(f, A.Name):
+                b, _ = scope.lookup(f.name)
+                info = b if isinstance(b, FuncInfo) and b.one_liner else None
+            elif isinstance(f, A.VecCalc):
+                ref = self.e_VecCalc(f, Ctx(None, scope, is_main=False))
+                info = ref.info
+            if info is None or len(info.fdef.params) != len(body.args):
+                return None
+            inner = rec(C.inline_where(info.body_expr()))
+            if inner is None:
+                return None
+            m = {p.name: a for p, a in zip(info.fdef.params, body.args)}
+            return [C.subst(c, m) for c in inner]
+        return None
+
+    def e_Integral(self, e, ctx):
+        if e.lo is None:
+            return self.indefinite_integral(e, ctx)
+        lo = self.expr(e.lo, ctx)
+        try:
+            hi = self.expr(e.hi, ctx)
+        except FermiumError as ex:
+            self._hint_sum_after_integral(e, lo, ex, ctx)
+            raise
+        self.need_num(lo, e.lo, "the lower limit")
+        self.need_num(hi, e.hi, "the upper limit")
+        self._limit_division_error(e, lo, hi, ctx)
+        self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"the limits of this integral are {self.desc(lo.ty.dim)} and "
+                      f"{self.desc(hi.ty.dim)}; they need the same units", e,
+                      hint=("e is the elementary charge in Fermium; for Euler's number write exp(1)"
+                            if any(isinstance(n, A.Name) and n.name == "e" for n in (e.lo, e.hi)) else
+                            "if you divide or multiply the integral by something, put the integral in parentheses: "
+                            "(∫ ... dx from a to b) / M"))
+        lam = I.ILambda("scalar", self.fresh_name("integrand"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        xs = I.Sym(e.var, NumTy(lo.ty.dim), "local", lam)
+        xs.assigned = True
+        lam.params = [xs]
+        scope.names[e.var] = xs
+        marks = (len(self.new_lambdas), len(self.all_lambdas))
+        body = self.expr(e.integrand, lctx)
+        if isinstance(body.ty, ComplexTy) and not getattr(e, "_component", False):
+            # a complex integrand: one integral for each part (D93); drop the lambdas made on the way
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return cplx.component_integral(self, e.integrand, ctx,
+                                           lambda part: A.Integral(part, e.var, e.lo, e.hi).at(e))
+        if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
+            # a vector integrand: one integral per component (D35); drop the lambdas made on the way
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return self.vector_integral(e, body.ty.n, ctx)
+        self.need_num(body, e.integrand, "the thing being integrated")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.IIntegral(lam, lo, hi, NumTy(body.ty.dim * lo.ty.dim))
+        r.sf = self._minsf(lo, hi, body)
+        self._warn_sum_in_limit(e, body)
+        # for "the integrand is NaN or infinite at x = …" (D45): the variable's name and display format
+        r.xname = self.text(e.var)
+        xf = I.IConst(0, NumTy(lo.ty.dim))
+        xf.hint = lo.hint or hi.hint
+        r.xfmt = self.fmt(xf)
+        return r
+
+    def _same_dim(self, a, b):
+        d = self.U.norm(DExpr.of(a) / DExpr.of(b))
+        return not d.terms and d.const.dimensionless
+
+    def _warn_sum_in_limit(self, e, body):
+        """`2 ∫ x dx from 0 to 1 - π` goes up to 1 - π (D173).  Warn only when the other reading,
+        (2 ∫ … to 1) - π, has consistent units too: the term after the +/- has the limit's units, so that is
+        when the integral has the integration variable's units, i.e. a dimensionless integrand.  With
+        `∫ v dt from 0 s to T - t0` the other reading is metres minus seconds, so no warning
+        (red team round 4 #6, D205)."""
+        info = getattr(e, "sum_info", None)
+        if info is None or not self._same_dim(body.ty.dim, DIMLESS):
+            return
+        tk = info["tok"]
+        verb = "add" if info["op"] == "+" else "subtract"
+        self.diags.warn(f"the ' {info['rest']}' is part of the upper limit: this integral goes up to {info['limit']}",
+                        line=tk.line, col=tk.col,
+                        hint=f"if that's what you meant, write  to ({info['limit']});  to {verb} it after "
+                             f"integrating, write  (… to {info['head']}) {info['rest']}")
+
+    def _hint_sum_after_integral(self, e, lo, ex, ctx):
+        """The upper limit `T - x0` is a unit error, but `(∫ … to T) - x0` might be meant: say so (D205)."""
+        info = getattr(e, "sum_info", None)
+        if info is None or info.get("head_node") is None:
+            return
+        try:
+            head = self.expr(info["head_node"], ctx)
+            rest = self.expr(info["rest_node"], ctx)
+        except FermiumError:
+            return
+        if not isinstance(getattr(head, "ty", None), NumTy) or not isinstance(getattr(rest, "ty", None), NumTy):
+            return
+        if self._same_dim(head.ty.dim, lo.ty.dim) and not self._same_dim(rest.ty.dim, lo.ty.dim):
+            verb = "add" if info["op"] == "+" else "subtract"
+            ex.hint = (f"the ' {info['rest']}' is part of the upper limit here; to {verb} it after integrating, "
+                       f"write  (… to {info['head']}) {info['rest']}")
+
+    def _limit_division_error(self, e, lo, hi, ctx):
+        """`∫ P0 dt from 0 s to E / (2 P0)`: a spaced '/' after the upper limit divides the whole integral
+        (D34), so the limits are s and J.  When dividing the limit instead has the right units, the error
+        says how to write that (red team round 4 #7, D205)."""
+        info = getattr(e, "div_info", None)
+        if info is None or "divisor" not in info or self._same_dim(lo.ty.dim, hi.ty.dim):
+            return
+        try:
+            dv = self.expr(info["divisor"], ctx)
+        except FermiumError:
+            return
+        if not isinstance(getattr(dv, "ty", None), NumTy):
+            return
+        if self._same_dim(DExpr.of(hi.ty.dim) / DExpr.of(dv.ty.dim), lo.ty.dim):
+            limit = f"{info['hi_text']} / {info['div_text']}"
+            raise self.err(f"the limits of this integral are {self.desc(lo.ty.dim)} and {self.desc(hi.ty.dim)}: "
+                           f"the ' / ' after the upper limit divides the whole integral, not the limit", e,
+                           hint=f"to divide the limit, write  to ({limit})")
+
+    def _warn_limit_division(self, e, b):
+        """D34/D112: a spaced '/' right after an integral's upper limit divides the whole integral.  Both
+        readings have consistent units only when the divisor is a plain number, so only then warn (red team
+        round 4 #7, D205); otherwise the units already decided, and a wrong reading is an error."""
+        integral = getattr(e.right, "limit_div_of", None)
+        if integral is None or e.op != "/" or not isinstance(getattr(b, "ty", None), (NumTy, ListTy)):
+            return
+        if not self._dimless(b):
+            return
+        tk = integral.div_info["tok"]
+        self.diags.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
+                        line=tk.line, col=tk.col, length=1,
+                        hint="to divide the limit, write it without spaces (to L/2) or in parentheses (to (L / 2))")
+
+    def e_Sum(self, e, ctx):
+        """Σ(body for k from a to b step s) (#49, D51): the body is a scalar lambda of k (like an integrand),
+        summed by a loop that counts like `for k from a to b step s`; a vector body sums per component."""
+        lo = self.expr(e.lo, ctx)
+        hi = self.expr(e.hi, ctx)
+        self.need_num(lo, e.lo, "the start of the sum")
+        self.need_num(hi, e.hi, "the end of the sum")
+        self.unify_or(lo.ty.dim, hi.ty.dim, lambda: f"this sum runs from {self.desc(lo.ty.dim)} to "
+                      f"{self.desc(hi.ty.dim)}; the start and end need the same units", e)
+        if e.step is not None:
+            st = self.expr(e.step, ctx)
+            self.need_num(st, e.step, "the step of the sum")
+            self.unify_or(lo.ty.dim, st.ty.dim, lambda: "the step of a sum needs the same units as its start", e.step)
+        else:
+            st = I.IConst(1.0, NumTy(lo.ty.dim))
+            if not self.U.unify(lo.ty.dim, DIMLESS):
+                raise self.err(f"this sum runs over {self.desc(lo.ty.dim)}, so it needs a step, like "
+                               f"Σ(… for {e.var} from a to b step 1 {getattr(lo.hint, 'name', 'm')})", e)
+        if isinstance(hi, I.IConst) and math.isinf(hi.value):
+            raise self.err("a sum needs a finite number of terms", e.hi,
+                           hint=f"sum up to a large fixed number, like Σ(… for {e.var} from 1 to 1000)")
+        lam = I.ILambda("scalar", self.fresh_name("term"))
+        lam.locals = []
+        scope = Scope(ctx.scope)
+        lctx = Ctx(lam, scope, is_main=False, parent=ctx, lam=lam)
+        lctx.enclosing = ctx.func
+        ks = I.Sym(e.var, NumTy(lo.ty.dim), "local", lam)
+        ks.assigned = True
+        ks.sf = None                    # a count is exact
+        lam.params = [ks]
+        scope.names[e.var] = ks
+        marks = (len(self.new_lambdas), len(self.all_lambdas))
+        body = self.expr(e.body, lctx)
+        if isinstance(body.ty, ComplexTy) and not getattr(e, "_component", False):
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            return cplx.component_integral(self, e.body, ctx, lambda part: A.Sum(part, e.var, e.lo, e.hi, e.step).at(e))
+        if isinstance(body.ty, VecTy) and not getattr(e, "_component", False):
+            del self.new_lambdas[marks[0]:]
+            del self.all_lambdas[marks[1]:]
+            comps = []
+            for k in range(body.ty.n):
+                idx = A.Index(e.body, A.Num(float(k + 1), None, False).at(e)).at(e.body)
+                c = A.Sum(idx, e.var, e.lo, e.hi, e.step).at(e)
+                c._component = True
+                comps.append(c)
+            return self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        self.need_num(body, e.body, "each term of a sum")
+        lam.body = body
+        self.new_lambdas.append(lam)
+        self.all_lambdas.append(lam)
+        r = I.ISum(lam, lo, hi, st, NumTy(body.ty.dim))
+        r.hint, r.sf = body.hint, body.sf
+        return r
+
+    def vector_integral(self, e, n, ctx):
+        """∫ <f, g, h> ds from a to b = <∫ f ds, ∫ g ds, ∫ h ds>, Biot–Savart's ∫ dl × r / |r|³ too:
+        each component is its own adaptive integral of the integrand's k-th component (D35)."""
+        comps = []
+        for k in range(n):
+            idx = A.Index(e.integrand, A.Num(float(k + 1), None, False).at(e)).at(e.integrand)
+            c = A.Integral(idx, e.var, e.lo, e.hi).at(e)
+            c._component = True
+            comps.append(c)
+        r = self.e_VecLit(A.VecLit(comps).at(e), ctx)
+        return self._vector_integral_retry(r, ctx)
+
+    def _vector_integral_retry(self, r, ctx):
+        """A component that is 0 by symmetry can be rounding noise that no relative test on the
+        component passes (E10).  So each component is tried quietly first (NaN if it doesn't converge);
+        a component that failed is computed again with an absolute tolerance of 10⁻¹⁰ × Σ|other
+        components|, which is the vector's relative tolerance (D44)."""
+        if not isinstance(r, I.IVec) or r.ty.mixed or not all(isinstance(it, I.IIntegral) for it in r.items):
+            return r
+        binds, total = [], None
+        mark = self.new_sym(self.fresh_name("__vint"), NumTy(DIMLESS), ctx)
+        mark.assigned = True
+        binds.append((mark, I.IBuiltin("qzero_mark", [], NumTy(DIMLESS))))
+        for it in r.items:
+            sym = self.new_sym(self.fresh_name("__vint"), NumTy(it.ty.dim), ctx)
+            sym.assigned = True
+            first = I.IIntegral(it.lam, it.lo, it.hi, it.ty)
+            first.xname, first.xfmt, first.soft = it.xname, it.xfmt, True
+            binds.append((sym, first))
+            v = I.IVar(sym)
+            size = I.IIf(I.ICmp("==", v, v, BOOL), I.IBuiltin("abs", [v], it.ty), I.IConst(0.0, it.ty), it.ty)
+            total = size if total is None else I.IBin("+", total, size, it.ty)
+        # every component 0 at every sample: one zero-integral warning for the vector (red team round 3 #5, D110)
+        check = self.new_sym(self.fresh_name("__vint"), NumTy(DIMLESS), ctx)
+        check.assigned = True
+        binds.append((check, I.IBuiltin("qzero_check", [I.IVar(mark), I.IConst(float(len(r.items)),
+                                                                                 NumTy(DIMLESS))], NumTy(DIMLESS))))
+        items = []
+        for (sym, _), it in zip(binds[1:], r.items):
+            it.atol = I.IBin("*", I.IConst(1e-10, NumTy(DIMLESS)), total, it.ty)
+            v = I.IVar(sym)
+            items.append(I.IIf(I.ICmp("==", v, v, BOOL), v, it, it.ty))
+        out = I.ILet(binds, I.IVec(items, r.ty))
+        out.hint, out.sf = r.hint, r.sf
+        return out
+
+    def indefinite_integral(self, e, ctx):
+        # inline calls to one-line user functions so SymPy sees a plain formula
+        def inline(n):
+            n = C.map_children(n, inline)
+            if isinstance(n, A.Call) and isinstance(n.func, A.Name):
+                b, _ = ctx.scope.lookup(n.func.name)
+                if isinstance(b, FuncInfo) and b.one_liner:
+                    m = {p.name: a for p, a in zip(b.fdef.params, n.args)}
+                    return C.subst(C.inline_where(b.body_expr()), m)
+            return n
+        integrand = C.inline_where(inline(e.integrand))
+        # undefined names first, before SymPy sees them; and which names are safe to assume > 0 (D37)
+        positive = set()
+        for node in _name_uses(integrand):
+            if node.name == e.var or node.name == "π":
+                continue
+            b, scope = ctx.scope.lookup(node.name)
+            if b is None:
+                raise self.undefined(node.name, node if node.line else e, ctx)
+            if isinstance(b, ConstInfo) and node.name != "∞" and b.value > 0:
+                positive.add(node.name)
+            elif isinstance(b, I.Sym) and scope is self.globals and node.name in self.positive_names:
+                positive.add(node.name)
+        try:
+            body = C.integrate_symbolic(integrand, e.var, frozenset(positive))
+        except FermiumError as ex:
+            if ex.line is None:
+                ex.line, ex.col, ex.length = e.line, e.col, 1
+            raise
+        fd = A.FuncDef(f"∫d{e.var}", [A.Param(e.var)], body)
+        fd.line, fd.col = e.line, e.col
+        info = FuncInfo(self.fresh_name("antideriv"), fd, ctx.scope if ctx.is_main else self.globals)
+        info.nat = self.nat if self.nat.natural else None
+        info.display_name = f"∫d{e.var}"
+        info.anon_label = f"∫ {C.to_source(e.integrand)} d{e.var}"
+        return FuncRef(info)
+
+    # ------------------------------------------------------------ solve
+    def s_Solve(self, s, ctx):
+        from .solve import check_solve
+        return check_solve(self, s, ctx)
+
+    def s_Fit(self, s, ctx):
+        from .solve import check_fit
+        return check_fit(self, s, ctx)
+
+    def s_Units(self, s, ctx):
+        """`units natural(ħ = c = 1)`: the rest of the program; `units nuclear:` + a block: just that block (D60)."""
+        if id(s) not in self._top_units or not ctx.is_main or ctx.lam is not None:
+            raise self.err("a  units  line must be at the top level of the program (not inside a function, loop or "
+                           "if)", s)
+        try:
+            system = make_system(s.system, [canonical_const_name(c) for c in s.consts])
+        except ValueError as ex:
+            raise self.err(str(ex), s)
+        if s.body is None:
+            self._set_system(system)
+            return None
+        saved = self.nat
+        self._set_system(system)
+        try:
+            return self.block(s.body, ctx)
+        finally:
+            self._set_system(saved)
+
+    def s_Plot(self, s, ctx):
+        from .solve import check_plot
+        n0 = len(self.tables.plots)
+        r = check_plot(self, s, ctx)
+        if self.nat is not SI:
+            for p in self.tables.plots[n0:]:
+                p["nat"] = self.nat
+        return r
+
+
+def _sup(n):
+    """A whole number as a superscript: 2 → ², 10 → ¹⁰."""
+    return str(n).translate(str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹"))
+
+
+def _stmts_in(st):
+    """A statement and the statements nested in it (if/for/while bodies)."""
+    yield st
+    for attr in ("body", "then", "other", "orelse", "else_body"):
+        sub = getattr(st, attr, None)
+        if isinstance(sub, list):
+            for x in sub:
+                if isinstance(x, A.Node):
+                    yield from _stmts_in(x)
+
+
+def _name_uses(e):
+    """The Name nodes an expression reads (not function names being called, nor bound variables)."""
+    out = []
+
+    def walk(n, bound):
+        if isinstance(n, A.Name):
+            if n.name not in bound:
+                out.append(n)
+            return
+        if isinstance(n, A.Call):
+            if not isinstance(n.func, A.Name):
+                walk(n.func, bound)
+            for a in n.args:
+                walk(a, bound)
+            return
+        if isinstance(n, A.Integral):
+            walk(n.integrand, bound | {n.var})
+            for x in (n.lo, n.hi):
+                if x is not None:
+                    walk(x, bound)
+            return
+        if isinstance(n, A.Sum):
+            walk(n.body, bound | {n.var})
+            for x in (n.lo, n.hi, n.step):
+                if x is not None:
+                    walk(x, bound)
+            return
+        for c in A.children(n):
+            walk(c, bound)
+    walk(e, frozenset())
+    return out
+
+
+def _positive_literal(v):
+    if isinstance(v, A.Num):
+        return v.value > 0
+    if isinstance(v, A.Quantity):
+        return _positive_literal(v.value)
+    if isinstance(v, A.BinOp) and v.op in "*/^" and not (v.op == "^" and not isinstance(v.right, A.Num)):
+        return _positive_literal(v.left) and (v.op == "^" or _positive_literal(v.right))
+    if isinstance(v, A.Sqrt):
+        return _positive_literal(v.operand)
+    return False
+
+
+def _positive_names(prog):
+    """Program variables that are safe to assume positive in a symbolic integral (D37): every assignment
+    to them is `name = <positive number or quantity>`, and nothing else binds them (loops, solve, fit,
+    function parameters, element assignments)."""
+    ok, bad = set(), set()
+
+    def walk(n):
+        if isinstance(n, A.Assign):
+            (ok if n.op == "=" and _positive_literal(n.value) else bad).add(n.name)
+        elif isinstance(n, (A.For, A.ForIn)):
+            bad.add(n.var)
+        elif isinstance(n, A.IndexAssign):
+            bad.add(n.target)
+        elif isinstance(n, A.Param):
+            bad.add(n.name)
+        elif isinstance(n, (A.Solve, A.Fit)):        # anything named in a solve or fit may be set by it
+            bad.update(_all_names(n))
+            if isinstance(n, A.Solve):
+                bad.add(n.var)
+        for v in vars(n).values():
+            for x in (v if isinstance(v, (list, tuple)) else [v]):
+                for y in (x if isinstance(x, tuple) else (x,)):
+                    if isinstance(y, A.Node):
+                        walk(y)
+    walk(prog)
+    return ok - bad
+
+
+def _all_names(n):
+    out = set()
+
+    def walk(x):
+        if isinstance(x, A.Name):
+            out.add(x.name)
+        for v in vars(x).values():
+            if isinstance(v, str):
+                out.add(v)
+            for y in (v if isinstance(v, (list, tuple)) else [v]):
+                for z in (y if isinstance(y, tuple) else (y,)):
+                    if isinstance(z, A.Node):
+                        walk(z)
+                    elif isinstance(z, str):
+                        out.add(z)
+    walk(n)
+    return out
+
+
+def _always_returns(stmts) -> bool:
+    for st in stmts:
+        if isinstance(st, I.SReturn):
+            return True
+        if isinstance(st, I.SIf) and st.other and _always_returns(st.then) and _always_returns(st.other):
+            return True
+    return False
+
+
+def canonical_unit_name(uexpr: A.UnitExpr) -> str:
+    """The display spelling of a written unit, independent of how it was typed:
+    `ft/s^2`, `ft/s²` and `ft s^-2` all display as `ft/s²`; `N·m` as `N m`; `m m` as `m²`."""
+    from .units import UNIT_PRETTY, join_units, _fmt_exp
+    order, exps = [], {}
+    for f in uexpr.factors:
+        name = UNIT_PRETTY.get(f.name, f.name)
+        if name.startswith(("u", "µ")) and len(name) > 1 and lookup_unit("μ" + name[1:]) is not None \
+                and name[1:] not in ("", "n") and lookup_unit(name) is not None and \
+                lookup_unit(name).factor == lookup_unit("μ" + name[1:]).factor:
+            name = "μ" + name[1:]
+        if name not in exps:
+            order.append(name)
+            exps[name] = Fraction(0)
+        exps[name] += f.exp
+    num = [n + _fmt_exp(exps[n]) for n in order if exps[n] > 0]
+    den = [n + _fmt_exp(-exps[n]) for n in order if exps[n] < 0]
+    return join_units(num, den)
+
+
+def read_csv_header(full, node=None):
+    """Read column names and units from a CSV header like  L [m], T [s]."""
+    try:
+        with open(full, newline="", encoding="utf-8-sig") as fh:
+            reader = csv.reader(fh)
+            header = next(reader)
+    except StopIteration:
+        raise FermiumError(f"the file {os.path.basename(full)} is empty")
+    cols = []
+    for h in header:
+        h = h.strip()
+        unit = Unit("1", DIMLESS, 1.0)
+        name = h
+        if "[" in h and h.endswith("]"):
+            name, _, ut = h.partition("[")
+            name = name.strip()
+            ut = ut[:-1].strip()
+            try:
+                unit = parse_unit_string(ut) if ut not in ("", "1", "-") else unit
+            except UnitSyntaxError as ex:
+                raise FermiumError(f"in {os.path.basename(full)}, column '{h}': {ex}")
+        from .lexer import canonical_name
+        name = canonical_name(name.replace(" ", "_"))
+        cols.append({"name": name, "unit": unit})
+    return cols
+
+
+def check(source_ast, diags=None, base_dir=".", repl=False):
+    return Checker(diags, base_dir, repl).check_program(source_ast)
+
+
+Ty  # re-export for type hints
+
+
+def hz_angle_mixup(ck, src_unit, dst_unit):
+    """(message, hint) when a value in src_unit is converted to dst_unit across Hz and rev/rpm/°/s (either
+    way), which is where `rad = 1` makes 1 Hz 9.55 rpm instead of 60 (D95, round 1 #2); else None.  Used by
+    the `in` conversion and by the Python boundaries (use python, fermium.compile; round 4 #2, D202).  `ck`
+    may be None (any object with the Checker's _unit_kind is fine)."""
+    kind = Checker._unit_kind
+    src, dst = kind(ck or Checker, src_unit), kind(ck or Checker, dst_unit)
+    if {src, dst} != {"cycles", "angular"} or getattr(src_unit, "dim", None) is None:
+        return None
+    try:
+        actual = src_unit.factor / dst_unit.factor
+    except ZeroDivisionError:
+        return None
+    s, t = src_unit.name, dst_unit.name
+    if src == "angular" and not (Checker._unit_words(src_unit) & (Checker.ANGLE_WORDS - {"rad"})):
+        return None      # rad/s in Hz: _warn_omega_in_hz says it
+    if src == "cycles":
+        expected = actual * 2 * math.pi
+        msg = (f"Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 {s} is "
+               f"{format_number(actual)} {t}, not {format_number(expected)} {t}"
+               + ("" if t == "rev/s" else "; 1 Hz = 1/(2π) rev/s"))
+        hint = (f"if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is "
+                f"3000 rpm), or multiply it by 2π:  2π f in {t}")
+    else:
+        expected = actual / (2 * math.pi)
+        msg = (f"angles are plain numbers (1 rev = 2π), so a rate in {s} shown in {t} is an angular "
+               f"frequency: 1 {s} is {format_number(actual)} {t} here, not {format_number(expected)} {t}")
+        hint = (f"to count turns per second write  in rev/s ; for the frequency in cycles per second "
+                f"divide by 2π:  ω/(2π) in {t}")
+    return msg, hint

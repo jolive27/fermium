@@ -1,0 +1,68 @@
+# Special relativity 22 — The twin paradox with accelerating legs
+#
+# A traveller leaves Earth with a constant proper acceleration g = 9.81 m/s²
+# for t₁ = 1.50 yr (Earth time), coasts for t_c = 2.00 yr, and decelerates for
+# t₁ to rest at the far point; then she comes back the same way. In the Earth
+# frame the proper velocity u = γv changes at the rate ±g (d(γv)/dt = g), so
+# u(t) is piecewise linear in t, and
+#
+#     v = u / √(1 + u²/c²),   dτ/dt = 1/γ = 1 / √(1 + u²/c²).
+#
+# (a) Integrate dτ/dt over the whole trip to get the traveller's age, and
+#     compare with the exact 4 (c/g) asinh(g t₁/c) + 2 t_c / γ_max.
+# (b) How far away is the turning point? Integrate v, and compare with
+#     2 (c²/g)(√(1 + (g t₁/c)²) − 1) + v_max t_c.
+# (c) Solve the same trip as ODEs, u' = a(t), x' = v, τ' = 1/γ, with the
+#     acceleration a(t) switching sign on the legs, and compare.
+# (d) Without coasting (four accelerating legs), how long must each leg last
+#     (Earth time) for the traveller to age exactly 40.0 yr, and how far does she
+#     get? (Rindler §3.8; Taylor & Wheeler ch. 4, "the twin paradox".)
+
+g = 9.81 m/s²
+t1 = 1.50 yr
+tc = 2.00 yr
+T_leg = 2 t1 + tc                   # the Earth time of one way
+T = 2 T_leg
+
+# the proper velocity: +g for t1, coast, −g for 2 t1 (decelerate, turn back), coast, +g for t1
+# (a piecewise formula over several lines needs the brackets: FRICTION S8)
+u(t) = (if t < t1 then g t
+       else if t < t1 + tc then g t1
+       else if t < 3 t1 + tc then g (2 t1 + tc - t)
+       else if t < 3 t1 + 2 tc then -g t1
+       else g (t - T))
+γ(t) = √(1 + u(t)² / c²)
+v(t) = u(t) / γ(t)
+
+# (a) the traveller's age: integrate over each leg (u has corners at the switches)
+τ_trip = ∫ 1/γ(t) dt from 0 yr to T
+γ_max = √(1 + (g t1 / c)²)
+τ_exact = 4 c / g * asinh(g t1 / c) + 2 tc / γ_max
+print "(a) Earth twin ages", T in yr to 6 digits
+print "    traveller ages", τ_trip in yr to 10 digits, "  exact", τ_exact in yr to 10 digits
+print "    top speed =", v(t1) in c to 10 digits
+
+# (b) the turning point
+x_far = ∫ v(t) dt from 0 yr to T_leg
+print "(b) turning point at", x_far in ly to 10 digits,
+      "  exact", 2 c² / g * (γ_max - 1) + v(t1) tc in ly to 10 digits
+print "    back home: x(T) =", ∫ v(t) dt from 0 yr to T in ly to 3 digits
+
+# (c) the same trip as ODEs with a switching acceleration
+a(t) = (if t < t1 then g
+       else if t < t1 + tc then 0 m/s²
+       else if t < 3 t1 + tc then -g
+       else if t < 3 t1 + 2 tc then 0 m/s²
+       else g)
+solve w' = a(t),
+      x' = w / √(1 + w² / c²),
+      τ' = 1 / √(1 + w² / c²)
+  with w(0) = 0 m/s, x(0) = 0 ly, τ(0) = 0 yr
+  for t from 0 yr to T
+print "(c) ODE: traveller ages", τ(T) in yr to 10 digits, "  turning point", x(T_leg) in ly to 10 digits
+
+# (d) four accelerating legs and a 40-year trip
+τ_goal = 40.0 yr
+solve 4 c / g * asinh(g t_a / c) = τ_goal for t_a from 0 yr to 1e6 yr
+print "(d) each leg lasts", t_a in yr to 8 digits, "of Earth time; Earth ages", 4 t_a in yr to 8 digits
+print "    farthest point", 2 c² / g * (√(1 + (g t_a / c)²) - 1) in ly to 8 digits

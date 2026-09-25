@@ -1,0 +1,30 @@
+# Astrophysics 02 — Schwarzschild radius, black-hole shadow, Eddington limit
+#
+# (Carroll & Ostlie, §17.3 (Schwarzschild radius), §10.6 and §28.2 (Eddington
+# luminosity); the shadow size is from the Event Horizon Telescope papers.)
+#
+#  (a) Schwarzschild radius R_S = 2GM/c² of the Sun, of a 10 M☉ black hole
+#      and of Sgr A* (4.30×10⁶ M☉).
+#  (b) A non-rotating black hole casts a shadow of diameter 2√27 GM/c².
+#      What angle does Sgr A*'s shadow span from 8.28 kpc away (in μas)?
+#  (c) The Eddington luminosity L_Ed = 4πG M m_p c / σ_T (pure ionised
+#      hydrogen, σ_T = (8π/3) r_e²) for 1 M☉ and for Sgr A*, in L☉.
+#  (d) The accretion rate that powers Sgr A* at L_Ed with efficiency 10 %,
+#      Ṁ = L_Ed / (0.1 c²), in M☉ per year.
+
+R_S(M) = 2 G M / c²
+σ_T = (8π/3) r_e²
+L_Ed(M) = 4π G M m_p c / σ_T
+
+M_SgrA = 4.30e6 M☉
+d_GC = 8.28 kpc
+
+print "(a) R_S(Sun) =", R_S(M☉) in km to 8 digits, "  R_S(10 Msun) =", R_S(10 M☉) in km to 8 digits,
+      "  R_S(Sgr A*) =", R_S(M_SgrA) in AU to 8 digits
+
+# There is no μas unit: divide by 1e-6 arcsec instead
+θ_shadow = 2 √27 G M_SgrA / c² / d_GC
+print "(b) shadow of Sgr A* =", θ_shadow / (1e-6 arcsec) to 8 digits, "micro-arcsec"
+
+print "(c) L_Ed(1 Msun) =", L_Ed(M☉) in L☉ to 8 digits, "  L_Ed(Sgr A*) =", L_Ed(M_SgrA) in W to 8 digits
+print "(d) Mdot =", L_Ed(M_SgrA) / (0.1 c²) in M☉/yr to 8 digits

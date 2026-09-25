@@ -1,0 +1,73 @@
+# Thermodynamics 21 — Liquid–vapour coexistence of a van der Waals fluid: the Maxwell construction
+#
+# (Callen, Thermodynamics, §9.3–9.5; Reif §8.6; Kittel & Kroemer ch. 10; Landau & Lifshitz,
+#  Statistical Physics I, §84.)
+# Carbon dioxide as a van der Waals fluid, (P + a/V²)(V − b) = RT per mole, with
+# a = 0.3640 Pa m⁶/mol² and b = 4.267 × 10⁻⁵ m³/mol.
+#
+#   (a) The critical point: T_c = 8a/(27Rb), P_c = a/(27b²), V_c = 3b.
+#   (b) At T = 0.900 T_c the isotherm has a loop. Find its spinodal points (where
+#       ∂P/∂V = 0): between their pressures, three volumes share one pressure.
+#   (c) The Maxwell construction: find the pressure P_s at which the liquid and gas
+#       volumes V_l < V_g on the isotherm enclose equal areas,
+#           ∫_{V_l}^{V_g} (P(V) − P_s) dV = 0.
+#       Give P_s/P_c (tables: 0.6470 at T/T_c = 0.9), V_l and V_g.
+#   (d) The latent heat from the entropy jump, L = T R ln((V_g − b)/(V_l − b)), and a
+#       check of Clausius–Clapeyron, dP_s/dT = L/(T(V_g − V_l)), by redoing the whole
+#       construction at T ± 0.1 K.
+
+a = 0.3640 Pa m⁶/mol²
+b = 4.267e-5 m³/mol
+R = R_gas
+# careful: `3 b` is 3 barn (b is the barn); write 3*b (FRICTION T7)
+
+# (a) the critical point
+T_c = 8*a / (27 R b)
+P_c = a / (27*b²)
+V_c = 3*b
+print "critical temperature:", T_c to 6 digits
+print "critical pressure:", P_c in MPa to 6 digits
+print "critical volume:", V_c in cm³/mol to 6 digits
+
+# (b) the isotherm and its spinodal points
+T = 0.900 T_c
+P_vdw(V, temp) = R temp / (V - b) - a / V²
+dP = ∂/∂V P_vdw            # a prime inside an algebraic solve is read as an ODE (FRICTION #3)
+spinodals(temp) =
+    solve dP(V1, temp) = 0 Pa mol/m³ for V1 from 1.01*b to V_c
+    solve dP(V2, temp) = 0 Pa mol/m³ for V2 from V_c to 100*b
+    return <V1, V2>
+sp = spinodals(T)
+print "spinodal volumes:", sp.x in cm³/mol to 6 digits, sp.y in cm³/mol to 6 digits
+print "spinodal pressures:", P_vdw(sp.x, T) in MPa to 6 digits, P_vdw(sp.y, T) in MPa to 6 digits
+
+# (c) the Maxwell construction. For a trial pressure P between the spinodal pressures,
+# find the liquid and gas volumes, then the area between the isotherm and the line P.
+volumes(temp, P) =
+    s = spinodals(temp)
+    solve P_vdw(V_l, temp) = P for V_l from 1.001*b to s.x
+    solve P_vdw(V_g, temp) = P for V_g from s.y to 1e4*b
+    return <V_l, V_g>
+area(temp, P) =
+    v = volumes(temp, P)
+    return ∫ P_vdw(V, temp) - P dV from v.x to v.y
+P_sat(temp) =
+    s = spinodals(temp)
+    lo = max(P_vdw(s.x, temp), 0 Pa) * (1 + 1e-9)
+    hi = P_vdw(s.y, temp) * (1 - 1e-9)
+    solve area(temp, P) = 0 J/mol for P from lo to hi
+    return P
+
+P_s = P_sat(T)
+V = volumes(T, P_s)
+print "saturation pressure:", P_s in MPa to 6 digits
+print "P_s / P_c:", P_s / P_c to 5 digits
+print "liquid and gas volumes:", V.x in cm³/mol to 6 digits, V.y in cm³/mol to 6 digits
+print "area check (J/mol):", area(T, P_s) in J/mol
+
+# (d) latent heat and Clausius–Clapeyron
+L = T R ln((V.y - b) / (V.x - b))
+print "latent heat:", L in kJ/mol to 6 digits
+slope = (P_sat(T + 0.1 K) - P_sat(T - 0.1 K)) / (0.2 K)
+print "dP_s/dT, numerical:", slope in kPa/K to 5 digits
+print "dP_s/dT, Clapeyron:", L / (T (V.y - V.x)) in kPa/K to 5 digits

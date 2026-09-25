@@ -1,0 +1,39 @@
+# 01 — The simple pendulum: measuring g
+#
+# A mass on a string of length L swings back and forth. For small swings
+# the period does not depend on the mass or on how far it swings:
+#
+#     T = 2π √(L / g)
+#
+# Turn that around and a stopwatch plus a tape measure give you g:
+#
+#     g = 4π² L / T²
+#
+# This is the first snippet of the Fermium spec (§3.1). We also compare the
+# small-angle period with the exact period for a large swing, which needs an
+# integral:  T = 4 √(L/g) ∫₀^{π/2} dφ / √(1 − k² sin²φ),  k = sin(θ₀/2).
+
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print "measured g =", g
+print "in imperial:", g in ft/s²
+
+# Period predicted with the standard value of g (g_n is built in)
+T_small = 2π √(L / g_n)
+print "small-angle period:", T_small
+
+# Exact period for big amplitudes (complete elliptic integral of the first kind)
+period(θ0) = 4 √(L/g_n) * ∫ 1/√(1 - sin(θ0/2)^2 sin(φ)^2) dφ from 0 to π/2
+
+for θ0 in [5°, 20°, 45°, 90°]
+    print "amplitude", θ0 in deg, " period", period(θ0), " ratio", period(θ0)/T_small
+
+# A whole lab session: the period measured for 11 string lengths.
+# The file's header says `L [cm], T [s]`, so Fermium knows the units.
+# `fit` finds the g that best matches T = 2π √(L/g), starting from our g above.
+data = load "data/pendulum.csv"
+fit T = 2π √(L / g) to data
+print "g from the fit:", g, " (standard gravity:", g_n, ")"
+
+plot data.T vs data.L to "gallery/pendulum_data.png"

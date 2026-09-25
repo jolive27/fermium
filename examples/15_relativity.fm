@@ -1,0 +1,47 @@
+# 15 — Special relativity: energy, momentum and the speed limit
+#
+# Near the speed of light Newton's formulas stop working. Einstein's versions:
+#
+#     γ = 1 / √(1 − v²/c²)          (Lorentz factor)
+#     E = γ m c²,   p = γ m v,      E² = (p c)² + (m c²)²
+#     kinetic energy K = (γ − 1) m c²
+#
+# At low speed K ≈ ½ m v², but as v → c the energy grows without limit,
+# so nothing with mass can reach c. Particle physicists measure energies in
+# MeV or GeV and momenta in MeV/c.
+
+γ(v) = 1 / √(1 - v²/c²)
+
+print "rest energies:  electron", m_e c² in MeV to 6 digits, "  proton", m_p c² in MeV to 6 digits, "  neutron", m_n c² in MeV to 6 digits
+
+# An electron accelerated through 1 MV (kinetic energy 1 MeV)
+KE = 1.000 MeV        # (not K: `2K` would be 2 kelvin!)
+E = KE + m_e c²
+p = √(E² - (m_e c²)²) / c
+v = p c² / E
+print "1 MeV electron:  γ =", E / (m_e c²), "  v =", v / c, "c  p =", p in MeV/c
+print "check E² = (pc)² + (mc²)²:", √((p c)² + (m_e c²)²) in MeV
+print "Newton would say v =", √(2 KE / m_e) / c, "c  (faster than light!)"
+
+# LHC protons: 6.8 TeV each
+E_LHC = 6.8 TeV
+γ_LHC = E_LHC / (m_p c²)
+print "LHC proton: γ =", γ_LHC, "  1 - v/c =", 1 / (2 γ_LHC²)
+
+# Cosmic-ray muons: made 15 km up, live 2.197 μs at rest.
+# At v = 0.9995 c, how far do they get before half have decayed?
+τ = 2.197 μs
+v_μ = 0.9995 c
+print "muon: γ =", γ(v_μ), "  mean distance without time dilation:", v_μ τ in km,
+      "  with:", γ(v_μ) v_μ τ in km
+
+# The kinetic energy, relativistic vs Newton. The derivative dK/dv = γ³ m v
+# comes out symbolically.
+K_rel(v) = (γ(v) - 1) m_e c²
+K_newton(v) = ½ m_e v²
+dK = d/dv K_rel
+print "dK/dv at v = 0.5 c:", dK(0.500 c), "  γ³ m v =", γ(0.500 c)³ m_e (0.500 c)
+print "at v = 0.1 c: relativistic", K_rel(0.100 c) in keV, "  Newton", K_newton(0.100 c) in keV
+print "at v = 0.9 c: relativistic", K_rel(0.900 c) in keV, "  Newton", K_newton(0.900 c) in keV
+
+plot K_rel(v) in MeV vs v from 0 c to 0.98 c, K_newton(v) in MeV vs v from 0 c to 0.98 c to "gallery/relativistic_energy.png"

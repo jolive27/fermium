@@ -1,0 +1,84 @@
+# Nuclear 21 — Single-neutron levels in a Woods–Saxon well with spin–orbit
+#
+# (Krane §5.1; Bohr & Mottelson vol. I, eqs. 2-181 and 2-182.)  A neutron
+# moves in the mean field of a ⁴⁰Ca core (A = 40):
+#
+#     V(r) = −V₀ f(r),      f(r) = 1 / (1 + exp((r − R)/a)),
+#     V_so(r) = 0.44 V₀ r₀² (1/r) (df/dr) ⟨l·s⟩/ħ²,
+#
+# with V₀ = 50.0 MeV, r₀ = 1.25 fm, R = r₀ A^(1/3), a = 0.65 fm and the
+# reduced mass μ = m_n A/(A + 1).  ⟨l·s⟩/ħ² = l/2 for j = l + ½ and
+# −(l + 1)/2 for j = l − ½.  The radial equation for u = r R(r) is
+#
+#     u'' = [ l(l+1)/r² + (2μ/ħ²) (V + V_so − E) ] u,    u ≈ r^(l+1) at r → 0.
+#
+#  (a) Find all bound levels with l = 0, 1, 2 deeper than −5 MeV by shooting
+#      (u(r_max) = 0 with r_max = 25 fm).
+#  (b) The spin–orbit splittings of 1p and 1d, E(l − ½) − E(l + ½), which
+#      should be positive and grow roughly like 2l + 1.
+#  (c) The level order: 1s½ 1p3/2 1p½ 1d5/2 2s½ 1d3/2, the shell-model
+#      ordering that closes the N = 20 shell of ⁴⁰Ca after 1d3/2.
+
+A = 40
+V0 = 50.0 MeV
+r_0 = 1.25 fm
+R = r_0 A^(1/3)
+a_ws = 0.65 fm
+μ = m_n A / (A + 1)
+
+f(r) = 1 / (1 + exp((r - R) / a_ws))
+df = f'
+V(r) = -V0 f(r)
+V_so(r, ls) = 0.44 V0 r_0² df(r) ls / r
+
+r_start = 1e-4 fm
+r_max = 25 fm
+
+# ls = ⟨l·s⟩/ħ²
+u_end(E, l, ls) =
+    solve u'' = (l (l + 1) / r² + (2 μ / ħ²) (V(r) + V_so(r, ls) - E)) u
+      with u(r_start) = (r_start / (1 fm))^(l + 1),
+           u'(r_start) = (l + 1) (r_start / (1 fm))^l / (1 fm)
+      for r from r_start to r_max
+    return u(r_max)
+
+print "R =", R to 6 digits, "  f'(R) =", df(R) to 6 digits
+
+# for each (l, 2j) record the levels in order
+E_1s = 0 MeV
+E_2s = 0 MeV
+E_1p3 = 0 MeV
+E_1p1 = 0 MeV
+E_1d5 = 0 MeV
+E_1d3 = 0 MeV
+for l from 0 to 2
+    for twoj in [2*l + 1, 2*l - 1]
+        if twoj > 0
+            j = twoj / 2
+            ls = (j (j + 1) - l (l + 1) - 3/4) / 2
+            node = 0
+            E_lo = -V0 + 0.01 MeV
+            while E_lo < -5 MeV
+                E_hi = E_lo + 0.25 MeV
+                if u_end(E_lo, l, ls) * u_end(E_hi, l, ls) < 0
+                    solve u_end(E, l, ls) = 0 for E from E_lo to E_hi
+                    node += 1
+                    print node, "l =", l, " 2j =", twoj, " <l.s> =", ls, " E =", E in MeV to 10 digits
+                    if l == 0 and node == 1
+                        E_1s = E
+                    if l == 0 and node == 2
+                        E_2s = E
+                    if node == 1 and l == 1 and twoj == 3
+                        E_1p3 = E
+                    if node == 1 and l == 1 and twoj == 1
+                        E_1p1 = E
+                    if node == 1 and l == 2 and twoj == 5
+                        E_1d5 = E
+                    if node == 1 and l == 2 and twoj == 3
+                        E_1d3 = E
+                E_lo = E_hi
+
+Δp = E_1p1 - E_1p3
+Δd = E_1d3 - E_1d5
+print "(b) splitting 1p =", Δp in MeV to 8 digits, "  1d =", Δd in MeV to 8 digits, "  ratio d/p =", Δd / Δp to 6 digits
+print "(c) shell-model order 1s½ 1p3/2 1p½ 1d5/2 2s½ 1d3/2:", E_1s < E_1p3 and E_1p3 < E_1p1 and E_1p1 < E_1d5 and E_1d5 < E_2s and E_2s < E_1d3

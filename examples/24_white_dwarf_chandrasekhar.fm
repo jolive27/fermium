@@ -1,0 +1,48 @@
+# 24 — White dwarfs, the Chandrasekhar limit, and neutron stars
+#
+# When a star like the Sun runs out of fuel, gravity squeezes its core into a
+# white dwarf about the size of the Earth. What holds it up is not heat but
+# the Pauli exclusion principle: electrons can't share states, so squeezing
+# them raises their momenta up to the Fermi momentum
+#
+#     p_F = ħ (3π² n_e)^(1/3),        n_e = ρ / (μ_e m_u)   (μ_e = 2 for C/O)
+#
+# Once p_F ≳ m_e c the electrons are relativistic, the star behaves like an
+# n = 3 polytrope (example 13), and there is a maximum mass it can have:
+#
+#     M_Ch = (√(3π) / 2) ω₃ (ħ c / G)^(3/2) / (μ_e m_u)²,    ω₃ = −ξ₁² θ'(ξ₁) = 2.01824
+#
+# Chandrasekhar found this in 1930 (Nobel Prize 1983). Heavier cores collapse
+# further, to neutron stars, held up by neutrons (and the strong force).
+
+μ_e = 2
+ω3 = 2.01824
+
+M_Ch = √(3π) / 2 * ω3 * (ħ c / G)^(3/2) / (μ_e m_u)²
+print "Chandrasekhar mass:", M_Ch in Msun to 3 digits, " (often quoted as 1.4 solar masses)"
+
+# Sirius B: 1.018 solar masses inside 5840 km
+M_wd = 1.018 M_sun
+R_wd = 5840 km
+ρ_wd = M_wd / ((4/3) π R_wd³)
+print "Sirius B mean density:", ρ_wd in kg/m³, " =", ρ_wd * 1 cm³ in kg, "per cm³"
+print "surface gravity:", G M_wd / R_wd² / g_n, "times Earth's"
+
+# Electron Fermi momentum at a range of densities
+p_F(ρ) = ħ (3π² ρ / (μ_e m_u))^(1/3)
+for ρ in [1.0e7 kg/m³, 1.0e8 kg/m³, 1.0e9 kg/m³, 1.0e10 kg/m³, 1.0e11 kg/m³]
+    print "ρ =", ρ, "  p_F c =", p_F(ρ) c in MeV to 3 digits, "  p_F / (m_e c) =", p_F(ρ) / (m_e c) to 3 digits
+
+# The density at which p_F = m_e c: beyond it, the electrons are relativistic
+ρ_rel = (m_e c / ħ)³ μ_e m_u / (3π²)
+print "electrons become relativistic above", ρ_rel in kg/m³ to 3 digits
+
+# A neutron star: 1.4 solar masses, 12 km radius
+M_ns = 1.4 M_sun
+R_ns = 12 km
+ρ_ns = M_ns / ((4/3) π R_ns³)
+ρ_nuc = m_u / ((4/3) π (1.20 fm)³)
+print "neutron star mean density:", ρ_ns in kg/m³, " =", ρ_ns / ρ_nuc, "× nuclear density"
+print "compactness 2GM/(R c²):", 2 G M_ns / (R_ns c²), " (1 would be a black hole)"
+print "surface gravity:", G M_ns / R_ns² in m/s², " falling 1 m there ends at",
+      √(2 G M_ns / R_ns² * 1 m) in km/s

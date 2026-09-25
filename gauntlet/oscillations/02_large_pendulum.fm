@@ -1,0 +1,33 @@
+# Oscillations 02 — The period of a pendulum at large amplitude
+#
+# (Taylor, Classical Mechanics, §4.5 and problem 4.38; Kleppner & Kolenkow ch. 6.)
+# A simple pendulum of length L = 1.000 m (g = 9.81 m/s²) is released from rest
+# at an angle θ₀.
+#
+#   (a) The small-angle period T₀ = 2π √(L/g).
+#   (b) Energy conservation gives the exact period as an integral with an
+#       integrable blow-up at the turning point:
+#           T = 4 √(L / 2g) ∫₀^θ₀ dθ / √(cos θ − cos θ₀)
+#       and, after the substitution sin(θ/2) = k sin φ with k = sin(θ₀/2),
+#           T = 4 √(L/g) K(k),   K(k) = ∫₀^{π/2} dφ / √(1 − k² sin² φ).
+#       Evaluate both for θ₀ = 10°, 45°, 90°, 150° and 179°.
+#   (c) Compare with the series T ≈ T₀ (1 + θ₀²/16 + 11 θ₀⁴/3072).
+#   (d) Solve θ'' = −(g/L) sin θ and measure the period as four times the time
+#       of the first zero crossing.
+
+L = 1.000 m
+g = 9.81 m/s²
+T0 = 2π √(L / g)
+print "small-angle period:", T0 to 8 digits
+
+K(k) = ∫ 1 / √(1 - k² sin(φ)²) dφ from 0 to π/2
+T_elliptic(θ0) = 4 √(L / g) K(sin(θ0 / 2))
+T_energy(θ0) = 4 √(L / (2*g)) ∫ 1 / √(cos(θ) - cos(θ0)) dθ from 0 to θ0
+T_series(θ0) = T0 (1 + θ0²/16 + 11 θ0⁴/3072)
+
+for θ0 in [10°, 45°, 90°, 150°, 179°]
+    solve θ'' = -(g / L) sin(θ)
+      with θ(0) = θ0, θ'(0) = 0 rad/s
+      for t from 0 s to 4 T_elliptic(θ0)
+    solve θ(t_quarter) = 0 for t_quarter from 0 s to 2 T_elliptic(θ0)
+    print "amplitude", θ0 in deg, "| elliptic:", T_elliptic(θ0) to 8 digits, "| energy integral:", T_energy(θ0) to 8 digits, "| ODE:", 4 t_quarter to 8 digits, "| series:", T_series(θ0) to 8 digits

@@ -1,0 +1,72 @@
+# Oscillations 03 — Two coupled oscillators: normal modes and beats
+#
+# (Taylor, Classical Mechanics, §11.1–11.2; Kleppner & Kolenkow ch. 6.)
+# Two carts on a frictionless track are tied to the walls by springs
+# k = 20.0 N/m and to each other by a weak spring k_c = 2.00 N/m.
+#
+#   (a) Equal masses m = 0.500 kg: the two normal-mode frequencies
+#       ω₁ = √(k/m) (in phase) and ω₂ = √((k + 2k_c)/m) (out of phase).
+#   (b) Cart 1 is pulled 5.00 cm aside and both are released from rest. Then
+#           x₁ = A cos(Δ t) cos(Ω t),   x₂ = A sin(Δ t) sin(Ω t),
+#       with Ω = (ω₁ + ω₂)/2, Δ = (ω₂ − ω₁)/2: the energy moves completely to
+#       cart 2 after t = π/(ω₂ − ω₁). Solve the equations of motion and check.
+#   (c) Measure ω₁ from the ODE: start both carts at 5.00 cm; the first zero
+#       crossing is a quarter period.
+#   (d) Unequal masses m₁ = 0.500 kg, m₂ = 1.00 kg: find the mode frequencies
+#       from det(K − ω² M) = 0 and the amplitude ratio of each mode; start the
+#       system in the slow mode and check that it stays a pure cosine.
+
+k = 20.0 N/m
+k_c = 2.00 N/m        # Taylor writes κ; see FRICTION O3 for why not here
+m = 0.500 kg
+A = 5.00 cm
+
+# (a)
+ω1 = √(k / m)
+ω2 = √((k + 2k_c) / m)
+print "in-phase mode:", ω1 to 6 digits
+print "out-of-phase mode:", ω2 to 6 digits
+
+# (b) beats
+Ω = (ω1 + ω2) / 2
+Δ = (ω2 - ω1) / 2
+t_swap = π / (ω2 - ω1)
+print "energy transfer time:", t_swap to 6 digits
+
+solve m x1'' = -k x1 - k_c (x1 - x2),
+      m x2'' = -k x2 - k_c (x2 - x1)
+  with x1(0) = A, x2(0) = 0 cm, x1'(0) = 0 m/s, x2'(0) = 0 m/s
+  for t from 0 s to 2 t_swap
+
+for tt in [1.00 s, 2.50 s, t_swap]
+    print "t =", tt to 6 digits, "| x1:", x1(tt) in cm to 6 digits, "vs", (A cos(Δ tt) cos(Ω tt)) in cm to 6 digits, "| x2:", x2(tt) in cm to 6 digits, "vs", (A sin(Δ tt) sin(Ω tt)) in cm to 6 digits
+
+# (c) the in-phase mode from the ODE
+solve m y1'' = -k y1 - k_c (y1 - y2),
+      m y2'' = -k y2 - k_c (y2 - y1)
+  with y1(0) = A, y2(0) = A, y1'(0) = 0 m/s, y2'(0) = 0 m/s
+  for t from 0 s to 2 s
+solve y1(t_q) = 0 cm for t_q from 0 s to 2 s
+print "ω1 from the ODE:", 2π / (4 t_q) to 6 digits
+
+# (d) unequal masses: det(K − ω² M) = 0 is
+#     (k + k_c − m₁ω²)(k + k_c − m₂ω²) = k_c²
+# The uncoupled frequencies √((k + k_c)/m₂) < √((k + k_c)/m₁) separate the two roots.
+m1 = 0.500 kg
+m2 = 1.00 kg
+char(ω) = (k + k_c - m1 ω²) (k + k_c - m2 ω²) - k_c²
+solve char(ω_slow) = 0 for ω_slow from 0 rad/s to √((k + k_c) / m2)
+solve char(ω_fast) = 0 for ω_fast from √((k + k_c) / m1) to 100 rad/s
+ratio_slow = (k + k_c - m1 ω_slow²) / k_c      # x₂/x₁ in each mode
+ratio_fast = (k + k_c - m1 ω_fast²) / k_c
+print "slow mode:", ω_slow to 6 digits, " x2/x1 =", ratio_slow to 6 digits
+print "fast mode:", ω_fast to 6 digits, " x2/x1 =", ratio_fast to 6 digits
+
+solve m1 z1'' = -k z1 - k_c (z1 - z2),
+      m2 z2'' = -k z2 - k_c (z2 - z1)
+  with z1(0) = A, z2(0) = ratio_slow A, z1'(0) = 0 m/s, z2'(0) = 0 m/s
+  for t from 0 s to 10 s
+worst = 0 cm
+for tt from 0 s to 10 s step 0.01 s
+    worst = max(worst, abs(z1(tt) - A cos(ω_slow tt)), abs(z2(tt) - ratio_slow A cos(ω_slow tt)))
+print "largest departure from a pure slow mode:", worst in cm

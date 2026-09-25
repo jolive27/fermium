@@ -1,0 +1,13 @@
+# A damped mass on a spring: solve m x'' = -k x - b x'
+k = 50 N/m
+m = 0.5 kg
+b = 0.2 kg/s
+
+solve m x'' = -k x - b x'
+  with x(0) = 10.0 cm, x'(0) = 0 cm/s
+  for t from 0 s to 10 s
+
+print "x(5 s) =", x(5 s) in cm to 5 digits
+print "v(1 s) =", x'(1 s) in cm/s to 5 digits
+E(t) = ½ k x(t)² + ½ m x'(t)²
+print "energy left after 10 s:", E(10 s) / E(0 s) to 4 digits

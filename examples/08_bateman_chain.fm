@@ -1,0 +1,52 @@
+# 08 — A decay chain: the technetium-99m "cow" used in hospitals
+#
+# Hospitals make the medical isotope Tc-99m from its parent Mo-99:
+#
+#     Mo-99  --(t½ = 65.94 h)-->  Tc-99m  --(t½ = 6.0067 h)-->  Tc-99 (very long-lived)
+#
+# The number of each nucleus obeys a small system of differential equations
+# (the Bateman equations): each species is fed by its parent and drained by
+# its own decay,
+#
+#     N_Mo' = -λ_Mo N_Mo
+#     N_Tc' =  λ_Mo N_Mo - λ_Tc N_Tc
+#     N_99' =  λ_Tc N_Tc
+#
+# Bateman's exact solution for the middle member is
+#     N_Tc(t) = N₀ λ_Mo / (λ_Tc − λ_Mo) · (exp(−λ_Mo t) − exp(−λ_Tc t)),
+# and the Tc-99m content peaks at t_max = ln(λ_Tc/λ_Mo) / (λ_Tc − λ_Mo).
+# That is when the hospital "milks the cow".
+
+λ_Mo = ln(2) / (65.94 hr)
+λ_Tc = ln(2) / (6.0067 hr)
+N0 = 1.0e15
+
+solve N_Mo' = -λ_Mo N_Mo,
+      N_Tc' = λ_Mo N_Mo - λ_Tc N_Tc,
+      N_99' = λ_Tc N_Tc
+  with N_Mo(0) = N0, N_Tc(0) = 0, N_99(0) = 0
+  for t from 0 hr to 240 hr
+
+bateman(t) = N0 λ_Mo / (λ_Tc - λ_Mo) * (exp(-λ_Mo t) - exp(-λ_Tc t))
+print "Tc-99m after 24 h: solve", N_Tc(24 hr), "  Bateman formula", bateman(24 hr)
+
+# Find the peak by looking for where N_Tc' changes sign
+t_peak = 0 hr
+for tt from 0 hr to 100 hr step 0.01 hr
+    if N_Tc'(tt) < 0 / (1 s)
+        t_peak = tt
+        break
+print "Tc-99m peaks at", t_peak to 4 digits, "  (formula:", ln(λ_Tc/λ_Mo) / (λ_Tc - λ_Mo) in hr to 4 digits, ")"
+
+# Activities at the peak: at that moment the two activities are equal
+print "Mo-99 activity: ", λ_Mo N_Mo(t_peak) in GBq
+print "Tc-99m activity:", λ_Tc N_Tc(t_peak) in GBq
+
+# Much later the pair reaches "transient equilibrium": A_Tc / A_Mo → λ_Tc/(λ_Tc−λ_Mo)
+print "activity ratio at 200 h:", λ_Tc N_Tc(200 hr) / (λ_Mo N_Mo(200 hr)),
+      " expected", λ_Tc / (λ_Tc - λ_Mo)
+
+# Nothing is lost: the three populations always add up to N0
+print "total at 240 h / N0:", (N_Mo(240 hr) + N_Tc(240 hr) + N_99(240 hr)) / N0
+
+plot N_Mo vs t, N_Tc vs t, N_99 vs t to "gallery/bateman_chain.png"

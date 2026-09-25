@@ -1,0 +1,70 @@
+# Gravitation 23 — Apsidal precession from a small extra force: exact, integral and ODE
+#
+# (Goldstein §3.9–3.11 and problem 3.x; Taylor problem 8.x; Danby, Fundamentals of
+#  Celestial Mechanics, ch. 11.)
+# A planet orbits the Sun (GM☉) starting at perihelion r_p = a(1 − e) with the Kepler
+# perihelion speed, a = 0.387 AU, e = 0.206, so its angular momentum per unit mass is
+# h = √(GM a (1 − e²)). An extra attractive force is added, per unit mass:
+#     case A:  λ / r³   with λ = 0.00200 h²
+#     case B:  κ / r⁴   with κ = 0.00100 h² p,  p = h²/GM
+#
+#   (a) Case A is solvable: the Binet equation becomes u'' + (1 − λ/h²) u = GM/h², so
+#       r(φ) = p' / (1 + e' cos(βφ)), β = √(1 − λ/h²), and the perihelion advances by
+#       Δφ = 2π(1/β − 1) per orbit (first order: πλ/h²).
+#   (b) Case A from the apsidal-angle integral
+#           Δθ = ∫_{r_min}^{r_max} h/r² dr / √(2(E − U_eff(r))),   U_eff = h²/(2r²) − GM/r − λ/(2r²),
+#       which blows up like 1/√ at both ends; find r_max from U_eff(r) = E and
+#       compare 2Δθ − 2π with (a).
+#   (c) Case A from the equations of motion: integrate r'' = −GM r/r³ − λ r/r⁴ as a
+#       2-D vector ODE for 1.3 periods and find the next perihelion (r · r' = 0 near one
+#       period). Its angle is the advance.
+#   (d) Case B has no simple closed form. Do (b) and (c) for it; the first-order
+#       result is 2πκ/(h² p).
+
+a = 0.387 AU
+e = 0.206
+GM = GM_sun
+h = √(GM a (1 - e²))
+p = h² / GM
+r_p = a (1 - e)
+v_p = h / r_p
+P = 2π √(a³ / GM)
+print "orbital period:", P in day to 6 digits
+
+# (a) case A exactly
+λ = 0.00200 h²
+β = √(1 - λ / h²)
+print "case A, exact advance per orbit:", 2π (1 / β - 1) to 7 digits
+print "case A, first order:", π λ / h² to 7 digits
+
+# (b) case A from the apsidal integral
+E = ½ v_p² - GM / r_p - λ / (2 r_p²)
+U_A(r) = h² / (2 r²) - GM / r - λ / (2 r²)
+solve U_A(r_max_A) = E for r_max_A from 1.5 r_p to 10 r_p
+Δθ_A = ∫ h / r² / √(2 (E - U_A(r))) dr from r_p to r_max_A
+print "case A, aphelion:", r_max_A in AU to 7 digits
+print "case A, advance from the integral:", 2 Δθ_A - 2π to 7 digits
+
+# (c) case A from the ODE
+solve rA'' = -GM rA / |rA|^3 - λ rA / |rA|^4
+  with rA(0) = <r_p, 0 m>, rA'(0) = <0 m/s, v_p>
+  for t from 0 s to 1.3 P tolerance 1e-12
+radialA(t) = rA(t) · rA'(t)
+solve radialA(tA) = 0 m²/s for tA from 0.75 P to 1.25 P
+print "case A, advance from the ODE:", atan2(rA(tA).y, rA(tA).x) to 7 digits
+
+# (d) case B
+κ = 0.00100 h² p
+E_B = ½ v_p² - GM / r_p - κ / (3 r_p³)
+U_B(r) = h² / (2 r²) - GM / r - κ / (3 r³)
+solve U_B(r_max_B) = E_B for r_max_B from 1.5 r_p to 10 r_p
+Δθ_B = ∫ h / r² / √(2 (E_B - U_B(r))) dr from r_p to r_max_B
+print "case B, advance from the integral:", 2 Δθ_B - 2π to 7 digits
+
+solve rB'' = -GM rB / |rB|^3 - κ rB / |rB|^5
+  with rB(0) = <r_p, 0 m>, rB'(0) = <0 m/s, v_p>
+  for t from 0 s to 1.3 P tolerance 1e-12
+radialB(t) = rB(t) · rB'(t)
+solve radialB(tB) = 0 m²/s for tB from 0.75 P to 1.25 P
+print "case B, advance from the ODE:", atan2(rB(tB).y, rB(tB).x) to 7 digits
+print "case B, first order:", 2π κ / (h² p) to 7 digits

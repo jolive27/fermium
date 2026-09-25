@@ -1,0 +1,34 @@
+# Thermodynamics 02 — Newton's law of cooling
+#
+# A cup of coffee at 90.0 °C is left in a room at 20.0 °C. After 5.00 min it has
+# cooled to 70.0 °C. Assume Newton's law of cooling, dT/dt = −k (T − T_room).
+#
+# (a) Find the cooling constant k.
+# (b) Solve the differential equation numerically: what is the temperature
+#     after 10.0 min, and how fast is the coffee cooling at t = 0?
+# (c) When is the coffee cool enough to drink, at 50.0 °C?
+# Exact answer: T(t) = T_room + (T₀ − T_room) e^(−k t).
+# (Halliday/Resnick ch. 18; any calculus text)
+
+T_room = 20.0 °C
+T0 = 90.0 °C
+T_5 = 70.0 °C
+t_5 = 5.00 min
+
+# (a) from the exact solution at t = 5 min
+k = ln((T0 - T_room) / (T_5 - T_room)) / t_5
+print "k =", k in 1/min to 6 digits
+
+# (b) the differential equation
+solve T' = -k (T - T_room)
+  with T(0) = T0
+  for t from 0 min to 60 min
+print "T(5 min)  =", T(5 min) in °C to 6 digits
+print "T(10 min) =", T(10 min) in °C to 6 digits
+print "cooling rate at t = 0:", T'(0 min) in K/min to 6 digits
+
+# (c) when does it reach 50 °C? Find the root on the ODE solution.
+T_drink = 50.0 °C
+solve T(t_drink) = T_drink for t_drink from 0 min to 60 min
+print "cool enough to drink after", t_drink in min to 6 digits
+print "exact: t = ln((T0 - T_room)/(T_drink - T_room))/k =", ln((T0 - T_room) / (T_drink - T_room)) / k in min to 6 digits

@@ -1,0 +1,64 @@
+# 02 — Projectile motion, with and without air resistance
+#
+# Throw a ball at speed v0 and angle θ above the ground. Without air, the
+# horizontal velocity never changes and gravity pulls the vertical velocity
+# down at g. The textbook results are
+#
+#     range      R = v0² sin(2θ) / g
+#     max height H = v0² sin²θ / (2g)
+#     flight time  = 2 v0 sinθ / g
+#
+# With air, a drag force F = ½ ρ C_d A v² points against the velocity. There is
+# no neat formula any more, so we let `solve` integrate Newton's law in 2-D.
+
+v0 = 30.0 m/s
+θ = 45°
+
+R = v0² sin(2θ) / g_n
+H = v0² sin(θ)² / (2 g_n)
+t_flight = 2 v0 sin(θ) / g_n
+print "no air:   range", R, "  height", H, "  time", t_flight
+
+# Which angle gives the longest range? Scan in 5° steps.
+best = 0°
+for a from 5 to 85 step 5
+    ang = a * 1°
+    if v0² sin(2ang)/g_n > v0² sin(2best)/g_n
+        best = ang
+print "best angle without air:", best in deg
+
+# A baseball: mass, size and drag coefficient
+mass = 0.145 kg
+radius = 3.7 cm
+ρ_air = 1.2 kg/m³
+C_d = 0.35
+A = π radius²
+k = ½ ρ_air C_d A / mass        # drag per unit mass [1/m]
+
+solve x'' = -k √(x'² + y'²) x',
+      y'' = -g_n - k √(x'² + y'²) y'
+  with x(0) = 0 m, y(0) = 0 m,
+       x'(0) = v0 cos(θ), y'(0) = v0 sin(θ)
+  for t from 0 s to t_flight
+
+# Find when the ball comes back down by scanning the solution
+t_land = t_flight
+for tt from 0.01 s to t_flight step 0.01 s
+    if y(tt) < 0 m
+        t_land = tt
+        break
+print "with air: range", x(t_land), "  time", t_land
+print "air shortens the throw by", R - x(t_land)
+
+# Collect both paths as lists (up to landing) and draw them on one plot
+x_with_air = []
+y_with_air = []
+x_no_air = []
+y_no_air = []
+for tt from 0 s to t_flight step 0.02 s
+    if tt <= t_land
+        push(x_with_air, x(tt))
+        push(y_with_air, y(tt))
+    push(x_no_air, v0 cos(θ) tt)
+    push(y_no_air, v0 sin(θ) tt - ½ g_n tt²)
+plot y_no_air vs x_no_air, y_with_air vs x_with_air to "gallery/projectile.png"

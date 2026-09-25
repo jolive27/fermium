@@ -1,0 +1,45 @@
+# 25 — The rocket equation
+#
+# A rocket pushes itself forward by throwing mass (hot exhaust) backwards at
+# speed v_e relative to itself. Momentum conservation gives Tsiolkovsky's
+# rocket equation (1903) for the speed gained in empty space:
+#
+#     Δv = v_e ln(m₀ / m_f)
+#
+# where m₀ is the starting mass and m_f the mass once the fuel is gone. The
+# logarithm is brutal: doubling the speed needs the *square* of the mass ratio.
+#
+# Launching from the ground, gravity also pulls down during the burn. We
+# solve the equations of motion for a vertical launch of a Saturn V first
+# stage (numbers rounded), burning fuel at a constant rate:
+#
+#     m' = −ṁ,      v' = v_e ṁ / m − g,      y' = v
+
+m0 = 2.97e6 kg           # fully fuelled Saturn V
+m_fuel = 2.16e6 kg       # first-stage propellant
+t_burn = 168 s
+v_e = 2.58 km/s          # exhaust speed of the F-1 engines
+ṁ = m_fuel / t_burn
+print "fuel burned per second:", ṁ in tonne/s to 3 digits
+print "thrust:", v_e ṁ in MN to 3 digits, "  weight at lift-off:", m0 g_n in MN to 3 digits
+
+m_f = m0 - m_fuel
+Δv_ideal = v_e ln(m0 / m_f)
+print "Tsiolkovsky Δv (no gravity):", Δv_ideal in km/s to 3 digits
+
+solve M' = -ṁ,
+      v' = v_e ṁ / M - g_n,
+      y' = v
+  with M(0) = m0, v(0) = 0 m/s, y(0) = 0 m
+  for t from 0 s to t_burn
+
+print "speed at burnout with gravity:", v(t_burn) in km/s to 3 digits
+print "gravity loss g t_burn:", g_n t_burn in km/s to 3 digits
+print "height at burnout:", y(t_burn) in km to 3 digits
+print "acceleration just before burnout:", v'(t_burn) / g_n to 2 digits, "g"
+
+# How big must the mass ratio be for low Earth orbit (Δv ≈ 9.4 km/s incl. losses)?
+for ve in [2.6 km/s, 3.5 km/s, 4.4 km/s]
+    print "v_e =", ve, "  needs m0/mf =", exp(9.4 km/s / ve) to 3 digits
+
+plot v in km/s vs t to "gallery/rocket.png"

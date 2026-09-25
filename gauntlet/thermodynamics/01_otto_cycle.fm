@@ -1,0 +1,47 @@
+# Thermodynamics 01 — The air-standard Otto cycle
+#
+# A petrol engine is modelled as an Otto cycle on n = 0.0200 mol of air
+# (an ideal diatomic gas, γ = 1.40). At the start of compression the gas is at
+# p₁ = 1.00 atm and T₁ = 27 °C. It is compressed adiabatically by a compression
+# ratio r = V₁/V₂ = 8.0, heated at constant volume to T₃ = 1600 K, expanded
+# adiabatically back to V₁, and cooled at constant volume to the start.
+#
+# (a) Find V₁, and T₂ at the end of compression.
+# (b) Find the work done on the gas in compression and by the gas in the power
+#     stroke, from W = ∫ p dV along each adiabat.
+# (c) Find the heat input Q_in = n C_V (T₃ − T₂) and the efficiency W_net / Q_in,
+#     and compare with the textbook result η = 1 − r^(1−γ).
+# (Halliday/Resnick ch. 20, Schroeder §4.3)
+
+γ = 1.40
+n = 0.0200 mol
+p1 = 1.00 atm
+T1 = 27 °C
+r = 8.0
+T3 = 1600 K
+
+C_V = R_gas / (γ - 1)            # molar heat capacity at constant volume
+
+# (a) the corners of the cycle
+V1 = n R_gas T1 / p1
+V2 = V1 / r
+T2 = T1 r^(γ - 1)                # T V^(γ-1) is constant on an adiabat
+p3 = n R_gas T3 / V2
+print "V1 =", V1 in L to 6 digits
+print "T2 =", T2 in K to 6 digits
+
+# (b) work from ∫ p dV along the two adiabats (p V^γ is constant)
+p_compress(V) = p1 (V1 / V)^γ
+p_expand(V) = p3 (V2 / V)^γ
+W_on = -∫ p_compress(V) dV from V1 to V2       # work done ON the gas
+W_by = ∫ p_expand(V) dV from V2 to V1           # work done BY the gas
+print "work done on the gas in compression =", W_on in J to 6 digits
+print "work done by the gas in expansion   =", W_by in J to 6 digits
+
+# (c) heat in, efficiency
+Q_in = n C_V (T3 - T2)
+W_net = W_by - W_on
+η = W_net / Q_in
+print "Q_in =", Q_in in J to 6 digits
+print "efficiency from the integrals =", η to 8 digits
+print "efficiency 1 - r^(1-γ)       =", 1 - r^(1 - γ) to 8 digits

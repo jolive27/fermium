@@ -1,0 +1,69 @@
+# Mechanics 03 — A sounding rocket: variable mass, gravity and air drag
+#
+# (Taylor, Classical Mechanics, §3.2; Kleppner & Kolenkow ch. 4.)
+# A single-stage sounding rocket has lift-off mass m₀ = 1200 kg, of which
+# 900 kg is propellant, burned at a constant rate over 60.0 s. The exhaust
+# leaves at v_e = 2.20 km/s relative to the rocket. It is launched vertically.
+#
+#   (a) The Tsiolkovsky Δv (no gravity, no air) and the thrust.
+#   (b) With uniform gravity g = 9.81 m/s² but no air: burnout speed and height
+#       (closed form), and the highest point reached after coasting.
+#   (c) Check (b) by solving m v' = v_e ṁ − m g.
+#   (d) Add quadratic air drag, ½ ρ(y) C_d A v², in an exponential atmosphere
+#       ρ(y) = 1.225 kg/m³ · exp(−y / 8.50 km), with C_d = 0.50 and a body
+#       radius of 25.0 cm. Find the burnout speed, the burnout height and the
+#       apex height.
+
+m0 = 1200 kg
+m_fuel = 900 kg
+t_b = 60.0 s
+v_e = 2.20 km/s
+g = 9.81 m/s²
+
+ṁ = m_fuel / t_b
+m_f = m0 - m_fuel
+
+# (a)
+print "thrust:", v_e ṁ in kN to 6 digits
+print "Tsiolkovsky Δv:", v_e ln(m0 / m_f) to 6 digits
+
+# (b) closed form with gravity
+v_b = v_e ln(m0 / m_f) - g t_b
+y_b = v_e t_b - ½ g t_b² - v_e m_f / ṁ * ln(m0 / m_f)
+print "burnout speed (no air):", v_b to 6 digits
+print "burnout height (no air):", y_b in km to 6 digits
+print "apex (no air):", (y_b + v_b² / (2*g)) in km to 6 digits
+
+# (c) the same by ODE
+solve M' = -ṁ,
+      M v' = v_e ṁ - M g,
+      y' = v
+  with M(0) = m0, v(0) = 0 m/s, y(0) = 0 m
+  for t from 0 s to t_b
+print "ODE burnout speed (no air):", v(t_b) to 6 digits
+print "ODE burnout height (no air):", y(t_b) in km to 6 digits
+
+# (d) with drag. Powered phase first ...
+C_d = 0.50
+A = π (25.0 cm)²
+ρ0 = 1.225 kg/m³
+H = 8.50 km
+ρ(z) = ρ0 exp(-z / H)
+solve Mp' = -ṁ,
+      Mp vp' = v_e ṁ - Mp g - ½ ρ(yp) C_d A vp |vp|,
+      yp' = vp
+  with Mp(0) = m0, vp(0) = 0 m/s, yp(0) = 0 m
+  for t from 0 s to t_b
+print "burnout speed (air):", vp(t_b) to 6 digits
+print "burnout height (air):", yp(t_b) in km to 6 digits
+
+# ... then coasting, starting from where the powered phase ended.
+solve vc' = -g - ½ ρ(yc) C_d A vc |vc| / m_f,
+      yc' = vc
+  with vc(t_b) = vp(t_b), yc(t_b) = yp(t_b)
+  for t from t_b to t_b + 400 s
+
+# apex: the vertical speed is zero
+solve vc(t_top) = 0 m/s for t_top from t_b to t_b + 400 s
+print "time of apex (air):", t_top to 6 digits
+print "apex (air):", yc(t_top) in km to 6 digits

@@ -1,0 +1,98 @@
+# Quantum 22 — The quartic oscillator four ways
+#
+# (Griffiths §7.1 and §9.2, Problems 7.4 and 9.8; Sakurai §5.4.)  An electron
+# is bound in the purely anharmonic potential V(x) = β x⁴ with
+# β = 1.00 eV/nm⁴.  There is no closed form for its energies.
+#
+#  (a) Shooting: integrate −ħ²/2m ψ'' + βx⁴ ψ = E ψ outward from x = 0
+#      (even: ψ(0) = 1, ψ'(0) = 0; odd: ψ(0) = 0, ψ'(0) = 1) and find the
+#      four lowest E for which ψ stays bounded.
+#  (b) WKB: solve ∮ p dx = 2 ∫_{−x_t}^{x_t} √(2m(E − βx⁴)) dx = 2π ħ (n + ½)
+#      for the same four levels, with x_t = (E/β)^{1/4}.  WKB should get
+#      better as n grows.
+#  (c) Variational: with the Gaussian trial ψ = (2α/π)^{1/4} exp(−αx²),
+#      compute E(α) = ⟨ψ|H|ψ⟩ by integration, minimise it by solving
+#      dE/dα = 0, and check E_var ≥ E₀ (Griffiths' variational principle).
+#  (d) Matrix mechanics: write H in the four lowest even oscillator states
+#      |0⟩, |2⟩, |4⟩, |6⟩ of an oscillator whose ground state is the best
+#      Gaussian from (c), and diagonalise.  Its lowest eigenvalue must lie
+#      between E₀ and E_var (the Gaussian is in the basis).
+
+β = 1.00 eV/nm⁴
+V(x) = β x⁴
+
+# natural length and energy of the problem: ħ²/(2m ℓ²) = β ℓ⁴
+ℓ = (ħ² / (2 m_e β))^(1/6)
+ε = β ℓ⁴
+print "length scale =", ℓ in nm to 6 digits, "  energy scale =", ε in eV to 6 digits
+x_max = 6 ℓ
+
+# (a) shooting
+psi_end(E, p) =
+    solve ψ'' = (2 m_e / ħ²) (V(x) - E) ψ
+      with ψ(0 nm) = (1 - p) [nm^(-1/2)], ψ'(0 nm) = p [nm^(-3/2)]
+      for x from 0 nm to x_max
+    return ψ(x_max)
+
+E_shoot = [0 eV, 0 eV, 0 eV, 0 eV]
+for p from 0 to 1
+    found = 0
+    E_lo = 0.01 eV
+    while found < 2
+        E_hi = E_lo + 0.05 eV
+        if psi_end(E_lo, p) * psi_end(E_hi, p) < 0
+            solve psi_end(E, p) = 0 for E from E_lo to E_hi
+            E_shoot[2 found + p + 1] = E
+            found += 1
+        E_lo = E_hi
+
+# (b) WKB.  The action integral as a function of E:
+action(E) = 2 ∫ √(2 m_e (E - V(x))) dx from -(E/β)^(1/4) to (E/β)^(1/4)
+
+for n from 0 to 3
+    solve action(E) = 2π ħ (n + ½) for E from 0.001 eV to 3 eV
+    print "n =", n, " E_shoot =", E_shoot[n + 1] in eV to 10 digits, " E_WKB =", E in eV to 10 digits, " WKB error =", (E - E_shoot[n + 1]) / E_shoot[n + 1] to 4 digits
+
+# (c) variational, with E(α) = ⟨T⟩ + ⟨V⟩ from the trial function itself
+trial(x, α) = (2α/π)^(1/4) exp(-α x²)
+dtrial = ∂/∂x trial
+E_var(α) = ∫ (ħ² / (2 m_e)) dtrial(x, α)² + V(x) trial(x, α)² dx from -∞ to ∞
+dE = d/dα E_var
+solve dE(α) = 0 for α from 0.1 nm^-2 to 100 nm^-2
+α_best = α
+print "(c) alpha =", α_best to 10 digits, " E_var =", E_var(α_best) in eV to 10 digits, " above E0:", E_var(α_best) > E_shoot[1]
+
+# (d) oscillator basis with m ω / (2ħ) = α_best, oscillator length b² = ħ/(m ω)
+ω = 2 ħ α_best / m_e
+b2 = ħ / (m_e ω)
+# H = ħω(N + ½) − ½ m ω² x² + β x⁴ ; the matrix elements of x² and x⁴ between
+# oscillator states |m⟩, |n⟩ (Sakurai Problem 2.13):
+x2(m, n) =
+    if m == n
+        return b2 (n + ½)
+    else if m == n + 2
+        return ½ b2 √((n + 1) (n + 2))
+    else if n == m + 2
+        return ½ b2 √((m + 1) (m + 2))
+    else
+        return 0 nm²
+x4(m, n) =
+    lo = min(m, n)
+    if m == n
+        return ¼ b2² (6 n² + 6 n + 3)
+    else if abs(m - n) == 2
+        return ¼ b2² (4 lo + 6) √((lo + 1) (lo + 2))
+    else if abs(m - n) == 4
+        return ¼ b2² √((lo + 1) (lo + 2) (lo + 3) (lo + 4))
+    else
+        return 0 nm⁴
+H(m, n) = (if m == n then ħ ω (n + ½) else 0 eV) - ½ m_e ω² x2(m, n) + β x4(m, n)
+
+Hm = [[H(0, 0), H(0, 2), H(0, 4), H(0, 6)],
+      [H(2, 0), H(2, 2), H(2, 4), H(2, 6)],
+      [H(4, 0), H(4, 2), H(4, 4), H(4, 6)],
+      [H(6, 0), H(6, 2), H(6, 4), H(6, 6)]]
+λs = eigenvalues(Hm)
+print "(d) H(0,0) =", H(0, 0) in eV to 10 digits, " lowest eigenvalue =", λs[1] in eV to 10 digits
+print "    E0 <= E_matrix <= E_var:", E_shoot[1] <= λs[1] and λs[1] <= E_var(α_best)
+print "    second even eigenvalue =", λs[2] in eV to 10 digits, " (shooting E2 =", E_shoot[3] in eV to 10 digits, ")"
