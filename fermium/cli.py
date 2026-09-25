@@ -125,6 +125,17 @@ def cmd_doctor(args):
     return doctor()
 
 
+def cmd_jupyter(args):
+    try:
+        from .jupyter.kernel import install
+    except ImportError:
+        sys.stderr.write("the Jupyter kernel needs ipykernel: python3 -m pip install ipykernel jupyterlab\n")
+        return 1
+    where = install(user=not args.sys_prefix, prefix=sys.prefix if args.sys_prefix else None)
+    print(f"installed the Fermium kernel in {where}\nstart Jupyter (jupyter lab) and pick 'Fermium' as the kernel")
+    return 0
+
+
 def main(argv=None):
     from . import __version__
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -151,13 +162,16 @@ def main(argv=None):
     bld.add_argument("file")
     bld.add_argument("-o", "--output", help="name of the executable (default: the program's name)")
     sub.add_parser("doctor", help="check that Fermium is installed correctly")
+    jup = sub.add_parser("jupyter", help="set up the Jupyter kernel:  fermium jupyter install")
+    jup.add_argument("action", choices=["install"])
+    jup.add_argument("--sys-prefix", action="store_true", help="install into this Python environment, not for the user")
     sub.add_parser("repl", help="start the interactive prompt (same as plain 'fermium')")
     args = p.parse_args(argv)
     if args.cmd is None or args.cmd == "repl":
         from .repl import main as repl_main
         return repl_main()
     return {"run": cmd_run, "check": cmd_check, "fmt": cmd_fmt, "doctor": cmd_doctor,
-            "build": cmd_build}[args.cmd](args)
+            "build": cmd_build, "jupyter": cmd_jupyter}[args.cmd](args)
 
 
 def entry():

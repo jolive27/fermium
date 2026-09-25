@@ -12,13 +12,14 @@ dependencies = ["llvmlite>=0.40", "numpy"]
 
 [project.optional-dependencies]
 full = ["scipy", "sympy", "matplotlib"]
-dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "scipy", "sympy", "matplotlib"]
+jupyter = ["ipykernel", "jupyter_client", "jupyterlab", "scipy", "sympy", "matplotlib"]
+dev = ["pytest", "pytest-cov", "hypothesis", "ruff", "scipy", "sympy", "matplotlib", "ipykernel", "jupyter_client", "nbformat", "nbclient", "pygls"]
 
 [project.scripts]
 fermium = "fermium.cli:entry"
 
 [tool.setuptools]
-packages = ["fermium", "fermium.runtime"]
+packages = ["fermium", "fermium.runtime", "fermium.jupyter"]
 
 [tool.setuptools.package-data]
 "fermium.runtime" = ["*.c"]
