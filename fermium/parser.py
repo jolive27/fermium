@@ -217,6 +217,11 @@ class Parser:
                 if end_line and not isinstance(s, (A.If, A.For, A.ForIn, A.While, A.Solve)):
                     self.end_statement()
                 return s
+        if t.kind == "NAME" and t.value == "analyze" and self._is_analyze():
+            s = self.analyze_stmt()
+            if end_line:
+                self.end_statement()
+            return s
         if t.kind == "NAME":
             nxt = self.peek()
             if nxt.kind == "OP" and nxt.value == "=":
@@ -557,6 +562,49 @@ class Parser:
                     if k > 0 and isinstance(g, A.Name) and g.name in unknowns:
                         self._warn_juxt_denominator(info, k, why=f", including the unknown {g.name}")
                         break
+
+    def _is_analyze(self):
+        """`analyze [title:] T depends on ...`: 'depends' follows on the same line (so `analyze` stays a name)."""
+        j = self.i + 1
+        while self.toks[j].kind not in ("NEWLINE", "EOF"):
+            if self.toks[j].kind == "NAME" and self.toks[j].value == "depends":
+                return True
+            j += 1
+        return False
+
+    def analyze_stmt(self):
+        """analyze [title:] T [unit] depends on a [unit], b, c  (D70)"""
+        t = self.next()
+        title = None
+        raw = {}
+        if self.tok.kind == "NAME" and self.peek().kind == "OP" and self.peek().value == ":":
+            title = self.next().value
+            self.next()
+
+        def quantity(what):
+            nt = self.tok
+            if nt.kind != "NAME":
+                raise self.error(f"expected {what}" + self._found(),
+                                 hint="write  analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]")
+            self.next()
+            unit = self.bracket_unit() if self.at_op("[") else None
+            raw[nt.value] = nt.raw
+            return self.span(A.Param(nt.value, unit), nt)
+        target = quantity("the quantity to analyze (like T)")
+        if not (self.tok.kind == "NAME" and self.tok.value == "depends"):
+            raise self.error("expected 'depends on' after the quantity to analyze" + self._found(),
+                             hint="write  analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]")
+        self.next()
+        if not (self.tok.kind == "NAME" and self.tok.value == "on"):
+            raise self.error("expected 'on' after 'depends'" + self._found())
+        self.next()
+        inputs = [quantity("a quantity after 'depends on'")]
+        while self.at_op(","):
+            self.next()
+            inputs.append(quantity("a quantity after ','"))
+        if title:
+            self.known.add(title)
+        return self.span(A.Analyze(title, target, inputs, raw), t)
 
     def fit_stmt(self):
         t = self.next()

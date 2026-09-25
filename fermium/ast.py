@@ -301,6 +301,17 @@ class Fit(Node):
 
 
 @dataclass(eq=False)
+class Analyze(Node):
+    """`analyze pendulum: T [s] depends on L [m], m [kg], g`: Buckingham Π analysis (D70).
+
+    target and inputs are Params (name + optional unit); `raw` maps each name to its spelling."""
+    title: str | None
+    target: Param
+    inputs: list          # list[Param]
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass(eq=False)
 class If(Node):
     cond: Node
     then: list

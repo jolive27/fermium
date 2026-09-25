@@ -552,6 +552,85 @@ class Checker(C.DiffContext):
                                 hint=f"rename the where-variable, or drop {name} from {s.name}(...)")
         return None
 
+    def s_Analyze(self, s, ctx):
+        """`analyze pendulum: T depends on L, m, g`: Buckingham Π groups, printed; defines pendulum(L, g) (D70)."""
+        from .dimanalysis import AnalysisError, analyze, pi_name, product_text, report
+        if not ctx.is_main or ctx.lam is not None or getattr(ctx, "branch", 0) or ctx.loop:
+            raise self.err("analyze must be at the top level of the program (not inside a block)", s)
+        raw = s.raw or {}
+        kinds = {}
+
+        def dim_of(p):
+            show = raw.get(p.name, p.name)
+            if p.unit is not None:
+                kinds[p.name] = "var"
+                return self.resolve_unit(p.unit).dim
+            b, _ = ctx.scope.lookup(p.name)
+            if isinstance(b, ConstInfo):
+                kinds[p.name] = "const"
+                return b.unit.dim
+            if isinstance(b, I.Sym) and isinstance(b.ty, NumTy):
+                if not self.U.is_concrete(b.ty.dim):
+                    raise self.err(f"the units of {show} aren't known yet", p,
+                                   hint=f"give its unit here:  {show} [m]")
+                kinds[p.name] = "var"
+                return self.U.resolve(b.ty.dim)
+            if b is None:
+                raise self.err(f"{show} has no units yet: analyze needs to know what it is", p,
+                               hint=f"give its unit, like  {show} [m], or define it first, like  {show} = 1.0 m")
+            raise self.err(f"{show} isn't a number with units, so it can't be analyzed", p,
+                           hint=f"give its unit instead, like  {show} [m]")
+        tdim = dim_of(s.target)
+        inputs = [(p, dim_of(p)) for p in s.inputs]
+        disp = {p.name: raw.get(p.name, p.name) for p in [s.target] + s.inputs}
+        canon = {v: k for k, v in disp.items()}
+        if s.title and s.title in disp:
+            raise self.err(f"the analysis can't be called {s.title}: that's one of its quantities", s,
+                           hint=f"pick another name, e.g.  analyze {s.title}_law: ...")
+        try:
+            an = analyze(disp[s.target.name], tdim, [(disp[p.name], d) for p, d in inputs])
+        except AnalysisError as e:
+            node = s if e.index is None else ([s.target] + s.inputs)[e.index]
+            raise self.err(e.message, node, hint=e.hint)
+        lines = report(an, title=s.title)
+        stmts = [I.SPrint([("text", None, self.text(line))]) for line in lines]
+        if not (s.title and an.prefactor):
+            return stmts
+        # make the result usable: pendulum(L, g) = √(L/g), for  fit T = C pendulum(L, g) to data
+        pre = {canon[k]: v for k, v in an.prefactor.items()}
+        params = [p for p in s.inputs if pre.get(p.name, 0) != 0 and kinds[p.name] == "var"]
+        body = None
+        for p in s.inputs:
+            e = pre.get(p.name, 0)
+            if e == 0:
+                continue
+            f = A.Name(p.name).at(s)
+            if e != 1:
+                k = abs(e)
+                ex = A.Num(float(k.numerator)).at(s) if k.denominator == 1 else \
+                    A.BinOp("/", A.Num(float(k.numerator)).at(s), A.Num(float(k.denominator)).at(s)).at(s)
+                if e < 0:
+                    ex = A.Neg(ex).at(s)
+                f = A.BinOp("^", f, ex).at(s)
+            body = f if body is None else A.BinOp("*", body, f).at(s)
+        text = product_text(an.prefactor, [disp[p.name] for p in s.inputs])
+        if params:
+            fdef = A.FuncDef(s.title, [A.Param(p.name, p.unit).at(p) for p in params], body).at(s)
+            self.s_FuncDef(fdef, ctx)
+            sig = f"{s.title}({', '.join(disp[p.name] for p in params)})"
+            rest = ", ".join(pi_name(i) for i in range(2, len(an.groups) + 1))
+            law = f"C {sig}" if len(an.groups) == 1 else f"{sig} · f({rest})"
+            stmts.append(I.SPrint([("text", None, self.text(
+                f"  defined {sig} = {text}, so {an.target} = {law}"))]))
+            return stmts
+        # only constants: a plain value, printed (planck = √(G ħ/c³) = 1.6×10⁻³⁵ m)
+        out = self.assign_to(s.title, self.expr(body, ctx), s, ctx)
+        out = out if isinstance(out, list) else [out]
+        v = self.expr(A.Name(s.title).at(s), ctx)
+        stmts += out
+        stmts.append(I.SPrint([("text", None, self.text(f"  defined {s.title} = {text} =")), ("num", v, self.fmt(v))]))
+        return stmts
+
     def s_Print(self, s, ctx):
         vals = [self.expr(it, ctx, allow_func=True) for it in s.items]
         return self.print_items(vals, s.items, ctx)
