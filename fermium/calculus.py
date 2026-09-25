@@ -171,7 +171,48 @@ class DiffContext:
 
 def diff(e, var, ctx: DiffContext):
     """d e / d var, as a (simplified) AST."""
-    return simplify(_d(inline_where(e), var, ctx))
+    return factor_common(simplify(_d(inline_where(e), var, ctx)))
+
+
+def _sum_terms(e, sign=1):
+    if isinstance(e, A.BinOp) and e.op in "+-" and not e.paren:
+        return _sum_terms(e.left, sign) + _sum_terms(e.right, sign if e.op == "+" else -sign)
+    if isinstance(e, A.Neg):
+        return _sum_terms(e.operand, -sign)
+    return [(sign, e)]
+
+
+def factor_common(e):
+    """Pull factors shared by every term of a sum out front: 2 e^u - 4 x² e^u -> (2 - 4x²) e^u."""
+    if isinstance(e, A.Neg) and isinstance(e.operand, A.BinOp) and e.operand.op in "+-":
+        e = _copy(e, operand=map_children(e.operand, factor_common))
+    else:
+        e = map_children(e, factor_common)
+    terms = _sum_terms(e)
+    if len(terms) < 2:
+        return e
+    fl = []
+    for sign, t in terms:
+        c, fs = _factors(t)
+        fl.append((sign * c, {key(f): f for f in fs}, fs))
+    common = set(fl[0][1])
+    for _, d, _ in fl[1:]:
+        common &= set(d)
+    common = [k for k in fl[0][1] if k in common and not isinstance(fl[0][1][k], A.Num)]
+    if not common:
+        return e
+    rest = None
+    for c, d, fs in sorted(fl, key=lambda x: x[0] < 0):
+        remaining = [f for f in fs if key(f) not in common]
+        t = _build_product(abs(c), remaining)
+        if rest is None:
+            rest = neg(t) if c < 0 else t
+        else:
+            rest = sub(rest, t) if c < 0 else add(rest, t)
+    out = rest
+    for k in common:
+        out = mul(out, fl[0][1][k])
+    return simplify(out)
 
 
 def _d(e, var, ctx):
@@ -293,6 +334,8 @@ def _factors(e):
         return -c, f
     if isinstance(e, A.Num):
         return e.value, []
+    if isinstance(e, A.Quantity) and isinstance(e.value, A.Num) and e.value.value != 1:
+        return e.value.value, [_copy(e, value=num(1))]
     return 1.0, [e]
 
 
@@ -344,12 +387,20 @@ def _build_product(c, factors):
         if abs(inv - round(inv)) < 1e-12 and round(inv) <= 1e6:
             den_c, c = float(round(inv)), 1.0
     out = None
-    if c != 1 or not top:
+    qs = [q for q in top if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and q.value.value == 1]
+    if qs and c != 0:
+        top = [q for q in top if q is not qs[0]]
+        out = _copy(qs[0], value=num(c))       # 9 m/s³ rather than 9·1 m/s³
+    elif c != 1 or not top:
         out = num(c)
     for it in top:
         out = it if out is None else mul(out, it)
     den = None
-    if den_c != 1:
+    qb = [q for q in bottom if isinstance(q, A.Quantity) and isinstance(q.value, A.Num) and q.value.value == 1]
+    if den_c != 1 and qb:
+        bottom = [q for q in bottom if q is not qb[0]]
+        den = _copy(qb[0], value=num(den_c))
+    elif den_c != 1:
         den = num(den_c)
     for it in bottom:
         den = it if den is None else mul(den, it)
@@ -486,7 +537,11 @@ def _src(e, pretty):
         return ("true" if e.value else "false"), PREC_ATOM
     if isinstance(e, A.Quantity):
         v, _ = _src(e.value, pretty)
-        return (f"{v} [{e.unit.text}]" if e.bracket else f"{v} {e.unit.text}"), PREC_JUXT
+        text = e.unit.text
+        if pretty:
+            from .checker import canonical_unit_name
+            text = canonical_unit_name(e.unit) or text
+        return (f"{v} [{text}]" if e.bracket else f"{v} {text}"), PREC_JUXT
     if isinstance(e, A.Neg):
         s, p = _src(e.operand, pretty)
         # -(a/b) and -a/b are the same number, so products and quotients need no parentheses
@@ -507,8 +562,10 @@ def _src(e, pretty):
                 sep = " "
                 if isinstance(e.right, (A.Num, A.Quantity)):
                     sep = "·" if pretty else "*"
-                elif isinstance(e.left, A.Num) and isinstance(e.right, A.Name) and pretty and \
-                        not is_unit_name(e.right.name):
+                elif isinstance(e.left, A.Num) and pretty and (
+                        isinstance(e.right, A.Name) and not is_unit_name(e.right.name) or
+                        isinstance(e.right, A.BinOp) and e.right.op == "^" and isinstance(e.right.left, A.Name)
+                        and not is_unit_name(e.right.left.name)):
                     sep = ""
                 return f"{l}{sep}{r}", PREC_JUXT
             l, lp = _paren(l, lp, PREC_PROD)

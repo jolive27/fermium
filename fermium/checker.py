@@ -449,6 +449,31 @@ class Checker(C.DiffContext):
         return f"{info.display_name}({params}): a function defined over several lines"
 
     def function_units(self, info):
+        parent = getattr(info, "parent", None)
+        if parent is not None:          # a derivative: units of f / units of the variable^order
+            base, i, order = parent
+            target = base
+            try:
+                args = [I.IConst(1, NumTy(DExpr.fresh(p.name))) for p in target.fdef.params]
+                saved = (self.new_funcs, self.new_lambdas)
+                self.new_funcs, self.new_lambdas = [], []
+                try:
+                    call = self.instantiate(target, args, target.fdef, cache=False)
+                finally:
+                    self.new_funcs, self.new_lambdas = saved
+                if isinstance(call.ty, NumTy):
+                    from .units import preferred_unit
+                    res = self.U.norm(call.ty.dim / (args[i].ty.dim ** order))
+                    pds = [self.U.norm(a.ty.dim) for a in args]
+                    if res.concrete and all(d.concrete for d in pds):
+                        if res.const.dimensionless and all(d.const.dimensionless for d in pds):
+                            return ""
+                        parts = [preferred_unit(res.const).name or "no units"]
+                        parts += [f"for {p.name} in {preferred_unit(d.const).name or 'plain numbers'}"
+                                  for p, d in zip(target.fdef.params, pds)]
+                        return ", ".join(parts)
+            except FermiumError:
+                pass
         try:
             args = [I.IConst(1, NumTy(DExpr.fresh(p.name))) for p in info.fdef.params]
             saved = (self.new_funcs, self.new_lambdas, len(self.U.subst))
@@ -1709,11 +1734,15 @@ class Checker(C.DiffContext):
             body = C.diff(body, pname, self._diffctx(info.scope))
             self.cur_ctx = saved
         suffix = "'" * order if len(f.params) == 1 else f"_∂{pname}" * order
+        pretty = (info.display_name + "'" * order) if len(f.params) == 1 else \
+            (f"∂{info.display_name}/∂{pname}" if order == 1 else f"∂{order}{info.display_name}/∂{pname}{order}")
         nm = info.name + suffix
         fd = A.FuncDef(nm, f.params, body)
         fd.line, fd.col = f.line, f.col
         d = FuncInfo(nm, fd, info.scope)
-        d.display_name = info.display_name + suffix
+        d.display_name = pretty
+        d.parent = (info if getattr(info, "parent", None) is None else info.parent[0], i,
+                    order + (info.parent[2] if getattr(info, "parent", None) else 0))
         info.derived[key] = d
         return d
 
