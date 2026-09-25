@@ -712,7 +712,7 @@ section when this round started.)
 - `fermium doctor` (including the C-compiler line) and the non-editable install: a wheel built from pyproject.toml
   contains the stdlib modules, and `import mechanics`, `parallel for` and `fermium build` work from it.
 
-### 1. A failed REPL input leaves its new variables half-defined; every later use is an internal error (crash). Status: open
+### 1. A failed REPL input leaves its new variables half-defined; every later use is an internal error (crash). Status: fixed (D220): the REPL session rolls the checker's scope back on any failed input, so the name can be used and defined again
 - **Repro (REPL):**
   ```
   fm> L = 1.20 +- 0.01 m      → the documented "uncertainties … not yet in the REPL" message
@@ -725,7 +725,7 @@ section when this round started.)
   (`codegen_llvm.slot`: `8 * sym.slot` with `slot = None`).
 - **Tests:** `test_1_repl_failed_input_does_not_poison_its_variables`, `test_1_repl_compile_error_in_a_block_does_not_poison_its_variables`.
 
-### 2. Jupyter: after that, the cell gets no reply at all (crash). Status: open
+### 2. Jupyter: after that, the cell gets no reply at all (crash). Status: fixed (D220): `do_execute` catches every exception and always replies (status error, one-line message)
 - **Repro:** cell 1 `a5 = 1 m` / `b5 = a5 + 1 s` (the unit error, fine); cell 2 `print a5`. The kernel's message
   handler raises the TypeError from #1. `FermiumKernel.do_execute` only catches `FermiumError`, so no
   `execute_reply` is sent: the notebook shows no output and no error for the cell, and the kernel log shows a Python
@@ -733,7 +733,7 @@ section when this round started.)
   "internal error in Fermium".
 - **Test:** `test_2_jupyter_cell_after_a_failed_cell_gets_a_reply`.
 
-### 3. Jupyter and the playground drop run-time warnings, so wrong answers look fine (wrong-answer, tool-mismatch). Status: open
+### 3. Jupyter and the playground drop run-time warnings, so wrong answers look fine (wrong-answer, tool-mismatch). Status: fixed (D223): Jupyter streams run-time warnings on stderr in order with the output; the playground adds them to `warnings`
 - **Repro:** `solve y'' = -(10/(1 s))^2 y with y(0) = 1 cm, y'(0) = 0 m/s for t from 0 s to 10 s step 0.1 s` then
   `print y(10 s)` prints `0.252 cm` (the true value is 0.862 cm). `fermium run` and the REPL add *the step is too
   coarse for this equation: the estimated error is 80% …*. A notebook cell shows only `0.252 cm`. Likewise
@@ -742,7 +742,7 @@ section when this round started.)
   browser console). Compile-time warnings do reach both tools (in Jupyter on stdout rather than stderr).
 - **Tests:** `test_3_jupyter_shows_run_time_warnings`, `test_3_playground_shows_run_time_warnings`.
 
-### 4. `d/dt x(2 s)` and `∂/∂x f(1, 2)` are silently 0 (wrong-answer). Status: open
+### 4. `d/dt x(2 s)` and `∂/∂x f(1, 2)` are silently 0 (wrong-answer). Status: fixed (D221): `d/dt x(2 s)` is `x'(2 s)` = 3 m/s and `∂/∂x f(1, 2)` = 12; a variable that isn't a parameter is an error; ∂ and ² print correctly
 - **Repro:** `x(t) = 3 m * t / 1 s` / `print d/dt x(2 s)` prints `d/dt (x(2 s)) = 0`; `print x'(2 s)` prints
   `3 m/s`. With `f(x, y) = x^3 y^2`, `print ∂/∂x f(1, 2)` prints `d/dx (f(1, 2)) = 0` (and names the partial
   derivative "d/dx"). A beginner reading "the derivative of x at 2 s" gets a formula equal to 0 with no units and
@@ -750,65 +750,65 @@ section when this round started.)
   arguments) should be an error or a warning that suggests `x'(2 s)` / `(∂/∂x f)(1, 2)`.
 - **Test:** `test_4_derivative_of_a_function_value_is_not_silently_zero`.
 
-### 5. `[1, 2, 3] m` with your own `m` is silently a list of masses (wrong-answer, silent). Status: open
+### 5. `[1, 2, 3] m` with your own `m` is silently a list of masses (wrong-answer, silent). Status: fixed (D222): standing alone it warns (the product reading of D192 stays), with other factors it is an error
 - **Repro:** `m = 2 kg` / `xs = [1, 2, 3] m` / `print xs` prints `[2, 4, 6] kg` with no warning. The same program's
   `x0 = 1 m` warns *'1 m' is the unit m, not your variable m*, and `2 m v` is an error. D192 chose the product
   reading on purpose (as for matrices, D29), but it is the opposite of the D7 rule for a number, and silent. The
   unit check catches it only if the list later meets a length. `[[1, 0], [0, 1]] m` is the same.
 - **Test:** `test_5_list_unit_colliding_with_a_variable_is_not_silent`.
 
-### 6. Every error inside a `parallel for` points at column 1 (tool-mismatch, message). Status: open
+### 6. Every error inside a `parallel for` points at column 1 (tool-mismatch, message). Status: fixed (D223): the caret and the LSP range are at the statement
 - **Repro:** `xs = zeros(3)` / `parallel for i from 1 to 3` / `    print i`: the caret is under the indentation, not
   under `print`, and the language server underlines one character at column 1. The same for *total is shared by all
   the iterations*, *random numbers can't be drawn*, and *may only write its own element*
   (`checker.parallel_info.err` sets `col, length = 1, 1` for every statement in the body).
 - **Test:** `test_6_parallel_for_errors_point_at_the_statement`.
 
-### 7. Language-server ranges are code points, not UTF-16, so they are off after 𝑖 (tool-mismatch). Status: open
+### 7. Language-server ranges are code points, not UTF-16, so they are off after 𝑖 (tool-mismatch). Status: fixed (D223): the server converts code points to UTF-16 and back (diagnostics, hover, completion)
 - **Repro:** over stdio, `print 𝑖, 1 m + 1 s`: the server announces `positionEncoding: utf-16` but publishes the
   error at characters 9–18. 𝑖 (U+1D456) is two UTF-16 units, so VS Code underlines `, 1 m + 1 ` instead of
   `1 m + 1 s`. Hover and completion positions coming in are also read as code points. Only astral characters are
   affected, and 𝑖 is the one Fermium teaches.
 - **Test:** `test_7_lsp_ranges_are_utf16_after_the_imaginary_unit`.
 
-### 8. No hover on a module member (tool-mismatch). Status: open
+### 8. No hover on a module member (tool-mismatch). Status: fixed (D223): hover on `module.member` shows the member's formula and units
 - **Repro:** `import mechanics` / `T = mechanics.pendulum_period(1 m, 9.81 m/s^2)`: hovering over `pendulum_period`
   gives nothing (hovering over `mechanics` lists the module). The same for `nuc.semf_binding` after
   `import nuclear as nuc`. After `from astro import schwarzschild_radius` the hover shows the formula and units, so
   only the qualified form is missing.
 - **Test:** `test_8_hover_on_module_member`.
 
-### 9. The °C-in-a-product warning (D181) points at the start of the expression (message). Status: open
+### 9. The °C-in-a-product warning (D181) points at the start of the expression (message). Status: fixed (D223): the warning points at `10 degC`
 - **Repro:** `Q = c_w * 1 kg * 10 degC`: the warning *10 °C is an absolute temperature …* has its caret (and the
   editor's underline) under `c_w`, not under `10 degC`. In a longer formula the reader has to hunt for the reading.
 - **Test:** `test_9_celsius_product_warning_points_at_the_reading`.
 
-### 10. `fermium check` says "no problems found" and then prints warnings, out of order (message). Status: open
+### 10. `fermium check` says "no problems found" and then prints warnings, out of order (message). Status: fixed (D223): the warnings print in line order, then *units check out, N warnings (read them above)*. (The line-order test already passed on main.)
 - **Repro:** `m = 2 kg` / `x = 3 m` → `w.fm: no problems found (units check out)`, followed by the warning *'3 m' is
   the unit m, not your variable m*. With a D181 warning on line 2 and a D173 warning on line 4, the line 4 warning
   prints first. The summary line should count the warnings (or come after them), and they should be in line order.
 - **Tests:** `test_10_check_with_warnings_doesnt_say_no_problems`, `test_10_check_prints_warnings_in_line_order`.
 
-### 11. The REPL's `:vars` shows internal type names (message). Status: open
+### 11. The REPL's `:vars` shows internal type names (message). Status: fixed (D223): `:vars` says *a complex number of …*, *a 2-D vector of speed [m/s]*, *text*, and lists modules, functions with their parameters and `use python` modules
 - **Repro:** after `z = 3 + 4i`, `v = <1, 2> m/s`, `M = [[1, 2], [3, 4]]`, `name = "a"`, `:vars` prints `z: cplx`,
   `v: vec`, `M: mat`, `name: str`: internal names, and no values or units (the docstring says "numbers show their value
   and unit"). Imported modules and `use python` names aren't listed.
 - **Test:** `test_11_repl_vars_uses_physics_words`.
 
-### 12. After an eigenvalue problem, `print ψ` suggests `ψ = 1.0 m` (message). Status: open
+### 12. After an eigenvalue problem, `print ψ` suggests `ψ = 1.0 m` (message). Status: fixed (D223): *ψ isn't defined: the eigenvalue problem's states are ψ₁, ψ₂*, hint with the ASCII spelling
 - **Repro:** `solve -hbar^2/(2 m_e) * psi'' = E psi with psi(0 nm) = 0, psi(1 nm) = 0 for x from 0 nm to 1 nm lowest 2`
   then `print psi` → *ψ isn't defined*, hint *give it a value first, e.g. ψ = 1.0 m*. The states are called `ψ₁ … ψ_N`
   (§20), and the message should say so.
 - **Test:** `test_12_eigenstate_name_hint`.
 
-### 13. The Jupyter kernel completes only `\name`, not names or module members (tool-mismatch). Status: open
+### 13. The Jupyter kernel completes only `\name`, not names or module members (tool-mismatch). Status: fixed (D223): Tab completes names, keywords and module members (the language server's completion); the kernel docstring and reference §17 say so
 - **Repro:** after `import mechanics`, Tab after `mechanics.spr` in a notebook gives no matches (`do_complete` returns
   `[]` unless the text after the last backslash is a symbol name). The language server completes the same position
   with `spring_period`, and the README lists "Jupyter kernel" among the tools without saying completion is symbols
   only.
 - **Test:** `test_13_jupyter_completes_module_members`.
 
-### 14. Bootcamp prose and transcripts disagree with the printed output (docs). Status: open
+### 14. Bootcamp prose and transcripts disagree with the printed output (docs). Status: fixed: Lesson 0's transcript shows `2.30 m` and `1.61 km` (with a note on `to 6 digits`), the doctor sample has the pygls, ipykernel and C-compiler lines; Lesson 1 says `2.30 m`; Lesson 2b's transcript shows `0.500`
 - **Lesson 0, Step 6:** the REPL transcript shows `fm> print 2 m + 30 cm` → `2.3 m` and `print 1 mi in km` →
   `1.60934 km`; the REPL prints `2.30 m` and `1.61 km` (3 significant figures by default). Step 5's `fermium doctor`
   sample also lacks the new *C compiler* line.
@@ -817,12 +817,12 @@ section when this round started.)
   (The output boxes are regenerated by bootcamp/update_outputs.py; hand-written transcripts and prose are not.)
 - **Tests:** `test_14_lesson0_repl_transcript_matches_the_repl`, `test_14_lesson1_and_2b_prose_match_the_output`.
 
-### 15. Lesson 2 says `0.5 m v^2 where m = 2 kg` "means 0.5 metres (Fermium warns you)"; it is an error (docs). Status: open
+### 15. Lesson 2 says `0.5 m v^2 where m = 2 kg` "means 0.5 metres (Fermium warns you)"; it is an error (docs). Status: fixed (already on main by the round-4 fix: Lesson 2 and the summary say it is an error); the test passes and is now a normal test
 - **Repro:** `E = 0.5 m v^2 where m = 2 kg` stops with *'0.5 m' is ambiguous: … but m is also the m from 'where'*.
   The summary's "Gotchas: `0.5 m v^2` uses *metres*" is outdated the same way (D7 rule 5 made it an error).
 - **Test:** `test_15_lesson2_where_gotcha_is_an_error_not_a_warning`.
 
-### 16. The reference's Tools section omits most tools; the grammar lists `solve` twice; `fermium doctor` doesn't check pygls (docs). Status: open
+### 16. The reference's Tools section omits most tools; the grammar lists `solve` twice; `fermium doctor` doesn't check pygls (docs). Status: fixed: §17 covers `fermium check`, the Jupyter kernel, `fermium lsp`, VS Code and the playground; §18 has one `solve`/`if`/`for` line; `fermium doctor` reports pygls and ipykernel
 - docs/reference.md §17 *Tools* covers the REPL, fmt, doctor, build and VS Code ("syntax highlighting and `\name`
   completion"), but not the Jupyter kernel (`fermium jupyter install`), the language server (`fermium lsp`: hover,
   live errors), `fermium check` or the browser playground.
@@ -832,20 +832,20 @@ section when this round started.)
   mention pygls (or ipykernel for the Jupyter kernel).
 - **Tests:** `test_16_reference_tools_section_lists_the_tools`, `test_16_doctor_checks_what_the_editor_readme_says`.
 
-### 17. `plot … to "a.png" title "sq"` is a parse error (message, parse). Status: open
+### 17. `plot … to "a.png" title "sq"` is a parse error (message, parse). Status: fixed (D223): options may follow the file name without `with` (reference §11 says so)
 - **Repro:** `plot ts^2 vs ts to "a.png" title "sq"` → *didn't expect 'title' here*. `plot ts^2 vs ts title "sq" to
   "a.png"`, `plot ts^2 vs ts, title "sq" to "a.png"` and `plot ts^2 vs ts to "a.png" with title "sq"` all work.
   §11 says `with` may be left out after the last series, and the file name is the natural thing to write right after
   the series.
 - **Test:** `test_17_plot_option_after_file_name_without_with`.
 
-### 18. `∂/∂x ∂/∂y f` is refused although the two steps work (message). Status: open
+### 18. `∂/∂x ∂/∂y f` is refused although the two steps work (message). Status: fixed (D221): `∂/∂x ∂/∂y f` works (h(1, 2) = 12)
 - **Repro:** `f(x, y) = x^3 y^2` / `h = ∂/∂x ∂/∂y f` → *can't differentiate this derivative expression
   symbolically*. `fy = ∂/∂y f` / `h = ∂/∂x fy` gives `h(1, 2) = 12`. Mixed partials (∂²f/∂x∂y) are common in
   thermodynamics (Maxwell relations). If they stay unsupported, the message should say how to write them in two steps.
 - **Test:** `test_18_mixed_partial_derivative`.
 
-### 19. The REPL lets a variable change its units, and Lesson 2 doesn't say so (docs). Status: open
+### 19. The REPL lets a variable change its units, and Lesson 2 doesn't say so (docs). Status: fixed: Lesson 2's *Variables keep their units* has a note that the REPL (and Jupyter) allow redefinition on purpose (D13)
 - **Repro:** Lesson 1 says "You can try everything in the REPL". Lesson 2's box shows `v = 3 m/s` / `v = 5` as the
   error *v is speed [m/s]; it can't now hold a plain number*. In the REPL, the same two lines are accepted silently,
   and `print v` shows `5`. This is deliberate (D13: the REPL allows redefinition), but the lesson's "Variables keep
@@ -853,10 +853,10 @@ section when this round started.)
   work.
 - **Test:** `test_19_lesson2_says_the_repl_allows_redefinition`.
 
-**Nits (no test):**
+**Nits** (fixed ones have tests named `test_nit_…` in tests/test_redteam5.py):
 - `fermium fmt --ascii` writes `2 + 1𝑖` as `2 + 1 1i` and `2𝑖` as `2 1i` (in other places `3(1i)`); it is correct but
-  reads oddly (`2i` would do).
-- After `from mechanics import spring_period, nothere` fails, `spring_period` is imported anyway in the REPL.
+  reads oddly (`2i` would do). *Fixed: `2𝑖` → `2i` after a plain number.*
+- After `from mechanics import spring_period, nothere` fails, `spring_period` is imported anyway in the REPL. *Fixed by D220's rollback.*
 - `hover` on a `table(…)` variable says only "data" (no columns or units); `fermium.selfhost` is not in pyproject's
-  `packages`, so `python -m fermium.selfhost` is missing from a non-editable install.
-- `3𝑖 V` is *V isn't defined*: a unit can't follow an imaginary literal. The hint says what to write instead.
+  `packages`, so `python -m fermium.selfhost` is missing from a non-editable install. *Both fixed: the hover lists the columns and their units; pyproject packages `fermium.selfhost` and its .fm file.*
+- `3𝑖 V` is *V isn't defined*: a unit can't follow an imaginary literal. The hint says what to write instead. *Won't fix: a unit after an imaginary literal would need a new literal rule, and the hint already gives `3𝑖 * 1 V`-style spelling.*
