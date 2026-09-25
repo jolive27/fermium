@@ -5,7 +5,7 @@ _Last updated: 2026-09-25 11:30 UTC_
 **How to resume:** read CLAUDE.md, DECISIONS.md, BACKLOG.md and `git log`, run `./check.sh`, then continue from **Next**. The whole night is summarised in MORNING_REPORT.md.
 
 ## Status at a glance (11:30 UTC)
-- **Tests:** 3612 passed at the last full run, plus 2 strict xfails (red team 7 #2 and #5, documented limitations). About 15 min on 4 cores.
+- **Tests:** `make check` passed at 12:56 UTC on the final commit: 3612 passed and 3 strict xfails (red team 7 #2 and #5, plus one older known limitation). About 15 min on 4 cores.
 - **Every example is checked:**
   - every ```` ```fermium ```` block in the docs, bootcamp, README and SHOWCASE runs in the tests;
   - every bootcamp output box is compared with the real output;

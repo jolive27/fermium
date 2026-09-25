@@ -11,7 +11,7 @@ Fermium is a physics programming language:
 - programs compile to native code through LLVM.
 
 Overnight it went from a spec to:
-- 3612 passing tests (plus 2 strict xfails for the two documented red-team limitations);
+- 3612 passing tests: `make check` passed at 12:56 UTC on the final commit, with the installed package verified to point at the main checkout. There are 3 strict xfails: the two documented red-team 7 limitations and one older known limitation. Between about 09:30 and 11:18 UTC the editable install pointed at an agent's worktree, so CLI-based checks in that window tested that copy. Every full run from 11:21 on used the main code. Coverage was not re-measured at the end: the last measurement was 90 % at 00:05, and the final coverage run was stopped to make room for this check;
 - 61 + 20 textbook problems;
 - 11 research reproductions compared with published numbers;
 - 7 red-team rounds with 88 findings: 83 fixed, 2 partly fixed and 3 documented as by design or known limitations;
