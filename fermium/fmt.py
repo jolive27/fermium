@@ -207,6 +207,9 @@ def _ascii_token(toks, i, closers, diags):
         if t.raw == "×":
             diags.warn("× (cross product) has no ASCII operator, so it was left as is", tok=t,
                        hint="write cross(a, b) if you need pure ASCII")
+        if t.raw == "ᵀ":
+            diags.warn("ᵀ (transpose) has no ASCII operator, so it was left as is", tok=t,
+                       hint="write transpose(M) if you need pure ASCII")
         return OP_ASCII.get(t.raw, t.raw)
     if t.kind == "SUP":
         v = t.value

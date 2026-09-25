@@ -119,6 +119,49 @@ static void print_seq(int64_t fid, const double *p, int64_t n, const char *open,
 
 void fm_print_list(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "[", "]"); }
 void fm_print_vec(int64_t fid, double *p, int64_t n) { print_seq(fid, p, n, "<", ">"); }
+
+/* a vector with a unit per component, <1 m, 2 m/s>: formats fid, fid+1, ... (D29) */
+void fm_print_mvec(int64_t fid, double *p, int64_t n) {
+    static char out[4096];
+    char buf[128];
+    strcpy(out, "<");
+    for (int64_t i = 0; i < n; i++) {
+        const fm_fmt *f = &fm_fmts[fid + i];
+        fmt_value(f, p[i], 6, buf, sizeof buf);
+        strcat(out, buf);
+        if (f->unit[0] && strcmp(f->unit, "1")) {
+            if (!attached(f->unit)) strcat(out, " ");
+            strcat(out, f->unit);
+        }
+        if (i + 1 < n) strcat(out, ", ");
+    }
+    strcat(out, ">");
+    emit(out);
+}
+
+/* a matrix, rows on one line: [[1, 2], [3, 4]] N/m */
+void fm_print_mat(int64_t fid, double *p, int64_t r, int64_t c) {
+    const fm_fmt *f = &fm_fmts[fid];
+    static char out[4096];
+    char buf[128];
+    int sf = f->sf;
+    if (sf >= 0 && !f->direct && sf < 2) sf = 2;
+    strcpy(out, "[");
+    for (int64_t i = 0; i < r; i++) {
+        strcat(out, "[");
+        for (int64_t j = 0; j < c; j++) {
+            double x = (p[i * c + j] - f->offset) / f->factor;
+            if (sf < 0) fmt_num(x, 6, 1, buf, sizeof buf);
+            else fmt_num(x, sf, 0, buf, sizeof buf);
+            strcat(out, buf);
+            if (j + 1 < c) strcat(out, ", ");
+        }
+        strcat(out, i + 1 < r ? "], " : "]");
+    }
+    strcat(out, "]");
+    if (f->unit[0] && strcmp(f->unit, "1")) { strcat(out, " "); strcat(out, f->unit); }
+    emit(out);
+}
 void fm_print_textlist(double *p, int64_t n) {
     static char out[1 << 15];
     strcpy(out, "[");
@@ -183,6 +226,7 @@ void fm_error(int64_t kind, double a, double b, int64_t ln, int64_t fmt) {
     case 14: snprintf(err_msg, sizeof err_msg, "the two sides of this equation jump past each other near %s (like tan at 90 degrees) instead of crossing: that's not a solution; narrow the range", x); break;
     case 13: snprintf(err_msg, sizeof err_msg, "this equation has no solution between %s and %s: the two sides never cross there (checked at 200 points)", x, y); break;
     case 12: snprintf(err_msg, sizeof err_msg, "this for loop has no definite number of steps: it goes from %s to %s (NaN in the start, end or step)", x, y); break;
+    case 15: snprintf(err_msg, sizeof err_msg, "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no unique solution"); break;
     default: snprintf(err_msg, sizeof err_msg, "runtime error"); break;
     }
 }

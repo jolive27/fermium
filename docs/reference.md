@@ -219,12 +219,49 @@ print a · b, a × b, unit(v)
 print 2 v + <1, 1> m/s
 ```
 
-- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2 or 3 components, all with the same units). `vec(3, 4)` is the same as `<3, 4>`.
-- **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D).
-- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`.
+- **Making a vector:** `<3, 4> m/s` or `<1 m, 2 m, 3 m>` (2, 3 or 4 components). `vec(3, 4)` is the same as `<3, 4>`.
+- **Operations:** `+`, `-`, multiplying or dividing by a number, `|v|` or `norm(v)` for the length, `unit(v)` for the unit vector, `a · b` (or `dot(a, b)`) for the dot product, `a × b` (or `cross(a, b)`) for the cross product (a number in 2-D; not defined in 4-D).
+- **Components:** `v.x`, `v.y`, `v.z`, or `v[1]`, `v[2]`, `v[3]`, `v[4]`.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
-- **In `solve`:** unknowns can be vectors (see §10).
-- **Not yet:** matrices, and lists of vectors (push the components into separate lists instead).
+- **In `solve`:** unknowns can be vectors, in 2-D or 3-D (see §10 and `examples/26_orbit_3d.fm`).
+- **Not yet:** lists of vectors (push the components into separate lists instead).
+
+**A different unit on each component.** A state vector such as position and velocity keeps one unit per component:
+
+```fermium
+q = <1 m, 2 m/s>
+print q, q.x, q[2]
+print q + <3 m, 4 m/s>
+print 2 q, q / (2 s)
+```
+
+- `+` and `-` need the same units component by component: `<1 m, 2 m/s> + <1, 2> m` is an error ("component 2 is speed [m/s] on one side and length [m] on the other").
+- Multiplying or dividing by a number changes every component's units.
+- `|v|`, `norm`, `unit`, `·` and `×` need all components in the same units, and say so otherwise: a state vector has no length.
+- `in` (unit conversion) works on one component at a time: `q.x in cm`.
+- A vector whose components all have the same units behaves exactly as before; `<1 m, 2 m>` is `<1, 2> m`.
+
+### Matrices
+
+```fermium
+K = [[2, -1], [-1, 2]] N/m
+x = <1, 2> cm
+print K
+print K x in N
+print det(K), inverse(K)
+print Kᵀ, K K
+print solve_linear(K, <1, 0> N)
+print K[1, 2], K[2]
+```
+
+- **Making a matrix:** a list of rows, `[[1, 2], [3, 4]] N/m`, or with a unit on every entry, `[[1 N/m, 0 N/m], [0 N/m, 2 N/m]]`. All entries share one unit. From 1 to 4 rows and 1 to 4 columns. `identity(n)` is the n×n identity matrix (n = 2, 3 or 4).
+- **Printing:** the rows on one line, `[[1, 2], [3, 4]] N/m`.
+- **Arithmetic:** `A + B`, `A - B` (same size, same units), `2 A`, `A / 2`, `-A`.
+- **Products:** `M v`, `M * v` or `M · v` is a matrix times a vector (a vector); `A B` or `A * B` is the matrix product. The units multiply: a stiffness matrix in N/m times a displacement in m gives a force in N. Write the matrix first; `v M` is an error.
+- **Functions:** `transpose(M)` (also `Mᵀ`), `det(M)` (units to the power n: a 2×2 in N/m has a determinant in N²/m²), `inverse(M)` (units to the power −1: m/N), `solve_linear(M, b)` solves M x = b (x has the units of b divided by those of M; Gaussian elimination with partial pivoting).
+- **Entries:** `M[i, j]` (1-based; also `M[i][j]`), and `M[i]` is row i as a vector. Indexes must be fixed numbers.
+- **Errors:** sizes that don't fit (`a 2×2 matrix times a 3-vector`), mixed units in a literal, and a singular matrix passed to `inverse` or `solve_linear` (a runtime error: "this matrix is singular").
+- Matrices can be function arguments and results: `rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]`.
 
 ## 8. Derivatives
 
@@ -389,6 +426,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | ° | `deg` | `\deg` |
 | °C | `degC` | `\celsius` |
 | · × | `*` | `\cdot` `\times` |
+| Mᵀ | `transpose(M)` | `\transpose` |
 | ≤ ≥ ≠ ≈ | `<=` `>=` `!=` `~=` | `\le` `\ge` `\ne` `\approx` |
 | ∞ | `inf` | `\infty` |
 | ε₀ | `epsilon_0` | `\epsilon\_0` |
@@ -411,6 +449,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `dot(a, b) trapz(ys, xs) interp(x, xs, ys)` | list maths |
 | `norm(v) unit(v) dot(a, b) cross(a, b) vec(x, y[, z])` | vectors (also `\|v\|`, `a · b`, `a × b`) |
 | `sign(v)` of a vector | the unit vector v/\|v\|, the same as `unit(v)`: `sign(<3, 4> m/s)` is `<0.6, 0.8>` |
+| `transpose(M) det(M) inverse(M) identity(n) solve_linear(M, b)` | matrices (also `Mᵀ`, `M v`, `A B`) |
 | `values(sol) times(sol)` | samples of an ODE solution |
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n) rand()` | |

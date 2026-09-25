@@ -179,18 +179,58 @@ class ListTy(Ty):
 
 
 class VecTy(Ty):
-    """A small fixed-length vector (2 or 3 components) sharing one dimension: <3, 4> m/s."""
+    """A small fixed-length vector (2 to 4 components).
+
+    Usually all components share one dimension (`dim`): <3, 4> m/s.  A vector whose components
+    have different dimensions, like the state vector <1 m, 2 m/s>, is *mixed*: `dims` holds one
+    dimension per component and `dim` is None (D29).
+    """
     kind = "vec"
 
-    def __init__(self, dim, n):
-        self.dim = DExpr.of(dim)
+    def __init__(self, dim, n, dims=None):
         self.n = n
+        if dims is not None:
+            self.dims = tuple(DExpr.of(d) for d in dims)
+            self.dim = None
+        else:
+            self.dim = DExpr.of(dim)
+            self.dims = None
+
+    @property
+    def mixed(self):
+        return self.dims is not None
+
+    def comp_dims(self):
+        """The dimension of each component (the shared one repeated, for a uniform vector)."""
+        return self.dims if self.dims is not None else (self.dim,) * self.n
 
     def key(self):
+        if self.dims is not None:
+            return ("mixed", self.n) + tuple(NumTy(d).key() for d in self.dims)
         return NumTy(self.dim).key() + (self.n,)
 
     def __repr__(self):
+        if self.dims is not None:
+            return f"Vec{self.n}[{', '.join(map(repr, self.dims))}]"
         return f"Vec{self.n}[{self.dim}]"
+
+
+class MatTy(Ty):
+    """A small matrix (rows × cols, each 1 to 4) whose entries share one dimension: [[1, 2], [3, 4]] N/m.
+
+    Stored row-major as r*c numbers (an LLVM <r*c x double>); `n` is that total (D29)."""
+    kind = "mat"
+
+    def __init__(self, dim, r, c):
+        self.dim = DExpr.of(dim)
+        self.r, self.c = r, c
+        self.n = r * c
+
+    def key(self):
+        return NumTy(self.dim).key() + ("mat", self.r, self.c)
+
+    def __repr__(self):
+        return f"Mat{self.r}x{self.c}[{self.dim}]"
 
 
 class TextListTy(Ty):
@@ -241,7 +281,11 @@ def type_desc(t: Ty, U: Unifier) -> str:
     if isinstance(t, ListTy):
         return f"a list of {U.describe(t.dim)}"
     if isinstance(t, VecTy):
+        if t.mixed:
+            return f"a {t.n}-vector of ({', '.join(U.describe(d) for d in t.dims)})"
         return f"a {t.n}-vector of {U.describe(t.dim)}"
+    if isinstance(t, MatTy):
+        return f"a {t.r}×{t.c} matrix of {U.describe(t.dim)}"
     if isinstance(t, TextListTy):
         return "a list of text"
     return {"bool": "true/false value", "str": "text", "sol": "ODE solution", "data": "data table",

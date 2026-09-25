@@ -17,9 +17,10 @@ from . import calculus as C
 from . import ir as I
 from .constants import all_constants
 from .errors import FermiumError, Diagnostics
-from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, TextListTy, BOOL, STR,
+from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
                     VOID, Ty,
                     type_desc)
+from .linalg import transpose_index
 from .units import SPELLED_UNITS, format_number, DIMLESS, Unit, lookup_unit, parse_unit_string, UnitSyntaxError, T as TIME_DIM, dim_name
 
 MATH1 = {"sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
@@ -29,7 +30,48 @@ LIST_FUNCS = {"len", "sum", "mean", "std", "first", "last", "cumsum", "diff", "r
 BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range",
     "push", "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm", "unit", "hat", "cross", "vec",
+    "transpose", "det", "inverse", "identity", "solve_linear",
 }
+
+
+class MixedHint(tuple):
+    """Display units of a vector whose components have different units: one Unit (or None) each."""
+    affine = False
+
+    @property
+    def name(self):
+        return ", ".join(u.name if u is not None else "?" for u in self)
+
+
+_SUP_DIGITS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+_TO_SUP = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
+
+
+def hint_power(u, p):
+    """The display unit u^p for a whole number p, written out: (N/m)² -> N²/m², (N/m)⁻¹ -> m/N.
+    None if u isn't a simple product of units (then the result is shown in SI)."""
+    if u is None or isinstance(u, MixedHint) or u.affine:
+        return None
+    num, _, den = u.name.partition("/")
+    powers = {}
+    for part, sign in ((num, 1), (den, -1)):
+        for tok in part.split():
+            m = re.fullmatch(r"([^\s⁰¹²³⁴⁵⁶⁷⁸⁹⁻^()]+)([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]*)", tok)
+            if m is None or "/" in tok:
+                return None
+            e = int(m.group(2).translate(_SUP_DIGITS)) if m.group(2) else 1
+            powers[m.group(1)] = powers.get(m.group(1), 0) + sign * e * p
+    top = [f"{k}{str(v).translate(_TO_SUP) if v != 1 else ''}" for k, v in powers.items() if v > 0]
+    bot = [f"{k}{str(-v).translate(_TO_SUP) if v != -1 else ''}" for k, v in powers.items() if v < 0]
+    if not top and not bot:
+        return None
+    name = (" ".join(top) or "1") + ("/" + " ".join(bot) if len(bot) == 1 else
+                                     "/(" + " ".join(bot) + ")" if bot else "")
+    try:
+        return parse_unit_string(name)
+    except (UnitSyntaxError, Exception):
+        return None
+
 
 
 class FuncInfo:
@@ -339,7 +381,15 @@ class Checker(C.DiffContext):
                                f"{type_desc(v.ty, self.U)}", node, hint="use a different name for the new value")
             if isinstance(sym.ty, VecTy) and sym.ty.n != v.ty.n:
                 raise self.err(f"{name} holds a {sym.ty.n}-vector; it can't now hold a {v.ty.n}-vector", node)
-            if isinstance(sym.ty, (NumTy, ListTy, VecTy)):
+            if isinstance(sym.ty, MatTy) and (sym.ty.r, sym.ty.c) != (v.ty.r, v.ty.c):
+                raise self.err(f"{name} holds a {sym.ty.r}×{sym.ty.c} matrix; it can't now hold a "
+                               f"{v.ty.r}×{v.ty.c} matrix", node)
+            if isinstance(sym.ty, VecTy) and (sym.ty.mixed or v.ty.mixed):
+                if self.vec_unify(sym.ty, v.ty) is not None:
+                    raise self.err(f"{name} is {type_desc(sym.ty, self.U)}; it can't now hold "
+                                   f"{type_desc(v.ty, self.U)}", node,
+                                   hint="each variable keeps its units; use a new name for a different quantity")
+            elif isinstance(sym.ty, (NumTy, ListTy, VecTy, MatTy)):
                 if not self.U.unify(sym.ty.dim, v.ty.dim):
                     if self.repl and ctx.is_main:
                         sym = self.new_sym(name, v.ty, ctx)
@@ -429,8 +479,12 @@ class Checker(C.DiffContext):
                 items.append(("num", v, self.fmt(v)))
             elif isinstance(v.ty, ListTy):
                 items.append(("list", v, self.fmt(v)))
+            elif isinstance(v.ty, VecTy) and v.ty.mixed:
+                items.append(("mvec", v, self.fmt_components(v)))
             elif isinstance(v.ty, VecTy):
                 items.append(("vec", v, self.fmt(v)))
+            elif isinstance(v.ty, MatTy):
+                items.append(("mat", v, self.fmt(v)))
             elif isinstance(v.ty, TextListTy):
                 items.append(("textlist", v, None))
             elif isinstance(v.ty, BoolTy):
@@ -456,6 +510,14 @@ class Checker(C.DiffContext):
     def fmt(self, v):
         self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct})
         return len(self.tables.fmts) - 1
+
+    def fmt_components(self, v):
+        """One print format per component of a mixed vector (consecutive ids); returns the first id."""
+        hints = v.hint if isinstance(v.hint, MixedHint) else (None,) * v.ty.n
+        first = len(self.tables.fmts)
+        for d, h in zip(v.ty.dims, hints):
+            self.tables.fmts.append({"dim": d, "hint": h, "sf": v.sf, "direct": v.direct})
+        return first
 
     def describe_function(self, info: FuncInfo):
         f = info.fdef
@@ -717,7 +779,7 @@ class Checker(C.DiffContext):
             raise self.err(f"{what} must be a number, but it is {got}", node)
 
     def need_numlike(self, v, node, what="this value", allow_vec=False):
-        if allow_vec and isinstance(v, I.Expr) and isinstance(v.ty, VecTy):
+        if allow_vec and isinstance(v, I.Expr) and isinstance(v.ty, (VecTy, MatTy)):
             return
         if isinstance(v, (FuncRef, SolRef)) or not isinstance(v.ty, (NumTy, ListTy)):
             got = "a function" if isinstance(v, FuncRef) else ("an ODE solution" if isinstance(v, SolRef)
@@ -768,6 +830,22 @@ class Checker(C.DiffContext):
         u = self.resolve_unit(e.unit)
         v = self.expr(e.value, ctx)
         self.need_numlike(v, e.value, allow_vec=True)
+        if isinstance(v.ty, VecTy) and v.ty.mixed:
+            raise self.err("this vector already has units (a different unit on each component)", e,
+                           hint="write the unit on each component, like <1 m, 2 m/s>")
+        if isinstance(v.ty, MatTy):
+            if u.affine:
+                raise self.err("°C/°F can't be used for matrices", e)
+            if not isinstance(e.value, A.ListLit):
+                vd = self.U.norm(v.ty.dim)
+                if vd.concrete and not vd.const.dimensionless:
+                    raise self.err(f"this already has units ({self.desc(v.ty.dim)})", e)
+            elif not self.U.unify(v.ty.dim, DIMLESS):
+                raise self.err(f"this matrix already has units ({self.desc(v.ty.dim)}); write the unit once, "
+                               f"after the ]]", e)
+            r = I.IBin("*", v, I.IConst(u.factor, NumTy(DIMLESS)), MatTy(DExpr.of(u.dim), v.ty.r, v.ty.c))
+            r.hint, r.sf, r.direct = u, v.sf, isinstance(e.value, A.ListLit)
+            return r
         if isinstance(v.ty, VecTy):
             if u.affine:
                 raise self.err("°C/°F can't be used for vectors", e)
@@ -847,9 +925,9 @@ class Checker(C.DiffContext):
                 sym.storage = "global"
                 return self._ivar(sym)
             if sym not in lam.captures:
-                if not isinstance(sym.ty, (NumTy, BoolTy)):
-                    raise self.err(f"{sym.name} can't be used inside this integral/equation (only numbers can be "
-                                   f"captured from a function)", node)
+                if not isinstance(sym.ty, (NumTy, BoolTy, VecTy, MatTy)):
+                    raise self.err(f"{sym.name} can't be used inside this integral/equation (only numbers, vectors "
+                                   f"and matrices can be captured from a function)", node)
                 lam.captures.append(sym)
             return self._ivar(sym)
         if sym.func is not ctx.func and sym.storage == "local":
@@ -956,6 +1034,8 @@ class Checker(C.DiffContext):
                                 "G": ("the gravitational constant G", ("gauss", "gauss"))}
 
     def arith(self, op, a, b, e):
+        if isinstance(a.ty, MatTy) or isinstance(b.ty, MatTy):
+            return self.mat_arith(op, a, b, e)
         if isinstance(a.ty, VecTy) or isinstance(b.ty, VecTy):
             return self.vec_arith(op, a, b, e)
         if op == "×":
@@ -1004,31 +1084,50 @@ class Checker(C.DiffContext):
             if a.ty.n != b.ty.n:
                 raise self.err(f"can't {'add' if op == '+' else 'subtract'} a {a.ty.n}-vector and a "
                                f"{b.ty.n}-vector", e)
+            verb = 'add' if op == '+' else 'subtract'
+            if a.ty.mixed or b.ty.mixed:
+                k = self.vec_unify(a.ty, b.ty)
+                if k is not None:
+                    da, db = self.desc(a.ty.comp_dims()[k]), self.desc(b.ty.comp_dims()[k])
+                    raise self.err(f"can't {verb} these vectors: component {k + 1} is {da} on one side and {db} "
+                                   f"on the other", e, hint="vectors add component by component, and each pair "
+                                   "must have the same units")
+                r = I.IBin(op, a, b, a.ty if a.ty.mixed else b.ty)
+                r.hint = a.hint if isinstance(a.hint, MixedHint) else b.hint if isinstance(b.hint, MixedHint) \
+                    else None
+                r.sf = self._minsf(a, b)
+                return r
             if not self.U.unify(a.ty.dim, b.ty.dim):
                 da, db = self.desc(a.ty.dim), self.desc(b.ty.dim)
-                raise self.err(f"can't {'add' if op == '+' else 'subtract'} vectors of {da} and {db}", e,
+                raise self.err(f"can't {verb} vectors of {da} and {db}", e,
                                hint=self.mismatch_hint(a, b))
             r = I.IBin(op, a, b, VecTy(a.ty.dim, a.ty.n))
             r.hint = a.hint or b.hint
         elif op == "*" and va and vb:
             if a.ty.n != b.ty.n:
                 raise self.err(f"can't take the dot product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
-            r = I.IBuiltin("vdot", [a, b], NumTy(a.ty.dim * b.ty.dim))
+            da = self.shared_dim(a, "the dot product", e)
+            db = self.shared_dim(b, "the dot product", e)
+            r = I.IBuiltin("vdot", [a, b], NumTy(da * db))
         elif op == "×" and va and vb:
             if a.ty.n != b.ty.n:
                 raise self.err(f"can't take the cross product of a {a.ty.n}-vector and a {b.ty.n}-vector", e)
-            ty = VecTy(a.ty.dim * b.ty.dim, 3) if a.ty.n == 3 else NumTy(a.ty.dim * b.ty.dim)
+            if a.ty.n == 4:
+                raise self.err("the cross product needs 3-vectors (or 2-vectors), not 4-vectors", e)
+            da = self.shared_dim(a, "the cross product", e)
+            db = self.shared_dim(b, "the cross product", e)
+            ty = VecTy(da * db, 3) if a.ty.n == 3 else NumTy(da * db)
             r = I.IBuiltin("cross", [a, b], ty)
         elif op in ("*", "×"):
             if op == "×":
                 raise self.err("× between a vector and a number: use * (or a space) to scale a vector", e)
             v, k = (a, b) if va else (b, a)
-            r = I.IBin("*", a, b, VecTy(a.ty.dim * b.ty.dim, v.ty.n))
+            r = I.IBin("*", a, b, self.vec_ty_map(v.ty, lambda d: d * k.ty.dim))
             r.hint = v.hint if self._dimless(k) else None
         elif op == "/":
             if vb:
                 raise self.err("can't divide by a vector", e)
-            r = I.IBin("/", a, b, VecTy(a.ty.dim / b.ty.dim, a.ty.n))
+            r = I.IBin("/", a, b, self.vec_ty_map(a.ty, lambda d: d / b.ty.dim))
             r.hint = a.hint if self._dimless(b) else None
         else:
             raise self.err(f"unknown operator {op}", e)
@@ -1037,14 +1136,175 @@ class Checker(C.DiffContext):
 
     def e_VecLit(self, e, ctx):
         items = [self.expr(x, ctx) for x in e.items]
-        dim = DExpr.fresh("vec")
         for it, node in zip(items, e.items):
             self.need_num(it, node, "a vector component")
-            self.unify_or(dim, it.ty.dim, lambda: f"all components of a vector need the same units; this one is "
-                          f"{self.desc(it.ty.dim)} but the others are {self.desc(dim)}", node)
+        known = [self.U.norm(it.ty.dim) for it in items]
+        known = [d.const for d in known if d.concrete]
+        if any(d != known[0] for d in known):
+            # components in different units, like the state vector <1 m, 2 m/s>: each keeps its own (D29)
+            r = I.IVec(items, VecTy(None, len(items), dims=[it.ty.dim for it in items]))
+            hints = MixedHint(it.hint for it in items)
+            r.hint = hints if any(h is not None for h in hints) else None
+            r.sf = self._minsf(*items)
+            return r
+        dim = DExpr.fresh("vec")
+        for it, node in zip(items, e.items):
+            self.U.unify(dim, it.ty.dim)
         r = I.IVec(items, VecTy(dim, len(items)))
         r.hint = next((it.hint for it in items if it.hint is not None), None)
         r.sf = self._minsf(*items)
+        return r
+
+    # ------------------------------------------------------------ vectors with a unit per component
+    def vec_unify(self, ta, tb):
+        """Unify two vector types component by component; the index of the first mismatch, or None."""
+        for k, (da, db) in enumerate(zip(ta.comp_dims(), tb.comp_dims())):
+            if not self.U.unify(da, db):
+                return k
+        return None
+
+    @staticmethod
+    def vec_ty_map(ty, f):
+        if ty.mixed:
+            return VecTy(None, ty.n, dims=[f(d) for d in ty.dims])
+        return VecTy(f(ty.dim), ty.n)
+
+    def shared_dim(self, v, what, node):
+        """The one dimension all components of vector v share (an error for <1 m, 2 m/s>)."""
+        if not v.ty.mixed:
+            return v.ty.dim
+        ds = v.ty.dims
+        if all(self.U.unify(ds[0], d) for d in ds[1:]):
+            return ds[0]
+        raise self.err(f"{what} needs all components of the vector in the same units, but this one has "
+                       f"{', '.join(self.desc(d) for d in ds)}", node,
+                       hint="a state vector like <x, v> can be added and scaled, but it has no length or "
+                            "direction")
+
+    # ------------------------------------------------------------ matrices (D29)
+    def mat_arith(self, op, a, b, e):
+        ma, mb = isinstance(a.ty, MatTy), isinstance(b.ty, MatTy)
+        if isinstance(a.ty, ListTy) or isinstance(b.ty, ListTy):
+            raise self.err("can't mix matrices and lists in arithmetic", e)
+
+        def shape(t):
+            return f"{t.r}×{t.c} matrix"
+        if op in ("+", "-"):
+            verb = 'add' if op == '+' else 'subtract'
+            if not (ma and mb):
+                what = "vector" if isinstance((b if ma else a).ty, VecTy) else "single number"
+                raise self.err(f"can't {verb} a matrix and a {what}", e,
+                               hint="both sides must be matrices of the same size")
+            if (a.ty.r, a.ty.c) != (b.ty.r, b.ty.c):
+                raise self.err(f"can't {verb} a {shape(a.ty)} and a {shape(b.ty)}", e)
+            if not self.U.unify(a.ty.dim, b.ty.dim):
+                raise self.err(f"can't {verb} matrices of {self.desc(a.ty.dim)} and {self.desc(b.ty.dim)}", e,
+                               hint=self.mismatch_hint(a, b))
+            r = I.IBin(op, a, b, MatTy(a.ty.dim, a.ty.r, a.ty.c))
+            r.hint = a.hint or b.hint
+        elif op == "×":
+            raise self.err("× is the cross product of vectors; multiply matrices with * or a space: A B", e)
+        elif op == "*" and ma and mb:
+            if a.ty.c != b.ty.r:
+                raise self.err(f"can't multiply a {shape(a.ty)} times a {shape(b.ty)}: the first needs as many "
+                               f"columns as the second has rows", e)
+            if a.ty.r * b.ty.c == 1:
+                ty = NumTy(a.ty.dim * b.ty.dim)
+            else:
+                ty = MatTy(a.ty.dim * b.ty.dim, a.ty.r, b.ty.c)
+            r = I.IBuiltin("matmul", [a, b], ty)
+            r.dims3 = (a.ty.r, a.ty.c, b.ty.c)
+            if a.hint is not None and b.hint is not None and a.hint.name == b.hint.name:
+                r.hint = hint_power(a.hint, 2)          # K K in N/m is shown in N²/m²
+            else:
+                r.hint = self._keep_hint(a, b)
+        elif op == "*" and ma and isinstance(b.ty, VecTy):
+            if a.ty.c != b.ty.n:
+                raise self.err(f"can't multiply a {shape(a.ty)} times a {b.ty.n}-vector: the matrix needs one "
+                               f"column per component", e)
+            db = self.shared_dim(b, "a matrix times a vector", e)
+            if a.ty.r == 1:
+                r = I.IBuiltin("matmul", [a, b], NumTy(a.ty.dim * db))
+            else:
+                r = I.IBuiltin("matmul", [a, b], VecTy(a.ty.dim * db, a.ty.r))
+            r.dims3 = (a.ty.r, a.ty.c, 1)
+        elif op == "*" and mb and isinstance(a.ty, VecTy):
+            raise self.err("a vector times a matrix isn't defined here; write the matrix first (M v), or use "
+                           "transpose(M) v for the row-vector product", e)
+        elif op == "*":
+            m, k = (a, b) if ma else (b, a)
+            r = I.IBin("*", a, b, MatTy(m.ty.dim * k.ty.dim, m.ty.r, m.ty.c))
+            r.hint = m.hint if self._dimless(k) else None
+        elif op == "/":
+            if mb:
+                raise self.err("can't divide by a matrix", e, hint="multiply by inverse(M) instead")
+            r = I.IBin("/", a, b, MatTy(a.ty.dim / b.ty.dim, a.ty.r, a.ty.c))
+            r.hint = a.hint if self._dimless(b) else None
+        else:
+            raise self.err(f"unknown operator {op}", e)
+        r.sf = self._minsf(a, b)
+        return r
+
+    def matrix_literal(self, e, ctx):
+        """[[a, b], [c, d]]: a matrix, all entries in one unit, stored row by row."""
+        rows = [[self.expr(x, ctx) for x in row.items] for row in e.items]
+        ncol = len(rows[0])
+        if any(len(r) != ncol for r in rows):
+            raise self.err("every row of a matrix needs the same number of entries", e)
+        if len(rows) > 4 or ncol > 4 or ncol == 0 or len(rows) * ncol < 2:
+            raise self.err(f"a matrix can have 1 to 4 rows and 1 to 4 columns (at most 4×4), not "
+                           f"{len(rows)}×{ncol}", e)
+        dim = DExpr.fresh("mat")
+        items = []
+        for row, rnode in zip(rows, e.items):
+            for it, node in zip(row, rnode.items):
+                self.need_num(it, node, "a matrix entry")
+                self.unify_or(dim, it.ty.dim, lambda: f"all entries of a matrix need the same units; this one is "
+                              f"{self.desc(it.ty.dim)} but the others are {self.desc(dim)}", node)
+                items.append(it)
+        r = I.IVec(items, MatTy(dim, len(rows), ncol))
+        r.hint = next((it.hint for it in items if it.hint is not None), None)
+        r.sf = self._minsf(*items)
+        r.direct = all(getattr(it, "direct", False) for it in items)
+        return r
+
+    def need_square(self, m, name, node):
+        if not isinstance(m.ty, MatTy):
+            raise self.err(f"{name} needs a matrix, like [[1, 2], [3, 4]]", node)
+        if m.ty.r != m.ty.c:
+            raise self.err(f"{name} needs a square matrix, but this one is {m.ty.r}×{m.ty.c}", node)
+
+    def mat_builtin(self, name, args, e):
+        n = len(args)
+        k = 2 if name == "solve_linear" else 1
+        if n != k:
+            raise self.err(f"{name} takes {k} argument{'s' if k != 1 else ''} but was given {n}", e)
+        m = args[0]
+        if name == "transpose":
+            if not isinstance(m.ty, MatTy):
+                raise self.err("transpose needs a matrix, like [[1, 2], [3, 4]]", e)
+            r = I.IBuiltin("shuffle", [m], MatTy(m.ty.dim, m.ty.c, m.ty.r))
+            r.idx = transpose_index(m.ty.r, m.ty.c)
+            r.hint, r.sf, r.direct = m.hint, m.sf, m.direct
+            return r
+        self.need_square(m, name, e)
+        if name == "det":
+            r = I.IBuiltin("det", [m], NumTy(m.ty.dim ** m.ty.r))
+            r.hint = hint_power(m.hint, m.ty.r)          # det of N/m entries is in N²/m² (2×2)
+        elif name == "inverse":
+            r = I.IBuiltin("inverse", [m], MatTy(m.ty.dim ** -1, m.ty.r, m.ty.c))
+            r.hint = hint_power(m.hint, -1)              # and its inverse in m/N
+        else:
+            b = args[1]
+            if not isinstance(b.ty, VecTy):
+                raise self.err("solve_linear(M, b) needs a matrix and a vector, like solve_linear(K, <1, 2> N)", e)
+            if b.ty.n != m.ty.r:
+                raise self.err(f"solve_linear(M, b) got a {m.ty.r}×{m.ty.c} matrix and a {b.ty.n}-vector; b needs "
+                               f"one component per row", e)
+            db = self.shared_dim(b, "solve_linear(M, b)", e)
+            r = I.IBuiltin("solve_linear", [m, b], VecTy(db / m.ty.dim, b.ty.n))
+        r.sf = self._minsf(*args)
+        r.line = e.line
         return r
 
     def mismatch_hint(self, a, b):
@@ -1180,9 +1440,12 @@ class Checker(C.DiffContext):
         a = self.expr(e.operand, ctx)
         self.need_numlike(a, e.operand, allow_vec=True)
         if isinstance(a.ty, VecTy):
-            r = I.IBuiltin("norm", [a], NumTy(a.ty.dim))
+            r = I.IBuiltin("norm", [a], NumTy(self.shared_dim(a, "|v|", e)))
             r.hint, r.sf = a.hint, a.sf
             return r
+        if isinstance(a.ty, MatTy):
+            raise self.err("the value inside |...| must be a number, but it is a matrix", e,
+                           hint="for the determinant write det(M)")
         r = I.IBuiltin("abs", [a], a.ty)
         r.hint, r.sf = a.hint, a.sf
         return r
@@ -1195,7 +1458,13 @@ class Checker(C.DiffContext):
             raise self.err("both branches of an if-expression must give the same kind of value", e)
         if isinstance(a.ty, VecTy) and a.ty.n != b.ty.n:
             raise self.err("both branches of an if-expression must give vectors of the same length", e)
-        if isinstance(a.ty, (NumTy, ListTy, VecTy)):
+        if isinstance(a.ty, MatTy) and (a.ty.r, a.ty.c) != (b.ty.r, b.ty.c):
+            raise self.err("both branches of an if-expression must give matrices of the same size", e)
+        if isinstance(a.ty, VecTy) and (a.ty.mixed or b.ty.mixed):
+            if self.vec_unify(a.ty, b.ty) is not None:
+                raise self.err(f"the two branches give {type_desc(a.ty, self.U)} and {type_desc(b.ty, self.U)}; "
+                               f"they must match", e)
+        elif isinstance(a.ty, (NumTy, ListTy, VecTy, MatTy)):
             self.unify_or(a.ty.dim, b.ty.dim, lambda: f"the two branches give {self.desc(a.ty.dim)} and "
                           f"{self.desc(b.ty.dim)}; they must match", e)
         r = I.IIf(c, a, b, a.ty)
@@ -1207,6 +1476,9 @@ class Checker(C.DiffContext):
         v = self.expr(e.value, ctx)
         self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
         u = self.resolve_unit(e.unit)
+        if isinstance(v.ty, VecTy) and v.ty.mixed:
+            raise self.err(f"can't show a vector with different units per component in {u.name}", e,
+                           hint="convert one component at a time, like s.x in cm")
         if not self.U.unify(v.ty.dim, u.dim):
             raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e,
                            hint="the units you convert to must measure the same kind of quantity")
@@ -1228,7 +1500,7 @@ class Checker(C.DiffContext):
 
     def e_Digits(self, e, ctx):
         v = self.expr(e.value, ctx)
-        if not isinstance(v.ty, (NumTy, ListTy, VecTy)):
+        if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
             raise self.err("'to N digits' only works on numbers", e)
         if e.digits < 1 or e.digits > 17:
             raise self.err("the number of digits must be between 1 and 17", e)
@@ -1259,6 +1531,11 @@ class Checker(C.DiffContext):
         raise self.err("uncertainties (±) are planned for a future version of Fermium", e)
 
     def e_ListLit(self, e, ctx):
+        if e.items and all(isinstance(x, A.ListLit) for x in e.items):
+            return self.matrix_literal(e, ctx)
+        if any(isinstance(x, A.ListLit) for x in e.items):
+            raise self.err("a matrix is written as a list of rows, like [[1, 2], [3, 4]]; lists of lists "
+                           "aren't supported otherwise", e)
         items = [self.expr(x, ctx) for x in e.items]
         if items and all(isinstance(it.ty, StrTy) for it in items):
             return I.IList(items, TextListTy())
@@ -1360,15 +1637,45 @@ class Checker(C.DiffContext):
             return I.ILet([(sym, I.IBuiltin("len", [target], NumTy(DIMLESS)))], body)
         return self.expr(idx_ast, ctx)
 
+    def mat_index(self, idx_ast, size, what, ctx):
+        if isinstance(idx_ast, A.End):
+            return size - 1
+        idx = self.index_expr(idx_ast, I.IConst(size, NumTy(DIMLESS)), ctx)
+        if isinstance(idx, I.ILet) and isinstance(idx.value, I.IConst):
+            idx = idx.value
+        if not isinstance(idx, I.IConst):
+            raise self.err("a matrix entry must be picked with fixed numbers, like M[1, 2]", idx_ast)
+        k = int(idx.value)
+        if not 1 <= k <= size:
+            raise self.err(f"this matrix has {size} {what}s, so there is no {what} {k}", idx_ast)
+        return k - 1
+
     def vec_elem(self, t, k, node):
         if not 0 <= k < t.ty.n:
             raise self.err(f"this vector has {t.ty.n} components, so there is no component {k + 1}", node)
-        r = I.IVecElem(t, k, NumTy(t.ty.dim))
-        r.hint, r.sf = t.hint, t.sf
+        r = I.IVecElem(t, k, NumTy(t.ty.comp_dims()[k]))
+        r.hint, r.sf = (t.hint[k] if isinstance(t.hint, MixedHint) else t.hint), t.sf
         return r
 
     def e_Index(self, e, ctx):
+        if isinstance(e.target, A.Index):             # M[i, j] (parsed as M[i][j]) or M[i][j]
+            inner = self.expr(e.target.target, ctx, allow_func=True)
+            if isinstance(inner, I.Expr) and isinstance(inner.ty, MatTy):
+                i = self.mat_index(e.target.index, inner.ty.r, "row", ctx)
+                j = self.mat_index(e.index, inner.ty.c, "column", ctx)
+                r = I.IVecElem(inner, i * inner.ty.c + j, NumTy(inner.ty.dim))
+                r.hint, r.sf = inner.hint, inner.sf
+                return r
         t = self.expr(e.target, ctx, allow_func=True)
+        if isinstance(t, I.Expr) and isinstance(t.ty, MatTy):
+            i = self.mat_index(e.index, t.ty.r, "row", ctx)
+            if not 2 <= t.ty.c <= 4:
+                raise self.err(f"a row of a {t.ty.r}×{t.ty.c} matrix isn't a vector; pick an entry with M[i, j]",
+                               e.index)
+            r = I.IBuiltin("shuffle", [t], VecTy(t.ty.dim, t.ty.c))
+            r.idx = [i * t.ty.c + j for j in range(t.ty.c)]
+            r.hint, r.sf = t.hint, t.sf
+            return r
         if isinstance(t, I.Expr) and isinstance(t.ty, VecTy):
             idx = self.index_expr(e.index, I.IConst(t.ty.n, NumTy(DIMLESS)), ctx) \
                 if not isinstance(e.index, A.End) else I.IConst(t.ty.n, NumTy(DIMLESS))
@@ -1689,6 +1996,11 @@ class Checker(C.DiffContext):
             ue = A.UnitExpr([A.UnitFactor(text)], text)
             del ue
             v = self.expr(e.args[0], ctx)
+            if isinstance(v.ty, VecTy) and v.ty.mixed:
+                raise self.err(f"can't show a vector with different units per component in {u.name}", e,
+                               hint="convert one component at a time, like to(s.x, cm)")
+            if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
+                raise self.err("to(x, unit) needs a number", e)
             if not self.U.unify(v.ty.dim, u.dim):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({dim_name(u.dim)})", e)
             v.hint = u
@@ -1747,6 +2059,7 @@ class Checker(C.DiffContext):
             return r
         if name == "sign" and n == 1 and isinstance(args[0].ty, VecTy):
             # sign(v) = v/|v|, the direction; d|u|/dt = sign(u)·u' then works for vectors too (A18)
+            self.shared_dim(args[0], "sign(v)", e)
             return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
         if name == "sign" or name == "isnan":
             need(1)
@@ -1831,8 +2144,9 @@ class Checker(C.DiffContext):
             need(1)
             if not isinstance(args[0].ty, VecTy):
                 raise self.err(f"{name} needs a vector, like <3, 4> m", e.args[0])
+            d = self.shared_dim(args[0], f"{name}(v)", e)
             if name == "norm":
-                r = self._bi("norm", args, NumTy(args[0].ty.dim), args)
+                r = self._bi("norm", args, NumTy(d), args)
                 r.hint = args[0].hint
                 return r
             return self._bi("unit", args, VecTy(DIMLESS, args[0].ty.n), args)
@@ -1842,11 +2156,23 @@ class Checker(C.DiffContext):
                 raise self.err("cross(a, b) needs two vectors", e)
             return self.vec_arith("×", args[0], args[1], e)
         if name == "vec":
-            if n not in (2, 3):
-                raise self.err("vec(...) takes 2 or 3 components", e)
+            if n not in (2, 3, 4):
+                raise self.err("vec(...) takes 2, 3 or 4 components", e)
             return self.e_VecLit(A.VecLit(e.args).at(e), ctx)
         if name == "dot" and n == 2 and all(isinstance(a.ty, VecTy) for a in args):
             return self.vec_arith("*", args[0], args[1], e)
+        if name in ("transpose", "det", "inverse", "solve_linear"):
+            return self.mat_builtin(name, args, e)
+        if name == "identity":
+            need(1)
+            k = args[0]
+            if not isinstance(k, I.IConst) or not isinstance(k.ty, NumTy):
+                raise self.err("identity(n) needs a fixed whole number, like identity(3)", e.args[0])
+            if k.value not in (2, 3, 4):
+                raise self.err("identity(n) needs n = 2, 3 or 4 (matrices are at most 4×4)", e.args[0])
+            m = int(k.value)
+            return I.IVec([I.IConst(1.0 if i == j else 0.0, NumTy(DIMLESS)) for i in range(m) for j in range(m)],
+                          MatTy(DIMLESS, m, m))
         if name == "trapz":
             need(2)
             for i in range(2):

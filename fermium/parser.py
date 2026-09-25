@@ -233,6 +233,9 @@ class Parser:
                     name = self.next()
                     self.next()
                     idx = self.expr()
+                    if self.at_op(","):
+                        raise self.error("the entries of a matrix can't be changed one at a time; build the new "
+                                         "matrix instead, like M = M + [[1, 0], [0, 0]]")
                     self.expect_op("]")
                     op = self.next().value
                     val = self.expr_where()
@@ -930,8 +933,14 @@ class Parser:
             elif self.at_op("[") and not self.tok.ws_before:
                 self.next()
                 idx = self.expr()
-                self.expect_op("]")
                 e = self.span(A.Index(e, idx), t)
+                if self.at_op(","):                     # M[i, j] is M[i][j] (a matrix entry, D29)
+                    self.next()
+                    e = self.span(A.Index(e, self.expr()), t)
+                self.expect_op("]")
+            elif self.at_op("ᵀ"):                       # Mᵀ is transpose(M)
+                self.next()
+                e = self.span(A.Call(A.Name("transpose").at(e), [e]), t)
             elif self.at_op("[") and self.tok.ws_before and not isinstance(e, A.Num) and self._bracket_is_unit():
                 u = self.bracket_unit()
                 e = self.span(A.Quantity(e, u, bracket=True), t)
@@ -1044,7 +1053,12 @@ class Parser:
                     elif not self.at_op("]"):
                         raise self.error("expected ',' or ']' in this list" + self._found())
                 self.next()
-                return self.span(A.ListLit(items), t)
+                lst = self.span(A.ListLit(items), t)
+                if items and all(isinstance(x, A.ListLit) for x in items) and self.tok.kind == "NAME" and \
+                        is_unit_name(self.tok.raw) and self.tok.value not in self.known and not self._is_call_like():
+                    u = self.unit_expr(explicit=False)          # [[1, 2], [3, 4]] N/m  (a matrix, D29)
+                    lst = self.span(A.Quantity(lst, u), t)
+                return lst
             if t.value == "<":
                 return self.vector_literal()
             if t.value == "|":
@@ -1080,7 +1094,7 @@ class Parser:
         return False
 
     def vector_literal(self):
-        """<a, b> or <a, b, c>, optionally followed by a unit: <3, 4> m/s."""
+        """<a, b>, <a, b, c> or <a, b, c, d>, optionally followed by a unit: <3, 4> m/s."""
         t = self.next()
         items = []
         while True:
@@ -1092,8 +1106,8 @@ class Parser:
         if not self.at_op(">"):
             raise self.error("expected '>' to close this vector (written <x, y> or <x, y, z>)" + self._found())
         self.next()
-        if len(items) not in (2, 3):
-            raise self.error(f"a vector needs 2 or 3 components, not {len(items)}", tok=t)
+        if len(items) not in (2, 3, 4):
+            raise self.error(f"a vector needs 2, 3 or 4 components, not {len(items)}", tok=t)
         v = self.span(A.VecLit(items), t)
         if self.tok.kind == "NAME" and is_unit_name(self.tok.raw) and not self._is_call_like():
             u = self.unit_expr(explicit=False)
