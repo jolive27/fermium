@@ -121,3 +121,18 @@ def test_unit_like_names_still_units_outside_integrals():
     assert run("x = 2 dm\nprint x in m") == "0.2 m"
     assert run("print ∫ 2 dm dx from 0 to 1") == "0.2 m"
     assert run("print ∫ 2 m dm from 0 kg to 1 kg") == "2 kg m"
+
+
+# ---------------------------------------------------------------- A49: d/dt (...) where ...
+def test_derivative_of_formula_with_where():
+    assert run("g = d/dt (a t^2) where a = 3\nprint g, g(1)") == "g(t) = 6t 6"
+    assert run("g = d/dt (a t^2) where a = 3 m\nprint g(2 s)") == "12 m s"
+
+
+def test_derivative_with_where_binding_the_variable_is_a_value():
+    assert run("print d/dt (a t^2) where a = 3, t = 2") == "12"
+
+
+def test_where_without_derivative_unchanged():
+    assert run("y = a + 1 where a = 3\nprint y") == "4"
+    assert "g is a function" in str(error_of("g = d/dt (t^2)\nprint g + 1"))

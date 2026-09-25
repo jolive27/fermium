@@ -1161,6 +1161,10 @@ class Checker(C.DiffContext):
         return v
 
     def e_Where(self, e, ctx):
+        if isinstance(e.value, A.Deriv) and not any(
+                n == e.value.var or C.depends_on(v, e.value.var) for n, v in e.bindings):
+            # g = d/dt (a t^2) where a = 3: substitute, so the derivative can still be a function of t
+            return self.expr(C.inline_where(e), ctx, allow_func=True)
         scope = Scope(ctx.scope)
         c2 = ctx.child(scope)
         binds = []
