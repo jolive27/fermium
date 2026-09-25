@@ -1,0 +1,108 @@
+# The uranium-238 decay series with the Bateman equations, from freshly purified U-238 to secular equilibrium.
+# Run from this folder:  fermium run u238_chain.fm
+#
+# dN₁/dt = −λ₁ N₁,   dN_i/dt = λ_(i−1) N_(i−1) − λ_i N_i.   Half-lives: NNDC NuDat (see README).
+# The half-lives run from 164 μs (Po-214) to 4.47×10⁹ yr (U-238), a ratio of 10²⁰: the system is
+# extremely stiff, so it is solved with `using radau`.
+
+λ_U238 = ln(2) / 4.468e9 yr
+λ_Th234 = ln(2) / 24.10 day
+λ_Pa234 = ln(2) / 1.159 min         # Pa-234m
+λ_U234 = ln(2) / 2.455e5 yr
+λ_Th230 = ln(2) / 7.538e4 yr
+λ_Ra226 = ln(2) / 1600 yr
+λ_Rn222 = ln(2) / 3.8235 day
+λ_Po218 = ln(2) / 3.098 min
+λ_Pb214 = ln(2) / 26.8 min
+λ_Bi214 = ln(2) / 19.9 min
+λ_Po214 = ln(2) / 164.3 μs
+λ_Pb210 = ln(2) / 22.20 yr
+λ_Bi210 = ln(2) / 5.012 day
+λ_Po210 = ln(2) / 138.376 day
+
+N0 = 1 kg / (238.05 g/mol) * N_A      # atoms in 1 kg of U-238
+
+A0 = λ_U238 N0
+print "activity of 1 kg of U-238:", A0 in Bq to 4 digits
+
+# The chain is solved from t = 0 to each time T, and read at its end, T itself (`X[end]`).
+# (Reading a solution between the solver's steps, X(T), interpolates; for the 164 μs Po-214 in a
+# 1000-year step that is off by 0.2 %: see the README.)  The last T is 3 Myr: secular equilibrium.
+for T in [1 yr, 1e3 yr, 1e5 yr, 3e6 yr]
+    solve
+        U238' = -λ_U238 U238
+        Th234' = λ_U238 U238 - λ_Th234 Th234
+        Pa234' = λ_Th234 Th234 - λ_Pa234 Pa234
+        U234' = λ_Pa234 Pa234 - λ_U234 U234
+        Th230' = λ_U234 U234 - λ_Th230 Th230
+        Ra226' = λ_Th230 Th230 - λ_Ra226 Ra226
+        Rn222' = λ_Ra226 Ra226 - λ_Rn222 Rn222
+        Po218' = λ_Rn222 Rn222 - λ_Po218 Po218
+        Pb214' = λ_Po218 Po218 - λ_Pb214 Pb214
+        Bi214' = λ_Pb214 Pb214 - λ_Bi214 Bi214
+        Po214' = λ_Bi214 Bi214 - λ_Po214 Po214
+        Pb210' = λ_Po214 Po214 - λ_Pb210 Pb210
+        Bi210' = λ_Pb210 Pb210 - λ_Bi210 Bi210
+        Po210' = λ_Bi210 Bi210 - λ_Po210 Po210
+        Pb206' = λ_Po210 Po210
+        with U238(0) = N0, Th234(0) = 0, Pa234(0) = 0, U234(0) = 0, Th230(0) = 0, Ra226(0) = 0, Rn222(0) = 0,
+             Po218(0) = 0, Pb214(0) = 0, Bi214(0) = 0, Po214(0) = 0, Pb210(0) = 0, Bi210(0) = 0, Po210(0) = 0,
+             Pb206(0) = 0
+        for t from 0 yr to T using radau
+    A_U = λ_U238 U238[end]
+    print "t =", T, ": A/A(U-238):  Th-234", λ_Th234 Th234[end] / A_U to 5 digits,
+          " U-234", λ_U234 U234[end] / A_U to 5 digits,
+          " Th-230", λ_Th230 Th230[end] / A_U to 5 digits,
+          " Ra-226", λ_Ra226 Ra226[end] / A_U to 5 digits,
+          " Rn-222", λ_Rn222 Rn222[end] / A_U to 5 digits,
+          " Po-214", λ_Po214 Po214[end] / A_U to 5 digits,
+          " Po-210", λ_Po210 Po210[end] / A_U to 5 digits
+    if T > 1e6 yr
+        # every member now has the activity of U-238 (secular equilibrium)
+        worst = 0
+        for r in [λ_Th234 Th234[end], λ_Pa234 Pa234[end], λ_U234 U234[end], λ_Th230 Th230[end], λ_Ra226 Ra226[end],
+                  λ_Rn222 Rn222[end], λ_Po218 Po218[end], λ_Pb214 Pb214[end], λ_Bi214 Bi214[end], λ_Po214 Po214[end],
+                  λ_Pb210 Pb210[end], λ_Bi210 Bi210[end], λ_Po210 Po210[end]] / A_U
+            worst = max(worst, abs(r - 1))
+        print "secular equilibrium at 3 Myr: largest |A_i/A(U-238) − 1| =", worst to 2 digits, "  (", len(times(U238)), "radau steps )"
+        total = U238[end] + Th234[end] + Pa234[end] + U234[end] + Th230[end] + Ra226[end] + Rn222[end] + Po218[end] + Pb214[end] + Bi214[end] + Po214[end] + Pb210[end] + Bi210[end] + Po210[end] + Pb206[end]
+        print "atoms conserved: total/N₀ − 1 =", total / N0 - 1 to 2 digits, "  Pb-206 formed:", Pb206[end] to 4 digits
+        # activities from 1 yr on, for the plot (named lists, so the legend reads well)
+        time = []
+        U_238 = []
+        Th_230 = []
+        Ra_226 = []
+        Rn_222 = []
+        Pb_210 = []
+        Po_210 = []
+        ts = times(U238)
+        for k from 1 to len(ts)
+            if ts[k] >= 1 yr
+                push(time, ts[k])
+                push(U_238, λ_U238 values(U238)[k])
+                push(Th_230, λ_Th230 values(Th230)[k])
+                push(Ra_226, λ_Ra226 values(Ra226)[k])
+                push(Rn_222, λ_Rn222 values(Rn222)[k])
+                push(Pb_210, λ_Pb210 values(Pb210)[k])
+                push(Po_210, λ_Po210 values(Po210)[k])
+        plot U_238 in Bq vs time in yr, Th_230 in Bq vs time in yr, Ra_226 in Bq vs time in yr, Rn_222 in Bq vs time in yr, Pb_210 in Bq vs time in yr, Po_210 in Bq vs time in yr with log, title "U-238 series from 1 kg of pure U-238: activities reach secular equilibrium" to "activities.png"
+
+# Radon in-growth: a freshly sealed Ra-226 source (no Rn) reaches 99 % of equilibrium after 6.64 radon half-lives
+solve
+    Ra' = -λ_Ra226 Ra
+    Rn' = λ_Ra226 Ra - λ_Rn222 Rn
+    with Ra(0 day) = 1e18, Rn(0 day) = 0
+    for t from 0 day to 100 day using radau
+    until λ_Rn222 Rn = 0.99 λ_Ra226 Ra
+print "Rn-222 reaches 99 % of the Ra-226 activity after", times(Rn)[end] in day to 5 digits
+
+# Th-234 in-growth in freshly purified uranium (how long before A(Th-234) = 0.99 A(U-238)); Pa-234m follows in minutes
+solve
+    U' = -λ_U238 U
+    Th' = λ_U238 U - λ_Th234 Th
+    Pa' = λ_Th234 Th - λ_Pa234 Pa
+    with U(0 day) = N0, Th(0 day) = 0, Pa(0 day) = 0
+    for t from 0 day to 1000 day using radau
+    until λ_Th234 Th = 0.99 λ_U238 U
+print "Th-234 reaches 99 % of the U-238 activity after", times(Th)[end] in day to 5 digits,
+      "; then A(Pa-234m)/A(U-238) =", λ_Pa234 Pa[end] / (λ_U238 U[end]) to 5 digits

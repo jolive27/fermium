@@ -1,0 +1,67 @@
+# Hydrogen energy levels from the radial Schrödinger equation, by shooting, with the reduced mass.
+# Run from this folder:  fermium run hydrogen.fm
+#
+# With ψ = (u(r)/r) Y_lm and μ = m_e m_p/(m_e + m_p), the radial equation is
+#     u'' = [ l(l+1)/r² − (2μ/ħ²) (E + e²/(4πε₀ r)) ] u,     u(0) = 0.
+# For a trial energy E we integrate outward from r₀ ≈ 0 (series u ≈ r^(l+1) (1 − r/((l+1) a_μ))) to a point
+# r_max well inside the classically forbidden region. Away from an eigenvalue u(r_max) blows up to +∞ or −∞;
+# it changes sign at each eigenvalue, where `solve shoot(E, l) = 0 for E from …` finds it.
+
+μ = m_e m_p / (m_e + m_p)
+a_μ = a_0 m_e / μ                  # the Bohr radius with the reduced mass
+r0 = 1e-6 a_0
+
+# how far out to integrate for a trial E: twice the classical turning point plus 25 decay lengths 1/κ
+r_max(E) = 2 e² / (4π ε₀ abs(E)) + 25 ħ / √(2 μ abs(E))
+
+# u(r_max) for a trial energy (u is measured so that u ≈ (r/a₀)^(l+1) near the origin)
+shoot(E, l) =
+    R = r_max(E)
+    solve u'' = (l (l + 1) / r² - (2 μ / ħ²) (E + e² / (4π ε₀ r))) u
+      with u(r0) = (r0/a_0)^(l + 1) (1 - r0 / ((l + 1) a_μ)),
+           u'(r0) = (l + 1) (r0/a_0)^l / a_0 - (l + 2) (r0/a_0)^(l + 1) / ((l + 1) a_μ)
+      for r from r0 to R
+    return u[end]
+
+Ry = 13.605693 eV                  # R_∞ h c (CODATA)
+print "Rydberg energy from the constants:", m_e e⁴ / (32π² ε₀² ħ²) in eV to 8 digits
+
+# scan E upward from −14 eV in steps of 3 %, and refine every sign change of u(r_max)
+E1s = 0 eV
+E2p = 0 eV
+worst = 0
+for l from 0 to 3
+    found = 0
+    E_lo = -14 eV
+    while found < 4 - l
+        E_hi = 0.97 E_lo
+        if shoot(E_lo, l) * shoot(E_hi, l) < 0
+            solve shoot(E, l) = 0 for E from E_lo to E_hi
+            found += 1
+            n = l + found
+            bohr = -Ry (μ / m_e) / n²
+            worst = max(worst, abs(E / bohr - 1))
+            print "n =", n, " l =", l, ": E =", E in eV to 9 digits, "  Bohr −13.605693 eV (μ/m_e)/n² =", bohr in eV to 9 digits
+            if n == 1
+                E1s = E
+            if n == 2 and l == 1
+                E2p = E
+        E_lo = E_hi
+print "largest relative difference from Bohr:", worst to 2 digits
+
+λ_Lyα = h c / (E2p - E1s)
+print "Lyman α (2p → 1s):", λ_Lyα in nm to 7 digits, "  measured (NIST): 121.567 nm"
+print "without the reduced mass it would be", λ_Lyα μ / m_e in nm to 7 digits
+
+# the 2p radial probability density, as a picture of the solution at the eigenvalue
+solve u'' = (2 / r² - (2 μ / ħ²) (E2p + e² / (4π ε₀ r))) u
+  with u(r0) = (r0/a_0)^2 (1 - r0 / (2 a_μ)), u'(r0) = 2 (r0/a_0) / a_0 - 3 (r0/a_0)^2 / (2 a_μ)
+  for r from r0 to 25 a_0
+solve u'(r_peak) = 0 m⁻¹ for r_peak from 1 a_0 to 10 a_0
+print "2p: u² peaks at r =", r_peak / a_0 to 6 digits, "a₀   (exact: 4 a_μ =", 4 a_μ / a_0 to 6 digits, "a₀)"
+r_over_a0 = []
+u_squared = []
+for k from 1 to 400
+    push(r_over_a0, 25 k / 400)
+    push(u_squared, u(25 k / 400 * a_0)²)
+plot u_squared vs r_over_a0 with title "2p: u(r)² peaks at r = 4 a_μ" to "u2p.png"

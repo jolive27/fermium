@@ -1,0 +1,73 @@
+# Rutherford scattering of 5 MeV α particles on gold, by Monte Carlo, against dσ/dΩ ∝ 1/sin⁴(θ/2)
+# and the Geiger–Marsden (1913) counts. Run from this folder:  fermium run rutherford.fm
+#
+# An α with impact parameter b is deflected by θ with  b = (d/2) cot(θ/2),  where d = z Z e²/(4πε₀ T) is the
+# distance of closest approach in a head-on collision. The α's arrive uniformly spread over the target area,
+# so b is sampled uniformly over a disk of radius b_max: b = b_max √(rand()).
+# Then  dσ/dΩ = (d/4)² / sin⁴(θ/2)  (Rutherford 1911).
+
+z = 2
+Z = 79
+T = 5 MeV
+d = z Z e² / (4π ε₀ T)
+print "distance of closest approach d =", d in fm to 4 digits
+
+θ_min = 5°                                 # smallest angle followed: sets the disk radius
+b_of(θ) = (d/2) / tan(θ / 2)              # b = (d/2) cot(θ/2)  (Fermium has no cot)
+b_max = b_of(θ_min)
+print "b_max =", b_max in fm to 4 digits, "  (θ > 5°:  σ =", π b_max² in barn to 4 digits, ")"
+
+# the Geiger–Marsden 1913 angles (gold, Table II) and their counts; the MC also counts a 5° window around each
+φ_GM = [150°, 135°, 120°, 105°, 75°, 60°, 45°, 37.5°, 30°, 22.5°, 15°]
+N_GM = [33.1, 43.0, 51.9, 69.5, 211, 477, 1435, 3300, 7800, 27300, 132000]
+n_GM = zeros(len(φ_GM))
+
+# histogram: 35 bins of 5° from 5° to 180°, filled by N α particles
+N = 20000000
+nbins = 35
+counts = zeros(nbins)
+for i from 1 to N
+    b = b_max √(rand())
+    θ = 2 atan(d / (2*b))            # 2*b: `2 b` would be 2 barn
+    k = floor((θ - θ_min) / 5°) + 1
+    if k <= nbins
+        counts[k] += 1
+    for j from 1 to len(φ_GM)
+        if abs(θ - φ_GM[j]) < 2.5°
+            n_GM[j] += 1
+
+# dσ/dΩ from the counts: each α stands for π b_max²/N of cross-section, spread over the bin's solid angle
+angle = []
+dσdΩ_mc = []
+dσdΩ_exact = []
+chi2 = 0
+for k from 1 to nbins
+    lo = θ_min + (k - 1) 5°
+    hi = lo + 5°
+    ΔΩ = 2π (cos(lo) - cos(hi))
+    expected = N (b_of(lo)² - b_of(hi)²) / b_max²          # exact number of α's in the bin
+    chi2 += (counts[k] - expected)² / expected
+    push(angle, (lo + hi) / 2 / 1°)
+    push(dσdΩ_mc, counts[k] / N * π b_max² / ΔΩ)
+    push(dσdΩ_exact, expected / N * π b_max² / ΔΩ)
+print "χ² of the 35 bins against the exact bin contents:", chi2 to 3 digits, " (35 degrees of freedom: 35 ± 8.4 expected)"
+backward = 0
+for k from 18 to nbins
+    backward += counts[k]
+print "backward (θ > 90°) fraction:", backward / N to 6 digits, "  exact:", b_of(90°)² / b_max² to 6 digits
+
+# Geiger–Marsden: N sin⁴(θ/2) is constant; the MC's dσ/dΩ sin⁴(θ/2)/(d/4)² should be 1
+mean_GM = 0
+for j from 1 to len(φ_GM)
+    mean_GM += N_GM[j] sin(φ_GM[j] / 2)^4 / len(φ_GM)
+for j from 1 to len(φ_GM)
+    φ = φ_GM[j]
+    ΔΩ = 2π (cos(φ - 2.5°) - cos(φ + 2.5°))
+    ratio = (n_GM[j] / N) (π b_max² / ΔΩ) sin(φ / 2)^4 / (d/4)²
+    exact = (b_of(φ - 2.5°)² - b_of(φ + 2.5°)²) / b_max² * (π b_max² / ΔΩ) sin(φ / 2)^4 / (d/4)²
+    print "θ =", φ / 1° to 3 digits, "°: MC dσ/dΩ sin⁴(θ/2)/(d/4)² =", ratio to 3 digits, " (", n_GM[j], "α; exact bin average", exact to 3 digits, ")",
+          "  Geiger–Marsden N sin⁴(θ/2) / mean =", N_GM[j] sin(φ / 2)^4 / mean_GM to 3 digits
+
+print "Rutherford dσ/dΩ at 90°:", (d/4)² / sin(45°)^4 in barn to 4 digits, "per sr"
+
+plot dσdΩ_mc in barn vs angle, dσdΩ_exact in barn vs angle with log y, points, title "5 MeV α on gold: Monte Carlo (2×10⁷ α) and Rutherford's dσ/dΩ (barn/sr)" to "cross_section.png"

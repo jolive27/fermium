@@ -42,3 +42,258 @@ def test_semf_fit_matches_numpy_least_squares():
         line = next(ln for ln in out.splitlines() if ln.startswith(f"N = {n0} "))
         vals = [float(v) for v in re.findall(r"(-?[\d.]+) MeV", line)]
         assert vals[0] > vals[1] and vals[0] > vals[2]     # magic isotones are more bound than N ± 8
+
+
+def line_of(out, start):
+    return next(ln for ln in out.splitlines() if ln.startswith(start))
+
+
+def floats(text):
+    return [float(v) for v in re.findall(r"-?\d+\.?\d*(?:e-?\d+)?", text)]
+
+
+def test_tov_ideal_neutron_gas_matches_scipy():
+    """Oppenheimer–Volkoff 1939: the ideal neutron Fermi gas has M_max ≈ 0.71 M☉."""
+    from scipy.constants import G, c, hbar, m_n, pi
+    from scipy.integrate import solve_ivp
+    from scipy.optimize import minimize_scalar
+    out = run_prog("neutron_star_tov", "tov.fm")
+    msun = 1.98841e30
+    K = m_n ** 4 * c ** 5 / (8 * pi ** 2 * hbar ** 3)
+
+    def eps(x):
+        return K * ((2 * x ** 3 + x) * np.sqrt(1 + x * x) - np.arcsinh(x))
+
+    def P(x):
+        return K / 3 * ((2 * x ** 3 - 3 * x) * np.sqrt(1 + x * x) + 3 * np.arcsinh(x))
+
+    def rhs(r, s):
+        y, m = s
+        x = np.sqrt(abs(y))
+        dPdr = -G * (eps(x) + P(x)) * (m + 4 * pi * r ** 3 * P(x) / c ** 2) / (c ** 2 * r ** 2 * (1 - 2 * G * m / (r * c ** 2)))
+        return [2 * x * dPdr / (8 * K * x ** 4 / (3 * np.sqrt(1 + x * x))), 4 * pi * r ** 2 * eps(x) / c ** 2]
+
+    def surface(r, s):
+        return s[0]
+    surface.terminal = True
+
+    def star(xc):
+        sol = solve_ivp(rhs, [1.0, 2e5], [xc ** 2, 0.0], events=surface, rtol=1e-10, atol=[1e-14, 1e10])
+        return sol.y_events[0][0][1] / msun, sol.t_events[0][0] / 1e3
+
+    best = minimize_scalar(lambda x: -star(x)[0], bounds=(0.5, 1.5), method="bounded", options={"xatol": 1e-6})
+    mmax, rmax = star(best.x)
+    assert num(out, "maximum mass:") == pytest.approx(mmax, rel=2e-4)
+    assert num(out, "radius at maximum mass:") == pytest.approx(rmax, rel=2e-3)
+    assert num(out, "central Fermi momentum x_c =") == pytest.approx(best.x, rel=2e-2)   # the maximum is flat
+    assert abs(mmax - 0.71) < 0.005                                    # Oppenheimer & Volkoff (1939)
+    rows = [ln for ln in out.splitlines() if ln.startswith("x_c =")]
+    for xc, line in zip((0.2, 0.5, 1.0, 2.0), rows, strict=True):
+        assert num(line, "x_c =") == pytest.approx(xc)
+        m, r = floats(line.split(":")[1])
+        ms, rs = star(xc)
+        assert m == pytest.approx(ms, rel=1e-3) and r == pytest.approx(rs, rel=1e-3), xc
+    # Newtonian limit: n = 3/2 polytrope, K = (3π²)^(2/3) ħ²/(5 m_n^(8/3)); M R³ = 4π ω₁ ξ₁³ (5K/(8πG))³
+    Kp = (3 * pi ** 2) ** (2 / 3) * hbar ** 2 / (5 * m_n ** (8 / 3))
+    mr3 = 4 * pi * 2.71406 * 3.65375 ** 3 * (2.5 * Kp / (4 * pi * G)) ** 3 / (msun * 1e9)
+    lo = floats(line_of(out, "M R³").split(":")[1])
+    assert lo[0] == pytest.approx(mr3, rel=0.03) and lo[1] == pytest.approx(mr3, rel=0.03)
+
+
+def test_lane_emden_and_chandrasekhar_mass():
+    """Lane–Emden constants vs SciPy and Chandrasekhar's 1939 table; M_Ch = 4π ω₃ (K/πG)^(3/2)."""
+    from scipy.constants import G, c, hbar, m_e, m_p, m_u, pi
+    from scipy.integrate import solve_ivp
+    out = run_prog("lane_emden_chandrasekhar", "lane_emden.fm")
+    table = {"1": (np.pi, np.pi), "1.5": (3.65375, 2.71406), "3": (6.89685, 2.01824)}   # Chandrasekhar (1939)
+    omega = {}
+    for n, (xi_tab, om_tab) in table.items():
+        nn = float(n)
+
+        def rhs(x, s):
+            return [s[1], -2 * s[1] / x - np.sign(s[0]) * abs(s[0]) ** nn]
+
+        def zero(x, s):
+            return s[0]
+        zero.terminal = True
+        x0 = 1e-5
+        sol = solve_ivp(rhs, [x0, 10], [1 - x0 ** 2 / 6, -x0 / 3], events=zero, rtol=1e-12, atol=1e-14)
+        xi1, dth = sol.t_events[0][0], sol.y_events[0][0][1]
+        xi_fm, om_fm, ratio = floats(line_of(out, f"n = {n}:").split(":", 1)[1].replace("²", ""))[-3:]
+        assert xi_fm == pytest.approx(xi1, rel=1e-6) and om_fm == pytest.approx(-xi1 ** 2 * dth, rel=1e-6), n
+        assert xi_fm == pytest.approx(xi_tab, abs=2e-5) and om_fm == pytest.approx(om_tab, abs=2e-5), n
+        assert ratio == pytest.approx(xi1 ** 3 / (3 * -xi1 ** 2 * dth), rel=1e-4)
+        omega[n] = -xi1 ** 2 * dth
+    msun = 1.98841e30
+    mch1 = 4 * pi * omega["3"] * ((hbar * c / 4) * (3 * pi ** 2) ** (1 / 3) / (m_u ** (4 / 3) * pi * G)) ** 1.5 / msun
+    assert num(out, "M_Ch μ_e² =") == pytest.approx(mch1, rel=1e-3)
+    assert mch1 == pytest.approx(np.sqrt(3 * pi) / 2 * omega["3"] * (hbar * c / G) ** 1.5 / m_u ** 2 / msun, rel=1e-9)
+    assert abs(mch1 - 5.83) < 0.01                                          # the textbook 5.83/μ_e² M☉
+    assert num(out, "white dwarf) =") == pytest.approx(mch1 / 4, rel=1e-3)
+    mch_h = mch1 / 4 * (m_u / (m_p + m_e)) ** 2
+    assert floats(line_of(out, "with m_H").split("μ_e = 2:")[1])[0] == pytest.approx(mch_h, rel=1e-3)
+    assert abs(mch_h - 1.44) < 0.01                                         # Chandrasekhar's 1.44 M☉
+    # n = 3/2 white dwarf, closed form
+    K = (3 * pi ** 2) ** (2 / 3) * hbar ** 2 / (5 * m_e * (2 * m_u) ** (5 / 3))
+    b = 5 * K / (8 * pi * G)
+    rho_c = (0.6 * msun / (4 * pi * b ** 1.5 * omega["1.5"])) ** 2
+    R = table["1.5"][0] * np.sqrt(b) * rho_c ** (-1 / 6)
+    assert floats(line_of(out, "n = 3/2 white dwarf").split("R =")[1])[0] == pytest.approx(R / 1e3, rel=5e-3)
+
+
+def test_u238_chain_matches_analytic_bateman():
+    """The 15-member U-238 series (radau) against the closed-form Bateman solution in 60-digit arithmetic."""
+    import mpmath as mp
+    out = run_prog("u238_chain", "u238_chain.fm")
+    mp.mp.dps = 60
+    yr, day, mn = mp.mpf(365.25 * 86400), mp.mpf(86400), mp.mpf(60)
+    half = [4.468e9 * yr, 24.10 * day, 1.159 * mn, 2.455e5 * yr, 7.538e4 * yr, 1600 * yr, 3.8235 * day,
+            3.098 * mn, 26.8 * mn, 19.9 * mn, mp.mpf("164.3e-6"), 22.20 * yr, 5.012 * day, 138.376 * day]
+    lam = [mp.log(2) / h for h in half]
+
+    def activity(n, t, lams=lam):          # λ_n N_n(t) / N_1(0), members 0-based, pure parent at t = 0
+        s = sum(mp.exp(-lams[j] * t) / mp.fprod([lams[k] - lams[j] for k in range(n + 1) if k != j])
+                for j in range(n + 1))
+        return mp.fprod(lams[:n + 1]) * s
+
+    names = {"Th-234": 1, "U-234": 3, "Th-230": 4, "Ra-226": 5, "Rn-222": 6, "Po-214": 10, "Po-210": 13}
+    rows = [ln for ln in out.splitlines() if ln.startswith("t = ")]
+    for T, line in zip((1, 1000, 100000, 3000000), rows, strict=True):
+        for name, i in names.items():
+            v = num(line, name)
+            exact = float(activity(i, T * yr) / activity(0, T * yr))
+            assert v == pytest.approx(exact, rel=2e-4), (T, name)
+    worst = max(abs(float(activity(i, 3e6 * yr) / activity(0, 3e6 * yr)) - 1) for i in range(1, 14))
+    assert num(out, "largest |A_i/A(U-238) − 1| =") == pytest.approx(worst, rel=0.05)
+    assert worst < 1e-3                                                  # secular equilibrium
+    assert abs(num(out, "total/N₀ − 1 =")) < 1e-9
+    assert num(out, "activity of 1 kg of U-238:") == pytest.approx(12.44e6, rel=1e-3)   # 12.4 kBq/g
+    # two-member in-growth: A2/A1 = λ2/(λ2 − λ1) (1 − exp(−(λ2 − λ1) t)) = 0.99
+    for text, (l1, l2) in {"Rn-222 reaches": (lam[5], lam[6]), "Th-234 reaches": (lam[0], lam[1])}.items():
+        t99 = -mp.log(1 - 0.99 * (l2 - l1) / l2) / (l2 - l1) / day
+        assert num(line_of(out, text), "after") == pytest.approx(float(t99), rel=1e-4)
+    assert num(line_of(out, "Rn-222 reaches"), "after") == pytest.approx(3.8235 * np.log(100) / np.log(2), rel=5e-4)   # 6.64 half-lives
+    t99 = -mp.log(1 - 0.99 * (lam[1] - lam[0]) / lam[1]) / (lam[1] - lam[0])
+    assert num(out, "A(Pa-234m)/A(U-238) =") == pytest.approx(float(activity(2, t99) / activity(0, t99)), rel=1e-4)
+
+
+def test_hydrogen_levels_match_bohr_with_reduced_mass():
+    """Shooting eigenvalues n = 1..4, l = 0..n−1 vs −Ry (μ/m_e)/n²; Lyman α vs NIST 121.567 nm."""
+    from scipy.constants import c, e, h, m_e, m_p, physical_constants
+    out = run_prog("hydrogen_levels", "hydrogen.fm")
+    ry = physical_constants["Rydberg constant times hc in eV"][0]
+    mu = m_e * m_p / (m_e + m_p)
+    levels = re.findall(r"n = ([\d.]+)\s+l = ([\d.]+) : E = (-[\d.]+) eV", out)
+    assert sorted((round(float(n)), round(float(l))) for n, l, _ in levels) == [(n, l) for n in range(1, 5) for l in range(n)]
+    for n, l, E in levels:
+        assert float(E) == pytest.approx(-ry * mu / m_e / round(float(n)) ** 2, rel=1e-7), (n, l)
+    assert num(out, "largest relative difference from Bohr:") < 1e-7
+    lya = h * c / (0.75 * ry * mu / m_e * e) * 1e9
+    assert num(out, "Lyman α (2p → 1s):") == pytest.approx(lya, rel=1e-6)
+    assert num(out, "Lyman α (2p → 1s):") == pytest.approx(121.567, rel=2e-5)     # NIST (fine structure ~10⁻⁵)
+    assert num(out, "without the reduced mass it would be") == pytest.approx(lya * mu / m_e, rel=1e-6)
+    assert num(out, "2p: u² peaks at r =") == pytest.approx(4 * m_e / mu, rel=1e-5)
+
+
+def test_friedmann_planck2018_matches_quad():
+    """Age, epochs and distances for Planck 2018 ΛCDM vs scipy.integrate.quad and brentq."""
+    from scipy.constants import G, c, pi, sigma
+    from scipy.integrate import quad
+    from scipy.optimize import brentq
+    out = run_prog("friedmann_planck2018", "friedmann.fm")
+    mpc, yr = 3.0856775814913673e22, 365.25 * 86400
+    gyr, gly = 1e9 * yr, 1e9 * c * yr
+    H0, om = 67.4e3 / mpc, 0.315
+    og = 4 * sigma * 2.7255 ** 4 / c ** 3 / (3 * H0 ** 2 / (8 * pi * G))
+    orad = og * (1 + 7 / 8 * (4 / 11) ** (4 / 3) * 3.046)
+    ol = 1 - om - orad
+
+    def H(a):
+        return H0 * np.sqrt(orad / a ** 4 + om / a ** 3 + ol)
+
+    def age(a1):
+        return quad(lambda a: 1 / (a * H(a)), 0, a1, epsabs=0, epsrel=1e-12, limit=200)[0]
+
+    assert num(out, "Ω_r =") == pytest.approx(orad, rel=1e-3)
+    t0 = age(1) / gyr
+    assert num(out, "age of the universe t₀ =") == pytest.approx(t0, rel=1e-4)
+    assert num(out, "until a = 1:") == pytest.approx(t0, rel=1e-4)
+    assert abs(t0 - 13.787) < 0.020                           # Planck 2018 VI, Table 2: 13.787 ± 0.020 Gyr
+    assert num(out, "matter–Λ equality: z =") == pytest.approx((ol / om) ** (1 / 3) - 1, rel=1e-3)
+    zq = brentq(lambda z: om * (1 + z) ** 3 + 2 * orad * (1 + z) ** 4 - 2 * ol, 0, 10)
+    assert num(out, "(q = 0): z =") == pytest.approx(zq, rel=1e-3)
+    assert num(out, "at t =") == pytest.approx(age(1 / (1 + zq)) / gyr, rel=1e-3)
+    assert num(out, "matter–radiation equality: z =") == pytest.approx(om / orad - 1, rel=1e-3)
+    dc = c * quad(lambda z: 1 / H(1 / (1 + z)), 0, 1100, epsrel=1e-12, limit=200)[0]
+    assert num(out, "comoving distance to z = 1100:") == pytest.approx(dc / mpc, rel=1e-4)
+    assert num(out, "age of the universe at z = 1100:") == pytest.approx(age(1 / 1101) / yr, rel=1e-3)
+    ph = c * quad(lambda a: 1 / (a * a * H(a)), 0, 1, epsrel=1e-12, limit=200)[0]
+    assert num(out, "particle horizon today (comoving):") == pytest.approx(ph / gly, rel=1e-3)
+
+
+def test_rutherford_monte_carlo_statistics():
+    """MC histogram vs the exact Rutherford bin contents; rand() has no seed, so the bounds are statistical (5σ)."""
+    from scipy.constants import e, epsilon_0, pi
+    from scipy.stats import chi2
+    out = run_prog("rutherford_mc", "rutherford.fm")
+    d = 2 * 79 * e ** 2 / (4 * pi * epsilon_0 * 5e6 * e)
+    assert num(out, "distance of closest approach d =") == pytest.approx(d * 1e15, rel=1e-3)
+    bmax = d / 2 / np.tan(np.radians(2.5))
+    assert num(out, "σ =") == pytest.approx(pi * bmax ** 2 / 1e-28, rel=1e-3)
+    assert num(out, "exact bin contents:") < chi2.ppf(1 - 1e-6, 35)            # χ² with 35 dof
+    N = 2e7
+    p = (d / 2) ** 2 / bmax ** 2                                                 # b(90°)² / b_max²
+    frac = num(out, "backward (θ > 90°) fraction:")
+    assert abs(frac - p) < 5 * np.sqrt(p / N) and num(out, "exact:") == pytest.approx(p, rel=1e-5)
+    gm = {150: 33.1, 135: 43.0, 120: 51.9, 105: 69.5, 75: 211, 60: 477, 45: 1435, 37.5: 3300, 30: 7800,
+          22.5: 27300, 15: 132000}
+    mean = np.mean([n * np.sin(np.radians(a) / 2) ** 4 for a, n in gm.items()])
+    rows = re.findall(r"θ = ([\d.]+) °: MC dσ/dΩ sin⁴\(θ/2\)/\(d/4\)² = ([\d.]+)\s+\( ([\d.]+(?:×10[⁰¹²³⁴⁵⁶⁷⁸⁹]+)?) α; exact bin average ([\d.]+) \)"
+                      r"\s+Geiger–Marsden N sin⁴\(θ/2\) / mean = ([\d.]+)", out)
+    assert len(rows) == 11
+    for a, ratio, n, exact, gmr in rows:
+        a, ratio, n, exact, gmr = float(a), float(ratio), num(n, ""), float(exact), float(gmr)
+        lo, hi = np.radians(a - 2.5), np.radians(a + 2.5)
+        dOmega = 2 * pi * (np.cos(lo) - np.cos(hi))
+        ex = pi * (d / 2) ** 2 * (1 / np.tan(lo / 2) ** 2 - 1 / np.tan(hi / 2) ** 2) / dOmega * np.sin(np.radians(a) / 2) ** 4 / (d / 4) ** 2
+        assert exact == pytest.approx(ex, abs=0.006), a
+        assert abs(ratio - ex) < 5 * ex / np.sqrt(n) + 0.006, a                 # Poisson, 5σ (+ printed rounding)
+        assert gmr == pytest.approx(gm[a] * np.sin(np.radians(a) / 2) ** 4 / mean, abs=0.006)
+        assert 0.8 < gmr < 1.25                                                 # Geiger–Marsden: N sin⁴ ≈ constant
+    assert num(out, "Rutherford dσ/dΩ at 90°:") == pytest.approx((d / 4) ** 2 / np.sin(pi / 4) ** 4 / 1e-28, rel=1e-3)
+
+
+def test_pp_cno_crossover_matches_brentq():
+    """pp/CNO crossover (Carroll & Ostlie and Kippenhahn & Weigert rates) vs brentq; published ≈ 17–18 MK."""
+    from scipy.optimize import brentq
+    out = run_prog("pp_cno_crossover", "pp_cno.fm")
+    X, Xc = 0.70, 0.01
+
+    def pp(t6):
+        return 0.241 * X ** 2 * t6 ** (-2 / 3) * np.exp(-33.80 * t6 ** (-1 / 3))
+
+    def cno(t6):
+        return 8.67e20 * X * Xc * t6 ** (-2 / 3) * np.exp(-152.28 * t6 ** (-1 / 3))
+
+    t_co = brentq(lambda t: np.log(pp(t) / cno(t)), 5, 50, xtol=1e-12)
+    assert num(out, "crossover (Carroll & Ostlie rates): T =") == pytest.approx(t_co, rel=1e-3)
+    assert num(out, "closed form:") == pytest.approx(t_co, rel=1e-3)
+    assert 17 < t_co < 18.5                                            # the textbook crossover near 18 MK
+    for name, f in (("pp", pp), ("CNO", cno)):
+        h = 1e-5
+        nu = (np.log(f(15 * (1 + h))) - np.log(f(15 * (1 - h)))) / (np.log(1 + h) - np.log(1 - h))
+        assert num(line_of(out, "d ln ε/d ln T"), name) == pytest.approx(nu, rel=2e-3), name
+
+    def pp_kw(T):
+        T9 = T / 1e3
+        g11 = 1 + 3.82 * T9 + 1.51 * T9 ** 2 + 0.144 * T9 ** 3 - 0.0114 * T9 ** 4
+        return 2.57e4 * X ** 2 * g11 * T9 ** (-2 / 3) * np.exp(-3.381 * T9 ** (-1 / 3))
+
+    def cno_kw(T):
+        T9 = T / 1e3
+        g141 = 1 - 2.00 * T9 + 3.41 * T9 ** 2 - 2.43 * T9 ** 3
+        return 8.24e25 * X * Xc * g141 * T9 ** (-2 / 3) * np.exp(-15.231 * T9 ** (-1 / 3) - (T9 / 0.8) ** 2)
+
+    t_kw = brentq(lambda t: np.log(pp_kw(t) / cno_kw(t)), 5, 50, xtol=1e-12)
+    assert num(out, "crossover (Kippenhahn & Weigert rates): T =") == pytest.approx(t_kw, rel=1e-3)
+    assert 17 < t_kw < 18.5
