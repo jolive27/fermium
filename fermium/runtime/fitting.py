@@ -81,9 +81,10 @@ def _run(least_squares, resid, p0, x_scale, n, k):
                         gtol=1e-14, max_nfev=20000)
 
 
-def degenerate(A, tol=1e-12):
+def degenerate(A, tol=1e-9):
     """Is JᵀJ singular up to rounding?  Scale-free: the matrix is normalised to unit diagonal (a correlation
-    matrix) and Gaussian elimination with partial pivoting must not meet a pivot below tol.  Parameters that only
+    matrix) and Gaussian elimination with partial pivoting must not meet a pivot below tol (1e-9: two parameters
+    correlated beyond ρ ≈ 1 - 5×10⁻¹⁰, where a finite-difference Jacobian can no longer tell them apart).  Parameters that only
     appear together (`A B`) make it exactly singular in exact arithmetic but only nearly so in floating point,
     where the outcome used to depend on the platform (macOS CI, D262).  aot_data.c:degenerate does the same."""
     A = np.array(A, dtype=float)

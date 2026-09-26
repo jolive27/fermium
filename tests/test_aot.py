@@ -45,11 +45,11 @@ def as_built(jit_out):
                   flags=re.M)
 
 
-def build_and_run(src, work, name="prog"):
+def build_and_run(src, work, name="prog", env=None):
     """Build src as if it were work/<name>.fm and run it in work."""
     exe = os.path.join(str(work), name)
     build(src, os.path.join(str(work), name + ".fm"), exe)
-    return subprocess.run([exe], capture_output=True, text=True, timeout=120, cwd=str(work))
+    return subprocess.run([exe], capture_output=True, text=True, timeout=120, cwd=str(work), env=env)
 
 
 def compare(src, work):
@@ -140,9 +140,10 @@ def test_built_fit_matches_jit(name, fname, content, src, tmp_path):
 def test_built_degenerate_fit_warns(tmp_path):
     # A and B only appear as A B: no standard errors, and the same warning as fermium run
     _decay_csv(tmp_path)
-    got = build_and_run('d = load "decay.csv"\nfit N = A B exp(-t/τ) to d', tmp_path)
+    got = build_and_run('d = load "decay.csv"\nfit N = A B exp(-t/τ) to d', tmp_path,
+                        env={**os.environ, "FERMIUM_DEBUG_FIT": "1"})
     assert got.returncode == 0, got.stderr
-    assert "warning: the fit may not have converged" in got.stdout
+    assert "warning: the fit may not have converged" in got.stdout, got.stderr       # the pivots (D262)
 
 
 def test_built_fit_too_few_points(tmp_path):

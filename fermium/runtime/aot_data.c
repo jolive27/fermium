@@ -413,7 +413,7 @@ static int solve_lin(double *A, double *b, int k) {
 }
 
 /* Is JᵀJ singular up to rounding?  The same test as fitting.degenerate (D262): normalise to unit diagonal, then
-   Gaussian elimination with partial pivoting must not meet a pivot below 1e-12. */
+   Gaussian elimination with partial pivoting must not meet a pivot below 1e-9. */
 static int degenerate(const double *A0, int k) {
     double *M = xmalloc(sizeof(double) * (size_t)(k * k + 1));
     int bad = 0;
@@ -424,7 +424,8 @@ static int degenerate(const double *A0, int k) {
     for (int col = 0; col < k && !bad; col++) {
         int piv = col;
         for (int r = col + 1; r < k; r++) if (fabs(M[r * k + col]) > fabs(M[piv * k + col])) piv = r;
-        if (!(fabs(M[piv * k + col]) >= 1e-12)) { bad = 1; break; }
+        if (getenv("FERMIUM_DEBUG_FIT")) fprintf(stderr, "fit pivot %d: %.3g\n", col, fabs(M[piv * k + col]));
+        if (!(fabs(M[piv * k + col]) >= 1e-9)) { bad = 1; break; }
         if (piv != col)
             for (int j = 0; j < k; j++) { double t = M[col * k + j]; M[col * k + j] = M[piv * k + j]; M[piv * k + j] = t; }
         for (int r = col + 1; r < k; r++) {
