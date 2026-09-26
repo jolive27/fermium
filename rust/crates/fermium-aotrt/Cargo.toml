@@ -8,6 +8,9 @@ description = "The run time of executables made by `fermium build` (a static lib
 [lib]
 crate-type = ["staticlib"]
 path = "src/lib.rs"
+# it defines the executables' C main, which a test harness would duplicate
+test = false
+doctest = false
 
 [dependencies]
 fermium-codegen = { path = "../fermium-codegen", default-features = false }
