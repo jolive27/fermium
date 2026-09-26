@@ -118,6 +118,22 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   extrapolation amplifies rounding).
 - Tests: `quad.rs` cases `bl3_06`, `bl3_08`.
 
+## Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)
+
+- v1: `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` printed `7.93×10⁻⁹` (exact 8×10⁻⁹): the sine part cancels,
+  and summing it leaves a rounding error of about ε ∫|f| ≈ 2×10⁻¹⁰, so only the first figure is right. A
+  symmetric zero printed rounding noise with three figures (`∫ sin(x) dx from -1 to 1` → `2.78×10⁻¹⁷`).
+- v2: the quadrature returns ∫|f| with the value; when ε ∫|f| exceeds the relative tolerance's reach
+  (10⁻¹⁰ |value|), the printed value keeps floor(log10(|value| / (ε ∫|f|))) significant figures, at least one:
+  `8×10⁻⁹`, `3×10⁻¹⁷`. Every integral that converged to its tolerance prints exactly as in v1 (the limit never
+  applies when ∫|f| is within 4.5×10⁵ of |value|, and the quadrature's own error estimate isn't used, since
+  after the B2 extrapolations it is pessimistic: `∫ 1/√|x − 0.3| dx` still prints 12 correct digits). It
+  applies to an integral printed directly, alone or scaled by a constant (`2 ∫ …`, a unit conversion), including
+  with `to N digits`; a value stored in a variable first prints as before.
+- Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
+  conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
+
 ## Special functions and cbrt: the C library, as v1's compiled code
 
 v1's compiled code called the platform C library for erf, erfc, gamma, lgamma, besselj/bessely, asinh/acosh/atanh
