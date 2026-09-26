@@ -130,8 +130,12 @@ platforms; the conformance goldens come from Linux.
 ## The browser playground (fermium-wasm): playground only, not `fermium run`
 
 The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
-`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
-prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run
+--backend interp` prints (`web/test/compare_native.js`, run by CI: 142 of 142 at 90a44c4). On the conformance
+suite (`conformance/run --impl rust --bin web/test/fermium-wasm`) the module scored 2679/3037 against 2713 for
+the native binary of the same commit (0f4840d, tree-walker); all 34 differences are floating-point: 23 in the
+last digits of numbers printed to 12–17 digits, 11 in values at rounding level (a 10⁻¹⁷ or 10⁻²² that should be 0,
+or a quantity found by cancellation). What differs, in the browser only:
 
 - **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
   gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on

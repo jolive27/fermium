@@ -3,7 +3,10 @@
 // programs and examples/*.fm) run by the WebAssembly module (web/gen/fermium.wasm, through web/fermium.js as the
 // page runs it) and by the native `fermium run`; stdout, warnings and errors must be the same.
 //
-//   node web/test/compare_native.js [--bin rust/target/release/fermium] [--only TEXT] [-v]
+//   node web/test/compare_native.js [--bin rust/target/release/fermium] [--backend interp|auto|llvm] [--only TEXT] [-v]
+//
+// --backend: the native back end (default interp, the one the page runs, so a difference is the browser build's;
+// auto compares with what a plain `fermium run` picks).
 //
 // The native binary: --bin, else FERMIUM_BIN, else rust/target/{release,fast,debug}/fermium. Both run the program
 // from a folder holding the example data files (the page's in-memory files; a temporary folder natively).
@@ -23,10 +26,11 @@ const ROOT = path.join(WEB, "..");
 
 function args() {
   const a = process.argv.slice(2);
-  const o = { bin: process.env.FERMIUM_BIN || null, only: null, verbose: false };
+  const o = { bin: process.env.FERMIUM_BIN || null, only: null, verbose: false, backend: "interp" };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--bin") o.bin = a[++i];
     else if (a[i] === "--only") o.only = a[++i];
+    else if (a[i] === "--backend") o.backend = a[++i];
     else if (a[i] === "-v") o.verbose = true;
   }
   if (!o.bin) {
@@ -83,7 +87,7 @@ async function main() {
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "program.fm");
       fs.writeFileSync(file, it.code);
-      const n = spawnSync(o.bin, ["run", "--base-dir", dir, file], { encoding: "utf8", timeout: 120000, cwd: dir });
+      const n = spawnSync(o.bin, ["run", "--backend", o.backend, "--base-dir", dir, file], { encoding: "utf8", timeout: 120000, cwd: dir });
       if (n.error) throw new Error(`could not run ${o.bin}: ${n.error.message}`);
       const r = F.run(mod, it.code, "/" + it.dir, files);
       let wErr = r.warnings.map((w) => w + "\n").join("") + (r.error ? r.error + "\n" : "");
