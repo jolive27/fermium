@@ -1,0 +1,3 @@
+g = d/dt (a t^2) where a = 3
+print g(1)        # error "d/dt(...) is a function; give it an argument, like d/dt(...)(x)"
+                  # expected 6 (works without `where`, with a = 3 on its own line)

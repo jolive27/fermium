@@ -1,0 +1,11 @@
+{
+ "id": "beb68dae81f1",
+ "area": "data",
+ "origin": "dev-notes/notes/bugs-tests.md#3",
+ "dir": "dev-notes/notes",
+ "stdout": "plot saved to <ROOT>/dev-notes/notes/F.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

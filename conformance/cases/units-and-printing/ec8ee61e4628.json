@@ -1,0 +1,11 @@
+{
+ "id": "ec8ee61e4628",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-adversarial.md#18",
+ "dir": "dev-notes/notes",
+ "stdout": "3.00×10⁸ m/s\n1.00×10⁸ m\n25 m²\n0.500 m\n1.5×10³ m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

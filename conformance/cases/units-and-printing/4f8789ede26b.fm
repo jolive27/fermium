@@ -1,4 +1,0 @@
-a = 0.27970539148927664 [M☉]
-b = a in M☉
-print b / (1 [M☉]) to 15 digits
-print (a in M☉) in M☉ to 15 digits

@@ -1,0 +1,11 @@
+{
+ "id": "87eec9dc56f7",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-adversarial.md#49",
+ "dir": "dev-notes/notes",
+ "stdout": "2 km 2 km\n2 eV 2 eV\n3 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

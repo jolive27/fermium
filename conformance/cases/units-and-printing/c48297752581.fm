@@ -1,0 +1,4 @@
+T = 20 °C
+print -T              # actual: -566.3 °C (= -293.15 K)   expected: an error, like 20 °C + 10 °C
+x = -(5 °C)
+print x               # actual: -551.3 °C                 expected: -5 °C or an error

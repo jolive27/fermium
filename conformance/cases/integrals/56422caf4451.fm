@@ -1,0 +1,5 @@
+print ∫ 1/sqrt(1 - x^2) dx from -1 to 1          # expected π; actual: "this integral doesn't converge"
+print ∫ 1/sqrt(1 - x^2) dx from 0 to 1           # expected π/2; same error
+print ∫ 1/sqrt(0.25 - x^2) dx from -0.5 to 0.5   # expected π
+print ∫ 1/sqrt(cos(x) - cos(1)) dx from -1 to 1  # expected 4.7376 (pendulum period integral, θ₀ = 1)
+print ∫ 1/sqrt(abs(x - 0.3)) dx from 0 to 1      # expected 2.76877 (interior singularity)

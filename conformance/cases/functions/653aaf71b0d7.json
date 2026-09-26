@@ -1,0 +1,11 @@
+{
+ "id": "653aaf71b0d7",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-tests.md#15",
+ "dir": "dev-notes/notes",
+ "stdout": "E = 3 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

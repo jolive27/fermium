@@ -1,0 +1,4 @@
+a = 890.2848815853079 [fm]
+b = a in inch
+print b / (1 [inch]) to 15 digits
+print (a in inch) in fm to 15 digits

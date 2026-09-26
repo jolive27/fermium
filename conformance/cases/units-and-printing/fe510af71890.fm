@@ -1,4 +1,0 @@
-a = 150.40860050202966 [bar]
-b = a in bar
-print b / (1 [bar]) to 15 digits
-print (a in bar) in bar to 15 digits

@@ -1,0 +1,17 @@
+{
+ "id": "d06933f5efa5",
+ "area": "units-and-printing",
+ "origin": "bootcamp/solutions/lesson00.md#5",
+ "dir": "bootcamp/solutions",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "Ada isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  Ada = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

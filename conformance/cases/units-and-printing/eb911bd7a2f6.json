@@ -1,0 +1,17 @@
+{
+ "id": "eb911bd7a2f6",
+ "area": "units-and-printing",
+ "origin": "bootcamp/TROUBLESHOOTING.md#13",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is length [m]; it can't now hold time [s]",
+  "line": 2,
+  "col": 1,
+  "hint": "each variable keeps its units; use a new name for a different quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

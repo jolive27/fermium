@@ -1,0 +1,17 @@
+{
+ "id": "df6c3ff6d861",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-adversarial.md#16",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x too small",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+for x in xs
+    push(xs, x)
+print xs          # actual: [1, 2, 3, 1, -2.79078×10⁻¹²², 3]   expected: [1, 2, 3, 1, 2, 3]

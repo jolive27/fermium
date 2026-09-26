@@ -1,0 +1,4 @@
+a = 0.8648644233597691 [pc]
+b = a in pc
+print b / (1 [pc]) to 15 digits
+print (a in pc) in pc to 15 digits

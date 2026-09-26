@@ -1,0 +1,9 @@
+solve x' = -x with x(0) = 1 for t from 0 to 30
+print x(30)            # actual: 8.29301×10⁻¹³   expected: 9.35762×10⁻¹⁴ (e⁻³⁰)
+solve x' = -x with x(0) = 1 for t from 0 to 60
+print x(60)            # actual: 2.27807×10⁻¹¹   expected: 8.75651×10⁻²⁷
+λ = 1 1/s
+solve N' = -λ N with N(0) = 1e20 for t from 0 s to 50 s
+print N(50 s)          # actual: 3.7168×10⁹      expected: 0.0192875 (1e20·e⁻⁵⁰)
+solve x'' = -x - 0.2 x' with x(0) = 1, x'(0) = 0 for t from 0 to 200
+print x(200)           # actual: -6.88365×10⁻¹⁰  expected: -1.15908×10⁻⁹ (scipy, atol=1e-30)

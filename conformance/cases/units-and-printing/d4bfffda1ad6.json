@@ -1,0 +1,17 @@
+{
+ "id": "d4bfffda1ad6",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson02b_symbols.md#9",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "fermium isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  fermium = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

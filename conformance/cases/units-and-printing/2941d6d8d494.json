@@ -1,0 +1,11 @@
+{
+ "id": "2941d6d8d494",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n",
+ "stderr": "warning: line 1: c (the speed of light) is now your variable: from here on, c means your value\n    c = 3.0e8 m/s\n    ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

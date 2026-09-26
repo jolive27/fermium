@@ -1,0 +1,13 @@
+a = 1 fm
+print ∫ exp(-r/a) dr from 0 m to ∞                             # actual: 0 m     expected: 1 fm
+a = 0.529e-10 m
+print ∫ 4π r² exp(-2 r/a) / (π a³) dr from 0 m to ∞            # actual: 0       expected: 1 (hydrogen 1s normalisation!)
+σ = 1 fm
+print ∫ exp(-x^2/(2 σ^2)) dx from -∞ to ∞ in fm                # actual: 0 fm    expected: 2.50663 fm
+E0 = 1 MeV
+print ∫ exp(-E/E0) dE from 0 J to ∞ in MeV                     # actual: 0 MeV   expected: 1 MeV
+print ∫ exp(-t/(1 ns)) dt from 0 s to ∞ in ns                  # actual: 0 ns    expected: 1 ns
+a = 1 AU
+print ∫ exp(-r/a) dr from 0 m to ∞ in AU                       # actual: "doesn't converge ... estimate
+                                                               #  1.49598×10¹¹ ± 158.646"  expected: 1 AU
+print ∫ exp(-t/(1 Gyr)) dt from 0 s to ∞                       # actual: "doesn't converge ... NaN ± NaN"

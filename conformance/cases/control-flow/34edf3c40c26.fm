@@ -1,0 +1,10 @@
+lo = 0 s
+hi = T_vac
+mid = 0 s
+while hi - lo > 1e-9 s
+    mid = (lo + hi) / 2
+    if r(mid).y > 0 m
+        lo = mid
+    else
+        hi = mid
+t_land = lo

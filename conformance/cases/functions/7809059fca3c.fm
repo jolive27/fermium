@@ -1,0 +1,4 @@
+f(x) = x + 1 m
+print f(2 s)
+# actual: line 1: can't add time [s] to length [m]
+# expected: the error points at (or at least mentions) the call on line 2, which is where the mistake is

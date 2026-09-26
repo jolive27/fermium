@@ -1,0 +1,2 @@
+print 2½          # actual: 1     expected: 2.5, or an error suggesting 2.5 / 5/2
+print 1½ m        # actual: error "m isn't defined"

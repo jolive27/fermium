@@ -1,0 +1,17 @@
+{
+ "id": "11e54f481411",
+ "area": "lists",
+ "origin": "bootcamp/lesson05_lists.md#5",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 4 is out of range: the list has 3 elements (valid indexes are 1 to 3)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

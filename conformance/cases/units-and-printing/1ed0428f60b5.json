@@ -1,0 +1,11 @@
+{
+ "id": "1ed0428f60b5",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n",
+ "stderr": "warning: line 1: e (the elementary charge) is now your variable: from here on, e means your value\n    e = 0.0167\n    ^\n  hint: that's fine if you don't need the elementary charge below; otherwise pick another name, like e_0 or e2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

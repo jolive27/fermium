@@ -1,0 +1,2 @@
+f(x, y) = x^2 y
+print (∂/∂x f)(1, 2)     # now: "expected ')' to close '(' but found ','"   (worked before; expected 4)

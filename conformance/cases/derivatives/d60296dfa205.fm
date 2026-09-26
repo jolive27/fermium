@@ -1,0 +1,5 @@
+r(t) = <t^2, t^3, 1>
+s(t) = |r(t)|
+g = s'
+print g(1)       # expected 2.88675 (= 10/(2√3))
+# actual: line 2: the argument of sign must be a number, but it is a 3-vector ...

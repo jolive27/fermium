@@ -1,0 +1,4 @@
+a = 0.5 [yr]
+b = a in ms
+print b / (1 [ms]) to 15 digits
+print (a in ms) in yr to 15 digits

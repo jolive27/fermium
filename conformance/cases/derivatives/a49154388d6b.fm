@@ -1,0 +1,4 @@
+term(n, x, y) = 4 V0 / (n π) * sin(n π x / a) * sinh(n π y / a) / sinh(n π)
+print ∇²term          # no output after 60 s (killed)
+g(n, x, y) = n² x² y
+print ∇²g(2, 1 m, 1 m)   # "can't add a plain number (no units) to area [m²]"

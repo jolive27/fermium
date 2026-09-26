@@ -1,4 +1,0 @@
-a = 912.6925554733393 [erg]
-b = a in keV
-print b / (1 [keV]) to 15 digits
-print (a in keV) in erg to 15 digits

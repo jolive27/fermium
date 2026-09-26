@@ -1,0 +1,11 @@
+{
+ "id": "94f0de62dfd7",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-adversarial.md#39",
+ "dir": "dev-notes/notes",
+ "stdout": "10 s\n",
+ "stderr": "warning: line 1: 'where x = ...' hides the parameter x of f, so the argument is ignored\n    f(x) = 2 x where x = 5 s\n                         ^\n  hint: rename the where-variable, or drop x from f(...)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

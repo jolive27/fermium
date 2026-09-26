@@ -1,0 +1,2 @@
+d = load "gap.csv"
+print d.y

@@ -1,0 +1,11 @@
+{
+ "id": "6401529ff620",
+ "area": "ode",
+ "origin": "dev-notes/notes/bugs-adversarial.md#37",
+ "dir": "dev-notes/notes",
+ "stdout": "-0.999\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

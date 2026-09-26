@@ -1,4 +1,0 @@
-a = 1.9 [nm]
-b = a in μm
-print b / (1 [μm]) to 15 digits
-print (a in μm) in nm to 15 digits

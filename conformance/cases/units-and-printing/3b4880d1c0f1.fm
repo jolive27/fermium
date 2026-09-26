@@ -1,0 +1,3 @@
+λ = 500 nm
+T = 5000 K
+print h c / λ k_B T

@@ -1,0 +1,11 @@
+{
+ "id": "caa4d76b68e8",
+ "area": "integrals",
+ "origin": "dev-notes/notes/bugs-adversarial.md#21",
+ "dir": "dev-notes/notes",
+ "stdout": "2 kg\n2 m³\n6 K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

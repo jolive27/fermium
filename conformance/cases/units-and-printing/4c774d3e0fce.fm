@@ -1,0 +1,4 @@
+a = 694.3743357136533 [Pa]
+b = a in bar
+print b / (1 [bar]) to 15 digits
+print (a in bar) in Pa to 15 digits

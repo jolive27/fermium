@@ -1,0 +1,2 @@
+solve N' = -N / 5 s with N(0) = 1000 for t from 0 s to 20 s
+print N(30 s)

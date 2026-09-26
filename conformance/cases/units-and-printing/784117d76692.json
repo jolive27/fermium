@@ -1,0 +1,17 @@
+{
+ "id": "784117d76692",
+ "area": "units-and-printing",
+ "origin": "bootcamp/TROUBLESHOOTING.md#9",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "LT isn't defined",
+  "line": 3,
+  "col": 7,
+  "hint": "did you mean L T (L times T)? Fermium reads LT as one name; put a space between",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

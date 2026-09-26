@@ -1,0 +1,4 @@
+a = 867.7854912055865 [pc]
+b = a in ft
+print b / (1 [ft]) to 15 digits
+print (a in ft) in pc to 15 digits

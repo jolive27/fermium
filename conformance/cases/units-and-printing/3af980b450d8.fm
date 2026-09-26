@@ -1,4 +1,0 @@
-a = 509.7651350640536 [ly]
-b = a in ly
-print b / (1 [ly]) to 15 digits
-print (a in ly) in ly to 15 digits

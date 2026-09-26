@@ -1,0 +1,4 @@
+a = 881.1751380216477 [Å]
+b = a in m
+print b / (1 [m]) to 15 digits
+print (a in m) in Å to 15 digits

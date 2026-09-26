@@ -1,0 +1,8 @@
+ω = 2 1/s
+F = ∫ cos(ω t) dt       # error: SymPy returned something Fermium can't use yet:
+                        #   Piecewise((sin(t*ω)/ω, (ω > 0) | (ω < 0)), (t, True))
+k = 3
+F = ∫ exp(-k x) dx      # same, Piecewise((-exp(-k*x)/k, ...
+a = 2
+F = ∫ x^a dx            # same
+F = ∫ abs(x) dx         # same

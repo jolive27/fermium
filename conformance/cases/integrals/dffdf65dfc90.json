@@ -1,0 +1,11 @@
+{
+ "id": "dffdf65dfc90",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6 N m³\n",
+ "stderr": "warning: line 2: V is a number here, so V(x) in area means V × (...)\n    print area(3 J, 2 m)\n          ^\n  hint: to pass a function, give its name: area(g, ...) after g(x) = ...; to multiply, write V*(...)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

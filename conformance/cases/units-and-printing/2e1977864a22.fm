@@ -1,0 +1,4 @@
+a = 843.5561721980838 [W]
+b = a in hp
+print b / (1 [hp]) to 15 digits
+print (a in hp) in W to 15 digits

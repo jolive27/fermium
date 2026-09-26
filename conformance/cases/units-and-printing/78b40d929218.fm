@@ -1,4 +1,0 @@
-a = 0.3048 [erg]
-b = a in MeV
-print b / (1 [MeV]) to 15 digits
-print (a in MeV) in erg to 15 digits

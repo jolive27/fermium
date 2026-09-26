@@ -1,0 +1,4 @@
+f(z) = ∫ (∫ z dφ from 0 to 1) ds from 0 to 1
+print f(2)            # 6.9×10⁻³¹⁰ (should be 2)
+g(z) = ∫ (∫ z / (s² + z²) dφ from 0 to 1) ds from 0 to 1
+print g(2)            # 0, or on another run: "this integral doesn't converge ... ∞ ± NaN" with no line

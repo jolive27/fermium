@@ -1,0 +1,17 @@
+{
+ "id": "5be64758d877",
+ "area": "lists",
+ "origin": "dev-notes/notes/bugs-adversarial.md#12",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "T holds temperature [K]; it can't now hold a list of temperature [K]",
+  "line": 5,
+  "col": 1,
+  "hint": "use a different name for the new value",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

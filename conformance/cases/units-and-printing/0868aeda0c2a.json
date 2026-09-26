@@ -1,0 +1,11 @@
+{
+ "id": "0868aeda0c2a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 Gy\n",
+ "stderr": "warning: line 1: adding a value in Gy and one in Sv: both are J/kg in SI, but grays measure absorbed dose and sieverts equivalent dose (weighted by the radiation type)\n    print 1 Gy + 1 Sv\n          ^\n  hint: convert the absorbed dose with the radiation weighting factor first (H = w_R D)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "ca9b75dd198a",
+ "area": "data",
+ "origin": "docs/reference.md#36",
+ "dir": "docs",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't find the file 'pendulum.csv'",
+  "line": 1,
+  "col": 8,
+  "hint": "looked in /home/user/fermium/docs",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

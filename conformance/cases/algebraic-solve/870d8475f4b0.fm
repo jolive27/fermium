@@ -1,0 +1,2 @@
+v_y(τ) = r'(τ).y
+solve v_y(t_apex) = 0 m/s for t_apex from 0 s to T_vac

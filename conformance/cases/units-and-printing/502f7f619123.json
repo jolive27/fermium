@@ -1,0 +1,17 @@
+{
+ "id": "502f7f619123",
+ "area": "units-and-printing",
+ "origin": "dev-notes/FERMIUM_SPEC_V1.5_V2.md#3",
+ "dir": "dev-notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 14,
+  "col": 7,
+  "hint": "write  3*m  for 3 × your variable m, or  3 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

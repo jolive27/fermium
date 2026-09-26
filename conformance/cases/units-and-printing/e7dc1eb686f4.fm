@@ -1,4 +1,0 @@
-a = 630.067621519221 [yr]
-b = a in day
-print b / (1 [day]) to 15 digits
-print (a in day) in yr to 15 digits

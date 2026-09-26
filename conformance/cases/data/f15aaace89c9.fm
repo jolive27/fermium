@@ -1,0 +1,2 @@
+f(x) = 3 x^2
+plot f(x) vs x from 0 m to 1 m to "e.png"

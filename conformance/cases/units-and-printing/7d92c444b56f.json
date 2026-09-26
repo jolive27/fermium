@@ -1,0 +1,17 @@
+{
+ "id": "7d92c444b56f",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-adversarial.md#42",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "not enough memory for a list of 3×10⁹ numbers (the most is 10⁹)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

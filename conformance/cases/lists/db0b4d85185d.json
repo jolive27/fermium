@@ -1,0 +1,11 @@
+{
+ "id": "db0b4d85185d",
+ "area": "lists",
+ "origin": "bootcamp/lesson05_lists.md#18",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    [0, 0.500, 1.00, 1.50, 2.00] s\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    [1, 3, 5, 7, 9]\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 3: this line computes a value but doesn't use it\n    [0, 0, 0]\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

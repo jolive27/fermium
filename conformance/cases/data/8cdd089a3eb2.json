@@ -1,0 +1,17 @@
+{
+ "id": "8cdd089a3eb2",
+ "area": "data",
+ "origin": "dev-notes/notes/bugs-adversarial.md#30",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't find the file 'gap.csv'",
+  "line": 1,
+  "col": 5,
+  "hint": "looked in /home/user/fermium/dev-notes/notes",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

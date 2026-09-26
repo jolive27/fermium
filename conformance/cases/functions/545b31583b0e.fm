@@ -1,0 +1,2 @@
+KE(mass, v) = ½ mass v^2
+print KE(2 kg)

@@ -1,4 +1,0 @@
-a = 851.9873778680246 [ft]
-b = a in AU
-print b / (1 [AU]) to 15 digits
-print (a in AU) in ft to 15 digits

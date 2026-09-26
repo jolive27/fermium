@@ -1,0 +1,5 @@
+d = load "pend.csv"
+xs = d.L
+xs[1] = 7 m          # changes d.L too (shared, fine under D26)
+push(xs, 5 m)        # realloc()s memory owned by NumPy -- undefined behaviour; d.L still has 4 values
+print xs, d.L        # [700, 20, 40, 80, 500] cm [700, 20, 40, 80] cm

@@ -1,4 +1,0 @@
-a = 116.55598705876854 [kg]
-b = a in kg
-print b / (1 [kg]) to 15 digits
-print (a in kg) in kg to 15 digits

@@ -5,35 +5,35 @@ warnings and error the oracle gives. `conformance/run --impl legacy|rust` scores
 
 | Area | Cases |
 |---|---|
-| algebraic-solve | 44 |
-| analyze | 33 |
+| algebraic-solve | 46 |
+| analyze | 34 |
 | appendix1 | 5 |
 | complex | 106 |
-| control-flow | 127 |
-| data | 79 |
-| derivatives | 207 |
-| eigen | 62 |
-| fft | 37 |
-| functions | 171 |
-| integrals | 274 |
-| lists | 111 |
+| control-flow | 137 |
+| data | 93 |
+| derivatives | 220 |
+| eigen | 63 |
+| fft | 39 |
+| functions | 197 |
+| integrals | 291 |
+| lists | 134 |
 | modules | 36 |
 | natural-units | 69 |
-| ode | 316 |
+| ode | 341 |
 | parallel | 25 |
 | pde | 61 |
 | python-interop | 24 |
 | rng | 29 |
-| uncertainty | 108 |
-| units-and-printing | 942 |
-| vectors-matrices | 171 |
-| **total** | **3037** |
+| uncertainty | 113 |
+| units-and-printing | 1130 |
+| vectors-matrices | 173 |
+| **total** | **3366** |
 
 Left out:
 
-- machine-dependent output: 4
+- machine-dependent output: 0
 - temporary directory with files: 141
-- duplicate: 137
-- crashed in legacy: 0
+- duplicate: 434
+- crashed in legacy: 1
 
 Appendix 1 (John's programs, mandatory): 5 cases.

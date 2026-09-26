@@ -1,0 +1,17 @@
+{
+ "id": "33776385332b",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-adversarial.md#35",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is a plain number (no units); it can't now hold length [m]",
+  "line": 8,
+  "col": 1,
+  "hint": "each variable keeps its units; use a new name for a different quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

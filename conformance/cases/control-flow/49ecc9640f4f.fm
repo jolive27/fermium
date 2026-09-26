@@ -1,0 +1,11 @@
+xs = [1, 2, 3]
+print xs[1e19]              # (also i = 18446744073709551617; xs[i], and xs[1e19] = 5)
+print xs[0/0]
+n = 0
+for i from 1 to inf         # (with a break inside -- arguably should just loop)
+    n += 1
+    if n > 5
+        break
+for i from 1 to 0/0
+    n += 1
+print len(zeros(inf))

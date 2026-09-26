@@ -1,0 +1,4 @@
+a = 1.9 [hr]
+b = a in day
+print b / (1 [day]) to 15 digits
+print (a in day) in hr to 15 digits

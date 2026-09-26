@@ -1,0 +1,11 @@
+{
+ "id": "aff62afd6d46",
+ "area": "control-flow",
+ "origin": "gauntlet/mechanics/FRICTION.md#3",
+ "dir": "gauntlet/mechanics",
+ "stdout": "6\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

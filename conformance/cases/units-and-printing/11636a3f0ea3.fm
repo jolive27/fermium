@@ -1,0 +1,4 @@
+a = 921.767036344975 [u]
+b = a in g
+print b / (1 [g]) to 15 digits
+print (a in g) in u to 15 digits

@@ -1,0 +1,4 @@
+a = 421.4125310770932 [km]
+b = a in AU
+print b / (1 [AU]) to 15 digits
+print (a in AU) in km to 15 digits

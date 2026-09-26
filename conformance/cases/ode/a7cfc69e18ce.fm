@@ -1,0 +1,4 @@
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+print max(x), min(x)        # actual: 0.999848 -0.999824   expected: 1 -1 (to ~1e-9)
+solve x'' = -x with x(0) = 0, x'(0) = 1 for t from 0 to 20 step 0.5
+print max(x)                # actual: 0.99713   expected: 1

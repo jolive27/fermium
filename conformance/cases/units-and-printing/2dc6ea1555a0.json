@@ -1,0 +1,11 @@
+{
+ "id": "2dc6ea1555a0",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2.21 ly\n",
+ "stderr": "warning: line 3: this divides by all of 'g (…)': implicit multiplication binds tighter than '/'\n    print c²/g (√(1 + (g T / c)²) - 1) in ly\n            ^\n  hint: write …/g * (…) if only g is below the line, or …/(g (…)) if all of it is\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

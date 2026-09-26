@@ -1,0 +1,11 @@
+{
+ "id": "11ab9d1dcc9d",
+ "area": "integrals",
+ "origin": "dev-notes/notes/bugs-adversarial.md#64",
+ "dir": "dev-notes/notes",
+ "stdout": "0.693\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

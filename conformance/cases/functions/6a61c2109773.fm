@@ -1,0 +1,2 @@
+f(x) = 2 x where x = 5 s
+print f(1 s)

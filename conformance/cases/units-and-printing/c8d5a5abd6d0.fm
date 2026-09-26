@@ -1,0 +1,4 @@
+a = 801.528774738403 [u]
+b = a in kg
+print b / (1 [kg]) to 15 digits
+print (a in kg) in u to 15 digits

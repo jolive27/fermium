@@ -1,0 +1,17 @@
+{
+ "id": "a49154388d6b",
+ "area": "derivatives",
+ "origin": "gauntlet/electromagnetism/FRICTION.md#5",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'V0' isn't a unit Fermium knows (or a variable you've defined)",
+  "line": 1,
+  "col": 19,
+  "hint": "see the list of units in docs/reference.md §15",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

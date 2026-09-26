@@ -1,0 +1,11 @@
+{
+ "id": "35d4e938975e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6.28 Hz\n",
+ "stderr": "warning: line 1: angles are plain numbers (1 rev = 2π), so a rate in rpm shown in Hz is an angular frequency: 1 rpm is 0.10472 Hz here, not 0.0166667 Hz\n    print 60 rpm in Hz\n          ^\n  hint: to count turns per second write  in rev/s ; for the frequency in cycles per second divide by 2π:  ω/(2π) in Hz\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+solve x' = -x with x(0) = 1 for t from 0 to 700
+print x(700)            # actual: 7.99895×10⁻³⁰²   expected: 9.85968×10⁻³⁰⁵
+solve x' = -x with x(0) = 1e-300 for t from 0 to 30
+print x(30)             # actual: 3.79017×10⁻³⁰¹   expected: 9.35762×10⁻³¹⁴ (subnormal)

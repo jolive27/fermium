@@ -1,0 +1,11 @@
+{
+ "id": "2785db2c76a2",
+ "area": "units-and-printing",
+ "origin": "dev-notes/FERMIUM_SPEC_V1.5_V2.md#1",
+ "dir": "dev-notes",
+ "stdout": "Hello Physics!\n29.4 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "73d928c9857f",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson04_conditions_loops.md#6",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    3 m\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}
