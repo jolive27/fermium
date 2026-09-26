@@ -7,6 +7,7 @@
 //! rejected up front (`supports`), before anything runs, and the CLI runs the tree-walker instead.
 pub mod compile;
 pub mod rt;
+pub mod solve_rt;
 
 use std::sync::Once;
 
@@ -77,6 +78,8 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     ctx.texts = tables.texts;
     ctx.builtins = tables.builtins;
     ctx.mvec_fmts = tables.mvec_fmts;
+    ctx.ode_sites = tables.ode_sites;
+    ctx.msum_sites = tables.msum_sites;
     let ee = g.lm.create_jit_execution_engine(OptimizationLevel::Default).map_err(|e| e.to_string())?;
     // (the optimizer has removed the declarations of callbacks the program doesn't use)
     for (name, a) in &g.mappings {
