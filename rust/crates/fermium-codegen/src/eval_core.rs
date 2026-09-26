@@ -575,27 +575,33 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         match &e.kind {
             ExprKind::Map { func, args, list_pos } => {
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
-                let lists: Vec<Rc<RefCell<Vec<f64>>>> =
-                    list_pos.iter().map(|&p| self.list_arg(&vals[p])).collect::<Result<_, _>>()?;
-                let n0 = lists[0].borrow().len();
+                // the elements as values: a list may hold uncertain numbers (D120)
+                let lists: Vec<Vec<Value>> = list_pos
+                    .iter()
+                    .map(|&p| crate::eval_unc::list_items(&vals[p]).ok_or(()))
+                    .collect::<Result<_, _>>()
+                    .or_else(|_| self.err("not yet supported by the Rust back end: a list was expected here"))?;
+                let n0 = lists[0].len();
                 for l in &lists[1..] {
-                    let ni = l.borrow().len();
-                    if ni != n0 {
-                        return self.len_error(n0, ni);
+                    if l.len() != n0 {
+                        return self.len_error(n0, l.len());
                     }
                 }
                 let mut out = Vec::with_capacity(n0);
                 for i in 0..n0 {
                     let mut a2 = vals.clone();
                     for (k, &p) in list_pos.iter().enumerate() {
-                        a2[p] = Value::Num(lists[k].borrow()[i]);
+                        a2[p] = lists[k][i].clone();
                     }
                     let line = self.line;
                     let v = self.call(*func, a2)?;
                     self.line = line;
-                    out.push(self.num_arg(&v)?);
+                    match v {
+                        v @ (Value::Num(_) | Value::Unc(_)) => out.push(v),
+                        v => out.push(Value::Num(self.num_arg(&v)?)),
+                    }
                 }
-                Ok(new_list(out))
+                Ok(crate::eval_unc::make_list(out))
             }
             _ => self.err("this isn't supported by the Rust back end yet"),
         }
