@@ -69,8 +69,13 @@ pub(crate) fn measured_sum(e: &Expr) -> bool {
             _ => e.sf.is_some() && !fermium_ir::uses_fit_sf(e),
         }
     }
+    // a temperature keeps v1's rule: its operands may be written in °C or °F, whose decimal places can't be read
+    // off the value in kelvin (20.0 °C is 293.15 K; red team 11 #1), and the IR doesn't keep the written unit
+    let temperature = matches!(&e.ty, fermium_ir::Ty::Num(d) if d.terms.is_empty()
+                               && d.konst == fermium_units::dim::TEMPERATURE);
     matches!(e.kind, ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, ..))
         && matches!(e.ty, fermium_ir::Ty::Num(_))
+        && !temperature
         && e.direct != 2
         && leaves_measured(e)
 }
