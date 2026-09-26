@@ -702,6 +702,35 @@ impl Integrator {
             // ln(x), atan(x), asin(x) alone are in the call table
             return None;
         }
+        // P(x) exp(a x) sin(b x): tabular, with g = exp·sin (each ∫ is again exp·(sin, cos))
+        if vf.len() >= 3 {
+            let ie = vf.iter().position(|f| matches!(call_parts(f), Some(("exp", [u])) if linear(u, &x).is_some()));
+            let it = vf.iter().position(|f| matches!(call_parts(f), Some(("sin" | "cos", [u])) if linear(u, &x).is_some()));
+            if let (Some(ie), Some(it)) = (ie, it) {
+                let others: Vec<A::Expr> =
+                    vf.iter().enumerate().filter(|(j, _)| *j != ie && *j != it).map(|(_, f)| f.clone()).collect();
+                let p = simplify(&build_product(1.0, &others));
+                if poly_coeffs(&p, &x, 6).is_some() {
+                    let g = mul(vf[ie].clone(), vf[it].clone());
+                    let mut out: Option<A::Expr> = None;
+                    let (mut pk, mut gk, mut sign) = (p, g, 1.0);
+                    for _ in 0..8 {
+                        if is_num_v(&pk, 0.0) {
+                            break;
+                        }
+                        gk = simplify(&self.integ(&gk)?);
+                        let t = mul(num(sign), mul(pk.clone(), gk.clone()));
+                        out = Some(match out {
+                            None => t,
+                            Some(o) => add(o, t),
+                        });
+                        pk = simplify(&d(&pk, &x, &mut Plain).ok()?);
+                        sign = -sign;
+                    }
+                    return out;
+                }
+            }
+        }
         for i in 0..vf.len() {
             let g = &vf[i];
             let Some((gname, [u])) = call_parts(g) else { continue };
