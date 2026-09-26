@@ -28,7 +28,7 @@ impl BackendChoice {
     }
     /// From FERMIUM_BACKEND when no --backend was given.
     pub fn from_env() -> BackendChoice {
-        std::env::var("FERMIUM_BACKEND").ok().and_then(|s| BackendChoice::parse(&s)).unwrap_or(BackendChoice::Interp) // TEMPORARY: the tree-walker by default until the LLVM back end is rebased on the merged evaluator
+        std::env::var("FERMIUM_BACKEND").ok().and_then(|s| BackendChoice::parse(&s)).unwrap_or(BackendChoice::Auto)
     }
 }
 

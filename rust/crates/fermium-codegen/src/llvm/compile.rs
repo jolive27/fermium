@@ -65,7 +65,8 @@ pub struct Val<'c> {
 
 /// The one-argument math built-ins called through shims (the same Rust functions as eval::math1).
 const SHIM1: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
-                         "exp", "ln", "log", "log10", "log2", "expm1", "log1p", "cot", "sec", "csc"];
+                         "exp", "ln", "log", "log10", "log2", "expm1", "log1p", "cot", "sec", "csc", "erf", "erfc",
+                         "gamma", "lgamma"];
 
 pub struct Gen<'c, 'm> {
     cx: &'c Context,
@@ -177,7 +178,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_tlist_copy", Some(p), &[p, p], rt::fm_tlist_copy as *const () as usize, false);
         self.declare("fm_par_run", None, &[p, p, p, i, f, f, p, i], rt::fm_par_run as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
-        self.declare("fm_fpow", Some(f), &[f, f], rt::fm_fpow as *const () as usize, true);
+        self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
+        self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
+        self.declare("fm_tlist_new", Some(p), &[p], rt::fm_tlist_new as *const () as usize, false);
+        self.declare("fm_tlist_clear", None, &[p], rt::fm_tlist_clear as *const () as usize, false);
         self.declare("fm_powc", Some(f), &[f, f], rt::fm_powc as *const () as usize, true);
         self.declare("fm_atan2", Some(f), &[f, f], rt::fm_atan2 as *const () as usize, true);
         self.declare("fm_hypot", Some(f), &[f, f], rt::fm_hypot as *const () as usize, true);
@@ -665,9 +669,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let l = bl!(self.b.build_load(self.ptrt(), p, "l")).into_pointer_value();
                 let iv = self.expr(idx)?;
                 let i = self.to_f(iv)?;
+                let ep = self.list_elem_ptr(l, i)?;
                 let vv = self.expr(value)?;
                 let v = self.to_f(vv)?;
-                let ep = self.list_elem_ptr(l, i)?;
                 bl!(self.b.build_store(ep, v));
             }
             StmtKind::Push(sym, e) => {
@@ -689,11 +693,12 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             StmtKind::Clear(sym) => {
                 let (p, k) = self.slot(*sym)?;
-                if k != Kind::L {
-                    return Err("clear of a non-list".into());
-                }
                 let l = bl!(self.b.build_load(self.ptrt(), p, "l"));
-                self.call("fm_list_clear", &[l])?;
+                match k {
+                    Kind::L => self.call("fm_list_clear", &[l])?,
+                    Kind::TL => self.call("fm_tlist_clear", &[l])?,
+                    _ => return Err("clear of this kind of value isn't compiled".into()),
+                };
             }
             StmtKind::If(c, then, other) => {
                 let cv = self.expr(c)?;
@@ -803,20 +808,22 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             None => self.fconst(1.0),
         };
-        let nz = bl!(self.b.build_float_compare(FloatPredicate::UNE, st, self.fconst(0.0), "stepnz"));
-        let z = self.fconst(0.0);
-        self.guard(nz, rt::E_STEP0, z, z)?;
+        // eval.rs for_count: a zero or NaN step and a NaN count are errors, a negative count is 0, at most 2⁶²
+        let nz = bl!(self.b.build_float_compare(FloatPredicate::ONE, st, self.fconst(0.0), "stepnz"));
+        self.guard(nz, rt::E_STEP0, lo, hi)?;
         let d = bl!(self.b.build_float_sub(hi, lo, "d"));
         let q = bl!(self.b.build_float_div(d, st, "q"));
         let q = bl!(self.b.build_float_add(q, self.fconst(1e-9), "q"));
         let n = self.intrinsic("llvm.floor", &[q])?;
-        // n.is_finite() && n >= 0: n >= 0 and n < ∞ (false for NaN)
-        let ge = bl!(self.b.build_float_compare(FloatPredicate::OGE, n, self.fconst(0.0), "nge"));
-        let fin = bl!(self.b.build_float_compare(FloatPredicate::OLT, n, self.fconst(f64::INFINITY), "nfin"));
-        let okn = bl!(self.b.build_and(ge, fin, "okn"));
-        let ni = self.fptosi_sat(n)?;
-        let ni = bl!(self.b.build_int_add(ni, self.i64c(1), "n1"));
-        let count = bl!(self.b.build_select(okn, ni, self.i64c(0), "count")).into_int_value();
+        let n = bl!(self.b.build_float_add(n, self.fconst(1.0), "n1"));
+        let neg = bl!(self.b.build_float_compare(FloatPredicate::OLT, n, self.fconst(0.0), "neg"));
+        let n = bl!(self.b.build_select(neg, self.fconst(0.0), n, "n0")).into_float_value();
+        let known = bl!(self.b.build_float_compare(FloatPredicate::ORD, n, n, "known"));
+        self.guard(known, rt::E_RANGE, lo, hi)?;
+        let cap = self.fconst(2f64.powi(62));
+        let big = bl!(self.b.build_float_compare(FloatPredicate::OGT, n, cap, "big"));
+        let n = bl!(self.b.build_select(big, cap, n, "ncap")).into_float_value();
+        let count = self.fptosi_sat(n)?;
         Ok((lo, st, count))
     }
 
@@ -1033,10 +1040,16 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             ExprKind::Pow(a, b) => {
                 let va = self.expr(a)?;
-                let x = self.to_f(va)?;
                 let vb = self.expr(b)?;
                 let y = self.to_f(vb)?;
-                fv(self.fcall("fm_fpow", &[x.into(), y.into()])?)
+                match va.k {
+                    Kind::F => {
+                        let x = va.v.unwrap().into_float_value();
+                        fv(self.fcall("fm_powf", &[x.into(), y.into()])?)
+                    }
+                    Kind::L => Val { k: Kind::L, v: self.call("fm_list_powf", &[ctx, va.v.unwrap(), y.into()])? },
+                    _ => return Err("** of this kind of value isn't compiled".into()),
+                }
             }
             ExprKind::Neg(a) => {
                 let v = self.expr(a)?;
@@ -1169,10 +1182,38 @@ impl<'c, 'm> Gen<'c, 'm> {
                     return Err("a call with the wrong number of arguments".into());
                 }
                 let rk = kind_of(&func.ret_ty)?;
+                let into_module = func.body.first().is_some_and(|s| s.line > crate::eval::MODLINE_MAX);
+                let saved = match self.known_line {
+                    Some(l) => self.i32c(l as i64),
+                    None => self.line_val()?,
+                };
+                if into_module {
+                    // eval.rs call(): 0 < caller line <= MODLINE_MAX → call_line (D185)
+                    let pos = bl!(self.b.build_int_compare(IntPredicate::SGT, saved, self.i32c(0), "pos"));
+                    let prog = bl!(self.b.build_int_compare(IntPredicate::ULE, saved,
+                                                            self.i32c(crate::eval::MODLINE_MAX as i64), "prog"));
+                    let yes = bl!(self.b.build_and(pos, prog, "yes"));
+                    let clp = unsafe { bl!(self.b.build_gep(self.cx.i8_type(), self.ctx_ptr, &[self.i64c(4)], "clp")) };
+                    let old = bl!(self.b.build_load(self.cx.i32_type(), clp, "old")).into_int_value();
+                    let nv = bl!(self.b.build_select(yes, saved, old, "cl"));
+                    bl!(self.b.build_store(clp, nv));
+                }
                 let cs = bl!(self.b.build_call(self.funcs[*f], &vals, "call"));
-                self.known_line = None;
                 self.check_err()?;
+                // eval.rs call(): later errors in the caller are on its own line
+                bl!(self.b.build_store(self.line_g.as_pointer_value(), saved));
                 Val { k: rk, v: cs.try_as_basic_value().left() }
+            }
+            ExprKind::List(items) if matches!(e.ty, Ty::TextList) => {
+                let l = self.call("fm_tlist_new", &[ctx])?.unwrap();
+                for it in items {
+                    let v = self.expr(it)?;
+                    if v.k != Kind::S {
+                        return Err("a text list item that isn't a text".into());
+                    }
+                    self.call("fm_tlist_push", &[l, v.v.unwrap()])?;
+                }
+                Val { k: Kind::TL, v: Some(l) }
             }
             ExprKind::List(items) => {
                 let cap = self.i64c(items.len() as i64);
@@ -1339,17 +1380,27 @@ impl<'c, 'm> Gen<'c, 'm> {
                 return Ok(fv(self.fcall(f, &[x.into(), y.into()])?));
             }
             if name == "max" || name == "min" {
-                // fold from ∓∞: take b if b > a (b < a) or a is NaN
-                let mut acc = self.fconst(if name == "max" { f64::NEG_INFINITY } else { f64::INFINITY });
-                for v in vals.clone() {
+                // eval_core: f64::max / min (llvm.maxnum / minnum) from the first argument
+                let mut acc = x;
+                for v in vals[1..].to_vec() {
                     let b = self.to_f(v)?;
-                    let pred = if name == "max" { FloatPredicate::OGT } else { FloatPredicate::OLT };
-                    let better = bl!(self.b.build_float_compare(pred, b, acc, "better"));
-                    let anan = bl!(self.b.build_float_compare(FloatPredicate::UNO, acc, acc, "anan"));
-                    let take = bl!(self.b.build_or(better, anan, "take"));
-                    acc = bl!(self.b.build_select(take, b, acc, "m")).into_float_value();
+                    acc = self.intrinsic(if name == "max" { "llvm.maxnum" } else { "llvm.minnum" }, &[acc, b])?;
                 }
                 return Ok(fv(acc));
+            }
+            if name == "mod" && vals.len() == 2 {
+                // a − c·⌊a/c⌋
+                let c = self.to_f(vals[1])?;
+                let q = bl!(self.b.build_float_div(x, c, "q"));
+                let fl = self.intrinsic("llvm.floor", &[q])?;
+                let m = bl!(self.b.build_float_mul(c, fl, "m"));
+                return Ok(fv(bl!(self.b.build_float_sub(x, m, "mod"))));
+            }
+            if name == "clamp" && vals.len() == 3 {
+                let lo = self.to_f(vals[1])?;
+                let hi = self.to_f(vals[2])?;
+                let a = self.intrinsic("llvm.maxnum", &[x, lo])?;
+                return Ok(fv(self.intrinsic("llvm.minnum", &[a, hi])?));
             }
         }
         if name == "len" && vals.len() == 1 {

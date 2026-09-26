@@ -101,6 +101,7 @@ pub const E_PENDING: i64 = -1;
 pub const E_INDEX: i64 = 1;
 pub const E_ASSERT: i64 = 4;
 pub const E_STEP0: i64 = 7;
+pub const E_RANGE: i64 = 12;
 pub const E_DEEP: i64 = 10;
 pub const E_PAR_ALIAS: i64 = 40;
 
@@ -108,6 +109,8 @@ pub const E_PAR_ALIAS: i64 = 40;
 #[repr(C)]
 pub struct Ctx<'m> {
     pub err: i32,
+    /// the program line that called into a module's code (D185), set by the compiled code (offset 4)
+    pub call_line: u32,
     pub module: &'m Module,
     printer: *mut (dyn Printer + 'm),
     pub error: Option<RunError>,
@@ -125,6 +128,7 @@ impl<'m> Ctx<'m> {
     pub fn new(module: &'m Module, printer: &mut (dyn Printer + 'm)) -> Box<Ctx<'m>> {
         Box::new(Ctx {
             err: 0,
+            call_line: 0,
             module,
             printer: printer as *mut _,
             error: None,
@@ -240,6 +244,25 @@ impl<'m> Ctx<'m> {
     }
 }
 
+impl Ctx<'_> {
+    /// A run-time error's program line: in a module's code, the line that called into it, and the message says
+    /// where in the module it happened (eval.rs locate, errors.py decode_line, D185).
+    pub fn locate(&self, mut e: RunError) -> RunError {
+        use crate::eval::{MODLINE_MAX, MODLINE_SHIFT};
+        if e.line > MODLINE_MAX {
+            let (k, ml) = ((e.line >> MODLINE_SHIFT) as usize, e.line & MODLINE_MAX);
+            let texts = &self.module.tables.texts;
+            let name = if 0 < k && k <= texts.len() { texts[k - 1].as_str() } else { "a module" };
+            let suf = format!(" (in {name}, line {ml})");
+            if !e.message.ends_with(&suf) {
+                e.message += &suf;
+            }
+            e.line = self.call_line;
+        }
+        e
+    }
+}
+
 impl Drop for Ctx<'_> {
     fn drop(&mut self) {
         for &p in &self.lists {
@@ -277,9 +300,21 @@ fn error(c: &mut Ctx, kind: i64, a: f64, b: f64, line: i32) {
         E_ASSERT => {
             RunError { message: c.module.tables.texts.get(a as usize).cloned().unwrap_or_default(), line, hint: None }
         }
-        E_STEP0 => RunError { message: "the step of this for loop is 0, so it would never end".into(), line, hint: None },
+        // the tree-walker's for_count
+        E_STEP0 => match c.interp.for_count(a, b, 0.0) {
+            Err(e) => e,
+            Ok(_) => RunError { message: "the step must be non-zero".into(), line, hint: None },
+        },
+        E_RANGE => {
+            let f = fermium_units::numfmt::format_number6;
+            RunError { message: format!("this for loop has no definite number of steps: it goes from {} to {} (NaN \
+                                         in the start, end or step)", f(a), f(b)), line, hint: None }
+        }
         E_DEEP => {
-            let name = c.module.funcs.get(a as usize).map(|f| f.name.clone()).unwrap_or_else(|| "a function".into());
+            // eval.rs call(): the function's name as written, at the line of its definition
+            let f = c.module.funcs.get(a as usize);
+            let name = f.map(|f| f.display.clone()).filter(|d| !d.is_empty()).unwrap_or_else(|| "a function".into());
+            let line = f.map(|f| f.def_line).filter(|&l| l != 0).unwrap_or(line);
             RunError { message: format!("{name} called itself too many times (the program ran out of stack) -- is a \
                                          base case missing, like  if n <= 0 then ...?"), line, hint: None }
         }
@@ -424,6 +459,11 @@ pub extern "C" fn fm_list_powc(c: C, a: *const FmList, p: f64) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| eval::powc(*x, p)).collect();
     locked(c, |c| c.new_list(v))
 }
+/// list ** y (eval.rs Pow on a list: powf element by element)
+pub extern "C" fn fm_list_powf(c: C, a: *const FmList, y: f64) -> *mut FmList {
+    let v = unsafe { (*a).as_slice() }.iter().map(|x| x.powf(y)).collect();
+    locked(c, |c| c.new_list(v))
+}
 pub extern "C" fn fm_list_neg(c: C, a: *const FmList) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| -x).collect();
     locked(c, |c| c.new_list(v))
@@ -495,6 +535,14 @@ pub extern "C" fn fm_tlist_push(l: *mut FmTList, id: i64) {
         l.0.push(id)
     }
 }
+pub extern "C" fn fm_tlist_new(c: C) -> *mut FmTList {
+    locked(c, |c| c.new_tlist(vec![]))
+}
+pub extern "C" fn fm_tlist_clear(l: *mut FmTList) {
+    if let Some(l) = unsafe { l.as_mut() } {
+        l.0.clear()
+    }
+}
 pub extern "C" fn fm_tlist_len(l: *const FmTList) -> i64 {
     unsafe { l.as_ref() }.map(|l| l.0.len() as i64).unwrap_or(0)
 }
@@ -551,9 +599,13 @@ math1! {
     fm_sinh => |x| x.sinh();
     fm_cosh => |x| x.cosh();
     fm_tanh => |x| x.tanh();
-    fm_asinh => |x| x.asinh();
-    fm_acosh => |x| x.acosh();
-    fm_atanh => |x| x.atanh();
+    fm_asinh => crate::eval_core::cmath::asinh;
+    fm_acosh => crate::eval_core::cmath::acosh;
+    fm_atanh => crate::eval_core::cmath::atanh;
+    fm_erf => crate::eval_core::cmath::erf;
+    fm_erfc => crate::eval_core::cmath::erfc;
+    fm_gamma => crate::eval_core::cmath::tgamma;
+    fm_lgamma => crate::eval_core::cmath::lgamma;
     fm_exp => |x| x.exp();
     fm_ln => |x| x.ln();
     fm_log => |x| x.ln();
@@ -566,8 +618,8 @@ math1! {
     fm_csc => |x| eval::fdiv(1.0, x.sin());
 }
 
-pub extern "C" fn fm_fpow(a: f64, b: f64) -> f64 {
-    eval::fpow(a, b)
+pub extern "C" fn fm_powf(a: f64, b: f64) -> f64 {
+    a.powf(b)
 }
 pub extern "C" fn fm_powc(x: f64, p: f64) -> f64 {
     eval::powc(x, p)
@@ -582,11 +634,14 @@ pub extern "C" fn fm_hypot(x: f64, y: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn math_shims_agree_with_math1() {
+    fn math_shims_agree_with_the_tree_walker() {
+        static M: std::sync::LazyLock<fermium_ir::Module> = std::sync::LazyLock::new(Default::default);
         for (name, _, addr) in super::math1_shims() {
             let f: extern "C" fn(f64) -> f64 = unsafe { std::mem::transmute(addr) };
             for x in [0.3, -0.7, 2.5, 1e-9] {
-                let (a, b) = (f(x), crate::eval::math1(name, x));
+                let mut it = crate::eval::Interpreter::new(&M, super::NullPrinter);
+                let b = it.builtin(name, vec![crate::eval::Value::Num(x)]).unwrap().num();
+                let a = f(x);
                 assert!(a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()), "{name}({x})");
             }
         }
