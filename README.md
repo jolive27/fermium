@@ -138,7 +138,7 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 
 ## Speed
 
-Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number. These numbers were measured with Fermium 1.5 (Python and llvmlite). The Rust binary also compiles through LLVM; its numbers will be re-measured for v2.0 (spec §B8) and replace these.
+Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number. These numbers were measured with Fermium 1.5 (Python and llvmlite). The Rust binary also compiles through LLVM; its first measurements, against Fermium 1.5 and Julia on a loaded machine, are in [rust/crates/fermium-codegen/PERF.md](rust/crates/fermium-codegen/PERF.md), and this table will be re-measured with it for v2.0 (spec §B8).
 
 | Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|
