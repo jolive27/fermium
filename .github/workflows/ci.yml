@@ -52,10 +52,10 @@ jobs:
       - name: LLVM 18 static libraries and lld (rust/BUILD.md)
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-18-dev lld-18 libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev || \
+          sudo apt-get install -y llvm-18-dev lld-18 liblld-18-dev libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev || \
             (wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
              sudo add-apt-repository -y "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" && \
-             sudo apt-get update && sudo apt-get install -y llvm-18-dev lld-18 libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev)
+             sudo apt-get update && sudo apt-get install -y llvm-18-dev lld-18 liblld-18-dev libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev)
           echo "LLVM_SYS_180_PREFIX=/usr/lib/llvm-18" >> "$GITHUB_ENV"
           echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
       - name: Build and test the Rust compiler
