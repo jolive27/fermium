@@ -452,8 +452,52 @@ n:kind values...""")
     w.close()
 
 
+# --------------------------------------------------------------------------------------- special
+# v1's special functions: the C library (what compiled v1 calls: erf erfc tgamma lgamma jn yn), v1's own
+# besseli/besselk/ellipk/ellipe (fermium/special.py), and SciPy as an independent reference.
+SPECIAL_X = [-30.0, -5.5, -2.5, -1.0, -0.3, -1e-8, 0.0, 1e-300, 1e-8, 0.1, 0.5, 1.0, 1.5, 2.0, 2.404825557695773,
+             3.0, 5.0, 7.5, 10.0, 17.3, 25.0, 50.0, 100.0, 170.5, 300.0, 1e3, 1e5]
+SPECIAL_N = [0, 1, 2, 3, 5, 10, 30, -1, -4]
+SPECIAL_M = [-5.0, -1.0, 0.0, 1e-10, 0.1, 0.5, 0.9, 0.99, 0.999999, 1 - 1e-12, 1.0]
+
+
+def gen_special():
+    import ctypes
+    import ctypes.util
+    import scipy.special as sc
+    from fermium import special as S
+    lib = ctypes.CDLL(ctypes.util.find_library("m"))
+    for f in ("erf", "erfc", "tgamma", "lgamma"):
+        getattr(lib, f).restype = ctypes.c_double
+        getattr(lib, f).argtypes = [ctypes.c_double]
+    for f in ("jn", "yn"):
+        getattr(lib, f).restype = ctypes.c_double
+        getattr(lib, f).argtypes = [ctypes.c_int, ctypes.c_double]
+    w = Writer("special.txt", """
+v1's special functions. fn:x v1 scipy   or   fn:n:x v1 scipy   or   ellip:m K E K_scipy E_scipy""")
+    for x in SPECIAL_X:
+        w.row(f"erf:{r(x)}", lib.erf(x), sc.erf(x))
+        w.row(f"erfc:{r(x)}", lib.erfc(x), sc.erfc(x))
+        w.row(f"gamma:{r(x)}", lib.tgamma(x), sc.gamma(x))
+        w.row(f"lgamma:{r(x)}", lib.lgamma(x), sc.gammaln(x))
+    for n in SPECIAL_N:
+        for x in SPECIAL_X:
+            if x < 0 and n not in (0, 1):
+                continue
+            w.row(f"besselj:{n}:{r(x)}", lib.jn(n, x), sc.jv(n, x))
+            if x > 0:
+                w.row(f"bessely:{n}:{r(x)}", lib.yn(n, x), sc.yn(n, x))
+            if abs(x) <= 300:
+                w.row(f"besseli:{n}:{r(x)}", S.besseli(n, x), sc.iv(n, x))
+            if 1e-100 < x <= 700:
+                w.row(f"besselk:{n}:{r(x)}", S.besselk(n, x), sc.kn(abs(n), x))
+    for m in SPECIAL_M:
+        w.row(f"ellip:{r(m)}", S.ellipk(m), S.ellipe(m), sc.ellipk(m), sc.ellipe(m))
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft}
+            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
