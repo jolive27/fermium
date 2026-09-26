@@ -122,9 +122,14 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   after the B2 extrapolations it is pessimistic: `∫ 1/√|x − 0.3| dx` still prints 12 correct digits). It
   applies to an integral printed directly, alone or scaled by a constant (`2 ∫ …`, a unit conversion), including
   with `to N digits`; a value stored in a variable first prints as before.
+- Orthogonality integrals of eigenfunctions are the typical case: ∫ψ₁ψ₂ is 2.31×10⁻¹⁷ (rounding noise, printed
+  `2×10⁻¹⁷`), and for the particle in a box 1.8025345105×10⁻¹¹ (the grid's non-orthogonality) with ∫|ψ₁ψ₂| ≈ 1
+  leaves a summation error near 10⁻¹⁶, so `to 10 digits` prints `1.803×10⁻¹¹`. The Rust quadrature returns v1's
+  value bit for bit in both (printed with a variable, `I = ∫ …; print I to 17 digits`, they agree to the last
+  digit); only the figures shown differ.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
   conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
-  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 (recorded divergences).
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 326ed4c73ce2 8b62468279c8 (recorded divergences).
 
 ## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
 
