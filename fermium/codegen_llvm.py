@@ -2854,11 +2854,6 @@ class FuncGen:
         c = self.expr(e.b)
         if isinstance(e.a.ty, BoolTy):
             return b.icmp_unsigned(e.op, a, c)
-        if e.op == "~=":
-            fabs = self.mg.intrinsic("fabs")
-            diff = b.call(fabs, [b.fsub(a, c)])
-            scale = b.call(self.mg.intrinsic("maxnum"), [b.call(fabs, [a]), b.call(fabs, [c])])
-            return b.fcmp_ordered("<=", diff, b.fadd(b.fmul(scale, f64(1e-6)), f64(1e-300)))
         if e.op == "!=":
             return b.fcmp_unordered("!=", a, c)
         return b.fcmp_ordered(e.op, a, c)
@@ -3187,6 +3182,9 @@ class FuncGen:
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
             from . import cplx
             return cplx.ll_builtin(self, e, args)
+        if name == "approx":                            # a ≈ b [within t] (D260)
+            from . import cplx
+            return cplx.ll_approx(self, e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             return self.matrix_op(e, args)
         if name in ("vdot", "norm", "unit", "cross"):

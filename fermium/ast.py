@@ -87,6 +87,7 @@ class Compare(Node):
     op: str              # == != < > <= >= ~=
     left: Node
     right: Node
+    tol: Node | None = None   # `a ≈ b within tol` (D260): an absolute tolerance, or a relative one written in %
 
 
 @dataclass(eq=False)
@@ -429,6 +430,8 @@ def children(n):
         return []
     if isinstance(n, Quantity):
         return [n.value]
+    if isinstance(n, Compare) and n.tol is not None:
+        return [n.left, n.right, n.tol]
     if isinstance(n, (BinOp, Compare, Logic)):
         return [n.left, n.right]
     if isinstance(n, (Neg, Not, Sqrt, Abs)):

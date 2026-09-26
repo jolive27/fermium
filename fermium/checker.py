@@ -2386,6 +2386,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         b = self.expr(e.right, ctx)
         if isinstance(a.ty, BoolTy) and isinstance(b.ty, BoolTy) and e.op in ("==", "!="):
             return I.ICmp(e.op, a, b, BOOL)
+        if e.op == "~=":
+            return self.approx(e, a, b, ctx)
         if cplx.is_c(a) or cplx.is_c(b):
             return cplx.compare(self, e.op, a, b, e)
         self.need_num(a, e.left, "each side of a comparison")
@@ -2393,6 +2395,49 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if not self.U.unify(a.ty.dim, b.ty.dim):
             raise self.err(f"can't compare {self.desc(a.ty.dim)} with {self.desc(b.ty.dim)}", e)
         return I.ICmp(e.op, a, b, BOOL)
+
+    def approx(self, e, a, b, ctx):
+        """a ≈ b [within tol] (D21, D260): Julia's isapprox, |a − b| ≤ max(atol, rtol·max(|a|, |b|)), with norms
+        for vectors and moduli for complex numbers.  Without `within`: rtol = 10⁻⁶, atol = 0; `within t`
+        states the whole tolerance: absolute (t in the units of a and b; rtol = 0) or, written in %, relative."""
+        c = cplx.is_c(a) or cplx.is_c(b)
+        vec = not c and any(isinstance(v, I.Expr) and isinstance(v.ty, VecTy) for v in (a, b))
+        if vec:
+            for v, node in ((a, e.left), (b, e.right)):
+                if isinstance(v, (FuncRef, SolRef)) or not isinstance(v.ty, VecTy):
+                    got = "a function" if isinstance(v, (FuncRef, SolRef)) else type_desc(v.ty, self.U)
+                    raise self.err(f"≈ compares a vector with a vector of the same length, but this is {got}", node)
+            if a.ty.n != b.ty.n:
+                raise self.err(f"can't compare a {a.ty.n}-vector with a {b.ty.n}-vector", e)
+            da, db = self.shared_dim(a, "≈", e.left), self.shared_dim(b, "≈", e.right)
+        elif not c:
+            self.need_num(a, e.left, "each side of a comparison")
+            self.need_num(b, e.right, "each side of a comparison")
+            da, db = a.ty.dim, b.ty.dim
+        else:
+            for v, node in ((a, e.left), (b, e.right)):
+                if not isinstance(v, I.Expr) or not isinstance(v.ty, (NumTy, ComplexTy)):
+                    raise self.err("each side of a comparison must be a number", node)
+            da, db = a.ty.dim, b.ty.dim
+        if not self.U.unify(da, db):
+            raise self.err(f"can't compare {self.desc(da)} with {self.desc(db)}", e)
+        zero = I.IConst(0.0, NumTy(da))
+        atol, rtol = zero, I.IConst(1e-6, NumTy(DIMLESS))
+        if e.tol is not None:
+            t = self.expr(e.tol, ctx)
+            self.need_num(t, e.tol, "the tolerance after 'within'")
+            in_pct = any(getattr(v.hint, "name", "") == "%" for v in (a, b) if isinstance(v, I.Expr))
+            if isinstance(e.tol, A.Quantity) and e.tol.unit.text.strip() in ("%", "percent") and not in_pct:
+                atol, rtol = zero, t                            # within 1%: relative
+            else:
+                if not self.U.unify(t.ty.dim, da):
+                    raise self.err(f"the tolerance after 'within' must be {self.desc(da)}, like the values it "
+                                   f"compares, but it is {self.desc(t.ty.dim)}", e.tol,
+                                   hint="for a relative tolerance write a percentage, like within 0.1%")
+                atol, rtol = t, I.IConst(0.0, NumTy(DIMLESS))
+        if c:
+            return cplx.compare(self, e.op, a, b, e, (atol, rtol))
+        return I.IBuiltin("approx", [a, b, atol, rtol], BOOL)
 
     def e_Logic(self, e, ctx):
         a = self.cond(e.left, ctx)

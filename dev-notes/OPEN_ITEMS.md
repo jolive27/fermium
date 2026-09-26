@@ -183,7 +183,7 @@ without their notes being updated; those are the **closed** rows.
 |---|---|---|---|---|
 | D81 | FFT returns `fft_re`/`fft_im` because there were no complex numbers | yes: `fft(xs)` "isn't defined (did you mean ifft?)"; `fft_re` works | A5 | Return complex values; keep the old names as deprecated aliases for one version |
 | D18 | Fit standard errors are "plain numbers until uncertainties exist" | partly superseded by D124: with a ± in the program, `fit` gives `9.7846 ± 0.0039 m/s²`; without one, plain numbers | C/D | C7. Always-uncertain fits would force the interpreter (D122) |
-| D21 | `≈` is "equal within 10⁻⁶ relative" | yes: `1e-12 m/s ≈ 0 m/s` is `false` | A8 | A8.1 |
+| D21 | `≈` is "equal within 10⁻⁶ relative" | **fixed (D260):** isapprox semantics; `v ≈ 0 m/s` is a compile error showing `within 1e-9 m/s`; `within` takes an absolute or % tolerance | A8 | A8.1 done |
 | D48 | ODE solution captured as a pointer stored in a double | yes (code unchanged) | A8 | A8.2 |
 | D83 | "Complex without complex numbers": PDE `i` found by probing with i = 1, −1, 2 | still the implementation; ψ is a complex value since D184 | B | Port with a real complex type |
 | D184 | A bare `i` is kept as the imaginary unit for legacy TDSE programs | yes | A1 | Listed in A1's superseded set; decide under the one rule |

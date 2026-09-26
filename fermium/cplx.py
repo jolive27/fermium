@@ -184,7 +184,7 @@ def builtin(ck, name, args, e):
     raise ck.err(f"{name} doesn't work on complex numbers", e)
 
 
-def compare(ck, op, a, b, e):
+def compare(ck, op, a, b, e, tols=None):
     if op in ("<", ">", "<=", ">="):
         raise ck.err(f"complex numbers can't be compared with {op} (they aren't ordered)", e,
                      hint="compare their sizes |z| or their real parts re(z) instead")
@@ -196,7 +196,7 @@ def compare(ck, op, a, b, e):
     name = {"==": "c.eq", "!=": "c.ne", "~=": "c.approx"}.get(op)
     if name is None:
         raise ck.err(f"complex numbers can't be compared with {op}", e)
-    return I.IBuiltin(name, [promote(a), promote(b)], BOOL)
+    return I.IBuiltin(name, [promote(a), promote(b)] + (list(tols) if op == "~=" else []), BOOL)
 
 
 def quantity(ck, v, u, e):
@@ -323,11 +323,36 @@ def k_pow(o, a, b):
     return (x, y)
 
 
-def k_approx(o, a, b):
-    """|a − b| <= 10⁻⁶ max(|a|, |b|): the complex version of ≈ (D21)."""
+def approx_core(o, same, diff, sa, sb, atol, rtol):
+    """Julia's isapprox (D260): a == b, or |a − b| ≤ max(atol, rtol·max(|a|, |b|)) with a finite difference
+    (so ∞ ≈ ∞ but not ∞ ≈ 1).  diff, sa, sb: |a − b|, |a|, |b| (norms for vectors, moduli for complex)."""
+    tol = o.fn("maxnum", atol, o.mul(rtol, o.fn("maxnum", sa, sb)))
+    close = o.and_(o.le(diff, tol), o.not_(o.eq(diff, o.const(math.inf))))
+    return o.not_(o.and_(o.not_(same), o.not_(close)))
+
+
+def k_approx(o, a, b, atol, rtol):
+    """The complex version of ≈: moduli in place of absolute values (D21, D260)."""
+    same = o.and_(o.eq(a[0], b[0]), o.eq(a[1], b[1]))
     diff = o.fn("hypot", o.sub(a[0], b[0]), o.sub(a[1], b[1]))
-    scale = o.fn("maxnum", o.fn("hypot", a[0], a[1]), o.fn("hypot", b[0], b[1]))
-    return o.le(diff, o.add(o.mul(scale, o.const(1e-6)), o.const(1e-300)))
+    return approx_core(o, same, diff, o.fn("hypot", a[0], a[1]), o.fn("hypot", b[0], b[1]), atol, rtol)
+
+
+def k_approx_real(o, a, b, atol, rtol):
+    """≈ for numbers (a, b one-element lists) and vectors (their components): norms, summed in order (D260)."""
+    if len(a) == 1:
+        return approx_core(o, o.eq(a[0], b[0]), o.fn("fabs", o.sub(a[0], b[0])), o.fn("fabs", a[0]),
+                           o.fn("fabs", b[0]), atol, rtol)
+
+    def norm(xs):
+        s = o.mul(xs[0], xs[0])
+        for x in xs[1:]:
+            s = o.add(s, o.mul(x, x))
+        return o.fn("sqrt", s)
+    same = o.eq(a[0], b[0])
+    for x, y in zip(a[1:], b[1:]):
+        same = o.and_(same, o.eq(x, y))
+    return approx_core(o, same, norm([o.sub(x, y) for x, y in zip(a, b)]), norm(a), norm(b), atol, rtol)
 
 
 def run_kernel(o, e, args, iscplx):
@@ -459,9 +484,10 @@ def py_builtin(e, args):
 
 
 # ------------------------------------------------------------ ops for LLVM
-def ll_builtin(gen, e, args):
+def ll_ops(gen):
+    """cplx's ops, building LLVM instructions."""
     from llvmlite import ir
-    from .codegen_llvm import F64, I32, LLOps
+    from .codegen_llvm import F64, LLOps
     b = gen.b
 
     class LLCOps(LLOps):
@@ -481,11 +507,37 @@ def ll_builtin(gen, e, args):
 
         def const(self, v):
             return ir.Constant(F64, float(v))
+    return LLCOps(gen)
 
+
+def ll_approx(gen, e, args):
+    """IBuiltin approx(a, b, atol, rtol) on numbers or vectors, in LLVM (D260)."""
+    from .codegen_llvm import I32
+    a, c, atol, rtol = args
+    if isinstance(e.args[0].ty, VecTy):
+        n = e.args[0].ty.n
+        a = [gen.b.extract_element(a, I32(k)) for k in range(n)]
+        c = [gen.b.extract_element(c, I32(k)) for k in range(n)]
+    else:
+        a, c = [a], [c]
+    return k_approx_real(ll_ops(gen), a, c, atol, rtol)
+
+
+def py_approx(e, args):
+    """IBuiltin approx(a, b, atol, rtol) on numbers or vectors, in the interpreter (D260)."""
+    a, c, atol, rtol = args
+    if not isinstance(a, tuple):
+        a, c = (a,), (c,)
+    return bool(k_approx_real(PyCOps(), list(a), list(c), atol, rtol))
+
+
+def ll_builtin(gen, e, args):
+    from .codegen_llvm import I32
+    b = gen.b
     iscplx = [isinstance(a.ty, ComplexTy) for a in e.args]
     unpacked = [(b.extract_element(v, I32(0)), b.extract_element(v, I32(1))) if c else v
                 for v, c in zip(args, iscplx)]
-    r = run_kernel(LLCOps(gen), e, unpacked, iscplx)
+    r = run_kernel(ll_ops(gen), e, unpacked, iscplx)
     if isinstance(r, tuple):
         return gen.pack(list(r))
     return r
