@@ -363,7 +363,7 @@ impl Checker {
             display_name: name.clone(),
             checked_generic: false,
             stable: false,
-            nat: if self.nat.is_empty() { None } else { Some(self.nat.clone()) },
+            nat: self.func_nat(),
             module: None,
             anon_label: None,
             parent: None,
