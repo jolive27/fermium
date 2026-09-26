@@ -22,8 +22,8 @@ every test program, example, rosetta, gauntlet and research program, every code 
 bootcamp, the benchmarks and John's Appendix 1 programs) holds each program with the output, warnings and error
 Fermium 1.5 gives. The comparison is strict (D264): output exactly, except that a number with a decimal point may
 differ by one unit in its last printed digit; the same error message, line and hint; the same warnings; the same
-exit code. [CONFORMANCE.md](CONFORMANCE.md) has the current score (99.7 % pass or are documented divergences when
-this was written) and lists every remaining failure.
+exit code. [CONFORMANCE.md](CONFORMANCE.md) has the current score (at the cutover: 3334 of 3366 pass and the other 32
+are documented divergences, so every program passes or is documented) and lists each divergence.
 
 Every deliberate difference is a section of [rust/DIVERGENCES.md](rust/DIVERGENCES.md), and each affected
 conformance case is checked against the output the divergence describes (D265). The ones a reader is most likely
