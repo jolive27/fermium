@@ -5,8 +5,10 @@
 //! NumPy with a native method that agrees to high accuracy where v1 called a library.
 //! Accuracy per method is documented in `NUMERICS.md`; intentional differences in `NOTES.md`.
 
+pub mod dense;
 pub mod ode;
 pub mod quad;
+pub mod stiff;
 
 /// A run-time failure with v1's error kind and its two numbers (see `describe_error` in
 /// `fermium/runtime/core.py`, which turns them into the message).
