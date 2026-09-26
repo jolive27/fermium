@@ -5,3 +5,4 @@
 //! already verified and erased the units.
 
 pub mod numerics;
+pub mod plot;
