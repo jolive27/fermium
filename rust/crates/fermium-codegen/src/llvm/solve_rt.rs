@@ -203,6 +203,8 @@ pub struct Rk4Plan {
     pub dy: *mut f64,
     pub h: f64,
     pub steps: i64,
+    /// the solution being filled (boxed: a right side may call a function that solves another equation)
+    pub sol: *mut ode::Sol,
 }
 
 /// A fixed-step RK4 solve (method rk4, no `until`) whose steps the compiled code takes itself, with the right side
@@ -251,19 +253,21 @@ pub extern "C" fn fm_rk4_begin(c: C, site: i64, f: OdeFn, env: *mut u8, y0: *con
     sol.y.reserve_exact(total * n);
     sol.dy.reserve_exact(total * n);
     unsafe {
-        *plan = Rk4Plan { t: sol.t.as_mut_ptr(), y: sol.y.as_mut_ptr(), dy: sol.dy.as_mut_ptr(), h, steps: steps as i64 };
-        (*c).rk4 = Some((sol, total));
+        let (t, y, dy) = (sol.t.as_mut_ptr(), sol.y.as_mut_ptr(), sol.dy.as_mut_ptr());
+        *plan = Rk4Plan { t, y, dy, h, steps: steps as i64, sol: Box::into_raw(Box::new(sol)) };
     }
     0
 }
 
-/// The end of a compiled RK4 solve whose loop filled every sample: ode::rk4's error estimate and warning, then
+/// The end of a compiled RK4 solve whose loop filled every sample (sol and steps: fm_rk4_begin's plan): ode::rk4's error estimate and warning, then
 /// fm_ode's end. The handle of the solution, or -1 after an error.
 #[no_mangle]
-pub extern "C" fn fm_rk4_end(c: C, site: i64, f: OdeFn, env: *mut u8, line: i32) -> i64 {
+pub extern "C" fn fm_rk4_end(c: C, site: i64, f: OdeFn, env: *mut u8, sol: *mut ode::Sol, steps: i64,
+                             line: i32) -> i64 {
     let line = line.max(0) as u32;
-    let Some((mut sol, total)) = (unsafe { (*c).rk4.take() }) else { return -1 };
-    // the compiled loop wrote all `total` samples into the reserved arrays
+    let mut sol = unsafe { *Box::from_raw(sol) };
+    // the compiled loop wrote all steps + 1 samples into the arrays fm_rk4_begin reserved for them
+    let total = steps as usize + 1;
     unsafe {
         sol.t.set_len(total);
         sol.y.set_len(total * sol.dim);

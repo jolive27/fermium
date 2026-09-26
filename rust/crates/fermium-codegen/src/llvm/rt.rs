@@ -179,8 +179,6 @@ pub struct Ctx<'m> {
     pub interp_sites: Vec<super::delegate::InterpSite>,
     /// values of kind Obj
     pub objs: Vec<Value>,
-    /// the solution a compiled RK4 loop is filling and its number of samples (solve_rt fm_rk4_begin)
-    pub rk4: Option<(fermium_runtime::numerics::ode::Sol, usize)>,
     /// the module's nodes by position (executables' tree-walker constructs, native::delegate)
     pub nodes: Vec<super::delegate::NodeRef>,
     /// printed measured sums (spec B2 decimal-place rule): the shape of each sum
@@ -209,7 +207,6 @@ impl<'m> Ctx<'m> {
             sols: vec![],
             interp_sites: vec![],
             objs: vec![],
-            rk4: None,
             nodes: vec![],
             msum_sites: vec![],
             quad_sf: None,

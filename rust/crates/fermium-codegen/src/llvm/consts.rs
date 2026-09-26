@@ -157,6 +157,42 @@ fn static_len(e: &Expr) -> Option<u64> {
     }
 }
 
+/// A list expression that always makes a new list (no other variable can hold it).
+fn fresh_list(e: &Expr) -> bool {
+    matches!(e.ty, Ty::List(_))
+        && match &e.kind {
+            ExprKind::List(_) | ExprKind::Bin(..) | ExprKind::Neg(_) | ExprKind::PowC(..) => true,
+            ExprKind::Builtin(name, _) => matches!(name.as_str(), "zeros" | "ones" | "linspace"),
+            _ => false,
+        }
+}
+
+/// The lists that own their numbers: fixed_candidates (every use indexes them, one binding) whose binding makes
+/// a new list. No two of them ever share their numbers, so their elements get TBAA types of their own
+/// (Gen::elem_tag): a store into one doesn't make LLVM reload another (v1's lists were separate global arrays).
+pub(super) fn owned_lists(m: &Module) -> HashSet<SymId> {
+    fn walk(body: &[Stmt], cand: &HashSet<SymId>, out: &mut HashSet<SymId>) {
+        for s in body {
+            if let StmtKind::Assign(x, e) = &s.kind {
+                if cand.contains(x) && fresh_list(e) {
+                    out.insert(*x);
+                }
+            }
+            let (_, blocks) = stmt_parts(s);
+            for b in blocks {
+                walk(b, cand, out);
+            }
+        }
+    }
+    let cand = fixed_candidates(m);
+    let mut out = HashSet::new();
+    walk(&m.main, &cand, &mut out);
+    for f in &m.funcs {
+        walk(&f.body, &cand, &mut out);
+    }
+    out
+}
+
 impl<'c, 'm> Gen<'c, 'm> {
     /// The program's main block. Until it calls a user function, each module variable it sets (at its top level)
     /// that nothing else ever sets becomes a constant if its value is known now, and each list that qualifies

@@ -199,7 +199,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         let (f64t, ptrt, i64t) = (self.f64t(), self.ptrt(), self.cx.i64_type());
         let arr = f64t.array_type(n as u32);
         let k1a = self.alloca(arr.into(), "k1")?;
-        let planty = self.cx.struct_type(&[ptrt.into(), ptrt.into(), ptrt.into(), f64t.into(), i64t.into()], false);
+        let planty = self.cx.struct_type(&[ptrt.into(), ptrt.into(), ptrt.into(), f64t.into(), i64t.into(), ptrt.into()],
+                                         false);
         let plan = self.alloca(planty.into(), "plan")?;
         let ctx: BasicValueEnum = self.ctx_ptr.into();
         let (fp, nn) = (self.fn_ptr(f), self.i64c(n as i64));
@@ -215,6 +216,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let dyp = field(self, 2, ptrt.into())?.into_pointer_value();
         let h = field(self, 3, f64t.into())?.into_float_value();
         let steps = field(self, 4, i64t.into())?.into_int_value();
+        let solp = field(self, 5, ptrt.into())?;
         let elem = |g: &mut Self, p: PointerValue<'c>, i: usize| -> R<PointerValue<'c>> {
             Ok(unsafe { bl!(g.b.build_gep(arr, p, &[g.i64c(0), g.i64c(i as i64)], "e")) })
         };
@@ -314,7 +316,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         }
         self.b.position_at_end(exit);
         sample(self, steps, t1, &yn, &kn)?;
-        let r = self.call("fm_rk4_end", &[ctx, self.i64c(id).into(), fp, env.into(), line.into()])?.unwrap();
+        let r = self.call("fm_rk4_end", &[ctx, self.i64c(id).into(), fp, env.into(), solp, steps.into(), line.into()])?.unwrap();
         Ok(r)
     }
 

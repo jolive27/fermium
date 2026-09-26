@@ -93,6 +93,11 @@ impl<'c, 'm> Gen<'c, 'm> {
     pub(super) fn parallel_for(&mut self, sym: SymId, lo: &Expr, hi: &Expr, step: Option<&Expr>, body: &[Stmt],
                                info: &ParInfo) -> R<()> {
         let m = self.m;
+        // an integer loop variable (compile.rs int_loop): the body gets its whole step
+        let int_st = match self.int_loop(sym, lo, step, body)? {
+            Some((_, st_i)) => st_i.get_sign_extended_constant(),
+            None => None,
+        };
         let (lo, st, count) = self.range_count(lo, hi, step)?;
         // lists written as xs[i] must not be the same list as another one the loop uses
         for &(w, o, text) in &info.alias {
@@ -137,7 +142,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.par_count += 1;
         let pf = self.lm.add_function(&format!("par{}", self.par_count), fty, Some(Linkage::Internal));
         let saved = self.save_fn();
-        let r = self.par_body(pf, sym, body, info, &env_syms, &env_kinds, &own, nenv);
+        let r = self.par_body(pf, sym, int_st, body, info, &env_syms, &env_kinds, &own, nenv);
         self.restore_fn(saved);
         self.known_line = None;
         r?;
@@ -185,7 +190,8 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn par_body(&mut self, pf: FunctionValue<'c>, sym: SymId, body: &[Stmt], info: &ParInfo, env_syms: &[SymId],
+    fn par_body(&mut self, pf: FunctionValue<'c>, sym: SymId, int_st: Option<i64>, body: &[Stmt], info: &ParInfo,
+                env_syms: &[SymId],
                 env_kinds: &[Kind], own: &HashSet<SymId>, nenv: u32) -> R<()> {
         self.begin_fn(pf, Kind::Void);
         let ptrt = self.ptrt();
@@ -215,13 +221,33 @@ impl<'c, 'm> Gen<'c, 'm> {
         }
         // iterations first..end
         let n = bl!(self.b.build_int_sub(end, first, "n"));
-        self.counted_loop(n, body, |g, j| {
-            let i = bl!(g.b.build_int_add(first, j, "i"));
-            let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
-            let x = bl!(g.b.build_float_mul(fi, st, "ist"));
-            let x = bl!(g.b.build_float_add(lo, x, "x"));
-            g.store_var(sym, fv(x))
-        })?;
+        if let Some(st_i) = int_st {
+            // a whole start (exact in lo) and step: the variable is lo + i·st as an i64 too, the same number
+            let lo_i = bl!(self.b.build_float_to_signed_int(lo, self.cx.i64_type(), "loi"));
+            let st_i = self.i64c(st_i);
+            let hoisted = self.hoist_lists(body)?;
+            let r = self.counted_loop_in(n, body, |g, j| {
+                let i = bl!(g.b.build_int_add(first, j, "i"));
+                let im = bl!(g.b.build_int_mul(i, st_i, "ist"));
+                let iv = bl!(g.b.build_int_add(lo_i, im, "iv"));
+                g.int_vars.insert(sym, iv);
+                let x = bl!(g.b.build_signed_int_to_float(iv, g.f64t(), "x"));
+                g.store_var(sym, fv(x))
+            });
+            for s in hoisted {
+                self.hoisted.remove(&s);
+            }
+            self.int_vars.remove(&sym);
+            r?;
+        } else {
+            self.counted_loop(n, body, |g, j| {
+                let i = bl!(g.b.build_int_add(first, j, "i"));
+                let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
+                let x = bl!(g.b.build_float_mul(fi, st, "ist"));
+                let x = bl!(g.b.build_float_add(lo, x, "x"));
+                g.store_var(sym, fv(x))
+            })?;
+        }
         for (k, r) in info.reductions.iter().enumerate() {
             let v = self.load_var(*r)?;
             let x = self.to_f(v)?;
