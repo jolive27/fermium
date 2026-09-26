@@ -6,6 +6,7 @@
 //! Accuracy per method is documented in `NUMERICS.md`; intentional differences in `NOTES.md`.
 
 pub mod dense;
+pub mod fit;
 pub mod ode;
 pub mod quad;
 pub mod stiff;
