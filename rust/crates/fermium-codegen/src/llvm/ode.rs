@@ -12,6 +12,9 @@ use super::lam::expr_syms;
 use super::*;
 use crate::llvm::solve_rt::OdeSite;
 
+/// The largest state a fixed-step RK4 solve compiles inline (rk4_inline; beyond it: fm_ode).
+const RK4_INLINE_MAX: usize = 32;
+
 fn slots(t: &Ty) -> usize {
     match t {
         Ty::Vec { n, .. } => *n,
@@ -171,14 +174,155 @@ impl<'c, 'm> Gen<'c, 'm> {
                 };
                 let id = self.add_site(OdeSite { env_kinds: kinds, ..site });
                 let line = self.i32c(s.line as i64);
+                if method == "rk4" && x.event.is_none() && (1..=RK4_INLINE_MAX).contains(&n) {
+                    self.rk4_inline(id, f, env, y0p, &ys, a, b, h0, line)?
+                } else {
                 self.call("fm_ode", &[ctx, self.i64c(id).into(), self.fn_ptr(f), env.into(), evf, evenv, y0p.into(),
                                       self.i64c(n as i64).into(), a.into(), b.into(), h0.into(), line.into()])?.unwrap()
+                }
             }
         };
         self.check_err()?;
         self.set_line_now(s.line)?;
         let _ = m;
         self.store_var(*sol, Val { k: Kind::H, v: Some(h) })
+    }
+
+    /// A fixed-step RK4 solve with its steps taken here, the right side called directly (so LLVM inlines it) and
+    /// the state in registers: fermium-runtime's ode::rk4_plain operation for operation (the same numbers), the
+    /// samples written into arrays fm_rk4_begin reserved, fm_rk4_end for the error estimate and the solution.
+    #[allow(clippy::too_many_arguments)]
+    fn rk4_inline(&mut self, id: i64, f: FunctionValue<'c>, env: PointerValue<'c>, y0p: PointerValue<'c>,
+                  ys: &[FloatValue<'c>], t0: FloatValue<'c>, t1: FloatValue<'c>, h0: FloatValue<'c>,
+                  line: IntValue<'c>) -> R<BasicValueEnum<'c>> {
+        let n = ys.len();
+        let (f64t, ptrt, i64t) = (self.f64t(), self.ptrt(), self.cx.i64_type());
+        let arr = f64t.array_type(n as u32);
+        let k1a = self.alloca(arr.into(), "k1")?;
+        let planty = self.cx.struct_type(&[ptrt.into(), ptrt.into(), ptrt.into(), f64t.into(), i64t.into()], false);
+        let plan = self.alloca(planty.into(), "plan")?;
+        let ctx: BasicValueEnum = self.ctx_ptr.into();
+        let (fp, nn) = (self.fn_ptr(f), self.i64c(n as i64));
+        self.call("fm_rk4_begin", &[ctx, self.i64c(id).into(), fp, env.into(), y0p.into(), nn.into(), t0.into(),
+                                    t1.into(), h0.into(), line.into(), k1a.into(), plan.into()])?;
+        self.check_err()?;
+        let field = |g: &mut Self, i: u32, ty: BasicTypeEnum<'c>| -> R<BasicValueEnum<'c>> {
+            let at = bl!(g.b.build_struct_gep(planty, plan, i, "pf"));
+            Ok(bl!(g.b.build_load(ty, at, "p")))
+        };
+        let tp = field(self, 0, ptrt.into())?.into_pointer_value();
+        let yp = field(self, 1, ptrt.into())?.into_pointer_value();
+        let dyp = field(self, 2, ptrt.into())?.into_pointer_value();
+        let h = field(self, 3, f64t.into())?.into_float_value();
+        let steps = field(self, 4, i64t.into())?.into_int_value();
+        let elem = |g: &mut Self, p: PointerValue<'c>, i: usize| -> R<PointerValue<'c>> {
+            Ok(unsafe { bl!(g.b.build_gep(arr, p, &[g.i64c(0), g.i64c(i as i64)], "e")) })
+        };
+        let mut k1 = vec![];
+        for j in 0..n {
+            let at = elem(self, k1a, j)?;
+            k1.push(bl!(self.b.build_load(f64t, at, "k1")).into_float_value());
+        }
+        let bufs: Vec<PointerValue<'c>> = ["tmp", "k2", "k3", "k4", "yn", "kn"].iter()
+            .map(|nm| self.alloca(arr.into(), nm)).collect::<R<_>>()?;
+        let (tmp, k2a, k3a, k4a, yna, kna) = (bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5]);
+        let half = bl!(self.b.build_float_mul(h, f64t.const_float(0.5), "half"));
+        let h6 = bl!(self.b.build_float_div(h, f64t.const_float(6.0), "h6"));
+        let last = bl!(self.b.build_int_sub(steps, self.i64c(1), "last"));
+        // a sample: t, y and y' at index i
+        let sample = |g: &mut Self, i: IntValue<'c>, t: FloatValue<'c>, y: &[FloatValue<'c>], k: &[FloatValue<'c>]| -> R<()> {
+            let at = unsafe { bl!(g.b.build_gep(f64t, tp, &[i], "ts")) };
+            g.st(at, t, "elem")?;
+            let base = bl!(g.b.build_int_mul(i, g.i64c(n as i64), "row"));
+            for j in 0..n {
+                let ix = bl!(g.b.build_int_add(base, g.i64c(j as i64), "ix"));
+                let at = unsafe { bl!(g.b.build_gep(f64t, yp, &[ix], "ys")) };
+                g.st(at, y[j], "elem")?;
+                let at = unsafe { bl!(g.b.build_gep(f64t, dyp, &[ix], "dys")) };
+                g.st(at, k[j], "elem")?;
+            }
+            Ok(())
+        };
+        // tmp = y + c·k, then out = f(t, tmp)
+        let stage = |g: &mut Self, y: &[FloatValue<'c>], c: FloatValue<'c>, k: &[FloatValue<'c>], t: FloatValue<'c>,
+                     out: PointerValue<'c>| -> R<Vec<FloatValue<'c>>> {
+            for j in 0..n {
+                let ck = bl!(g.b.build_float_mul(c, k[j], "ck"));
+                let v = bl!(g.b.build_float_add(y[j], ck, "tmp"));
+                let at = elem(g, tmp, j)?;
+                bl!(g.b.build_store(at, v));
+            }
+            g.rk4_call(f, t, tmp, out, nn, env)?;
+            let mut r = vec![];
+            for j in 0..n {
+                let at = elem(g, out, j)?;
+                r.push(bl!(g.b.build_load(f64t, at, "k")).into_float_value());
+            }
+            Ok(r)
+        };
+        let pre = self.b.get_insert_block().unwrap();
+        let (body, exit) = (self.new_bb("rk4"), self.new_bb("rk4.end"));
+        bl!(self.b.build_unconditional_branch(body));
+        self.b.position_at_end(body);
+        self.known_line = None;
+        let sphi = bl!(self.b.build_phi(i64t, "s"));
+        let yphi: Vec<_> = (0..n).map(|_| self.b.build_phi(f64t, "y")).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        let kphi: Vec<_> = (0..n).map(|_| self.b.build_phi(f64t, "k1")).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        let s = sphi.as_basic_value().into_int_value();
+        let y: Vec<FloatValue> = yphi.iter().map(|p| p.as_basic_value().into_float_value()).collect();
+        let k1v: Vec<FloatValue> = kphi.iter().map(|p| p.as_basic_value().into_float_value()).collect();
+        let sf = bl!(self.b.build_unsigned_int_to_float(s, f64t, "sf"));
+        let sh = bl!(self.b.build_float_mul(sf, h, "sh"));
+        let t = bl!(self.b.build_float_add(t0, sh, "t"));
+        sample(self, s, t, &y, &k1v)?;
+        let th = bl!(self.b.build_float_add(t, half, "th"));
+        let k2 = stage(self, &y, half, &k1v, th, k2a)?;
+        let k3 = stage(self, &y, half, &k2, th, k3a)?;
+        let tph = bl!(self.b.build_float_add(t, h, "tph"));
+        let k4 = stage(self, &y, h, &k3, tph, k4a)?;
+        let mut yn = vec![];
+        for j in 0..n {
+            let s23 = bl!(self.b.build_float_add(k2[j], k3[j], "s23"));
+            let d23 = bl!(self.b.build_float_mul(f64t.const_float(2.0), s23, "d23"));
+            let a = bl!(self.b.build_float_add(k1v[j], d23, "a"));
+            let a = bl!(self.b.build_float_add(a, k4[j], "a"));
+            let inc = bl!(self.b.build_float_mul(h6, a, "inc"));
+            let v = bl!(self.b.build_float_add(y[j], inc, "yn"));
+            let at = elem(self, yna, j)?;
+            bl!(self.b.build_store(at, v));
+            yn.push(v);
+        }
+        let s1 = bl!(self.b.build_int_add(s, self.i64c(1), "s1"));
+        let s1f = bl!(self.b.build_unsigned_int_to_float(s1, f64t, "s1f"));
+        let s1h = bl!(self.b.build_float_mul(s1f, h, "s1h"));
+        let tnext = bl!(self.b.build_float_add(t0, s1h, "tnext"));
+        let is_last = bl!(self.b.build_int_compare(IntPredicate::EQ, s, last, "islast"));
+        let tn = bl!(self.b.build_select(is_last, t1, tnext, "tn")).into_float_value();
+        self.rk4_call(f, tn, yna, kna, nn, env)?;
+        let mut kn = vec![];
+        for j in 0..n {
+            let at = elem(self, kna, j)?;
+            kn.push(bl!(self.b.build_load(f64t, at, "kn")).into_float_value());
+        }
+        let more = bl!(self.b.build_int_compare(IntPredicate::ULT, s1, steps, "more"));
+        let latch = self.b.get_insert_block().unwrap();
+        bl!(self.b.build_conditional_branch(more, body, exit));
+        sphi.add_incoming(&[(&self.i64c(0), pre), (&s1, latch)]);
+        for j in 0..n {
+            yphi[j].add_incoming(&[(&ys[j], pre), (&yn[j], latch)]);
+            kphi[j].add_incoming(&[(&k1[j], pre), (&kn[j], latch)]);
+        }
+        self.b.position_at_end(exit);
+        sample(self, steps, t1, &yn, &kn)?;
+        let r = self.call("fm_rk4_end", &[ctx, self.i64c(id).into(), fp, env.into(), line.into()])?.unwrap();
+        Ok(r)
+    }
+
+    /// out = f(t, y) inside the compiled RK4 loop; stop if the right side stopped the program.
+    fn rk4_call(&mut self, f: FunctionValue<'c>, t: FloatValue<'c>, y: PointerValue<'c>, out: PointerValue<'c>,
+                n: IntValue<'c>, env: PointerValue<'c>) -> R<()> {
+        bl!(self.b.build_call(f, &[t.into(), y.into(), out.into(), n.into(), env.into()], ""));
+        self.check_err()
     }
 
     fn add_site(&mut self, s: OdeSite) -> i64 {
