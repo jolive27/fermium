@@ -154,3 +154,37 @@ fn non_elementary_integrals_are_refused() {
     assert!(integ("exp(2 x) x exp(x) - exp(2 x)/x", "x", &[]).unwrap_err().ends_with("Ei(2*x)"));
     assert_eq!(integ("exp(sin(x))", "x", &[]).unwrap_err(), "Fermium couldn't find a formula for this integral");
 }
+
+fn ad_of(src: &str, var: &str, order: usize) -> Result<String, String> {
+    let (p, _) = fermium_syntax::parse(src, &[]).expect("parses");
+    let A::StmtKind::FuncDef { name, params, body: A::FuncBody::Block(b), .. } = &p.body[0].kind else {
+        panic!("not a multi-line function")
+    };
+    let ps: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+    let mut b = b.clone();
+    for _ in 0..order {
+        b = ad_body(name, &ps, &b, var, &mut Plain).map_err(|d| d.message)?;
+    }
+    Ok(crate::ad::block_source(&b, 0))
+}
+
+#[test]
+fn autodiff_of_multi_line_functions() {
+    // spec §C2: forward mode as a source transformation; tangents are assigned before their variables
+    let src = "f(x) =\n    y = x^2\n    z = sin(y) + 3\n    return z y\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(),
+               "dy/dx = 2x\ny = x²\ndz/dx = dy/dx cos(y)\nz = sin(y) + 3\nreturn y dz/dx + z dy/dx\n");
+    // constants get no tangent; op-assignments, loops and branches; print is dropped
+    let src = "p(x) =\n    g = 9.81\n    s = 0\n    print s\n    for k from 1 to 4\n        s += k x\n    if x > 1\n        s *= 2\n    s\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(),
+               "ds/dx = 0\nfor k from 1 to 4\n    ds/dx = ds/dx + k\nif x > 1\n    \
+                ds/dx = 2ds/dx\nds/dx\n");
+    // the variable itself reassigned: its tangent starts at 1
+    let src = "f(x) =\n    x = sin(x)\n    x\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(), "dx/dx = 1\ndx/dx = dx/dx cos(x)\nx = sin(x)\ndx/dx\n");
+    // a second derivative differentiates the derivative's body again
+    let src = "f(x) =\n    y = x^3\n    y\n";
+    assert_eq!(ad_of(src, "x", 2).unwrap(), "ddy/dx/dx = 6x\nddy/dx/dx\n");
+    // refused: lists changed with values depending on x, solve
+    assert!(ad_of("f(x) =\n    xs = [1, 2]\n    xs[0] = x\n    xs[0]\n", "x", 1).unwrap_err().contains("list xs"));
+}

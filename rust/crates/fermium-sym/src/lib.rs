@@ -19,6 +19,7 @@
 //!
 //! Errors are `fermium_syntax::diag::Diagnostic`s (Python FermiumError): a node made here has no position,
 //! so errors about it have `line: None`, and callers fill the position in, as the Python checker does.
+pub mod ad;
 pub mod build;
 pub mod diff;
 pub mod integrate;
@@ -29,6 +30,7 @@ pub mod source;
 pub mod tidy;
 pub mod walk;
 
+pub use ad::ad_body;
 pub use build::SymResult;
 pub use diff::{builtin_deriv, d, diff, tidy, DiffContext, Plain, BUILTIN_DERIV_NAMES};
 pub use integrate::integrate;
