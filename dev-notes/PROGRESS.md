@@ -24,11 +24,15 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 02:40–03:35 UTC: macOS CI (first ever) found two real problems: a degenerate fit not detected by `fermium build` on macOS (D262, scale-free test in both runtimes) and a parser crash on an unclosed bracket found by the fuzz test. Both fixed; **CI green on Linux and macOS at `ccdb288`**.
 - 03:40 UTC: **A10 — v1.5 frozen** at `ccdb288` (tag `v1.5` local; tag push refused with 403, so the branch `claude/v1.5-freeze` marks it; D263). CHANGES_1.5.md written; PR #2 open.
 
+- 04:00 UTC: **B3 done**: conformance suite harvested from v1.5 (3037 programs in 22 areas, Appendix 1 included); `conformance/run --impl legacy` passes 100% (conformance/LEGACY.md).
+- 04:05 UTC: **B4 started**: Cargo workspace rust/ with the spec's crates; AST ported; `fermium run --base-dir` CLI stub; LLVM 18 static libraries and lld installed (llvm-18-dev, liblld-18-dev).
+
 ## In progress
-- **Phase B** (v2, Rust): branch `claude/v2-rust` from `ccdb288`; conformance suite first.
+- Agents (worktrees): fermium-syntax (lexer + parser port, parity tool vs the Python parser), fermium-units (units, constants, natural units, D11 printing; unit database from units_db.fm at build time), fermium-runtime numerics (quadrature, ODE incl. Radau/BDF, LM fit, Brent, eigen, FFT, special functions, RNG, PDE; fixtures from v1/SciPy).
+- Me: checker + typed IR + evaluator (the interpreter backend first; LLVM backend behind a trait next).
 
 ## Next
-- B3 conformance harvest + runner + CONFORMANCE.md; B4 Cargo workspace; B5 milestones in order.
+- Integrate the crates; `conformance/run --impl rust` → CONFORMANCE.md; milestones B5.1–B5.14 in order.
 
 ## Blocked
 - (none)
@@ -40,3 +44,4 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 2026-09-26 01:50 UTC — A3, A6, A8.3 in; A7 mostly done; waiting on A4/A5 and A8.1/A8.2 agents and red team 8. CI green on Linux (A2).
 - 2026-09-26 02:40 UTC — all Phase A items merged; red team 8 fixed; PR #2 open; waiting for macOS CI before the v1.5 tag.
 - 2026-09-26 03:40 UTC — v1.5 frozen (CI green on both platforms); starting Phase B.
+- 2026-09-26 04:10 UTC — Phase B: conformance suite ready (legacy 100%); Rust workspace up; three porting agents running.
