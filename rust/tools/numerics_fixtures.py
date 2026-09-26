@@ -514,8 +514,64 @@ seed:<s> values...   (seed:default = never seeded)""")
     w.close()
 
 
+# --------------------------------------------------------------------------------------- pde
+# v1's pde_solve (fermium/runtime/pde.py over scipy.sparse splu). Probes f(x, [u, ux, uxx, t, ut, i]) ->
+# [rhs, u0, phase0, v0, left, right]; the same in tests/pde.rs (by name).
+def _barrier(x):
+    return 1.0 if abs(x) < 0.5 else 0.0
+
+
+PDE_CASES = [
+    # name, probe, xa, xb, t0, t1, options
+    ("heat_cn", lambda x, a: [0.1 * a[2], sin(pi * x) + 0.3 * sin(3 * pi * x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0,
+     0.5, dict(grid=100)),
+    ("heat_jump", lambda x, a: [a[2], 0.0, 0.0, 0.0, 1.0, 0.0], 0.0, 1.0, 0.0, 0.2, dict(grid=50)),
+    ("heat_neumann_step", lambda x, a: [0.5 * a[2] - 0.2 * a[1], cos(pi * x), 0.0, 0.0, 0.0, 0.3], 0.0, 1.0, 0.0,
+     1.0, dict(grid=80, step=0.05, bc=(1, 1))),
+    ("heat_implicit_src", lambda x, a: [a[2] - a[0] + sin(3 * a[3]) * x, x * (1 - x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0,
+     0.0, 2.0, dict(grid=60, method="implicit", tdep=True)),
+    ("heat_explicit", lambda x, a: [a[2], exp(-40 * (x - 0.3) * (x - 0.3)), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 0.05,
+     dict(grid=40, method="explicit")),
+    ("tdse_free", lambda x, a: [a[5] * (0.5 * a[2]), exp(-(x + 5) * (x + 5) / 4), 2.0 * x, 0.0, 0.0, 0.0], -20.0,
+     20.0, 0.0, 2.0, dict(grid=400, is_complex=True)),
+    ("tdse_barrier", lambda x, a: [a[5] * (0.5 * a[2] - _barrier(x) * a[0]), exp(-(x + 5) * (x + 5) / 4), 1.5 * x,
+                                   0.0, 0.0, 0.0], -20.0, 20.0, 0.0, 3.0, dict(grid=400, is_complex=True)),
+    ("wave", lambda x, a: [4.0 * a[2], exp(-50 * (x - 0.5) * (x - 0.5)), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 1.0,
+     dict(grid=200, order=2)),
+    ("wave_damped", lambda x, a: [a[2] - 0.5 * a[4], sin(pi * x), 0.0, 1.0, 0.0, 0.0], 0.0, 1.0, 0.0, 2.0,
+     dict(grid=100, order=2, step=0.004)),
+    ("explicit_unstable", lambda x, a: [a[2], sin(pi * x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 0.1,
+     dict(grid=100, method="explicit", step=0.01)),
+]
+
+
+def gen_pde():
+    from fermium.runtime.pde import pde_solve, PdeFail
+    w = Writer("pde.txt", """
+v1's PDE solver (fermium.runtime.pde.pde_solve). name nsnap M ncomp nwarn wkind west  t,y,dy at (snap, point) samples
+snaps: 0, 1, n//3, n//2, n-1; points: round(f*(width-1)) for f in 0, 0.21, 0.5, 0.77, 1 over the row width  or  name ERR message""")
+    for name, probe, xa, xb, t0, t1, opts in PDE_CASES:
+        warns = []
+        try:
+            ts, ys, dys, ncomp, M = pde_solve(probe, xa, xb, t0, t1, warn=lambda k, e: warns.append((k, e)), **opts)
+        except PdeFail as fl:
+            w.row(name, "ERR", fl.message.replace(" ", "_"))
+            continue
+        width = (M + 1) * ncomp
+        n = len(ts)
+        vals = [float(n), float(M), float(ncomp), float(len(warns))] + (list(warns[0]) if warns else [0.0, 0.0])
+        for s in (0, 1, n // 3, n // 2, n - 1):
+            vals.append(ts[s])
+            for f in (0.0, 0.21, 0.5, 0.77, 1.0):
+                i = int(round(f * (width - 1)))
+                vals += [ys[s * width + i], dys[s * width + i]]
+        w.row(name, *vals)
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special, "rng": gen_rng}
+            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special, "rng": gen_rng,
+            "pde": gen_pde}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
