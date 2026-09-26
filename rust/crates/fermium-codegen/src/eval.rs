@@ -289,12 +289,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         l.borrow_mut().extend(ys)
                     }
                     (Value::TextList(l), Value::Str(t)) => l.borrow_mut().push(t),
-                    _ => {}
+                    (Value::CList(l), Value::Vec(z)) if z.len() == 2 => l.borrow_mut().push((z[0], z[1])),
+                    _ => return self.err("not yet supported by the Rust back end: pushing this value"),
                 }
             }
             StmtKind::Clear(sym) => {
-                if let Value::List(l) = self.get(*sym, fr)? {
-                    l.borrow_mut().clear();
+                match self.get(*sym, fr)? {
+                    Value::List(l) => l.borrow_mut().clear(),
+                    Value::TextList(l) => l.borrow_mut().clear(),
+                    Value::CList(l) => l.borrow_mut().clear(),
+                    _ => return self.err("not yet supported by the Rust back end: clearing this value"),
                 }
             }
             StmtKind::If(c, then, other) => {
