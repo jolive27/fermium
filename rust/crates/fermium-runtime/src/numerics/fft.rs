@@ -5,7 +5,6 @@
 //! to rounding (~1e-16 of the largest |X_k|). [`spectrum`] ports v1's `fermium/runtime/spectral.py`.
 
 use super::dense::C64;
-use std::f64::consts::FRAC_PI_2;
 
 /// e^{−2πi k/n}, accurate to rounding for every k (octant reduction with exact integer arithmetic)
 fn twiddle(k: usize, n: usize) -> C64 {
@@ -14,11 +13,11 @@ fn twiddle(k: usize, n: usize) -> C64 {
     let q = (4 * k) / n; // quadrant
     let r = 4 * k - q * n; // 0 <= r < n: angle within the quadrant = (π/2)·r/n
     let (c, s) = if 2 * r <= n {
-        let a = FRAC_PI_2 * (r as f64) / (n as f64);
-        (a.cos(), a.sin())
+        let (c, s) = dd_cos_sin_half_pi(r as f64, n as f64);
+        (c, s)
     } else {
-        let a = FRAC_PI_2 * ((n - r) as f64) / (n as f64);
-        (a.sin(), a.cos())
+        let (c, s) = dd_cos_sin_half_pi((n - r) as f64, n as f64);
+        (s, c)
     };
     // angle θ = qπ/2 + φ with (cos φ, sin φ) = (c, s); return (cos θ, −sin θ)
     let (ct, st) = match q {
@@ -28,6 +27,52 @@ fn twiddle(k: usize, n: usize) -> C64 {
         _ => (s, -c),
     };
     C64::new(ct, -st)
+}
+
+// ---- double-double arithmetic, so the twiddle factors are correctly rounded like pocketfft's constants
+type DD = (f64, f64);
+
+fn fast_two_sum(a: f64, b: f64) -> DD {
+    let s = a + b;
+    (s, b - (s - a))
+}
+
+fn dd_add(a: DD, b: DD) -> DD {
+    let s = a.0 + b.0;
+    let bb = s - a.0;
+    let e = (a.0 - (s - bb)) + (b.0 - bb);
+    fast_two_sum(s, e + a.1 + b.1)
+}
+
+fn dd_mul(a: DD, b: DD) -> DD {
+    let p = a.0 * b.0;
+    let e = a.0.mul_add(b.0, -p) + (a.0 * b.1 + a.1 * b.0);
+    fast_two_sum(p, e)
+}
+
+fn dd_div_f(a: DD, k: f64) -> DD {
+    let q1 = a.0 / k;
+    let r = (-q1).mul_add(k, a.0);
+    fast_two_sum(q1, (r + a.1) / k)
+}
+
+/// (cos, sin) of (π/2)·r/n for 0 ≤ r/n ≤ 1/2, correctly rounded (Taylor series in double-double).
+fn dd_cos_sin_half_pi(r: f64, n: f64) -> (f64, f64) {
+    const HALF_PI: DD = (1.5707963267948966, 6.123233995736766e-17);
+    let q1 = r / n;
+    let q2 = (-q1).mul_add(n, r) / n;
+    let x = dd_mul(HALF_PI, fast_two_sum(q1, q2));
+    let (mut c, mut s): (DD, DD) = ((1.0, 0.0), (0.0, 0.0));
+    let mut term: DD = (1.0, 0.0);
+    for k in 1..40 {
+        term = dd_div_f(dd_mul(term, x), k as f64);
+        let t = if (k / 2) % 2 == 1 { (-term.0, -term.1) } else { term };
+        if k % 2 == 1 { s = dd_add(s, t) } else { c = dd_add(c, t) }
+        if term.0.abs() < 1e-40 {
+            break;
+        }
+    }
+    (c.0 + c.1, s.0 + s.1)
 }
 
 fn factorize(mut n: usize) -> Vec<usize> {
@@ -113,12 +158,27 @@ impl Plan {
                     o[2] = m1 - jd;
                 }
                 _ => {
-                    for r in 0..p {
-                        let mut acc = t[0];
-                        for q in 1..p {
-                            acc = acc + t[q] * self.w(q * r, p);
+                    // odd p, pocketfft's structure: sums and differences of the pairs (q, p − q), so a real input
+                    // gives an exactly real X_0 and exactly conjugate X_r, X_{p−r} (numpy prints 0, not 1e-17)
+                    let h = (p - 1) / 2;
+                    let s: Vec<C64> = (1..=h).map(|q| t[q] + t[p - q]).collect();
+                    let d: Vec<C64> = (1..=h).map(|q| t[q] - t[p - q]).collect();
+                    let mut o0 = t[0];
+                    for v in &s {
+                        o0 = o0 + *v;
+                    }
+                    o[0] = o0;
+                    for r in 1..=h {
+                        let mut ca = t[0];
+                        let mut cb = C64::default();
+                        for q in 1..=h {
+                            let w = self.w(q * r, p);
+                            ca = ca + s[q - 1].scale(w.re);
+                            cb = cb + d[q - 1].scale(w.im);
                         }
-                        o[r] = acc;
+                        let icb = C64::new(-cb.im, cb.re); // i·cb
+                        o[r] = ca + icb;
+                        o[p - r] = ca - icb;
                     }
                 }
             }
