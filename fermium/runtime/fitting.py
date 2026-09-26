@@ -81,12 +81,36 @@ def _run(least_squares, resid, p0, x_scale, n, k):
                         gtol=1e-14, max_nfev=20000)
 
 
+def degenerate(A, tol=1e-12):
+    """Is JᵀJ singular up to rounding?  Scale-free: the matrix is normalised to unit diagonal (a correlation
+    matrix) and Gaussian elimination with partial pivoting must not meet a pivot below tol.  Parameters that only
+    appear together (`A B`) make it exactly singular in exact arithmetic but only nearly so in floating point,
+    where the outcome used to depend on the platform (macOS CI, D262).  aot_data.c:degenerate does the same."""
+    A = np.array(A, dtype=float)
+    d = np.sqrt(np.abs(np.diag(A)))
+    if not np.all(np.isfinite(A)) or np.any(d == 0):
+        return True
+    M = A / np.outer(d, d)
+    k = len(M)
+    for c in range(k):
+        piv = c + int(np.argmax(np.abs(M[c:, c])))
+        if abs(M[piv, c]) < tol:
+            return True
+        if piv != c:
+            M[[c, piv]] = M[[piv, c]]
+        for r in range(c + 1, k):
+            M[r, c:] -= M[r, c] / M[c, c] * M[c, c:]
+    return False
+
+
 def _finish(res, best, r, n, k, extra=None):
     rss = float(np.dot(r, r))
     dof = max(1, n - k)
     errs = [None] * k
     try:
         J = res.jac
+        if degenerate(J.T @ J):
+            raise np.linalg.LinAlgError("degenerate")
         cov = np.linalg.inv(J.T @ J) * (rss / dof)
         errs = [math.sqrt(cov[i, i]) if cov[i, i] >= 0 else None for i in range(k)]
         if extra is not None:

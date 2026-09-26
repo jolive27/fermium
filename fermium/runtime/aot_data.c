@@ -412,6 +412,30 @@ static int solve_lin(double *A, double *b, int k) {
     return 1;
 }
 
+/* Is JᵀJ singular up to rounding?  The same test as fitting.degenerate (D262): normalise to unit diagonal, then
+   Gaussian elimination with partial pivoting must not meet a pivot below 1e-12. */
+static int degenerate(const double *A0, int k) {
+    double *M = xmalloc(sizeof(double) * (size_t)(k * k + 1));
+    int bad = 0;
+    for (int a = 0; a < k && !bad; a++)
+        if (!(A0[a * k + a] > 0) || !isfinite(A0[a * k + a])) bad = 1;
+    for (int a = 0; a < k && !bad; a++)
+        for (int b = 0; b < k; b++) M[a * k + b] = A0[a * k + b] / sqrt(A0[a * k + a] * A0[b * k + b]);
+    for (int col = 0; col < k && !bad; col++) {
+        int piv = col;
+        for (int r = col + 1; r < k; r++) if (fabs(M[r * k + col]) > fabs(M[piv * k + col])) piv = r;
+        if (!(fabs(M[piv * k + col]) >= 1e-12)) { bad = 1; break; }
+        if (piv != col)
+            for (int j = 0; j < k; j++) { double t = M[col * k + j]; M[col * k + j] = M[piv * k + j]; M[piv * k + j] = t; }
+        for (int r = col + 1; r < k; r++) {
+            double f = M[r * k + col] / M[col * k + col];
+            for (int j = col; j < k; j++) M[r * k + j] -= f * M[col * k + j];
+        }
+    }
+    free(M);
+    return bad;
+}
+
 static void jacobian(fit_ctx *c, const double *p, const double *r, double *J, int scipy_step) {
     int k = c->k;
     int64_t n = c->n;
@@ -554,6 +578,13 @@ int64_t fm_fit(int64_t fid, int64_t h, double *p) {
     int *ok = xmalloc(sizeof(int) * (size_t)k);
     jacobian(&c, best, rbest, J, 1);
     int singular = 0;
+    for (int a = 0; a < k; a++)
+        for (int b = 0; b < k; b++) {
+            double t = 0;
+            for (int64_t i = 0; i < n; i++) t += J[i * k + a] * J[i * k + b];
+            A[a * k + b] = t;
+        }
+    if (degenerate(A, k)) singular = 1;
     for (int j = 0; j < k && !singular; j++) {        /* column j of the inverse */
         for (int a = 0; a < k; a++)
             for (int b = 0; b < k; b++) {
