@@ -14,9 +14,12 @@ mod eval_solve;
 mod eval_unc;
 mod eval_vecmat;
 pub mod printer;
+pub mod varmap;
 pub mod session;
 #[cfg(feature = "llvm")]
 pub mod llvm;
+
+pub mod native;
 
 use eval::{Printer, RunError};
 use fermium_ir::Module;

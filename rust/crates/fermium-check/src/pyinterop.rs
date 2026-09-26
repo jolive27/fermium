@@ -1,11 +1,13 @@
 //! The checker's side of `use python` (M6, DECISIONS D140–D141): calling Python functions from Fermium with the
 //! units checked at the boundary. A port of `fermium/pyinterop.py` (PythonMixin), method by method.
 //!
-//!     use python numpy as np
-//!     use python scipy.special as sp
-//!     use python mylib as ml:
-//!         energy(m [kg], v [m/s]) -> [J]
-//!         positions(t [s]) -> list [m]
+//! ```text
+//! use python numpy as np
+//! use python scipy.special as sp
+//! use python mylib as ml:
+//!     energy(m [kg], v [m/s]) -> [J]
+//!     positions(t [s]) -> list [m]
+//! ```
 //!
 //! Python functions take and return plain numbers. Without a declared signature every argument must be
 //! dimensionless (a unit error at compile time says how to fix it: divide by a unit, like r / (1 m)) and the

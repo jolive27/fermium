@@ -53,7 +53,11 @@ pub fn doctor() -> ExitCode {
     ok("nothing else is needed: no Python, C compiler or LLVM to install");
     ok("built in too: the REPL (fermium), the language server (fermium lsp) and the Jupyter kernel \
         (fermium jupyter install)");
-    println!("  - fermium build (standalone executables) is not in this version yet");
+    if crate::aot::available() {
+        ok("fermium build makes standalone executables with the built-in linker (lld): no C compiler needed");
+    } else {
+        println!("  - fermium build (standalone executables) isn't available in this fermium binary");
+    }
     let src = "L = 1.20 m\nT = 2.21 s\nprint 4π² L / T²\n";
     let r = std::thread::Builder::new()
         .stack_size(crate::run::STACK)

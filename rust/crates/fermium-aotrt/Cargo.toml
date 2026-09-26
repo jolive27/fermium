@@ -1,0 +1,14 @@
+[package]
+name = "fermium-aotrt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The run time of executables made by `fermium build` (a static library the fermium binary carries)"
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/lib.rs"
+
+[dependencies]
+fermium-codegen = { path = "../fermium-codegen", default-features = false }
+fermium-syntax = { path = "../fermium-syntax" }

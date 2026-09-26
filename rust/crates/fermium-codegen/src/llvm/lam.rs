@@ -24,12 +24,14 @@ pub(super) struct Saved<'c> {
     ret_kind: Kind,
     block: Option<BasicBlock<'c>>,
     known_line: Option<u32>,
+    ctx_ptr: PointerValue<'c>,
 }
 
 /// Every variable an expression uses (lambda bodies included), and every variable its where-bindings make.
 pub(super) fn expr_syms(m: &Module, e: &Expr, used: &mut HashSet<SymId>, bound: &mut HashSet<SymId>) {
     match &e.kind {
-        ExprKind::Var(s) => {
+        ExprKind::Var(s) | ExprKind::SolEval { sol: s, .. } | ExprKind::SolList { sol: s, .. }
+        | ExprKind::PdeEval { sol: s, .. } => {
             used.insert(*s);
         }
         ExprKind::Let(binds, _) => bound.extend(binds.iter().map(|(s, _)| *s)),
@@ -64,6 +66,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             ret_kind: self.ret_kind,
             block: self.b.get_insert_block(),
             known_line: self.known_line,
+            ctx_ptr: self.ctx_ptr,
         }
     }
 
@@ -77,6 +80,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.ret_kind = s.ret_kind;
         self.b.position_at_end(s.block.unwrap());
         self.known_line = s.known_line;
+        self.ctx_ptr = s.ctx_ptr;
     }
 
     /// Is this variable one of the current function's own (a local, or living in an override)?
@@ -94,7 +98,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             let (p, k) = self.slot(*s)?;
             kinds.push(k);
             let at = unsafe { bl!(self.b.build_gep(ptrt.array_type(n), env, &[self.i64c(0), self.i64c(i as i64)], "e")) };
-            bl!(self.b.build_store(at, p));
+            self.st(at, p, "env")?;
         }
         Ok((env, kinds))
     }
@@ -105,7 +109,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let n = syms.len().max(1) as u32;
         for (i, (s, k)) in syms.iter().zip(kinds).enumerate() {
             let at = unsafe { bl!(self.b.build_gep(ptrt.array_type(n), env, &[self.i64c(0), self.i64c(i as i64)], "e")) };
-            let p = bl!(self.b.build_load(ptrt, at, "ep")).into_pointer_value();
+            let p = self.ld(ptrt, at, "ep", "env")?.into_pointer_value();
             self.overrides.insert(*s, (p, *k));
         }
         Ok(())
@@ -127,7 +131,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 Kind::F => self.fconst(0.0).as_basic_value_enum(),
                 _ => ty.const_zero(),
             };
-            bl!(self.b.build_store(p, zero));
+            self.st(p, zero, "var")?;
             self.overrides.insert(s, (p, k));
         }
         Ok(())
@@ -202,7 +206,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                                                 xf.into(), line.into()])?;
                 self.check_err()?;
                 // eval_calc: the line when the integral started
-                bl!(self.b.build_store(self.line_g.as_pointer_value(), line));
+                self.st(self.line_g.as_pointer_value(), line, "line")?;
                 Ok(fv(r))
             }
             ExprKind::Root { lam, lo, hi, scale, tfmt } => {
@@ -222,7 +226,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let r = self.fcall("fm_root", &[ctx, fp.into(), env.into(), g.into(), genv.into(), a.into(), b.into(),
                                                 tf.into(), line.into()])?;
                 self.check_err()?;
-                bl!(self.b.build_store(self.line_g.as_pointer_value(), line));
+                self.st(self.line_g.as_pointer_value(), line, "line")?;
                 Ok(fv(r))
             }
             ExprKind::Sum { lam, lo, hi, step } => {
@@ -279,7 +283,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                     };
                 }
                 r?;
-                bl!(self.b.build_store(self.line_g.as_pointer_value(), line));
+                self.st(self.line_g.as_pointer_value(), line, "line")?;
                 self.known_line = None;
                 let s = bl!(self.b.build_load(self.f64t(), acc, "sum")).into_float_value();
                 Ok(fv(s))

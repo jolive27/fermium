@@ -947,6 +947,41 @@ print(mod["g"])              # 9.81 m/s²  (also mod.g)
 
 See DECISIONS.md D140–D142 for the design.
 
+## Python interop in Fermium 2 (the Rust compiler)
+
+**`use python`** works in the `fermium` binary exactly as described above (same signatures, conversions and
+messages). The binary has no link-time dependency on Python: the first time a program says `use python`, it
+asks `python3` where its shared library is (`sysconfig`), loads it, and imports the module in that Python, so
+the modules you can use are those of that `python3` (with NumPy for lists). A program that doesn't use Python
+never loads it, so the binary runs on a machine without Python. To pick another Python, set `FERMIUM_PYTHON`
+to its interpreter (or `FERMIUM_LIBPYTHON` to its `libpython3.x.so`); the interpreter must have been built
+with its shared library, as the Python of Linux distributions, python.org and Homebrew are.
+
+**Calling Fermium 2 from Python** uses the shared library `libfermium_pyapi` (a C interface, built from
+`rust/crates/fermium-pyapi`) through `fermium2`, a pure-Python module that needs only NumPy (no compiler, no
+Python headers). It offers the same API as `fermium.compile` above:
+
+```sh
+cd rust && cargo build --release -p fermium-pyapi      # target/release/libfermium_pyapi.so
+export PYTHONPATH=$PWD/crates/fermium-pyapi/python    # where fermium2/ is
+```
+
+```python
+import fermium2 as fermium
+from fermium2 import Q
+
+mod = fermium.compile("g = 9.81 m/s²\nperiod(L [m]) = 2π √(L / g)\n")
+print(mod.period(1.0), mod.period(Q(50, "cm")).to("s"), mod["g"])
+```
+
+`fermium2` finds the library in `FERMIUM_PYAPI_LIB`, next to its own `__init__.py`, or in the repository's
+`rust/target/{release,fast,debug}`. Quantities, lists, errors (`fermium2.FermiumError`,
+`FermiumRuntimeError`), warnings, the ΔT and rpm/Hz checks behave as in Fermium 1.5, and a compiled program can
+itself `use python`. One difference: Fermium 2 runs these programs with its tree-walking interpreter, not
+the LLVM back end, so a loop-heavy function is about as fast as pure Python rather than ~10× faster
+(rust/DIVERGENCES.md). Tests: `rust/crates/fermium-pyapi/python/test_fermium2.py` (run by `cargo test -p
+fermium-pyapi`).
+
 ## 12. Symbols and ASCII spellings
 
 Every symbol has an ASCII spelling that means exactly the same thing.

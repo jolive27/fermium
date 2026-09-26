@@ -182,11 +182,19 @@ or a quantity found by cancellation). What differs, in the browser only:
 
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
-- Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
+- Radau/BDF: LAPACK's LU and OpenBLAS's products modelled with their rounding (`numerics/npblas.rs`), so
+  Radau's steps are v1's step for step. BDF's step-size factors use `error_norms ** (-1/k)`, which
+  NumPy evaluates with its vectorised pow (not libm's; it differs in the last bit about 5% of the time),
+  so a long BDF solve can drift from v1 at the rounding level; it shows only when the results are printed to
+  16–17 digits (case 1954d43c8916).
 - Fit: MINPACK lmder port with our QR; parameters agree with SciPy to 1e-9, standard errors to 2e-8.
-- Eigenvalues (matrix method): Sturm bisection + inverse iteration instead of LAPACK stebz/stein;
-  energies agree to 4e-12 relative.
-- FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
+- Eigenvalues (matrix method): LAPACK dstebz/dstein, dgbtf2/dgbtrs and the BLAS calls are transcribed,
+  so energies and eigenfunctions are v1's to the last bit, except after the near-degenerate-pair fix,
+  which uses a 2×2 eigenproblem instead of NumPy's SVD (last-digit differences in ψ). Orthogonality integrals
+  such as ∫ψ₁ψ₂ are rounding noise (about 10⁻¹⁷) in both implementations and differ there (cases 1fc80f4b748e,
+  92190636e7d6, 02e450290630; recorded under the rounding-level integrals section, which prints them with one
+  figure).
+- FFT: a literal port of pocketfft (numpy.fft's library): bit-identical to NumPy on every fixture value.
 - PDE: a tridiagonal LU instead of SuperLU; 3e-13.
 
 ## Plots: native SVG/PNG/GIF instead of matplotlib (spec B6)
@@ -326,3 +334,20 @@ checker doesn't compile yet); `cargo test -p fermium-jupyter` plays a client ove
 - Run-time warnings (they go to the process's stderr) are shown after the cell's printed output; v1 showed
   them in the order they happened.
 - stdin (`input`) and comms are not used by Fermium; history, inspect and comm_info get empty replies.
+
+## Python interop (use python, and calling Fermium from Python)
+
+`use python` behaves as in v1 (conformance area python-interop: 24 of 24). Differences in how it is set up, and
+in the API for calling Fermium from Python (D142), which no conformance case covers:
+
+- The binary loads libpython with dlopen the first time a program says `use python` (spec §B5.14), from the
+  `python3` found on the PATH, then /usr/local/bin/python3 and /usr/bin/python3, or from `FERMIUM_PYTHON` /
+  `FERMIUM_LIBPYTHON`. v1 *was* Python, so it used its own interpreter. A Python built without its shared
+  library can't be used; the error at the `use python` line says so.
+- Calling Fermium from Python is the module `fermium2` (rust/crates/fermium-pyapi/python), a ctypes wrapper
+  of the library libfermium_pyapi, instead of `fermium.compile` / `fermium.load` in the `fermium` package.
+  It has v1's API (compile, load, Module, Quantity, Q, QuantityArray, ComplexQuantity; the same errors and
+  warnings); python/test_fermium2.py ports v1's tests of it.
+- It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
+  (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
+  faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.

@@ -34,6 +34,8 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 
 - 05:20–06:25 UTC: merged the solve agent (ode 295/316, pde 53/61, eigen 44/62; PDE-after-jump warning, B2 RT7-2), B (complex 106/106, FFT 37/37), C (derivatives 207/207, integrals 269/274, algebraic solve 44/44), A (rng 29/29, uncertainty 97/108), the tools port (CLI parity, REPL, LSP), the WASM playground (B5.12), and the LLVM back end (default Auto; 1769 compiled programs identical to the tree-walker). Documented divergences checked by the runner (D265). CI was not running (invalid workflow YAML since the Rust job): fixed. **Rust 2775/3037 (91.4 %) + 8 documented divergences**, before the RNG/uncertainty merge.
 
+- 06:25–07:15 UTC: merged the data/plot port (data 76/79), RNG + uncertainties, the tools port (CLI parity, REPL, LSP, Jupyter kernel with native ZMTP), the WASM playground (B5.12: 142/142 examples as native, plots byte for byte, page test 14/14), Python interop both ways (B5.14: python-interop 24/24; libpython loaded only when used; fermium2 ctypes API), calculus B2 fixes (integrals at rounding level; decimal-place rule for sums, 3 cases, all improvements). Conformance suite re-harvested with the docs/notes/red-team blocks and checker-only tests: **3366 cases, legacy 3366/3366; Rust 3307/3366 (98.2 %) + 9 documented divergences (98.5 %)**. CI: legacy oracle pinned to the harvest's library versions.
+
 ## In progress
 - Agents (worktrees): A core expressions + built-ins; B vectors/matrices/complex/FFT; C calculus + fermium-sym; D ODE/eigen/PDE solve; numerics (special functions, FFT, RNG, PDE next); syntax (corpus widening, then fermium fmt).
 - Me: merging, integration, remaining checker areas (unit systems, analyze, modules, uncertainty, RNG, parallel, data/plot/fit), red-team follow-ups.
@@ -58,3 +60,5 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 2026-09-26 04:40 UTC — Rust `fermium run` works end to end; strict conformance runner; Rust at 24.7 %; four porting agents + numerics + syntax running.
 - 2026-09-26 05:20 UTC — Rust at 73.9 % (before the ODE/eigen/PDE merge); agents A–E + LLVM back end running; harvest being widened (notes, red-team, docs blocks).
 - 2026-09-26 06:25 UTC — Rust 91.4 % + 8 documented; agents: data/plot (B), speed of the evaluator (A), solve precision (D), calculus B2 (C), LLVM ODE + build (LLVM), Jupyter (tools), playground wrap-up.
+- 2026-09-26 07:15 UTC — Rust 98.2 % (+9 documented) on the 3366-case suite; B5.1, B5.9, B5.11–B5.14 done; B5.10 (build) and LLVM ODE in progress; red team 10 started.
+- 2026-09-26 08:10 UTC — Rust 98.6 % + 27 documented (99.4 %); runner mirrors each program's folder; module call-line fix; `fermium build` (B5.10) merged: lld linked in, fermium-aotrt runtime, executables identical to `fermium run` on the sample; next PERF.md.
