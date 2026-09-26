@@ -83,6 +83,13 @@ pub struct SolView {
     pub name: String,
     pub n: usize,
     pub stride: usize,
+    /// a complex unknown: two slots per derivative (D93)
+    pub cplx: bool,
+    /// display units: of this derivative, of each derivative order, of the time; significant figures
+    pub hint: Option<I::Hint>,
+    pub hints: Vec<Option<I::Hint>>,
+    pub thint: Option<I::Hint>,
+    pub sf: Option<u32>,
 }
 
 /// A one-line helper defined inside a function (D194), expanded at each call.
@@ -106,6 +113,8 @@ pub enum Binding {
     Module(usize),
     /// `use python numpy as np` (pyinterop.py PyModRef)
     PyModule(usize),
+    /// the unknown of a PDE after its solve (m3solve.py PdeView); index into Checker::solve.pdes
+    Pde(usize),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -237,6 +246,8 @@ pub struct Checker {
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
+    /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
+    pub solve: crate::solve::SolveTables,
 }
 
 impl Checker {
@@ -276,6 +287,7 @@ impl Checker {
             par_stack: vec![],
             fmt_dims: vec![],
             nodes: HashMap::new(),
+            solve: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -539,6 +551,7 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Solve(sv) => self.s_solve(s, sv, ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }

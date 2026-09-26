@@ -139,14 +139,19 @@ pub enum ExprKind {
     /// The x in [lo, hi] where lam(x) = 0 (D32).
     Root { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr> },
     /// A solution component (or its derivative) at time t.
-    SolEval { sol: SymId, comp: usize, t: Box<Expr>, use_dy: bool },
+    SolEval { sol: SymId, comp: usize, t: Box<Expr>, use_dy: bool, tfmt: usize },
     /// All samples of a solution component (what = 0) or its times (what = 1) as a list.
     SolList { sol: SymId, comp: usize, what: u8 },
     Load(usize),
     Table(Vec<Expr>),
     Column(Box<Expr>, usize),
     /// u(x, t) of a PDE solution (D83).
-    PdeEval { sol: SymId, xa: f64, xb: f64, m: usize, comp0: usize, x: Box<Expr>, t: Box<Expr>, which: u8 },
+    /// (xa, xb are unused: the ends of the grid are read from the solution; xfmt, tfmt: formats for errors)
+    PdeEval { sol: SymId, xa: f64, xb: f64, m: usize, comp0: usize, x: Box<Expr>, t: Box<Expr>, which: u8,
+              xfmt: usize, tfmt: usize },
+    /// The highest derivatives of a coupled ODE (D47): the n×n system m·x = b solved by Gaussian elimination;
+    /// a singular matrix is an ODE error "<text><t>: the matrix of their coefficients is singular".
+    OdeLinSolve { m: Vec<Expr>, b: Vec<Expr>, t: Box<Expr>, text: usize, fmt: usize },
     /// ± and the parts of an uncertain value (D120–D124).
     Uncertain(Box<Expr>, Box<Expr>),
 }
@@ -190,7 +195,7 @@ pub enum StmtKind {
     Print(Vec<PrintItem>),
     Plot(usize, Vec<Expr>),
     Solve { sol: SymId, rhs: LambdaId, y0: Vec<Expr>, t0: Expr, t1: Expr, step: Option<Expr>, method: String,
-            rtol: Option<Expr> },
+            rtol: Option<Expr>, x: Box<SolveExtra> },
     Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId },
     Return(Option<Expr>),
     Break,
@@ -199,6 +204,36 @@ pub enum StmtKind {
     Assert(Expr, usize),
     Animate { anim_id: usize, sol: SymId, xa: f64, xb: f64 },
     Propagate { n: Option<Expr>, body: Vec<Stmt>, outs: Vec<SymId> },
+}
+
+/// The rest of a solve statement (Python sets them as attributes on SSolve).
+#[derive(Clone, Debug, Default)]
+pub struct SolveExtra {
+    /// the relative tolerance (1e-9 unless given)
+    pub rtol: f64,
+    /// absolute tolerance per state slot: (value in SI, power of 1/|t1 − t0|) (D160)
+    pub atol: Option<Vec<(f64, u32)>>,
+    /// the stop condition's g = lhs − rhs (D39), and the text id of its "never happened" message (−1: none)
+    pub event: Option<LambdaId>,
+    pub evtext: i64,
+    /// text id of the independent variable's name, and the print format of its values (for errors)
+    pub tname: usize,
+    pub tfmt: usize,
+    /// the right side reads t itself (D40)
+    pub tdep: bool,
+    /// eigenvalue problems (method "eigen", D82): states, grid, 0 = matrix / 1 = shooting
+    pub nstates: usize,
+    pub grid: usize,
+    pub eig_method: u8,
+    /// PDEs (method "pde", D83): the x range, order in t, 0 CN / 1 implicit / 2 explicit, boundary kinds
+    pub xa: Option<Expr>,
+    pub xb: Option<Expr>,
+    pub order: u8,
+    pub pmethod: u8,
+    pub bc: (u8, u8),
+    pub is_complex: bool,
+    /// the source line (PDE warnings)
+    pub line: u32,
 }
 
 /// A monomorphic instance of a user function.

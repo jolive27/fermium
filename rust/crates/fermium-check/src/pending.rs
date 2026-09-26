@@ -39,12 +39,6 @@ impl Checker {
         Err(self.not_ported("a complex number with units", e.span))
     }
     // ---- solutions
-    pub fn sol_values(&mut self, _view: SolViewId, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("the values of an ODE solution", e.span))
-    }
-    pub fn sol_names(&self, _sol: usize) -> Vec<String> {
-        vec![]
-    }
     // ---- unit systems (D60)
     pub fn natural(&self) -> bool {
         !self.nat.is_empty()
@@ -148,20 +142,11 @@ impl Checker {
     pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("calling Python", e.span))
     }
-    pub fn is_pde_name(&self, _name: &str, _ctx: &Ctx) -> bool {
-        false
-    }
-    pub fn pde_call(&mut self, _name: &str, e: &A::Expr, _ctx: &mut Ctx, _deriv: bool) -> CResult<Checked> {
-        Err(self.not_ported("a PDE solution", e.span))
-    }
     pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("err(…)", e.span))
     }
     pub fn builtin(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported(&format!("the built-in {name}"), e.span))
-    }
-    pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("evaluating an ODE solution", e.span))
     }
     pub fn module_call(&mut self, _info: FuncInfoId, _args: Vec<Checked>, node: &A::Expr, _cache: bool)
                        -> CResult<I::Expr> {

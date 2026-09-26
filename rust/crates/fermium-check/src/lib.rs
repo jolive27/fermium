@@ -7,13 +7,17 @@ pub mod arith;
 pub mod ast_ext;
 pub mod builtins;
 pub mod calls;
+pub mod eigen;
 pub mod checker;
 pub mod exprs;
 pub mod names;
 mod pending;
+pub mod pde;
 pub mod print;
+pub mod solve;
 pub mod source;
 pub mod stmts;
+pub mod sym_isolate;
 pub mod units;
 pub mod walk;
 
