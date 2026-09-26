@@ -74,7 +74,7 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   prints a different, equivalent formula, sometimes longer (∇² of the Yukawa potential `A exp(-a r)/r`: v1
   `A a² exp(-a r)/r`), sometimes shorter (∇·∇ of `G M / r` and ∇² of `x/r³`: v2 `0`, where v1 printed a long
   expression SymPy couldn't reduce; ∂/∂x of `x/r³`: v2 `(y² + z² - 2x²)/r⁵`, v1 `1/r³ - 3x²/r⁵`). Of 16
-  textbook potentials (∇, ∇², ∇×, ∇· each), 12 print exactly as v1; about a third of random formulas print
+  textbook potentials (∇, ∇², ∇×, ∇· each), 11 print exactly as v1; about a third of random formulas print
   differently; derivatives (`f'`, `d/dx`,
   `∂/∂x`) don't go through this step and printed identically in 370 random formulas. Values are the same
   either way.
