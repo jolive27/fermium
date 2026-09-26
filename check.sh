@@ -22,7 +22,7 @@ if [ "${FERMIUM_SKIP_RUST:-}" = "1" ]; then
     echo "== Rust: SKIPPED (FERMIUM_SKIP_RUST=1): the Rust build, cargo test and the conformance suite did not run"
 elif ! command -v cargo >/dev/null 2>&1; then
     echo "== Rust: SKIPPED (cargo not found): the Rust build, cargo test and the conformance suite did not run"
-    echo "   install Rust and LLVM 18 (rust/BUILD.md) to check Fermium 2, or set FERMIUM_SKIP_RUST=1 to silence this"
+    echo "   install Rust and LLVM 18 (rust/BUILD.md) to check Fermium 2, or set FERMIUM_SKIP_RUST=1 to skip it on purpose"
 else
     echo "== Rust: build and cargo test (Fermium 2)"
     (cd rust && cargo build --profile fast && cargo test --profile fast \
