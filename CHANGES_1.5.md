@@ -33,6 +33,10 @@ What that changes:
 - `≈` works for vectors (it compares lengths: `|a − b|` against `|a|` and `|b|`) as well as numbers and complex numbers.
 - `∞ ≈ ∞` is true; `∞ ≈ 1e308` is now false (it used to be true).
 
+## Under the hood
+
+- An ODE solution used inside an integral or equation in a function is now passed to it as a pointer, not disguised as a number. Nothing prints differently; it just can't break under fast-math or flush-to-zero settings (D261).
+
 ## Tools
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.

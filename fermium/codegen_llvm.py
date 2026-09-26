@@ -189,7 +189,8 @@ def i64(v):
 
 
 def env_slots(sym):
-    """Doubles a captured variable takes in a nested function's environment."""
+    """8-byte slots a captured variable takes in a nested function's environment: one per number (a double),
+    n for a vector or matrix, one for an ODE solution (its pointer, stored as a pointer: D261)."""
     return sym.ty.n if isinstance(sym.ty, (VecTy, MatTy)) else 1
 
 
@@ -2527,8 +2528,10 @@ class FuncGen:
             v = self.load(sym)
             if isinstance(sym.ty, BoolTy):
                 v = b.uitofp(v, F64)
-            if isinstance(sym.ty, SolTy):             # a solution: its pointer's bits (D48)
-                v = b.bitcast(b.ptrtoint(v, I64), F64)
+            if isinstance(sym.ty, SolTy):             # a solution: the pointer itself, stored as a pointer (D261)
+                b.store(v, b.bitcast(b.gep(env, [i64(i)]), SOLP.as_pointer()))
+                i += 1
+                continue
             if isinstance(sym.ty, (VecTy, MatTy)):       # a vector or matrix takes n slots
                 for k in range(sym.ty.n):
                     b.store(b.extract_element(v, I32(k)), b.gep(env, [i64(i)]))
@@ -3543,13 +3546,16 @@ class LambdaGen(FuncGen):
                 for k in range(sym.ty.n):
                     v = b.insert_element(v, b.load(b.gep(env, [i64(i + k)])), I32(k))
                 i += sym.ty.n
+            elif isinstance(sym.ty, SolTy):
+                # a solution's slot holds a pointer, loaded as a pointer: its bits never pass through a double,
+                # where flush-to-zero could turn an address that looks like a subnormal into 0 (D261)
+                v = b.load(b.bitcast(b.gep(env, [i64(i)]), SOLP.as_pointer()))
+                i += 1
             else:
                 v = b.load(b.gep(env, [i64(i)]))
                 i += 1
             if isinstance(sym.ty, BoolTy):
                 v = b.fcmp_ordered("!=", v, f64(0))
-            if isinstance(sym.ty, SolTy):
-                v = b.inttoptr(b.bitcast(v, I64), SOLP)
             p = self.alloca(lltype(sym.ty), sym.name)
             b.store(v, p)
             self.slots[sym.id] = p
