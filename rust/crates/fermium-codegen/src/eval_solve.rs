@@ -263,9 +263,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     fn snapshot(&self, lam: usize, fr: &Frame) -> Frame {
         let module = self.module;
         let mut refs = vec![];
-        referenced(module, &module.lambdas[lam].body, &mut refs);
-        let mut snap = Frame { vars: fr.vars.clone() };
-        for s in refs {
+        let l = &module.lambdas[lam];
+        referenced(module, &l.body, &mut refs);
+        // the lambda's own variables are set at each call (a stale copy would shadow them)
+        let own = |s: &SymId| l.params.contains(s) || l.state.contains(s) || l.locals.contains(s);
+        let mut snap = Frame { vars: fr.vars.iter().filter(|(k, _)| !own(k)).map(|(k, v)| (*k, v.clone())).collect() };
+        for s in refs.into_iter().filter(|s| !own(s)) {
             if !snap.vars.contains_key(&s) {
                 if let Some(v) = self.globals.get(&s) {
                     snap.vars.insert(s, v.clone());

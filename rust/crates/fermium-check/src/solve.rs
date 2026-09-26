@@ -955,7 +955,7 @@ impl Checker {
                     let sym = if u.name != "" && u.name != "1" { format!(" {}", u.name) } else { String::new() };
                     let shown = format!("{}{sym}", crate::units::format_number(scale / u.factor, Some(3)));
                     self.warn(format!("this absolute tolerance is {times} the largest starting value in its units ({shown}), \
-                                       so the error control is effectively off and the result may be far off"), *span,
+                                       so the error control is effectively off and the result may be far off"), A::Span { length: 1, ..*span },
                               Some("an absolute tolerance is the size of error you accept; make it much smaller than the \
                                     values, e.g. 10⁻⁶ of them (check the unit: mm, not km?)".into()));
                 }
