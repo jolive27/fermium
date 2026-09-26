@@ -496,8 +496,26 @@ v1's special functions. fn:x v1 scipy   or   fn:n:x v1 scipy   or   ellip:m K E 
     w.close()
 
 
+# --------------------------------------------------------------------------------------- rng
+def gen_rng():
+    from fermium import rng
+    w = Writer("rng.txt", """
+v1's seeded RNG (fermium/rng.py): per seed, 20 rand(), then 20 randn(), then 5 rand(2, 7) interleaved with randn(1, 0.5).
+seed:<s> values...   (seed:default = never seeded)""")
+    for s in ["default", 0.0, 1.0, 42.0, -7.0, 3.9, 123456789.0, 1e18, 1e19, math.nan, -2.5e17]:
+        st = list(rng.DEFAULT_STATE)
+        if s != "default":
+            rng.seed(st, s)
+        vals = [rng.rand(st) for _ in range(20)] + [rng.randn(st) for _ in range(20)]
+        for _ in range(5):
+            vals.append(2.0 + (7.0 - 2.0) * rng.rand(st))
+            vals.append(1.0 + 0.5 * rng.randn(st))
+        w.row(f"seed:{s if s == 'default' else r(s)}", *vals)
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special}
+            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special, "rng": gen_rng}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
