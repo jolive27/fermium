@@ -1,0 +1,3 @@
+line 1: index 5 is out of range: the list has 2 elements (valid indexes are 1 to 2)
+    print xs[5]
+1

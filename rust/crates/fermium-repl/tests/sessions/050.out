@@ -1,0 +1,5 @@
+line 1: x holds a plain number (no units); it can't now hold a list of a plain number (no units)
+    x = [1, 2]
+    ^^^^^^^^^^
+  hint: use a different name for the new value
+1

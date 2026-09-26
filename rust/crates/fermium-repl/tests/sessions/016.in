@@ -1,0 +1,4 @@
+x = 3 m
+if x > 2 m
+    print "far"
+

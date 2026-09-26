@@ -212,3 +212,56 @@ iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
   erfc: each is within 2·10⁻³ of the range or flagged; t = 50 s is accurate and not flagged; no check without a jump).
 - Affected cases (a warning v1 didn't give): 36c9c5b55398 (the red team's 55.004 K), 6781a0d7f2f0 (34.239 K where
   erfc gives 34.34 K: off by 1.3·10⁻³ of the range, over the tolerance).
+
+## The command-line tool: doctor, --help, --time, build (fermium-cli)
+
+The subcommands, argument errors, help texts, messages and exit codes are v1's (`fermium/cli.py`), compared
+with `python3 -m fermium …` for `check` (ok, error, warnings, parse error, missing file, a folder, extra
+arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argument. The differences:
+
+- `fermium doctor` (spec §B7): Fermium 2 is one self-contained program, so doctor no longer checks Python,
+  llvmlite, NumPy, SciPy, SymPy, matplotlib, pygls, ipykernel or a C compiler. It reports the version (and
+  where the program is), the LLVM version built into it, the platform, that nothing else is needed, that the
+  REPL, language server and Jupyter kernel are built in, that `fermium build` isn't there yet, and it still
+  compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
+- `fermium run` also takes `--backend auto|llvm|interp` and `--base-dir DIR` (the conformance runner uses
+  them); `--interp` is `--backend interp`. Its help and usage list them.
+- `fermium run --time` prints `time: parse … ms, check … ms, run … ms (codegen, JIT and running)`: the back end
+  is one number (v1 split it into codegen, LLVM+JIT and run).
+- `fermium build` (milestone B5.10, not done yet) says so and exits with 1; its help says "not yet in this
+  version" instead of "needs a C compiler".
+- `fermium --version` prints `fermium 2.0.0-dev (Rust)`.
+
+## The REPL (fermium-repl)
+
+The prompt loop is repl.py's, line for line: the banner, `fm> ` and `... `, blocks (a blank line ends one at a
+terminal; indentation, `else`/`elif` and unfinished input continue one from a pipe), `:help`, `:vars`,
+`:quit`, the terminal-command hint, `\name` expansion on Enter, errors in the one-line form with a caret, and a
+failed input leaving no names behind (D220: the checker is rolled back to a copy). 53 scripted sessions (every
+session of tests/test_repl.py plus 30 more) print exactly what v1 prints
+(`cargo test -p fermium-repl`, fixtures from rust/tools/repl_sessions.py). Differences:
+
+- Line editing and history are a small editor of Fermium's own over the terminal (termios through the libc
+  crate) instead of GNU readline/libedit: arrows, Home/End, Ctrl-A/E/K/U/W/L, Up/Down history saved in
+  `~/.fermium_history` (v1's file; a libedit file from macOS is read too), at most 1000 entries kept.
+  Tab completes `\name` (a unique match is replaced, a common prefix is extended, several matches are listed
+  as `\varphi φ`); Tab on a blank line indents by four spaces (readline did nothing). Long lines that wrap
+  past the terminal width are redrawn less neatly than readline does.
+- Inputs run on the tree-walker (the LLVM back end doesn't compile arena variables yet), so an input's
+  output is the same as `fermium run --backend interp` would print.
+- `±` is refused by the checker as in `fermium run` (v1's REPL refused it with its own message).
+
+## The language server (fermium-lsp)
+
+`fermium lsp` is lsp.py's server without pygls: the same diagnostics (errors and warnings, UTF-16 ranges, the
+hint on a second line), hover (variables with their units, functions with the units of their result, ODE
+solutions, modules, constants, units, keywords; everything above an error still hovers), completion (`\name`
+symbols, names in scope with their hover as detail, a module's members after `name.`, keywords) and the A1
+quick fix (the edit of `fermium fmt --fix`). Four scripted sessions (the two of tests/test_lsp.py plus
+warnings, astral characters, incremental edits, a parse error and modules) get exactly v1's replies
+(`cargo test -p fermium-lsp`, fixtures from rust/tools/lsp_session.py). Differences:
+
+- The initialize reply lists only the capabilities the server has (pygls lists more), with
+  `textDocumentSync` incremental as pygls's default.
+- After `shutdown` then `exit` the process exits with 0, as the protocol says (pygls exits with 1).
+- A file:// URI with %-escapes (a folder name with spaces) is decoded before imports are looked up there.

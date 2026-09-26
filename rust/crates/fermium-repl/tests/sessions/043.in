@@ -1,0 +1,3 @@
+solve y' = -y / (2 s) with y(0) = 4 m for t from 0 s to 3 s
+print y(2 s)
+:vars

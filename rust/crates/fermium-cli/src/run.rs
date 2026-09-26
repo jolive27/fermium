@@ -34,26 +34,42 @@ impl BackendChoice {
 
 /// Stack of the thread programs run on: deep recursion gets a clear error from the compiled code (400 MB used,
 /// as in v1) instead of a crash.
-const STACK: usize = 512 << 20;
+pub const STACK: usize = 512 << 20;
 
-pub fn run_file(file: &str, base_dir: Option<&str>, backend: BackendChoice) -> ExitCode {
-    let (file, base) = (file.to_string(), base_dir.map(str::to_string));
+/// `fermium run`'s options (cli.py cmd_run, plus the back-end choice and --base-dir of the conformance runner).
+#[derive(Clone, Debug)]
+pub struct RunOptions {
+    pub base_dir: Option<String>,
+    pub backend: BackendChoice,
+    /// --time: how long each stage took (stderr)
+    pub time: bool,
+    /// --emit-llvm: print the LLVM IR instead of running
+    pub emit_llvm: bool,
+}
+
+impl Default for RunOptions {
+    fn default() -> Self {
+        RunOptions { base_dir: None, backend: BackendChoice::Auto, time: false, emit_llvm: false }
+    }
+}
+
+pub fn run_file(file: &str, o: RunOptions) -> ExitCode {
+    let file = file.to_string();
     fermium_codegen::eval::STACK_LIMIT.store(400 << 20, std::sync::atomic::Ordering::Relaxed);
-    let h = std::thread::Builder::new().stack_size(STACK).spawn(move || run_file_here(&file, base.as_deref(), backend));
+    let h = std::thread::Builder::new().stack_size(STACK).spawn(move || run_file_here(&file, &o));
     match h {
         Ok(h) => h.join().unwrap_or(ExitCode::from(101)),
         Err(_) => ExitCode::from(101),
     }
 }
 
-fn run_file_here(file: &str, base_dir: Option<&str>, backend: BackendChoice) -> ExitCode {
-    let src = match std::fs::read_to_string(file) {
+fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
+    let (base_dir, backend) = (o.base_dir.as_deref(), o.backend);
+    let src = match fermium_fmt::cli::read_program(file) {
         Ok(s) => s,
-        Err(_) => {
-            eprintln!("can't find the file '{file}'");
-            return ExitCode::from(1);
-        }
+        Err(code) => return ExitCode::from(code),
     };
+    let t0 = std::time::Instant::now();
     let name = std::path::Path::new(file).file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let fail = |e: &Diagnostic, warnings: &[Diagnostic]| {
         // the warnings collected before the error often explain it
@@ -67,6 +83,7 @@ fn run_file_here(file: &str, base_dir: Option<&str>, backend: BackendChoice) -> 
         Ok(x) => x,
         Err(e) => return fail(&e, &[]),
     };
+    let t_parse = t0.elapsed();
     let base = base_dir.map(str::to_string).unwrap_or_else(|| {
         std::path::Path::new(file).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or(".".into())
     });
@@ -79,13 +96,32 @@ fn run_file_here(file: &str, base_dir: Option<&str>, backend: BackendChoice) -> 
             return fail(&e, &ws);
         }
     };
+    let t_check = t0.elapsed() - t_parse;
     for w in pdiags.warnings.iter().chain(cdiags.warnings.iter()) {
         eprintln!("{}", w.format(Some(&src), None));
     }
+    if o.emit_llvm {
+        return match fermium_codegen::session::emit_llvm(&module) {
+            Ok(ir) => {
+                println!("{ir}");
+                ExitCode::SUCCESS
+            }
+            Err(why) => {
+                eprintln!("fermium: the LLVM back end can't compile this program yet: {why}");
+                ExitCode::from(3)
+            }
+        };
+    }
+    let t1 = std::time::Instant::now();
     let stdout = std::io::stdout();
     let mut printer = fermium_codegen::printer::StdPrinter::new(&module, std::io::BufWriter::new(stdout.lock()));
     let r = run_module(&module, &mut printer, backend);
     drop(printer);
+    if o.time {
+        // v1 splits the last stage into codegen, LLVM+JIT and run; here the back end's time is one number
+        eprintln!("time: parse {:.1} ms, check {:.1} ms, run {:.1} ms (codegen, JIT and running)",
+                  t_parse.as_secs_f64() * 1e3, t_check.as_secs_f64() * 1e3, t1.elapsed().as_secs_f64() * 1e3);
+    }
     match r {
         Ok(()) => ExitCode::SUCCESS,
         Err(Stop::Unsupported(why)) => {
@@ -137,4 +173,14 @@ fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::ev
         }
     }
     fermium_codegen::InterpBackend.run(module, printer).map_err(Stop::Error)
+}
+
+/// Run a module with the default back end, without the FERMIUM_BACKEND_INFO report (`fermium doctor`).
+pub fn run_module_quiet(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::eval::Printer)
+                        -> Result<(), RunError> {
+    match run_module(module, printer, BackendChoice::from_env()) {
+        Ok(()) => Ok(()),
+        Err(Stop::Error(e)) => Err(e),
+        Err(Stop::Unsupported(why)) => Err(RunError { message: why, line: 0, hint: None }),
+    }
 }

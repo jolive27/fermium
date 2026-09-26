@@ -1,0 +1,6 @@
+g = 9.81 m/s²
+h = 10 m
+v = √(2 g h)
+v
+v in km/h
+print v to 2 digits

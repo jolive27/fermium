@@ -1,0 +1,7 @@
+total = 0
+for k from 1 to 4
+    total += k
+    if total > 5
+        print "big"
+
+print total

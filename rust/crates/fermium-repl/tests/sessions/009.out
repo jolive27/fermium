@@ -1,0 +1,5 @@
+line 1: can't add length [m] to time [s]
+    a = 1 m + 1 s
+        ^^^^^^^^^
+  hint: both sides of + and - must have the same units
+2 m
