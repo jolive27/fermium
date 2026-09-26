@@ -1097,3 +1097,180 @@ regression tests in tests/test_redteam8.py.
 | 23 | BBN README ⁷Li sentence and old `2/π² T⁴` note | doc | fixed |
 | 24 | ²⁰⁸Pb table −8.05 vs printed −8.04 | doc | fixed |
 | 25 | Lesson 2 overstated the rule | doc | fixed by #5, #6, #9 |
+
+## Round 9 (run 2, 2026-09-26 04:30 UTC): Phase B groundwork (conformance suite + early Rust)
+
+Independent reviewer on branch claude/v2-rust at 2939b2e: `conformance/run`, `conformance/harvest.py`,
+`conformance/MANIFEST.md`, the `FERMIUM_HARVEST` hook in `tests/conftest.py`, and the Rust crates `fermium-ir`
+(types.rs, the Unifier), `fermium-codegen/src/eval.rs`, `fermium-units` (numfmt) and `fermium-check` (arith.rs).
+`cargo test --workspace` passes (13 tests, plus the 51 247-check units parity fixture). The Rust CLI stub scores
+0/3037, which is honest. The scoreboard itself is the problem: a deliberately wrong implementation scores 99.9 %.
+Nothing here is fixed yet; the status of each finding is "open".
+
+### 1. A wrong implementation scores 3034/3037 (99.9 %) (high). Status: open
+- **Repro:** a fake `--bin` script (`mutant`, 30 lines of Python) reads the golden `<id>.json` next to the program
+  and prints it back with every number changed: each integer +1, the last decimal digit of each decimal +1,
+  `1.5×10⁻⁹` rewritten as `1.5e-9`. It prints every warning without its caret and hint, and every error message
+  with its words in reverse order. `conformance/run --impl rust --bin ./mutant --out /tmp/M.md` gives
+  **3034 of 3037 (99.9 %)**, 100 % in 20 of the 22 areas. The only 3 failures are subnormal numbers
+  (`9.35762×10⁻³¹⁴`), where `10.0 ** -324` underflows the tolerance to 0. A second mutant adds a digit to every
+  number (`3` → `3.4`, `2.21` → `2.214`) and scores 3035/3037.
+- **Why it passes:** `same_token` accepts a difference of one unit in the expected token's last digit, so for an
+  integer (`4`, `100`, a count, a loop index, a list length) any value ±1 passes. 2924 of the 24 820 stdout tokens
+  are such integers. The got token's precision and notation are never compared, so `3.1` matches `3.14159`,
+  `1.00` matches `1`, and `1500` matches `1.5×10³`. Significant figures (D11) and the `×10ⁿ` style are core
+  language behaviour, and none of it is scored. `parse_num` strips `[](),<>;:`, so `[1, 2, 3] m` matches
+  `1 2 3 m` and `<3, 4>` matches `(3; 4)`. `similar()` is a 60 % Jaccard over sets of words, so word order and
+  negation are ignored: "expected a length but got a time" matches "expected a time but got a length", and
+  "x is not a length" matches "x is a length". Whitespace is ignored (`split()`), so table alignment is not scored.
+- **Fix:** compare text exactly by default. Allow a numeric tolerance only where the numerics are expected to
+  differ (quadrature, ODE, PDE, eigen, fit, fft, rng), and only when the got token has the same digit count and
+  notation as the expected one. Compare integers exactly. Keep the brackets. Compare error messages exactly, or by
+  an ordered key phrase stored per case. Add `conformance/selftest` with these mutants and require them to score
+  below a few percent, and report "exact" and "within tolerance" counts separately in CONFORMANCE.md.
+
+### 2. Diagnostics: column, caret, hint, kind and exit code are never compared (high). Status: open
+- **Repro:** the mutant in #1 drops every caret and hint and still passes. The 773 expected errors include 414
+  hints, and `col`, `hint` and `kind` are stored in each case's JSON but `judge()` never reads them. `case["exit"]`
+  is never read either: any non-zero exit counts as "an error", so a Rust panic (exit 101) is as good as exit 1.
+  Also, when the implementation's error has no `line N:`, `judge()` skips the line check: the probe
+  `judge(case, out, "", {"message": <expected message>, "line": None})` passes for an error expected on line 3.
+  `run_binary` takes `msg[0]` (the first matching line), although its comment says "the last".
+- **Why it matters:** spec §B3 requires "expected diagnostics (kind, line and column, key content), an exit code",
+  and "one-line errors with a caret and a hint" is on the keep-100 % list (spec §1).
+- **Fix:** compare the exit code, the line and the column (fail when the implementation gives no line), the kind,
+  and the caret line. Compare the hint by key phrase. Parse the whole error block, not only the `file, line N:`
+  line.
+
+### 3. The golden output sits next to the program, and nothing stops the binary from reading it or calling Python (medium). Status: open
+- **Repro:** the mutant in #1 opens `path[:-3] + ".json"`. A "Rust" binary that runs
+  `python3 -m fermium run` would also score 100 %, although spec §B1 requires zero runtime dependencies.
+- **Fix:** copy each `.fm` into a fresh temporary directory, with only its data files, before running it. Run the
+  binary with a minimal environment (`env -i PATH=/usr/bin:/bin`, no `PYTHONPATH`), and in CI on a runner image
+  without python3 on PATH, or under a seccomp or `unshare` sandbox that denies `execve`.
+
+### 4. Harvest gaps against spec §B3: notes/, FRICTION.md, REDTEAM.md repros, fmt, REPL, CLI and rejection-only checks (medium). Status: open
+- **What is harvested:** only programs that go through `run_source` while pytest runs (3030 cases), plus the
+  benchmarks (7). The glob list (examples, rosetta, gauntlet, research, tests/programs, john, benchmarks) adds
+  nothing new, because tests already run those files and dedup keeps the tests copy. Bootcamp, docs and README
+  ```fermium blocks *are* covered (all 236 are in the suite, via test_docs).
+- **Missing sources** (fenced blocks counted with a fence parser; "covered" means every non-comment line of the
+  block appears in a single case):
+  - `dev-notes/notes/*.md` (5 files of bug repros, e.g. `xs = [1, 2, 3] / ys = xs / push(ys, 4)`): 123 fenced
+    blocks, 32 covered. About 40 more appear in tests/*.py with edited comments, and the remaining ~50 are complete
+    programs with no guaranteed case.
+  - `gauntlet/**/FRICTION.md` (11 files): 30 fenced blocks, 7 covered. About 500 inline code spans, 197 of them
+    found verbatim in the suite.
+  - `dev-notes/REDTEAM.md`: 6 fenced blocks (5 covered). 85 `**Repro:**` lines hold 130 code-like inline spans, and
+    ~23 of those are not in the suite verbatim (e.g. `f = 50 Hz; print f in rev/min`,
+    `f(a) = ∫ exp(-(x - a)²) dx from -1e6 to 1e6`, `print [0.125, 0.375] * 1.0`).
+  - rejection tests that only run the checker: `warnings_of()` (68 calls) and `check_only()` (2) in conftest call
+    `Checker` directly, so the hook never sees them.
+  - `fmt`: `format_source` has 45 calls in 12 test files, and the suite has no fmt case. B5 milestone 1 ("Syntax,
+    including fmt round-trips") therefore has no conformance group.
+  - REPL/Jupyter (`ReplSession`, 12 uses), the CLI, `fermium build` and `fermium check` (64 subprocess calls in
+    39 test files). Milestones 9 and 10 have no conformance group.
+  - programs where the oracle itself raises a non-FermiumError: the hook doesn't record them, and `rerun_clean`
+    drops them silently (MANIFEST's "crashed in legacy: 0" counts only the globbed files).
+- **Fix:** harvest every ```fermium block, and every untagged block that parses, from notes/, FRICTION.md and
+  REDTEAM.md, plus the `Repro:` spans joined on ` / `. Add case kinds `fmt` (input → `--pretty`/`--ascii` output
+  and the round-trip), `check` (warnings and errors without running), `repl` (a transcript) and `cli`
+  (argv → stdout, stderr, exit code). Record the checker-only paths in the hook, and count legacy crashes in
+  MANIFEST.
+
+### 5. The "machine-dependent" and "temporary directory" exclusions hide real behaviour (medium). Status: open
+- **Repro:** `NONDETERMINISTIC = \bclock\(\)|\bTIME\b|\btime:\s`, matched anywhere in the source, comments included:
+  - `gauntlet/quantum/32_rabi_ramsey.fm` is excluded because a *comment* says "to the same time: the
+    counter-rotating terms". This is a false positive; the program is deterministic.
+  - `research/shell_model_magic_numbers/shell.fm` (a whole research reproduction) is excluded for its one
+    `print "time:", clock() - t_start` line.
+  - Neither is in `conformance/cases`. The benchmarks already show the right mechanism: `drop_prefixes`.
+  - "temporary directory with files: 141": every test program that `load`s a CSV, `import`s a module or `plot`s
+    into `tmp_path` is dropped. That removes most of the data and modules features from the suite, and a Rust
+    `load`/`import` is scored on only 28 `load "` cases.
+- Separately, the 53 successful plot cases compare stdout only (usually empty), and no PNG or SVG is checked. A
+  `plot` that writes nothing passes (B5 milestone 7). Running the suite also writes PNGs into the repo directories
+  (e.g. `tests/programs/x_vs_t.png`).
+- **Fix:** match NONDETERMINISTIC on code with comments stripped, and use `drop_prefixes: ["time:"]` for shell.fm.
+  In the hook, snapshot the files in `base_dir` into `conformance/fixtures/<id>/` and run the case there. For
+  plots, check that the file exists and is a valid PNG/SVG of the right size, and compare the axis labels and
+  units in the SVG text.
+
+### 6. eval.rs ports interp.py, but the oracle that scores it is the compiled path, and the two disagree (medium). Status: open
+- **Repro (Python, both 1.5 back ends):** `x = 0.49999999999999994` / `print round(x)` gives `0` from
+  `run_source` (LLVM `llvm.round`) and `1` from `run_interpreted`. `x = -10` / `print x^309` gives `-∞` compiled
+  and `∞` interpreted. The Rust probe (a scratch crate calling the pub helpers) gives
+  `math1("round", 0.49999999999999994) = 1` and `math1("round", 4503599627370497.0) = 4503599627370498`: the
+  interp.py formula `floor(|x| + 0.5)` is off for 0.5 − ½ulp and for odd integers ≥ 2⁵², and the compiled oracle
+  is right in both cases. On the other hand `fpow(-10, 309) = -inf` matches the compiled path and not interp.py.
+  Julia's `round` is ties-to-even, Python 1.5 rounds half away from zero, and the eval.rs test pins
+  `round(2.5) = 3`, which is correct for Fermium.
+- **Fix:** name `run_source` (compiled) as the reference in eval.rs's header. Use `x.round()` (Rust rounds half
+  away from zero exactly, like `llvm.round`). Add a differential fixture over the IEEE helpers (edge values:
+  ±0, ½ − ½ulp, 2⁵²+1, subnormals, ±∞, NaN, overflow of negative bases) generated from the compiled path. Log in
+  DIVERGENCES.md where interp.py and the compiled path differ.
+
+### 7. eval.rs `for` loops: a NaN or ∞ bound or a NaN step runs 0 times silently, and the step-0 message differs (medium). Status: open
+- **Repro (oracle):** `x = 0/0` / `for i from 1 to x` stops with "this for loop has no definite number of steps:
+  it goes from 1 to NaN …". `for i from 1 to 3 step x` (x NaN) stops with "the step must be a non-zero number
+  that goes from the start towards the end". `for i from 1 to 1/0` with a `break` after 4 passes prints `4` (the
+  oracle runs 2⁶² iterations for +∞). eval.rs (`StmtKind::For`) checks only `st == 0.0`, and
+  `n = floor(span + 1e-9)` that is not finite gives 0 iterations, so all three run 0 times with no error. Its
+  step-0 message ("the step of this for loop is 0, so it would never end") shares few words with the oracle's.
+- **Fix:** port `s_SFor` exactly: error on NaN step or NaN span, 2⁶² iterations for +∞, and the oracle's messages.
+
+### 8. eval.rs returns NaN silently for unported built-ins and value shapes (medium). Status: open
+- **Repro (by reading, with the oracle's output):**
+  - the checker lowers `max(xs)` / `min(xs)` to the built-ins `max_list` / `min_list`, which eval.rs sends to
+    `math1`, and `math1`'s `_ => NaN` returns NaN. The probe gives `math1("max_list", 1) = NaN`; the oracle
+    prints `5` for `xs = [1, 5, 3]` / `print max(xs)`.
+  - `erf`, `erfc`, `gamma`, `lgamma` also return NaN unless the runtime registers them (probe:
+    `math1("erf", 0.5) = NaN`; the oracle prints 0.52).
+  - `max(x, x)` with x NaN folds from −∞ and returns `-∞` (min returns `∞`); the oracle returns `NaN NaN`.
+  - `max(xs, 1e-12)` (element by element, D162) collapses the list to NaN.
+  - `ExprKind::Pow` calls `.num()`, so `xs^k` with a list base gives a scalar NaN; the oracle prints `[1, 25, 9]`.
+  - `ExprKind::Neg` of a complex list returns the list unchanged (`v => v`): −z = z.
+  - `IndexAssign`, `Push` and `Clear` on an unexpected shape do nothing.
+  - `print` of an unexpected shape prints an empty line.
+
+  `Value::num()` turns every non-number into NaN.
+- **Fix:** every fall-through should return `RunError("not yet supported by the Rust back end: …")`, as the
+  unsupported statements already do. A stub must stop, not print NaN (rule 6). Implement `max_list`/`min_list`
+  and the NaN-propagating fold (`r = a if a > r or r != r`).
+
+### 9. `odd_root_numerator` is not the oracle's algorithm (low). Status: open
+- **Repro:** Python uses `Fraction(p).limit_denominator(99)` with an odd denominator and a relative tolerance.
+  Rust tries only q ∈ {3, 5, …, 15}. The Rust probe gives `powc(-2, 1/17) = NaN` and `powc(-2, 2/25) = NaN`;
+  `x = -2` / `print x^(1/17)` prints `-1.04` and `x^(2/25)` prints `1.06` in the oracle.
+- **Fix:** port the continued-fraction `limit_denominator(99)` (arith.rs already has one), and add fixtures for
+  every n/q with q odd ≤ 99.
+
+### 10. Rational64 can overflow where Python's Fraction cannot (low). Status: open
+- `Dim::pow`, `DExpr::pow`/`mul` and `const_exponent` (a·b, a/b) use `Ratio<i64>`: overflow panics in debug builds
+  and wraps silently in release builds (overflow-checks are off in `[profile.release]`). Python's Fraction is
+  unbounded. It is reachable with chained constant exponents, e.g. `((x^(1/9973))^(1/9967))^(1/9949)…`, and in
+  `limit_denominator`, where `exp > 60` returns None and a value ≥ 2⁶³ is cast with `as i64` and wraps.
+- **Fix:** use checked arithmetic, and on overflow give the checker's "this exponent is too complicated" error,
+  or use `Ratio<i128>` as a backstop. Set `overflow-checks = true` in release, at least for fermium-units and
+  fermium-check.
+
+### 11. Small runner issues (low). Status: open
+- `parse_num` raises OverflowError for `×10⁴⁰⁰`-style tokens (it computes `10.0 ** 400`), and the case is counted
+  as a "crash". Subnormal expectations can only match exactly (see #1).
+- `CONFORMANCE.md` lists the first 20 failures per area; spec §B3 asks for pass/fail for each program.
+- The legacy score (3037/3037) comes from the same in-process `run_source`, in a reused worker process, that
+  wrote the goldens. It shows only determinism, not the CLI path the Rust binary is scored through. Score legacy
+  also through a `fermium run --base-dir` subprocess (the Python CLI has no `--base-dir`), and run each case in a
+  fresh process at least once, to rule out state carried from one case to the next (units.py keeps module-level
+  caches such as `_PREFERRED`).
+- Six success cases expect empty stdout, so a binary that prints nothing and exits 0 passes them
+  (e.g. `units-and-printing/c1a48190d6c0`, a list of assignments). Add a `print` or compare the warnings.
+
+**Not findings (noted):**
+- Number formatting in fermium-units matches CPython on ties: a probe of `{:.Ne}`/`{:.N}` over 0.125, 2.5, 0.375,
+  1e23, 5e-324, 12.5, 1234.5, −2.5 (p = 0–3) gave 0 differences from `f"{x:.Ne}"`/`f"{x:.Nf}"`.
+  `round_text` uses `round_ties_even`, like Python's `round()`.
+- The Unifier (types.rs) is a faithful port of types.py's (same variable choice, `|c| == 1` first, then the
+  oldest), and `limit_denominator` matches Python's tie rule.
+- `fdiv` (x/0 = ±∞ by the sign of 0, 0/0 = NaN), NaN comparisons, `sign(NaN) = 0` and `fpow` with 0 to a
+  negative power (+∞, including −0) match the oracle.

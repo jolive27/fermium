@@ -1026,3 +1026,17 @@ The rule (spec §3.4.2), refined:
 ## D263. The v1.5 freeze point: a local tag and a branch (the tag can't be pushed from here)
 - **What:** v1.5 is commit `ccdb288`, where CI passed on Linux and macOS (PR #2). It is tagged `v1.5` locally, but pushing tags from this session is refused (HTTP 403: the session's git access covers branches only), so the same commit is published as the branch `claude/v1.5-freeze`. Phase B's branch `claude/v2-rust` starts from that commit, as the spec asks ("created from the v1.5 tag").
 - **For John:** `git tag -a v1.5 ccdb288 -m "Fermium 1.5" && git push origin v1.5` creates the tag on GitHub (or the GitHub web UI: Releases → Draft a new release → tag v1.5 on branch claude/v1.5-freeze).
+
+## D264 — The conformance runner compares strictly (red team round 9)
+**What:** `conformance/run` compares stdout exactly (spacing and punctuation included). The one tolerance: a number
+written with a decimal point or a power of ten may differ by one unit in its last printed digit, and only when it
+has the same shape (digits, decimal places, power of ten). Errors need the same message, line and hint; warnings
+the same lines and messages; the exit code must match. The Rust binary runs on a copy of the program in an empty
+temporary directory with an empty PATH. CONFORMANCE.md lists every failure.
+**Why:** red team round 9 built a fake implementation (every integer +1, every last digit changed, notation
+rewritten, error words reversed) that scored 3034/3037 under the first runner: ±1 on integers, value-only number
+comparison (so significant figures and notation were never scored), stripped brackets, and a 60 % bag-of-words
+message match. `tests/test_conformance_suite.py` now checks that such fakes fail.
+**Alternatives:** keep a loose default and a strict mode (rejected: the scoreboard must be honest by default);
+compare numbers by value with a relative tolerance in the numerics areas only (kept for later if a documented
+divergence needs it; then it goes in DIVERGENCES.md with the case ids).
