@@ -551,6 +551,7 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }

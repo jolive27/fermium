@@ -3,6 +3,7 @@
 //! See `checker.rs` for how the Python class is split into modules.
 pub use fermium_ir::{types, Dim, DIMLESS};
 
+pub mod analyze;
 pub mod arith;
 pub mod ast_ext;
 pub mod builtin;
