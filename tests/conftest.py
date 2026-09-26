@@ -66,7 +66,15 @@ def error_of(src, base_dir=None):
     return ei.value
 
 
+def _harvest_checked(src, base_dir):
+    """Checker-only tests (warnings_of, check_only) are harvested too: the harvest re-runs each program with the
+    oracle, so only the source matters here (red team round 9 #4)."""
+    if HARVEST:
+        _harvest(src, base_dir if base_dir not in (None, ".") else None, "", "", None)
+
+
 def check_only(src, base_dir="."):
+    _harvest_checked(src, base_dir)
     d = Diagnostics()
     prog = parse(src, d)
     Checker(d, base_dir).check_program(prog)
@@ -74,6 +82,7 @@ def check_only(src, base_dir="."):
 
 
 def warnings_of(src):
+    _harvest_checked(src, None)
     d = Diagnostics()
     prog = parse(src, d)
     Checker(d, ".").check_program(prog)

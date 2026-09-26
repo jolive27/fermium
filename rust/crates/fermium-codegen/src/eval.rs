@@ -215,11 +215,14 @@ pub struct Interpreter<'m, P: Printer> {
     pub(crate) call_line: u32,
     /// Builtins the runtime provides (special functions, numerics), looked up by name.
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
+    /// ODE / eigenvalue / PDE solutions and run-time warnings shown (eval_solve.rs)
+    pub(crate) solve: crate::eval_solve::SolveState,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new() }
+        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
+                      solve: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
