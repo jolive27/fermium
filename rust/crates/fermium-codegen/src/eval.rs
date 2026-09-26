@@ -822,7 +822,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         crate::varmap::give_args(args);
         let body = &func.body;
         let caller_line = self.line;
-        if body.first().is_some_and(|s| s.line > MODLINE_MAX) && 0 < caller_line && caller_line <= MODLINE_MAX {
+        if func_in_module(func) && 0 < caller_line && caller_line <= MODLINE_MAX {
             self.call_line = caller_line; // calling a module's function from the program (D185)
         }
         let r = match self.block(body, &mut fr)? {
@@ -919,5 +919,15 @@ mod tests {
         assert_eq!(math1("round", 2.5), 3.0);
         assert_eq!(math1("round", -2.5), -3.0);
         assert_eq!(math1("sign", -0.0), 0.0);
+    }
+}
+
+/// Whether a function instance is a module's: its first line is a module line code (D185). A one-line function
+/// `f(x) = ...` is a return statement without a line of its own, so its expression's line counts.
+pub fn func_in_module(func: &fermium_ir::Func) -> bool {
+    match func.body.first() {
+        Some(s) if s.line != 0 => s.line > MODLINE_MAX,
+        Some(Stmt { kind: StmtKind::Return(Some(e)), .. }) => e.line > MODLINE_MAX,
+        _ => false,
     }
 }
