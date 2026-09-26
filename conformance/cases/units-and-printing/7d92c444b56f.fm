@@ -1,0 +1,3 @@
+xs = zeros(3e9)
+xs[1] = 2
+print sum(xs)               # Segmentation fault (exit 139)

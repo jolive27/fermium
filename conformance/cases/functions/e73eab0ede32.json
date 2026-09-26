@@ -1,0 +1,17 @@
+{
+ "id": "e73eab0ede32",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-adversarial.md#15",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f doesn't return a value on every path (for example when an if is false, or a loop doesn't run)",
+  "line": 1,
+  "col": 1,
+  "hint": "make sure the function ends with a value or a return that always runs; this happened when calling f on line 4 (with x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

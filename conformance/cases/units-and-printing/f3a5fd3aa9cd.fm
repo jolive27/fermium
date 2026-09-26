@@ -1,0 +1,3 @@
+tau = 2 s
+t = 1 s
+print e^(-t / tau)

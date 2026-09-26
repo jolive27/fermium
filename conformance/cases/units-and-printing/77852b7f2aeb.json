@@ -1,0 +1,17 @@
+{
+ "id": "77852b7f2aeb",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson04_conditions_loops.md#8",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'squared' isn't a unit Fermium knows (or a variable you've defined)",
+  "line": 1,
+  "col": 3,
+  "hint": "see the list of units in docs/reference.md §15",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

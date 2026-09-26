@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+a = fft_re(xs)
+b = fft_im(xs)
+c = ifft(a, b)

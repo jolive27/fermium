@@ -1,0 +1,17 @@
+{
+ "id": "870d8475f4b0",
+ "area": "algebraic-solve",
+ "origin": "gauntlet/mechanics/FRICTION.md#4",
+ "dir": "gauntlet/mechanics",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "T_vac isn't defined",
+  "line": 2,
+  "col": 50,
+  "hint": "give it a value on an earlier line, e.g.  T_vac = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

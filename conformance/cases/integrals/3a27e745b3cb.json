@@ -1,0 +1,17 @@
+{
+ "id": "3a27e745b3cb",
+ "area": "integrals",
+ "origin": "gauntlet/electromagnetism/FRICTION.md#1",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "L isn't defined",
+  "line": 1,
+  "col": 56,
+  "hint": "L is a unit; units go right after a number, like 1 L, or in brackets [L]; this happened when calling ∇V on line 2 (with x = length [m], y = length [m], z = length [m])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

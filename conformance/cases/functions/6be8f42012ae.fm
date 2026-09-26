@@ -1,0 +1,3 @@
+spring_energy(x [m]) = 0.5 * 50 N/m * x^2
+print spring_energy(10 cm)
+print spring_energy(3 s)

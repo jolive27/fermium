@@ -1,0 +1,11 @@
+{
+ "id": "664012910470",
+ "area": "lists",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#19",
+ "dir": "dev-notes/notes",
+ "stdout": "[5, 2] m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

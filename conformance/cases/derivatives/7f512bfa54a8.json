@@ -1,0 +1,11 @@
+{
+ "id": "7f512bfa54a8",
+ "area": "derivatives",
+ "origin": "dev-notes/notes/bugs-adversarial.md#59",
+ "dir": "dev-notes/notes",
+ "stdout": "6\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

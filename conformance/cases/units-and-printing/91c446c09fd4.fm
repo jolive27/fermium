@@ -1,0 +1,1 @@
+print round(2.567), floor(2.7)

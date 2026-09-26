@@ -1,0 +1,11 @@
+{
+ "id": "b4fb7a563aaf",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2.00×10⁻¹⁰ m³/(kg s²)\n",
+ "stderr": "warning: line 1: 3 G means 3 × the gravitational constant G; for gauss write 3 gauss\n    x = 3 G\n        ^\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

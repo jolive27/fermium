@@ -1,0 +1,11 @@
+{
+ "id": "4c8855e79152",
+ "area": "derivatives",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#21",
+ "dir": "dev-notes/notes",
+ "stdout": "r'(t) = 0\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

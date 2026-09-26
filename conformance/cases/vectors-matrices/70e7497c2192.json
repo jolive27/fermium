@@ -1,0 +1,11 @@
+{
+ "id": "70e7497c2192",
+ "area": "vectors-matrices",
+ "origin": "dev-notes/notes/bugs-review.md#7",
+ "dir": "dev-notes/notes",
+ "stdout": "<3, 4> m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

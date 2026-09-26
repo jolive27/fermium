@@ -1,0 +1,5 @@
+a = 15.75 MeV
+A = 56
+print a * A        # 882.0 MeV   (good)
+f(A) = a A
+print f(56)        # 1.413×10⁻¹⁰ J   <- expected 882.0 MeV

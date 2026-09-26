@@ -1,0 +1,17 @@
+{
+ "id": "545b31583b0e",
+ "area": "functions",
+ "origin": "bootcamp/TROUBLESHOOTING.md#41",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "KE takes 2 arguments but was given 1",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

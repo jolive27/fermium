@@ -161,6 +161,9 @@ pub enum ExprKind {
     OdeLinSolve { m: Vec<Expr>, b: Vec<Expr>, t: Box<Expr>, text: usize, fmt: usize },
     /// ± and the parts of an uncertain value (D120–D124).
     Uncertain(Box<Expr>, Box<Expr>),
+    /// sample(expr, n): a list of n values of the lambda `expr`, evaluated afresh each time (its parameter is the
+    /// 1-based sample number; D80).
+    Sample { lam: LambdaId, n: Box<Expr> },
 }
 
 /// One item of a print statement.
@@ -204,7 +207,8 @@ pub enum StmtKind {
     Plot(usize, Vec<Expr>),
     Solve { sol: SymId, rhs: LambdaId, y0: Vec<Expr>, t0: Expr, t1: Expr, step: Option<Expr>, method: String,
             rtol: Option<Expr>, x: Box<SolveExtra> },
-    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId },
+    /// errs: the hidden variables that receive the standard errors, for err(x)
+    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId, errs: Vec<SymId> },
     Return(Option<Expr>),
     Break,
     Continue,
@@ -317,6 +321,27 @@ pub struct Tables {
     pub plots: Vec<serde_like::Json>,
     pub loads: Vec<serde_like::Json>,
     pub fits: Vec<serde_like::Json>,
+    /// calls into Python (`use python`, D140): one entry per call site, indexed by the first argument of the
+    /// `pycall` built-in
+    pub pycalls: Vec<PyCallSite>,
+    /// the program's folder, put on Python's sys.path when a module is imported
+    pub py_base_dir: String,
+}
+
+/// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
+/// (value passed = SI / factor) and int flag of each argument, and the result's shape and unit factor.
+#[derive(Clone, Debug, Default)]
+pub struct PyCallSite {
+    pub module: String,
+    pub func: String,
+    pub display: String,
+    pub facs: Vec<f64>,
+    pub ints: Vec<bool>,
+    pub pnames: Vec<String>,
+    pub rlist: bool,
+    pub rfac: f64,
+    /// the result's shape was declared in the use line
+    pub declared: bool,
 }
 
 /// A checked program: main, the function instances, lambdas, symbols and tables.
@@ -408,7 +433,7 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
             v.extend(step.iter().map(|x| &**x));
             v
         }
-        K::SolEval { t, .. } => vec![t],
+        K::SolEval { t, .. } | K::Sample { n: t, .. } => vec![t],
         K::PdeEval { x, t, .. } => vec![x, t],
         K::OdeLinSolve { m, b, t, .. } => {
             let mut v: Vec<&Expr> = m.iter().chain(b.iter()).collect();
@@ -421,7 +446,8 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
 /// The lambda an expression uses (integrand, summand, root function), if any.
 pub fn lambda_of(e: &Expr) -> Option<LambdaId> {
     match &e.kind {
-        ExprKind::Integral { lam, .. } | ExprKind::Sum { lam, .. } | ExprKind::Root { lam, .. } => Some(*lam),
+        ExprKind::Integral { lam, .. } | ExprKind::Sum { lam, .. } | ExprKind::Root { lam, .. }
+        | ExprKind::Sample { lam, .. } => Some(*lam),
         _ => None,
     }
 }

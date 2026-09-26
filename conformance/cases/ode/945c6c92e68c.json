@@ -1,0 +1,11 @@
+{
+ "id": "945c6c92e68c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "(a) P_e (RWA ODE) = 0.8000000000  Rabi = 0.8000000000  norm = 1.000000000\n(b) P_e (full) = 0.79725184  difference from RWA = -0.002748  Omega/omega0 = 0.0200\n(c) Delta = 1.00×10⁶ rad/s  P_e (ODE) = 0.7268031891  Foot = 0.7268031891  short-pulse cos²(ΔT/2) = 0.770151\n(c) Delta = 3.00×10⁶ rad/s  P_e (ODE) = 0.006234582636  Foot = 0.006234582636  short-pulse cos²(ΔT/2) = 0.00500375\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

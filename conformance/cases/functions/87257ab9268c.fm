@@ -1,0 +1,2 @@
+y(t) = 20 m/s * t - ½ * 9.81 m/s^2 * t^2
+print d²y/dt²            # same with d^2y/dt^2

@@ -1,0 +1,17 @@
+{
+ "id": "4ee19fe0d3e4",
+ "area": "units-and-printing",
+ "origin": "bootcamp/TROUBLESHOOTING.md#11",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'furlongs' isn't a unit Fermium knows (or a variable you've defined)",
+  "line": 1,
+  "col": 9,
+  "hint": "see the list of units in docs/reference.md §15",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

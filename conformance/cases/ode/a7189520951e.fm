@@ -1,0 +1,5 @@
+solve r'' = -r with r(0) = <1, 0>, r'(0) = <0, 1> for t from 0 to 3
+print r''(3)     # error "can't take that many derivatives of the solution r''"
+                 # (scalar x''(t) works, and r.x''(3) works) -- expected <0.989992, -0.14112>
+print r[end]     # error "r is a vector; use its components, like r.x" -- no "line 2:" prefix,
+                 # and the final vector <cos 3, sin 3> would be a natural answer

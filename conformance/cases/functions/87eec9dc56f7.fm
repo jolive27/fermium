@@ -1,0 +1,5 @@
+f(x) = 2 x
+print 2 * (1 km), f(1 km)      # 2 km 2000 m
+print 2 (1 eV), f(1 eV)        # 2 eV 3.20435×10⁻¹⁹ J
+f(E) = E
+print f(3 MeV)                 # 4.80653×10⁻¹³ J    expected 3 MeV

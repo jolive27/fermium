@@ -1,0 +1,17 @@
+{
+ "id": "2d9e0d6dc047",
+ "area": "units-and-printing",
+ "origin": "bootcamp/TROUBLESHOOTING.md#19",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show mass [kg] in N (force [N])",
+  "line": 1,
+  "col": 7,
+  "hint": "5 kg is mass; try  in kg  or  in u  or  in MeV/c²",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,3 @@
+T = 5800 K
+B(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)
+print B(1 THz)

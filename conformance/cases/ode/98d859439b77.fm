@@ -1,0 +1,2 @@
+I(θ) = (sin(β(θ)) / β(θ))²
+solve I'(θ_max) = 0 for θ_max from 1.01 θ1 to 0.99 θ2

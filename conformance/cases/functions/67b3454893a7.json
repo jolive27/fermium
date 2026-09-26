@@ -1,0 +1,11 @@
+{
+ "id": "67b3454893a7",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#14",
+ "dir": "dev-notes/notes",
+ "stdout": "-13.6 eV -3.40 eV\n-3.40 eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

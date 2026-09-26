@@ -53,3 +53,20 @@ Hooks in other crates (small, in files of their own): `fermium-check/src/api.rs`
 - **Why:** spec §B1: no libzmq. Jupyter's kernels only need this subset.
 - **Alternatives:** the `zmq` crate (binds libzmq, a C++ library); `zeromq` (pure Rust, but async on tokio);
   `sha2`/`hmac` crates (fine, but 60 lines of SHA-256 are simpler than two more dependencies).
+
+## How the tools are tested against v1
+
+- CLI: messages, help texts and exit codes were compared with `python3 -m fermium ...` case by case.
+- REPL: `cargo test -p fermium-repl` replays 53 scripted sessions (fixtures from
+  `python3 rust/tools/repl_sessions.py`, run through v1's REPL); `python3 rust/tools/repl_pty.py` drives the
+  line editor through a pseudo-terminal.
+- Language server: `cargo test -p fermium-lsp` replays 4 sessions against v1's replies (fixtures from
+  `python3 rust/tools/lsp_session.py --write-fixtures`; `lsp_session.py v1|BINARY` prints a server's replies).
+- Jupyter: `cargo test -p fermium-jupyter` plays a client over TCP; `python3 rust/tools/jupyter_e2e.py` runs
+  the kernel under the real jupyter_client.
+
+## Not done yet
+
+- Interrupting a running cell in Jupyter (the interrupt is acknowledged; the cell runs on). Ctrl+C in the REPL
+  stops the whole session, as v1 did.
+- The REPL and the kernel run inputs on the tree-walker (the LLVM back end doesn't compile arena variables).

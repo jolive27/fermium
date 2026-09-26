@@ -1,0 +1,10 @@
+kT = 0.025 eV
+μ = 5 eV
+f(E) = 1/(exp((E - μ)/kT) + 1)          # Fermi-Dirac occupation
+g = f'
+print g(30 eV)      # actual: NaN   expected: -0 (≈ -1.4e-435 → 0)
+f(x) = tanh(x)
+h = f''             # h(x) = -2 sinh(x)/cosh(x)³
+print h(1000)       # NaN, expected 0
+f(x) = 1/cosh(x)
+print f'(800)       # NaN (g(x) = -sinh(x)/cosh(x)²), expected 0

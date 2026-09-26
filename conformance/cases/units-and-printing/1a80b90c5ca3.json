@@ -1,0 +1,17 @@
+{
+ "id": "1a80b90c5ca3",
+ "area": "units-and-printing",
+ "origin": "bootcamp/solutions/lesson04.md#2",
+ "dir": "bootcamp/solutions",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "A isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "A is a unit; units go right after a number, like 1 A, or in brackets [A]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

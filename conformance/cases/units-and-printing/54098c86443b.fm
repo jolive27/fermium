@@ -1,0 +1,4 @@
+a = 504.25683909725325 [m]
+b = a in mi
+print b / (1 [mi]) to 15 digits
+print (a in mi) in m to 15 digits

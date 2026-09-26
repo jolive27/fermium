@@ -1,0 +1,19 @@
+[package]
+name = "fermium-pyapi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Calling Fermium from Python (D142): a shared library with a C ABI, loaded by the pure-Python ctypes wrapper in
+# python/fermium2/ (no Python headers or pyo3 at build time). Programs run on the tree-walker, with the
+# top-level variables kept between calls (v1's arena, as the REPL keeps them).
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }
+fermium-check = { path = "../fermium-check" }
+fermium-codegen = { path = "../fermium-codegen", default-features = false }
+fermium-ir = { path = "../fermium-ir" }
+fermium-units = { path = "../fermium-units" }
+num-rational = "0.4"

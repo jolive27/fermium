@@ -1,4 +1,0 @@
-a = 727.9331625202353 [fm]
-b = a in Å
-print b / (1 [Å]) to 15 digits
-print (a in Å) in fm to 15 digits

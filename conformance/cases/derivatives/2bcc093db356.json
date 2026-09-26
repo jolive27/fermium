@@ -1,0 +1,11 @@
+{
+ "id": "2bcc093db356",
+ "area": "derivatives",
+ "origin": "dev-notes/notes/bugs-adversarial.md#56",
+ "dir": "dev-notes/notes",
+ "stdout": "0.105 Hz\n60 rpm\n",
+ "stderr": "warning: line 1: angles are plain numbers (1 rev = 2π), so a rate in rev/min shown in Hz is an angular frequency: 1 rev/min is 0.10472 Hz here, not 0.0166667 Hz\n    print 1 rev/min in Hz     # 0.10472 Hz   -- a rotation frequency of 1 rpm is 0.016667 Hz\n          ^\n  hint: to count turns per second write  in rev/s ; for the frequency in cycles per second divide by 2π:  ω/(2π) in Hz\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

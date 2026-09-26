@@ -1,0 +1,11 @@
+{
+ "id": "2ed0a3639bdc",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 2: fft_re(xs) is deprecated and will be removed after Fermium 1.5: write re(fft(xs))\n    a = fft_re(xs)\n        ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 3: fft_im(xs) is deprecated and will be removed after Fermium 1.5: write im(fft(xs))\n    b = fft_im(xs)\n        ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 4: ifft(re, im) is deprecated and will be removed after Fermium 1.5: write ifft(complex(re, im))\n    c = ifft(a, b)\n        ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

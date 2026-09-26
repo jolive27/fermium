@@ -87,11 +87,16 @@ def legacy_run(src: str, base_dir: str | None, filename="<program>"):
 
 
 def _clean_one(r):
+    import signal
     base = r["base_dir"] if r["base_dir"] and os.path.isdir(r["base_dir"]) else None
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(240)
     try:
         out, err, e = legacy_run(r["src"], base)
-    except Exception:
+    except (Exception, _Timeout):
         return None
+    finally:
+        signal.alarm(0)
     return dict(r, stdout=out, stderr=err, error=e)
 
 
@@ -148,12 +153,26 @@ def markdown_programs():
     return out
 
 
+class _Timeout(Exception):
+    pass
+
+
+def _alarm(*_):
+    raise _Timeout
+
+
 def _run_file_job(job):
+    """One program, with a time limit (a docs block may wait for input or loop forever)."""
+    import signal
     src, d, name, origin = job
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(240)
     try:
         out, err, e = legacy_run(src, d, name)
-    except Exception:
+    except (Exception, _Timeout):
         return None
+    finally:
+        signal.alarm(0)
     return {"src": src, "base_dir": d, "stdout": out, "stderr": err, "error": e, "origin": origin}
 
 

@@ -1,0 +1,4 @@
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+# max over step midpoints tm of |x'(tm) - cos(tm)| = 0.0020349     (x(tm): 6.4e-6)
+solve x' = y, y' = -x with x(0) = 0, y(0) = 1 for t from 0 to 20
+# max |x'(tm) - cos(tm)| = 0.000370 while max |y(tm) - cos(tm)| = 2.9e-8 (y *is* x')

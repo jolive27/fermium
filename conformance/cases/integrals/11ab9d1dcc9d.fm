@@ -1,0 +1,2 @@
+print ∫ 1/u du from 1 to 2      # actual: 6.02214×10²⁶ 1/kg   (∫ 1 u⁻¹ du)   expected: 0.693147
+f(x) = ∫ 1/u du from 0 to x     # the divergent integral is silently a straight line in 1/kg

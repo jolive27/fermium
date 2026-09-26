@@ -1,0 +1,6 @@
+fermium run pendulum.fm      # run a program (or just: fermium pendulum.fm)
+fermium                      # interactive prompt (REPL)
+fermium check pendulum.fm    # check units without running
+fermium fmt pendulum.fm --pretty   # ASCII -> symbols;  --ascii for the reverse; -w rewrites the file
+fermium doctor               # check the installation
+fermium build pendulum.fm    # make a standalone executable ./pendulum (needs a C compiler)

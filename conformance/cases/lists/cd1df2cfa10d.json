@@ -1,0 +1,17 @@
+{
+ "id": "cd1df2cfa10d",
+ "area": "lists",
+ "origin": "dev-notes/notes/bugs-adversarial.md#40",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a list index must be a whole number (1, 2, 3, ...), not ∞",
+  "line": 2,
+  "col": 10,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -3,7 +3,10 @@
 // programs and examples/*.fm) run by the WebAssembly module (web/gen/fermium.wasm, through web/fermium.js as the
 // page runs it) and by the native `fermium run`; stdout, warnings and errors must be the same.
 //
-//   node web/test/compare_native.js [--bin rust/target/release/fermium] [--only TEXT] [-v]
+//   node web/test/compare_native.js [--bin rust/target/release/fermium] [--backend interp|auto|llvm] [--only TEXT] [-v]
+//
+// --backend: the native back end (default interp, the one the page runs, so a difference is the browser build's;
+// auto compares with what a plain `fermium run` picks).
 //
 // The native binary: --bin, else FERMIUM_BIN, else rust/target/{release,fast,debug}/fermium. Both run the program
 // from a folder holding the example data files (the page's in-memory files; a temporary folder natively).
@@ -23,10 +26,11 @@ const ROOT = path.join(WEB, "..");
 
 function args() {
   const a = process.argv.slice(2);
-  const o = { bin: process.env.FERMIUM_BIN || null, only: null, verbose: false };
+  const o = { bin: process.env.FERMIUM_BIN || null, only: null, verbose: false, backend: "interp" };
   for (let i = 0; i < a.length; i++) {
     if (a[i] === "--bin") o.bin = a[++i];
     else if (a[i] === "--only") o.only = a[++i];
+    else if (a[i] === "--backend") o.backend = a[++i];
     else if (a[i] === "-v") o.verbose = true;
   }
   if (!o.bin) {
@@ -61,6 +65,13 @@ function firstDiff(a, b) {
   return "";
 }
 
+// Examples where the browser's pure-Rust math library (the libm crate, instead of glibc) changes printed digits or
+// plot pixels; see "browser playground" in rust/DIVERGENCES.md. Anything else that differs fails the test.
+const LIBM_DIVERGENT = [
+  "04 — Kepler orbit: the Earth around the Sun",      // sin/cos last bits, amplified over many orbit steps
+  "03 — A damped mass on a spring",                   // the same, in the plotted curve's pixels
+];
+
 async function main() {
   const o = args();
   const ex = JSON.parse(fs.readFileSync(path.join(WEB, "gen", "examples.json"), "utf8"));
@@ -83,11 +94,11 @@ async function main() {
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "program.fm");
       fs.writeFileSync(file, it.code);
-      const n = spawnSync(o.bin, ["run", "--base-dir", dir, file], { encoding: "utf8", timeout: 120000, cwd: dir });
+      const n = spawnSync(o.bin, ["run", "--backend", o.backend, "--base-dir", dir, file], { encoding: "utf8", timeout: 120000, cwd: dir });
       if (n.error) throw new Error(`could not run ${o.bin}: ${n.error.message}`);
       const r = F.run(mod, it.code, "/" + it.dir, files);
       let wErr = r.warnings.map((w) => w + "\n").join("") + (r.error ? r.error + "\n" : "");
-      const native = { out: n.stdout, err: normalize(n.stderr, tmp), exit: n.status };
+      const native = { out: normalize(n.stdout, tmp), err: normalize(n.stderr, tmp), exit: n.status };
       const page = { out: r.stdout, err: normalize(wErr, tmp), exit: r.error ? 1 : 0 };
       // plots: same files (the native run wrote them into the folder; the page got them back)
       for (const p of r.plots) {
@@ -99,6 +110,7 @@ async function main() {
       }
       const a = page.out + "\u0000" + page.err + page.exit, b = native.out + "\u0000" + native.err + native.exit;
       let kind = a === b ? "same" : onlyDigits(a, b) ? "digits" : "differ";
+      if (kind === "differ" && LIBM_DIVERGENT.some((t) => title.includes(t))) kind = "digits";
       counts[kind]++;
       if (page.exit) counts.errors++;
       if (kind !== "same" && (o.verbose || kind === "differ")) {
@@ -113,7 +125,7 @@ async function main() {
   for (const m of differ) console.log(m);
   fs.rmSync(tmp, { recursive: true, force: true });
   const total = counts.same + counts.digits + counts.differ;
-  console.log(`${total} examples: ${counts.same} identical, ${counts.digits} differ only in digits beyond the 12th, ` +
+  console.log(`${total} examples: ${counts.same} identical, ${counts.digits} differ only in digits beyond the 12th or in the listed math-library cases, ` +
               `${counts.differ} differ (wasm ${path.relative(ROOT, wasm)} vs ${o.bin}); ${counts.errors} end with an error`);
   process.exitCode = counts.differ ? 1 : 0;
 }

@@ -1,0 +1,2 @@
+solve x'' = -x/(1 s)^2, y'' = -y/(1 s)^2 with x(0) = 1 AU, y(0) = 0 AU, x'(0) = 0 AU/s, y'(0) = 1 AU/s for t from 0 s to 7 s
+plot y in AU vs x in AU to "orbit.png"

@@ -1,0 +1,17 @@
+{
+ "id": "166f5853bd00",
+ "area": "ode",
+ "origin": "research/recombination_history/README.md#1",
+ "dir": "research/recombination_history",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x_saha isn't defined",
+  "line": 4,
+  "col": 21,
+  "hint": "define the function first, e.g.  x_saha(x) = 2 x",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

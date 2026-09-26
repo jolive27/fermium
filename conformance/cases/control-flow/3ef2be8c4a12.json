@@ -1,0 +1,11 @@
+{
+ "id": "3ef2be8c4a12",
+ "area": "control-flow",
+ "origin": "dev-notes/notes/bugs-examples.md#14",
+ "dir": "dev-notes/notes",
+ "stdout": "1.0×10⁷ kg/m³ 2.0×10⁷ kg/m³\n1.0×10⁸ kg/m³ 2.0×10⁸ kg/m³\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

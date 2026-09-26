@@ -1,0 +1,2 @@
+label = "hi"
+print label

@@ -1,0 +1,17 @@
+{
+ "id": "efe63e30c5a5",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson08_integrals.md#10",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "at isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  at = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

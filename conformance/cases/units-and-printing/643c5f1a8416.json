@@ -1,0 +1,17 @@
+{
+ "id": "643c5f1a8416",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson04_conditions_loops.md#14",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "half isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  half = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "f64fddb81e2b",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson01_numbers_units.md#18",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    0.511 MeV\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    938 MeV\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

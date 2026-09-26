@@ -13,8 +13,75 @@ use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
 thread_local! {
     /// fm.qzero: quiet first tries of a vector integral's components that came out exactly 0 (D110)
     static QZERO: Cell<f64> = const { Cell::new(0.0) };
+    /// the fewest significant figures an integral evaluated since the last take_quad_sf() can support
+    static QUAD_SF: Cell<Option<u32>> = const { Cell::new(None) };
     /// run-time warnings already shown (each distinct text once, like Runtime.warn_text)
     static WARNED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// The significant figures an integral's result supports (spec B2, OPEN_ITEMS L-2). Summing an integrand
+/// that cancels (a large oscillating part, a symmetric zero) leaves a rounding error of about ε ∫|f|, whatever
+/// the quadrature's own error estimate says (that estimate is pessimistic after the B2 extrapolations, and it
+/// can't see rounding). Only a result below the relative tolerance's reach, ε ∫|f| > 10⁻¹⁰ |value|, is
+/// limited, to floor(log10(|value| / (ε ∫|f|))) figures, at least 1: `∫ 1e6 sin(x) + 4e-9 dx from -1 to 1`
+/// prints 8×10⁻⁹, not 7.93×10⁻⁹.
+pub(crate) fn meaningful_sf(value: f64, _error: f64, abs_sum: f64) -> Option<u32> {
+    let u = f64::EPSILON * abs_sum;
+    if value == 0.0 || !value.is_finite() || !u.is_finite() || u <= 1e-10 * value.abs() {
+        return None;
+    }
+    Some((value.abs() / u).log10().floor().max(1.0) as u32)
+}
+
+/// Take (and clear) the figures limit recorded by the integrals evaluated since the last call.
+pub(crate) fn take_quad_sf() -> Option<u32> {
+    QUAD_SF.with(|q| q.replace(None))
+}
+
+fn note_quad_sf(n: Option<u32>) {
+    if let Some(n) = n {
+        QUAD_SF.with(|q| q.set(Some(q.get().map_or(n, |m| m.min(n)))));
+    }
+}
+
+/// An integral, possibly scaled by constants (a unit factor, a sign): its printed value can be limited to the
+/// figures the integral supports.
+pub(crate) fn integral_shaped(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Integral { .. } => true,
+        ExprKind::Neg(a) => integral_shaped(a),
+        ExprKind::Bin(fermium_ir::BinOp::Mul | fermium_ir::BinOp::Div, a, b) => {
+            (integral_shaped(a) && matches!(b.kind, ExprKind::Const(_)))
+                || (integral_shaped(b) && matches!(a.kind, ExprKind::Const(_)))
+        }
+        _ => false,
+    }
+}
+
+/// A printed sum or difference whose every operand carries measured precision (significant figures from a
+/// written value; whole literals are exact and don't count), not asked for `to N digits`.
+pub(crate) fn measured_sum(e: &Expr) -> bool {
+    fn leaves_measured(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, a, b)
+                if matches!(e.ty, fermium_ir::Ty::Num(_)) => leaves_measured(a) && leaves_measured(b),
+            _ => e.sf.is_some(),
+        }
+    }
+    matches!(e.kind, ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, ..))
+        && matches!(e.ty, fermium_ir::Ty::Num(_))
+        && e.direct != 2
+        && leaves_measured(e)
+}
+
+/// The decimal place (power of ten) of the last significant figure of x with sf figures.
+fn last_place(x: f64, sf: u32) -> Option<i32> {
+    (x != 0.0 && x.is_finite()).then(|| x.abs().log10().floor() as i32 - sf as i32 + 1)
+}
+
+/// The significant figures of x when its last meaningful decimal place is 10^place (at least 1).
+pub(crate) fn decimal_rule_sf(x: f64, place: i32) -> Option<u32> {
+    (x != 0.0 && x.is_finite()).then(|| (x.abs().log10().floor() as i32 - place + 1).clamp(1, 17) as u32)
 }
 
 /// Show a run-time warning once per distinct text (Runtime.warn_text).
@@ -111,6 +178,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let p = l.params[0];
         let old = fr.vars.insert(p, Value::Num(x));
         let r = self.eval(&l.body[0], fr);
+        let r = match r {
+            // a callback given to a numerical kernel must return plain numbers (interp.plain_fn, D122)
+            Ok(v @ (Value::Unc(_) | Value::UList(_))) => Err(crate::eval_unc::kernel_unc_error(&l.name, &v, self.line)),
+            r => r,
+        };
         match old {
             Some(v) => {
                 fr.vars.insert(p, v);
@@ -120,6 +192,40 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
         }
         Ok(r?.num())
+    }
+
+    /// (value, last significant decimal place in the display unit, k = its SI factor) of a measured sum: the
+    /// coarsest place of its operands (the textbook rule).
+    fn sum_place(&mut self, e: &Expr, k: f64, fr: &mut Frame) -> Result<(f64, Option<i32>), RunError> {
+        if let ExprKind::Bin(op @ (fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub), a, b) = &e.kind {
+            if matches!(e.ty, fermium_ir::Ty::Num(_)) {
+                let (va, pa) = self.sum_place(a, k, fr)?;
+                let (vb, pb) = self.sum_place(b, k, fr)?;
+                let v = self.bin(*op, Value::Num(va), Value::Num(vb))?.num();
+                let p = match (pa, pb) {
+                    (Some(x), Some(y)) => Some(x.max(y)),
+                    _ => None,
+                };
+                return Ok((v, p));
+            }
+        }
+        let v = self.eval(e, fr)?.num();
+        Ok((v, e.sf.and_then(|s| last_place(v / k, s))))
+    }
+
+    /// The value of a printed measured sum and its significant figures by the decimal-place rule (spec B2).
+    pub(crate) fn sum_sf(&mut self, e: &Expr, fmt: usize, fr: &mut Frame) -> Result<(f64, Option<u32>), RunError> {
+        let k = match self.module.tables.fmts.get(fmt) {
+            Some(f) => {
+                let hint = f.hint.as_ref().map(|h| fermium_units::Unit { name: h.name.clone(), dim: h.dim,
+                                                                           factor: h.factor, offset: h.offset });
+                fermium_units::display_unit(&f.dim, hint.as_ref()).factor
+            }
+            None => 1.0,
+        };
+        let (v, p) = self.sum_place(e, k, fr)?;
+        let x = v / k;
+        Ok((v, p.and_then(|p| decimal_rule_sf(x, p))))
     }
 
     fn fail(&self, f: Fail, fmt: Option<usize>) -> RunError {
@@ -165,6 +271,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return Err(ex);
                 }
                 let r = r.map_err(|f| self.fail(f, *xfmt))?;
+                note_quad_sf(meaningful_sf(r.value, r.error, r.abs_sum));
                 if r.all_zero {
                     if atol < 0.0 {
                         QZERO.with(|q| q.set(q.get() + 1.0));
@@ -192,6 +299,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return Err(self.fail(Fail::new(12, a, b), None));
                 }
                 let n = cnt.min(2f64.powi(62)) as i64;
+                if self.module.uses_uncertainty {
+                    return self.unc_sum(*lam, a, st, n, fr); // the terms may be uncertain (interp.e_ISum)
+                }
                 let line = self.line;
                 let mut acc = 0.0;
                 for i in 0..n {
@@ -241,5 +351,38 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             _ => self.err("this isn't supported by the Rust back end yet"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decimal_rule_sf, last_place, meaningful_sf};
+
+    #[test]
+    fn sums_keep_the_coarsest_decimal_place() {
+        // 293.15 K + 0.5 K: places −2 and −1 → 293.65 to the tenths, 4 figures (293.6 K; 293.65 is 293.6499…)
+        let p = last_place(293.15, 5).unwrap().max(last_place(0.5, 1).unwrap());
+        assert_eq!(p, -1);
+        assert_eq!(decimal_rule_sf(293.65, p), Some(4));
+        // 1.20 m + 2.0 m → 3.2 m; 938.272 MeV + 2.2 MeV → 940.5 MeV; 0.1 + 0.2 → 0.3
+        assert_eq!(decimal_rule_sf(3.2, last_place(1.2, 3).unwrap().max(last_place(2.0, 2).unwrap())), Some(2));
+        assert_eq!(decimal_rule_sf(940.472, last_place(938.272, 6).unwrap().max(last_place(2.2, 2).unwrap())), Some(4));
+        assert_eq!(decimal_rule_sf(0.30000000000000004, last_place(0.1, 1).unwrap().max(last_place(0.2, 1).unwrap())),
+                   Some(1));
+        // 1.00 m − 0.999 m: nothing is left at the hundredths, so one figure
+        assert_eq!(decimal_rule_sf(0.0010000000000000009, -2), Some(1));
+    }
+
+    #[test]
+    fn rounding_level_integrals_keep_only_their_meaningful_figures() {
+        // ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1: 7.93×10⁻⁹ with ∫|f| = 9.19×10⁵ → 1 figure (8×10⁻⁹, exact 8×10⁻⁹)
+        assert_eq!(meaningful_sf(7.930793799459934e-9, 5.82e-11, 919395.39), Some(1));
+        // an integral that converged to its relative tolerance keeps every figure
+        assert_eq!(meaningful_sf(0.3333333333333333, 5.6e-17, 0.3333333333333333), None);
+        assert_eq!(meaningful_sf(1.0, 1e-11, 1.0), None);
+        // a large error estimate alone (a singular integrand) doesn't limit the figures
+        assert_eq!(meaningful_sf(2.7687651131, 1e-7, 2.7687651131), None);
+        // a symmetric zero: rounding noise, one figure
+        assert_eq!(meaningful_sf(2.7755575615628914e-17, 1.4e-17, 0.9193953882637206), Some(1));
     }
 }

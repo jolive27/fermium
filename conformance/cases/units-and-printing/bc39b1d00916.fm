@@ -1,0 +1,4 @@
+k = 50 N/m
+m = 0.125 kg
+ω0 = √(k/m)
+print ω0 in Hz

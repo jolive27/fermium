@@ -88,8 +88,11 @@ impl Checker {
             K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Slice { .. } => self.e_slice(e)?,
+            K::Uncertain { value, err } => self.e_uncertain(e, value, err, ctx)?,
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
+            K::Load { path } => self.e_load(e, path)?,
+            K::Table { names, items } => self.e_table(e, names, items, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
             K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
             K::Field { target, name } => return self.e_field(e, target, name, ctx),
@@ -98,6 +101,7 @@ impl Checker {
             K::VecCalc { .. } => return self.e_veccalc(e, ctx),
             K::Integral { .. } => return self.e_integral(e, ctx),
             K::Sum { .. } => return self.e_sum(e, ctx),
+            #[allow(unreachable_patterns)]
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))

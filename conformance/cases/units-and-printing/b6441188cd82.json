@@ -1,0 +1,11 @@
+{
+ "id": "b6441188cd82",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-tests.md#17",
+ "dir": "dev-notes/notes",
+ "stdout": "32.2 ft/s²\n32.2 ft/s²\n68 °F\n6.674×10⁻¹¹ N m²/kg²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

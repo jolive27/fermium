@@ -1,0 +1,2 @@
+solve x'' = -x + sin(t)^3 with x(0) = 0, x'(0) = 0 for t from 0 to 3
+print x(3)                  # expected 1.16631 (scipy); actual: same error

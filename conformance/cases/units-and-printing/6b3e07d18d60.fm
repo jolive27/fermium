@@ -1,4 +1,0 @@
-a = 1.001 [J]
-b = a in eV
-print b / (1 [eV]) to 15 digits
-print (a in eV) in J to 15 digits

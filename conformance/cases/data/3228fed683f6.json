@@ -1,0 +1,11 @@
+{
+ "id": "3228fed683f6",
+ "area": "data",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#4",
+ "dir": "dev-notes/notes",
+ "stdout": "plot saved to <ROOT>/dev-notes/notes/f.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

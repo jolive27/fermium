@@ -1,0 +1,17 @@
+{
+ "id": "f3a5fd3aa9cd",
+ "area": "units-and-printing",
+ "origin": "bootcamp/TROUBLESHOOTING.md#17",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium",
+  "line": 3,
+  "col": 7,
+  "hint": "for the exponential function write exp(x)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

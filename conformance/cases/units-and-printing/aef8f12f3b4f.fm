@@ -1,0 +1,4 @@
+a = 42.701978278315394 [mm]
+b = a in AU
+print b / (1 [AU]) to 15 digits
+print (a in AU) in mm to 15 digits

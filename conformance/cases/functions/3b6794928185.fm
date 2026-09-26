@@ -1,0 +1,6 @@
+f(v) =
+    v[1] = 42
+    0
+xs = [1, 2, 3]
+print f(xs), xs      # actual: error "v isn't a list, so you can't set v[...]" (with v = a plain number)
+                     # expected: 0 [42, 2, 3]

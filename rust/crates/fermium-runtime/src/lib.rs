@@ -8,4 +8,5 @@ pub mod data;
 pub mod format;
 pub mod numerics;
 pub mod plot;
+pub mod python;
 pub mod vfs;

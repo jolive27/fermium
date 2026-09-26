@@ -1,0 +1,2 @@
+f = 50 Hz
+print 2π f in rad/s

@@ -9,6 +9,7 @@ mod eval_data;
 mod eval_m3;
 mod eval_more;
 mod eval_par;
+mod eval_py;
 mod eval_solve;
 mod eval_unc;
 mod eval_vecmat;
@@ -36,6 +37,12 @@ pub trait Backend {
 impl<P: Printer + ?Sized> Printer for &mut P {
     fn num(&mut self, fmt: usize, v: f64) {
         (**self).num(fmt, v)
+    }
+    fn num_capped(&mut self, fmt: usize, v: f64, max_sf: u32) {
+        (**self).num_capped(fmt, v, max_sf)
+    }
+    fn num_sf(&mut self, fmt: usize, v: f64, sf: u32) {
+        (**self).num_sf(fmt, v, sf)
     }
     fn list(&mut self, fmt: usize, v: &[f64]) {
         (**self).list(fmt, v)

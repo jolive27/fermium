@@ -168,7 +168,10 @@ fn name_before_dot(text: &[char]) -> Option<String> {
 
 /// The module whose member is at the position (`mechanics.pendulum_period`), as an index into the module table.
 pub fn module_of(an: &Analysis, source: &str, line: usize, ch: usize) -> Option<usize> {
-    let ck = an.checker.as_ref()?;
+    module_in(an.checker.as_ref()?, source, line, ch)
+}
+
+fn module_in(ck: &Checker, source: &str, line: usize, ch: usize) -> Option<usize> {
     let cs = line_chars(source, line)?;
     let (s, _) = words(&cs).into_iter().find(|(s, e)| *s <= ch && ch <= *e)?;
     let q = name_before_dot(&cs[..s])?;
@@ -204,18 +207,23 @@ pub fn fmt_g(x: f64, prec: usize) -> String {
 
 /// Markdown for the name at the 0-based position (lsp.py `hover_text`).
 pub fn hover_text(an: &mut Analysis, source: &str, line: usize, ch: usize) -> Option<String> {
+    hover_in(an.checker.as_mut(), source, line, ch)
+}
+
+/// `hover_text` with any checker (the Jupyter kernel asks its session's).
+pub fn hover_in(mut ck: Option<&mut Checker>, source: &str, line: usize, ch: usize) -> Option<String> {
     let name = word_at(source, line, ch)?;
-    let module = module_of(an, source, line, ch);
-    let mut b = an.checker.as_ref().and_then(|ck| ck.global(&name));
+    let module = ck.as_deref().and_then(|c| module_in(c, source, line, ch));
+    let mut b = ck.as_deref().and_then(|c| c.global(&name));
     if let Some(m) = module {
-        let ck = an.checker.as_ref().unwrap();
+        let ck = ck.as_deref().unwrap();
         b = ck.module_binding(m, &name);
         if b.is_none() {
             let (mname, _, _) = ck.module_names(m)?;
             return Some(format!("**{name}**: not in the module {mname}"));
         }
     }
-    if let (Some(b), Some(ck)) = (b, an.checker.as_mut()) {
+    if let (Some(b), Some(ck)) = (b, ck.as_deref_mut()) {
         match b {
             Binding::Sym(id) => {
                 let sym = &ck.module.syms[id];
@@ -242,7 +250,7 @@ pub fn hover_text(an: &mut Analysis, source: &str, line: usize, ch: usize) -> Op
     }
     if let Some(u) = fermium_units::lookup_unit(&name) {
         let base = fermium_units::preferred_unit(&u.dim);
-        let dname = match &an.checker {
+        let dname = match &ck {
             Some(ck) => ck.desc(&DExpr::of(u.dim)),
             None => base.name.clone(),
         };
@@ -260,6 +268,11 @@ pub type Item = (String, String, usize, String);
 
 /// Completion items for the 0-based position (lsp.py `completions`).
 pub fn completions(an: &mut Analysis, source: &str, line: usize, ch: usize) -> Vec<Item> {
+    completions_in(an.checker.as_mut(), source, line, ch)
+}
+
+/// `completions` with any checker (the Jupyter kernel asks its session's).
+pub fn completions_in(mut ck: Option<&mut Checker>, source: &str, line: usize, ch: usize) -> Vec<Item> {
     let cs = line_chars(source, line).unwrap_or_default();
     let text: Vec<char> = cs[..ch.min(cs.len())].to_vec();
     // \\([A-Za-z]*|\^-?\d?|_\d?)$
@@ -293,17 +306,18 @@ pub fn completions(an: &mut Analysis, source: &str, line: usize, ch: usize) -> V
     }
     let prefix: String = text[text.len() - prefix_len..].iter().collect();
     let start = ch.min(cs.len()) - prefix_len;
-    let Some(ck) = an.checker.as_ref() else {
+    let Some(ckr) = ck.as_deref() else {
         return keywords(&prefix, start);
     };
+    let ck_ = ckr;
     if let Some(q) = name_before_dot(&text[..start]) {
-        if let Some(Binding::Module(m)) = ck.global(&q) {
-            let (_, _, names) = ck.module_names(m).unwrap_or_default();
+        if let Some(Binding::Module(m)) = ck_.global(&q) {
+            let (_, _, names) = ck_.module_names(m).unwrap_or_default();
             return names.into_iter().filter(|n| n.starts_with(&prefix)).map(|n| (n.clone(), n, start, String::new()))
                 .collect();
         }
     }
-    let names: Vec<String> = ck
+    let names: Vec<String> = ck_
         .global_names()
         .into_iter()
         .map(|(n, _)| n)
@@ -311,7 +325,7 @@ pub fn completions(an: &mut Analysis, source: &str, line: usize, ch: usize) -> V
         .collect();
     let mut out = vec![];
     for n in names {
-        let detail = hover_text(an, &n, 0, 0).unwrap_or_default();
+        let detail = hover_in(ck.as_deref_mut(), &n, 0, 0).unwrap_or_default();
         out.push((n.clone(), n, start, detail));
     }
     out.extend(keywords(&prefix, start));

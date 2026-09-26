@@ -22,6 +22,12 @@ pub enum Value {
     CList(Rc<RefCell<Vec<(f64, f64)>>>),
     /// An opaque handle (solutions, data tables) owned by the runtime.
     Handle(usize),
+    /// An uncertain number, 5.0 ± 0.2 (D120; eval_unc.rs).
+    Unc(Rc<fermium_runtime::numerics::uncertain::UFloat>),
+    /// A list holding uncertain numbers (and plain ones, as `Num`).
+    UList(Rc<RefCell<Vec<Value>>>),
+    /// All the samples of a number at once, inside `propagate montecarlo` (v1's NumPy arrays, D123).
+    Arr(Rc<Vec<f64>>),
     Void,
 }
 
@@ -29,6 +35,13 @@ impl Value {
     pub fn num(&self) -> f64 {
         match self {
             Value::Num(x) => *x,
+            // comparisons and the like use the nominal value, as v1's UFloat does
+            Value::Unc(u) => u.v,
+            // an operation that needs one number got all the samples: v1's vectorized Monte Carlo fails there
+            Value::Arr(_) => {
+                crate::eval_unc::vec_fail();
+                f64::NAN
+            }
             Value::Bool(b) => f64::from(u8::from(*b)),
             _ => f64::NAN,
         }
@@ -58,6 +71,14 @@ pub struct RunError {
 /// Printing, implemented by the runtime (the formats are in `module.tables.fmts`).
 pub trait Printer {
     fn num(&mut self, fmt: usize, v: f64);
+    /// A number printed with at most `max_sf` significant figures (an integral at its rounding level, spec B2).
+    fn num_capped(&mut self, fmt: usize, v: f64, _max_sf: u32) {
+        self.num(fmt, v)
+    }
+    /// A number printed with exactly `sf` significant figures (a sum by the decimal-place rule, spec B2).
+    fn num_sf(&mut self, fmt: usize, v: f64, _sf: u32) {
+        self.num(fmt, v)
+    }
     fn list(&mut self, fmt: usize, v: &[f64]);
     fn vec(&mut self, fmt: usize, v: &[f64]);
     fn mixed_vec(&mut self, fmts: &[usize], v: &[f64]);
@@ -226,12 +247,14 @@ pub struct Interpreter<'m, P: Printer> {
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
     /// ODE / eigenvalue / PDE solutions and run-time warnings shown (eval_solve.rs)
     pub(crate) solve: crate::eval_solve::SolveState,
+    /// data sets made by load and table (eval_data.rs)
+    pub(crate) data: crate::eval_data::DataState,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
         Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
-                      solve: Default::default() }
+                      solve: Default::default(), data: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -293,14 +316,25 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::IndexAssign(sym, idx, value) => {
                 let lst = self.get(*sym, fr)?;
+                if let Value::UList(l) = &lst {
+                    let i = self.eval(idx, fr)?.num();
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    let v = self.eval(value, fr)?;
+                    l.borrow_mut()[k] = v;
+                    return Ok(Flow::Normal);
+                }
                 let Value::List(l) = lst else {
                     return self.err("not yet supported by the Rust back end: setting an element of this value");
                 };
                 let i = self.eval(idx, fr)?.num();
                 let n = l.borrow().len();
                 let k = self.elem_index(i, n)?;
-                let v = self.eval(value, fr)?.num();
-                l.borrow_mut()[k] = v;
+                let v = self.eval(value, fr)?;
+                if crate::eval_unc::is_unc(&v) {
+                    return self.err(crate::eval_unc::GENERIC);
+                }
+                l.borrow_mut()[k] = v.num();
             }
             StmtKind::Push(sym, e) => {
                 let v = self.eval(e, fr)?;
@@ -312,12 +346,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                     (Value::TextList(l), Value::Str(t)) => l.borrow_mut().push(t),
                     (Value::CList(l), Value::Vec(z)) if z.len() == 2 => l.borrow_mut().push((z[0], z[1])),
+                    (Value::UList(l), v @ (Value::Num(_) | Value::Unc(_))) => l.borrow_mut().push(v),
                     _ => return self.err("not yet supported by the Rust back end: pushing this value"),
                 }
             }
             StmtKind::Clear(sym) => {
                 match self.get(*sym, fr)? {
                     Value::List(l) => l.borrow_mut().clear(),
+                    Value::UList(l) => l.borrow_mut().clear(),
                     Value::TextList(l) => l.borrow_mut().clear(),
                     Value::CList(l) => l.borrow_mut().clear(),
                     _ => return self.err("not yet supported by the Rust back end: clearing this value"),
@@ -360,6 +396,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             StmtKind::ForIn(sym, lst, body) => {
                 let items: Vec<Value> = match self.eval(lst, fr)? {
                     Value::List(l) => l.borrow().iter().map(|x| Value::Num(*x)).collect(),
+                    Value::UList(l) => l.borrow().clone(),
                     Value::TextList(l) => l.borrow().iter().map(|t| Value::Str(t.clone())).collect(),
                     Value::Vec(v) => v.iter().map(|x| Value::Num(*x)).collect(),
                     // for z in fft(xs): each z a complex number (D243)
@@ -402,12 +439,30 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn print(&mut self, items: &[PrintItem], fr: &mut Frame) -> Result<(), RunError> {
         for it in items {
             match it {
+                PrintItem::Num(e, f) if crate::eval_calc::measured_sum(e) => {
+                    let (x, sf) = self.sum_sf(e, *f, fr)?;
+                    match sf {
+                        Some(n) => self.printer.num_sf(*f, x, n),
+                        None => self.printer.num(*f, x),
+                    }
+                }
                 PrintItem::Num(e, f) => {
-                    let v = self.eval(e, fr)?.num();
-                    self.printer.num(*f, v)
+                    crate::eval_calc::take_quad_sf();
+                    let v = self.eval(e, fr)?;
+                    if !self.unc_print(&v, *f) {
+                        let x = v.num();
+                        match crate::eval_calc::take_quad_sf() {
+                            Some(n) if crate::eval_calc::integral_shaped(e) => self.printer.num_capped(*f, x, n),
+                            _ => self.printer.num(*f, x),
+                        }
+                    }
                 }
                 PrintItem::List(e, f) => {
-                    if let Value::List(l) = self.eval(e, fr)? {
+                    let v = self.eval(e, fr)?;
+                    if self.unc_print(&v, *f) {
+                        continue;
+                    }
+                    if let Value::List(l) = v {
                         let v = l.borrow().clone();
                         self.printer.list(*f, &v)
                     }
@@ -496,19 +551,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Const(x) => Value::Num(*x),
             ExprKind::Bool(b) => Value::Bool(*b),
             ExprKind::Str(s) => Value::Str(s.as_str().into()),
-            ExprKind::Var(sym) => self.get(*sym, fr)?,
+            ExprKind::Var(sym) => {
+                let v = self.get(*sym, fr)?;
+                if crate::eval_unc::mc_active() { crate::eval_unc::mc_sample(&v) } else { v }
+            }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
                 self.bin(*op, va, vb)?
             }
             ExprKind::PowC(a, p) => match self.eval(a, fr)? {
+                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_powc(v, *p)?,
                 Value::Num(x) => Value::Num(powc(x, *p)),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| powc(*x, *p)).collect()))),
                 _ => Value::Num(f64::NAN),
             },
             ExprKind::Pow(a, b) => {
                 // llvm.pow, element by element for a list base (e_IPow)
-                let (va, y) = (self.eval(a, fr)?, self.eval(b, fr)?.num());
+                let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
+                if crate::eval_unc::is_unc(&va) || crate::eval_unc::is_unc(&vb) {
+                    return self.unc_pow(va, vb);
+                }
+                let y = vb.num();
                 match va {
                     Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| x.powf(y)).collect()))),
                     Value::Num(x) => Value::Num(x.powf(y)),
@@ -516,13 +579,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Neg(a) => match self.eval(a, fr)? {
+                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_neg(v)?,
                 Value::Num(x) => Value::Num(-x),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| -x).collect()))),
                 Value::Vec(v) => Value::Vec(Rc::new(v.iter().map(|x| -x).collect())),
                 v => v,
             },
             ExprKind::Cmp(op, a, b) => {
-                let (x, y) = (self.eval(a, fr)?.num(), self.eval(b, fr)?.num());
+                let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
+                if crate::eval_unc::is_unc(&va) || crate::eval_unc::is_unc(&vb) {
+                    return self.unc_cmp(*op, &va, &vb);
+                }
+                let (x, y) = (va.num(), vb.num());
                 Value::Bool(match op {
                     CmpOp::Eq => x == y,
                     CmpOp::Ne => x != y,
@@ -583,14 +651,31 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::List(items) => {
                 let mut out = Vec::with_capacity(items.len());
+                let mut uout: Option<Vec<Value>> = None;
                 for it in items {
-                    match self.eval(it, fr)? {
+                    let v = self.eval(it, fr)?;
+                    if uout.is_none() && crate::eval_unc::is_unc(&v) {
+                        uout = Some(out.iter().map(|x| Value::Num(*x)).collect());
+                    }
+                    if let Some(u) = uout.as_mut() {
+                        match v {
+                            Value::UList(l) => u.extend(l.borrow().iter().cloned()),
+                            Value::List(l) => u.extend(l.borrow().iter().map(|x| Value::Num(*x))),
+                            v @ (Value::Num(_) | Value::Unc(_)) => u.push(v),
+                            _ => return self.err("not yet supported by the Rust back end: this list"),
+                        }
+                        continue;
+                    }
+                    match v {
                         Value::Num(x) => out.push(x),
                         Value::List(l) => out.extend(l.borrow().iter()),
-                        _ => {}
+                        _ => return self.err("not yet supported by the Rust back end: this list"),
                     }
                 }
-                Value::List(Rc::new(RefCell::new(out)))
+                match uout {
+                    Some(u) => Value::UList(Rc::new(RefCell::new(u))),
+                    None => Value::List(Rc::new(RefCell::new(out))),
+                }
             }
             ExprKind::Vec(items) => {
                 let mut out = Vec::with_capacity(items.len());
@@ -598,7 +683,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     match self.eval(it, fr)? {
                         Value::Num(x) => out.push(x),
                         Value::Vec(v) => out.extend(v.iter()),
-                        _ => {}
+                        // interp.e_IVec: float() of an uncertain value
+                        Value::Unc(_) => return self.err(crate::eval_unc::GENERIC),
+                        _ => return self.err("not yet supported by the Rust back end: this vector"),
                     }
                 }
                 Value::Vec(Rc::new(out))
@@ -621,6 +708,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         let k = self.elem_index(i, n)?;
                         Value::Str(l.borrow()[k].clone())
                     }
+                    Value::UList(l) => {
+                        let n = l.borrow().len();
+                        let k = self.elem_index(i, n)?;
+                        l.borrow()[k].clone()
+                    }
                     _ => return self.err("not yet supported by the Rust back end: indexing this value"),
                 }
             }
@@ -629,6 +721,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
                 }
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
+                if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
+                    return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
+                }
                 self.builtin(name, vals)?
             }
             _ => return self.eval_more(e, fr),
@@ -636,6 +731,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub(crate) fn bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
+        if crate::eval_unc::is_unc(&a) || crate::eval_unc::is_unc(&b) {
+            return self.unc_bin(op, a, b);
+        }
         let f = |x: f64, y: f64| match op {
             BinOp::Add => x + y,
             BinOp::Sub => x - y,
@@ -706,8 +804,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {
+        if name == "pycall" {
+            return self.pycall(&args); // a Python function (D140, eval_py.rs)
+        }
         if let Some(f) = self.builtins.get(name) {
             return f(&args).map_err(|m| RunError { message: m, line: self.line, hint: None });
+        }
+        if !name.starts_with("pm") && !name.starts_with("unc_") && args.iter().any(crate::eval_unc::is_unc) {
+            return self.unc_apply(name, &args);
         }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
                      Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {

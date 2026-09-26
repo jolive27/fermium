@@ -1,0 +1,4 @@
+M = 1 kg
+m2 = 1 kg
+r = 1 m
+print G M m2 / r²

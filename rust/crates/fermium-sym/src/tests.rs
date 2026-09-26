@@ -103,7 +103,9 @@ fn antiderivatives_are_right() {
                    ("csc(x)^2", "x"), ("exp(-x) sin(x)", "x"), ("k x", "x"), ("x^a", "x"), ("cos(ω t)", "t"),
                    ("x^2 exp(x)", "x"), ("x ln(x)", "x"), ("x exp(-x^2)", "x"), ("1/(x^2 - 1)", "x"),
                    ("(3x + 1)/(x^2 + 2 x + 5)", "x"), ("sin(x) cos(x)", "x"), ("1/(1 + x^2)", "x"),
-                   ("exp(-a x^2)", "x"), ("tan(x)", "x"), ("x (x + 1)^2", "x")] {
+                   ("exp(-a x^2)", "x"), ("tan(x)", "x"), ("x (x + 1)^2", "x"), ("cos(x)^3", "x"),
+                   ("sin(2x)^5", "x"), ("ln(x)^2", "x"), ("ln(3 x)^3", "x"), ("sin(2x) sin(3x)", "x"),
+                   ("cos(x) cos(4x)", "x"), ("1/(1 + cos(x))", "x"), ("1/(1 - cos(2x))", "x")] {
         assert!(integ(s, v, &["a"]).is_ok(), "{s}: {:?}", integ(s, v, &["a"]));
     }
 }

@@ -1,4 +1,0 @@
-a = 0.9144000000000001 [T]
-b = a in T
-print b / (1 [T]) to 15 digits
-print (a in T) in T to 15 digits

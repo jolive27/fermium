@@ -38,6 +38,11 @@ impl ReplState {
     pub fn value(&self, sym: SymId) -> Option<&Value> {
         self.globals.get(&sym)
     }
+
+    /// Give a top-level variable a value (the arguments of a call from Python, fermium-pyapi).
+    pub fn set(&mut self, sym: SymId, v: Value) {
+        self.globals.insert(sym, v);
+    }
 }
 
 /// The LLVM IR of a module (before optimization), or why the LLVM back end can't compile it yet.

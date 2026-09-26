@@ -1,0 +1,6 @@
+solve x'' = -GM x / (x² + y²)^(3/2),
+      y'' = -GM y / (x² + y²)^(3/2)
+  with x(0) = r_peri, y(0) = 0 m,
+       x'(0) = 0 m/s, y'(0) = v_peri
+  for t from 0 s to 1 yr
+plot y in AU vs x in AU, comet_y in AU vs comet_x in AU to "gallery/kepler_orbit.png"

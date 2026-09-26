@@ -1,0 +1,11 @@
+{
+ "id": "fc144cf3e38f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 Bq\n",
+ "stderr": "warning: line 1: adding a value in Bq and one in Hz: both are 1/s in SI, but becquerels count decays and hertz count cycles\n    print 1 Bq + 1 Hz\n          ^\n  hint: check that both mean the same thing\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+a = 119.87945871808506 [eV]
+b = a in MeV
+print b / (1 [MeV]) to 15 digits
+print (a in MeV) in eV to 15 digits

@@ -1,0 +1,11 @@
+{
+ "id": "bc39b1d00916",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "20.0 Hz\n",
+ "stderr": "warning: line 4: ω0 in Hz shows the angular frequency itself (Fermium treats rad as 1, so rad/s and Hz are the same unit), not the frequency ω0/2π\n    print ω0 in Hz\n          ^\n  hint: for the frequency in cycles per second write  ω0/(2π) in Hz  (or  ω0 in rad/s  to keep it angular)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

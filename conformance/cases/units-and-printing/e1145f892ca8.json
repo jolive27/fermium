@@ -1,0 +1,11 @@
+{
+ "id": "e1145f892ca8",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-tests.md#16",
+ "dir": "dev-notes/notes",
+ "stdout": "50%\n50%\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

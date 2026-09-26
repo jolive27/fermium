@@ -1,0 +1,11 @@
+{
+ "id": "a559cfce01e4",
+ "area": "units-and-printing",
+ "origin": "bootcamp/solutions/lesson01.md#2",
+ "dir": "bootcamp/solutions",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    499 s\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    8.32 min\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

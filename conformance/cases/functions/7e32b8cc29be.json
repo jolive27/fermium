@@ -1,0 +1,11 @@
+{
+ "id": "7e32b8cc29be",
+ "area": "functions",
+ "origin": "dev-notes/FERMIUM_SPEC_V1.5_V2.md#4",
+ "dir": "dev-notes",
+ "stdout": "10 rad/s\n2.0 s\n0.500\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "a7cfc69e18ce",
+ "area": "ode",
+ "origin": "dev-notes/notes/bugs-adversarial.md#65",
+ "dir": "dev-notes/notes",
+ "stdout": "1.00 -1.00\n1.00\n",
+ "stderr": "warning: line 3: the step is too coarse for this equation: the estimated error is 0.67% of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or drop  step  to use the adaptive solver\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

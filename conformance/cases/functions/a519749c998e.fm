@@ -1,0 +1,4 @@
+print h(2)
+h(x) = x^2
+# actual: 1.32521×10⁻³³ J s   (Planck constant × 2)     expected: 4, or an error "h is defined
+# as a function on line 2, after this line"

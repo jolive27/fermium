@@ -1,4 +1,0 @@
-a = 0.001 [erg]
-b = a in J
-print b / (1 [J]) to 15 digits
-print (a in J) in erg to 15 digits

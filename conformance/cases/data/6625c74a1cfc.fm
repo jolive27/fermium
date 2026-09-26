@@ -1,0 +1,12 @@
+decay(rate, y0, T) =
+    solve y' = -rate(t) y with y(0 s) = y0 for t from 0 s to T
+    y(T)
+k1(t) = 0.5 / 1 s
+k2(t) = t / 1 s²
+show(V, L) =
+    plot V vs x from 0 m to L to "/tmp/pytest-of-root/pytest-790/popen-gw2/test_passed_function_used_by_s0/v.svg"
+    V(L)
+V1(x) = 2 N x
+print decay(k1, 1 kg, 2 s) to 6 digits
+print decay(k2, 1 kg, 2 s) to 6 digits
+print show(V1, 3 m)

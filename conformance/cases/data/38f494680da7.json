@@ -1,0 +1,17 @@
+{
+ "id": "38f494680da7",
+ "area": "data",
+ "origin": "README.md#5",
+ "dir": ".",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "r_peri isn't defined",
+  "line": 3,
+  "col": 15,
+  "hint": "give it a value on an earlier line, e.g.  r_peri = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "b2fb6f9d5b34",
+ "area": "uncertainty",
+ "origin": "dev-notes/notes/bugs-adversarial.md#61",
+ "dir": "dev-notes/notes",
+ "stdout": "1.00×10⁻¹⁵ m\n1.00\n2.51 fm\n1 MeV\n1 ns\n1 AU\n3.16×10¹⁶ s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

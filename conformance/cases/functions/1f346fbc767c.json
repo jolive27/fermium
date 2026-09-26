@@ -1,0 +1,11 @@
+{
+ "id": "1f346fbc767c",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-examples.md#4",
+ "dir": "dev-notes/notes",
+ "stdout": "882.0 MeV\n882.0 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

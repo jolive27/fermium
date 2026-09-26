@@ -1,0 +1,6 @@
+print 3 * 10^8 m/s       # works: 3×10⁸ m/s
+# fermium fmt --pretty  ->  print 3 · 10⁸ m/s   ->  "line 1: m isn't defined"
+print 10⁸ m              # error: m isn't defined     expected 1×10⁸ m (same as 10^8 m)
+print 5² m²              # error                       expected 25 m²
+print 2⁻¹ m              # error                       expected 0.5 m
+print 1.5 × 10³ m        # error (with spaces; `1.5×10³ m` without spaces works)   expected 1500 m

@@ -1,0 +1,2 @@
+v_r(τ) = r(τ) · r'(τ) / |r(τ)|
+solve v_r(t_aph) = 0 km/s for t_aph from 0 s to T

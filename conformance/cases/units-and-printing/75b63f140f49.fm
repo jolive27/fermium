@@ -1,4 +1,0 @@
-a = 710.5170250814231 [min]
-b = a in day
-print b / (1 [day]) to 15 digits
-print (a in day) in min to 15 digits

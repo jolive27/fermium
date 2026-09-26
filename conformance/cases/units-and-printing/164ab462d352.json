@@ -1,0 +1,17 @@
+{
+ "id": "164ab462d352",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson01_numbers_units.md#7",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add length [m] to time [s]",
+  "line": 1,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

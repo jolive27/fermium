@@ -1,0 +1,11 @@
+{
+ "id": "f419f32139c1",
+ "area": "lists",
+ "origin": "bootcamp/lesson07_derivatives.md#14",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    [0, 0.250, 0.500, 0.750, 1.00] s\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    [10.0, 8.78, 5.40, 0.707, -4.16] m/s\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

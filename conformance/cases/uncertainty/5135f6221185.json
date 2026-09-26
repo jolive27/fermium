@@ -1,0 +1,17 @@
+{
+ "id": "5135f6221185",
+ "area": "uncertainty",
+ "origin": "dev-notes/notes/bugs-adversarial.md#66",
+ "dir": "dev-notes/notes",
+ "stdout": "10.0\n12.0\n",
+ "stderr": "",
+ "error": {
+  "message": "couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere -- the estimate was 4.64709 ± 7.62234×10⁻⁸ in SI units",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

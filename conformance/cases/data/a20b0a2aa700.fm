@@ -1,0 +1,2 @@
+flux = π * ∫ B(λ) dλ from 0 nm to ∞        # equals σT⁴ to 10 digits
+plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"

@@ -1,0 +1,2 @@
+V(x, y, z) = ∫ k λ / √((x - s)^2 + y^2 + z^2) ds from -L/2 to L/2
+print -∇V(0.3 m, 0.5 m, 0 m)

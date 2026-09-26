@@ -1,0 +1,4 @@
+a = 349.5596239075216 [N]
+b = a in N
+print b / (1 [N]) to 15 digits
+print (a in N) in N to 15 digits

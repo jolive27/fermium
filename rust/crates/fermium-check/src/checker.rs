@@ -180,6 +180,8 @@ pub struct SymExtra {
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
     pub list_sf: Option<u32>,
+    /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
+    pub err_sym: Option<I::SymId>,
     /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
     pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }
@@ -255,6 +257,8 @@ pub struct Checker {
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
     /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
     pub solve: crate::solve::SolveTables,
+    /// data sets, fits, plots and animations (data.rs)
+    pub data: crate::data::DataTables,
     /// calculus: derived functions made so far (calculus.rs)
     pub calc: crate::calculus::CalcState,
 }
@@ -299,6 +303,7 @@ impl Checker {
             fmt_dims: vec![],
             nodes: HashMap::new(),
             solve: Default::default(),
+            data: Default::default(),
             calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
@@ -517,6 +522,7 @@ impl Checker {
         let main = self.block(&prog.body, &mut ctx)?;
         self.check_uncalled()?;
         self.resolve_fmts();
+        self.resolve_data_tables();
         self.module.main = main;
         self.module.uses_uncertainty = self.uses_unc;
         Ok(std::mem::take(&mut self.module))
@@ -576,10 +582,14 @@ impl Checker {
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
             K::Solve(sv) => self.s_solve(s, sv, ctx),
+            K::Propagate { samples, body } => self.s_propagate(s, samples.as_ref(), body, ctx),
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),
+            K::Fit { .. } => self.s_fit(s, ctx),
+            K::Plot { .. } => self.s_plot(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
+            #[allow(unreachable_patterns)]
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }

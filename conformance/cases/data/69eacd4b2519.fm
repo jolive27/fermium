@@ -1,0 +1,3 @@
+data = load "data/ba137m_decay.csv"
+fit rate = R0 exp(-ln(2) t / t_half) + B to data
+  with R0 = 80 s⁻¹, t_half = 100 s, B = 1 s⁻¹

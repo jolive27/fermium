@@ -1,0 +1,4 @@
+a = 939.3133234438047 [N]
+b = a in dyn
+print b / (1 [dyn]) to 15 digits
+print (a in dyn) in N to 15 digits

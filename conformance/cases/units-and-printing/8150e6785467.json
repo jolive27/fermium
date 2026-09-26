@@ -1,0 +1,11 @@
+{
+ "id": "8150e6785467",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 J\n",
+ "stderr": "warning: line 1: adding a value in J and one in N m: both are kg m²/s² in SI, but J is an energy and N m a torque\n    print 1 J + 1 N m\n          ^\n  hint: check that both mean the same thing\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

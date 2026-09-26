@@ -31,3 +31,9 @@ target/
 dev-notes/notes/*.png
 dev-notes/notes/*.svg
 dev-notes/notes/*.gif
+
+# plot files the harvest writes when it runs README/docs blocks at the repo root
+/*.png
+/*.gif
+/gallery/
+/*_frames/

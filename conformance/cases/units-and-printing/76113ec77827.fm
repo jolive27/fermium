@@ -1,0 +1,4 @@
+a = 159.44608326608997 [ly]
+b = a in AU
+print b / (1 [AU]) to 15 digits
+print (a in AU) in ly to 15 digits

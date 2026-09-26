@@ -1,0 +1,5 @@
+d = load "decay.csv"
+fit N = A exp(-t/τ) to d
+# actual:  A = 312.6 (standard error could not be estimated)
+#          τ = -4.885×10⁹ ms (standard error could not be estimated), rms residual = 299
+# expected: A = 1002 ± 1.5, τ = 2.993 ± 0.0075 ms (scipy curve_fit), rms 1.56

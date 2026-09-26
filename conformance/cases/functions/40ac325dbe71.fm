@@ -1,0 +1,2 @@
+f(x) = k x where k = 5
+print f(1)

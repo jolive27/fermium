@@ -1,0 +1,11 @@
+{
+ "id": "16e3c8dadbaf",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#16",
+ "dir": "dev-notes/notes",
+ "stdout": "hi\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

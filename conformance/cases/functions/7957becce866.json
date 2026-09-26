@@ -1,0 +1,17 @@
+{
+ "id": "7957becce866",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-adversarial.md#24",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f called itself too many times (the program ran out of stack) -- is a base case missing, like  if n <= 0 then ...?",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

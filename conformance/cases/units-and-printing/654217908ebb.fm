@@ -1,0 +1,4 @@
+a = 211.92847229542733 [yr]
+b = a in hr
+print b / (1 [hr]) to 15 digits
+print (a in hr) in yr to 15 digits

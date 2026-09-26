@@ -1,0 +1,2 @@
+area(V, L) = ∫ V(x) dx from 0 m to L
+print area(3 J, 2 m)

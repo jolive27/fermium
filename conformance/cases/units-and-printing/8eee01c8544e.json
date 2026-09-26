@@ -1,0 +1,11 @@
+{
+ "id": "8eee01c8544e",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson04_conditions_loops.md#12",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    0 s 0 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    0.5 s 8.77 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 3: this line computes a value but doesn't use it\n    1 s 15.1 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 4: this line computes a value but doesn't use it\n    1.5 s 19.0 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 5: this line computes a value but doesn't use it\n    2 s 20.4 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 6: this line computes a value but doesn't use it\n    2.5 s 19.3 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 7: this line computes a value but doesn't use it\n    3 s 15.9 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 8: this line computes a value but doesn't use it\n    3.5 s 9.91 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 9: this line computes a value but doesn't use it\n    4 s 1.52 m\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

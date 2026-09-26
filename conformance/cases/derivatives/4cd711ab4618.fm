@@ -1,0 +1,5 @@
+f(x) = exp(sin(exp(x)))
+g = f''
+print g(13/10)       # actual: 0.856062     expected: 8.25545 (sympy / mpmath)
+print g              # g(x) = (cos(exp(x))² - sin(exp(x)) + cos(exp(x)))·exp(sin(exp(x)))·exp(x)
+                     # correct: (exp(x)·(cos(exp(x))² - sin(exp(x))) + cos(exp(x)))·exp(sin(exp(x)))·exp(x)

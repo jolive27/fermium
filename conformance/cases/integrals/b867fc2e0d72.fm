@@ -1,0 +1,2 @@
+print ∫ exp(-(x-20)^2) dx from -inf to inf     # expected: 1.77245 (√π)
+print ∫ sin(x) dx from 0 to inf                # expected: an error (does not converge)

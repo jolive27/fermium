@@ -1,0 +1,17 @@
+x = 1
+if x > 2
+    y = 3 m
+print y              # actual: 3 m   (never assigned!)     expected: an error
+for i from 1 to 0
+    z = 5
+print z              # actual: 5
+while false
+    w = 1
+print w              # actual: 6.90361×10⁻³¹⁰  (garbage)
+x = 1
+if x > 2
+    ys = [1, 2]
+print ys             # actual: "runtime error" (no message, no line)
+if x > 2
+    solve q' = -q with q(0) = 1 for t from 0 to 1
+print q(0.5)         # actual: "runtime error"

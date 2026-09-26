@@ -1,0 +1,5 @@
+J1(x) = (1/π) ∫ cos(τ - x sin(τ)) dτ from 0 to π
+I(x) = (2 J1(x) / x)²
+print ∫ I(x) x dx from 0 to ∞       # line 3: "doesn't converge ... estimate 4.1×10⁻⁵" (the answer is 2)
+print ∫ I(x) x dx from 0 to 2000    # the same, estimate −6.4×10⁻⁵ for a positive integrand
+print J1(20000)                     # "this integral doesn't converge ..." with no line at all

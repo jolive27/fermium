@@ -4,20 +4,6 @@ Fermium 1.5 (Python) is the oracle (spec §B2). This file lists each place where
 deliberately behaves differently, with the conformance case ids it affects. Temporary divergences are
 marked as such and disappear when the feature is ported.
 
-## `use python` stops with one clear error (temporary)
-
-Spec §B5.14: Python interop loads libpython at run time, and only when a program imports it. It is the last
-milestone. Until then the checker handles the placement rules that don't need Python (top level only; not
-inside a Fermium module). Any other `use python …` line stops with:
-
-    use python needs Python interop, which this build doesn't have yet
-      hint: run it with the Python implementation (legacy/) for now
-
-Affected cases (area python-interop; 22 of 24 fail on purpose): 06c39fca6004 092b2cb0af63 3ff6452a9896
-41c01f70ba40 43e3bfbe2b59 51e5813de4ee 5e2299e27fdd 5f1addc03ebf 72ac3f6e78b3 7437a9e2cca4 76e31071c42f
-82370562a3c8 8b383857434d 9fc3b3db6503 afeacad54612 c11247eac4c7 d7c13acaf581 d8a5135d4e94 dcbf3421f1b3
-e54c838bd4d0 ee9e8f8e830b f50e686a0691.
-
 ## The standard library is embedded in the binary
 
 In v1, `import mechanics` finds `fermium/stdlib/mechanics.fm` next to the Python package. The Rust binary
@@ -118,6 +104,40 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   extrapolation amplifies rounding).
 - Tests: `quad.rs` cases `bl3_06`, `bl3_08`.
 
+## Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)
+
+- v1: `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` printed `7.93×10⁻⁹` (exact 8×10⁻⁹): the sine part cancels,
+  and summing it leaves a rounding error of about ε ∫|f| ≈ 2×10⁻¹⁰, so only the first figure is right. A
+  symmetric zero printed rounding noise with three figures (`∫ sin(x) dx from -1 to 1` → `2.78×10⁻¹⁷`).
+- v2: the quadrature returns ∫|f| with the value; when ε ∫|f| exceeds the relative tolerance's reach
+  (10⁻¹⁰ |value|), the printed value keeps floor(log10(|value| / (ε ∫|f|))) significant figures, at least one:
+  `8×10⁻⁹`, `3×10⁻¹⁷`. Every integral that converged to its tolerance prints exactly as in v1 (the limit never
+  applies when ∫|f| is within 4.5×10⁵ of |value|, and the quadrature's own error estimate isn't used, since
+  after the B2 extrapolations it is pessimistic: `∫ 1/√|x − 0.3| dx` still prints 12 correct digits). It
+  applies to an integral printed directly, alone or scaled by a constant (`2 ∫ …`, a unit conversion), including
+  with `to N digits`; a value stored in a variable first prints as before.
+- Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
+  conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
+
+## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
+
+- v1 gave a sum or difference the significant figures of its most precise operand (D95: the textbook rule
+  counts decimal places, which needs the magnitudes, known only at run time): `293.15 K + 0.5 K` printed
+  `293.65 K`, `1.20 m + 2.0 m` printed `3.20 m`, `0.1 + 0.2` printed `0.30`.
+- v2 applies the textbook rule when a printed sum's operands all carry measured precision (significant figures
+  from written values; whole literals like `1` or `300` are exact, so `1 - r` keeps v1's rule): at run time each
+  operand's last significant decimal place is found in the unit the result prints in, the sum keeps the
+  coarsest one, and that sets its figures (at least one): `293.6 K` (293.65 is 293.6499… in binary),
+  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
+  variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
+  same.
+- Measured on the whole conformance suite before adopting it: 3 cases change (the three above), no others.
+  An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
+  worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
+- Tests: `fermium-codegen/src/eval_calc.rs` (`sums_keep_the_coarsest_decimal_place`); conformance cases
+  89747a9eb10a 664786f7f30f 09fe8fafb686 (recorded divergences).
+
 ## Special functions and cbrt: the C library, as v1's compiled code
 
 v1's compiled code called the platform C library for erf, erfc, gamma, lgamma, besselj/bessely, asinh/acosh/atanh
@@ -130,8 +150,12 @@ platforms; the conformance goldens come from Linux.
 ## The browser playground (fermium-wasm): playground only, not `fermium run`
 
 The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
-`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
-prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run
+--backend interp` prints (`web/test/compare_native.js`, run by CI: 142 of 142 at 90a44c4). On the conformance
+suite (`conformance/run --impl rust --bin web/test/fermium-wasm`) the module scored 2679/3037 against 2713 for
+the native binary of the same commit (0f4840d, tree-walker); all 34 differences are floating-point: 23 in the
+last digits of numbers printed to 12–17 digits, 11 in values at rounding level (a 10⁻¹⁷ or 10⁻²² that should be 0,
+or a quantity found by cancellation). What differs, in the browser only:
 
 - **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
   gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on
@@ -265,3 +289,49 @@ warnings, astral characters, incremental edits, a parse error and modules) get e
   `textDocumentSync` incremental as pygls's default.
 - After `shutdown` then `exit` the process exits with 0, as the protocol says (pygls exits with 1).
 - A file:// URI with %-escapes (a folder name with spaces) is decoded before imports are looked up there.
+
+## Function instances are keyed by the shape and units of vector and matrix arguments
+
+v1 made one instance of a user function per argument type, but it keyed a vector or matrix argument by its
+kind alone. So `f(v) = |v|` called first with `<3, 4> m` and then with `<1, 2, 2> s` reused the first instance:
+v1's compiled code stopped with an internal error (`TypeError: Type of #1 arg mismatch: <2 x double> !=
+<3 x double>`), and a straight port printed `3 m` for the second call. The Rust checker keys these arguments by
+their length (or rows and columns) and by the dimension of each component, so each call gets its own instance
+(`5 m 3 s`). No conformance case is affected (v1 crashed on every such program).
+
+## The Jupyter kernel (fermium-jupyter)
+
+v1's kernel ran on ipykernel (Python, pyzmq, libzmq). The Rust kernel has its own ZMTP 3.1 (TCP, NULL
+mechanism, ROUTER/PUB/REP) and HMAC-SHA256, so it needs nothing installed beside `fermium`. It behaves as
+kernel.py: one REPL session for all cells, stdout streamed, warnings on stderr, errors in the one-line form
+on stderr with an error reply, "plot saved to …" lines replaced by the inline picture (PNG, or SVG), Tab
+completion of `\name`, names, keywords and module members, and is_complete for unfinished blocks.
+Checked end to end with jupyter_client (rust/tools/jupyter_e2e.py: 14 checks) and with nbclient on
+examples/notebook.ipynb (every cell prints what v1's kernel prints, except the `plot` cell, which the Rust
+checker doesn't compile yet); `cargo test -p fermium-jupyter` plays a client over TCP. Differences:
+
+- kernel.json starts `fermium jupyter kernel -f {connection_file}` and says `"interrupt_mode": "message"`;
+  an interrupt is acknowledged but doesn't stop a running cell yet (the kernel ignores SIGINT rather than
+  die of it). v1's ipykernel could interrupt a cell.
+- `fermium jupyter install --sys-prefix` installs into the active conda or virtual environment (or
+  python3's prefix); `--prefix DIR` installs into DIR/share/jupyter (v1's install(prefix=…)).
+- Run-time warnings (they go to the process's stderr) are shown after the cell's printed output; v1 showed
+  them in the order they happened.
+- stdin (`input`) and comms are not used by Fermium; history, inspect and comm_info get empty replies.
+
+## Python interop (use python, and calling Fermium from Python)
+
+`use python` behaves as in v1 (conformance area python-interop: 24 of 24). Differences in how it is set up, and
+in the API for calling Fermium from Python (D142), which no conformance case covers:
+
+- The binary loads libpython with dlopen the first time a program says `use python` (spec §B5.14), from the
+  `python3` found on the PATH, then /usr/local/bin/python3 and /usr/bin/python3, or from `FERMIUM_PYTHON` /
+  `FERMIUM_LIBPYTHON`. v1 *was* Python, so it used its own interpreter. A Python built without its shared
+  library can't be used; the error at the `use python` line says so.
+- Calling Fermium from Python is the module `fermium2` (rust/crates/fermium-pyapi/python), a ctypes wrapper
+  of the library libfermium_pyapi, instead of `fermium.compile` / `fermium.load` in the `fermium` package.
+  It has v1's API (compile, load, Module, Quantity, Q, QuantityArray, ComplexQuantity; the same errors and
+  warnings); python/test_fermium2.py ports v1's tests of it.
+- It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
+  (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
+  faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.

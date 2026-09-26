@@ -1,0 +1,11 @@
+{
+ "id": "13d103c3b0bf",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson03_functions.md#14",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    14.0 m/s\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    15.9 km/hr\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

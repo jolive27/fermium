@@ -1,0 +1,17 @@
+{
+ "id": "85b5dbe33131",
+ "area": "control-flow",
+ "origin": "docs/reference.md#1",
+ "dir": "docs",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "fermium isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  fermium = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

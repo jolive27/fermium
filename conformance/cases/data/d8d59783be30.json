@@ -1,0 +1,17 @@
+{
+ "id": "d8d59783be30",
+ "area": "data",
+ "origin": "README.md#7",
+ "dir": ".",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "N0 isn't defined",
+  "line": 4,
+  "col": 18,
+  "hint": "give it a value on an earlier line, e.g.  N0 = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

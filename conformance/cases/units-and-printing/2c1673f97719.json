@@ -1,0 +1,11 @@
+{
+ "id": "2c1673f97719",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n",
+ "stderr": "warning: line 1: G (the gravitational constant) is now your variable: from here on, G means your value\n    G = 1\n    ^\n  hint: that's fine if you don't need the gravitational constant below; otherwise pick another name, like G_0 or G2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

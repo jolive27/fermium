@@ -1,0 +1,11 @@
+{
+ "id": "20b623c9075e",
+ "area": "units-and-printing",
+ "origin": "bootcamp/README.md#2",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    2.30 m\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

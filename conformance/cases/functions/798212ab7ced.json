@@ -1,0 +1,11 @@
+{
+ "id": "798212ab7ced",
+ "area": "functions",
+ "origin": "gauntlet/optics_waves/FRICTION.md#2",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "1\n0.577\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

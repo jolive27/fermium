@@ -1,0 +1,17 @@
+{
+ "id": "f761094dfb3f",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson05_lists.md#24",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "planet isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  planet = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

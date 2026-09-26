@@ -1,0 +1,11 @@
+{
+ "id": "e10960658652",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2\n",
+ "stderr": "warning: line 3: 'where x = ...' hides the parameter x of f, so the argument is ignored\n        y where x = 2\n                    ^\n  hint: rename the where-variable, or drop x from f(...)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}
