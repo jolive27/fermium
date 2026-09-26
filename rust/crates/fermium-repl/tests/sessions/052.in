@@ -1,0 +1,6 @@
+if 2 > 1
+    print "yes"
+elif 1 > 2
+    print "no"
+else
+    print "maybe"

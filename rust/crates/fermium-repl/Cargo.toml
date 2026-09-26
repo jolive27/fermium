@@ -1,0 +1,16 @@
+[package]
+name = "fermium-repl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The interactive session shared by the REPL (fermium-cli) and the Jupyter kernel (fermium-jupyter): each input
+# is checked by one long-lived checker in REPL mode and run by the tree-walker with the variables kept between
+# inputs (v1's ReplSession), plus the REPL's line editor (history, \name + Tab).
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }
+fermium-check = { path = "../fermium-check" }
+fermium-codegen = { path = "../fermium-codegen" }
+fermium-ir = { path = "../fermium-ir" }
+fermium-units = { path = "../fermium-units" }
+libc = "0.2"

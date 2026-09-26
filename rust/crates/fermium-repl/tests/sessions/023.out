@@ -1,0 +1,26 @@
+line 1: index 5 is out of range: the list has 2 elements (valid indexes are 1 to 2)
+    print xs[5]
+1
+line 1: can't add length [m] to time [s]
+    x = 3 m + 2 s
+        ^^^^^^^^^
+  hint: both sides of + and - must have the same units
+'fermium' looks like a terminal command. This is the Fermium prompt; type :quit to go back to the terminal first.
+cd = 3
+xs: a list of plain numbers (no units)
+1
+2
+a
+line 1: θ isn't defined
+    print θ
+          ^
+  hint: give it a value on an earlier line, e.g.  θ = 2.5 m  (with its own unit)
+1
+1 m
+0.1 m
+cd = 3
+f(x): function
+i = 2
+x = 2
+xs: a list of plain numbers (no units)
+θ = 1

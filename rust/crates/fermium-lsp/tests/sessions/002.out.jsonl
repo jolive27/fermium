@@ -1,0 +1,14 @@
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "can't add a plain number (no units) to length [m]\nhint: both sides of + and - must have the same units (for complex numbers too)", "range": {"end": {"character": 11, "line": 5}, "start": {"character": 4, "line": 5}}, "severity": 1, "source": "fermium"}], "uri": "file:///tmp/fermium-lsp-test/a.fm"}}
+{"id": 2, "jsonrpc": "2.0", "result": {"contents": {"kind": "markdown", "value": "**h**: Planck constant (exact)  \n= 6.62607015e-34 J s"}}}
+{"id": 3, "jsonrpc": "2.0", "result": {"contents": {"kind": "markdown", "value": "**km**: unit of length [m], = 1000 m"}}}
+{"id": 4, "jsonrpc": "2.0", "result": {"contents": {"kind": "markdown", "value": "**y**: length [m], shown in km"}}}
+{"id": 5, "jsonrpc": "2.0", "result": null}
+{"id": 6, "jsonrpc": "2.0", "result": null}
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "10 °C is an absolute temperature, so it enters this formula as 283.15 K\nhint: for a temperature change (ΔT in Q = m c ΔT) write 10 K; for an absolute temperature (p V = n R T) write 283.15 K to make it clear", "range": {"end": {"character": 24, "line": 1}, "start": {"character": 17, "line": 1}}, "severity": 2, "source": "fermium"}], "uri": "file:///tmp/fermium-lsp-test/a.fm"}}
+{"id": 7, "jsonrpc": "2.0", "result": {"contents": {"kind": "markdown", "value": "**w**: a complex number of plain numbers"}}}
+{"id": 8, "jsonrpc": "2.0", "result": {"isIncomplete": false, "items": [{"detail": "**y**: length [m], shown in km", "filterText": "y", "label": "y", "textEdit": {"newText": "y", "range": {"end": {"character": 1, "line": 3}, "start": {"character": 0, "line": 3}}}}]}}
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "whi isn't defined\nhint: give it a value on an earlier line, e.g.  whi = 2.5 m  (with its own unit)", "range": {"end": {"character": 3, "line": 6}, "start": {"character": 0, "line": 6}}, "severity": 1, "source": "fermium"}], "uri": "file:///tmp/fermium-lsp-test/a.fm"}}
+{"id": 9, "jsonrpc": "2.0", "result": {"isIncomplete": false, "items": [{"detail": "keyword", "filterText": "while", "label": "while", "textEdit": {"newText": "while", "range": {"end": {"character": 3, "line": 6}, "start": {"character": 0, "line": 6}}}}]}}
+{"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": {"diagnostics": [{"message": "whi isn't defined\nhint: give it a value on an earlier line, e.g.  whi = 2.5 m  (with its own unit)", "range": {"end": {"character": 3, "line": 6}, "start": {"character": 0, "line": 6}}, "severity": 1, "source": "fermium"}], "uri": "file:///tmp/fermium-lsp-test/a.fm"}}
+{"id": 10, "jsonrpc": "2.0", "result": null}
+{"exit code": 1}

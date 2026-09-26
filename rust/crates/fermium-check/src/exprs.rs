@@ -192,6 +192,7 @@ impl Checker {
                 let ex = r.extra();
                 ex.abs_literal = Some((x, hint_of(&u)));
                 ex.abs_at = Some((e.span.line, e.span.col));
+                self.abs_at_len.insert((e.span.line, e.span.col), e.span.length);
             }
         }
         Ok(r)

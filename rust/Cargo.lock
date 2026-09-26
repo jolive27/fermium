@@ -50,6 +50,9 @@ dependencies = [
  "fermium-codegen",
  "fermium-fmt",
  "fermium-ir",
+ "fermium-jupyter",
+ "fermium-lsp",
+ "fermium-repl",
  "fermium-syntax",
 ]
 
@@ -77,6 +80,39 @@ dependencies = [
  "fermium-units",
  "num-rational",
  "num-traits",
+]
+
+[[package]]
+name = "fermium-jupyter"
+version = "2.0.0-dev"
+dependencies = [
+ "fermium-check",
+ "fermium-lsp",
+ "fermium-repl",
+ "fermium-syntax",
+]
+
+[[package]]
+name = "fermium-lsp"
+version = "2.0.0-dev"
+dependencies = [
+ "fermium-check",
+ "fermium-fmt",
+ "fermium-ir",
+ "fermium-syntax",
+ "fermium-units",
+]
+
+[[package]]
+name = "fermium-repl"
+version = "2.0.0-dev"
+dependencies = [
+ "fermium-check",
+ "fermium-codegen",
+ "fermium-ir",
+ "fermium-syntax",
+ "fermium-units",
+ "libc",
 ]
 
 [[package]]

@@ -1,0 +1,95 @@
+[
+[
+"textDocument/didOpen",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"languageId": "fermium",
+"version": 1,
+"text": "m = 2 kg\nx = 3 m\n"
+}
+},
+true
+],
+[
+"textDocument/codeAction",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"range": {
+"start": {
+"line": 1,
+"character": 0
+},
+"end": {
+"line": 1,
+"character": 7
+}
+},
+"context": {
+"diagnostics": []
+}
+},
+false
+],
+[
+"textDocument/codeAction",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"range": {
+"start": {
+"line": 0,
+"character": 0
+},
+"end": {
+"line": 0,
+"character": 7
+}
+},
+"context": {
+"diagnostics": []
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 2
+},
+"contentChanges": [
+{
+"text": "g = 9.81 m/s²\nprint 20 m/s/g\n"
+}
+]
+},
+true
+],
+[
+"textDocument/codeAction",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"range": {
+"start": {
+"line": 1,
+"character": 0
+},
+"end": {
+"line": 1,
+"character": 3
+}
+},
+"context": {
+"diagnostics": []
+}
+},
+false
+]
+]

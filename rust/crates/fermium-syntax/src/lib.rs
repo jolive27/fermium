@@ -10,6 +10,7 @@ pub mod lexer;
 pub mod parser;
 pub mod pyfmt;
 pub mod sexpr;
+pub mod symbols;
 #[rustfmt::skip]
 pub mod tables;
 pub mod unitrule;

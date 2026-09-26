@@ -199,6 +199,7 @@ pub struct CheckOptions {
     pub source_name: String,
 }
 
+#[derive(Clone)] // the REPL rolls a failed input back to a copy (D220)
 pub struct Checker {
     pub diags: Diagnostics,
     pub u: Unifier,
