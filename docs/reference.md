@@ -541,7 +541,7 @@ f(x, y) = x² y + sin(x)
 print ∇²f
 ```
 
-- `∇f` (gradient), `∇·F` (divergence), `∇×F` (curl) and `∇²f` (Laplacian) of a one-line function of 2 or 3 Cartesian coordinates. The curl needs 3. The result is a new function of the same coordinates, differentiated symbolically, so `print ∇φ` shows its formula (tidied by SymPy when it is installed). Call it at a point like any function: `∇φ(1 m, 0 m, 0 m)`.
+- `∇f` (gradient), `∇·F` (divergence), `∇×F` (curl) and `∇²f` (Laplacian) of a one-line function of 2 or 3 Cartesian coordinates. The curl needs 3. The result is a new function of the same coordinates, differentiated symbolically, so `print ∇φ` shows its formula (tidied by Fermium's simplifier). Call it at a point like any function: `∇φ(1 m, 0 m, 0 m)`.
 - `F` for `∇·F` and `∇×F` must be a vector formula: `F(x, y, z) = <…, …, …>` (a unit after `>` applies to every component).
 - Units follow: φ in V with coordinates in m gives ∇φ in V/m. A component that differentiates to 0 fits the other components' units.
 - ASCII: `grad(f)`, `div(F)`, `curl(F)`, `laplacian(f)`; `fermium fmt --ascii` writes these. `∇` is typed `\nabla`.
@@ -574,7 +574,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 
 - **Units:** the result's units are the integrand's units times the variable's units.
 - **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number (`to L / 2`, `to 1 / (1 + z)`), so that both readings have the same units, Fermium warns that it divides the whole integral (DECISIONS D34, D112, D205); when only dividing the limit has the right units (`to E / (2 P0)` with a time variable), it is an error whose hint says `to (E / (2 P0))`; there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it. A spaced `+` or `-` stays in the upper limit (`from 0 to L - a` goes up to L − a), with a warning that says so when the other reading, (∫ … to L) − a, has consistent units too (a dimensionless integrand; D205); for `2 ∫ … from 0 to 1 - π` meaning (2∫…) − π, bracket the integral: `(2 ∫ … to 1) - π` (D173).
-- **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
+- **Integrals without limits** (`∫ x² dx`) are done symbolically (Fermium 2's own rules; Fermium 1.5 used SymPy) and give a function.
 - **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
 
 ```fermium
@@ -587,7 +587,7 @@ B = μ₀ I / (4π) * ∫ dl(φ) × (P - ring(φ)) / |P - ring(φ)|^3 dφ from 0
 print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding in x and y)
 ```
 
-- **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
+- **Integrals without limits** (`∫ x² dx`) are done symbolically (Fermium 2's own rules; Fermium 1.5 used SymPy) and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
 
 ### Sums: Σ
 

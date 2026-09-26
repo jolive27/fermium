@@ -43,7 +43,7 @@ Fermium is a small programming language for physicists.
 
 ## Install
 
-Fermium is one program, `fermium`, with everything inside it: the compiler, LLVM, the units, the numerics, the plots, the REPL, the language server and the Jupyter kernel. Download the file for your computer from the Releases page (`fermium-macos-arm64` or `fermium-linux-x86_64`), put it on your PATH as `fermium`, and check it:
+Fermium is one program, `fermium`, with everything inside it: the compiler, LLVM, the units, the numerics, the plots, the REPL, the language server and the Jupyter kernel. Download the file for your computer from the Releases page (`fermium-macos-arm64` or `fermium-linux-x86_64`), put it on your PATH as `fermium`, and check it (the v2.0 binaries aren't on the Releases page yet: until they are, build it with `make install`, below):
 
 ```
 fermium doctor                   # checks the installation and explains fixes
@@ -151,10 +151,10 @@ to run on this machine.
 |---|---|---|---|---|
 | N-body, 1M steps | 1.01× Julia | 0.98× Julia | 1× | ~54× Julia |
 | Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | **1.89× Julia** (slower) | 1.95× Julia | 1× | ~21× Julia |
-| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 1.03× Julia (1.2× Fermium 1.5) | 0.87× Julia | 1× | ~21× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 1.03× Julia (1.2× slower than Fermium 1.5) | 0.87× Julia | 1× | ~21× Julia |
 | Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | **1.50× Julia** (slower; 1.1–1.4× Fermium 1.5) | 1.34× Julia | 1× | ~20× Julia |
 | Loop with units | 0.98× Julia | 1.04× Julia | 1× | ~83× Julia |
-| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 1.00× Julia (**1.6× Fermium 1.5**; noisy on this machine, see PERF.md) | 0.61× Julia | 1× | ~52× Julia's 1-thread time (Python runs one thread) |
+| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 1.00× Julia (**1.6× slower than Fermium 1.5**; noisy on this machine, see PERF.md) | 0.61× Julia | 1× | ~52× Julia's 1-thread time (Python runs one thread) |
 | the same, 1 thread | 1.13× Julia | 1.06× Julia | 1× | |
 
 Counting startup and compilation, Fermium 2 finishes every benchmark program far sooner than Julia (24–133 ms

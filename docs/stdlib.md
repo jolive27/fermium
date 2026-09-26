@@ -3,7 +3,7 @@
 Modules shipped with Fermium. Import one with `import mechanics` (then `mechanics.kinetic_energy(…)`),
 `import astro as a`, or `from nuclear import semf_binding, Q_value`; see [the reference, Modules](reference.md#modules).
 
-Each function checks the units of its arguments (the units in brackets; any unit of the same kind works, like `km/hr` for `[m/s]`), and its result has the units shown after the arrow. Parameters without brackets take any units. Every function is tested against a closed form or SciPy in `tests/test_stdlib.py`.
+Each function checks the units of its arguments (the units in brackets; any unit of the same kind works, like `km/hr` for `[m/s]`), and its result has the units shown after the arrow. Parameters without brackets take any units. Every function is tested against a closed form or SciPy in `legacy/tests/test_stdlib.py`.
 
 This page is generated from the modules' source (`fermium/stdlib/*.fm`) by `python3 -m fermium.stdlib_doc > docs/stdlib.md`.
 

@@ -148,7 +148,7 @@ print G(3)
 9
 ```
 
-This uses a separate maths library (SymPy), so it only works for formulas that have a neat answer. When you need a number, use limits.
+This uses symbolic integration rules, so it only works for formulas that have a neat answer. When you need a number, use limits.
 
 ## Summary
 

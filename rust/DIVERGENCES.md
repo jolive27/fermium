@@ -50,7 +50,10 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   of 45 textbook integrands, 43 print exactly as v1; the other two: `∫ sec(x) dx` is `ln(sec(x) + tan(x))`
   (v1 printed SymPy's `ln(1 + sin(x))/2 - ln(-1 + sin(x))/2`, which is NaN for every real x, so v1's formula
   was wrong physics) and `∫ 1/(x³ + 1) dx` writes one atan argument unfactored. With symbolic constants the
-  formula can still be written differently (an equivalent expression; the values agree).
+  formula can still be written differently (an equivalent expression; the values agree). An antiderivative is
+  defined only up to a constant, so a different but correct formula can differ from v1's by one: `∫ sin(x) cos(x) dx`
+  is `-cos(2x)/4` here and `sin(x)²/2` in v1, so F(1) prints 0.104 against 0.354, while F(b) − F(a) (the only
+  meaningful use) is the same (red team 12 #5).
 - **Values: ln|u| where the formula prints ln(u)** (red team 11 #2, #3). SymPy's (and so v1's) formulas write
   ln(u), which is NaN on one side of every real pole: v1's `∫ 1/(9 - x²) dx` gave NaN for F(1) − F(0), the side
   where 1/(a² − x²) is usually used, and `∫ 1/(x - 5) dx` NaN for x < 5. v2 prints the same formula but evaluates

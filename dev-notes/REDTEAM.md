@@ -1674,3 +1674,117 @@ Other results:
 - #4 (sums rule fragile): open; the `100.0 °C - 0.5 K` case is covered by the #1 fix.
 - #6 (speed): the LLVM agent re-measures on a quiet machine for PERF.md.
 - #7: the Releases page gets its first release at the B8 v2.0 tag. Comparing carets and columns in the runner is open.
+
+## Round 12 (2026-09-26 13:10 UTC): the v2.0 release as a user meets it, benchmarks, the newest compiled code
+
+Independent reviewer. Binary: `claude/v2.0-freeze` (f61b8e6) built with
+`CARGO_TARGET_DIR=/tmp/claude-0/rt12-target FERMIUM_NO_AOTRT=1 cargo build --release -p fermium-cli`
+(`fermium 2.0.0 (Rust)`; no `fermium build` in this build). Oracle: `fermium-legacy` (checked:
+`import fermium` → /home/user/fermium/legacy/fermium). Programs: /tmp/claude-0/redteam12/{loops,phys}/, outputs
+in /tmp/claude-0/redteam12/{out,out2}/. Load average 5–7.7 the whole time (other agents).
+
+**High: none.** The compiled-code changes of D273 held up against everything I threw at them (below).
+
+**Medium**
+- **#1 The release binaries don't exist, but the docs send users to them without a caveat.** README "Install", CHANGES_2.0 "Installing"
+  (first bullet), and bootcamp Lesson 0 Steps 2–3 ("Open the Releases page … click the file for your computer")
+  all present the download as the way in; nothing says the release hasn't been published yet (D274: the tag push
+  was refused). D274 says "CHANGES_2.0 and the README say how to build from source meanwhile". They do list the
+  build route, but only as an alternative. A beginner following Lesson 0 finds an empty Releases page. This repeats
+  round 11 #7. Fix: a one-line note in all three ("the first release is pending; until then build from the
+  source, below") until the owner pushes the tag.
+- **#2 The textbook pendulum, written as on paper, is silently a different equation (v1 and v2 alike).**
+  `θ'' = -g / L sin(θ)` is `-g/(L sin θ)` under D8. D34 warns only when the denominator factor *is* an unknown,
+  not when it's a function of one. So `phys/q02_pend_small.fm` (θ₀ = 1) and `phys/p11_pendulum_large.fm`
+  fail with a misleading "step became too small … not a blow-up … add an absolute tolerance" (the equation
+  really is singular at θ = 0). The silent case is worse: `phys/q06_force_over_mass.fm`, `a(t) = F0 / M cos(t / 1 s)`,
+  prints a(1 s) = 3.70 m/s² (= F0/(M cos 1)) with no warning. `-(g / L) * sin(θ)` gives the right 1.60 (SciPy 1.6022).
+  Suggest extending D34's warning to a denominator factor that is a call of sin/cos/exp/… (or any call whose
+  argument holds an unknown or the independent variable) after a spaced `/`. `h c / λ k_B T` has no call, so it
+  stays unwarned.
+
+**Low**
+- **#3 CHANGES_2.0 "Speed" is stale.** It says "The benchmark table in the README was measured with Fermium 1.5 …
+  the re-run … replaces the table", but the README table is now the 26 Sep Fermium 2 run.
+- **#4 Stale SymPy mentions in user docs:**
+  - docs/reference.md:465 ("hand 𝑖 to SymPy");
+  - :544 ("tidied by SymPy when it is installed");
+  - :577 and :590 ("done symbolically with SymPy", "When SymPy can't give a usable formula");
+  - bootcamp/lesson08_integrals.md:151 ("This uses a separate maths library (SymPy)");
+  - docs/stdlib.md:6 cites `tests/test_stdlib.py` (now `legacy/tests/`).
+  The kept-for-conformance error "SymPy's formula for this integral uses the function Ei …" also names a library
+  that v2 doesn't use. That is documented, but worth rewording once the oracle goes.
+- **#5 ∫ sin(x) cos(x) dx is not v1's function** (`phys/s02_indef_trig.fm`, `phys/s41_indef_value.fm`). v2 gives
+  `-cos(2x)/4`, v1 gives `sin(x)²/2`, so F(1) is 0.104 against 0.354 (a constant ¼ apart; F(b) − F(a) agrees).
+  DIVERGENCES says formulas may be written differently "with symbolic constants … the values agree". Here
+  there are no symbolic constants and F's values differ. Either match SymPy (substitute u = sin x first), or say in
+  DIVERGENCES that F can differ from v1's by a constant.
+- **#6 Ambiguous ratios in the README speed table.** `1.2× Fermium 1.5` (adaptive RK45) and the bold
+  `**1.6× Fermium 1.5**` (forces, 4 threads) are both *slower* (696 vs 592 µs; 11.0 vs 6.74 ms). Elsewhere bold
+  plus "(slower)" marks a loss, so a reader can take 1.6× for a speed-up. Write "1.6× slower than Fermium 1.5".
+- **#7 `make install` bypasses rust/.cargo/config.toml.** `cargo install --path rust/crates/fermium-cli` runs
+  from the repository root, and cargo reads `.cargo/config.toml` from the working directory. So the
+  `-fuse-ld=lld` flag isn't applied, and the link uses the default linker, which BUILD.md calls several times
+  slower. I didn't check whether it fails. Fix: `cd rust && cargo install --locked --path crates/fermium-cli`.
+- **#8 (v1-shared) An RK4 right side that goes out of its domain gives NaN silently.** In `loops/r01_rk4_error_mid.fm`
+  (`x' = -√x`, past x = 0), `x(3 s)` prints `NaN m` with no warning on any back end.
+- **#9 (nit, fair to Julia) blackbody.jl's timed region includes the extra `ratio` integral** (1001 integrals
+  against Fermium's 1000). That handicaps Julia by about 0.1 %.
+
+**What checked out**
+- **Compiled code (D273), 71 adversarial programs** (`loops/v*`, `w*`, `x*`, `y*`, `r*`): `--backend llvm`,
+  `--backend interp` and `fermium-legacy run` were byte for byte identical on every one (stdout, stderr, exit
+  code). They covered:
+  - indexes out of range only on the last, the first or some middle iterations (`x[6 - i]`, `x[4 - i]`,
+    `x[i + 1]` with step 2, two lists of different lengths in one body, descending loops to 0, negative ranges);
+  - lists that grow or are cleared inside the loop, or in a function called from it;
+  - a list rebound, pushed through an alias (`b = a`), or mutated by a function;
+  - "constants" reassigned later at module level, inside a loop, by a `for N` loop, by a solve unknown of the
+    same name, or in an if/else; a function reading a name before it is defined;
+  - a loop variable or an outer loop variable reassigned inside a versioned body; loop bounds changed in the
+    body;
+  - fractional, zero, negative and too-large steps, NaN bounds, `to inf` with and without `break`, trip counts
+    near 2⁵³ and past 2³¹; integer products past 2⁶³ (no wraparound); integer comparisons against fractions;
+  - `parallel for` with an out-of-range index and with negative steps;
+  - RK4 right sides that fail mid-solve (index error, √ of a negative, log, 1/(1 − t)), a solve inside a
+    function used in a solve's right side, solves in loops, backwards RK4, a step that doesn't divide the range
+    or exceeds it, vector RK4, and a right side reading a list that changes between solves;
+  - mixed mode (plot and list-function calls next to compiled loops).
+- **Benchmarks reproduced** (release build against fermium-legacy, 7 interleaved runs, medians, load 7.0–7.7,
+  so busier than RESULTS.md's 1.4–2.9). Inner v2/v1: nbody 1.03, spring_rk4 0.98, blackbody 1.46,
+  spring_adaptive 1.20. Wall: v2 27–140 ms against v1 297–443 ms. That agrees with PERF.md (1.06, 0.98, 1.4,
+  1.26) and RESULTS.md. Like for like: spring_rk4 has the same dt and 10⁶ steps (Fermium's trajectory storage
+  and step check are disclosed); blackbody has the same rtol 10⁻¹⁰; Julia's warm-up is excluded from Inner and
+  said so. The README's wall ranges (24–133 ms, 0.8–2.5 s, 0.16–0.41 s, 18 ms startup) match RESULTS.md. No
+  cherry-picking found: the slower rows (spring_rk4 1.89×, blackbody 1.50× Julia, forces 1 thread) are shown.
+- **User-facing tools and docs:**
+  - `fermium --version` → `fermium 2.0.0 (Rust)`, as Lesson 0 and CHANGES say.
+  - `doctor` is honest: it says `fermium build` isn't in this binary and that Python is optional.
+  - Both README program blocks print their commented results (9.70 m/s², 31.8 ft/s², 10 rad/s, v(t), 1 J,
+    3.52 cm).
+  - `fmt --pretty`, `check`, `use python math`, SVG plots and the REPL work.
+  - The conformance numbers (3334 + 32 = 3366) agree across CHANGES_2.0 and CONFORMANCE.md.
+  - legacy/README is accurate (`fermium-legacy --version` → `fermium 0.1.0`, `fermium-legacy doctor` works).
+  - pyproject only installs `fermium-legacy`. I found no doc telling a user to pip-install `fermium` as the
+    language.
+- **Physics, 106 programs** (`phys/p01–p64`, `s01–s41`, `q*`): identical to v1 except the documented
+  decimal-place sum rule (`0.1 + 0.2` → `0.3`, v1 `0.30`) and #5. The results match physics:
+  - Bohr radius 52.9 pm, 13.6 eV, ħc 197 MeV fm, escape speed 11.19 km/s;
+  - box levels 0.376/1.50/3.38 eV, harmonic oscillator E/ħω = 0.500/1.50/2.50;
+  - Monte Carlo g = 9.87 ± 0.22 m/s², correlated ± (x²/x = 2.00 ± 0.10, x − x = 0 ± 0);
+  - complex ODE = exp(−2i), radau/bdf stiff solves, the Bateman two-member chain;
+  - 1 AU orbit = 365 d, Compton 2.43 pm, R∞ = m_e c α²/2h, 1/α = 137, Hα 656.46 nm, ∇, curl and ∇² of test
+    fields, Carnot 0.400, Doppler 1100 Hz;
+  - every unit-error program has v1's message, caret and hint.
+- **Seen but not new (v1 does the same):** the display mixes `1.0` and `1` in one list (`[1.0, 50, 3.0]`);
+  `r × F` prints in J rather than N m; `semf_binding(A, Z)` doesn't reject Z > A (the README's own SEMF example
+  writes B(Z, A)).
+- **Not tested:** `fermium build` (the binary had no AOTRT), the 3.6 MB wasm claim, macOS.
+
+**Round 12 status (13:55 UTC):**
+- #1: fixed. README, CHANGES_2.0 and Lesson 0 say the release isn't published yet and point to building from source.
+- #3, #4, #6: fixed. The CHANGES speed section is updated, the SymPy mentions in reference.md and lesson 8 are corrected, stdlib.md's test path is corrected, and the README ratios now say "slower".
+- #5: documented in DIVERGENCES (antiderivatives differ by a constant; F(b) − F(a) agrees).
+- #7: fixed. `make install` runs from rust/.
+- #2, #8: added to BACKLOG for v2.5 (a new warning is a language change).
+- #9: noted (Julia's blackbody times 1001 integrals against 1000, 0.1 % in Fermium's favour); it doesn't change any ratio's first two digits.

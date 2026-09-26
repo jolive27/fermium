@@ -9,6 +9,8 @@ Design details are in `DECISIONS.md` (the Rust implementation from D264 onwards;
 
 ## Installing
 
+- The v2.0 release binaries aren't on the Releases page yet (the tag is pending, D274): until they are, build
+  from a checkout with `make install`.
 - Download `fermium-macos-arm64` or `fermium-linux-x86_64` from the release, put it on your PATH as `fermium`
   ([bootcamp Lesson 0](bootcamp/lesson00_setup.md) walks through it), and run `fermium doctor`.
 - From a checkout: `make install` (`cargo install --locked --path rust/crates/fermium-cli`); building needs Rust
@@ -52,9 +54,10 @@ to notice:
 doesn't compile itself (plots, fits, loading data, a function applied to a list) run in the tree-walking
 interpreter while the rest stays compiled, and everything else runs in the interpreter. The back end never
 changes what a program prints (`rust/tools/llvm_diff.py` checks this on every conformance program). The
-benchmark table in the README was measured with Fermium 1.5; the LLVM back end's first measurements are in
-rust/crates/fermium-codegen/PERF.md, and the re-run against Julia and Python for 2.0 (spec §B8) replaces the
-table.
+benchmark table in the README is the Fermium 2 run against Fermium 1.5, Julia and Python (spec §B8.3), with the
+details in benchmarks/RESULTS.md and rust/crates/fermium-codegen/PERF.md: whole programs are faster than 1.5
+and Julia (fast start-up); compiled inner loops are level with 1.5 on four benchmarks and slower on blackbody
+(1.4×), spring_adaptive (1.26×) and 4-thread forces.
 
 ## Fermium 1.5 is deprecated
 

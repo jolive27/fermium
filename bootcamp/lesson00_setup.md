@@ -42,6 +42,8 @@ The computer answers `hello`. You just ran your first command.
 
 ## Step 2: Download Fermium
 
+> **Not published yet:** the first release (v2.0) hasn't been uploaded to the Releases page yet. Until it is, build Fermium from the source ([Building Fermium from the source](#building-fermium-from-the-source), below) and continue at Step 4, or use the Python version ([below](#the-old-python-version-fermium-15-deprecated)).
+
 1. Open the Fermium **Releases** page in your web browser: **https://github.com/jolive27/fermium/releases**
 2. Under the newest release, click **Assets**, then click the file for your computer (see the table at the top): `fermium-macos-arm64` or `fermium-linux-x86_64`.
 
