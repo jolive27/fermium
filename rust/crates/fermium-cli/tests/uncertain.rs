@@ -121,3 +121,45 @@ fn std_of_uncertain_values_needs_plain_numbers() {
                "prog.fm, line 2: this operation needs a plain number, but got an uncertain value (±); write value(x) \
                 to drop the uncertainty, or put the calculation in a  propagate montecarlo  block");
 }
+
+/// det, inverse, solve_linear, eigenvalues and eigenvectors of matrices of uncertain values: v1's interpreter
+/// runs linalg.py (up to 4×4) or linalg_big.py (larger) on UFloat values, so the uncertainties propagate through
+/// the same operations (B-U1). Expected outputs from `python3 -m fermium run`.
+#[test]
+fn linear_algebra_of_uncertain_matrices() {
+    let src = "L = 1.20 ± 0.01 m\nM = [[1, 2], [3, 4]] * L\nprint det(M)\nN = [[2, 1, 0], [1, 3, 1], [0, 1, 4]] * L\n\
+               print det(N)\nMi = inverse(M)\nprint Mi[1, 1]\nprint Mi[2, 1]\nx = solve_linear(M, <1 m², 2 m²>)\n\
+               print x.y\ny = solve_linear(N, <1, 2, 3> * L)\nprint y[1], y[2], y[3]\n";
+    assert_eq!(stdout_of("la2", src),
+               "-2.880 ± 0.048 m²\n31.10 ± 0.78 m³\n-1.667 ± 0.014 1/m\n1.250 ± 0.010 1/m\n0.4167 ± 0.0035 m\n\
+                0.333 ± 0 0.333 ± 0 0.667 ± 0\n");
+    let big = "L = 1.20 ± 0.01\nM = [[2, 1, 0, 0, 0], [1, 3, 1, 0, 0], [0, 1, 4, 1, 0], [0, 0, 1, 5, 1], \
+               [0, 0, 0, 1, 6]] * L\nprint det(M)\nMi = inverse(M)\nprint Mi[1, 1]\nprint Mi[5, 4]\n\
+               x = solve_linear(M, <1, 2, 3, 4, 5>)\nprint x[1], x[5]\n";
+    assert_eq!(stdout_of("la5", big),
+               "1224 ± 51\n0.5098 ± 0.0042\n-0.03049 ± 0.00025\n0.2524 ± 0.0021 0.6182 ± 0.0052\n");
+    let two = "a = 3.0 ± 0.1\nb = 1.0 ± 0.2\nM = [[3, 0, 0, 1], [0, 3, 1, 0], [0, 1, 3, 0], [1, 0, 0, 3]] * a + \
+               [[0, 1, 0, 0], [1, 0, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]] * b\nprint det(M)\nprint inverse(M)[2, 3]\n\
+               N = ([[1, 0], [0, 1]] * a + [[0, 1], [1, 0]] * b) * 1 m\nprint det(N)\nprint inverse(N)[1, 2]\n";
+    assert_eq!(stdout_of("la4", two), "(5.00 ± 0.68)×10³\n-0.0438 ± 0.0018\n8.00 ± 0.72 m²\n-0.125 ± 0.033 1/m\n");
+    assert_eq!(error_of("lasing", "L = 1.20 ± 0.01\nM = [[1, 2], [2, 4]] * L\nprint det(M)\nprint inverse(M)[1, 1]\n"),
+               "prog.fm, line 4: this matrix is singular (its determinant is 0), so it has no inverse and M x = b has \
+                no unique solution");
+    // eigenvalues: a rotation that meets an uncertain entry takes math.sqrt of a UFloat (v1 needs a plain number),
+    // except where no rotation is needed (equal diagonal entries)
+    let eig = "a = 3.0 ± 0.1\nI5 = [[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 1, 0, 0], [0, 0, 0, 1, 0], \
+               [0, 0, 0, 0, 1]]\nN = [[1, 0, 0], [0, 1, 0], [0, 0, 1]] * a\n\
+               print eigenvalues(N)[2], eigenvalues(N, [[2, 0, 0], [0, 2, 0], [0, 0, 2]])[3]\n\
+               print eigenvalues(I5 * a, I5 * 2)[5]\nprint eigenvectors(I5 * a, I5 * 2)[2, 2]\n";
+    assert_eq!(stdout_of("laeig", eig), "3.00 ± 0.10 1.500 ± 0.050\n1.500 ± 0.050\n1\n");
+    let generic = "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the \
+                   uncertainty, or put the calculation in a  propagate montecarlo  block";
+    assert_eq!(error_of("laeig2", "L = 1.20 ± 0.01\nM = [[2, 1], [1, 3]] * L\nprint eigenvalues(M)\n"),
+               format!("prog.fm, line 3: {generic}"));
+    assert_eq!(error_of("laeig3", "a = 3.0 ± 0.1\nprint eigenvalues([[1, 0], [0, 1]] * 2, [[1, 0], [0, 1]] * -a)\n"),
+               "prog.fm, line 2: in eigenvalues(K, M) the second matrix M must be positive definite, like a mass \
+                matrix (positive masses on the diagonal)");
+    let asym = "L = 1.20 ± 0.01\nM = [[2, 1, 0, 0, 0], [1, 3, 1, 0, 0], [0, 1, 4, 1, 0], [0, 0, 1, 5, 1], \
+                [0, 0, 0, 2, 6]] * L\nprint eigenvalues(M)\n";
+    assert!(error_of("laeig4", asym).starts_with("prog.fm, line 3: eigenvalues and eigenvectors need a symmetric matrix"));
+}

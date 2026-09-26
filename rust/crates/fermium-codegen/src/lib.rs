@@ -12,6 +12,7 @@ mod eval_par;
 mod eval_py;
 mod eval_solve;
 mod eval_unc;
+mod eval_unc_la;
 mod eval_vecmat;
 pub mod printer;
 pub mod varmap;
