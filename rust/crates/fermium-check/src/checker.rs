@@ -395,8 +395,12 @@ impl Checker {
                 let sugg = match f.name.as_str() {
                     "h" => "h is Planck's constant, not the hour; for hours write hr".to_string(),
                     "t" => "for metric tons write tonne".to_string(),
-                    _ => "see the units list in docs/reference.md".to_string(),
+                    n => match fermium_units::spelled_unit(n) {
+                        Some(sym) => format!("Fermium writes units as symbols: {sym}"),
+                        None => crate::convert::unit_name_suggestion(n),
+                    },
                 };
+                let sugg = if sugg.is_empty() { "see the units list in docs/reference.md".to_string() } else { sugg };
                 let n = f.name.chars().count() as u32;
                 return Err(Diagnostic::error(format!("'{}' is not a unit Fermium knows", f.name), f.span.line,
                                              f.span.col, n, Some(sugg)));
@@ -414,8 +418,9 @@ impl Checker {
             });
         }
         let mut total = total.unwrap_or_else(Unit::one);
-        if !uexpr.text.is_empty() {
-            total.name = uexpr.text.clone();
+        let canon = crate::convert::canonical_unit_name(uexpr);
+        if !canon.is_empty() {
+            total.name = canon;
         }
         Ok(total)
     }

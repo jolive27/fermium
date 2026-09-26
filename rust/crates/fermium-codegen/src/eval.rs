@@ -136,15 +136,14 @@ pub fn powc(x: f64, p: f64) -> f64 {
         return if x >= 0.0 { fdiv(1.0, x * x.sqrt()) } else { f64::NAN };
     }
     if (p - 1.0 / 3.0).abs() < 1e-15 {
-        return if x.is_finite() { x.abs().powf(1.0 / 3.0).copysign(x) } else { x };
+        return x.cbrt();
     }
     if let Some(n) = odd_root_numerator(p) {
-        if x < 0.0 {
-            let r = fpow(-x, p);
-            return if n % 2 != 0 { -r } else { r };
-        }
+        // x^(n/q), q odd: the real root, also for x < 0 (like cbrt)
+        let r = x.abs().powf(p);
+        return if n % 2 != 0 { r.copysign(x) } else { r };
     }
-    fpow(x, p)
+    x.powf(p)
 }
 
 /// The one-argument math functions (interp.math1).
@@ -272,13 +271,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::IndexAssign(sym, idx, value) => {
                 let lst = self.get(*sym, fr)?;
+                let Value::List(l) = lst else {
+                    return self.err("not yet supported by the Rust back end: setting an element of this value");
+                };
                 let i = self.eval(idx, fr)?.num();
+                let n = l.borrow().len();
+                let k = self.elem_index(i, n)?;
                 let v = self.eval(value, fr)?.num();
-                if let Value::List(l) = lst {
-                    let n = l.borrow().len();
-                    let k = self.list_index(i, n)?;
-                    l.borrow_mut()[k] = v;
-                }
+                l.borrow_mut()[k] = v;
             }
             StmtKind::Push(sym, e) => {
                 let v = self.eval(e, fr)?;
@@ -318,11 +318,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Some(e) => self.eval(e, fr)?.num(),
                     None => 1.0,
                 };
-                if st == 0.0 {
-                    return self.err("the step of this for loop is 0, so it would never end");
-                }
-                let n = ((hi - lo) / st + 1e-9).floor();
-                let n = if n.is_finite() && n >= 0.0 { n as i64 + 1 } else { 0 };
+                let n = self.for_count(lo, hi, st)?;
                 if let Some(info) = par {
                     return self.parallel_for(info, *sym, lo, st, n.max(0) as usize, body, fr);
                 }
@@ -443,17 +439,25 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         Ok(())
     }
 
-    /// A 1-based list index checked like v1 (`index 4 is out of range: the list has 3 elements …`).
-    pub(crate) fn list_index(&self, i: f64, n: usize) -> Result<usize, RunError> {
-        if i != i.floor() || !i.is_finite() {
-            return self.err(format!("a list index must be a whole number, not {i}"));
+    /// The number of iterations of `for … from lo to hi step st` (s_SFor / for_count of the compiled path): a zero
+    /// or NaN step and a NaN count are errors; a range to ∞ runs 2⁶² times (until a break).
+    pub(crate) fn for_count(&self, lo: f64, hi: f64, st: f64) -> Result<i64, RunError> {
+        if st == 0.0 || st.is_nan() {
+            return self.err("the step must be a non-zero number that goes from the start towards the end");
         }
-        if i < 1.0 || i as usize > n {
-            let valid = if n == 0 { "the list is empty".to_string() } else { format!("valid indexes are 1 to {n}") };
-            return self.err(format!("index {} is out of range: the list has {n} element{} ({valid})", i as i64,
-                                    if n == 1 { "" } else { "s" }));
+        let mut cnt = ((hi - lo) / st + 1e-9).floor() + 1.0;
+        if cnt < 0.0 {
+            cnt = 0.0;
         }
-        Ok(i as usize - 1)
+        if cnt.is_nan() {
+            return self.err(format!("this for loop has no definite number of steps: it goes from {} to {} (NaN in \
+                                     the start, end or step)", fermium_units::numfmt::format_number6(lo),
+                                    fermium_units::numfmt::format_number6(hi)));
+        }
+        if cnt > 2f64.powi(62) {
+            cnt = 2f64.powi(62);
+        }
+        Ok(cnt as i64)
     }
 
     pub fn eval(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
@@ -475,8 +479,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 _ => Value::Num(f64::NAN),
             },
             ExprKind::Pow(a, b) => {
-                let (x, y) = (self.eval(a, fr)?.num(), self.eval(b, fr)?.num());
-                Value::Num(fpow(x, y))
+                // llvm.pow, element by element for a list base (e_IPow)
+                let (va, y) = (self.eval(a, fr)?, self.eval(b, fr)?.num());
+                match va {
+                    Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| x.powf(y)).collect()))),
+                    Value::Num(x) => Value::Num(x.powf(y)),
+                    _ => return self.err("not yet supported by the Rust back end: this power"),
+                }
             }
             ExprKind::Neg(a) => match self.eval(a, fr)? {
                 Value::Num(x) => Value::Num(-x),
@@ -534,6 +543,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
                 self.call(*f, vals)?
             }
+            ExprKind::List(items) if matches!(e.ty, Ty::TextList) => {
+                let mut out: Vec<Rc<str>> = Vec::with_capacity(items.len());
+                for it in items {
+                    match self.eval(it, fr)? {
+                        Value::Str(t) => out.push(t),
+                        _ => return self.err("not yet supported by the Rust back end: this list of text"),
+                    }
+                }
+                Value::TextList(Rc::new(RefCell::new(out)))
+            }
             ExprKind::List(items) => {
                 let mut out = Vec::with_capacity(items.len());
                 for it in items {
@@ -566,15 +585,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 match lst {
                     Value::List(l) => {
                         let n = l.borrow().len();
-                        let k = self.list_index(i, n)?;
+                        let k = self.elem_index(i, n)?;
                         Value::Num(l.borrow()[k])
                     }
                     Value::TextList(l) => {
                         let n = l.borrow().len();
-                        let k = self.list_index(i, n)?;
+                        let k = self.elem_index(i, n)?;
                         Value::Str(l.borrow()[k].clone())
                     }
-                    _ => Value::Num(f64::NAN),
+                    _ => return self.err("not yet supported by the Rust back end: indexing this value"),
                 }
             }
             ExprKind::Builtin(name, args) => {
