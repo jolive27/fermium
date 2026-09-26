@@ -45,6 +45,8 @@ class Writer:
 
 # --------------------------------------------------------------------------------------- quadrature
 # The same integrands are defined in rust/crates/fermium-runtime/tests/quad.rs (by name).
+# Squares and cubes are written as products: Python's x ** 2 calls libm pow, which is not always
+# correctly rounded, while Rust (LLVM) turns powf(x, 2.0) into x * x.
 from math import sin, cos, sqrt, log, atan, tanh, pi  # noqa: E402
 
 
@@ -57,33 +59,33 @@ def exp(x):
 
 QUAD_CASES = [
     # name, f, a, b, truth (None: v1's value is right)
-    ("poly", lambda x: x ** 2, 0.0, 3.0, 9.0),
+    ("poly", lambda x: x * x, 0.0, 3.0, 9.0),
     ("gauss_inf", lambda x: exp(-x * x), -inf, inf, sqrt(pi)),
     ("inv_sqrt", lambda x: 1 / sqrt(x), 0.0, 1.0, 2.0),
-    ("planck", lambda x: x ** 3 / (exp(x) - 1), 0.0, inf, pi ** 4 / 15),
+    ("planck", lambda x: x * x * x / (exp(x) - 1), 0.0, inf, pi ** 4 / 15),
     ("sinc", lambda x: sin(x) / x, 0.0, 10.0, None),
     ("decay", lambda x: exp(-x / 2.5), 0.0, inf, 2.5),
     ("lorentz", lambda x: 1 / (1 + x * x), -inf, inf, pi),
     ("log", lambda x: log(x), 0.0, 1.0, -1.0),
     ("damped_cos", lambda x: cos(30 * x) * exp(-x), 0.0, 5.0, None),
-    ("reversed", lambda x: x ** 3, 2.0, -1.0, -3.75),
+    ("reversed", lambda x: x * x * x, 2.0, -1.0, -3.75),
     ("left_tail", lambda x: exp(x), -inf, 0.0, 1.0),
-    ("power_tail", lambda x: 1 / (1 + x) ** 2, 0.0, inf, 1.0),
+    ("power_tail", lambda x: 1 / ((1 + x) * (1 + x)), 0.0, inf, 1.0),
     ("kink", lambda x: abs(x - 0.3), 0.0, 1.0, 0.29),
     ("step", lambda x: 1.0 if x < 0.37 else 2.0, 0.0, 1.0, 1.63),
     ("sqrt_sing_mid", lambda x: 1 / sqrt(abs(x - 0.5)), 0.0, 1.0, 4 * sqrt(0.5)),
-    ("atan_tail", lambda x: atan(x) / (1 + x ** 3), 0.0, inf, None),
+    ("atan_tail", lambda x: atan(x) / (1 + x * x * x), 0.0, inf, None),
     ("tiny_scale", lambda x: exp(-x / 1e-15), 0.0, inf, 1e-15),
     ("huge_scale", lambda x: exp(-x / 1e20), 0.0, inf, 1e20),
     ("tanh_wall", lambda x: tanh(1000 * (x - 0.123)), 0.0, 1.0, None),
     ("x_sin_inf", lambda x: x * exp(-x) * sin(x), 0.0, inf, 0.5),
-    ("gauss_offset", lambda x: exp(-(x - 7.3) ** 2), -inf, inf, sqrt(pi)),
+    ("gauss_offset", lambda x: exp(-(x - 7.3) * (x - 7.3)), -inf, inf, sqrt(pi)),
     ("zero", lambda x: 0.0 * x, 0.0, 1.0, 0.0),
     ("x_pow_m09", lambda x: x ** -0.9, 0.0, 1.0, 10.0),
     ("nested_scale", lambda x: exp(-x * x / 2e-6), -1.0, 1.0, sqrt(2e-6 * pi)),
     # v1's documented failures (OPEN_ITEMS RT1-1, BL-1, BL-2, BL-3) and errors
-    ("rt1_1", lambda x: exp(-((x - 1) / 1e-6) ** 2), 0.0, inf, 1e-6 * sqrt(pi)),
-    ("bl1", lambda x: exp(-(x - 1000) ** 2 * 100), 0.0, 2000.0, sqrt(pi / 100)),
+    ("rt1_1", lambda x: exp(-((x - 1) / 1e-6) * ((x - 1) / 1e-6)), 0.0, inf, 1e-6 * sqrt(pi)),
+    ("bl1", lambda x: exp(-(x - 1000) * (x - 1000) * 100), 0.0, 2000.0, sqrt(pi / 100)),
     ("bl2", lambda x: exp(-x * x), -1e6, 1e6, sqrt(pi)),
     ("bl3_06", lambda x: abs(x - 0.3) ** -0.6, 0.0, 1.0, (0.3 ** 0.4 + 0.7 ** 0.4) / 0.4),
     ("bl3_08", lambda x: abs(x - 0.3) ** -0.8, 0.0, 1.0, (0.3 ** 0.2 + 0.7 ** 0.2) / 0.2),
@@ -119,7 +121,78 @@ name  v1_value all_zero truth   |   name ERR kind a b truth   (truth: nan when v
     w.close()
 
 
-SECTIONS = {"quad": gen_quad}
+# --------------------------------------------------------------------------------------- ODEs (explicit)
+# The same right-hand sides are in rust/crates/fermium-runtime/tests/ode.rs (by name).
+def _vdp(t, y):
+    return [y[1], 5.0 * (1 - y[0] * y[0]) * y[1] - y[0]]
+
+
+def _kepler(t, y):
+    r3 = (y[0] * y[0] + y[1] * y[1]) ** 1.5
+    return [y[2], y[3], -y[0] / r3, -y[1] / r3]
+
+
+def _lorenz(t, y):
+    return [10.0 * (y[1] - y[0]), y[0] * (28.0 - y[2]) - y[1], y[0] * y[1] - 8.0 / 3.0 * y[2]]
+
+
+ODE_CASES = [
+    # name, method, f, y0, t0, t1, rtol or step, event, tdep, atol
+    ("decay6", "rk45", lambda t, y: [-y[0]], [1.0], 0.0, 5.0, 1e-6, None, False, None),
+    ("decay10", "rk45", lambda t, y: [-y[0]], [1.0], 0.0, 5.0, 1e-10, None, False, None),
+    ("harmonic", "rk45", lambda t, y: [y[1], -4.0 * y[0]], [1.0, 0.0], 0.0, 20.0, 1e-8, None, False, None),
+    ("vdp", "rk45", _vdp, [2.0, 0.0], 0.0, 20.0, 1e-8, None, False, None),
+    ("kepler", "rk45", _kepler, [0.5, 0.0, 0.0, sqrt(3.0)], 0.0, 2 * pi, 1e-10, None, False, None),
+    ("backwards", "rk45", lambda t, y: [t * y[0]], [1.0], 2.0, 0.0, 1e-8, None, False, None),
+    ("lorenz", "rk45", _lorenz, [1.0, 1.0, 1.0], 0.0, 10.0, 1e-9, None, False, None),
+    ("projectile", "rk45", lambda t, y: [y[1], -9.81], [0.0, 20.0], 0.0, 100.0, 1e-8,
+     lambda t, y: [y[0]], False, None),
+    ("jump", "rk45", lambda t, y: [1.0 if t < 0.3 else -2.0], [0.0], 0.0, 1.0, 1e-8, None, True, None),
+    ("atol", "rk45", lambda t, y: [-y[0] + 1e-20 * cos(t)], [1e-20], 0.0, 10.0, 1e-6, None, False, [1e-24]),
+    ("stiffish", "rk45", lambda t, y: [-1e5 * (y[0] - cos(t))], [0.0], 0.0, 4.0, 1e-6, None, False, None),
+    ("blowup", "rk45", lambda t, y: [y[0] * y[0]], [1.0], 0.0, 2.0, 1e-8, None, False, None),
+    ("nan_start", "rk45", lambda t, y: [1.0 / t if t else math.inf], [1.0], 0.0, 1.0, 1e-8, None, False, None),
+    ("no_event", "rk45", lambda t, y: [1.0], [0.0], 0.0, 1.0, 1e-8, lambda t, y: [y[0] + 1.0], False, None),
+    ("rk4_harm", "rk4", lambda t, y: [y[1], -y[0]], [1.0, 0.0], 0.0, 10.0, 0.01, None, False, None),
+    ("rk4_coarse", "rk4", lambda t, y: [y[1], -y[0]], [1.0, 0.0], 0.0, 30.0, 0.7, None, False, None),
+    ("rk4_event", "rk4", lambda t, y: [y[1], -9.81], [0.0, 20.0], 0.0, 100.0, 0.01,
+     lambda t, y: [y[0]], False, None),
+    ("rk4_back", "rk4", lambda t, y: [-2.0 * y[0]], [1.0], 1.0, -1.0, 0.05, None, False, None),
+]
+FRACS = [0.1, 0.33, 0.5, 0.77, 0.999]
+
+
+def gen_ode():
+    from fermium import interp as I
+    w = Writer("ode.txt", """
+v1's explicit ODE solvers (fermium.interp.dp45 / rk4 + rk4_error), which mirror the compiled kernels.
+name n t_last y_last... [y(t_k) y'(t_k) for comp 0 at t0 + FRACS*(t_last - t0)] max0 min0 nwarn warn_kind warn_a
+or name ERR kind a b""")
+    for name, method, f, y0, t0, t1, par, ev, tdep, atol in ODE_CASES:
+        warns = []
+        try:
+            if method == "rk4":
+                sol = I.rk4(f, y0, t0, t1, par, ev, -1, -1)
+                est = I.rk4_error(f, sol)
+                if est > I.RK4_WARN:
+                    warns.append((7, est))
+            else:
+                sol = I.dp45(f, y0, t0, t1, par, ev, -1, -1, tdep, lambda c: warns.append((2, c)), atol)
+        except I._Fail as fl:
+            w.row(name, "ERR", str(fl.kind), fl.a, fl.b)
+            continue
+        vals = [float(sol.n), sol.t[-1]] + sol.y[-sol.dim:]
+        tl = sol.t[-1]
+        for fr in FRACS:
+            tt = t0 + fr * (tl - t0)
+            vals += [sol.eval(0, tt, False), sol.eval(0, tt, True)]
+        vals += [I.Interpreter.sol_ext(sol, 0, 1.0), I.Interpreter.sol_ext(sol, 0, -1.0)]
+        vals += [float(len(warns))] + (list(warns[0]) if warns else [0.0, 0.0])
+        w.row(name, *vals)
+    w.close()
+
+
+SECTIONS = {"quad": gen_quad, "ode": gen_ode}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)

@@ -5,6 +5,7 @@
 //! NumPy with a native method that agrees to high accuracy where v1 called a library.
 //! Accuracy per method is documented in `NUMERICS.md`; intentional differences in `NOTES.md`.
 
+pub mod ode;
 pub mod quad;
 
 /// A run-time failure with v1's error kind and its two numbers (see `describe_error` in
@@ -56,4 +57,17 @@ pub mod err {
     pub const ODE_STEPS_FROM: i64 = 1_000_000;
     /// + 1 + the variable's text id: "too many steps" (stiff solvers)
     pub const STIFF_STEPS_FROM: i64 = 2_000_000;
+}
+
+/// Python's `max(a, b)` for floats: `a` unless `b > a` (so a NaN in `a` is kept, and one in `b` is
+/// ignored). Unlike `f64::max`; v1's kernels rely on this order.
+#[inline]
+pub(crate) fn pymax(a: f64, b: f64) -> f64 {
+    if b > a { b } else { a }
+}
+
+/// Python's `min(a, b)` for floats: `a` unless `b < a`.
+#[inline]
+pub(crate) fn pymin(a: f64, b: f64) -> f64 {
+    if b < a { b } else { a }
 }
