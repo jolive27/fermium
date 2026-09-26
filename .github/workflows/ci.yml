@@ -149,7 +149,7 @@ jobs:
         run: cargo build --profile fast && cargo test --profile fast --no-fail-fast && otool -L target/fast/fermium && cargo test --profile fast -p fermium-pyapi -p fermium-wasm
       - run: rust/target/fast/fermium doctor
       - name: "Conformance, Rust (ratchet: never below conformance/RUST_FLOOR)"
-        run: python3 conformance/run --impl rust --bin rust/target/fast/fermium --out conformance-rust-macos.md --min "$(cat conformance/RUST_FLOOR)"
+        run: python3 conformance/run --impl rust --bin rust/target/fast/fermium --out conformance-rust-macos.md --min "$(cat conformance/RUST_FLOOR)" --skip-file conformance/libm_sensitive.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,0 +1,33 @@
+# Cases whose golden output depends on the C maths library (sin, cos, exp, pow...): the goldens are glibc's
+# (Linux), and on macOS Apple's libm changes the last printed digits or a rounding-noise value (e.g. -5.75e-17 vs
+# -5.55e-17, a 17th digit, an adaptive step count). Fermium 1.5 on macOS differs from these goldens the same way.
+# The rust-macos CI job skips them (conformance/run --skip-file; the floor is lowered by the number skipped, and
+# the report names them). Linux runs them all. Collected from the first macOS run (PR #3, run 36240218480).
+05ba2f1bd109
+16ffb07d61e6
+2248bad2c3d5
+3de9f428079f
+7375f410f654
+95d4bbe2f0a4
+cd75180ce44b
+028644b3cb0d
+0a4d5eb3883b
+3a23b84769cf
+562528564d92
+681d13108920
+6fade03d2509
+70a351976054
+731e536e54d0
+731ed5932ace
+944dea221169
+ab0a889f944a
+1954d43c8916
+5835a4d372f1
+9b56866b9ce8
+aa3fce1cb879
+fbcb42df2f89
+4be38a411a78
+231badb2d1ef
+81b21c16c9b9
+b14fd9efa6ab
+d7c8dcbeca9b

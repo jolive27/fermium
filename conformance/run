@@ -362,8 +362,13 @@ def main():
         print("\n".join(["", "Failures and divergences (first 60):"] + shown))
     passed_or_documented = passed + documented
     if a.min is not None:
-        if passed < a.min:
-            print(f"REGRESSION: {passed} pass, fewer than the floor {a.min} (conformance/RUST_FLOOR)")
+        floor = a.min
+        if skipped:
+            # skipped cases can't pass here: the floor (set on Linux, where they run) is lowered by their number
+            floor -= sum(1 for cid in skipped if divergence_of(cid) is None)
+            print(f"floor {a.min} lowered to {floor}: {len(skipped)} cases skipped (--skip-file)")
+        if passed < floor:
+            print(f"REGRESSION: {passed} pass, fewer than the floor {floor} (conformance/RUST_FLOOR)")
             return 1
         return 0
     return 0 if passed_or_documented == total else 1

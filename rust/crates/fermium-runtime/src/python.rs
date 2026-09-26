@@ -372,7 +372,8 @@ def fm_call(*a):
     fn ask_python(exe: &str) -> Option<(Vec<String>, String)> {
         let script = "import sys, sysconfig\nv = sysconfig.get_config_var\n\
                       print(v('LIBDIR') or ''); print(v('INSTSONAME') or ''); print(v('LDLIBRARY') or '')\n\
-                      print(sys.executable or ''); print(v('MULTIARCH') or '')";
+                      print(sys.executable or ''); print(v('MULTIARCH') or '')\n\
+                      print(sys.base_prefix or ''); print(v('PYTHONFRAMEWORKPREFIX') or '')";
         let out = std::process::Command::new(exe).args(["-c", script]).stderr(std::process::Stdio::null())
             .output().ok()?;
         if !out.status.success() {
@@ -381,7 +382,19 @@ def fm_call(*a):
         let text = String::from_utf8_lossy(&out.stdout).into_owned();
         let l: Vec<&str> = text.lines().collect();
         let (libdir, inst, ld, exe_path, multi) = (l.first()?, l.get(1)?, l.get(2)?, l.get(3)?, l.get(4).unwrap_or(&""));
+        let (base, fw_prefix) = (l.get(5).unwrap_or(&""), l.get(6).unwrap_or(&""));
         let mut cands = vec![];
+        // a macOS framework build (python.org, setup-python): LDLIBRARY is "Python.framework/Versions/X.Y/Python"
+        // and LIBDIR the build machine's path, which a relocated install (a CI tool cache) doesn't have; the
+        // library is the framework's `Python` file, at sys.base_prefix (…/Python.framework/Versions/X.Y)
+        if ld.contains(".framework/") {
+            if !base.is_empty() {
+                cands.push(format!("{base}/Python"));
+            }
+            if !fw_prefix.is_empty() {
+                cands.push(format!("{fw_prefix}/{ld}"));
+            }
+        }
         for name in [inst, ld] {
             if name.is_empty() || name.ends_with(".a") {
                 continue;
@@ -391,6 +404,10 @@ def fm_call(*a):
                 if !multi.is_empty() {
                     cands.push(format!("{libdir}/{multi}/{name}"));
                 }
+            }
+            // a relocated install: the library under the interpreter's own prefix
+            if !base.is_empty() && !name.contains('/') {
+                cands.push(format!("{base}/lib/{name}"));
             }
             cands.push(name.to_string());
         }
