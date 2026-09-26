@@ -186,29 +186,12 @@ impl Checker {
     fn natural_convert_hint(&self) -> String {
         let consts = self.system_consts(&self.nat);
         let name = self.nat_name();
-        if consts.split(" = ").any(|c| c == "G") {
+        if self.nat.consts().contains(&"G") {
             return format!("in {name} units ({consts} = 1) a mass, a length and a time are all measured in the same \
                             unit; check the powers");
         }
         format!("in {name} units ({consts} = 1) a length or time is 1/energy and a mass is an energy; check the powers \
                  of energy")
-    }
-
-    /// `x in fm` using variables computed under a natural system that doesn't hold here (Python _export, D60).
-    fn export(&mut self, e: &A::Expr, value: &A::Expr, _unit: &A::UnitExpr, ctx: &mut Ctx) -> CResult<Option<I::Expr>> {
-        let mut foreign = false;
-        for n in crate::walk::free_names(value) {
-            if let Some((Binding::Sym(s), _)) = self.lookup(ctx.scope, &n) {
-                let other = &self.extra[s].nat;
-                if !other.is_empty() && !self.nat_contains(other) {
-                    foreign = true;
-                }
-            }
-        }
-        if !foreign {
-            return Ok(None);
-        }
-        Err(self.not_ported("converting a value from a natural-units region", e.span))
     }
 
     /// Converting between Hz and rev, rpm, rad/s or °/s (either way): 1 Hz is 9.55 rpm, not 60 (D95).
