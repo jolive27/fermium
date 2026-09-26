@@ -576,7 +576,58 @@ impl Checker {
                  Some("run it with the Python implementation (legacy/) for now".into()))
     }
 
+    /// Check the bodies of functions that were never called, so their errors still show (Python check_uncalled).
     pub fn check_uncalled(&mut self) -> CResult<()> {
+        // Python walks the global names in the order they were bound: the order of definition
+        let mut todo: Vec<(u32, String, FuncInfoId)> = self.scopes[self.globals]
+            .names
+            .iter()
+            .filter_map(|(n, b)| match b {
+                Binding::Func(fi) => Some((self.funcs[*fi].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), *fi)),
+                _ => None,
+            })
+            .collect();
+        todo.sort();
+        for (_, _, b) in todo {
+            let f = &self.funcs[b];
+            if !f.instances.is_empty() || f.checked_generic || f.module.is_some() {
+                continue;
+            }
+            self.funcs[b].checked_generic = true;
+            let Some(fdef) = self.funcs[b].fdef.clone() else { continue };
+            let A::StmtKind::FuncDef { params, .. } = &fdef.kind else { continue };
+            if !self.funcs[b].one_liner() && params.is_empty() {
+                continue;
+            }
+            if !self.func_param_uses(b).is_empty() {
+                continue; // takes a function: checked per call instead (D43)
+            }
+            let node = crate::ast_ext::mk(A::ExprKind::Name { name: self.funcs[b].name.clone() }, fdef.span);
+            let node: &'static A::Expr = Box::leak(Box::new(node));
+            let saved_nat = self.nat.clone();
+            let fnat = self.funcs[b].nat.clone().unwrap_or_default();
+            self.set_system(fnat);
+            let args: Vec<Checked> =
+                params.iter().map(|_| Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))).collect();
+            let r = self.instantiate(b, args, node, false);
+            let r = match r {
+                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before") => Ok(()),
+                Err(e) if e.message.contains("needs a list") => {
+                    // total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some parameters
+                    // are numbers), it is checked at each call instead (D142)
+                    let args: Vec<Checked> = params
+                        .iter()
+                        .map(|_| Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0)))
+                        .collect();
+                    let _ = self.instantiate(b, args, node, false);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+                Ok(_) => Ok(()),
+            };
+            self.set_system(saved_nat);
+            r?;
+        }
         Ok(())
     }
 }
