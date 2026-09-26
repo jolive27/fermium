@@ -48,7 +48,10 @@ def execute(kc, code):
             outs.append(("display", m["content"]["data"]))
         elif t == "status" and m["content"]["execution_state"] == "idle":
             break
-    return kc.get_shell_msg(timeout=60)["content"]["status"], outs
+    while True:  # the reply to this request (never a stale one left from an earlier cell)
+        r = kc.get_shell_msg(timeout=60)
+        if r["parent_header"].get("msg_id") == msg_id:
+            return r["content"]["status"], outs
 
 
 def test_values_carry_over_between_cells(kernel):
@@ -59,6 +62,8 @@ def test_values_carry_over_between_cells(kernel):
 
 def test_errors_are_one_line_physics(kernel):
     kc, _ = kernel
+    # self-contained: under pytest-xdist this test may not run right after the one that defines L and T
+    assert execute(kc, "L = 1.20 m\nT = 2.21 s")[0] == "ok"
     status, outs = execute(kc, "y = L + T")
     assert status == "error"
     assert outs[0][0] == "stderr" and "can't add length [m] to time [s]" in outs[0][1]
