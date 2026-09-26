@@ -269,3 +269,32 @@ warnings, astral characters, incremental edits, a parse error and modules) get e
   `textDocumentSync` incremental as pygls's default.
 - After `shutdown` then `exit` the process exits with 0, as the protocol says (pygls exits with 1).
 - A file:// URI with %-escapes (a folder name with spaces) is decoded before imports are looked up there.
+
+## Function instances are keyed by the shape and units of vector and matrix arguments
+
+v1 made one instance of a user function per argument type, but it keyed a vector or matrix argument by its
+kind alone. So `f(v) = |v|` called first with `<3, 4> m` and then with `<1, 2, 2> s` reused the first instance:
+v1's compiled code stopped with an internal error (`TypeError: Type of #1 arg mismatch: <2 x double> !=
+<3 x double>`), and a straight port printed `3 m` for the second call. The Rust checker keys these arguments by
+their length (or rows and columns) and by the dimension of each component, so each call gets its own instance
+(`5 m 3 s`). No conformance case is affected (v1 crashed on every such program).
+
+## The Jupyter kernel (fermium-jupyter)
+
+v1's kernel ran on ipykernel (Python, pyzmq, libzmq). The Rust kernel has its own ZMTP 3.1 (TCP, NULL
+mechanism, ROUTER/PUB/REP) and HMAC-SHA256, so it needs nothing installed beside `fermium`. It behaves as
+kernel.py: one REPL session for all cells, stdout streamed, warnings on stderr, errors in the one-line form
+on stderr with an error reply, "plot saved to …" lines replaced by the inline picture (PNG, or SVG), Tab
+completion of `\name`, names, keywords and module members, and is_complete for unfinished blocks.
+Checked end to end with jupyter_client (rust/tools/jupyter_e2e.py: 14 checks) and with nbclient on
+examples/notebook.ipynb (every cell prints what v1's kernel prints, except the `plot` cell, which the Rust
+checker doesn't compile yet); `cargo test -p fermium-jupyter` plays a client over TCP. Differences:
+
+- kernel.json starts `fermium jupyter kernel -f {connection_file}` and says `"interrupt_mode": "message"`;
+  an interrupt is acknowledged but doesn't stop a running cell yet (the kernel ignores SIGINT rather than
+  die of it). v1's ipykernel could interrupt a cell.
+- `fermium jupyter install --sys-prefix` installs into the active conda or virtual environment (or
+  python3's prefix); `--prefix DIR` installs into DIR/share/jupyter (v1's install(prefix=…)).
+- Run-time warnings (they go to the process's stderr) are shown after the cell's printed output; v1 showed
+  them in the order they happened.
+- stdin (`input`) and comms are not used by Fermium; history, inspect and comm_info get empty replies.

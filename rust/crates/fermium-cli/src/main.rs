@@ -196,9 +196,31 @@ fn cmd_jupyter(args: &[String]) -> ExitCode {
     if JUPYTER.wants_help(args) {
         return ExitCode::SUCCESS;
     }
-    let sys_prefix = args.iter().any(|a| a == "--sys-prefix");
-    let pos: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
-    let bad: Vec<&String> = args.iter().filter(|a| a.starts_with('-') && *a != "--sys-prefix").collect();
+    // `fermium jupyter kernel -f FILE` is what kernel.json asks Jupyter to start (not in the help)
+    if args.first().map(String::as_str) == Some("kernel") {
+        let file = args.iter().position(|a| a == "-f").and_then(|i| args.get(i + 1));
+        let Some(file) = file else {
+            return arg_error("usage: fermium jupyter kernel -f CONNECTION_FILE", "fermium jupyter",
+                             "the following arguments are required: -f");
+        };
+        return ExitCode::from(fermium_jupyter::kernel_command(file) as u8);
+    }
+    let mut sys_prefix = false;
+    let mut prefix = None;
+    let (mut pos, mut extra) = (vec![], vec![]);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--sys-prefix" => sys_prefix = true,
+            // --prefix DIR: install into DIR/share/jupyter (as v1's install(prefix=...); used by the tests)
+            "--prefix" => match it.next() {
+                Some(d) => prefix = Some(d.clone()),
+                None => return arg_error(JUPYTER.usage, "fermium jupyter", "argument --prefix: expected one argument"),
+            },
+            s if s.starts_with('-') => extra.push(a),
+            _ => pos.push(a),
+        }
+    }
     match pos.first().map(|s| s.as_str()) {
         None => return JUPYTER.missing("action"),
         Some("install") => {}
@@ -207,11 +229,11 @@ fn cmd_jupyter(args: &[String]) -> ExitCode {
                              &format!("argument action: invalid choice: '{other}' (choose from 'install')"))
         }
     }
-    let extra: Vec<&String> = bad.into_iter().chain(pos[1..].iter().copied()).collect();
+    extra.extend(pos[1..].iter().copied());
     if !extra.is_empty() {
         return unrecognized(&extra);
     }
-    ExitCode::from(fermium_jupyter::install_command(sys_prefix) as u8)
+    ExitCode::from(fermium_jupyter::install_command(sys_prefix, prefix.as_deref()) as u8)
 }
 
 fn main() -> ExitCode {
