@@ -1,0 +1,17 @@
+{
+ "id": "121a76361e3e",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a slice xs[a:b] can be read but not assigned to; set the elements one at a time, like  for i from a to b  then  xs[i] = ...",
+  "line": 2,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

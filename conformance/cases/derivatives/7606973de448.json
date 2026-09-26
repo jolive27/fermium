@@ -1,0 +1,17 @@
+{
+ "id": "7606973de448",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add vectors of electric field [V/m] and length [m]",
+  "line": 4,
+  "col": 5,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

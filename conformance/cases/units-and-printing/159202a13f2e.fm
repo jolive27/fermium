@@ -1,0 +1,4 @@
+a = 844.6140015048619 [lb]
+b = a in M☉
+print b / (1 [M☉]) to 15 digits
+print (a in M☉) in lb to 15 digits

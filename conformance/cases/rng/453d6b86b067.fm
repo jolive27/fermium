@@ -1,0 +1,5 @@
+seed(3)
+x = rand(2 m, 3 m)
+print x > 2 m and x < 3 m
+y = randn(10 kg, 1 g)
+print abs(y - 10 kg) < 10 g

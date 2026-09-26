@@ -1,0 +1,4 @@
+s = 0
+parallel for i from 1 to 3
+    s += 1
+    t = s

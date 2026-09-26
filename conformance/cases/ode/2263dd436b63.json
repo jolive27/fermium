@@ -1,0 +1,11 @@
+{
+ "id": "2263dd436b63",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) v(5 yr) = 0.9817563133 c   exact 0.9817563134 c\n    x(5 yr) = 4.124529243 ly   exact 4.124529243 ly\n    tau(5 yr) = 2.269853848 yr   exact 2.269853848 yr\n(b) Earth time = 6.002021094 yr   ship time = 3.581651998 yr   exact ship time 3.581651986 yr\n    top speed = 0.9516793067 c\n(c) ship = 0.7183715114 c   probe = 0.9212791110 c\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

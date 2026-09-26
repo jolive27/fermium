@@ -1,0 +1,11 @@
+{
+ "id": "db44bcbfb792",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.769238901363972 + 0.638961276313635i\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

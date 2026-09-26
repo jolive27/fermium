@@ -1,0 +1,17 @@
+{
+ "id": "595c7e43d902",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't store a value in h²: the left side of = must be a variable name",
+  "line": 3,
+  "col": 4,
+  "hint": "you can only assign to a name; to solve h² = … for h, write  solve h² = … for h from h_min to h_max, or store h = √(…) and write h² where you need it",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

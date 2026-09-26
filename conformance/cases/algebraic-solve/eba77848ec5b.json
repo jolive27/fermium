@@ -1,0 +1,17 @@
+{
+ "id": "eba77848ec5b",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this solve has no equation",
+  "line": 1,
+  "col": 1,
+  "hint": "write e.g. solve x' = -x with x(0) = 1 for t from 0 to 5",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

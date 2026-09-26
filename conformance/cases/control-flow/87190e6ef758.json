@@ -1,0 +1,17 @@
+{
+ "id": "87190e6ef758",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 6 is out of range: valid indexes here are 1 to 5",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

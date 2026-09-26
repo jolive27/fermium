@@ -1,0 +1,11 @@
+{
+ "id": "8aeb3f8fcba9",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "time constant τ = R C = 1.03 s\nafter τ:   5.69 V = 0.632 of V0  (1 - 1/e = 0.632 )\nafter 5τ:  8.94 V\ncurrent at t = 0: 1.91 mA   (V0/R = 1.91 mA )\ncurrent at t = τ: 0.704 mA\nenergy stored in C:      8.91 mJ\nenergy turned to heat:   8.91 mJ\nenergy from the battery: 17.8 mJ\ndischarging: half the voltage is left after 0.717 s ; check: 4.50 V\nplot saved to <ROOT>/examples/gallery/rc_circuit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

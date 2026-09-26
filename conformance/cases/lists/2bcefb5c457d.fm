@@ -1,0 +1,4 @@
+xs = [1 m, 2 m]
+ys = xs
+ys[1] = 5 m
+print xs

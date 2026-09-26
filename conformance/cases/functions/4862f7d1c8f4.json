@@ -1,0 +1,11 @@
+{
+ "id": "4862f7d1c8f4",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9.00000000000\n19.6000000000 m\n0.882081390722\n2.00000000068\n",
+ "stderr": "warning: line 2: h (Planck's constant) is now your variable: from here on, h means your value\n        h = (b - a) / n\n        ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

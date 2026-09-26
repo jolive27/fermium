@@ -1,0 +1,17 @@
+{
+ "id": "b20f9553567b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'8 K' is ambiguous: right after a number, K is a unit (kelvin), but K is also your variable K",
+  "line": 2,
+  "col": 9,
+  "hint": "write  8*K  for 8 × your variable K, or  8 [K]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

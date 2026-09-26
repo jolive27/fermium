@@ -1,0 +1,11 @@
+{
+ "id": "a0d25874fcaa",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "after 365 days: <1.000, -0.002768> AU\ndistance from the Sun: 1.000 AU\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+xs = [3, 1, 2]
+ys = sort(xs)
+ys[1] = 100
+print xs

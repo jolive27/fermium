@@ -1,0 +1,4 @@
+f(x) =
+    g(s) = g(s) + 1
+    return g(x)
+print f(1)

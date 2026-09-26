@@ -1,0 +1,11 @@
+{
+ "id": "cc26cbe212c4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 1/(kg s)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

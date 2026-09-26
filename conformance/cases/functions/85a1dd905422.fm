@@ -1,0 +1,6 @@
+fall_time(h) =
+    g = 9.81 m/s^2
+    t = sqrt(2 * h / g)
+    return t
+
+print fall_time(330 m)

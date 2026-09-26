@@ -1,0 +1,13 @@
+f(x) = exp(-x^2)
+d1 = f'
+d2 = f''
+print d1(-0.17768996949472005) to 17 digits
+print d2(-0.17768996949472005) to 17 digits
+print d1(-0.9626892799173294) to 17 digits
+print d2(-0.9626892799173294) to 17 digits
+print d1(-0.8739600444572653) to 17 digits
+print d2(-0.8739600444572653) to 17 digits
+print d1(-1.1654232552563726) to 17 digits
+print d2(-1.1654232552563726) to 17 digits
+print d1(-1.2364094271740345) to 17 digits
+print d2(-1.2364094271740345) to 17 digits

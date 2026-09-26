@@ -1,0 +1,2 @@
+f(x) = <cos(x), sin(x), 0>
+print ∫ f(x) dx from 0 to π

@@ -1,0 +1,17 @@
+{
+ "id": "0195dbe7a69d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 N·m' is ambiguous: right after a number, N·m is one unit (m is metres there), but m is also your variable m",
+  "line": 2,
+  "col": 11,
+  "hint": "write  (2 N) m  for 2 N × your variable m, or  2 [N·m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

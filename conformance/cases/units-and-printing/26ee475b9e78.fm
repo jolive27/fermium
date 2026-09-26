@@ -1,0 +1,4 @@
+d = 1.3 pc
+print d in ly, d in AU
+print 1 Msun in kg
+print 3 angstrom in nm

@@ -1,0 +1,9 @@
+units natural
+ω = 10 MeV
+solve x'' = -ω^2 x with x(0) = 1.00000 fm, x'(0) = 0 for t from 0 to 1 fm
+print x(0.500000 fm) in fm to 6 digits
+print cos(ω * 0.500000 fm) to 6 digits
+V(r) = -50 MeV * exp(-r/(1.2 fm))
+F(r) = -d/dr V(r)
+print F(1 fm) in MeV/fm to 6 digits
+print F(1 fm) in N to 6 digits

@@ -1,0 +1,2 @@
+import stats
+print stats.linear_slope([1 s, 2 s, 3 s], [1 m, 2 m, 4 m]) + 1 s

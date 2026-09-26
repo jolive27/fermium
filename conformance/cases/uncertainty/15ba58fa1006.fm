@@ -1,0 +1,118 @@
+# Hydrogen recombination and the CMB last-scattering surface: Saha equilibrium, Peebles' three-level atom,
+# and the visibility function, for Planck 2018 ΛCDM.
+# Run from this folder:  fermium run recombination.fm
+#
+# x_e = n_e / n_H is the free-electron fraction (hydrogen only; see README). The independent variable is z.
+
+# ---- Planck 2018 (paper VI, Table 2, TT,TE,EE+lowE+lensing) -----------------------------------------------
+h = 0.6736
+H0 = 67.36 km/s/Mpc                 # h = H0 / (100 km/s/Mpc)
+Ωbh2 = 0.02237
+Ωch2 = 0.1200
+Y_p = 0.2454                       # helium mass fraction (BBN-consistent value used by Planck)
+T_cmb = 2.7255 K                   # Fixsen (2009)
+N_eff = 3.046
+
+ρ_crit = 3 H0² / (8π G)
+Ω_m = (Ωbh2 + Ωch2) / h²
+Ω_r = 4 σ T_cmb⁴ / c³ / ρ_crit * (1 + (7/8) (4/11)^(4/3) N_eff)
+Ω_Λ = 1 - Ω_m - Ω_r
+m_H = 1.00782503 u
+n_H0 = (1 - Y_p) (Ωbh2 / h²) ρ_crit / m_H         # hydrogen nuclei per volume today
+print "n_H today =", n_H0 in 1/m³ to 5 digits, "  Ω_m =", Ω_m to 5 digits, "  Ω_r =", Ω_r to 4 digits
+
+H(z) = H0 √(Ω_m (1 + z)³ + Ω_r (1 + z)⁴ + Ω_Λ)
+T(z) = T_cmb (1 + z)               # the gas is held at the photon temperature by Compton scattering
+n_H(z) = n_H0 (1 + z)³
+
+# ---- atomic physics ---------------------------------------------------------------------------------------
+E_ion = 13.598434 eV               # ionisation energy of hydrogen (NIST)
+λ_α = 121.567 nm                   # Lyman α (NIST; research/hydrogen_levels gets 121.5684 nm)
+E_α = 2π ħ c / λ_α                 # (h is the Hubble parameter here)
+E_2 = E_ion - E_α                  # binding energy of n = 2
+Λ_2s = 8.2245809 / (1 s)           # two-photon decay rate 2s → 1s
+σ_T = (8π/3) r_e²                  # Thomson cross-section
+
+# case-B recombination coefficient (Péquignot, Petitjean & Boisson 1991, the fit used in RECFAST);
+# F = 1 is Peebles' atom, RECFAST multiplies by F = 1.14 to mimic a multi-level atom
+α_B(T, F) = F 4.309e-19 m³/s * (T / 1e4 K)^(-0.6166) / (1 + 0.6703 (T / 1e4 K)^0.5300)
+# photo-ionisation rate from n = 2, by detailed balance with α_B
+β_B(T, F) = α_B(T, F) (m_e k_B T / (2π ħ²))^(3/2) exp(-E_2 / (k_B T))
+
+# ---- 1. Saha equilibrium ---------------------------------------------------------------------------------
+# x²/(1 − x) = S(z) = (m_e k_B T / (2π ħ²))^(3/2) e^(−E_ion/k_B T) / n_H,  so  x = 2 / (1 + √(1 + 4/S))
+S(z) = (m_e k_B T(z) / (2π ħ²))^(3/2) exp(-E_ion / (k_B T(z))) / n_H(z)
+x_saha(z) = 2 / (1 + √(1 + 4 / S(z)))
+solve x_saha(z_half) = 0.5 for z_half from 1000 to 2000
+print "Saha: x_e = 0.5 at z =", z_half to 9 digits, "  x_e(1600) =", x_saha(1600) to 8 digits, "  x_e(1100) =", x_saha(1100) to 3 digits
+
+# ---- 2. Peebles' three-level atom ------------------------------------------------------------------------
+# dx_e/dt = −C [n_H α_B x_e² − β_B (1 − x_e) e^(−E_α/k_B T)],   dt = −dz / (H (1 + z)),
+# C = (Λ_2s + Λ_α) / (Λ_2s + Λ_α + β_B): the chance that an atom in n = 2 reaches the ground state before it is
+# ionised again. Λ_α = 8π H / (λ_α³ n_1s) is the rate at which Lyman-α photons redshift out of the line.
+Λ_α(z, x) = 8π H(z) / (λ_α³ n_H(z) (1 - x))
+C(z, x, F) = (Λ_2s + Λ_α(z, x)) / (Λ_2s + Λ_α(z, x) + β_B(T(z), F))
+peebles(z, x, F) = C(z, x, F) (n_H(z) α_B(T(z), F) x² - β_B(T(z), F) (1 - x) exp(-E_α / (k_B T(z)))) / (H(z) (1 + z))
+# the optical depth to Thomson scattering: dτ/dz = n_e σ_T c / (H (1 + z))
+s(z) = n_H(z) σ_T c / (H(z) (1 + z))
+
+solve
+    xe' = peebles(z, xe, 1)
+    τ' = xe s(z)
+    with xe(1600) = x_saha(1600), τ(1600) = 0
+    for z from 1600 to 200 using radau tolerance 1e-10 absolute 1e-14
+print "Peebles:", len(times(xe)), "steps (radau)"
+solve xe(zh) = 0.5 for zh from 1000 to 1600
+print "Peebles: x_e = 0.5 at z =", zh to 9 digits
+for zq in [1500, 1400, 1300, 1200, 1100, 1000, 800, 600, 400]
+    print "z =", zq, ": x_e Peebles =", xe(zq) to 8 digits, "  Saha =", x_saha(zq) to 3 digits
+print "freeze-out: x_e(200) =", xe[end] to 8 digits, "  d ln x_e / d ln(1 + z) at z = 200:", xe'(200) 201 / xe[end] to 3 digits
+
+# ---- 3. the visibility function g(z) = e^(−τ) dτ/dz and the last-scattering redshift ----------------------
+# (the probability that a CMB photon last scattered between z and z + dz; = −dτ/dt e^(−τ) per unit time)
+# τ(z) is counted from z = 200 (τ below z = 200 is ~10⁻³, see README): τ_200(z) = τ(z) − τ(200)
+κ(z) = xe(z) s(z)                               # dτ/dz
+solve τ(z_star) - τ[end] = 1 for z_star from 900 to 1300
+print "optical depth τ = 1 at z_* =", z_star to 9 digits, "  (Planck 2018: z_* = 1089.92 ± 0.25)"
+# the maximum of g(z): dg/dz = e^(−τ) (dκ/dz − κ²) = 0, with dκ/dz = x_e' s + x_e s'
+solve xe'(zg) s(zg) + xe(zg) s'(zg) = κ(zg)² for zg from 1000 to 1200
+print "g(z) peaks at z =", zg to 8 digits
+# in conformal time η (dz/dη = −H/c), g_η ∝ x_e (1 + z)² e^(−τ): its maximum is where x_e'/x_e + 2/(1 + z) = κ
+solve xe'(zη) / xe(zη) + 2 / (1 + zη) = κ(zη) for zη from 1000 to 1200
+print "g(η) peaks at z =", zη to 8 digits
+print "x_e at z_* =", xe(z_star) to 6 digits
+# width: where g falls to half its maximum
+g(z) = κ(z) exp(-(τ(z) - τ[end]))
+solve g(z_hi) = g(zg) / 2 for z_hi from zg to 1300
+solve g(z_lo) = g(zg) / 2 for z_lo from 800 to zg
+print "g(z): half maximum at z =", z_lo to 8 digits, "and", z_hi to 8 digits, "  (FWHM Δz =", z_hi - z_lo to 3 digits, ")"
+print "∫ g dz from 200 to 1600 =", ∫ g(z) dz from 200 to 1600 to 8 digits, "  (1 − e^(−τ(1600)) =", 1 - exp(τ[end]) to 8 digits, ")"
+
+# ---- 4. RECFAST's fudge factor F = 1.14, for comparison ---------------------------------------------------
+solve
+    xf' = peebles(z, xf, 1.14)
+    τf' = xf s(z)
+    with xf(1600) = x_saha(1600), τf(1600) = 0
+    for z from 1600 to 200 using radau tolerance 1e-10 absolute 1e-14
+solve τf(zf) - τf[end] = 1 for zf from 900 to 1300
+print "with F = 1.14: x_e(200) =", xf[end] to 8 digits, "  τ = 1 at z =", zf to 9 digits, "  x_e(1100) =", xf(1100) to 6 digits
+
+# ---- 5. starting deeper in equilibrium: the stiff part -------------------------------------------------
+# At z = 2500 recombination and photo-ionisation are thousands of times faster than the expansion and nearly
+# cancel (x_e sits at its Saha value); RK45 then needs too many steps (see README), radau does not.
+# The answer doesn't depend on where it starts.
+solve
+    x2' = peebles(z, x2, 1)
+    with x2(2500) = x_saha(2500)
+    for z from 2500 to 200 using radau tolerance 1e-10 absolute 1e-14
+print "started at z = 2500:", len(times(x2)), "radau steps; x_e(200) =", x2[end] to 8 digits, "  x_e(1100) =", x2(1100) to 8 digits
+
+# ---- 6. plots --------------------------------------------------------------------------------------------
+redshift = linspace(200, 1600, 701)
+Peebles = xe(redshift)
+Saha = max(x_saha(redshift), 1e-6)
+RECFAST_fudge = xf(redshift)
+plot Saha vs redshift, Peebles vs redshift, RECFAST_fudge vs redshift with log y, y from 1e-4 to 1.5, reversed x, xlabel "redshift z", ylabel "free-electron fraction x_e", title "Hydrogen recombination: Saha equilibrium vs Peebles' three-level atom" to "xe.png"
+z_g = linspace(700, 1400, 701)
+visibility = g(z_g)
+plot visibility vs z_g with reversed x, xlabel "redshift z", ylabel "g(z) = e^(−τ) dτ/dz", title "Visibility function: the last-scattering surface at z ≈ 1080–1090" to "visibility.png"

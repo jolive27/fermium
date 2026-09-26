@@ -1,0 +1,17 @@
+{
+ "id": "ec5837702bf6",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "step, tolerance, absolute and using are for differential equations; an equation is solved to full precision",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

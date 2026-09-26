@@ -1,0 +1,11 @@
+{
+ "id": "1facd241083c",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[1, 2, 3] m\n[500.0, 1500] m\n3 kg\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

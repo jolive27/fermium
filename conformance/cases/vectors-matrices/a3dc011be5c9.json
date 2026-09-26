@@ -1,0 +1,17 @@
+{
+ "id": "a3dc011be5c9",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "solve_linear(M, b) got a 2×2 matrix and a 3-vector; b needs one component per row",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+solve x' = (x - 1 m) / (1e-8 s) with x(2500 s) = 2 m for t from 2500 s to 0 s
+print x(0 s)

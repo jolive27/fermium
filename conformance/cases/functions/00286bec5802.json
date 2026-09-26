@@ -1,0 +1,17 @@
+{
+ "id": "00286bec5802",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a function defined inside another function must fit on one line, like  g(x) = …  (define a longer one at the top level)",
+  "line": 2,
+  "col": 5,
+  "hint": "this happened when calling f on line 5 (with x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

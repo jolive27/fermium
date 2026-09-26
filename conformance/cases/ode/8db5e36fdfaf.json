@@ -1,0 +1,11 @@
+{
+ "id": "8db5e36fdfaf",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "Ry = 13.60569312 eV\nl = 0  n = 1  E_shoot = -13.60569312 eV  -Ry/n² = -13.60569312 eV\nl = 0  n = 2  E_shoot = -3.401423281 eV  -Ry/n² = -3.401423281 eV\nl = 0  n = 3  E_shoot = -1.511743679 eV  -Ry/n² = -1.511743680 eV\nl = 1  n = 2  E_shoot = -3.401423281 eV  -Ry/n² = -3.401423281 eV\nl = 1  n = 3  E_shoot = -1.511743680 eV  -Ry/n² = -1.511743680 eV\n(b) <r>_1s = 1.500000000 a0   <r>_2p = 4.999999905 a0\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,3 @@
+solve y' = -y / (1 s) with y(0 s) = 1 for t from 0 s to 1 s
+ap(f, x) = f(x)
+print ap(y, 1 s)

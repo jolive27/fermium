@@ -1,0 +1,3 @@
+period(L) = 2 pi sqrt(L / g) where g = 9.81 m/s^2
+print period(1 m)
+print period(25 cm)

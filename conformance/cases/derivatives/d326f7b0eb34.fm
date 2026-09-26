@@ -1,0 +1,5 @@
+ω = 2 rad/s
+r(t) = <cos(ω t), sin(ω t)> m
+v = r'
+print v(0 s)
+print |v(1 s)|

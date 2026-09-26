@@ -1,0 +1,2 @@
+x = 6 m
+print x / 2 / s

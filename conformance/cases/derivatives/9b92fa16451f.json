@@ -1,0 +1,17 @@
+{
+ "id": "9b92fa16451f",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 m' is ambiguous: right after a number, m is a unit (metres), but m is also the variable m you differentiate by",
+  "line": 2,
+  "col": 16,
+  "hint": "write  2*m  for 2 × the variable m you differentiate by, or  2 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

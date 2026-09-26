@@ -1,0 +1,2 @@
+analyze stokes: F [N] depends on μ [Pa s], v [m/s], r [m]
+analyze sphere: F [N] depends on μ [Pa s], v [m/s], r [m], ρ [kg/m³]

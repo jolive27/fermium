@@ -1,0 +1,4 @@
+k = 0.0 ± 0.1
+propagate montecarlo 1000 samples
+    I = ∫ exp(-k t) dt from 0 to 1
+print uncertainty(I) to 4 digits

@@ -1,0 +1,3 @@
+analyze blast: R [m] depends on E [J], ρ [kg/m³], t [s]
+E = 1.0e14 J
+print blast(E, 1.2 kg/m³, 25 ms)

@@ -1,0 +1,11 @@
+{
+ "id": "135f2208fa57",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "39.4769 AU³/(M☉ yr²)\n1 M☉\n1.00004 M☉\n3 m\n4.74047 km/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

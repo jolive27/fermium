@@ -1,0 +1,17 @@
+{
+ "id": "961c22c8a17c",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the two sides of this equation jump past each other near 1.57 (like tan at 90°) instead of crossing: that's not a solution; narrow the range",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

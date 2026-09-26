@@ -1,0 +1,3 @@
+f(x) = x^2 exp(-x) sin(3x)
+d = f'
+print d(1.70192150681553) to 15 digits

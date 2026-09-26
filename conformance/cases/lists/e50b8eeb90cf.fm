@@ -1,0 +1,1 @@
+print argmax([3, 9, 2, 9]), argmin([3, 9, 2, 9])

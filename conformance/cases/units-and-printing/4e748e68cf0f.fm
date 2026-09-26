@@ -1,0 +1,4 @@
+a = 746.2755261917613 [erg]
+b = a in cal
+print b / (1 [cal]) to 15 digits
+print (a in cal) in erg to 15 digits

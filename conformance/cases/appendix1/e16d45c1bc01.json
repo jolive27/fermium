@@ -1,0 +1,17 @@
+{
+ "id": "e16d45c1bc01",
+ "area": "appendix1",
+ "origin": "tests/programs/john/appendix1_lesson2.fm",
+ "dir": "tests/programs/john",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 14,
+  "col": 7,
+  "hint": "write  3*m  for 3 × your variable m, or  3 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

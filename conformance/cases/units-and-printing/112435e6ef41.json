@@ -1,0 +1,17 @@
+{
+ "id": "112435e6ef41",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add two absolute temperatures (°C + °C)",
+  "line": 1,
+  "col": 7,
+  "hint": "to add a temperature change, write it in K, e.g. 20 °C + 5 K",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

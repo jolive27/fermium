@@ -1,0 +1,5 @@
+f(x, y) = x^2 y + sin(x y)
+fx = ∂/∂x f
+fy = ∂/∂y f
+fxy = ∂/∂y fx
+print fx(1, 2) to 6 digits, fy(1, 2) to 6 digits, fxy(1, 2) to 6 digits

@@ -1,0 +1,11 @@
+{
+ "id": "fc80c491a017",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.250\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

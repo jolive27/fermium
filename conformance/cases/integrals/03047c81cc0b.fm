@@ -1,0 +1,2 @@
+c = 1 + 1i
+print ∫ c * x dx from 0 to 2

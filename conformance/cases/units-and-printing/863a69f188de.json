@@ -1,0 +1,17 @@
+{
+ "id": "863a69f188de",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "foo isn't defined",
+  "line": 1,
+  "col": 7,
+  "hint": "define the function first, e.g.  foo(x) = 2 x",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

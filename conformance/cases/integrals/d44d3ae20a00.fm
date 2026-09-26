@@ -1,0 +1,4 @@
+f(k) = ∫ (M * <x, 1> m) · <1, 1> m dx from 0 to k where M = [[1, 2], [3, 4]]
+print f(2)
+g(a) = ∫ (v · v) x dx from 0 to 1 where v = <a, 2 a, 3 a>
+print g(1 m)

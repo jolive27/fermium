@@ -1,0 +1,2 @@
+g = d/dt (t^2)
+print g + 1

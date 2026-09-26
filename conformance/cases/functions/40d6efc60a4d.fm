@@ -1,0 +1,6 @@
+g = 9.8 m/s²
+t1 = 2 s
+u(t) = if t < t1 then g t
+       else if t < 3 t1 then g t1
+       else g t1 - g (t - 3 t1)
+print u(1 s), u(3 s), u(7 s)

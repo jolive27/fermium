@@ -1,0 +1,43 @@
+# 21 — Particles as waves, waves as particles: Compton and de Broglie
+#
+# Compton (1923): an X-ray or gamma-ray photon bouncing off an electron loses
+# energy, just like a billiard ball. Its wavelength grows by
+#
+#     Δλ = (h / m_e c) (1 − cos θ)          h / m_e c = 2.426 pm (Compton wavelength)
+#
+# or, in terms of energy,  E' = E / (1 + (E / m_e c²)(1 − cos θ)).
+# In a gamma-ray detector the largest energy an electron can receive (θ = 180°)
+# shows up as the "Compton edge" in the spectrum.
+#
+# de Broglie (1924): every particle with momentum p has a wavelength λ = h / p.
+# This is why electrons and neutrons diffract off crystals.
+
+λ_C = h / (m_e c)
+print "Compton wavelength of the electron:", λ_C in pm to 6 digits
+
+# Cs-137 gamma rays (662 keV) scattered at different angles
+E_γ = 661.657 keV
+E_after(θ) = E_γ / (1 + E_γ / (m_e c²) * (1 - cos(θ)))
+for θ in [0°, 30°, 60°, 90°, 120°, 180°]
+    print "θ =", θ in deg, "  photon keeps", E_after(θ) in keV, "  wavelength shift", λ_C (1 - cos(θ)) in pm
+
+edge = E_γ - E_after(180°)
+print "Compton edge (maximum electron energy):", edge in keV
+print "backscatter peak:", E_after(180°) in keV
+
+# de Broglie wavelengths
+λ_dB(p) = h / p
+p_nonrel(mass, E) = √(2 mass E)       # (not `2 m`: that is 2 metres)
+print "electron, 100 eV:      ", λ_dB(p_nonrel(m_e, 100 eV)) in nm to 4 digits
+print "thermal neutron, 25 meV:", λ_dB(p_nonrel(m_n, 25 meV)) in nm
+print "baseball, 0.145 kg at 40 m/s:", λ_dB(0.145 kg * 40 m/s)
+
+# Fast electrons need the relativistic momentum pc = √(E_k² + 2 E_k m c²)
+p_rel(mass, Ek) = √(Ek² + 2 Ek mass c²) / c
+print "electron, 1 GeV:", λ_dB(p_rel(m_e, 1 GeV)) in fm, " (smaller than a nucleus: electron scattering sees inside)"
+print "   (non-relativistic formula would give", λ_dB(p_nonrel(m_e, 1 GeV)) in fm, ")"
+
+# The electron microscope: 200 kV
+print "electron microscope, 200 keV:", λ_dB(p_rel(m_e, 200 keV)) in pm
+
+plot E_after(θ) in keV vs θ from 0° to 180° to "gallery/compton.png"

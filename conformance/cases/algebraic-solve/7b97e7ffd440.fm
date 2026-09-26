@@ -1,0 +1,6 @@
+solve cos(x) = x for x from 0 to 10
+print x
+
+g = 9.81 m/s^2
+solve g t^2/2 = 20 m for t from 0 s to 10 s
+print t

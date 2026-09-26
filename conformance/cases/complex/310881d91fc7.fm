@@ -1,0 +1,5 @@
+V0 = 5.00 eV
+a = 0.500 nm
+T(E) = 1 / |cos(q a) - 1i (k² + q²) / (2 k q) * sin(q a)|² where k = √(2 m_e E) / ħ, q = √(2 m_e (E - V0) + 0i) / ħ
+for E in [0.5 eV, 2 eV, 4.9 eV, 5.5 eV, 10 eV]
+    print T(E) to 12 digits

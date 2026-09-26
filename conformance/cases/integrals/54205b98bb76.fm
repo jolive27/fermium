@@ -1,0 +1,1 @@
+print ∫ 1/sqrt(cos(x) - cos(1)) dx from -1 to 1 to 12 digits

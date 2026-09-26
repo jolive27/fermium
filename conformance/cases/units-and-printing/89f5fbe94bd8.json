@@ -1,0 +1,17 @@
+{
+ "id": "89f5fbe94bd8",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "v is speed [m/s]; it can't now hold a plain number (no units)",
+  "line": 2,
+  "col": 1,
+  "hint": "each variable keeps its units; use a new name for a different quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

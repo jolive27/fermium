@@ -1,0 +1,11 @@
+{
+ "id": "cd3a0d2250de",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "F(x) = x³/3\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

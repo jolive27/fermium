@@ -1,0 +1,11 @@
+{
+ "id": "46666b526bd5",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "dimensional analysis of sound: v depends on P, ρ\n  3 quantities, 2 independent dimensions (among length, mass, time) → 3 − 2 = 1 dimensionless group\n  Π₁ = v √(ρ/P)\n  so v ∝ √(P/ρ)   (v = C √(P/ρ), with C a pure number)\n  defined sound(P, ρ) = √(P/ρ), so v = C sound(P, ρ)\n290 m/s\n340 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

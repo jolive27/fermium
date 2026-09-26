@@ -1,0 +1,11 @@
+{
+ "id": "f281919ca74a",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[3, 6, 9] m\n[4, 7, 10] m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "72e73ba9d8df",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "show uses print, so it can't be called inside a parallel for",
+  "line": 6,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

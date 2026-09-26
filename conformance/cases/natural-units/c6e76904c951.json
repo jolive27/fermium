@@ -1,0 +1,17 @@
+{
+ "id": "c6e76904c951",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add a quantity with units [K] to energy or mass [MeV]",
+  "line": 3,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

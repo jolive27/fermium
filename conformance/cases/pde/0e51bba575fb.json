@@ -1,0 +1,11 @@
+{
+ "id": "0e51bba575fb",
+ "area": "pde",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "grid spacing 10 mm   time step 0.36 s   r = 0.40\nafter 200 s : middle of the rod is 53.1 °C\nbump height: simulation 33.29 K   exact 33.30 K\nrelative error: 0.00040\naverage excess temperature: 21 K\nplot saved to <ROOT>/examples/gallery/heat_equation.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+z = 2 + 1i
+w = 2i
+q = 2^3 1i
+print z, w, q

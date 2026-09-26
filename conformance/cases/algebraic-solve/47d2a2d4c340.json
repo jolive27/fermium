@@ -1,0 +1,11 @@
+{
+ "id": "47d2a2d4c340",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) f(M) = 0.25070465 M☉\n(b) a1 sin i = 8.3677449 R☉\n(c) M2 = 21.379764 M☉\n(d) separation = 52.517528 R☉\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

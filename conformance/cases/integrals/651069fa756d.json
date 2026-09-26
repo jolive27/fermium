@@ -1,0 +1,17 @@
+{
+ "id": "651069fa756d",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the integrand is NaN at u = 766 K (0/0? ∞/∞? an overflow like exp(710)?), so this integral can't be computed; rewrite the integrand so it stays finite there, e.g. exp(x) / (exp(x) - 1)² as exp(-x) / (1 - exp(-x))², or 1 - cos(x) as 2 sin(x/2)²",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "2fb4e36a7ad0",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "energy at the start: -502.628 MJ/kg\nrelative energy drift after 3 years: 6.46×10⁻⁹\nangular momentum at the start: <0, -1.79517×10¹⁵, 3.73995×10¹⁵> m²/s\nrelative change in L after 3 years: 3.22×10⁻⁹\ntilt of the orbit: 25.6410°\nsemi-major axis: 0.882490 AU\nperiod: 0.829035 yr\nplot saved to <ROOT>/examples/gallery/orbit_3d.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

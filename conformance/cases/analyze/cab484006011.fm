@@ -1,0 +1,2 @@
+f(x) = x
+analyze T [s] depends on f

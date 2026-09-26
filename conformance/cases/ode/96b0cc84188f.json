@@ -1,0 +1,11 @@
+{
+ "id": "96b0cc84188f",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) x_c = 1: M = 0.69474325 M☉  R = 7.9128208 km\n(b) x_c at the maximum = 0.83385  M_max = 0.7101803 M☉  R = 9.16143 km\n    central mass density = 4.2058×10¹⁵ g/cm³\n(c) compactness 2GM/(Rc²) = 0.228931\n    x_c = 0.05: M = 0.0302619 M☉  polytrope = 0.0304350 M☉\n                R = 48.3001 km  polytrope = 48.4009 km\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

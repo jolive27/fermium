@@ -1,0 +1,4 @@
+L = 2 m
+g = 9.81 m/s²
+v = 3 m/s
+analyze v depends on g, L

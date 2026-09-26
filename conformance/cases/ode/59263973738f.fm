@@ -1,0 +1,2 @@
+solve x'' = -x with x(0) = 1, x'(0) = 0 for t from 0 to 100000
+print x(100000) to 6 digits

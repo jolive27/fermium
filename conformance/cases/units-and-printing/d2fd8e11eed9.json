@@ -1,0 +1,17 @@
+{
+ "id": "d2fd8e11eed9",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'0 [m] ≈ x' is true only when x is exactly 0: ≈ allows a difference of 10⁻⁶ × the larger size, which is 0 here",
+  "line": 2,
+  "col": 13,
+  "hint": "give an absolute tolerance: write 0 [m] ≈ x within 1e-9 [m] (the difference you can accept)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

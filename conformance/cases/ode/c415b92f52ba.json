@@ -1,0 +1,11 @@
+{
+ "id": "c415b92f52ba",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "N_Tc(24 h) / N0 = 0.071592\nN_99(240 h) / N0 = 0.91173\nTc-99m peaks at 22.843 hr\nactivity ratio at 200 h: 1.1002\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

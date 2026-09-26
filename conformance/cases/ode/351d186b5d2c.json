@@ -1,0 +1,11 @@
+{
+ "id": "351d186b5d2c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "E = 0.50 eV  T_numeric = 2.744778552×10⁻⁵  T_exact = 2.744778552×10⁻⁵\nE = 1.0 eV  T_numeric = 9.084579386×10⁻⁵  T_exact = 9.084579386×10⁻⁵\nE = 2.0 eV  T_numeric = 0.0005376131983  T_exact = 0.0005376131983\nE = 3.0 eV  T_numeric = 0.002736452818  T_exact = 0.002736452818\nE = 4.0 eV  T_numeric = 0.01519899804  T_exact = 0.01519899804\nE = 4.9 eV  T_numeric = 0.08796597023  T_exact = 0.08796597023\nE = 5.5 eV  T_numeric = 0.3180894806  T_exact = 0.3180894806\nE = 7.0 eV  T_numeric = 0.9127629422  T_exact = 0.9127629422\nE = 10 eV  T_numeric = 0.9664231790  T_exact = 0.9664231790\nresonance E = 6.504120648 eV  T_numeric = 1.000000000\n",
+ "stderr": "warning: line 40: 'κ' and 'k' look almost identical but are different names\n            κ = √(2 m_e (V0 - E)) / ħ\n            ^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+solve -0.0380998 eV nm² * u'' + 0.5 * (1 eV/nm²) x² u = E u with u(-3 nm) = 0, u(3 nm) = 0 for x from -3 nm to 3 nm lowest 2
+print E in eV to 6 digits

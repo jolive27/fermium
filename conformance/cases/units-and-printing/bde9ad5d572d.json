@@ -1,0 +1,17 @@
+{
+ "id": "bde9ad5d572d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this text (string) is missing its closing quote \"",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

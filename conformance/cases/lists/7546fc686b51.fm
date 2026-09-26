@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+ys = cumsum(xs)
+ys[1] = 50
+print xs

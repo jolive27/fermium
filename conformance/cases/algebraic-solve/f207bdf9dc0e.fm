@@ -1,0 +1,5 @@
+lst = [1, 2, 3]
+f(x) =
+    v = lst[round(x)]
+    return v - 3.5
+solve f(x) = 0 for x from 1 to 10

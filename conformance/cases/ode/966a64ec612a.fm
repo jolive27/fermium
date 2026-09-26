@@ -1,0 +1,4 @@
+k = 2 /m
+solve ψ'' = -k² ψ with ψ(0 m) = 1 + 0i, ψ'(0 m) = 1i k for x from 0 m to 3 m
+print ψ(3 m) to 12 digits
+print ψ'(3 m) to 12 digits

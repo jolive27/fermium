@@ -1,0 +1,11 @@
+{
+ "id": "f6899841bc8b",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "ω0  = 1000.0000 rad/s\nα   = 200.00000 1/s\nω_d = 979.79590 rad/s\nq(2 ms) solve = -25.496887 μC\nq(2 ms) exact = -25.496889 μC\ni(2 ms) solve = -126.61649 mA\ni(2 ms) exact = -126.61649 mA\nheat in R by 10 ms (solve) = 0.97894301 mJ\nheat in R by 10 ms (exact) = 0.97894304 mJ\ndrop in stored energy      = 0.97894304 mJ\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "b9d7de2b7293",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "fft(xs): xs must be a list, not length [m]",
+  "line": 1,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

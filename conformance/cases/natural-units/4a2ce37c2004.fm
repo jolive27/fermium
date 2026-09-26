@@ -1,0 +1,7 @@
+L = 2 m
+units nuclear:
+    E = 10 MeV
+    k = 1/(1 fm)
+    print E, k          # 10 MeV 197.327 MeV
+r = 1/k in fm           # an ordinary SI length again
+print r in m, E in J

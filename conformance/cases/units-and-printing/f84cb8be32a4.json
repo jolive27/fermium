@@ -1,0 +1,17 @@
+{
+ "id": "f84cb8be32a4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g",
+  "line": 3,
+  "col": 9,
+  "hint": "write  2*g  for 2 × your variable g, or  2 [g]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

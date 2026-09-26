@@ -1,0 +1,17 @@
+{
+ "id": "54a8541e71dd",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'a = b = 1': Fermium gives one variable a value at a time",
+  "line": 1,
+  "col": 7,
+  "hint": "write each on its own line, like  a = …  and  b = …  (== compares two values)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

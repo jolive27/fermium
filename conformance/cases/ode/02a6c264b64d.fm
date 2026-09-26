@@ -1,0 +1,2 @@
+solve x' = 1 with x(0) = 0 for t from 0 to 1 step 0
+print x(1)

@@ -1,0 +1,4 @@
+x = 1
+v = if x > 1 then 1
+else 0
+print v

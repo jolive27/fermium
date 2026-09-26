@@ -1,0 +1,17 @@
+{
+ "id": "52993676b551",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't subtract length [m] from time [s]",
+  "line": 4,
+  "col": 26,
+  "hint": "the ' - x0' is part of the upper limit here; to subtract it after integrating, write  (… to T) - x0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

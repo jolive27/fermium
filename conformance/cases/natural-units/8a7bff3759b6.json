@@ -1,0 +1,11 @@
+{
+ "id": "8a7bff3759b6",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of pendulum: T depends on L, m, g\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  (in SI dimensions: under units natural (ħ = c = 1) those constants are pure numbers, so length, mass and time would collapse into powers of energy and hide the groups)\n  Π₁ = T √(g/L)\n  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)\n  m drops out: nothing else has mass\n  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)\n0.319275 s\ndimensional analysis of planck: l depends on G, ħ, c\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  (in SI dimensions: under units natural (ħ = c = 1) those constants are pure numbers, so length, mass and time would collapse into powers of energy and hide the groups)\n  Π₁ = l √(c³/(G ħ))\n  so l ∝ √(G ħ/c³)   (l = C √(G ħ/c³), with C a pure number)\n  defined planck = √(G ħ/c³) = 8.19×10⁻²³ MeV⁻¹\n1.616×10⁻³⁵ m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "39c7225e1c68",
+ "area": "data",
+ "origin": "tests",
+ "dir": ".",
+ "stdout": "fit B = a_V A - a_S A^(2/3) - a_C Z·(Z - 1)/A^(1/3) - a_A (A - 2Z)²/A + P a_P/√(A)   (2484 data points from research/semf_ame2020/ame2020_binding.csv)\n  a_V = 15.414 MeV   (standard error 0.023 MeV)\n  a_S = 16.86 MeV   (standard error 0.074 MeV)\n  a_C = 0.69524 MeV   (standard error 0.0016 MeV)\n  a_A = 22.497 MeV   (standard error 0.058 MeV)\n  a_P = 12.03 MeV   (standard error 0.91 MeV)\n  rms residual = 3.31 MeV\n0.023 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

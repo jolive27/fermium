@@ -1,0 +1,11 @@
+{
+ "id": "ff8505814eee",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "dimensional analysis of waves: v depends on g, λ\n  3 quantities, 2 independent dimensions (length, time) → 3 − 2 = 1 dimensionless group\n  Π₁ = v/√(g λ)\n  so v ∝ √(g λ)   (v = C √(g λ), with C a pure number)\n  defined waves(g, λ) = √(g λ), so v = C waves(g, λ)\nλ = 100 m: 12.5 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

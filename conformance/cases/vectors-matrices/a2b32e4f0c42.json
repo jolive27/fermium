@@ -1,0 +1,17 @@
+{
+ "id": "a2b32e4f0c42",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "|v| needs all components of the vector in the same units, but this one has length [m], speed [m/s]",
+  "line": 1,
+  "col": 7,
+  "hint": "a state vector like <x, v> can be added and scaled, but it has no length or direction",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

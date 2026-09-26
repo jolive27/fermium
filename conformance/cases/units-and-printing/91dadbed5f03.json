@@ -1,0 +1,17 @@
+{
+ "id": "91dadbed5f03",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "min needs all values in the same units",
+  "line": 1,
+  "col": 16,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

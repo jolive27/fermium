@@ -1,0 +1,1 @@
+print ∫ <exp(-x²), 0, 0> dx from -1e6 to 1e6

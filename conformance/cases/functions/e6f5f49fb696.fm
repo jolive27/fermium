@@ -1,0 +1,6 @@
+make(n) =
+    out = []
+    for i from 1 to n
+        push(out, i^2)
+    out
+print make(4)

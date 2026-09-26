@@ -1,0 +1,17 @@
+{
+ "id": "0be2cc16d9f3",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add voltage [V] to resistance [Ω]",
+  "line": 1,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units (for complex numbers too)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

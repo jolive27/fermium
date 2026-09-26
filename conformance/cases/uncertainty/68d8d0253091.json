@@ -1,0 +1,11 @@
+{
+ "id": "68d8d0253091",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "61.435623\n165.06044\n20.085537\n30.128305\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

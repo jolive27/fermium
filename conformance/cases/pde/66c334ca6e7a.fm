@@ -1,0 +1,6 @@
+L = 1 m
+D = 1e-4 m^2/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 1000 s
+print u(0.1 m, 1000 s) to 6 digits

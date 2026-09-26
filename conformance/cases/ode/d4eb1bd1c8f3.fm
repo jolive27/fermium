@@ -1,0 +1,9 @@
+solve u' = -u / (1 s)
+  with u(5 s) = 1 m
+  for t from 5 s to 0 s
+print u(0 s) / (1 m) to 12 digits, u(2.5 s) / (1 m) to 12 digits, u[end] / (1 m) to 12 digits
+print times(u)[1], times(u)[end]
+solve w' = -w / (1 s)
+  with w(5 s) = 1 m
+  for t from 5 s to 0 s step 0.01 s
+print w(0 s) / (1 m) to 12 digits, w[end] / (1 m) to 12 digits

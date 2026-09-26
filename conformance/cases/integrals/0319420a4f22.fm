@@ -1,0 +1,3 @@
+m = m_e
+T = 300 K
+print ∫ 4π v^2 (m/(2π k_B T))^(3/2) exp(-m v^2 / (2 k_B T)) dv from 0 m/s to ∞

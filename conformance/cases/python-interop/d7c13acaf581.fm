@@ -1,0 +1,3 @@
+use python numpy as np:
+    sqrt(x [°C]) -> number
+print 1

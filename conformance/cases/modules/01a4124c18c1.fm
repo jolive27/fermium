@@ -1,0 +1,5 @@
+import astro as a
+print a.wien_peak'(5000 K) / (1 m/K) to 6 digits
+from astro import wien_peak
+dw = wien_peak'
+print dw(5000 K) / (1 m/K) to 6 digits

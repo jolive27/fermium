@@ -1,0 +1,11 @@
+solve x' = -x / (1 s)
+  with x(0 s) = 2 m
+  for t from 0 s to 3 s
+ts = linspace(0 s, 3 s, 7)
+ys = x(ts)
+print len(ys), sum(ys) to 8 digits
+s = 0 m
+for t in ts
+    s = s + x(t)
+print s to 8 digits
+print x([1 [s]]) in cm to 4 digits

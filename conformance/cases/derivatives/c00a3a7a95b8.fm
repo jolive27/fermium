@@ -1,0 +1,2 @@
+f(x) = atan(x) + asin(x/4)
+print f'

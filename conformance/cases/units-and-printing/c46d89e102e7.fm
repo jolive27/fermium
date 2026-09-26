@@ -1,0 +1,3 @@
+σ = 0.02 m
+x = 1.03 m
+print x ≈ 1 m within 2σ, x ≈ 1 m within σ

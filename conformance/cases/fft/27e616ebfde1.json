@@ -1,0 +1,11 @@
+{
+ "id": "27e616ebfde1",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[0.791666666666667, -0.187638837486628, 0.162040531072258, 0.375000000000000, -0.328707197738924, 0.187638837486628]\n",
+ "stderr": "warning: line 1: ifft(re, im) is deprecated and will be removed after Fermium 1.5: write ifft(complex(re, im))\n    print ifft([1.0, 2.0, -0.5, 0.25, 3.0, -1.0], [0.0, 0.5, 1.5, -2.0, 0.0, 0.7]) to 15 digits\n          ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

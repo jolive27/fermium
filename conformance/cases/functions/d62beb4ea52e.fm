@@ -1,0 +1,8 @@
+# How fast is a ball going after falling from height h?
+impact_speed(h) =
+    g = 9.81 m/s^2
+    v = sqrt(2 * g * h)
+    return v
+
+print impact_speed(10 m)
+print impact_speed(1 m) in km/hr

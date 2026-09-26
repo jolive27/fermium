@@ -1,0 +1,4 @@
+g = 9.81 m/s^2
+h = 20 m
+print 2*g*h
+print 2 [g]

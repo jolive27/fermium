@@ -1,0 +1,1 @@
+solve -ħ²/(2*m_e) * u'' + 2 u * 0.1 eV = E u with u(0 nm) = 0, u(3 nm) = 0 for x from 0 nm to 3 nm lowest 2

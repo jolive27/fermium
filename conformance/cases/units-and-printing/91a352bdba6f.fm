@@ -1,0 +1,2 @@
+x = 3 m/s²
+print x in m/s

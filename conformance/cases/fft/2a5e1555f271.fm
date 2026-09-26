@@ -1,0 +1,5 @@
+X = fft([0.3, -1.2, 2.5, 0.7, -0.4, 1.9, -2.2, 0.05, 1.1, -0.8, 0.6])
+print re(X) to 12 digits
+print im(ifft(fft(X))) to 12 digits
+print complex([1, 2], [3, 4])
+print re(ifft([1, 2, 3])) to 12 digits

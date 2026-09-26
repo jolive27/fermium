@@ -1,0 +1,11 @@
+{
+ "id": "054ab36fe306",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "1.200 ± 0.010 m 2.210 ± 0.020 s\n120.0 ± 1.0 cm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

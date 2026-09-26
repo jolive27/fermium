@@ -1,0 +1,11 @@
+{
+ "id": "d051dc565fce",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "recorded 365 positions\nplot saved to <ROOT>/bootcamp/my_orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

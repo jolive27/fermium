@@ -1,0 +1,11 @@
+{
+ "id": "f3474e9f4811",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "9.0 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "72dfcdc6034c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 kg\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

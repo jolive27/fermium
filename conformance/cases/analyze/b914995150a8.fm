@@ -1,0 +1,1 @@
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]

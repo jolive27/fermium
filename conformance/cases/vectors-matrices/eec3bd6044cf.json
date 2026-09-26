@@ -1,0 +1,17 @@
+{
+ "id": "eec3bd6044cf",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'v ≈ <0, 0> m/s' is true only when v is exactly 0: ≈ allows a difference of 10⁻⁶ × the larger size, which is 0 here",
+  "line": 2,
+  "col": 9,
+  "hint": "give an absolute tolerance: write v ≈ <0, 0> m/s within 1e-9 m/s (the difference you can accept)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

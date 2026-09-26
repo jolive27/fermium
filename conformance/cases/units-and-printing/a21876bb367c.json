@@ -1,0 +1,11 @@
+{
+ "id": "a21876bb367c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "9.81 m/s²\n32.2 ft/s²\ng is 9.81 m/s²\n1.27×10⁵ km/hr²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

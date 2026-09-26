@@ -1,0 +1,17 @@
+{
+ "id": "9c06dbc33420",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the explicit method is unstable with this step: it needs dt ≤ h²/(2D) = 0.00125 s (SI) on this grid; use a smaller step, or crank_nicolson",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

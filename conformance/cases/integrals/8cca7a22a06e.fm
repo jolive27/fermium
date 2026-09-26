@@ -1,0 +1,2 @@
+a = 1 AU
+print ∫ exp(-r/a) dr from 0 m to ∞ in AU to 6 digits

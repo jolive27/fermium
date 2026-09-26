@@ -1,0 +1,5 @@
+units natural(ħ = c = 1)
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]
+print pendulum(1 m, 9.81 m/s²) in s to 6 digits
+analyze planck: l [m] depends on G, ħ, c
+print planck in m to 4 digits

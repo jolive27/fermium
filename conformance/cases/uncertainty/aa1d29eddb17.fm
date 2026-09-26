@@ -1,0 +1,64 @@
+# 09 — The semi-empirical mass formula: binding energy per nucleon
+#
+# Why does iron sit at the top of the "curve of binding energy", so that
+# fusion of light nuclei and fission of heavy ones both release energy?
+# The liquid-drop model (Bethe–Weizsäcker formula) builds the binding energy of
+# a nucleus with Z protons and A nucleons from five physical ideas:
+#
+#   B = a_V A                      volume: each nucleon bonds to its neighbours
+#     − a_S A^(2/3)                surface: nucleons at the surface have fewer
+#     − a_C Z(Z−1) / A^(1/3)       Coulomb: the protons repel each other
+#     − a_A (A − 2Z)² / A          asymmetry: the Pauli principle prefers N ≈ Z
+#     ± a_P / A^(1/2)              pairing: even-even nuclei are extra bound
+#
+# We check it against measured values, then loop over A, pick the most stable
+# Z for each, and plot B/A.
+
+a_V = 15.75 MeV
+a_S = 17.8 MeV
+a_C = 0.711 MeV
+a_A = 23.7 MeV
+a_P = 11.18 MeV
+
+pairing(Z, A) =
+    N = A - Z
+    if mod(A, 2) == 1
+        return 0 MeV
+    else if mod(Z, 2) == 0
+        return a_P / √A         # even Z, even N
+    else
+        return -a_P / √A        # odd Z, odd N
+
+B(Z, A) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + pairing(Z, A)
+
+print "He-4:   B/A =", B(2, 4) / 4 in MeV, "  (measured 7.07 MeV: the liquid drop fails for tiny nuclei)"
+print "C-12:   B/A =", B(6, 12) / 12 in MeV, "  (measured 7.68 MeV)"
+print "Fe-56:  B/A =", B(26, 56) / 56 in MeV, "  (measured 8.79 MeV)"
+print "Ni-62:  B/A =", B(28, 62) / 62 in MeV, "  (measured 8.79 MeV)"
+print "U-238:  B/A =", B(92, 238) / 238 in MeV, "  (measured 7.57 MeV)"
+
+# The most stable Z for a given A: minimise the mass, which gives
+#   Z ≈ A / (2 + (a_C / 2a_A) A^(2/3))
+Z_stable(A) = round(A / (2 + a_C / (2 a_A) * A^(2/3)))
+print "most stable Z for A = 56:", Z_stable(56), " (iron-56 has Z = 26: the pairing term, left out here, favours even Z)"
+print "most stable Z for A = 208:", Z_stable(208), " (lead is 82)"
+
+As = []
+BperA = []
+best_A = 0
+best = 0 MeV
+for A from 10 to 250
+    Z = Z_stable(A)
+    b = B(Z, A) / A
+    push(As, A)
+    push(BperA, b)
+    if b > best
+        best = b
+        best_A = A
+print "the peak of the curve is at A =", best_A, "with B/A =", best
+
+# Energy released by fission of U-235 into two A ≈ 117 fragments
+Q_fission = 2 * B(46, 117) - B(92, 235)
+print "fission of U-235 releases about", Q_fission in MeV
+
+plot BperA in MeV vs As to "gallery/binding_energy.png"

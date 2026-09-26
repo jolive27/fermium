@@ -1,0 +1,17 @@
+{
+ "id": "10ccc9322f86",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "identity(n) needs a fixed whole number, like identity(3)",
+  "line": 2,
+  "col": 16,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

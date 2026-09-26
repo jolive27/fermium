@@ -1,0 +1,11 @@
+{
+ "id": "df9d06cd675b",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = ((2x - x²)·sin(3x) + 3x² cos(3x))·exp(-x)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

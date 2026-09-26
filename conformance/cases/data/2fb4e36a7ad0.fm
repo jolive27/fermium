@@ -1,0 +1,45 @@
+# 26 — A tilted orbit in 3-D, written as one vector equation
+#
+# Newton's law of gravity for a planet at position r (a 3-vector) around the Sun:
+#
+#     r'' = -G M☉ r / |r|³
+#
+# One line covers all three coordinates: `solve` sees that r(0) is a 3-vector
+# and follows x, y and z together. We launch the planet with part of its speed
+# out of the x-y plane, so the orbit is a tilted ellipse.
+#
+# Two things must not change along the way (per kilogram of planet):
+#   * the energy             E = ½ |v|² − G M☉ / |r|
+#   * the angular momentum   L = r × v   (a vector: its direction is the orbit's axis)
+
+GM = G M_sun
+r0 = <1, 0, 0> AU
+v0 = <0, 25, 12> km/s        # 27.7 km/s: slower than a circular orbit (29.8 km/s),
+                             # so 1 AU is the farthest point and the planet falls inward
+
+solve r'' = -GM r / |r|³
+  with r(0) = r0, r'(0) = v0
+  for t from 0 s to 3 yr
+
+E(t) = ½ |r'(t)|² - GM / |r(t)|
+L(t) = r(t) × r'(t)
+
+T = 3 yr
+print "energy at the start:", E(0 s) in MJ/kg to 6 digits
+print "relative energy drift after 3 years:", |E(T) - E(0 s)| / |E(0 s)|
+print "angular momentum at the start:", L(0 s) to 6 digits
+print "relative change in L after 3 years:", |L(T) - L(0 s)| / |L(0 s)|
+
+# The orbit is a flat ellipse in a tilted plane: its axis L makes this angle with the z-axis
+print "tilt of the orbit:", acos(L(0 s).z / |L(0 s)|) in deg to 6 digits
+
+# Kepler's third law from the energy: a = -GM / (2E), T² = 4π² a³ / GM
+a = -GM / (2 E(0 s))
+print "semi-major axis:", a in AU to 6 digits
+print "period:", 2π √(a³ / GM) in yr to 6 digits
+
+assert |E(T) - E(0 s)| < 1e-6 |E(0 s)|, "energy should be conserved"
+assert |L(T) - L(0 s)| < 1e-6 |L(0 s)|, "angular momentum should be conserved"
+assert |r(T) · L(0 s)| < 1e-6 |r(T)| |L(0 s)|, "the orbit should stay in its plane (r ⊥ L)"
+
+plot r.y in AU vs r.x in AU to "gallery/orbit_3d.png"

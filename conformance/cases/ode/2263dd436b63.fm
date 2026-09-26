@@ -1,0 +1,43 @@
+# Special relativity 02 — The relativistic rocket and velocity addition
+#
+# (Taylor & Wheeler, "Spacetime Physics", Ch. 1 exercises / Rindler, "Relativity",
+# hyperbolic motion.)  A starship accelerates with a constant proper
+# acceleration g = 9.81 m/s² (the crew feels normal Earth gravity).
+# In the Earth frame its equations of motion are
+#
+#     d(γv)/dt = g   ⇔   dv/dt = g (1 − v²/c²)^(3/2),   dx/dt = v,
+#     dτ/dt = √(1 − v²/c²)   (proper time on board).
+#
+#  (a) Integrate for 5 years of Earth time.  Compare v, x and τ with the exact
+#      hyperbolic-motion results v = gt/√(1 + (gt/c)²),
+#      x = (c²/g)(√(1 + (gt/c)²) − 1),  τ = (c/g) asinh(gt/c).
+#  (b) Trip to Alpha Centauri, 4.37 ly: accelerate to the midpoint, then flip
+#      and decelerate.  How long does it take on Earth and on board?
+#      (Exact: τ = (2c/g) acosh(1 + g d / 2c²).)
+#  (c) After one year (Earth time) the ship fires a probe forward at 0.600 c
+#      relative to itself.  How fast is the probe in the Earth frame?
+
+g = 9.81 m/s²
+d = 4.37 ly
+
+solve v' = g (1 - v²/c²)^(3/2),
+      x' = v,
+      τ' = √(1 - v²/c²)
+  with v(0) = 0 m/s, x(0) = 0 ly, τ(0) = 0 yr
+  for t from 0 yr to 5 yr
+
+T = 5 yr
+print "(a) v(5 yr) =", v(T) in c to 10 digits, "  exact", g T / √(1 + (g T / c)²) in c to 10 digits
+print "    x(5 yr) =", x(T) in ly to 10 digits, "  exact", c² / g * (√(1 + (g T / c)²) - 1) in ly to 10 digits
+print "    tau(5 yr) =", τ(T) in yr to 10 digits, "  exact", c / g * asinh(g T / c) in yr to 10 digits
+
+# (b) find the Earth time of the midpoint from the solution itself
+solve x(t_mid) = d / 2 for t_mid from 0 yr to 5 yr
+print "(b) Earth time =", 2 t_mid in yr to 10 digits, "  ship time =", 2 τ(t_mid) in yr to 10 digits,
+      "  exact ship time", 2 [c] / g * acosh(1 + g d / (2 c²)) in yr to 10 digits
+print "    top speed =", v(t_mid) in c to 10 digits
+
+# (c) relativistic velocity addition
+u = 0.600 c
+v1 = v(1 yr)
+print "(c) ship =", v1 in c to 10 digits, "  probe =", (v1 + u) / (1 + v1 u / c²) in c to 10 digits

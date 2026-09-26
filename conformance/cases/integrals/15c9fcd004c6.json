@@ -1,0 +1,11 @@
+{
+ "id": "15c9fcd004c6",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Earth:   11.2 km/s\nMoon:    2.375 km/s\nMars:    5.027 km/s\nJupiter: 60.20 km/s\nSun:     618 km/s\nwork to escape, per kg: 62.5 MJ\nspeed from ½ v² = W/(1 kg): 11.2 km/s\nneutron star: 1.8×10⁵ km/s = 0.59 of light speed\nSchwarzschild radius of the Sun:   2.953 km\nSchwarzschild radius of the Earth: 8.87 mm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

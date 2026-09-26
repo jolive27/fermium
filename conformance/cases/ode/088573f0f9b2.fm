@@ -1,0 +1,28 @@
+simpson(f, a, b, n) =
+    h = (b - a) / n
+    s = f(a) + f(b)
+    for i from 1 to n - 1
+        x = a + i h
+        if mod(i, 2) == 1
+            s += 4 f(x)
+        else
+            s += 2 f(x)
+    s h / 3
+me = 9.1093837e-31 kg
+L = 1 nm
+shoot(V, E) =
+    solve ψ'' = 2 me (V(x) - E) ψ / ħ²
+      with ψ(0 nm) = 0, ψ'(0 nm) = 1
+      for x from 0 nm to L
+    ψ(L)
+flat(x) = 0 eV
+ramp(x) = 0.5 eV x / L
+sq(x) = x²
+print simpson(sq, 0, 3, 100)
+print simpson(sin, 0, π, 50) to 12 digits
+force(V, x) = -V'(x)
+print force(ramp, 3 nm) in eV/nm
+solve shoot(ramp, E) = 0 for E from 0.4 eV to 1 eV
+print E in eV to 10 digits
+iterate(f, x, n) = if n <= 0 then x else iterate(f, f(x), n - 1)
+print iterate(cos, 1, 30) to 10 digits

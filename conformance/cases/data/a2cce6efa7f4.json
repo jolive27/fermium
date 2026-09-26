@@ -1,0 +1,11 @@
+{
+ "id": "a2cce6efa7f4",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of pendulum: T depends on L, m, g\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = T √(g/L)\n  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)\n  m drops out: nothing else has mass\n  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)\nfit T = C pendulum(L, 9.81 m/s²)   (5 data points from /tmp/pytest-of-root/pytest-786/popen-gw0/test_fit_with_the_analysis_res0/pendulum.csv)\n  C = 6.28318626   (standard error 4.7×10⁻⁷)\n  rms residual = 2.32×10⁻⁷ s\n6.28319\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

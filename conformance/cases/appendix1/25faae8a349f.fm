@@ -1,0 +1,2 @@
+print "Hello Physics!"
+print 9.81 m / s^2 * 3 s        # 29.4 m/s

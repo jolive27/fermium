@@ -1,0 +1,17 @@
+{
+ "id": "7f52564da2d9",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add length [m] to a list of time [s]",
+  "line": 2,
+  "col": 10,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

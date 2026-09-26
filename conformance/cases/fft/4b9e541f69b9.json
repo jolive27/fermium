@@ -1,0 +1,11 @@
+{
+ "id": "4b9e541f69b9",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[3000 + 0i, -1000 + 0i] mV\n[6.500 + 0i, -1.000 + 0.8660i, -1.000 - 0.8660i]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

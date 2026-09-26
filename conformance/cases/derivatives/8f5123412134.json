@@ -1,0 +1,17 @@
+{
+ "id": "8f5123412134",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't differentiate this sum with respect to N: its limits depend on N",
+  "line": 1,
+  "col": 11,
+  "hint": "the number of terms changes in steps, so it has no derivative; (needed for the derivative of F on line 2)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

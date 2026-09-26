@@ -1,0 +1,11 @@
+{
+ "id": "eab1adb54930",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 cm³/(mol s)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

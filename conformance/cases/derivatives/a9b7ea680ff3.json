@@ -1,0 +1,17 @@
+{
+ "id": "a9b7ea680ff3",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "d/dr f(r, 2R): R isn't defined, so this can't be a function of r alone",
+  "line": 2,
+  "col": 6,
+  "hint": "for the partial derivative with the other arguments kept as parameters, write ∂/∂r f  (a function of the same arguments as f)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,41 @@
+# Thermodynamics 31 — Bose–Einstein condensation of a uniform ⁸⁷Rb gas
+#
+# (Pathria & Beale, Statistical Mechanics 3rd ed., §7.1, eqs. 7.1.24–7.1.39 and
+#  Appendix D; Huang, Statistical Mechanics §12.3; Kittel & Kroemer ch. 7.)
+# An ideal gas of ⁸⁷Rb atoms (m = 86.909 u, spin-0 for this purpose) has number
+# density n = 2.50×10¹⁹ m⁻³. With the thermal wavelength λ = h / √(2π m_Rb k_B T) and the
+# Bose functions g_ν(z) = (1/Γ(ν)) ∫₀^∞ x^(ν−1) / (e^x/z − 1) dx,
+#     n λ³ = g_{3/2}(z)   (above T_c),     T_c: n λ(T_c)³ = ζ(3/2) = g_{3/2}(1).
+#   (a) ζ(3/2) and ζ(5/2) from the integrals, and T_c.
+#   (b) At T = 1.50 T_c, solve n λ³ = g_{3/2}(z) for the fugacity z, and check it
+#       against the series g_{3/2}(z) = Σ z^k / k^(3/2).
+#   (c) Below T_c: the condensate fraction N₀/N = 1 − (T/T_c)^(3/2) at 0.50 T_c,
+#       and the heat capacity per atom just below T_c, C/(N k_B) = (15/4) ζ(5/2)/ζ(3/2).
+#   (d) Just above T_c the heat capacity is continuous (the cusp): Pathria 7.1.37
+#       C/(N k) = (15/4) g_{5/2}(z)/g_{3/2}(z) − (9/4) g_{3/2}(z)/g_{1/2}(z); evaluate it
+#       at 1.50 T_c.
+
+m_Rb = 86.909 u
+n = 2.50e19 m⁻³     # (with the mass called m, `2.50e19 /m³` is silently 2.5×10¹⁹ / m³, in 1/kg³)
+λ(T) = h / √(2π m_Rb k_B T)
+
+g(ν, z) = ∫ x^(ν - 1) / (exp(x) / z - 1) dx from 0 to ∞ / gamma(ν)
+ζ32 = g(1.5, 1)
+ζ52 = g(2.5, 1)
+print "(a) zeta(3/2) =", ζ32 to 10 digits, " zeta(5/2) =", ζ52 to 10 digits
+T_c = (2π ħ² / (m_Rb k_B)) (n / ζ32)^(2/3)
+print "    T_c =", T_c in nK to 8 digits, " check n λ(T_c)³ =", n λ(T_c)³ to 10 digits
+
+# (b) fugacity at 1.5 T_c
+T = 1.50 T_c
+target = n λ(T)³
+solve g(1.5, z) = target for z from 0.01 to 0.999999
+series = Σ(z^k / k^1.5 for k from 1 to 400)
+print "(b) n λ³ =", target to 10 digits, " z =", z to 10 digits, " series g(3/2, z) =", series to 10 digits
+
+# (c) below T_c
+print "(c) condensate fraction at 0.5 T_c =", 1 - 0.50^1.5 to 6 digits, " C/(N k) below T_c =", 15/4 * ζ52 / ζ32 to 8 digits
+
+# (d) above T_c
+C_above = (15/4) g(2.5, z) / g(1.5, z) - (9/4) g(1.5, z) / g(0.5, z)
+print "(d) C/(N k) at 1.5 T_c =", C_above to 8 digits, " (classical limit 1.5)"

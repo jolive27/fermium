@@ -1,0 +1,8 @@
+force(V, x) = -V'(x)
+stiffness(V, x) = d²/dx² V(x)
+spring(x) = ½ (4 N/m) x²
+gravity(x) = 2 kg * 9.8 m/s² * x
+print force(spring, 3 m)
+print force(gravity, 3 m)
+print stiffness(spring, 1 m)
+print force(spring', 3 m)

@@ -1,0 +1,17 @@
+{
+ "id": "a2cc3700f684",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a parallel for can't be inside another parallel for",
+  "line": 2,
+  "col": 5,
+  "hint": "make the inner loop a plain for; the outer loop already uses every core",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

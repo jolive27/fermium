@@ -1,0 +1,11 @@
+{
+ "id": "9c1983d283db",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9.701842515 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

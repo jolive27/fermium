@@ -1,0 +1,11 @@
+{
+ "id": "8e649aa07327",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) age, matter + Lambda: integral = 13.79150103 Gyr   closed form = 13.79150103 Gyr\n(b) age = 13.78592392 Gyr   age at z = 1100 = 366012.42 yr   lookback to z = 1 = 7.935348491 Gyr\n(c) D_C(z = 1) = 3395.540563 Mpc   D_L = 6791.081125 Mpc\n(d) a_acc = 0.6091581476   z_acc = 0.6416098248\n    acceleration begins at t = 7.641859740 Gyr   ODE age (A = 1) = 13.78592349 Gyr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

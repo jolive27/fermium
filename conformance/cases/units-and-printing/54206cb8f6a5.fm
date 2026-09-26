@@ -1,0 +1,3 @@
+L = 2 m
+T = 3 s
+print LT

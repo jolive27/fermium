@@ -1,0 +1,17 @@
+{
+ "id": "22fb8b7bf45a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 c' is ambiguous: right after a number, c is a unit (the speed of light), but c is also your variable c",
+  "line": 2,
+  "col": 9,
+  "hint": "write  2*c  for 2 × your variable c, or  2 [c]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

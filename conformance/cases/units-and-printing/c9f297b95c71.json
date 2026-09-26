@@ -1,0 +1,11 @@
+{
+ "id": "c9f297b95c71",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.00×10⁻²⁸ m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

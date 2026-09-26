@@ -1,0 +1,2 @@
+for t from 0 s to 1 s step 0.25 s
+    print t

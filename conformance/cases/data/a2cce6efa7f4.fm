@@ -1,0 +1,4 @@
+data = load "/tmp/pytest-of-root/pytest-786/popen-gw0/test_fit_with_the_analysis_res0/pendulum.csv"
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]
+fit T = C pendulum(L, 9.81 m/s²) to data
+print C to 6 digits

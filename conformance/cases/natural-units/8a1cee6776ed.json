@@ -1,0 +1,11 @@
+{
+ "id": "8a1cee6776ed",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.23456 m\n1.23456 fm\n1.23456 s\n1.23456 kg\n1.23456 J\n1.23456 MeV\n1.23456 1/GeV²\n1.23456 barn\n1.23456 N\n1.23456 W\n1.23456 Pa\n1.23456 K\n1.23456 C\n1.23456 T\n1.23456 V\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

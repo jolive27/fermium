@@ -1,0 +1,17 @@
+{
+ "id": "00d405df6993",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the argument of sin must be a number, but it is a 2×2 matrix of a plain number (no units)",
+  "line": 1,
+  "col": 11,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

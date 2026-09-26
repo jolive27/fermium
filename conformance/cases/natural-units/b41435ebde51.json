@@ -1,0 +1,17 @@
+{
+ "id": "b41435ebde51",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show a quantity with units [m] in 1/MeV (a quantity with units [m⁻¹])",
+  "line": 2,
+  "col": 7,
+  "hint": "in natural units (c = G = 1) a mass, a length and a time are all measured in the same unit; check the powers",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

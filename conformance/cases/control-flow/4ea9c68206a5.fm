@@ -1,0 +1,18 @@
+dt = 1 ms
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V * sin(2π * 47.3 Hz * ts[i]) + 1 V * cos(2π * 120 Hz * ts[i]) + 0.5 V
+A = amplitude_spectrum(xs)
+f = frequencies(xs, dt)
+peaks = values(A)
+peaks[1] = 0 V
+k = argmax(peaks)
+print f[k]
+print A[k] to 12 digits
+print A[1] to 12 digits
+print len(f), f[end]
+P = power_spectrum(xs, dt)
+df = f[2] - f[1]
+print sum(P) df / mean(xs * xs) to 12 digits

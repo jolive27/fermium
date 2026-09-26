@@ -1,0 +1,5 @@
+decay(N0, τ) =
+    N(t) = N0 exp(-t / τ)
+    solve x' = -x / τ with x(0 s) = N0 for t from 0 s to 3 τ
+    return (x(τ) - N(τ)) / N0
+print abs(decay(1000, 2 s)) < 1e-6

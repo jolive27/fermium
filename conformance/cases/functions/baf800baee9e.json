@@ -1,0 +1,17 @@
+{
+ "id": "baf800baee9e",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "ΔT looks like a temperature change, but a value in °C is an absolute temperature (10 °C is 283.15 K)",
+  "line": 2,
+  "col": 7,
+  "hint": "write a change of temperature in K (10 °C → 10 K), or as a difference like T2 - T1",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

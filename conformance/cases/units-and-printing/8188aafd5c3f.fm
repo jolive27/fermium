@@ -1,0 +1,4 @@
+T1 = 20 °C
+T2 = 30 °C
+ΔT = T2 - T1
+print 4186 J/(kg K) * 1 kg * ΔT

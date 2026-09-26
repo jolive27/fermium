@@ -1,0 +1,11 @@
+{
+ "id": "53330002702f",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "1048576 bacteria after 400 min = 6.67 hr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

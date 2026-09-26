@@ -1,0 +1,16 @@
+import stats
+xs = [1 s, 2 s, 3 s, 4 s, 5 s, 6 s]
+ys = [2.1 m, 3.9 m, 6.2 m, 7.8 m, 10.1 m, 11.7 m]
+σs = [0.1 m, 0.2 m, 0.1 m, 0.3 m, 0.2 m, 0.25 m]
+model = 2 m/s * xs
+
+print (stats.standard_error(ys)) / (1 m) to 12 digits
+print (stats.weighted_mean(ys, σs)) / (1 m) to 12 digits
+print (stats.weighted_mean_error(σs)) / (1 m) to 12 digits
+print stats.chi_squared(ys, model, σs) to 12 digits
+print stats.reduced_chi_squared(ys, model, σs, 1) to 12 digits
+print (stats.linear_slope(xs, ys)) / (1 m/s) to 12 digits
+print (stats.linear_intercept(xs, ys)) / (1 m) to 12 digits
+print (stats.linear_slope_error(xs, ys)) / (1 m/s) to 12 digits
+print (stats.linear_intercept_error(xs, ys)) / (1 m) to 12 digits
+print stats.correlation(xs, ys) to 12 digits

@@ -1,0 +1,17 @@
+{
+ "id": "2334164f6ea2",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "power_spectrum takes 2 arguments: power_spectrum(xs, dt)",
+  "line": 1,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

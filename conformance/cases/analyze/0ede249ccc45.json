@@ -1,0 +1,11 @@
+{
+ "id": "0ede249ccc45",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of hydrogen: E depends on m_e, e, ε₀, ħ\n  5 quantities, 4 independent dimensions (length, mass, time, current) → 5 − 4 = 1 dimensionless group\n  Π₁ = E ε₀² ħ²/(m_e e⁴)\n  so E ∝ m_e e⁴/(ε₀² ħ²)   (E = C m_e e⁴/(ε₀² ħ²), with C a pure number)\n  defined hydrogen = m_e e⁴/(ε₀² ħ²) = 6.88×10⁻¹⁶ J\n13.6057 eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

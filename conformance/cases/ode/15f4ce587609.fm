@@ -1,0 +1,2 @@
+solve dN/dt = -N / (2 s) with N(0) = 100 for t from 0 s to 1 s
+print N(1 s) to 6 digits

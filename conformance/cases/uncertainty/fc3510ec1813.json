@@ -1,0 +1,11 @@
+{
+ "id": "fc3510ec1813",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "π ≈ 3.14 ± 0.00519\n2.01 s ± 0.0101 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

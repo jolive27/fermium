@@ -1,0 +1,4 @@
+x = 1
+K(k) = ∫ 1/√(1 - k² sin(φ)²) dφ from 0 to π/2
+print K(0.5)
+print K(1)

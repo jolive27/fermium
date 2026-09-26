@@ -1,0 +1,11 @@
+{
+ "id": "eb9d89b9f2c7",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "half-life: 18.65 ± 0.94 min\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "62ab287eaf27",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "Planet: Mars\nMars is the fourth planet\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

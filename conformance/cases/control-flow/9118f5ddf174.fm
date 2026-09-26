@@ -1,0 +1,5 @@
+# Only odd numbers: mod(n, 2) is the remainder after dividing by 2
+for n from 1 to 9
+    if mod(n, 2) == 0
+        continue
+    print n

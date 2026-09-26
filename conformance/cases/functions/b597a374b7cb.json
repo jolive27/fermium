@@ -1,0 +1,11 @@
+{
+ "id": "b597a374b7cb",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n[1] m\n",
+ "stderr": "warning: line 3: xs = [] here makes a new list xs inside this function; the program's list xs is unchanged\n        xs = []\n        ^\n  hint: to empty the program's list from here, write  clear(xs)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

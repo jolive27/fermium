@@ -1,0 +1,7 @@
+
+K = [[30.0, -10.0, 0.0], [-10.0, 25.0, -15.0], [0.0, -15.0, 15.0]] N/m
+M = [[2.0, 0.0, 0.0], [0.0, 1.5, 0.0], [0.0, 0.0, 1.0]] kg
+ω2 = eigenvalues(K, M)
+print ω2 to 15 digits
+print eigenvectors(K, M) to 15 digits
+print √(ω2[1]) to 6 digits

@@ -1,0 +1,17 @@
+{
+ "id": "d46e1a2ab9f0",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the limits of this integral are a plain number (no units) and charge [C]; they need the same units",
+  "line": 1,
+  "col": 7,
+  "hint": "e is the elementary charge in Fermium; for Euler's number write exp(1)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

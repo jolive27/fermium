@@ -1,0 +1,13 @@
+{
+ "id": "62437c295166",
+ "area": "ode",
+ "origin": "benchmarks/fermium/spring_adaptive.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "x_100s 1.117349590×10⁻¹²\naccepted_steps 4297\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

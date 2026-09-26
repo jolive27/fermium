@@ -1,0 +1,17 @@
+{
+ "id": "d30df53e37b4",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a'' and b'' both appear in one equation; that works when every equation is linear in a'', b'' (like m1 a'' + k b'' = F, with coefficients that may depend on t and the unknowns), and this one isn't",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+f(z, w) = ∫ (∫ z s + w φ dφ from 0 to 1) ds from 0 to 1
+print f(2, 3)

@@ -1,0 +1,5 @@
+L0 = 1 fm
+f(x) = x + L0
+print f(1 m)
+units natural
+print f(1 fm) in fm

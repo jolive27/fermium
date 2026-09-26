@@ -1,0 +1,11 @@
+m_p = 1.67262192e-27 kg
+c0 = 2.99792458e8 m/s
+q = 1.602176634e-19 C
+E = <0, 1e6, 0> V/m
+energy(p) = √(m_p² c0⁴ + |p|² c0²)
+solve p' = q E, r' = p c0² / energy(p)
+  with p(0 ns) = <4e-19, 0, 0> kg m/s, r(0 ns) = <0, 0, 0> m
+  for t from 0 ns to 10.0 ns tolerance 1e-11
+v = r'(5 ns)
+w = p(5 ns) c0² / energy(p(5 ns))
+print |v - w| / |w|

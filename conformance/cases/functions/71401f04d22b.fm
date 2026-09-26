@@ -1,0 +1,2 @@
+where_E = ½ m v² where m = 2 kg, v = 3 m/s
+print where_E in eV to 6 digits

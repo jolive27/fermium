@@ -1,0 +1,17 @@
+{
+ "id": "0a4f22497333",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "didn't expect ''' here",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

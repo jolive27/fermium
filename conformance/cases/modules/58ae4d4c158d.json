@@ -1,0 +1,17 @@
+{
+ "id": "58ae4d4c158d",
+ "area": "modules",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "mechanics.projectile_range expects g in m/s² (acceleration [m/s²]), but got time [s]",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

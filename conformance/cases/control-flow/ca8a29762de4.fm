@@ -1,0 +1,3 @@
+for i from 1 to 0
+    print 5
+print i

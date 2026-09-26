@@ -1,0 +1,5 @@
+units natural:
+    a = 2 fm
+units natural(ħ = c = k_B = 1):
+    b = 1 K
+print a b in 1

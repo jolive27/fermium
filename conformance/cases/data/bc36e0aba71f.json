@@ -1,0 +1,11 @@
+{
+ "id": "bc36e0aba71f",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "fuel burned per second: 12.9 tonne/s\nthrust: 33.2 MN   weight at lift-off: 29.1 MN\nTsiolkovsky Δv (no gravity): 3.35 km/s\nspeed at burnout with gravity: 1.70 km/s\ngravity loss g t_burn: 1.65 km/s\nheight at burnout: 83.9 km\nacceleration just before burnout: 3.2 g\nv_e = 2.6 km/s   needs m0/mf = 37.2\nv_e = 3.5 km/s   needs m0/mf = 14.7\nv_e = 4.4 km/s   needs m0/mf = 8.47\nplot saved to <ROOT>/examples/gallery/rocket.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+m = 1 kg
+solve m a'' + m c'' = 1 N, a'' + c'' = 2 m/s²
+  with a(0 s) = 0 [m], c(0 s) = 0 [m], a'(0 s) = 0 m/s, c'(0 s) = 0 m/s
+  for t from 0 s to 1 s

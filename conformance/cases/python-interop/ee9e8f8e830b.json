@@ -1,0 +1,11 @@
+{
+ "id": "ee9e8f8e830b",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "first zero of J1: 3.8317060\nfirst dark ring: 0.19218°  (the textbook 1.22 λ/D: 0.19223° )\nintensity halfway to the ring: 0.367515\nPlanck at 500 nm (Python): 2.62385×10¹³ W/m³\nPlanck at 500 nm (Fermium): 2.62385×10¹³ W/m³\npeak of the spectrum: 502.0 nm  Wien's law: 502.0 nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

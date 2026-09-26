@@ -1,0 +1,7 @@
+R = 0.10 m
+I = 2.0 A
+ring(φ) = R · <cos(φ), sin(φ), 0>
+dl(φ) = R · <-sin(φ), cos(φ), 0>
+P = <0 m, 0 m, 0.05 m>
+B = μ₀ I / (4π) · ∫ dl(φ) × (P - ring(φ)) / |P - ring(φ)|³ dφ from 0 to 2π
+print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding in x and y)

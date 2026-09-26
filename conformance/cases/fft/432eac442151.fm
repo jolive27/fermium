@@ -1,0 +1,6 @@
+X = fft([1, 2, 3, 4])
+total = 0i
+for z in X
+    total = total + z
+print total
+print X[1] + X[3]

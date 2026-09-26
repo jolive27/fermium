@@ -1,0 +1,6 @@
+d = load "../data/decay.csv"
+fit counts = N0 exp(-t / tau) to d with N0 = 1000, tau = 10 min
+decay_constant = 1 / tau
+print decay_constant in 1/s
+print decay_constant in 1/min
+print "activity at t = 0:", decay_constant N0 in 1/min

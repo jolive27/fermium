@@ -1,0 +1,2 @@
+solve r' = <-r.y, r.x> / (1 s) with r(0) = <1, 0> for t from 0 s to 3 s
+print r'(3 s)

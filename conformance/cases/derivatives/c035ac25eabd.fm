@@ -1,0 +1,5 @@
+k = 200 N/m
+U(x) = ½ k x^2
+F(x) = -U'(x)
+print F(5 cm)
+print -k * 5 cm

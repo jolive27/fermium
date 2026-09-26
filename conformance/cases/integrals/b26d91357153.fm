@@ -1,0 +1,2 @@
+f(x) = ∫ <x s, s> ds from 0 to 1
+print f(3)

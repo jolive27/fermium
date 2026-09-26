@@ -1,0 +1,1 @@
+print ∫ 1/sqrt(1 - x^2) dx from 0 to 1 to 12 digits

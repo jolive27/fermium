@@ -1,0 +1,17 @@
+{
+ "id": "fc36023680b9",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add force [N] to energy [J]",
+  "line": 1,
+  "col": 16,
+  "hint": "both sides of + and - must have the same units; this happened when calling energy on line 5 (with V = the function V2, x = length [m])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

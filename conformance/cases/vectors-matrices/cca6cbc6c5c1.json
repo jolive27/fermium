@@ -1,0 +1,17 @@
+{
+ "id": "cca6cbc6c5c1",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no unique solution",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "42cf75dbbb11",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = 3x² - 2\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

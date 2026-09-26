@@ -1,0 +1,1 @@
+solve x'' = -y'(t) / (1 s) with x(0 s) = 1 m, x'(0 s) = 0 m/s for t from 0 s to 1 s

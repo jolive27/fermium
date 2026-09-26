@@ -1,0 +1,8 @@
+x = 3 m
+print 1 m < x < 5 m, 1 m < x < 2 m
+print 0 < 1 <= 1 < 2
+f(y) = y^2
+print 0 < f(x/(1 m)) < 10, 0 <= f(x/(1 m)) < 10 <= 10
+g(t) = if 0 s < t < 1 s then 1 else 0
+print g(0.5 s) == 1, g(2 s) == 0
+print 1 == 1 == 1

@@ -1,0 +1,11 @@
+{
+ "id": "000592038162",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "semi-major axis a0 = 1.9490321×10⁶ km\n(a) periastron advance = 4.226226 °/yr\n(b) f(e) = 11.856837  dP_b/dt = -2.402102×10⁻¹²\n(c) time to a = 1e5 km = 3.006914230×10⁸ yr  e there = 0.013014321\n    Peters: time from e0 to e1 = 3.006914230×10⁸ yr\n    merger time = 3.0070276×10⁸ yr  (circular orbit a0⁴/(4β) = 1.63688×10⁹ yr )\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

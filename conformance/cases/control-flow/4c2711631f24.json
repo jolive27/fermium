@@ -1,0 +1,11 @@
+{
+ "id": "4c2711631f24",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "0 km 0 μs\n1 km 3.34 μs\n2 km 6.67 μs\n3 km 10.0 μs\n4 km 13.3 μs\n5 km 16.7 μs\n6 km 20.0 μs\n7 km 23.3 μs\n8 km 26.7 μs\n9 km 30.0 μs\n10 km 33.4 μs\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+f(t) = 3 m t / (1 s)
+print df/dt(2 s)

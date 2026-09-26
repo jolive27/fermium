@@ -1,0 +1,4 @@
+L = 1.000 ± 0.010 m
+g = 9.81 m/s^2
+T = 2 π sqrt(L / g)
+print T / sqrt(L)

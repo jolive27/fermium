@@ -1,0 +1,6 @@
+f(x, y) = x^2 y + sin(y)
+fx = partial/partial x f
+fy = partial/partial y f
+print fx
+print fy
+print fx(1, 2), fy(1, 2)

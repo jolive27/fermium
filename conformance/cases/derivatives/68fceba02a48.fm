@@ -1,0 +1,1 @@
+print d/dt (a t^2) where a = 3, t = 2

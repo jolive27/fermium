@@ -1,0 +1,10 @@
+k = 80 N/m
+kc = 20 N/m
+K = [[k + kc, -kc], [-kc, k + kc]]
+print eigenvalues(K)                  # <80, 120> N/m
+print eigenvectors(K)                 # columns: the unit eigenvectors
+M = [[0.2, 0], [0, 0.4]] kg
+ω2 = eigenvalues(K, M)                # K v = ω² M v
+print ω2
+print sqrt(ω2[1]), sqrt(ω2[2])              # the normal-mode angular frequencies
+print eigenvectors(K, M)              # the mode shapes

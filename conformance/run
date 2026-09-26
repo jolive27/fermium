@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Score an implementation against the conformance suite (spec §B3) and write CONFORMANCE.md.
+
+  conformance/run --impl legacy            # the Python implementation (v1.5, the oracle): must be 100%
+  conformance/run --impl rust [--bin PATH] # the Rust compiler (default rust/target/release/fermium)
+  options: --area NAME (one area), -j N (parallel jobs), --out FILE (default CONFORMANCE.md at the repo root)
+
+How outputs are compared (documented tolerances):
+  - stdout, line by line and token by token: tokens must be equal, except numbers, which may differ by rounding in
+    their last printed digit (one unit of the expected token's last digit) or by 1e-9 relative;
+  - an expected error: the implementation must fail, on the same line, with the same message or one sharing at
+    least 60 % of its words;
+  - warnings (stderr): the same warning lines (line numbers), messages compared like errors.
+"""
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+sys.path.insert(0, ROOT)
+
+SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+NUM = re.compile(r"^[-+]?(\d+(\.\d*)?|\.\d+)(e[-+]?\d+)?(×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?$")
+
+
+def parse_num(tok):
+    t = tok.strip("[](),<>;:")
+    if not NUM.match(t):
+        return None
+    mant, _, exp = t.partition("×10")
+    try:
+        v = float(mant)
+    except ValueError:
+        return None
+    if exp:
+        v *= 10.0 ** int(exp.translate(SUP))
+    digits = mant.split("e")[0]
+    last = 10.0 ** (-(len(digits.split(".")[1])) if "." in digits else 0)
+    if "e" in mant:
+        last *= 10.0 ** int(mant.split("e")[1])
+    if exp:
+        last *= 10.0 ** int(exp.translate(SUP))
+    return v, last
+
+
+def same_token(want, got):
+    if want == got:
+        return True
+    a, b = parse_num(want), parse_num(got)
+    if a is None or b is None:
+        return False
+    (va, ulp), (vb, _) = a, b
+    return abs(va - vb) <= ulp * 1.0000001 or abs(va - vb) <= 1e-9 * max(abs(va), abs(vb))
+
+
+def same_text(want, got):
+    wl, gl = want.rstrip("\n").split("\n"), got.rstrip("\n").split("\n")
+    if len(wl) != len(gl):
+        return False, f"{len(gl)} lines, expected {len(wl)}"
+    for i, (w, g) in enumerate(zip(wl, gl)):
+        wt, gt = w.split(), g.split()
+        if len(wt) != len(gt) or not all(same_token(a, b) for a, b in zip(wt, gt)):
+            return False, f"line {i + 1}: got {g.strip()[:90]!r}, expected {w.strip()[:90]!r}"
+    return True, ""
+
+
+def words(s):
+    return set(re.findall(r"[\w'’]+", (s or "").lower()))
+
+
+def similar(a, b):
+    if (a or "").split() == (b or "").split():
+        return True
+    wa, wb = words(a), words(b)
+    return bool(wa | wb) and len(wa & wb) / len(wa | wb) >= 0.6
+
+
+WARN = re.compile(r"warning: (?:.*?, )?line (\d+): (.*)")
+
+
+def warnings_of(stderr):
+    return [(int(m.group(1)), m.group(2)) for m in (WARN.match(ln) for ln in stderr.splitlines()) if m]
+
+
+def judge(case, out, err, error):
+    """(passed, reason)"""
+    drop = tuple(case.get("drop_prefixes") or ())
+    if drop:
+        out = "".join(ln for ln in out.splitlines(True) if not ln.startswith(drop))
+    exp_err = case["error"]
+    if exp_err is not None:
+        if error is None:
+            return False, f"expected the error {exp_err['message'][:80]!r}, but the program ran"
+        if exp_err.get("line") and error.get("line") and exp_err["line"] != error["line"]:
+            return False, f"error on line {error['line']}, expected line {exp_err['line']}"
+        if not similar(exp_err["message"], error.get("message")):
+            return False, f"error {error.get('message', '')[:80]!r}, expected {exp_err['message'][:80]!r}"
+    elif error is not None:
+        return False, f"unexpected error: {error.get('message', '')[:100]!r}"
+    ok, why = same_text(case["stdout"], out)
+    if not ok:
+        return False, "stdout " + why
+    we, wg = warnings_of(case["stderr"]), warnings_of(err)
+    if [ln for ln, _ in we] != [ln for ln, _ in wg] or not all(similar(a, b) for (_, a), (_, b) in zip(we, wg)):
+        return False, f"warnings on lines {[ln for ln, _ in wg]}, expected {[ln for ln, _ in we]}"
+    return True, ""
+
+
+def run_legacy(path, case):
+    import io
+    import signal
+    from fermium.driver import run_source
+    from fermium.errors import FermiumError
+    src = open(path, encoding="utf-8").read()
+    base = os.path.join(ROOT, case["dir"]) if case["dir"] else None
+    out, err = io.StringIO(), io.StringIO()
+
+    def alarm(*_):
+        raise TimeoutError
+    signal.signal(signal.SIGALRM, alarm)
+    signal.alarm(300)
+    try:
+        run_source(src, os.path.basename(path) if case["origin"] != "tests" else "<program>", out=out, base_dir=base,
+                   err=err)
+        e = None
+    except FermiumError as ex:
+        e = {"message": ex.message, "line": ex.line}
+    except TimeoutError:
+        return out.getvalue(), err.getvalue(), {"message": "timed out after 300 s", "line": None}
+    finally:
+        signal.alarm(0)
+    return out.getvalue().replace(ROOT, "<ROOT>"), err.getvalue().replace(ROOT, "<ROOT>"), e
+
+
+ERR_LINE = re.compile(r"^(?:.*?, )?line (\d+): (.*)$")
+
+
+def run_binary(binary, path, case):
+    base = os.path.join(ROOT, case["dir"]) if case["dir"] else HERE
+    try:
+        p = subprocess.run([binary, "run", "--base-dir", base, path], capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        return "", "", {"message": "timed out after 300 s", "line": None}
+    except OSError as ex:
+        return "", "", {"message": f"could not run {binary}: {ex}", "line": None}
+    out, err = p.stdout.replace(ROOT, "<ROOT>"), p.stderr.replace(ROOT, "<ROOT>")
+    e = None
+    if p.returncode != 0:
+        # the error is the last non-warning line that looks like 'file, line N: message'
+        msg = [ln for ln in err.splitlines() if ERR_LINE.match(ln) and not ln.startswith("warning:")]
+        m = ERR_LINE.match(msg[0]) if msg else None
+        e = {"message": m.group(2) if m else (err.strip().splitlines() or ["(no message)"])[-1],
+             "line": int(m.group(1)) if m else None}
+        err = "\n".join(ln for ln in err.splitlines() if ln.startswith("warning:"))
+    return out, err, e
+
+
+def one(args):
+    impl, binary, path = args
+    case = json.load(open(path[:-3] + ".json", encoding="utf-8"))
+    t0 = time.time()
+    try:
+        out, err, e = run_legacy(path, case) if impl == "legacy" else run_binary(binary, path, case)
+        ok, why = judge(case, out, err, e)
+    except Exception as ex:          # a crash of the implementation counts as a failure, never stops the run
+        ok, why = False, f"crash: {type(ex).__name__}: {ex}"
+    return case["area"], case["id"], case["origin"], ok, why, time.time() - t0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--impl", choices=["legacy", "rust"], required=True)
+    ap.add_argument("--bin", default=os.path.join(ROOT, "rust", "target", "release", "fermium"))
+    ap.add_argument("--area")
+    ap.add_argument("-j", type=int, default=os.cpu_count() or 2)
+    ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
+    a = ap.parse_args()
+    files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=a.j) as ex:
+        results = list(ex.map(one, [(a.impl, a.bin, f) for f in files], chunksize=4))
+    areas = {}
+    for area, cid, origin, ok, why, dt in results:
+        areas.setdefault(area, []).append((cid, origin, ok, why))
+    total, passed = len(results), sum(r[3] for r in results)
+    impl_name = "Fermium 1.5 (Python, the oracle)" if a.impl == "legacy" else "Fermium 2 (Rust)"
+    lines = [f"# Conformance: {impl_name}", "",
+             f"**{passed} of {total} programs pass ({100.0 * passed / max(total, 1):.1f} %)**, "
+             f"generated by `conformance/run --impl {a.impl}` in {time.time() - t0:.0f} s.", "",
+             "The suite (conformance/cases, see conformance/MANIFEST.md) was harvested from Fermium 1.5: every program the",
+             "test suite runs, every example, rosetta, gauntlet and research program, the benchmarks, and John's Appendix 1",
+             "programs. Tolerances: numbers may differ by one unit in the last printed digit (or 1e-9 relative); errors",
+             "must be on the same line with the same message (or 60 % of its words); warnings on the same lines.", "",
+             "| Area | Pass | Total | % |", "|---|---|---|---|"]
+    for area in sorted(areas):
+        rs = areas[area]
+        n = sum(r[2] for r in rs)
+        lines.append(f"| {area} | {n} | {len(rs)} | {100.0 * n / len(rs):.0f} |")
+    lines += [f"| **all** | **{passed}** | **{total}** | **{100.0 * passed / max(total, 1):.1f}** |", ""]
+    fails = [(area, r) for area in sorted(areas) for r in areas[area] if not r[2]]
+    if fails:
+        lines += ["## Failures (first 20 per area)", ""]
+        for area in sorted(areas):
+            fs = [r for r in areas[area] if not r[2]]
+            if not fs:
+                continue
+            lines.append(f"### {area} ({len(fs)})")
+            lines += [f"- `{cid}` ({origin}): {why}" for cid, origin, _, why in fs[:20]]
+            lines.append("")
+    open(a.out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    print("\n".join(lines[:len(areas) + 12]))
+    return 0 if passed == total else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

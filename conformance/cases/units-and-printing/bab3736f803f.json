@@ -1,0 +1,11 @@
+{
+ "id": "bab3736f803f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "22 N\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,10 @@
+mass = 80 kg
+g = 9.81 m/s^2
+rho = 1.2 kg/m^3
+C = 1.0
+A = 0.7 m^2
+solve mass v' = mass g - ½ rho C A v^2
+  with v(0) = 0 m/s
+  for t from 0 s to 30 s
+print "speed after 30 s:", v(30 s), "=", v(30 s) in km/hr
+print "terminal velocity:", sqrt(2 mass g / (rho C A)) to 4 digits

@@ -1,0 +1,11 @@
+{
+ "id": "86d86cb305f6",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Po-212: G = 16.1   t½ = 6.32×10⁻⁸ s    measured 2.99×10⁻⁷ s\nPo-210: t½ = 3.42 day    measured 138 day\nRa-226: t½ = 81.0 yr    measured 1600 yr\nU-238:  t½ = 2.73×10⁸ yr    measured 4.47×10⁹ yr\nTh-232: t½ = 7.79×10⁸ yr    measured 1.40×10¹⁰ yr\nplot saved to <ROOT>/examples/gallery/geiger_nuttall.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

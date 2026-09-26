@@ -1,0 +1,3 @@
+g(x) = exp(1i k x) where k = 2 /m
+print g'(0 m)
+print g''(0 m)

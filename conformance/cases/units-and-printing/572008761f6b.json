@@ -1,0 +1,17 @@
+{
+ "id": "572008761f6b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'4/3 π' is ambiguous: is it (4/3)·π or 4/(3 π)?",
+  "line": 2,
+  "col": 8,
+  "hint": "write  (4/3) π  or  4/(3 π)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

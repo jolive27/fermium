@@ -1,0 +1,11 @@
+{
+ "id": "db01bedaec2f",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "(a) V0 = 33.73450302 MeV  kR = 1.830502229  kappa = 0.23160792 1/fm\n(b) E1 = -2.224600 MeV  E2 = 0.338143 MeV  (E2 > 0: no second bound state)\n(c) P(outside) closed form = 0.62841115  numerical = 0.628411\n(d) rms radius r_d = 1.94684 fm\n",
+ "stderr": "warning: line 25: 'k' and 'κ' look almost identical but are different names\n    k = kk(V0)\n    ^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

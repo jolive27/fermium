@@ -1,0 +1,4 @@
+x_D = 800
+print 1
+D = ∫ x^4 exp(x) / (exp(x) - 1)^2 dx from 0 to x_D
+print D

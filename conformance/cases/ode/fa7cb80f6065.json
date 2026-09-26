@@ -1,0 +1,11 @@
+{
+ "id": "fa7cb80f6065",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "t = 10 min  A(Po-218) = 106.73543 Bq  A(Pb-214) = 86.967744 Bq  A(Bi-214) = 19.182151 Bq  A(Po-214) = 19.182142 Bq\nt = 30 min  A(Po-218) = 1.2159782 Bq  A(Pb-214) = 60.003103 Bq  A(Bi-214) = 46.672546 Bq  A(Po-214) = 46.672545 Bq\nt = 60 min  A(Po-218) = 0.0014786031 Bq  A(Pb-214) = 27.691446 Bq  A(Bi-214) = 41.775602 Bq  A(Po-214) = 41.775604 Bq\nBi-214 activity peaks at 38.343044 min with 48.460670 Bq\nA(Po-214) / A(Bi-214) at 60 min = 1.0000000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

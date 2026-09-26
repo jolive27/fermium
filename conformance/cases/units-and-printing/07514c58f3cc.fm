@@ -1,0 +1,2 @@
+T = 300 K
+print k_B T in eV to 5 digits

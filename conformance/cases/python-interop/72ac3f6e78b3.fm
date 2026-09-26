@@ -1,0 +1,3 @@
+use python scipy.special as sp
+r = 2 m
+print sp.jv(0, r)

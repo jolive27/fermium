@@ -1,0 +1,17 @@
+{
+ "id": "fce5f95201e4",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "missing the initial condition:  with u(x, 0 s) = …",
+  "line": 3,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

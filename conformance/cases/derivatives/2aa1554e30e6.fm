@@ -1,0 +1,6 @@
+f(r, R) = 1 / (1 + exp((r - R) / (0.6 fm)))
+df = d/dr f(r, R)
+print df(5 fm, 5 fm) in 1/fm to 6 digits
+print df(4 fm, 5 fm) in 1/fm to 6 digits
+g = ∂/∂r f
+print g(4 fm, 5 fm) in 1/fm to 6 digits

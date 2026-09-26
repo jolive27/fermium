@@ -1,0 +1,17 @@
+{
+ "id": "b78685e01344",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "F has 2 components but 3 coordinates; ∇· needs them to match",
+  "line": 2,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

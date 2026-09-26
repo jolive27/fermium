@@ -1,0 +1,17 @@
+{
+ "id": "1222d5e8adb4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show acceleration [m/s²] in m (length [m])",
+  "line": 2,
+  "col": 7,
+  "hint": "g is acceleration; try  in m/s²",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

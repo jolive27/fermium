@@ -1,0 +1,2 @@
+xs = [1, 2] [m]
+plot xs vs xs to "_a62_check.png"

@@ -1,0 +1,38 @@
+# Optics 01 — Single-slit diffraction
+#
+# Light from a He–Ne laser (λ = 633 nm) passes through a slit of width
+# a = 0.100 mm and falls on a screen L = 2.00 m away. The intensity is
+#
+#     I(θ) = I₀ (sin β / β)²,   β = π a sin θ / λ.
+#
+# (a) Where on the screen are the first and second dark fringes (a sin θ = m λ)?
+#     How wide is the central bright fringe?
+# (b) Find the first secondary maximum where dI/dθ = 0 between the first two
+#     minima, and its intensity relative to I₀. (Textbook: β = 4.493, I/I₀ = 0.0472.)
+# (c) What is the intensity 2.00 cm from the centre of the screen?
+# (Halliday/Resnick ch. 36, Hecht §10.2)
+
+λ = 633 nm
+a = 0.100 mm
+L = 2.00 m
+
+# (a) dark fringes
+θ1 = asin(λ / a)
+θ2 = asin(2λ / a)
+y1 = L tan(θ1)
+y2 = L tan(θ2)
+print "first dark fringe at y  =", y1 in mm to 8 digits
+print "second dark fringe at y =", y2 in mm to 8 digits
+print "central fringe width    =", 2 y1 in mm to 8 digits
+
+# (b) the first side maximum, as a fraction of I₀
+β(θ) = π a sin(θ) / λ
+I(θ) = (sin(β(θ)) / β(θ))²
+dI = I'      # naming the derivative: `solve I'(θ) = 0` is taken for a differential equation
+solve dI(θ_max) = 0 for θ_max from 1.01 θ1 to 0.99 θ2
+print "secondary maximum at β =", β(θ_max) to 8 digits
+print "I/I0 there              =", I(θ_max) to 8 digits
+
+# (c) on the screen, 2 cm from the centre
+θ_c = atan((2.00 cm) / L)
+print "I/I0 at y = 2.00 cm     =", I(θ_c) to 8 digits

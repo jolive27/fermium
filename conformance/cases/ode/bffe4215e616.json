@@ -1,0 +1,11 @@
+{
+ "id": "bffe4215e616",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "(a) <T> = 5.6959237 keV  without Coulomb = 6.2308130 keV\n(b) most probable T = 2.4976519 keV\n(c) W0 = 1.036381679  f = 2.8799820×10⁻⁶  log10(f t) = 3.0491\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

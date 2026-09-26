@@ -1,0 +1,11 @@
+{
+ "id": "823ee36d82fa",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "no air:   range 91.8 m   height 22.9 m   time 4.33 s\nbest angle without air: 45°\nwith air: range 64.9 m   time 3.91 s\nair shortens the throw by 26.9 m\nplot saved to <ROOT>/examples/gallery/projectile.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

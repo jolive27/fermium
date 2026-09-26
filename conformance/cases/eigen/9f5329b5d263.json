@@ -1,0 +1,17 @@
+{
+ "id": "9f5329b5d263",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a term with ψ' isn't supported in eigenvalue problems yet: write the equation with ψ'' and ψ only (for a radial equation use u = r R, which removes the R' term)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

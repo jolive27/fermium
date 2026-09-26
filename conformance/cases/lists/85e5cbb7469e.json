@@ -1,0 +1,11 @@
+{
+ "id": "85e5cbb7469e",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[0.10, 0.20]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "109ca046ea39",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "A = 1   R = 1.20 fm\nA = 4   R = 1.90 fm\nA = 12   R = 2.75 fm\nA = 16   R = 3.02 fm\nA = 56   R = 4.59 fm\nA = 120   R = 5.92 fm\nA = 208   R = 7.11 fm\nA = 238   R = 7.44 fm\nthe uranium nucleus is 6.20 times wider than a proton-sized one\ndensity of Fe-56: 2.29×10¹⁷ kg/m³\ndensity of Pb-208: 2.29×10¹⁷ kg/m³  (the same: A cancels)\nnucleons per fm³: 0.138 1/fm³\na teaspoon (5 mL) of nuclear matter weighs 1.15×10⁹ tonne\nO-16:  r0 from data = 1.383 fm\nCa-40: r0 from data = 1.313 fm\nPb-208: r0 from data = 1.199 fm\nthe Earth squeezed to nuclear density: 184 m\nplot saved to <ROOT>/examples/gallery/nuclear_radius.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

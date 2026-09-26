@@ -1,0 +1,17 @@
+{
+ "id": "0034a38f9d4b",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "only lists can be sliced with [a:b], and a vector isn't a list",
+  "line": 2,
+  "col": 7,
+  "hint": "pick single components with v[1], v[2], ...",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,1 @@
+print dot(1 + 1i, 1 - 1i)

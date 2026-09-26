@@ -1,0 +1,11 @@
+{
+ "id": "9ce4d6054f3b",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "y(t) = 20 m/s t - 0.5·9.81 m/s² t²   [m, for t in s]\nv(t) = 20 m/s - 9.81 m/s² t   [m/s, for t in s]\na(t) = -9.81 m/s²   [m/s², for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

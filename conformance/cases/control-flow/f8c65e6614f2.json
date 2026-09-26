@@ -1,0 +1,11 @@
+{
+ "id": "f8c65e6614f2",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "after 365 days: x = 1.00 AU y = -0.002768 AU\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

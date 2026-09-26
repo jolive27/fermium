@@ -1,0 +1,4 @@
+t = 0 s
+t = t + 1.5 s
+t += 2 s
+print t

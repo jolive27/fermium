@@ -1,0 +1,3 @@
+f(g, x) = g + x
+sq(x) = x²
+print f(sq, 2)

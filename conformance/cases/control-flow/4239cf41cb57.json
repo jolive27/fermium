@@ -1,0 +1,17 @@
+{
+ "id": "4239cf41cb57",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x might not have a value here: it is only set inside the for loop on line 1, which may not run at all",
+  "line": 3,
+  "col": 7,
+  "hint": "give x a value before the for loop on line 1, e.g.  x = 0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

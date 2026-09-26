@@ -1,0 +1,3 @@
+b = -2 m
+K = ∫ 1 / √(b^2 + s^2) ds
+print K(1 m) - K(-1 m) to 9 digits

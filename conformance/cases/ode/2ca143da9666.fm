@@ -1,0 +1,67 @@
+# Special relativity 21 — An electron in a uniform electric field (hyperbolic motion)
+#
+# An electron enters a uniform electric field E = −1.00 MV/m x̂ (so the force
+# on it is +eE x̂) at the origin, with momentum p₀ = 1.00 MeV/c along ŷ.
+# The relativistic equations of motion are
+#
+#     dp/dt = q E,   dr/dt = p c² / √(m²c⁴ + |p|²c²),   dτ/dt = m c² / √(m²c⁴ + |p|²c²).
+#
+# (a) Solve them as vector ODEs for 10.0 ns and compare with the exact solution
+#     (ε₀ = √(m²c⁴ + p₀²c²), the initial energy):
+#         x(t) = (√(ε₀² + (eEct)²) − ε₀) / (eE),
+#         y(t) = (p₀c / eE) asinh(eEct / ε₀),
+#         τ(t) = (m c / eE) asinh(eEct / ε₀).
+# (b) The path is a catenary, not a parabola: x = (ε₀/eE)(cosh(eE y / p₀c) − 1).
+#     Check it at t = 10 ns, and compare with the Newtonian parabola.
+# (c) When does the speed reach 0.98 c? Solve on the numerical solution and
+#     compare with the exact time.
+# (d) The kinetic energy gained equals the work eE x (the field is conservative).
+# (Jackson §12.4, Rindler §3.8; Taylor & Wheeler, "Spacetime Physics", ch. 3)
+
+q = -e
+M = m_e
+E = <-1.00, 0, 0> MV/m
+p0 = 1.00 MeV/c
+F = e |E|                                # the size of the force, eE
+energy(p) = √(M² c⁴ + |p|² c²)
+
+solve p' = q E,
+      r' = p c² / energy(p),
+      τ' = M c² / energy(p)
+  with p(0) = <0 MeV/c, p0, 0 MeV/c>, r(0) = <0, 0, 0> m, τ(0) = 0 ns
+  for t from 0 ns to 10.0 ns tolerance 1e-11
+
+ε0 = √(M² c⁴ + p0² c²)
+x_exact(t) = (√(ε0² + (F c t)²) - ε0) / F
+y_exact(t) = p0 c / F * asinh(F c t / ε0)
+τ_exact(t) = M c / F * asinh(F c t / ε0)
+
+# (a)
+T = 10.0 ns
+print "(a) ε0 =", ε0 in MeV to 10 digits
+print "    x(10 ns) =", r(T).x in m to 9 digits, "  exact", x_exact(T) in m to 9 digits
+print "    y(10 ns) =", r(T).y in m to 9 digits, "  exact", y_exact(T) in m to 9 digits
+print "    τ(10 ns) =", τ(T) in ns to 9 digits, "  exact", τ_exact(T) in ns to 9 digits
+print "    p(10 ns) =", p(T) in MeV/c
+
+# (b) the catenary, and the parabola a Newtonian would draw
+y1 = r(T).y
+print "(b) catenary x at that y =", ε0 / F * (cosh(F y1 / (p0 c)) - 1) in m to 9 digits
+v0 = p0 c² / ε0
+print "    Newtonian parabola x =", ½ (F / M) (y1 / v0)² in m to 6 digits
+
+# (c) 0.98 c
+# The speed from the equation of motion, |p| c² / E, is accurate to ~1e-10;
+# |r'(t)| read off the solution is only good to ~1e-6 (FRICTION S9), which
+# moves the answer in the 5th digit, because the speed is so flat near c.
+speed(t) = |p(t)| c² / energy(p(t))
+solve speed(t98) = 0.98 c for t98 from 0 ns to 10 ns
+speed_r(t) = |r'(t)|        # `solve |r'(t_r)| = …` is taken for an ODE (#3)
+solve speed_r(t_r) = 0.98 c for t_r from 0 ns to 10 ns
+γ98 = 1 / √(1 - 0.98²)
+print "(c) speed 0.98 c at t =", t98 in ns to 9 digits,
+      "  exact", √((γ98 M c²)² - ε0²) / (F c) in ns to 9 digits
+print "    (from |r'(t)| instead:", t_r in ns to 9 digits, ")"
+
+# (d) work-energy
+print "(d) energy gained =", energy(p(T)) - ε0 in MeV to 9 digits, "  eE x =", F r(T).x in MeV to 9 digits

@@ -1,0 +1,4 @@
+f(t) = sin(t)
+a = d²/dt² f
+b = f''
+print a(1) ~= b(1), a(1) ~= -sin(1)

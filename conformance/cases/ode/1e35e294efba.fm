@@ -1,0 +1,48 @@
+# Waves 03 — Phase and group velocity of water waves
+#
+# Waves on deep water obey the dispersion relation (gravity plus surface tension)
+#
+#     ω(k)² = g k + (σ/ρ) k³,    σ = 0.0728 N/m,  ρ = 1000 kg/m³.
+#
+# (a) For a wavelength of 1.00 m, find the phase velocity v_p = ω/k and the group
+#     velocity v_g = dω/dk. Show that v_g ≈ v_p/2 (gravity waves).
+# (b) For a 1.00 mm ripple, show that v_g ≈ 3 v_p/2 (capillary waves).
+# (c) Find the wavenumber where v_p is smallest, from dv_p/dk = 0, and the minimum
+#     speed. Textbook: k = √(ρ g/σ), v_min = (4 g σ/ρ)^(1/4) ≈ 23 cm/s; there v_g = v_p.
+# (d) In water of finite depth H = 2.00 m (gravity only), ω² = g k tanh(k H).
+#     Find v_g for a 10.0 m wavelength and compare with the textbook formula
+#     v_g = (v_p/2) (1 + 2 k H / sinh(2 k H)).
+# (Crawford, Waves ch. 6; Lighthill, Waves in Fluids)
+
+g = 9.81 m/s²
+σ = 0.0728 N/m                  # surface tension (replaces the built-in Stefan–Boltzmann σ)
+ρ = 1000 kg/m³
+
+ω(k) = √(g k + σ / ρ * k³)
+v_p(k) = ω(k) / k
+v_g = dω/dk                    # symbolic
+
+# (a) gravity waves
+k1 = 2π / (1.00 m)
+print "λ = 1 m:  v_p =", v_p(k1) in m/s to 8 digits
+print "λ = 1 m:  v_g =", v_g(k1) in m/s to 8 digits
+print "λ = 1 m:  v_g/v_p =", v_g(k1) / v_p(k1) to 8 digits
+
+# (b) capillary ripples
+k2 = 2π / (1.00 mm)
+print "λ = 1 mm: v_g/v_p =", v_g(k2) / v_p(k2) to 8 digits
+
+# (c) the slowest waves
+dv_p = v_p'                     # named: `solve v_p'(k) = 0` would be read as a differential equation
+solve dv_p(k_min) = 0 for k_min from 1 m⁻¹ to 1000 m⁻¹
+print "k_min =", k_min in 1/m to 8 digits, "  formula:", √(ρ g / σ) in 1/m to 8 digits
+print "v_min =", v_p(k_min) in cm/s to 8 digits, "  formula:", (4*g σ / ρ)^(1/4) in cm/s to 8 digits
+print "v_g/v_p at k_min =", v_g(k_min) / v_p(k_min) to 8 digits
+
+# (d) finite depth
+H = 2.00 m
+ω_H(k) = √(g k tanh(k H))
+k3 = 2π / (10.0 m)
+vp3 = ω_H(k3) / k3
+print "H = 2 m, λ = 10 m: v_g =", ω_H'(k3) in m/s to 8 digits
+print "H = 2 m, λ = 10 m: formula =", vp3 / 2 * (1 + 2 k3 H / sinh(2 k3 H)) in m/s to 8 digits

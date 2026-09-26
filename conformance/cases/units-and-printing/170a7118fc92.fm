@@ -1,0 +1,4 @@
+print ½
+print ⅓
+x = ⅔
+print x

@@ -1,0 +1,23 @@
+x = 3 m
+if x > 2 m
+    print "far"
+else if x > 1 m
+    print "middle"
+else
+    print "near"
+
+total = 0 m
+for i from 1 to 10
+    total += i · 1 cm
+print total
+
+for t from 0 s to 1 s step 0.25 s
+    print t
+
+n = 0
+while n < 3
+    n += 1
+print n
+
+y = if x > 0 m then x else -x
+print 1 m < x < 5 m                   # true: a chained comparison

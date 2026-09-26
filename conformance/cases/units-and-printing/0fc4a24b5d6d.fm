@@ -1,0 +1,2 @@
+assert 1 m == 100 cm, "units"
+print 1

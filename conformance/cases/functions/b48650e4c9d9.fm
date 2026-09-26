@@ -1,0 +1,15 @@
+GM = G M_sun
+ax(x, y) = -GM x / (x^2 + y^2)^1.5
+ay(x, y) = -GM y / (x^2 + y^2)^1.5
+
+dt = 1 hr
+x = 1 AU
+y = 0 AU
+vx = 0 km/s
+vy = 29.78 km/s
+for n from 1 to 24 * 365
+    vx += ax(x, y) dt
+    vy += ay(x, y) dt
+    x += vx dt
+    y += vy dt
+print "after 365 days:", x in AU, y in AU

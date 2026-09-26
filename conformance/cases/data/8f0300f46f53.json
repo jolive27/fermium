@@ -1,0 +1,11 @@
+{
+ "id": "8f0300f46f53",
+ "area": "data",
+ "origin": "tests",
+ "dir": "research/hydrogen_levels",
+ "stdout": "Rydberg energy from the constants: 13.605693 eV\nn = 1  l = 0 : E = -13.5982873 eV   Bohr −13.605693 eV (μ/m_e)/n² = -13.5982871 eV\nn = 2  l = 0 : E = -3.39957182 eV   Bohr −13.605693 eV (μ/m_e)/n² = -3.39957179 eV\nn = 3  l = 0 : E = -1.51092081 eV   Bohr −13.605693 eV (μ/m_e)/n² = -1.51092079 eV\nn = 4  l = 0 : E = -0.849892954 eV   Bohr −13.605693 eV (μ/m_e)/n² = -0.849892946 eV\nn = 2  l = 1 : E = -3.39957182 eV   Bohr −13.605693 eV (μ/m_e)/n² = -3.39957179 eV\nn = 3  l = 1 : E = -1.51092081 eV   Bohr −13.605693 eV (μ/m_e)/n² = -1.51092079 eV\nn = 4  l = 1 : E = -0.849892954 eV   Bohr −13.605693 eV (μ/m_e)/n² = -0.849892946 eV\nn = 3  l = 2 : E = -1.51092081 eV   Bohr −13.605693 eV (μ/m_e)/n² = -1.51092079 eV\nn = 4  l = 2 : E = -0.849892954 eV   Bohr −13.605693 eV (μ/m_e)/n² = -0.849892946 eV\nn = 4  l = 3 : E = -0.849892954 eV   Bohr −13.605693 eV (μ/m_e)/n² = -0.849892946 eV\nlargest relative difference from Bohr: 9.1×10⁻⁹\nLyman α (2p → 1s): 121.5684 nm   measured (NIST): 121.567 nm\nwithout the reduced mass it would be 121.5023 nm\n2p: u² peaks at r = 4.00218 a₀   (exact: 4 a_μ = 4.00218 a₀)\nplot saved to <ROOT>/research/hydrogen_levels/u2p.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

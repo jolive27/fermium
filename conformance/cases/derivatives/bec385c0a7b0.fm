@@ -1,0 +1,2 @@
+x(t) = t^2
+print d/dt x(2 s)

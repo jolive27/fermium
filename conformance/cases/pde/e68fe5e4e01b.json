@@ -1,0 +1,11 @@
+{
+ "id": "e68fe5e4e01b",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.500 cm   d'Alembert: 0.50 cm\n",
+ "stderr": "warning: line 1: c (the speed of light) is now your variable: from here on, c means your value\n    c = 2 m/s\n    ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

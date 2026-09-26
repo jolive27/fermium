@@ -1,0 +1,11 @@
+{
+ "id": "c52920ceb916",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples/data",
+ "stdout": "fit T = 2π √(L/g) + t0   (11 data points from pendulum.csv)\n  g = 9.902 m/s²   (standard error 0.088 m/s²)\n  t0 = 0.007332 s   (standard error 0.0075 s)\n  rms residual = 0.00538 s\n9.90 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

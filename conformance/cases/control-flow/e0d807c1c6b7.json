@@ -1,0 +1,17 @@
+{
+ "id": "e0d807c1c6b7",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected an indented block here",
+  "line": 3,
+  "col": 1,
+  "hint": "indent the lines that belong to this block (e.g. 4 spaces)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

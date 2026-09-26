@@ -1,0 +1,3 @@
+L = 2
+T = 3
+print LT

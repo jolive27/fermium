@@ -1,0 +1,11 @@
+{
+ "id": "97531844f53c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 2\n",
+ "stderr": "warning: line 2: 'ρ' and 'p' look almost identical but are different names\n    ρ = 2\n    ^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

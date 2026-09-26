@@ -1,0 +1,5 @@
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print g                 # 9.70 m/s²
+print g in ft/s²        # 31.8 ft/s²

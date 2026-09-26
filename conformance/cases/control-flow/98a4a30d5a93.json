@@ -1,0 +1,17 @@
+{
+ "id": "98a4a30d5a93",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "mid might not have a value here: it is only set inside the while loop on line 2",
+  "line": 5,
+  "col": 7,
+  "hint": "give mid a value before the while loop on line 2, e.g.  mid = 0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

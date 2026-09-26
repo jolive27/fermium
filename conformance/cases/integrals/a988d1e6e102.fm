@@ -1,0 +1,1 @@
+print ∫ exp(-t/(1 ns)) dt from 0 s to ∞ in ns to 6 digits

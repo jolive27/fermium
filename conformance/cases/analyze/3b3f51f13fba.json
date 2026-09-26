@@ -1,0 +1,11 @@
+{
+ "id": "3b3f51f13fba",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of blast: R depends on E, ρ, t\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = R (ρ/(E t²))^(1/5)\n  so R ∝ (E t²/ρ)^(1/5)   (R = C (E t²/ρ)^(1/5), with C a pure number)\n  defined blast(E, ρ, t) = (E t²/ρ)^(1/5), so R = C blast(E, ρ, t)\n140 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

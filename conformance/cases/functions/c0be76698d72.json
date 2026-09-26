@@ -1,0 +1,17 @@
+{
+ "id": "c0be76698d72",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f takes 1 argument but was given 2",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

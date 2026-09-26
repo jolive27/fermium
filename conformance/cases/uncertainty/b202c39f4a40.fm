@@ -1,0 +1,2 @@
+x = 4.0 ± 0.2 m
+print value(x) to 2 digits, uncertainty(x), rel(x) to 3 digits, err(x)

@@ -1,0 +1,17 @@
+{
+ "id": "66a2eeff1db2",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "complex(a, b) needs both parts in the same units, but they are length [m] and time [s]",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

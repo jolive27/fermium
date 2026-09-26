@@ -1,0 +1,17 @@
+{
+ "id": "a6991294afd0",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "d isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  d = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

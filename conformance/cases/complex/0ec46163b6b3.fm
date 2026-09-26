@@ -1,0 +1,6 @@
+s = 0
+for i from 1 to 4
+    s += 2 i
+print s
+i = 3
+print 2i, 2 i

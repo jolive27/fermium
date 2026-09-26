@@ -1,0 +1,17 @@
+{
+ "id": "1d0086f26fd4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "speed isn't defined",
+  "line": 1,
+  "col": 7,
+  "hint": "give it a value on an earlier line, e.g.  speed = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

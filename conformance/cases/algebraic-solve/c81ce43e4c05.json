@@ -1,0 +1,11 @@
+{
+ "id": "c81ce43e4c05",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "(a) hbar w = 1 eV  eps = -221.77228 + 22.277228i  N = 0.74701927 + 14.910745i  R = 0.9867421892\n(a) hbar w = 10 eV  eps = -1.2497750 + 0.022497750i  N = 0.010061798 + 1.1179787i  R = 0.9822707494\n(a) hbar w = 14 eV  eps = -0.14790062 + 0.0081992901i  N = 0.010656010 + 0.38472609i  R = 0.9635517435\n(a) hbar w = 15 eV  eps = 4.4442469×10⁻⁵ + 0.0066663704i  N = 0.057926509 + 0.057541620i  R = 0.7935839600\n(a) hbar w = 20 eV  eps = 0.43751406 + 0.0028124297i  N = 0.66145187 + 0.0021259519i  R = 0.04152232949\n(b) R = 0.5 at hbar w = 15.22290524 eV\n(c) skin depth at 1 eV = 13.233878 nm  at 0.01 eV = 56.246198 nm\n    sigma_0 = 3.02667×10⁷ S/m\n(d) R(0.01 eV) = 0.9943435463  Hagen-Rubens = 0.9940371521\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

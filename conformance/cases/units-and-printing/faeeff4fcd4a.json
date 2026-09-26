@@ -1,0 +1,17 @@
+{
+ "id": "faeeff4fcd4a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected ']' to close the unit brackets but found '/'",
+  "line": 1,
+  "col": 11,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

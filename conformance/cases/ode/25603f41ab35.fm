@@ -1,0 +1,2 @@
+units nuclear
+solve x' = x with x(0) = 1 fm for t from 0 to 1 fm

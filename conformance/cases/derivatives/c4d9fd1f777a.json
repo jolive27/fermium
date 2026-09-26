@@ -1,0 +1,11 @@
+{
+ "id": "c4d9fd1f777a",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "n at 589 nm = 1.5167065\nf at 589 nm = 23.224016 cm\nimage distance = 43.367250 cm\nmagnification  = -0.86734499\nimage height   = -2.6020350 mm\nfinal image distance s2' = -27.250065 cm\noverall magnification = 0.70833549\nf at 486 nm = 22.971702 cm\nf at 656 nm = 23.329972 cm\ndf/dλ at 589 nm = 0.018476802 mm/nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

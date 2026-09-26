@@ -1,0 +1,14 @@
+m = m_e
+σ = 1 nm
+k0 = 2 / (1 nm)
+τ = 2*m σ² / ħ
+solve i ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 s) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(i k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 s to 2 τ
+    grid 4000
+T = 2 τ
+print ∫ |ψ(x, 0 s)|^2 dx from -40 nm to 40 nm to 14 digits
+print ∫ |ψ(x, T)|^2 dx from -40 nm to 40 nm to 14 digits
+xm = ∫ x |ψ(x, T)|^2 dx from -40 nm to 40 nm
+print xm / (ħ k0 T / m) to 10 digits
+print sqrt(∫ (x - xm)^2 |ψ(x, T)|^2 dx from -40 nm to 40 nm) / (σ sqrt(1 + (T / τ)^2)) to 10 digits

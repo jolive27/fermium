@@ -1,0 +1,13 @@
+f(x) = x^2 exp(-x) sin(3x)
+d1 = f'
+d2 = f''
+print d1(0.12157057137048888) to 17 digits
+print d2(0.12157057137048888) to 17 digits
+print d1(1.3823973088976969) to 17 digits
+print d2(1.3823973088976969) to 17 digits
+print d1(2.5572140014693403) to 17 digits
+print d2(2.5572140014693403) to 17 digits
+print d1(1.1839228590346145) to 17 digits
+print d2(1.1839228590346145) to 17 digits
+print d1(1.5134067156853095) to 17 digits
+print d2(1.5134067156853095) to 17 digits

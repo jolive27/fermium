@@ -1,0 +1,13 @@
+# the time-dependent Schrödinger equation for a free particle: ψ(t) = exp(−iEt/ħ)
+E = 1.0 eV
+T = 2 fs
+solve 𝑖ħ ψ' = E ψ with ψ(0 s) = 1 for t from 0 s to T
+print ψ(T), exp(-1i E T / ħ)
+print |ψ(T)| to 6 digits
+print ψ.re(T), ψ.im(T)
+
+# complex integrals and sums: one quadrature per part
+print ∫ exp(1i π t² / 2) dt from 0 to 2          # Fresnel integrals C(2) + i S(2)
+print Σ(cis(2π k / 3) for k from 1 to 2)       # -1
+g(x) = exp(1i k x) where k = 2 /m
+print g'(0 m)

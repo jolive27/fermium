@@ -1,0 +1,6 @@
+h(k) =
+    solve u' = -k u
+      with u(0 s) = 1
+      for t from 0 s to 1 s tolerance 1e-12
+    return ∫ (∫ u(t) u(τ) dτ from 0 s to t) dt from 0 s to 1 s
+print h(1 / (1 s)) to 9 digits

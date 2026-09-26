@@ -1,0 +1,11 @@
+{
+ "id": "8663546c0834",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.746008353444\n0.000635483291574\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

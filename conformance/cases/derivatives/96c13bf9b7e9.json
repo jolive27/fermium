@@ -1,0 +1,17 @@
+{
+ "id": "96c13bf9b7e9",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "g is a function; give it an argument, like g(x)",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

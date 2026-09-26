@@ -1,0 +1,17 @@
+{
+ "id": "ad8d5e34c7da",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "log needs a plain number, but got mass [kg]",
+  "line": 1,
+  "col": 11,
+  "hint": "divide by a reference value first, e.g. ln(p / (1 atm))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

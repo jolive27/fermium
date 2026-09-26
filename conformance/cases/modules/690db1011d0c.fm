@@ -1,0 +1,3 @@
+import astro
+f(T) = 2 astro.wien_peak(T)
+print f'(5000 K) in nm/K to 6 digits

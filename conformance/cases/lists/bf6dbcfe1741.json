@@ -1,0 +1,17 @@
+{
+ "id": "bf6dbcfe1741",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a slice xs[a:b] runs from a up to b, so b can't be smaller than a − 1 (xs[a:a-1] is the empty list); to reverse a list use reverse(xs)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+F = ∫ abs(x) dx
+print F(2) - F(-1)

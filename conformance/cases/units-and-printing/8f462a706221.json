@@ -1,0 +1,17 @@
+{
+ "id": "8f462a706221",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add frequency [1/s] to speed [m/s]",
+  "line": 1,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

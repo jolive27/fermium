@@ -1,0 +1,2 @@
+M = [[1, 0], [0, 1e-15]]
+print inverse(M)

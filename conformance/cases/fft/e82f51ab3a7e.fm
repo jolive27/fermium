@@ -1,0 +1,9 @@
+dt = 1 ms
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V * sin(2π * 50 Hz * ts[i])
+X = fft(xs)
+spec = abs(X) / n
+print 2 spec[51] to 12 digits

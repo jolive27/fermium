@@ -1,0 +1,17 @@
+{
+ "id": "5c7ed7fc7666",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected a loop variable name but the line ended",
+  "line": 1,
+  "col": 4,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

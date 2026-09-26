@@ -1,0 +1,2 @@
+print ∫ atan(1/x) dx from -2 to 3 to 8 digits
+print ∫ exp(sin(x^4)) dx from 0 to 5 to 8 digits

@@ -1,0 +1,66 @@
+# N-body (Computer Language Benchmarks Game): the Sun and the four giant planets.
+# Positions in AU, velocities in AU/yr, masses in solar masses -- written WITH units.
+# Units are checked at compile time and erased, so they cost nothing at run time.
+G_sun = 4π² [AU³/(M☉ yr²)]      # Kepler's third law in these units: G M☉ = 4π² AU³/yr²
+day_per_yr = 365.24
+N = 1000000
+dt = 0.01 yr
+
+x = [0, 4.84143144246472090e+00, 8.34336671824457987e+00, 1.28943695621391310e+01, 1.53796971148509165e+01] [AU]
+y = [0, -1.16032004402742839e+00, 4.12479856412430479e+00, -1.51111514016986312e+01, -2.59193146099879641e+01] [AU]
+z = [0, -1.03622044471123109e-01, -4.03523417114321381e-01, -2.23307578892655734e-01, 1.79258772950371181e-01] [AU]
+vx = day_per_yr [0, 1.66007664274403694e-03, -2.76742510726862411e-03, 2.96460137564761618e-03, 2.68067772490389322e-03] [AU/yr]
+vy = day_per_yr [0, 7.69901118419740425e-03, 4.99852801234917238e-03, 2.37847173959480950e-03, 1.62824170038242295e-03] [AU/yr]
+vz = day_per_yr [0, -6.90460016972063023e-05, 2.30417297573763929e-05, -2.96589568540237556e-05, -9.51592254519715870e-05] [AU/yr]
+mass = [1, 9.54791938424326609e-04, 2.85885980666130812e-04, 4.36624404335156298e-05, 5.15138902046611451e-05] [M☉]
+n = len(mass)
+
+# offset the Sun's momentum so the total is zero
+px = 0 M☉ AU/yr
+py = 0 M☉ AU/yr
+pz = 0 M☉ AU/yr
+for i from 1 to n
+    px += mass[i] vx[i]
+    py += mass[i] vy[i]
+    pz += mass[i] vz[i]
+vx[1] = -px / mass[1]
+vy[1] = -py / mass[1]
+vz[1] = -pz / mass[1]
+
+energy() =
+    E = 0 J
+    for i from 1 to n
+        E += ½ mass[i] (vx[i]² + vy[i]² + vz[i]²)
+        for j from i + 1 to n
+            r = √((x[i] - x[j])² + (y[i] - y[j])² + (z[i] - z[j])²)
+            E -= G_sun mass[i] mass[j] / r
+    E
+
+# The Benchmarks Game reports energy with the mass unit M☉/(4π²) (so that G = 1):
+E_unit = 1 M☉ AU²/yr² / (4π²)
+print "N", N
+print "energy_before", energy() / E_unit to 9 digits
+
+t0 = clock()
+for k from 1 to N
+    for i from 1 to n
+        for j from i + 1 to n
+            dx = x[i] - x[j]
+            dy = y[i] - y[j]
+            dz = z[i] - z[j]
+            d2 = dx² + dy² + dz²
+            mag = G_sun dt / (d2 √d2)
+            vx[i] -= dx mass[j] mag
+            vy[i] -= dy mass[j] mag
+            vz[i] -= dz mass[j] mag
+            vx[j] += dx mass[i] mag
+            vy[j] += dy mass[i] mag
+            vz[j] += dz mass[i] mag
+    for i from 1 to n
+        x[i] += dt vx[i]
+        y[i] += dt vy[i]
+        z[i] += dt vz[i]
+t1 = clock()
+
+print "energy_after", energy() / E_unit to 9 digits
+print "TIME_INNER", (t1 - t0) / (1 s)

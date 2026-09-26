@@ -1,0 +1,9 @@
+J1p(x) = d/dx besselj(1, x)
+print J1p(2) to 15 digits
+Kd(x) = d/dx besselk(1, x)
+print besselk(0, 2) + Kd(2) + besselk(1, 2) / 2
+Kp(m) = d/dm ellipk(m)
+Ep(m) = d/dm ellipe(m)
+print Kp(0.3) to 15 digits, Ep(0.3) to 15 digits
+I0p(x) = d/dx besseli(0, x)
+print I0p(1.5) to 15 digits

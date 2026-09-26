@@ -1,0 +1,20 @@
+GM = G M_sun
+dt = 1 hr
+x = 1.524 AU
+y = 0 AU
+vx = 0 km/s
+vy = 24.07 km/s
+t = 0 s
+period = 0 s
+while period == 0 s
+    r = sqrt(x^2 + y^2)
+    vx += -GM x / r^3 * dt
+    vy += -GM y / r^3 * dt
+    y_before = y
+    x += vx dt
+    y += vy dt
+    t += dt
+    if y_before < 0 AU and y >= 0 AU
+        period = t
+print "simulated period:", period in yr
+print "Kepler's third law:", 1.524^1.5, "yr"

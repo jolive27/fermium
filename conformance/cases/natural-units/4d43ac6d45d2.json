@@ -1,0 +1,17 @@
+{
+ "id": "4d43ac6d45d2",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "units nuclear always means ħ = c = 1 (with MeV and fm); for other constants write  units natural(...)",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

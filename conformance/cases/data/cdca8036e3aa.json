@@ -1,0 +1,17 @@
+{
+ "id": "cdca8036e3aa",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the column x appears twice in this table",
+  "line": 1,
+  "col": 20,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

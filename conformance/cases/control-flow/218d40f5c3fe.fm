@@ -1,0 +1,3 @@
+x = -3 m
+distance = if x > 0 m then x else -x
+print distance

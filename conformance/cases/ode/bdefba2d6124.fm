@@ -1,0 +1,15 @@
+# the radon progeny on an air filter: Po-218 → Pb-214 → Bi-214 → Po-214 (164 μs)
+λ1 = ln(2) / 3.098 min
+λ2 = ln(2) / 26.8 min
+λ3 = ln(2) / 19.9 min
+λ4 = ln(2) / 164.3 μs
+solve
+    N1' = -λ1 N1
+    N2' = λ1 N1 - λ2 N2
+    N3' = λ2 N2 - λ3 N3
+    N4' = λ3 N3 - λ4 N4
+    with N1(0) = 1e6, N2(0) = 0, N3(0) = 0, N4(0) = 0
+    for t from 0 min to 720 min using radau
+print "Bi-214 atoms at 1 h:", N3(60 min)
+print "A(Po-214) / A(Bi-214) at 5 h:", λ4 N4(300 min) / (λ3 N3(300 min))
+print len(times(N1)), "steps"

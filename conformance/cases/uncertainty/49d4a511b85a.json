@@ -1,0 +1,11 @@
+{
+ "id": "49d4a511b85a",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "E on the bisector (integral) = 160.77421 V/m\nE on the bisector (formula)  = 160.77421 V/m\nE_x at P (integral) = 19.975653 V/m\nE_y at P (integral) = 157.01964 V/m\nV at P = 126.80201 V\nE_x at P (-∇V) = 19.975653 V/m\nE_y at P (-∇V) = 157.01964 V/m\nE_z at P (-∇V) = 0 V/m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

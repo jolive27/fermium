@@ -1,0 +1,2 @@
+solve x' = -x/(1 s) with x(0) = 1 m for t from 0 hr to 2 hr
+print x(3 hr)

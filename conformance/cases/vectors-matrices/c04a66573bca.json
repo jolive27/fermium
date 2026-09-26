@@ -1,0 +1,17 @@
+{
+ "id": "c04a66573bca",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an index must be a whole number (1, 2, 3, ...), not 0.5",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

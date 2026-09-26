@@ -1,0 +1,2 @@
+σ = 1 nm
+print ∫ exp(-x²/(2σ²)) dx from -1 m to 1 m

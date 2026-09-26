@@ -1,0 +1,4 @@
+v = 3 m/s
+T = 10 s
+t0 = 2 s
+print ∫ v dt from 0 s to T - t0

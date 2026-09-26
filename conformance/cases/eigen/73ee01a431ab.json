@@ -1,0 +1,17 @@
+{
+ "id": "73ee01a431ab",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an eigenvalue problem needs an unknown constant, like E in  … = E ψ; every name here already has a value (use a new name for the eigenvalue)",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

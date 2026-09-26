@@ -1,0 +1,4 @@
+E = 0
+E += 3 J
+E += 2 J
+print E

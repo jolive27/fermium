@@ -1,0 +1,2 @@
+T = [-10 °C, 10 °C]
+print T in K

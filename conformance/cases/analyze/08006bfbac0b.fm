@@ -1,0 +1,2 @@
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]
+print pendulum(1 s, 9.81 m/s²)

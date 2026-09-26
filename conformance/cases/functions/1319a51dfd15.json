@@ -1,0 +1,11 @@
+{
+ "id": "1319a51dfd15",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "Sun:   501.6 nm\nhuman: 9.348 μm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

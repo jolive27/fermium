@@ -1,0 +1,7 @@
+L = 1.20 ± 0.01 m
+T = 2.21 ± 0.02 s
+g = 4π² L / T²
+print g, g in ft/s², rel(g) to 3 digits
+propagate montecarlo 20000 samples
+    g2 = 4π² L / T²
+print g2

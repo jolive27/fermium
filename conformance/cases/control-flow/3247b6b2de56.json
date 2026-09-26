@@ -1,0 +1,17 @@
+{
+ "id": "3247b6b2de56",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected 'from' (write: for i from 1 to 10) but the line ended",
+  "line": 1,
+  "col": 6,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

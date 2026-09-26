@@ -1,0 +1,11 @@
+{
+ "id": "3c0f6ab4e4e0",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "dt = 1440 min period = 366.0000 day\ndt = 360 min period = 365.2500 day\ndt = 60 min period = 365.1250 day\ndt = 10 min period = 365.0903 day\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

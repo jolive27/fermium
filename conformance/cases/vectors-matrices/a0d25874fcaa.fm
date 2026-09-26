@@ -1,0 +1,13 @@
+# Earth around the Sun, with vectors
+GM = G M_sun
+dt = 1 day
+r = <1, 0> AU          # position
+v = <0, 29.78> km/s    # velocity
+
+for day_number from 1 to 365
+    a = -GM r / |r|^3
+    v += a dt
+    r += v dt
+
+print "after 365 days:", r in AU
+print "distance from the Sun:", |r| in AU

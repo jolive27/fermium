@@ -1,0 +1,17 @@
+{
+ "id": "de686a66c097",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a unit's exponent must be a fraction of whole numbers, like m^(1/2)",
+  "line": 1,
+  "col": 15,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

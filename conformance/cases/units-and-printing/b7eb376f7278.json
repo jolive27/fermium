@@ -1,0 +1,11 @@
+{
+ "id": "b7eb376f7278",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "It takes 2.02 s to fall.\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

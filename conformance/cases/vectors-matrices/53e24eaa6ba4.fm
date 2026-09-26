@@ -1,0 +1,8 @@
+K = [[2, -1], [-1, 2]] N/m
+x = <1, 2> cm
+print K
+print K x in N
+print det(K), inverse(K)
+print Kᵀ, K K
+print solve_linear(K, <1, 0> N)
+print K[1, 2], K[2]

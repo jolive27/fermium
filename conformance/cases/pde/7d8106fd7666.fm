@@ -1,0 +1,8 @@
+m = m_e
+σ = 1 nm
+k0 = 2 / (1 nm)
+solve 𝑖 ħ ∂ψ/∂t = -ħ²/(2*m) * ∂²ψ/∂x²
+    with ψ(x, 0 fs) = (2π σ²)^(-1/4) exp(-x² / (4σ²)) exp(𝑖 k0 x), ψ(-40 nm, t) = 0 nm^(-1/2), ψ(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 fs to 5 fs
+    grid 800
+print ∫ |ψ(x, 5 fs)|^2 dx from -40 nm to 40 nm to 4 digits

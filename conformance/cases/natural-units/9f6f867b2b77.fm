@@ -1,0 +1,4 @@
+units natural(G = c = 1)
+M = M☉
+print M to 7 digits
+print 2 M in km to 6 digits

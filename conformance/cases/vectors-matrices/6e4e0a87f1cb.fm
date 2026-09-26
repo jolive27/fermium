@@ -1,0 +1,8 @@
+K1 = [[1, 2], [3, 4]] N/m
+K2 = [[10, 20], [30, 40]] N/m
+print K1 + K2
+print K2 - K1
+print 2 K1
+print K1 * 2 m
+print -K1
+print K1 / 2

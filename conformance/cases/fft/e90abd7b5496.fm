@@ -1,0 +1,9 @@
+X = fft([1, 2, 3, 4])
+print X
+print X[2]
+print X[end]
+print abs(X) to 15 digits
+print |X| to 15 digits
+print arg(X) to 15 digits
+print conj(X)
+print X.re, X.im

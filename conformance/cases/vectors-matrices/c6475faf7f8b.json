@@ -1,0 +1,17 @@
+{
+ "id": "c6475faf7f8b",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'<…> T' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 2,
+  "col": 18,
+  "hint": "write  <…>*T  for <…> × your variable T, or  <…> [T]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

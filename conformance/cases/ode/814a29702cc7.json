@@ -1,0 +1,11 @@
+{
+ "id": "814a29702cc7",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "length scale = 0.580079 nm   energy scale = 0.113227 eV\nn = 0  E_shoot = 0.1200612379 eV  E_WKB = 0.09818395274 eV  WKB error = -0.1822\nn = 1  E_shoot = 0.4302242148 eV  E_WKB = 0.4248172909 eV  WKB error = -0.01257\nn = 2  E_shoot = 0.8441836352 eV  E_WKB = 0.8394609876 eV  WKB error = -0.005594\nn = 3  E_shoot = 1.318495422 eV  E_WKB = 1.314734014 eV  WKB error = -0.002853\n(c) alpha = 2.143068784 1/nm²  E_var = 0.1224758059 eV  above E0: true\n(d) H(0,0) = 0.1224758059 eV  lowest eigenvalue = 0.1200716885 eV\n    E0 <= E_matrix <= E_var: true\n    second even eigenvalue = 0.8479133690 eV  (shooting E2 = 0.8441836352 eV )\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

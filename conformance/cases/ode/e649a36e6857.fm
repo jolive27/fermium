@@ -1,0 +1,7 @@
+f(k) =
+    solve y' = k y
+      with y(0 s) = 1
+      for t from 0 s to 1 s tolerance 1e-12
+    solve y(T) = 2 for T from 0 s to 1 s
+    return T
+print f(1 / (1 s)) to 9 digits

@@ -1,0 +1,11 @@
+{
+ "id": "e91b4f7a3bed",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "research/bbn_network",
+ "stdout": "η₁₀ = 6.132\nY_p = 0.242340\nD/H = 2.59588×10⁻⁵\n3He/H = 1.02875×10⁻⁵\n7Li/H = 4.36405×10⁻¹⁰\nY_n = 4.206×10⁻⁹\nT = 0.0114912 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

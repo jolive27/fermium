@@ -1,0 +1,5 @@
+k = 0.50 ± 0.05 1/s
+propagate montecarlo 2000 samples
+    solve x' = -k x with x(0 s) = 1.0 m for t from 0 s to 2 s
+    x2 = x(2 s)
+print x2

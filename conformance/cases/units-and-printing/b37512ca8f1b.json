@@ -1,0 +1,17 @@
+{
+ "id": "b37512ca8f1b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "pritn isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "did you mean print?",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

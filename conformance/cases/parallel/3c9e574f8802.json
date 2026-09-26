@@ -1,0 +1,17 @@
+{
+ "id": "3c9e574f8802",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "print can't be used inside a parallel for: the iterations run at the same time, in no fixed order",
+  "line": 2,
+  "col": 5,
+  "hint": "keep the values in a list with xs[i] = …, then use them after the loop",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

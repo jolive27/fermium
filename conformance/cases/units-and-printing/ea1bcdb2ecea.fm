@@ -1,0 +1,23 @@
+v₀ = 20 m/s
+θ = 45 °
+R = (v₀)² sin(2θ)/g₀
+print R                          # 40.8 m
+
+m = 1500 kg
+v = 100 km/hr
+KE = (1/2) m v²
+print KE in kJ                   # 579 kJ
+
+v = √((2 G M_earth)/R_earth)
+print v in km/s                  # 11.2 km/s
+
+a = 3 [m]
+b = 5 [m]
+temp = a
+a = b
+b = temp
+print a, b                       # 5 m 3 m
+
+v = 0.01 · c
+lam = h / m_e  v
+print lam in nm                  # 0.24 nm  (λ = h/(m_e v) ≈ 0.243 nm)

@@ -1,0 +1,5 @@
+D = 1e-4 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 0 K, u(0 m, t) = 80 K, u(1 m, t) = 0 K
+    for x from 0 m to 1 m, t from 0 s to 100 s
+print u(2.5 mm, 0.05 s) to 5 digits

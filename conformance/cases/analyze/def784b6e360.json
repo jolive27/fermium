@@ -1,0 +1,11 @@
+{
+ "id": "def784b6e360",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "4\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

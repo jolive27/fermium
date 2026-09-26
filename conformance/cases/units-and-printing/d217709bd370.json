@@ -1,0 +1,11 @@
+{
+ "id": "d217709bd370",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "true true true 20 °C\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

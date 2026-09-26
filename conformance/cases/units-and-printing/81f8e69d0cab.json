@@ -1,0 +1,17 @@
+{
+ "id": "81f8e69d0cab",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show energy [J] in W (power [W])",
+  "line": 1,
+  "col": 7,
+  "hint": "1 J is energy; try  in J  or  in eV  or  in MeV",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

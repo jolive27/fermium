@@ -1,0 +1,11 @@
+{
+ "id": "3ce108eb35b5",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "mass ratio μ: 0.0121506\nsidereal month 2π/Ω: 27.2846 day\nL1 from the barycentre: 321710 km\nL1 from the Moon: 58019.1 km\nL4: 187529 km 332900 km\nRouth limit: 0.0385209\nshort libration period: 28.5852 day\nlong libration period: 91.4952 day\nJacobi constant at the start: 3.13651040827×10⁶ m²/s²\nJacobi constant after 360 days: 3.13651040827×10⁶ m²/s²\nlargest distance from L4: 32007 km\nposition after 100 days (from L4): 15460.1 km -39.9936 km\nμ = 0.05, distance from L4 after 120 days: 135920 km\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

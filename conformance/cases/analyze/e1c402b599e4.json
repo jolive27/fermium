@@ -1,0 +1,11 @@
+{
+ "id": "e1c402b599e4",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "dimensional analysis of swing: T depends on L, g, θ₀\n  4 quantities, 2 independent dimensions (length, time) → 4 − 2 = 2 dimensionless groups\n  Π₁ = T √(g/L)\n  Π₂ = θ₀\n  so T = √(L/g) · f(Π₂)   (f is a function dimensional analysis can't give)\n  defined swing(L, g) = √(L/g), so T = swing(L, g) · f(Π₂)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

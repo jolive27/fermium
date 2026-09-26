@@ -1,0 +1,6 @@
+N = 1
+t = 0 min
+while N <= 1000000
+    N = 2 * N
+    t += 20 min
+print N, "bacteria after", t, "=", t in hr

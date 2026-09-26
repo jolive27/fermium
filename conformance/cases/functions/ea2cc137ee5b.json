@@ -1,0 +1,17 @@
+{
+ "id": "ea2cc137ee5b",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "i might not have a value here: it is only set inside the for loop on line 2, which may not run at all",
+  "line": 4,
+  "col": 5,
+  "hint": "give i a value before the for loop on line 2, e.g.  i = 0; this happened when calling f on line 5 (with n = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

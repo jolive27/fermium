@@ -1,0 +1,1 @@
+print ∫ exp(-(x-100)^2) dx from 0 to inf to 6 digits

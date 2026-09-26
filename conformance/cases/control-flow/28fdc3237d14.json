@@ -1,0 +1,17 @@
+{
+ "id": "28fdc3237d14",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this line ended before the expression was complete",
+  "line": 1,
+  "col": 3,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

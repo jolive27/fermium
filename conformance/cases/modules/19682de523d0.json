@@ -1,0 +1,17 @@
+{
+ "id": "19682de523d0",
+ "area": "modules",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't change nuclear.a_V: a module's names can't be changed from outside it",
+  "line": 2,
+  "col": 13,
+  "hint": "make your own copy and use it instead:  a_V = …  (the module's own functions keep using nuclear.a_V)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

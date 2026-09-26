@@ -1,0 +1,11 @@
+{
+ "id": "84830543adce",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) beam kinetic energy = 5.629632537 GeV   6 m_p c² = 5.629632537 GeV\n    beam momentum = 6.500539721 GeV/c\n(b) photon threshold = 144.6854638 MeV   formula 144.6854638 MeV\n(c) GZK threshold = 2.49012×10²⁰ eV   approx 2.49012×10²⁰ eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

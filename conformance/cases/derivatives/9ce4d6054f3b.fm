@@ -1,0 +1,6 @@
+y(t) = 20 m/s t - ½ 9.81 m/s^2 t^2
+v = y'
+a = y''
+print y
+print v
+print a

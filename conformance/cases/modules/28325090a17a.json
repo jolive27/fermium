@@ -1,0 +1,17 @@
+{
+ "id": "28325090a17a",
+ "area": "modules",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "std needs at least 2 values: it is the sample standard deviation, which divides by N − 1, so one value says nothing about the spread (quote the instrument's uncertainty for a single measurement) (in stdlib/stats.fm, line 6)",
+  "line": 4,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

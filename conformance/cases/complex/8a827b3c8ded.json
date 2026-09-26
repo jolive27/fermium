@@ -1,0 +1,17 @@
+{
+ "id": "8a827b3c8ded",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a complex number's parts are .re and .im (not .x)",
+  "line": 1,
+  "col": 7,
+  "hint": "or write re(z) and im(z)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

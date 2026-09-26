@@ -1,0 +1,11 @@
+{
+ "id": "1fb8935f9411",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "natural frequency ω0 = 10 rad/s\ndamping rate γ = 0.20 1/s\nquality factor Q = 25\nx(5 s) numerical: 3.52006 cm   exact: 3.52006 cm\nspeed at 1 s: 44.4 cm/s\nenergy at start: 0.25 J   after 10 s: 0.0045 J\nfraction left: 0.018  (expected about exp(-2γ t) = 0.018 )\nplot saved to <ROOT>/examples/gallery/damped_spring.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

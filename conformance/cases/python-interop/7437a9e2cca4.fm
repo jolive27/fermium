@@ -1,0 +1,2 @@
+use python numpy as np
+print np.sqrt(vec(1, 2))

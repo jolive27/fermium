@@ -1,0 +1,2 @@
+f(y) = ∫ x y dx from 0 to y
+print ∫ f(y) dy from 0 to 2

@@ -1,0 +1,17 @@
+{
+ "id": "6a4cf7ca9a9d",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a  units  line must be at the top level of the program (not inside a function, loop or if)",
+  "line": 2,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

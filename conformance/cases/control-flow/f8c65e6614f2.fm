@@ -1,0 +1,20 @@
+# Earth around the Sun, version 1
+GM = G M_sun          # G times the mass of the Sun
+dt = 1 day            # time step
+
+# starting position and velocity
+x = 1 AU
+y = 0 AU
+vx = 0 km/s
+vy = 29.78 km/s
+
+for day_number from 1 to 365
+    r = sqrt(x^2 + y^2)
+    ax = -GM x / r^3
+    ay = -GM y / r^3
+    vx += ax dt
+    vy += ay dt
+    x += vx dt
+    y += vy dt
+
+print "after 365 days: x =", x in AU, "y =", y in AU

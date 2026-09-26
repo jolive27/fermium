@@ -1,0 +1,11 @@
+m = m_e
+ħω = 1 eV
+omega = ħω / hbar
+V(x) = m omega^2 x^2 / 2
+solve -hbar^2/(2*m) * psi'' + V(x) psi = E psi
+    with psi(-3 nm) = 0, psi(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 4
+for n from 1 to 4
+    print "E", n, "=", E[n] in eV, "  (ħω(n - ½) =", ħω (n - 0.5), ")"
+print psi_1(0 nm), integral psi_1(x)^2 dx from -3 nm to 3 nm

@@ -1,0 +1,6 @@
+s = <1 m, 2 m/s, 3 kg>
+q = <10 m, 20 [m/s], 30 kg>
+print s + q
+print q - s
+s = s + q
+print s

@@ -1,0 +1,11 @@
+{
+ "id": "c00a3a7a95b8",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = 1/(1 + x²) + 1/(4 √(1 - (x/4)²))\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

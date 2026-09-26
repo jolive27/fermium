@@ -1,0 +1,17 @@
+{
+ "id": "a908d2474d78",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is length [m]; it can't now hold area [m²]",
+  "line": 2,
+  "col": 1,
+  "hint": "each variable keeps its units; use a new name for a different quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

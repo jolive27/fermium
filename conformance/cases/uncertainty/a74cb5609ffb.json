@@ -1,0 +1,11 @@
+{
+ "id": "a74cb5609ffb",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "g = 9.70 ± 0.19 m/s²\nrelative uncertainties: 0.0083 0.0090 0.020\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

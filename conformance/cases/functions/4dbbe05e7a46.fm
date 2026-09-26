@@ -1,0 +1,3 @@
+L = 2 m
+f(x) = x + 2 L
+print f(1 m)

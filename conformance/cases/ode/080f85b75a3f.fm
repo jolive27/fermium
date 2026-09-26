@@ -1,0 +1,6 @@
+solve y'' = -y / (1 s)²
+  with y(0 s) = 1 m, y'(0 s) = 0 m/s
+  for t from 0 s to 10 s
+solve y'(t2) = 0 m/s for t2 from 1 s to 5 s
+solve y(t3) · y'(t3) = 0 m²/s for t3 from 0.5 s to 3 s
+print t2 to 14 digits, t3 to 14 digits

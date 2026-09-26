@@ -1,0 +1,11 @@
+{
+ "id": "702a142eba5b",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "F(x) = -𝑖 exp(𝑖 x)\n0 + 2i\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

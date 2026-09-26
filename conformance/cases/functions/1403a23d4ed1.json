@@ -1,0 +1,11 @@
+{
+ "id": "1403a23d4ed1",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "fx(x, y) = 2x y\nfy(x, y) = x² + cos(y)\n4 0.584\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

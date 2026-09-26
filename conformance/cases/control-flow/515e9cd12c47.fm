@@ -1,0 +1,6 @@
+n = 0
+for i from 1 to inf
+    n += 1
+    if n > 5
+        break
+print n

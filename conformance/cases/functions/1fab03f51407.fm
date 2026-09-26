@@ -1,0 +1,4 @@
+speed(h) =
+    g = 9.81 m/s^2
+    return sqrt(2*g*h)    # note: `2 g` would mean 2 grams!
+print speed(10 m)

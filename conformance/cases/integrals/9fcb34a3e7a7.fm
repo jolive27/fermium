@@ -1,0 +1,2 @@
+f(x) = ∫ 1/u du from 1 to x
+print f(3) to 6 digits

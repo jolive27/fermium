@@ -1,0 +1,2 @@
+x0 = 0.40673828125
+print ∫ sin(x - x0) / (x - x0) dx from 0 to 1 to 12 digits

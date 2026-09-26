@@ -1,0 +1,17 @@
+{
+ "id": "369c21f48064",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this equation has no solution between 1 1/s and 2 1/s: the two sides never cross there (checked at 200 points)",
+  "line": 6,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

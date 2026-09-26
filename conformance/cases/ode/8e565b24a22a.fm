@@ -1,0 +1,5 @@
+r(t) = if t < 0.3 s then 1 / (1 s) else 2 / (1 s)
+solve y' = r(t) y
+  with y(0 s) = 1
+  for t from 0 s to 1 s
+print y(1 s) to 17 digits

@@ -1,0 +1,17 @@
+{
+ "id": "fe71d39e6bd6",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "g calls itself; a function defined inside another function can't be recursive (define it at the top level)",
+  "line": 2,
+  "col": 12,
+  "hint": "this happened when calling g on line 3 (with s = a plain number (no units)); this happened when calling f on line 4 (with x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "72645e24d19b",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "angle after 1 s: -80.5°\nplot saved to <ROOT>/bootcamp/pendulum_big.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

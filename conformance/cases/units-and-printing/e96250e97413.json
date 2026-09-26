@@ -1,0 +1,11 @@
+{
+ "id": "e96250e97413",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "1.33×10⁻³³ J s\n9.8 m/s²\n",
+ "stderr": "warning: line 1: 2 h means 2 × Planck's constant h; for hours write 2 hr\n    print 2 h\n          ^\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

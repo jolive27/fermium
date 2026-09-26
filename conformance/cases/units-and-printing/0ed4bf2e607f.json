@@ -1,0 +1,17 @@
+{
+ "id": "0ed4bf2e607f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'g' after a bracket is read as a variable, and you haven't defined g",
+  "line": 3,
+  "col": 15,
+  "hint": "for the unit write it in brackets: [g]; for standard gravity use g_n, or define g = 9.81 m/s²",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

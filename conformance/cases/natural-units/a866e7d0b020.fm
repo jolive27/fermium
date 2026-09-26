@@ -1,0 +1,5 @@
+units natural(ħ = c = k_B = 1)
+T = 300 K
+print T in meV to 6 digits
+print 1 eV in K to 9 digits
+print 25 °C in K to 5 digits

@@ -1,0 +1,3 @@
+G(x) = ∫ x s^2 ds from 0 to x
+print G'(2) to 12 digits
+print G'

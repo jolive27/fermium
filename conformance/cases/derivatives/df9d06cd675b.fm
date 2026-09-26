@@ -1,0 +1,2 @@
+f(x) = x^2 exp(-x) sin(3x)
+print f'

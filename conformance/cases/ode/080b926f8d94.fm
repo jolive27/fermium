@@ -1,0 +1,3 @@
+λ = 1 1/s
+solve N' = -λ N with N(0) = 1e20 for t from 0 s to 50 s
+print N(50 s) to 6 digits

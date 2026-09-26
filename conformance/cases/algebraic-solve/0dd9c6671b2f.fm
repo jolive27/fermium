@@ -1,0 +1,42 @@
+# Astrophysics 22 — Saha ionisation of hydrogen: stellar atmospheres and recombination
+#
+# (Carroll & Ostlie §8.1, Example 8.1.4 and Fig. 8.9; Ryden, "Introduction to
+# Cosmology", §8.3.)  The Saha equation for hydrogen (χ = 13.6 eV, partition
+# functions Z_I = 2 for the neutral atom in its ground state, Z_II = 1):
+#
+#     N_II/N_I = (2 k T Z_II / (P_e Z_I)) (2π mₑ k T / h²)^(3/2) e^(−χ/kT).
+#
+#  (a) In a stellar atmosphere with electron pressure P_e = 20.0 Pa
+#      (200 dyn/cm²), find the temperature at which hydrogen is half ionised
+#      (C&O: about 9600 K), and the ionised fraction at 8300 K and 11300 K.
+#      Also the width of the transition, 1/(dx/dT) at the half-way point.
+#  (b) Recombination: in pure hydrogen of total density n_H, with n_e = n_II,
+#      the ionised fraction x obeys x²/(1 − x) = (1/n_H)(2π mₑ kT/h²)^(3/2) e^(−χ/kT).
+#      In the expanding universe T = T₀(1 + z) and n_H = n_H0 (1 + z)³ with
+#      T₀ = 2.7255 K, n_H0 = 0.190 m⁻³.  Find the redshift and temperature at
+#      which x = ½ (Ryden: z ≈ 1380, T ≈ 3740 K), and x at z = 1100.
+
+χ = 13.6 eV
+
+# (a)
+P_e = 20.0 Pa
+ratio(T) = (2 k_B T / (2 P_e)) (2π m_e k_B T / h²)^(3/2) exp(-χ / (k_B T))
+frac(T) = ratio(T) / (1 + ratio(T))
+solve ratio(T) = 1 for T from 3000 K to 30000 K
+T_half = T
+dfrac = d/dT frac
+print "(a) half ionised at T =", T_half to 8 digits
+print "    x(8300 K) =", frac(8300 K) to 8 digits, "  x(11300 K) =", frac(11300 K) to 8 digits
+print "    dx/dT at T_half =", dfrac(T_half) to 8 digits, "  width 1/(dx/dT) =", 1 / dfrac(T_half) to 8 digits
+
+# (b)
+T_0 = 2.7255 K
+n_H0 = 0.190 m⁻³
+S(T) = (2π m_e k_B T / h²)^(3/2) exp(-χ / (k_B T))
+# x²/(1 − x) = q  →  x = (−q + √(q² + 4q))/2   (q, not s: "4 s" is four seconds)
+ion(z) =
+    q = S(T_0 (1 + z)) / (n_H0 (1 + z)³)
+    return (-q + √(q² + 4 q)) / 2
+solve ion(z) = 0.5 for z from 500 to 3000
+print "(b) x = 1/2 at z =", z to 8 digits, "  T =", T_0 (1 + z) to 8 digits
+print "    x(z = 1100) =", ion(1100) to 8 digits, "  x(z = 1500) =", ion(1500) to 8 digits

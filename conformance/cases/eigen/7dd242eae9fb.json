@@ -1,0 +1,11 @@
+{
+ "id": "7dd242eae9fb",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "(a) TE10 = 6.5571404 GHz  TE20 = 13.114281 GHz  TE01 = 14.753566 GHz  TE11 = 16.145086 GHz\n(b) lambda_g = 39.707119 mm  v_p/c = 1.3244869  v_g/c = 0.75500934  v_p v_g / c² = 1.000000000\n(c) k_c = 137.4275002 1/m  pi/a = 137.4275002 1/m  second / first = 4.0000000\n(d) R_s = 0.0260895 Ω  alpha_c = 0.0124783 1/m  = 0.108385 dB/m\n(e) x'11 = 1.841183781  TE11 = 8.7849233 GHz  x01 = 2.404825558  TM01 = 11.474253 GHz\n",
+ "stderr": "warning: line 43: 'k' and 'κ' look almost identical but are different names\n    k = ω / c\n    ^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

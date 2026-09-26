@@ -1,0 +1,10 @@
+tau_A = 2 hr
+tau_B = 5 hr
+solve
+    A' = -A / tau_A
+    B' = A / tau_A - B / tau_B
+    with A(0) = 1000, B(0) = 0
+    for t from 0 hr to 24 hr
+print "B after 5 hours:", B(5 hr)
+print "most B ever:", max(B)
+plot A vs t, B vs t to "chain.png"

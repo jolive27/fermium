@@ -1,0 +1,7 @@
+f(x) =
+    y = x * 2
+    if y > 3 m
+        return y
+    z = y + 1 m
+    z * 3
+print f(1 m), f(2 m)

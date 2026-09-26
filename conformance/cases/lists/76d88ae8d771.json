@@ -1,0 +1,17 @@
+{
+ "id": "76d88ae8d771",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "all elements of a list need the same units; this one is time [s] but earlier ones are length [m]",
+  "line": 1,
+  "col": 12,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

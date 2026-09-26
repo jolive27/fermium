@@ -1,0 +1,17 @@
+{
+ "id": "5b76bc1d369d",
+ "area": "modules",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the uncertainty, or put the calculation in a  propagate montecarlo  block (in stdlib/stats.fm, line 6)",
+  "line": 4,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

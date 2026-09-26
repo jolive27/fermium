@@ -1,0 +1,22 @@
+# Semi-empirical mass formula: binding energy per nucleon, peak of the curve
+a_V = 15.75 MeV
+a_S = 17.8 MeV
+a_C = 0.711 MeV
+a_A = 23.7 MeV
+a_P = 11.18 MeV
+
+pairing(Z, A) = if mod(A, 2) == 1 then 0 MeV else if mod(Z, 2) == 0 then a_P / √A else -a_P / √A
+B(Z, A) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + pairing(Z, A)
+Z_stable(A) = round(A / (2 + a_C / (2 a_A) * A^(2/3)))
+
+print "Fe-56: B/A =", B(26, 56) / 56 in MeV to 5 digits
+print "U-238: B/A =", B(92, 238) / 238 in MeV to 5 digits
+
+best_A = 0
+best = 0 MeV
+for A from 10 to 250
+    b = B(Z_stable(A), A) / A
+    if b > best
+        best = b
+        best_A = A
+print "peak at A =", best_A, "with B/A =", best in MeV to 5 digits

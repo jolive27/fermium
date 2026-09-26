@@ -1,0 +1,2 @@
+seed(0)
+print rand() to 15 digits, randn() to 15 digits

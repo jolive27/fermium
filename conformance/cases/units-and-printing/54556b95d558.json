@@ -1,0 +1,17 @@
+{
+ "id": "54556b95d558",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "clear empties a list, and x is a plain number (no units)",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

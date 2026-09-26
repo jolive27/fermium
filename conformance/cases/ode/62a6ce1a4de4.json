@@ -1,0 +1,17 @@
+{
+ "id": "62a6ce1a4de4",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "r is a vector, so it can't be evaluated at each element of a list (lists of vectors aren't supported yet)",
+  "line": 4,
+  "col": 7,
+  "hint": "loop over the list, or take one component, like r.x or r[1]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

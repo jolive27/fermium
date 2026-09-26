@@ -1,0 +1,2 @@
+X = fft([1, 2])
+print sum(X)

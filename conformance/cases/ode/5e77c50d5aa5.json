@@ -1,0 +1,11 @@
+{
+ "id": "5e77c50d5aa5",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "(3 + 4i) Ω (0.00300 + 0.00400i) kΩ 5 Ω 53.1°\n-1 + 0i (1.50 + 2.25i) m NaN + NaNi\n-0.416 - 0.909i\n0.488 + 0.343i\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+f(x) = asin(x/2) + acos(x/3)
+g = f'
+h = f''
+print g(13/10) to 6 digits, h(13/10) to 6 digits

@@ -1,0 +1,17 @@
+{
+ "id": "ce494d7625a2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'15 T⁴' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 2,
+  "col": 11,
+  "hint": "write  15*T⁴  for 15 × your variable T, or  15 [T⁴]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

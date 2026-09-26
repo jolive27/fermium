@@ -1,0 +1,4 @@
+F = integral cos(x) dx
+print F(pi / 2)
+G = integral x^2 dx
+print G(3)

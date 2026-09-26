@@ -1,0 +1,2 @@
+heat(m [kg], ΔT [K]) = m 4186 J/(kg K) ΔT
+print heat(1 kg, 10 °C)

@@ -1,0 +1,2 @@
+units natural
+print (1 m + 1 s) in m to 6 digits

@@ -1,0 +1,11 @@
+{
+ "id": "d605c6363a18",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.50 + 1.0i\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

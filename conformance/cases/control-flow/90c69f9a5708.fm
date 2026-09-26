@@ -1,0 +1,4 @@
+n = 0
+for i from 1 to 0/0
+    n += 1
+print n

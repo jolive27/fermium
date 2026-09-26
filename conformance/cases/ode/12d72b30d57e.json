@@ -1,0 +1,11 @@
+{
+ "id": "12d72b30d57e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) L/hbar = 1.5000000  Z alpha = 0.57649085  E/(m c²) = 0.9258703712  bound: true\n(b) turning points found: 3  advance per radial period = 29.949303°\n    Sommerfeld 2π(1/√(1 − (k/Lc)²) − 1) = 29.949303°\n    first turning angle = -165.02535°  |r| there = 1.4924845\n(c) r_max/r0 = 1.492484527  T_r (ODE) = 8.64947469×10⁻²⁰ s\n    T_r (quadrature) = 8.64947469×10⁻²⁰ s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

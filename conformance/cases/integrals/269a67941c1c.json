@@ -1,0 +1,11 @@
+{
+ "id": "269a67941c1c",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "first 10 s: 5.79 mC\ntotal:      6 mC\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

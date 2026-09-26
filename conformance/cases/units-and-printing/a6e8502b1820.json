@@ -1,0 +1,17 @@
+{
+ "id": "a6e8502b1820",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "M holds a 2×2 matrix; it can't now hold a 3×3 matrix",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

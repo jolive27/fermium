@@ -1,0 +1,7 @@
+xs = [1 s, 2 s, 3 s]
+xs[2] = 5 s
+xs[end] += 1 s
+print xs
+push(xs, 7 s)
+append(xs, 8 s)
+print len(xs), xs[end]

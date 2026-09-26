@@ -1,0 +1,11 @@
+{
+ "id": "5903b46f3152",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.51769200422664 eV\n2.1304838864736 eV\n4.5307064566460 eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

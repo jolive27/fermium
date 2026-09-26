@@ -1,0 +1,5 @@
+k = 2
+f(x) = k x
+print f(3)
+k = 5
+print f(3)

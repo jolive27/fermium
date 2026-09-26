@@ -1,0 +1,14 @@
+z = 3 + 4i
+print z, |z|, arg(z) in °, conj(z)
+print re(z), im(z), z.re, z.im
+print (1 + 2i) * (3 - 1i), 2 / (1 + 1i), (1 + 1i)^2
+print exp(𝑖 π) ≈ -1 + 0i                # Euler's identity
+print sqrt(-4 + 0i), ln(1i), cis(π/3), polar(2, 45°)
+
+R = 100 Ω
+L = 0.5 H
+C = 10 μF
+ω = 2π × 50 Hz
+Z = R + 1i ω L + 1 / (1i ω C)           # an impedance: a complex number in Ω
+print Z, |Z|, arg(Z) in °
+print (230 + 0i) [V] / Z                # the current, in A

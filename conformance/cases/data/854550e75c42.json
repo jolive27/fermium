@@ -1,0 +1,11 @@
+{
+ "id": "854550e75c42",
+ "area": "data",
+ "origin": "tests",
+ "dir": "research/neutron_star_tov",
+ "stdout": "maximum mass: 0.7102 M☉\nradius at maximum mass: 9.161 km\ncentral Fermi momentum x_c = 0.8339\ncentral density (rest mass): 3.54×10¹⁵ g/cm³   (ε/c²: 4.21×10¹⁵ g/cm³ )\ncompactness 2GM/(Rc²): 0.229\nx_c = 0.2 : M = 0.2228 M☉   R = 23.63 km\nx_c = 0.5 : M = 0.5942 M☉   R = 13.51 km\nx_c = 1 : M = 0.6947 M☉   R = 7.913 km\nx_c = 2 : M = 0.4763 M☉   R = 5.081 km\nM R³ at x_c = 0.05 and 0.07 (constant for n = 3/2): 3420 M☉ km³ 3380 M☉ km³\nplot saved to <ROOT>/research/neutron_star_tov/mass_radius.png\nplot saved to <ROOT>/research/neutron_star_tov/mass_vs_xc.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

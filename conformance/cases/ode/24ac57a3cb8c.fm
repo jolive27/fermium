@@ -1,0 +1,5 @@
+m = 1 kg
+k = 5 [N/m]
+solve m x'' = -k
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
+  for t from 0 s to 1 s

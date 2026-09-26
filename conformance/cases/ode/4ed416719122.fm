@@ -1,0 +1,4 @@
+solve x' = -x / (1 s)
+  with x(0) = 1 m
+  for t from 0 s to 1 s tolerance 1e-11 using rk45
+print x(1 s) to 9 digits

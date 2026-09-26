@@ -1,0 +1,11 @@
+{
+ "id": "f5ae99951e26",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "0 ± 0 m\n1 ± 0\n1.440 ± 0.024 m² but for two separate measurements: 1.440 ± 0.017 m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

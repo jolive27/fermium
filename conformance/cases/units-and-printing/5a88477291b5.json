@@ -1,0 +1,17 @@
+{
+ "id": "5a88477291b5",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the number 1e400 is too large (bigger than about 1.8×10³⁰⁸)",
+  "line": 1,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

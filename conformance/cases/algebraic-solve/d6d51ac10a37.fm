@@ -1,0 +1,48 @@
+# Optics 21 — Fraunhofer diffraction by a circular aperture: the Airy pattern
+#
+# The Fraunhofer pattern of a circular aperture of diameter D is
+#
+#     I(θ) / I₀ = (2 J₁(x) / x)²,   x = π D sin θ / λ,
+#
+# with the Bessel function J₁(x) = (1/π) ∫₀^π cos(τ − x sin τ) dτ.
+#
+# (a) Find the first dark ring (the first zero of J₁) and the Rayleigh
+#     criterion sin θ = 1.2197 λ/D.
+# (b) Find the half-intensity point (the FWHM of the central peak) and the
+#     first bright ring (dI/dx = 0) with its intensity (textbook: x = 5.1356,
+#     I/I₀ = 0.0175).
+# (c) What fraction of the light falls inside the first dark ring? Integrate
+#     the pattern, I(x) x dx, and compare with Rayleigh's 1 − J₀² − J₁² = 83.8 %.
+# (d) The Hubble Space Telescope: D = 2.40 m, focal length f = 57.6 m, at
+#     λ = 550 nm. Find the angular resolution (in milliarcseconds) and the
+#     radius of the Airy disk in the focal plane.
+# (Hecht, Optics §10.2.5; Born & Wolf §8.5.2)
+
+J0(x) = (1/π) ∫ cos(x sin(τ)) dτ from 0 to π
+J1(x) = (1/π) ∫ cos(τ - x sin(τ)) dτ from 0 to π
+I(x) = (2 J1(x) / x)²
+
+# (a) the first zero of J₁ (x = 0 is not a zero of the pattern, so start at 3)
+solve J1(x1) = 0 for x1 from 3 to 5
+print "(a) first dark ring at x =", x1 to 10 digits, "  sin θ D/λ =", x1 / π to 10 digits
+
+# (b) half maximum, and the first bright ring
+solve I(x_half) = ½ for x_half from 0.5 to 3
+print "(b) half intensity at x =", x_half to 10 digits
+dI = I'
+solve dI(x_ring) = 0 for x_ring from 4 to 7
+print "    first bright ring at x =", x_ring to 10 digits, "  I/I0 =", I(x_ring) to 10 digits
+
+# (c) the encircled energy: ∫₀^∞ I(x) x dx = 2
+inside = ½ ∫ I(x) x dx from 0 to x1
+print "(c) fraction inside the first dark ring =", inside to 10 digits,
+      "  1 - J0² - J1² =", 1 - J0(x1)² - J1(x1)² to 10 digits
+
+# (d) Hubble
+D = 2.40 m
+f_len = 57.6 m
+λ = 550 nm
+θ_R = asin(x1 λ / (π D))
+print "(d) Rayleigh angle =", θ_R in mas to 8 digits
+print "    FWHM =", 2 asin(x_half λ / (π D)) in mas to 8 digits
+print "    Airy radius in the focal plane =", f_len tan(θ_R) in μm to 8 digits

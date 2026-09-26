@@ -1,0 +1,4 @@
+units natural
+m = 1 kg
+d = 2 fm
+print m + d

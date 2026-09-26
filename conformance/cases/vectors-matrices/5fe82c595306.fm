@@ -1,0 +1,4 @@
+v = <3, 4> m/s
+print v
+print |v|
+print v.x, v.y, v[2]

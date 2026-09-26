@@ -1,0 +1,11 @@
+{
+ "id": "fce55c1fcddb",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[10 + 0i, -2 + 2i, -2 + 0i, -2 - 2i] V\n(-2 + 2i) V\n[10.0, 2.83, 2.00, 2.83] V\n[1 + 0i, 2 + 0i, 3 + 0i, 4 + 0i] V\n[0, 2.36, 3.14, -2.36]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

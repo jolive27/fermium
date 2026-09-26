@@ -1,0 +1,4 @@
+xs = [1 m, 2 m]
+for x in xs
+    print x², x⁻¹
+print 1 ≈ 1.0000001

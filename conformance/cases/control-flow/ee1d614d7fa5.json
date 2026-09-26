@@ -1,0 +1,11 @@
+{
+ "id": "ee1d614d7fa5",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "simulated period: 1.87 yr\nKepler's third law: 1.881 yr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

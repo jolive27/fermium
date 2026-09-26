@@ -1,0 +1,6 @@
+m = 245.3 ± 0.1 g
+d = 2.54 ± 0.01 cm
+h = 5.08 ± 0.02 cm
+ρ = m / (π (d/2)² h)
+print "ρ =", ρ in g/cm³
+print "relative:", rel(m) to 2 digits, 2 rel(d) to 2 digits, rel(h) to 2 digits

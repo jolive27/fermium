@@ -1,0 +1,11 @@
+{
+ "id": "7249e912ded6",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "RC = 1 s\nV at t = RC: 3.16 V which is 0.632 of V0\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

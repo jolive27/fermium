@@ -1,0 +1,4 @@
+T = 300 K
+lam = 10 um
+x = h c / lam k_B T
+print x

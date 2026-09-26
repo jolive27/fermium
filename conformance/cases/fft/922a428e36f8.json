@@ -1,0 +1,11 @@
+{
+ "id": "922a428e36f8",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[11, -2, -3, -2] [0, 3, 0, -3]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

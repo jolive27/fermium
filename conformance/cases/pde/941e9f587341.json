@@ -1,0 +1,17 @@
+{
+ "id": "941e9f587341",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "u is a solution of a PDE, a function of x and t: write u(x, t), like u(0.5 m, 1 s)",
+  "line": 6,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

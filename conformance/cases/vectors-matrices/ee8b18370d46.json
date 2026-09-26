@@ -1,0 +1,17 @@
+{
+ "id": "ee8b18370d46",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "v holds a 2-vector; it can't now hold a 3-vector",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

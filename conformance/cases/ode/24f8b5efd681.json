@@ -1,0 +1,17 @@
+{
+ "id": "24f8b5efd681",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "absolute sets the error control of the adaptive solvers (rk45, radau, bdf); with  step  the steps are fixed, so leave out one of them",
+  "line": 4,
+  "col": 49,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

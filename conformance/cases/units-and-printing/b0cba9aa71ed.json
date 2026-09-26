@@ -1,0 +1,17 @@
+{
+ "id": "b0cba9aa71ed",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "b² is a unit, not a value",
+  "line": 2,
+  "col": 11,
+  "hint": "for the quantity write  1 b²  (a number, then its unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

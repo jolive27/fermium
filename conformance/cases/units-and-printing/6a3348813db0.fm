@@ -1,0 +1,4 @@
+a = 0.5 [T]
+b = a in gauss
+print b / (1 [gauss]) to 15 digits
+print (a in gauss) in T to 15 digits

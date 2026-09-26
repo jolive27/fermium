@@ -1,0 +1,4 @@
+t = linspace(0 s, 1 s, 11)
+d = ½ * 9.81 m/s^2 * t^2
+print t
+print d

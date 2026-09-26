@@ -1,0 +1,165 @@
+# Big Bang nucleosynthesis: n ↔ p freeze-out, the deuterium bottleneck and the light elements up to ⁷Li/⁷Be,
+# from T = 10 MeV (t = 0.007 s) to t = 10⁴ s, as a stiff network solved with `using radau`.
+# Run from this folder:  fermium run bbn.fm
+#
+# T is the photon temperature written as an energy (k_B T, in MeV), as BBN papers do.
+# Y_i = n_i / n_b is the number of nucleus i per baryon; the mass fraction is X_i = A_i Y_i.
+
+# ---- inputs ---------------------------------------------------------------------------------------------
+τ_n = 878.4 s                      # neutron lifetime (PDG 2024)
+Ωbh2 = 0.0224                      # Planck 2018 baryon density Ω_b h²
+T_cmb = 2.7255 K                   # CMB temperature today (Fixsen 2009)
+Q_np = 1.29333 MeV                 # m_n − m_p
+ζ3 = 1.2020569031595942            # ζ(3)
+me = m_e c²
+
+# baryon-to-photon ratio today: η = n_b / n_γ, with n_b = Ω_b ρ_crit / m_b; the mean mass per baryon m_b is
+# that of the H and ⁴He atoms today (mass fractions 0.753 and 0.247)
+ρ_c100 = 3 (100 km/s/Mpc)² / (8π G)
+n_γ0 = (2 ζ3 / π²) (k_B T_cmb / (ħ c))³
+m_b = 0.753 * 1.007825 u + 0.247 * 4.002602 u / 4
+η = Ωbh2 ρ_c100 / (m_b n_γ0)
+print "η₁₀ =", 1e10 η to 4 digits
+
+# ---- the hot plasma: photons, e± pairs (with their mass), three neutrino species -------------------------
+fd(y) = 1 / (1 + exp(y))           # Fermi–Dirac occupation at energy/temperature y
+
+# e± pairs (g = 4): energy density, pressure and dρ/dT, with x = m_e c²/T and u = p c / T
+ρ_e(T) =
+    x = me / T
+    (2/π²) T⁴/(ħ c)³ * ∫ u² √(u² + x²) fd(√(u² + x²)) du from 0 to (60 + x)
+P_e(T) =
+    x = me / T
+    (2/π²) T⁴/(ħ c)³ * ∫ u⁴ fd(√(u² + x²)) / (3 √(u² + x²)) du from 0 to (60 + x)
+dρe_dT(T) =
+    x = me / T
+    (2/π²) T³/(ħ c)³ * ∫ u² (u² + x²) fd(√(u² + x²)) fd(-√(u² + x²)) du from 0 to (60 + x)
+ρ_γ(T) = (π²/15) T⁴/(ħ c)³
+
+# Entropy conservation: the neutrinos decoupled before e± annihilation, so T_ν ∝ 1/a while the photons are
+# heated: s_γ+e a³ is constant, and s = (ρ + P)/T. At high T, s_γ+e = (11/4) s_γ(T_ν).
+s_γe(T) = ((4/3) ρ_γ(T) + ρ_e(T) + P_e(T)) / T
+T_ν(T) = (s_γe(T) / (11/4 * 4π²/45 / (ħ c)³))^(1/3)
+ρ_ν(T) = 3 * 7/8 * ρ_γ(T_ν(T))
+H(T) = √(8π G (ρ_γ(T) + ρ_e(T) + ρ_ν(T)) / (3 c²))
+
+# baryons: n_b a³ is constant like T_ν³ a³, and today n_b = η n_γ(T_ν (11/4)^(1/3))
+n_b(T) = η * 11/4 * (2 ζ3 / π²) (T_ν(T) / (ħ c))³
+
+# ---- weak rates n ↔ p (Born approximation, normalised to τ_n) --------------------------------------------
+# n + ν → p + e⁻, n + e⁺ → p + ν̄, n → p + e⁻ + ν̄, in electron energy ε = E/m_e c² = cosh(w):
+#   λ(n→p) = 1/(τ_n λ₀) ∫ ε p [(ε − q)² (1 − f_e(ε)) f_ν(ε − q) + (ε + q)² f_e(ε) (1 − f_ν(ε + q))] dε
+# with q = Q/m_e c²; λ(p→n) is the same with q → −q.
+q = Q_np / me
+λ0 = ∫ ε √(ε² - 1) (q - ε)² dε from 1 to q
+weak(s, T) =
+    z = me / T
+    zν = me / T_ν(T)
+    I = ∫ cosh(w) sinh(w)² ((cosh(w) - s q)² fd(-cosh(w) z) fd((cosh(w) - s q) zν) + (cosh(w) + s q)² fd(cosh(w) z) fd(-(cosh(w) + s q) zν)) dw from 0 to acosh(q + 60 / z)
+    I / (τ_n λ0)
+λ_np(T) = weak(1, T)
+λ_pn(T) = weak(-1, T)
+
+# ---- nuclear reaction rates N_A<σv> ---------------------------------------------------------------------
+# The fits of Smith, Kawano & Malaney 1993 (ApJS 85, 219) as coded in Kawano's NUC123, version 4.1 (Dec 1991),
+# subroutine rate2 (reactions 12, 16, 17, 20, 24, 26-31). Checked coefficient by coefficient on 2026-09-26 (spec
+# A8.3) against the NUC123 listing https://github.com/ckald/KAWANO-sterile/blob/master/nuc123.f (a copy of
+# Kawano's version 4.1); all agree except ³He(α,γ)⁷Be's T9 scaling, which had been typed from memory as CF88's
+# 0.0495 and is NUC123's 0.1071 (fixed). ⁷Li(p,α) is CF88's ⁷Li(p,α)⁴He plus CF88's ⁷Li(p,γ)⁸Be (→ 2α), as in
+# NUC123 (see README for the comparison with CF88).
+# They are fitted for T₉ ≤ 10; above that (T > 0.86 MeV) they are held at T₉ = 10: the light nuclei are then
+# in equilibrium (set by the reverse rates below, which use the true T) and the rates only need to be fast.
+T9(T) = min(T / (1e9 K * k_B), 10)
+rate = 1 cm³/(mol s)
+σv_pn(T) =          # p(n,γ)d
+    t = T9(T)
+    4.742e4 rate * (1 - 0.8504 t^(1/2) + 0.4895 t - 0.09623 t^(3/2) + 8.471e-3 t² - 2.80e-4 t^(5/2)) / N_A
+σv_dp(T) =          # d(p,γ)³He
+    t = T9(T)
+    2.65e3 rate * t^(-2/3) exp(-3.720 / t^(1/3)) (1 + 0.112 t^(1/3) + 1.99 t^(2/3) + 1.56 t + 0.162 t^(4/3) + 0.324 t^(5/3)) / N_A
+σv_ddn(T) =         # d(d,n)³He
+    t = T9(T)
+    3.95e8 rate * t^(-2/3) exp(-4.259 / t^(1/3)) (1 + 0.098 t^(1/3) + 0.765 t^(2/3) + 0.525 t + 9.61e-3 t^(4/3) + 0.0167 t^(5/3)) / N_A
+σv_ddp(T) =         # d(d,p)t
+    t = T9(T)
+    4.17e8 rate * t^(-2/3) exp(-4.258 / t^(1/3)) (1 + 0.098 t^(1/3) + 0.518 t^(2/3) + 0.355 t - 0.010 t^(4/3) - 0.018 t^(5/3)) / N_A
+σv_h3n(T) =         # ³He(n,p)t
+    t = T9(T)
+    7.21e8 rate * (1 - 0.508 t^(1/2) + 0.228 t) / N_A
+σv_td(T) =          # t(d,n)⁴He
+    t = T9(T)
+    (1.063e11 rate * t^(-2/3) exp(-4.559 / t^(1/3) - (t / 0.0754)²) (1 + 0.092 t^(1/3) - 0.375 t^(2/3) - 0.242 t + 33.82 t^(4/3) + 55.42 t^(5/3))
+     + 8.047e8 rate * t^(-2/3) exp(-0.4857 / t)) / N_A
+σv_h3d(T) =         # ³He(d,p)⁴He
+    t = T9(T)
+    (5.021e10 rate * t^(-2/3) exp(-7.144 / t^(1/3) - (t / 0.270)²) (1 + 0.058 t^(1/3) + 0.603 t^(2/3) + 0.245 t + 6.97 t^(4/3) + 7.19 t^(5/3))
+     + 5.212e8 rate * t^(-1/2) exp(-1.762 / t)) / N_A
+σv_h3a(T) =         # ³He(α,γ)⁷Be
+    t = T9(T)
+    ta = t / (1 + 0.1071 t)           # NUC123 reaction 27 (t9f); the from-memory version had CF88's 0.0495
+    (4.817e6 rate * t^(-2/3) exp(-14.964 / t^(1/3)) (1 + 0.0325 t^(1/3) - 1.04e-3 t^(2/3) - 2.37e-4 t - 8.11e-5 t^(4/3) - 4.69e-5 t^(5/3))
+     + 5.938e6 rate * ta^(5/6) t^(-3/2) exp(-12.859 / ta^(1/3))) / N_A
+σv_ta(T) =          # t(α,γ)⁷Li
+    t = T9(T)
+    ta = t / (1 + 0.1378 t)
+    (3.032e5 rate * t^(-2/3) exp(-8.090 / t^(1/3)) (1 + 0.0516 t^(1/3) + 0.0229 t^(2/3) + 8.28e-3 t - 3.28e-4 t^(4/3) - 3.01e-4 t^(5/3))
+     + 5.109e5 rate * ta^(5/6) t^(-3/2) exp(-8.068 / ta^(1/3))) / N_A
+σv_b7n(T) =         # ⁷Be(n,p)⁷Li
+    t = T9(T)
+    ta = t / (1 + 13.076 t)
+    (2.675e9 rate * (1 - 0.560 t^(1/2) + 0.179 t - 0.0283 t^(3/2) + 2.214e-3 t² - 6.851e-5 t^(5/2))
+     + 9.391e8 rate * ta^(3/2) t^(-3/2) + 4.467e7 rate * t^(-3/2) exp(-0.07486 / t)) / N_A
+σv_l7p(T) =         # ⁷Li(p,α)⁴He
+    t = T9(T)
+    ta = t / (1 + 0.759 t)
+    (1.096e9 rate * t^(-2/3) exp(-8.472 / t^(1/3)) - 4.830e8 rate * ta^(5/6) t^(-3/2) exp(-8.472 / ta^(1/3))
+     + 1.06e10 rate * t^(-3/2) exp(-30.442 / t)
+     + 1.56e5 rate * t^(-2/3) exp(-8.472 / t^(1/3) - (t / 1.696)²) (1 + 0.049 t^(1/3) - 2.498 t^(2/3) + 0.860 t + 3.518 t^(4/3) + 3.08 t^(5/3))
+     + 1.55e6 rate * t^(-3/2) exp(-4.478 / t)) / N_A
+
+# ---- reverse rates from detailed balance ----------------------------------------------------------------
+# photodisintegration c + γ → a + b:   λ_γ = <σv> (g_a g_b / g_c) (μ c² T / (2π ħ² c²))^(3/2) exp(−Q/T)
+# c + d → a + b:   <σv>_rev / <σv> = (g_a g_b / g_c g_d) (μ_ab / μ_cd)^(3/2) exp(−Q/T)
+# (μ in atomic mass units, from the mass numbers; Q in MeV from AME2020 masses)
+saha(g, μ, Q, T) = g (μ m_u c² T / (2π (ħ c)²))^(3/2) exp(-Q / T)
+back(g, μratio, Q, T) = g μratio^(3/2) exp(-Q / T)
+
+# net rates per baryon (1/s): forward minus reverse
+F_np(T, Yn, Yp) = λ_np(T) Yn - λ_pn(T) Yp
+F_pn(T, Yn, Yp, Yd) = σv_pn(T) (n_b(T) Yn Yp - saha(4/3, 1/2, 2.224573 MeV, T) Yd)
+F_dp(T, Yd, Yp, Y3He) = σv_dp(T) (n_b(T) Yd Yp - saha(3, 2/3, 5.493485 MeV, T) Y3He)
+F_ddn(T, Yd, Yn, Y3He) = n_b(T) σv_ddn(T) (Yd² / 2 - back(9/4, 4/3, 3.268914 MeV, T) / 2 * Yn Y3He)
+F_ddp(T, Yd, Yp, Y3H) = n_b(T) σv_ddp(T) (Yd² / 2 - back(9/4, 4/3, 4.032669 MeV, T) / 2 * Yp Y3H)
+F_h3n(T, Y3He, Yn, Yp, Y3H) = n_b(T) σv_h3n(T) (Y3He Yn - back(1, 1, 0.763763 MeV, T) Yp Y3H)
+F_td(T, Y3H, Yd, Yn, Y4He) = n_b(T) σv_td(T) (Y3H Yd - back(3, 3/2, 17.589293 MeV, T) Yn Y4He)
+F_h3d(T, Y3He, Yd, Yp, Y4He) = n_b(T) σv_h3d(T) (Y3He Yd - back(3, 3/2, 18.353053 MeV, T) Yp Y4He)
+F_h3a(T, Y3He, Y4He, Y7Be) = σv_h3a(T) (n_b(T) Y3He Y4He - saha(1/2, 12/7, 1.586627 MeV, T) Y7Be)
+F_ta(T, Y3H, Y4He, Y7Li) = σv_ta(T) (n_b(T) Y3H Y4He - saha(1/2, 12/7, 2.467032 MeV, T) Y7Li)
+F_b7n(T, Y7Be, Yn, Y7Li, Yp) = n_b(T) σv_b7n(T) (Y7Be Yn - back(1, 1, 1.644243 MeV, T) Y7Li Yp)
+F_l7p(T, Y7Li, Yp, Y4He) = n_b(T) σv_l7p(T) (Y7Li Yp - 2 back(8, 7/16, 17.346244 MeV, T) Y4He² / 2)
+
+# the photon temperature: entropy conservation, dT/dt = −3 H T s / (dρ/dT)
+dTdt(T) = -3 H(T) T s_γe(T) / (4 ρ_γ(T) / T + dρe_dT(T))
+
+
+T0 = 10 MeV
+t0 = 1 / (2 H(T0))
+Yn0 = 1 / (1 + exp(Q_np / T0))
+solve
+    T' = dTdt(T)
+    Yn' = -F_np(T, Yn, Yp) - F_pn(T, Yn, Yp, Yd) + F_ddn(T, Yd, Yn, Y3He) - F_h3n(T, Y3He, Yn, Yp, Y3H) + F_td(T, Y3H, Yd, Yn, Y4He) - F_b7n(T, Y7Be, Yn, Y7Li, Yp)
+    Yp' = F_np(T, Yn, Yp) - F_pn(T, Yn, Yp, Yd) - F_dp(T, Yd, Yp, Y3He) + F_ddp(T, Yd, Yp, Y3H) + F_h3n(T, Y3He, Yn, Yp, Y3H) + F_h3d(T, Y3He, Yd, Yp, Y4He) + F_b7n(T, Y7Be, Yn, Y7Li, Yp) - F_l7p(T, Y7Li, Yp, Y4He)
+    Yd' = F_pn(T, Yn, Yp, Yd) - F_dp(T, Yd, Yp, Y3He) - 2 F_ddn(T, Yd, Yn, Y3He) - 2 F_ddp(T, Yd, Yp, Y3H) - F_td(T, Y3H, Yd, Yn, Y4He) - F_h3d(T, Y3He, Yd, Yp, Y4He)
+    Y3H' = F_ddp(T, Yd, Yp, Y3H) + F_h3n(T, Y3He, Yn, Yp, Y3H) - F_td(T, Y3H, Yd, Yn, Y4He) - F_ta(T, Y3H, Y4He, Y7Li)
+    Y3He' = F_dp(T, Yd, Yp, Y3He) + F_ddn(T, Yd, Yn, Y3He) - F_h3n(T, Y3He, Yn, Yp, Y3H) - F_h3d(T, Y3He, Yd, Yp, Y4He) - F_h3a(T, Y3He, Y4He, Y7Be)
+    Y4He' = F_td(T, Y3H, Yd, Yn, Y4He) + F_h3d(T, Y3He, Yd, Yp, Y4He) - F_h3a(T, Y3He, Y4He, Y7Be) - F_ta(T, Y3H, Y4He, Y7Li) + 2 F_l7p(T, Y7Li, Yp, Y4He)
+    Y7Li' = F_ta(T, Y3H, Y4He, Y7Li) + F_b7n(T, Y7Be, Yn, Y7Li, Yp) - F_l7p(T, Y7Li, Yp, Y4He)
+    Y7Be' = F_h3a(T, Y3He, Y4He, Y7Be) - F_b7n(T, Y7Be, Yn, Y7Li, Yp)
+    with T(t0) = T0, Yn(t0) = Yn0, Yp(t0) = 1 - Yn0, Yd(t0) = 0, Y3H(t0) = 0, Y3He(t0) = 0, Y4He(t0) = 0, Y7Li(t0) = 0, Y7Be(t0) = 0
+    for t from t0 to 1e4 s using radau tolerance 1e-10
+print "Y_p =", 4 Y4He[end] to 6 digits
+print "D/H =", Yd[end] / Yp[end] to 6 digits
+print "3He/H =", (Y3He[end] + Y3H[end]) / Yp[end] to 6 digits
+print "7Li/H =", (Y7Li[end] + Y7Be[end]) / Yp[end] to 6 digits
+print "Y_n =", Yn[end] to 4 digits
+print "T =", T[end] in MeV to 6 digits

@@ -1,0 +1,7 @@
+L = 1.20 ± 0.01 m
+T = (2.21 ± 0.02) s
+g = 4π² L / T²
+print g, g in ft/s²
+print value(g), uncertainty(g), rel(g) to 2 digits
+print L - L, L / L
+print 5.0 ± 3%, 20.0 ± 0.5 °C, 1.20 m ± 1 cm

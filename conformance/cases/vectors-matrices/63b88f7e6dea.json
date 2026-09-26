@@ -1,0 +1,17 @@
+{
+ "id": "63b88f7e6dea",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix (positive masses on the diagonal)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

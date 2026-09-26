@@ -1,0 +1,6 @@
+φ(x, y, z) = x² y z + sin(y z)
+E = ∇φ
+print curl(E)(0.3, 1.2, -0.7)
+A(x, y, z) = <y z², x³, sin(x y)>
+C = ∇×A
+print div(C)(0.3, 1.2, -0.7)

@@ -1,0 +1,3 @@
+ap(f, x) = f(x)
+h(a, b) = a + b
+print ap(h, 1)

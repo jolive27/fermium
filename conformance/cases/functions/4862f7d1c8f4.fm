@@ -1,0 +1,17 @@
+simpson(f, a, b, n) =
+    h = (b - a) / n
+    s = f(a) + f(b)
+    for i from 1 to n - 1
+        x = a + i h
+        if mod(i, 2) == 1
+            s += 4 f(x)
+        else
+            s += 2 f(x)
+    s h / 3
+sq(x) = x²
+g(t) = 9.8 m/s² * t
+bump(x) = exp(-x²)
+print simpson(sq, 0, 3, 100) to 12 digits
+print simpson(g, 0 s, 2 s, 10) to 12 digits
+print simpson(bump, 0, 2, 200) to 12 digits
+print simpson(sin, 0, π, 200) to 12 digits

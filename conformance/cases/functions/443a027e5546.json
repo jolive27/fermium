@@ -1,0 +1,11 @@
+{
+ "id": "443a027e5546",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "501.6 nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

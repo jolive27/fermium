@@ -1,0 +1,5 @@
+x(t) = 3 m/s^3 t^3
+h = 1e-6 s
+print "estimate:", (x(2 s + h) - x(2 s)) / h to 9 digits
+print "exact:   ", x'(2 s) to 9 digits
+print x'

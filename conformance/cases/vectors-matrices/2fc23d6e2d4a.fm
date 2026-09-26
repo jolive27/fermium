@@ -1,0 +1,2 @@
+p = <1 AU, 1 mm, 0 m>
+print p

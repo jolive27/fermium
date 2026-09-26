@@ -1,0 +1,4 @@
+f(x) =
+    if x > 0
+        return 1 m
+print f(-2)

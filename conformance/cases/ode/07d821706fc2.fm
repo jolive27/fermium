@@ -1,0 +1,6 @@
+solve x' = -x with x(0) = 1 for t from 0 to 1
+ws = values(x)
+ws[1] = 100
+for i from 1 to 100
+    push(ws, 0)
+print x(0), values(x)[1]

@@ -1,0 +1,7 @@
+xs = [3.2 m, 7.1 m, 1.4 m, 6.9 m]
+largest = xs[1]
+for x in xs
+    if x > largest
+        largest = x
+print largest
+print max(xs)

@@ -1,0 +1,3 @@
+I = 2.0 A
+B_axis(z) = μ₀ I (1 m)² / (2 ((1 m)² + z²)^(3/2))
+print ∫ B_axis(z) dz from -∞ m to ∞ m / (μ₀ I) to 6 digits

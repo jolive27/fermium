@@ -1,0 +1,4 @@
+solve x² = 2 for x from 0 to 2
+solve sin(x) = 0 for x from -1 to 1
+solve x = 0 for x from -1 to 1
+solve 1e-30 x = 1e-30 for x from 0 to 3

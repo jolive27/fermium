@@ -1,0 +1,17 @@
+{
+ "id": "9b49454d9b13",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "zz isn't defined",
+  "line": 1,
+  "col": 13,
+  "hint": "give it a value on an earlier line, e.g.  zz = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

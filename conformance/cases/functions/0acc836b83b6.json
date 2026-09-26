@@ -1,0 +1,11 @@
+{
+ "id": "0acc836b83b6",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "9\n9 m²\n4 s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

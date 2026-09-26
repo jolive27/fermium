@@ -1,0 +1,3 @@
+v0 = 10 m/s
+θ = 0
+print v0 <cos(θ), sin(θ)>

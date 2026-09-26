@@ -1,0 +1,4 @@
+xs = zeros(10)
+ys = xs
+parallel for i from 1 to 10
+    xs[i] = ys[i] + 1

@@ -1,0 +1,17 @@
+{
+ "id": "c5c35783dd61",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'1/2 π' is ambiguous: is it (1/2)·π or 1/(2 π)?",
+  "line": 3,
+  "col": 8,
+  "hint": "write  (1/2) π  or  1/(2 π)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

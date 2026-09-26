@@ -1,0 +1,4 @@
+seed(5)
+xs = sample(randn(1.5 m, 0.2 m), 40000)
+print len(xs)
+print abs(mean(xs) - 1.5 m) < 0.01 m, abs(std(xs) - 0.2 m) < 0.005 m

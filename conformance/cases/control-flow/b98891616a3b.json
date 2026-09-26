@@ -1,0 +1,17 @@
+{
+ "id": "b98891616a3b",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is length [m]; it can't now hold a plain number (no units)",
+  "line": 3,
+  "col": 5,
+  "hint": "each variable keeps its units; use a new name for a different quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

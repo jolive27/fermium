@@ -1,0 +1,4 @@
+print ∫ x^(-0.8) dx from 0 to 1
+print ∫ abs(x)^(-0.5) dx from -1 to 1
+print ∫ x^(-0.95) dx from 0 to 1
+print ∫ ln(abs(x)) dx from -1 to 1

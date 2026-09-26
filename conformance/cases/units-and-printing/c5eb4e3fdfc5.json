@@ -1,0 +1,11 @@
+{
+ "id": "c5eb4e3fdfc5",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.0500\n",
+ "stderr": "warning: line 1: h (Planck's constant) is now your variable: from here on, h means your value\n    h = 2\n    ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\nwarning: line 2: c (the speed of light) is now your variable: from here on, c means your value\n    c = 3\n    ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\nwarning: line 4: k_B (Boltzmann's constant) is now your variable: from here on, k_B means your value\n    k_B = 5\n    ^\n  hint: that's fine if you don't need Boltzmann's constant below; otherwise pick another name, like k_B_0 or k_B2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

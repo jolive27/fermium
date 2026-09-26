@@ -1,0 +1,2 @@
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s^2]
+print 2pi pendulum(1 m, 9.81 m/s^2)

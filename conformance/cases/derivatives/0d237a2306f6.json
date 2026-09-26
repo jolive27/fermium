@@ -1,0 +1,17 @@
+{
+ "id": "0d237a2306f6",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "∇f needs a function of 2 or 3 coordinates, like φ(x, y, z); f has 1",
+  "line": 2,
+  "col": 8,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

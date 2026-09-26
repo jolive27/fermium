@@ -1,0 +1,11 @@
+{
+ "id": "64ba3cba1b15",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "true 1.27×10⁵ km/hr²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

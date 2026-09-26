@@ -1,0 +1,17 @@
+{
+ "id": "1b2194b918d5",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a complex number can't be indexed with [...]",
+  "line": 1,
+  "col": 7,
+  "hint": "its parts are re(z) and im(z) (or z.re and z.im)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

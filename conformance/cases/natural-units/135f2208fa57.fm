@@ -1,0 +1,6 @@
+units astro
+print G to 6 digits
+print M☉
+print 4π^2 (1 AU)^3/(G * (1 yr)^2) to 6 digits
+print 3 m
+print 1 AU/yr in km/s to 6 digits

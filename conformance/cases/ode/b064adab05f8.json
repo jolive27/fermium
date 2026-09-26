@@ -1,0 +1,11 @@
+{
+ "id": "b064adab05f8",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "-0.995 - 0.103i -0.99 - 0.10i\n1.00000\n-0.995 -0.103\n0.488 + 0.343i\n-1 + 0i\n(0 + 2i) 1/m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

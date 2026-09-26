@@ -1,0 +1,11 @@
+{
+ "id": "f4ebedba4375",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6 m\n17\n<1, 2>\n<3, 4>\n2 m 3 m 3 m\n3 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

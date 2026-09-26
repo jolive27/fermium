@@ -1,0 +1,9 @@
+iterate(f, x, n) = if n <= 0 then x else iterate(f, f(x), n - 1)
+half(x) = x / 2
+cosine(x) = cos(x)
+print iterate(half, 8 m, 3)
+print iterate(cosine, 1, 100) to 6 digits
+swap(f, g, n) = if n <= 0 then f(1) else swap(g, f, n - 1)
+two(x) = 2 x
+three(x) = 3 x
+print swap(two, three, 5)

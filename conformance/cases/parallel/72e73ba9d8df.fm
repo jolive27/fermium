@@ -1,0 +1,6 @@
+show(k) =
+    print k
+    k
+s = 0
+parallel for i from 1 to 3
+    s += show(i)

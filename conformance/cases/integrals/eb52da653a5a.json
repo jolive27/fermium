@@ -1,0 +1,11 @@
+{
+ "id": "eb52da653a5a",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "<20.09677675, 60.29033024, 0> V/m\n",
+ "stderr": "warning: line 4: this integral came out as exactly 0 because the integrand was 0 at every point where it was sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range that fits it\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

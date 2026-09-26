@@ -1,0 +1,4 @@
+T = 5800 K
+B(ν) = 2 h ν^3 / c^2 / (exp(h ν / (k_B T)) - 1)
+Bλ(λ) = 2 h c^2 / λ^5 / (exp(h c / (λ k_B T)) - 1)
+print ∫ B(ν) dν from 0 Hz to ∞ to 8 digits, ∫ Bλ(λ) dλ from 0 m to ∞ to 8 digits, σ T^4 / π to 8 digits

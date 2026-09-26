@@ -1,0 +1,11 @@
+{
+ "id": "b7978df8faeb",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "half-life is between 6 and 7 years\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

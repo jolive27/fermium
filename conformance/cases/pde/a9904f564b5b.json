@@ -1,0 +1,17 @@
+{
+ "id": "a9904f564b5b",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "missing a boundary condition at x = L: give u(…, t) = … (fixed value) or ∂u/∂x(…, t) = … (flux; 0 for an insulated end)",
+  "line": 3,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

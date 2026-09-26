@@ -1,0 +1,4 @@
+E = 0
+E += 3 J
+print E
+E += 2 m

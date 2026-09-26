@@ -1,0 +1,11 @@
+{
+ "id": "1a1ac111235f",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "g(x) = exp(2i x)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

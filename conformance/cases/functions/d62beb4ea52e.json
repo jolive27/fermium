@@ -1,0 +1,11 @@
+{
+ "id": "d62beb4ea52e",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "14.0 m/s\n15.9 km/hr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

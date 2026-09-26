@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+push(xs, 4)
+push(xs, 5)
+print xs

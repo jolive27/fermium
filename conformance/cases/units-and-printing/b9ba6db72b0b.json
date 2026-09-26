@@ -1,0 +1,17 @@
+{
+ "id": "b9ba6db72b0b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an exponent must be a plain number, but this is length [m]",
+  "line": 2,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

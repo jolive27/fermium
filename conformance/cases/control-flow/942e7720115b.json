@@ -1,0 +1,11 @@
+{
+ "id": "942e7720115b",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "40 km/s bound, E = -8.71×10⁷ J/kg\n42 km/s bound, E = -5.13×10⁶ J/kg\n44 km/s escapes, E = 8.09×10⁷ J/kg\nescape velocity: 42.1 km/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

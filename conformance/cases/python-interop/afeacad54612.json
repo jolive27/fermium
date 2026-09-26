@@ -1,0 +1,11 @@
+{
+ "id": "afeacad54612",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "24\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

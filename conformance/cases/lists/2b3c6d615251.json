@@ -1,0 +1,17 @@
+{
+ "id": "2b3c6d615251",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a list can hold numbers or text, but not both",
+  "line": 1,
+  "col": 6,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

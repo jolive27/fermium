@@ -1,0 +1,9 @@
+xs = [1, 2, 3]
+k = 3
+print len(xs[k+1:end]), len(xs[2:1])
+solve x' = -x / (1 s)
+  with x(0 s) = 1 m
+  for t from 0 s to 1 s step 0.25 s
+print x[2:3] to 4 digits
+f(v) = sum(v[2:end])
+print f([1, 2, 3])

@@ -1,0 +1,4 @@
+d = load "data/decay.csv"
+fit counts = N0 exp(-t / tau) to d with N0 = 1000, tau = 10 min
+print "half-life:", tau ln(2) in min
+plot d.counts vs d.t to "decay.png"

@@ -1,0 +1,17 @@
+{
+ "id": "981202050df8",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "r is a vector; use its components, like r.x",
+  "line": 2,
+  "col": 10,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

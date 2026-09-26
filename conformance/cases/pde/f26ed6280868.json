@@ -1,0 +1,11 @@
+{
+ "id": "f26ed6280868",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3.40661×10⁻⁹ K\n2.67552×10⁻¹¹ K\n0.999996 K\n-1.00000 K/m\n-0.999996 K/m\n",
+ "stderr": "warning: line 3: this PDE's time step could not be made fine enough: with 32000 steps the estimated error is still 4.3% of the solution's range (checked by step doubling); the result may be inaccurate\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

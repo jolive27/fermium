@@ -1,0 +1,48 @@
+# Electromagnetism 03 — A series RLC circuit rings down
+#
+# A 20.0 μF capacitor is charged to V₀ = 10.0 V and, at t = 0, connected across a
+# 50.0 mH inductor and a 20.0 Ω resistor in series. Kirchhoff's loop rule gives
+#
+#     L q'' + R q' + q/C = 0,    q(0) = C V₀,  q'(0) = 0.
+#
+# (a) Find the undamped frequency ω₀ = 1/√(LC), the damping rate α = R/2L and the
+#     damped frequency ω_d = √(ω₀² − α²).
+# (b) Solve for q(t) and find the charge and the current at t = 2.00 ms. Compare with
+#     q(t) = Q₀ e^(−αt) (cos ω_d t + (α/ω_d) sin ω_d t).
+# (c) How much energy has the resistor turned into heat by t = 10.0 ms? Compare
+#     ∫ i² R dt with the drop in stored energy, q²/2C + L i²/2.
+# (Halliday/Resnick ch. 31, Purcell & Morin ch. 8)
+
+C = 20.0 μF
+V0 = 10.0 V
+L = 50.0 mH
+R = 20.0 Ω
+Q0 = C V0
+
+# (a)
+ω0 = 1 / √(L C)
+α = R / (2*L)
+ω_d = √(ω0² - α²)
+print "ω0  =", ω0 in rad/s to 8 digits
+print "α   =", α in 1/s to 8 digits
+print "ω_d =", ω_d in rad/s to 8 digits
+
+# (b) Kirchhoff's loop rule
+solve L q'' + R q' + q / C = 0
+  with q(0) = Q0, q'(0) = 0 A
+  for t from 0 ms to 10 ms
+q_exact(t) = Q0 exp(-α t) (cos(ω_d t) + α / ω_d * sin(ω_d t))
+t1 = 2.00 ms
+print "q(2 ms) solve =", q(t1) in μC to 8 digits
+print "q(2 ms) exact =", q_exact(t1) in μC to 8 digits
+print "i(2 ms) solve =", q'(t1) in mA to 8 digits
+print "i(2 ms) exact =", q_exact'(t1) in mA to 8 digits
+
+# (c) energy: the heat from the numerical current, and from the exact one
+t2 = 10.0 ms
+heat = ∫ q'(t)² R dt from 0 ms to t2
+heat_exact = ∫ q_exact'(t)² R dt from 0 ms to t2
+U(t) = q(t)² / (2*C) + ½ L q'(t)²
+print "heat in R by 10 ms (solve) =", heat in mJ to 8 digits
+print "heat in R by 10 ms (exact) =", heat_exact in mJ to 8 digits
+print "drop in stored energy      =", U(0 ms) - U(t2) in mJ to 8 digits

@@ -1,0 +1,4 @@
+a = 858.2709061488914 [eV]
+b = a in erg
+print b / (1 [erg]) to 15 digits
+print (a in erg) in eV to 15 digits

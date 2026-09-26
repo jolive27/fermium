@@ -1,0 +1,11 @@
+{
+ "id": "4deee8fa6dc8",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 2\n",
+ "stderr": "warning: line 2: 'ο' and 'o' look almost identical but are different names\n    ο = 2\n    ^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

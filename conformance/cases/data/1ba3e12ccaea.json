@@ -1,0 +1,17 @@
+{
+ "id": "1ba3e12ccaea",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "fit ... to <data>: the data must come from load \"file.csv\" or table(x = xs, y = ys)",
+  "line": 1,
+  "col": 16,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

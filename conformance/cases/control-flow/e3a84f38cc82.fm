@@ -1,0 +1,4 @@
+n = 0
+for t from 0 s to 1 s step 1 ms
+    n += 1
+print n

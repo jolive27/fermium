@@ -1,0 +1,13 @@
+f(x) = acos(x/5) atan(x)
+d1 = f'
+d2 = f''
+print d1(2.208823454165552) to 17 digits
+print d2(2.208823454165552) to 17 digits
+print d1(-0.25776187613962787) to 17 digits
+print d2(-0.25776187613962787) to 17 digits
+print d1(-0.3627471892731817) to 17 digits
+print d2(-0.3627471892731817) to 17 digits
+print d1(-2.477264300009078) to 17 digits
+print d2(-2.477264300009078) to 17 digits
+print d1(1.0303265379649318) to 17 digits
+print d2(1.0303265379649318) to 17 digits

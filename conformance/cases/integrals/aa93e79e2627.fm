@@ -1,0 +1,1 @@
+print ∫ exp(-(x-100)^2) dx from -inf to inf to 12 digits

@@ -1,0 +1,17 @@
+{
+ "id": "22e4e0a0e4d5",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "couldn't compute this integral: the integrand is infinite at x = 3.04×10⁻¹⁵⁶ (1/0? an overflow like exp(710)?), so it may blow up there (like 1/x at 0); if it shouldn't, rewrite it so it stays finite, e.g. 1 - cos(x) as 2 sin(x/2)²",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

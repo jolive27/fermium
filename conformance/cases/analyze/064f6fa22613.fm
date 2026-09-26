@@ -1,0 +1,4 @@
+analyze taylor: E [J] depends on R [m], ρ [kg/m³], t [s]
+E_trinity = taylor(130 m, 1.2 kg/m³, 25 ms)
+print "E ≈", E_trinity
+print "  ≈", E_trinity / (4.184e12 J), "kilotons of TNT"

@@ -1,0 +1,11 @@
+{
+ "id": "b04b378a90e3",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "v(t) = 20 m/s - 9.81 m/s² t   [m/s, for t in s]\n0.380 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

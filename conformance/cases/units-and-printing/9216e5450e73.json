@@ -1,0 +1,11 @@
+{
+ "id": "9216e5450e73",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "Pendulum length: 1.20 m\nMeasured g = 9.70 m/s² which is 31.8 ft/s²\ng to 6 digits: 9.69966 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

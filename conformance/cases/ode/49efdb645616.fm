@@ -1,0 +1,6 @@
+h(k) =
+    solve u' = -k u
+      with u(0 s) = 1
+      for t from 0 s to 1 s
+    return u
+print h(1 / (1 s))

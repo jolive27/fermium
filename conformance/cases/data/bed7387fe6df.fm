@@ -1,0 +1,3 @@
+data = load "pendulum.csv"
+fit T = 2π √(L / g) to data with g = 9 m/s²
+print g

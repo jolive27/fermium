@@ -1,0 +1,72 @@
+# Quantum 31 — The fine structure of hydrogen's n = 2 level, from numerical eigenstates
+#
+# (Griffiths & Schroeter, Introduction to QM 3rd ed., §7.3, eqs. 7.53–7.69 and
+#  Problems 7.17–7.19; Sakurai & Napolitano, Modern QM §5.3; Bethe & Salpeter §15–17.)
+# Take the nucleus as infinitely heavy (m = m_e) and V(r) = −k/r, k = e²/(4πε₀).
+#   (a) Find the n = 2 states numerically: the radial equation for u = r R,
+#         −(ħ²/2m) u'' + (V(r) + ħ² l(l+1)/(2m r²)) u = E u,  u(0) = u(r_max) = 0,
+#       for l = 0 (the second state is 2s) and l = 1 (the lowest state is 2p), with
+#       r_max = 4 nm. Compare E with the Bohr energy −13.6 eV/4.
+#   (b) Expectation values by integration: ⟨1/r⟩, ⟨1/r²⟩ in both, ⟨1/r³⟩ in 2p, and
+#       |ψ(0)|² = u'(0)²/4π in 2s.
+#   (c) Assemble the first-order corrections (Griffiths 7.56, 7.67, and the Darwin term):
+#         E_rel = −(E² − 2E⟨V⟩ + ⟨V²⟩)/(2mc²),
+#         E_so  = (k/(2 m_e² c²)) ⟨1/r³⟩ ⟨S·L⟩,  ⟨S·L⟩ = (ħ²/2)(j(j+1) − l(l+1) − ¾),
+#         E_D   = (π ħ² k / (2 m_e² c²)) |ψ(0)|²   (s states only),
+#       for 2s½, 2p½, 2p3/2, and compare with the fine-structure formula
+#         E_fs = −(E_n²/(2mc²)) (4n/(j + ½) − 3)   and the exact Dirac energy
+#         E = mc² [(1 + (α/(n − (j+½) + √((j+½)² − α²)))²)^(−½) − 1].
+#   (d) The 2p3/2 − 2p½ splitting in GHz (measured: 10.969 GHz, which includes the
+#       reduced mass and QED; the Dirac value is 10.94 GHz).
+
+k = e² / (4π ε_0)
+# (the mass is written m_e throughout: with a variable m = m_e, `2 m c²` is silently read as
+#  2 × the compound unit 'm c²' (metre times c², since c is also a unit), with no error)
+E_bohr2 = -m_e k² / (2 ħ²) / 4
+r_max = 4 nm
+# (Written when the solver still evaluated the equation at the ends; since D172 the wall
+# can be at r = 0 exactly. With r_in = 10⁻²⁰ m, E(2s) moves by (ħ²/2m) u'(0)² r_in ≈ 4×10⁻¹⁰ E.)
+# The eigenfunctions were only second-order accurate, which needed grid 32000 for ⟨1/r⟩ to
+# 10⁻⁷ (FRICTION #70); they are now Numerov's (fourth order, D190), and the default grid
+# gives ~10⁻⁹.
+r_in = 1e-11 nm
+
+solve -ħ²/(2*m_e) * ψ'' - k / r * ψ = E ψ
+    with ψ(r_in) = 0, ψ(r_max) = 0
+    for r from r_in to r_max
+    lowest 2
+solve -ħ²/(2*m_e) * φ'' + (ħ² / (m_e r²) - k / r) φ = W φ
+    with φ(r_in) = 0, φ(r_max) = 0
+    for r from r_in to r_max
+    lowest 1
+E2s = E[2]
+E2p = W[1]
+print "(a) E(2s) =", E2s in eV to 10 digits, " E(2p) =", E2p in eV to 10 digits, " Bohr =", E_bohr2 in eV to 10 digits
+
+inv1s = ∫ ψ₂(r)² / r dr from r_in to r_max
+inv2s = ∫ ψ₂(r)² / r² dr from r_in to r_max
+inv1p = ∫ φ₁(r)² / r dr from r_in to r_max
+inv2p = ∫ φ₁(r)² / r² dr from r_in to r_max
+inv3p = ∫ φ₁(r)² / r³ dr from r_in to r_max
+ψ0sq = ψ₂'(r_in)² / (4π)
+print "(b) 2s: <1/r> a0 =", inv1s a_0 to 8 digits, " <1/r²> a0² =", inv2s a_0² to 8 digits, " |psi(0)|² a0³ =", ψ0sq a_0³ to 8 digits
+print "    2p: <1/r> a0 =", inv1p a_0 to 8 digits, " <1/r²> a0² =", inv2p a_0² to 8 digits, " <1/r³> a0³ =", inv3p a_0³ to 8 digits
+
+# (c) first-order corrections. ⟨V⟩ = −k⟨1/r⟩, ⟨V²⟩ = k²⟨1/r²⟩
+rel(En, i1, i2) = -(En² + 2 En k i1 + k² i2) / (2 m_e c²)
+so(j, l, i3) = k / (2 m_e² c²) * i3 * (ħ²/2) (j (j + 1) - l (l + 1) - 0.75)
+darwin = π ħ² k / (2 m_e² c²) * ψ0sq
+fs(n, j) = -(E_bohr2² / (2 m_e c²)) (4 n / (j + 0.5) - 3)
+# (1 + x)^(−½) − 1 written as expm1(−½ log1p(x)): x ~ 10⁻⁵, and the direct form would
+# leave only ~6 good digits after subtracting the Bohr energy
+dirac(n, j) = m_e c² expm1(-0.5 log1p((α / (n - (j + 0.5) + √((j + 0.5)² - α²)))²)) + m_e c² α² / (2 n²)
+E_2s = rel(E2s, inv1s, inv2s) + darwin
+E_2p1 = rel(E2p, inv1p, inv2p) + so(0.5, 1, inv3p)
+E_2p3 = rel(E2p, inv1p, inv2p) + so(1.5, 1, inv3p)
+print "(c) 2s1/2: rel =", rel(E2s, inv1s, inv2s) in μeV to 8 digits, " Darwin =", darwin in μeV to 8 digits, " total =", E_2s in μeV to 8 digits
+print "    2p1/2: total =", E_2p1 in μeV to 8 digits, " 2p3/2: total =", E_2p3 in μeV to 8 digits
+print "    formula: j = 1/2:", fs(2, 0.5) in μeV to 8 digits, " j = 3/2:", fs(2, 1.5) in μeV to 8 digits
+print "    Dirac (minus the Bohr energy): j = 1/2:", dirac(2, 0.5) in μeV to 8 digits, " j = 3/2:", dirac(2, 1.5) in μeV to 8 digits
+
+# (d) the splitting as a frequency (cycles per second: divide by h, not ħ)
+print "(d) 2p3/2 - 2p1/2 =", (E_2p3 - E_2p1) / h in GHz to 6 digits, " Dirac:", (dirac(2, 1.5) - dirac(2, 0.5)) / h in GHz to 6 digits

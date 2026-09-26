@@ -1,0 +1,11 @@
+{
+ "id": "ccac2cd937f4",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "thrust: 33.0000 kN\nTsiolkovsky Δv: 3.04985 km/s\nburnout speed (no air): 2.46125 km/s\nburnout height (no air): 53.3450 km\napex (no air): 362.098 km\nODE burnout speed (no air): 2461.25 m/s\nODE burnout height (no air): 53.3450 km\nburnout speed (air): 2030.24 m/s\nburnout height (air): 43.3321 km\ntime of apex (air): 264.858 s\napex (air): 249.265 km\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

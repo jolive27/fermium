@@ -1,0 +1,1 @@
+print linspace(0 s, 1 s, 5)

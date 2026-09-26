@@ -1,0 +1,11 @@
+{
+ "id": "4dd35faa64f1",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.7×10⁷ S/m\n9.0 m²/s²\n7.57×10⁻¹⁶ J/(m³ K⁴)\n-5 J/kg\n9.0 J/kg\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

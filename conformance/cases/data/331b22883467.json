@@ -1,0 +1,17 @@
+{
+ "id": "331b22883467",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "plot options are:  with log y,  with log x,  with log,  with points,  with title \"...\",  with xlabel \"...\",  with ylabel \"...\",  with y from a to b,  with x from a to b,  with reversed x,  with animate over t",
+  "line": 2,
+  "col": 20,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+L = 1.20 ± 0.01 m
+print L - L
+print L / L
+print L * L, "but for two separate measurements:", (1.20 ± 0.01 m) * (1.20 ± 0.01 m)

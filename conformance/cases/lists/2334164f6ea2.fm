@@ -1,0 +1,1 @@
+x = power_spectrum([1, 2, 3])

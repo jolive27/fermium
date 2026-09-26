@@ -1,0 +1,17 @@
+{
+ "id": "43e3bfbe2b59",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "np is the Python module numpy (line 1) and is defined again on line 2",
+  "line": 2,
+  "col": 1,
+  "hint": "rename your np, or use another name after as",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

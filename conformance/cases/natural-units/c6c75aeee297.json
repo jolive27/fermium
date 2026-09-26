@@ -1,0 +1,17 @@
+{
+ "id": "c6c75aeee297",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "r was computed in nuclear units (ħ = c = 1), so its units here are ambiguous",
+  "line": 3,
+  "col": 7,
+  "hint": "say which unit you want, like  r in fm  (or s for a time)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

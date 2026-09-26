@@ -1,0 +1,5 @@
+squares = []
+for n from 1 to 6
+    push(squares, n^2)
+print squares
+print len(squares)

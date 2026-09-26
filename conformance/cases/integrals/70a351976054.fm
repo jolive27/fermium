@@ -1,0 +1,7 @@
+R = 0.10 m
+I = 2.0 A
+ring(phi) = R * <cos(phi), sin(phi), 0>
+dl(phi) = R * <-sin(phi), cos(phi), 0>
+P = <0 m, 0 m, 0.05 m>
+B = mu_0 I / (4pi) * integral dl(phi) × (P - ring(phi)) / |P - ring(phi)|^3 dφ from 0 to 2pi
+print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding in x and y)

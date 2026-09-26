@@ -1,0 +1,4 @@
+units nuclear:
+    r = 2 fm
+y = r in fm
+print y in s

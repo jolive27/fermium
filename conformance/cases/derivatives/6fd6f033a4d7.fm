@@ -1,0 +1,4 @@
+x(t) = 5 m sin(2 t / 1 s)
+ts = linspace(0 s, 1 s, 5)
+print ts
+print x'(ts)

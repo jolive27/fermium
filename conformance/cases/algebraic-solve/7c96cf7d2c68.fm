@@ -1,0 +1,2 @@
+solve exp(-x) = x for x from 0 to 1
+print x to 17 digits

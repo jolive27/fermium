@@ -1,0 +1,6 @@
+z = 0i
+for k from 1 to 4
+    z = z * 1i + 1
+print z
+w = if re(z) > 0 then z else -z
+print w

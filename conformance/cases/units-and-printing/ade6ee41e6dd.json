@@ -1,0 +1,17 @@
+{
+ "id": "ade6ee41e6dd",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show speed [m/s] in m (length [m])",
+  "line": 1,
+  "col": 7,
+  "hint": "100 km/hr is speed; try  in m/s  or  in km/s",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

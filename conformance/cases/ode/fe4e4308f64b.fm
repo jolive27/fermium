@@ -1,0 +1,2 @@
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+print max(x) to 12 digits, min(x) to 12 digits

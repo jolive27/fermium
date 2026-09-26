@@ -1,0 +1,3 @@
+print hbar c in MeV fm
+print m_e c^2 in MeV
+print k_B (300 K) in eV

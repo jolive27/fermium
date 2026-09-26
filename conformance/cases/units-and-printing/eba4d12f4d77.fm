@@ -1,0 +1,3 @@
+omega = 3
+omega_0 = 2
+print omega omega_0, omega_0^2

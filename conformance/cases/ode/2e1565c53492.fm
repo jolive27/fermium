@@ -1,0 +1,7 @@
+x(t) = t^3
+print d²x/dt²(2)
+print d^2x/dt^2(2)
+solve d²y/dt² = -y with y(0) = 1, dy/dt(0) = 0 for t from 0 to 1
+print y(1) to 6 digits
+solve d/dt (dz/dt) = -z with z(0) = 1, z'(0) = 0 for t from 0 to 1
+print z(1) to 6 digits

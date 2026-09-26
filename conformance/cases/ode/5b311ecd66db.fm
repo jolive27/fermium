@@ -1,0 +1,4 @@
+v0 = 10 m/s
+θ = 0
+solve r'' = <0, 0> m/s² with r(0 s) = <0, 0> m, r'(0 s) = v0 <cos(θ), sin(θ)> for t from 0 s to 1 s
+print r(1 s)

@@ -1,0 +1,13 @@
+f(x) = tan(x/3)
+d1 = f'
+d2 = f''
+print d1(-0.28631152909882873) to 17 digits
+print d2(-0.28631152909882873) to 17 digits
+print d1(-0.6485785043720109) to 17 digits
+print d2(-0.6485785043720109) to 17 digits
+print d1(1.9121546993386112) to 17 digits
+print d2(1.9121546993386112) to 17 digits
+print d1(1.3005010052869848) to 17 digits
+print d2(1.3005010052869848) to 17 digits
+print d1(2.7945794552041567) to 17 digits
+print d2(2.7945794552041567) to 17 digits

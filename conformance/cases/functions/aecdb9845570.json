@@ -1,0 +1,17 @@
+{
+ "id": "aecdb9845570",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add length [m] to time [s]",
+  "line": 2,
+  "col": 12,
+  "hint": "both sides of + and - must have the same units; this happened when calling g on line 3 (with s = length [m]); this happened when calling f on line 4 (with x = time [s])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

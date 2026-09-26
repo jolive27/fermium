@@ -1,0 +1,17 @@
+{
+ "id": "20e5e0251bb6",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected 'from' (write: Σ(k² for k from 1 to 10)) but found 'in'",
+  "line": 1,
+  "col": 18,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

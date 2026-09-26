@@ -1,0 +1,2 @@
+T = linspace(0 °C, 100 °C, 3)
+print mean(T), T in K

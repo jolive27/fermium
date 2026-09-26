@@ -1,0 +1,11 @@
+{
+ "id": "d6d51ac10a37",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "(a) first dark ring at x = 3.831705970   sin θ D/λ = 1.219669891\n(b) half intensity at x = 1.616339948\n    first bright ring at x = 5.135622302   I/I0 = 0.01749786279\n(c) fraction inside the first dark ring = 0.8377848692   1 - J0² - J1² = 0.8377848692\n(d) Rayleigh angle = 57.652598 mas\n    FWHM = 48.639535 mas\n    Airy radius in the focal plane = 16.099643 μm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

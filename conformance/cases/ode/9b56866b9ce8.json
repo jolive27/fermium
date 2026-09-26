@@ -1,0 +1,11 @@
+{
+ "id": "9b56866b9ce8",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "slow mode: 2.39720 1/s vs 2.39720 1/s\nfast mode: 5.78735 1/s vs 5.78735 1/s\nslow mode shape θ₂/θ₁: 1.41421 vs √2 = 1.41421\nslow mode from the ODE at 1°: 2.39709 1/s\nenergy at 0 s: 14.71500000 J\nenergy at 20 s: 14.71500001 J\nθ₁, θ₂ at 2 s: -109.525° -108.281°\nseparation at 4 s: 8.897×10⁻⁵°\nseparation at 8 s: 0.007606°\nseparation at 12 s: 8.934°\nLyapunov estimate (4 s to 8 s): 1.11 1/s\ngentle start, separation at 12 s: 4.19×10⁻⁷°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

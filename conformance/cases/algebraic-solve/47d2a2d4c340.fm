@@ -1,0 +1,31 @@
+# Astrophysics 04 — The mass function of a spectroscopic binary (Cygnus X-1)
+#
+# (Carroll & Ostlie, §7.3.)  In a single-lined spectroscopic binary only the
+# visible star's radial-velocity curve is measured: period P and
+# semi-amplitude K₁.  Kepler's third law then gives the mass function
+#
+#     f(M) = P K₁³ / (2πG) = M₂³ sin³i / (M₁ + M₂)².
+#
+# Cygnus X-1 (Miller-Jones et al. 2021): P = 5.599829 d, K₁ = 75.6 km/s for
+# the O-type supergiant, whose mass is M₁ = 40.6 M☉; the inclination is
+# i = 27.51°.
+#
+#  (a) The mass function, in M☉.  It is a strict lower limit on M₂.
+#  (b) The projected orbit of the O star, a₁ sin i = P K₁ / 2π, in R☉.
+#  (c) Solve f(M) = M₂³ sin³i / (M₁ + M₂)² for the black-hole mass M₂.
+#  (d) The separation of the two stars from Kepler's third law, in R☉.
+
+P = 5.599829 day
+K1 = 75.6 km/s
+M1 = 40.6 M☉
+i = 27.51°
+
+f_M = P K1³ / (2π G)
+print "(a) f(M) =", f_M in M☉ to 8 digits
+print "(b) a1 sin i =", P K1 / (2π) in R☉ to 8 digits
+
+solve M2³ sin(i)³ / (M1 + M2)² = f_M for M2 from 0.1 M☉ to 1000 M☉
+print "(c) M2 =", M2 in M☉ to 8 digits
+
+a = ∛(G (M1 + M2) P² / (4π²))
+print "(d) separation =", a in R☉ to 8 digits

@@ -1,0 +1,2 @@
+x(t) = t
+print d^2/dt^* x

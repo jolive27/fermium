@@ -1,0 +1,13 @@
+
+λ = 2.0 nC/m
+L = 0.5 m
+V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)^2 + y^2 + z^2)) ds from -L to L
+
+h = 1 mm
+p = (∂/∂x V)(0.3 m, 0.4 m, 0.2 m)
+fd = (V(0.3 m + h, 0.4 m, 0.2 m) - V(0.3 m - h, 0.4 m, 0.2 m)) / (2 h)
+print p to 10 digits
+print abs(p - fd) / abs(p) < 1e-5
+q = (∂/∂z V)(0.3 m, 0.4 m, 0.2 m)
+fz = (V(0.3 m, 0.4 m, 0.2 m + h) - V(0.3 m, 0.4 m, 0.2 m - h)) / (2 h)
+print abs(q - fz) / abs(q) < 1e-5

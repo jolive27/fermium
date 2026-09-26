@@ -1,0 +1,17 @@
+{
+ "id": "d7c13acaf581",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a Python function's unit can't be °C (a scale with an offset); use K",
+  "line": 2,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

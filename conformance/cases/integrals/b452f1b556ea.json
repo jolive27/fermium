@@ -1,0 +1,11 @@
+{
+ "id": "b452f1b556ea",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "(a) φ(centre) = 25.00000000 V   V0/4 = 25.00000000 V\n    φ(a/4, 3a/4) = 43.20283319 V\n(b) ∂²/∂x² term = ∂²term/∂x²(n, x, y) = -4V0 n π sin(n π x/a) sinh(n π y/a)/(a² sinh(n π))   [V/m², for n in plain numbers, for x in m, for y in m]\n    ∂²/∂y² term = ∂²term/∂y²(n, x, y) = 4V0 n π sin(n π x/a) sinh(n π y/a)/(a² sinh(n π))   [V/m², for n in plain numbers, for x in m, for y in m]\n    Laplacian of term 3 at (a/7, a/5) = 0 V/m²   vs ∂²/∂x² alone -4770 V/m²\n    average of φ on a circle about the centre = 25.00000000 V\n(c) φ on the left wall, bottom wall = 0 V 0 V\n    φ at the middle of the lid (N terms) = 99.68169807 V\n(d) λ on the bottom wall = -195.3549043 pC/m\n(e) cube centre = 16.66666667 V   V0/6 = 16.66666667 V\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

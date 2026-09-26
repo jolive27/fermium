@@ -1,0 +1,4 @@
+c = 340 m/s
+t = 2 s
+d = 2 c * t
+print d in m

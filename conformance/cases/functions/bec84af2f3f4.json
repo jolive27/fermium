@@ -1,0 +1,17 @@
+{
+ "id": "bec84af2f3f4",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "these two lists have different lengths (3 and 2)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+w = <1 m, 2 m, 3 m>
+print w in cm

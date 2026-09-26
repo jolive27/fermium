@@ -1,0 +1,11 @@
+{
+ "id": "8b64a107bcf2",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3.20435×10⁻¹³ J\n1 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

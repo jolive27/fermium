@@ -1,0 +1,5 @@
+# Free fall from a height h
+g = 9.81 m/s^2    # acceleration due to gravity
+h = 20 m          # height of the building
+t_fall = sqrt(2 * h / g)
+print "It takes", t_fall, "to fall."

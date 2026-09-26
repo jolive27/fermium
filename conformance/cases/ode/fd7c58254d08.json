@@ -1,0 +1,11 @@
+{
+ "id": "fd7c58254d08",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "equal masses, mode 1: 9.68121 1/s vs 9.68121 1/s\nequal masses, mode 2: 17.8885 1/s vs 17.8885 1/s\nequal masses, mode 3: 23.3725 1/s vs 23.3725 1/s\nmode shapes (columns): [[0.500, 0.707, -0.500], [0.707, -8.76×10⁻¹⁷, 0.707], [0.500, -0.707, -0.500]]\nheavy middle, slow mode: 7.81758 1/s\n  quadratic for the symmetric modes: 7.81758 1/s 20.4667 1/s\nheavy middle, middle mode: 17.8885 1/s  (antisymmetric, √(2k/m) = 17.8885 1/s )\nheavy middle, fast mode: 20.4667 1/s\nM-orthogonality v1·Mv2, v1·Mv3, v2·Mv3: 4.16×10⁻¹⁷ kg -1.39×10⁻¹⁷ kg 4.16×10⁻¹⁷ kg\nmodal amplitudes: 0.00593958 m 0.0141421 m 0.0111679 m\nx1(5 s), ODE vs modal sum: -0.0235919 cm -0.0235919 cm\nx3(5 s), ODE: -0.208670 cm\nmode energies: 0.422291 mJ 8.00000 mJ 7.57771 mJ\nsum vs ½ x₀ᵀ K x₀: 16.0000 mJ 16.0000 mJ\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

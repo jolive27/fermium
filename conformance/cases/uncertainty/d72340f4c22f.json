@@ -1,0 +1,11 @@
+{
+ "id": "d72340f4c22f",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "linear: 10.20 ± 0.20 m\nMonte Carlo: 10.05 ± 0.29 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

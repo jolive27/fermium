@@ -1,0 +1,6 @@
+seed(42)
+for i from 1 to 5
+    print rand() to 15 digits
+print randn() to 15 digits
+seed(42)
+print rand() to 15 digits

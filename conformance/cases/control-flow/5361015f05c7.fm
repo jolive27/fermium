@@ -1,0 +1,8 @@
+k = 3 N/m
+K = zeros(8, 8)
+for i from 1 to 8
+    K[i, i] = 2 k
+    if i < 8
+        K[i, i + 1] = -k
+        K[i + 1, i] = -k
+print eigenvalues(K) / 0.5 kg          # ω² of the 8 normal modes

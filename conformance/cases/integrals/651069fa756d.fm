@@ -1,0 +1,2 @@
+f(T) = ∫ exp(u / (1 K)) / (exp(u / (1 K)) - 1) du from 1 K to T
+print f(900 K)

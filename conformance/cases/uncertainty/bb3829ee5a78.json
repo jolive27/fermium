@@ -1,0 +1,11 @@
+{
+ "id": "bb3829ee5a78",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "(a) Q(D+T) = 17.589300 MeV\n    T_n = 14.048937 MeV   T_alpha = 3.5403632 MeV\n(b) Q(U-238 alpha) = 4.2698581 MeV   T_alpha = 4.1980958 MeV\n(c) Q(n beta decay) = 0.78234699 MeV\n(d) S_n(Pb-208) = 7.3674868 MeV\n(e) B(Pb-208): masses 1636.4298 MeV   SEMF 1613.6407 MeV\n    B/A: masses 7.8674510 MeV   SEMF 7.7578881 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

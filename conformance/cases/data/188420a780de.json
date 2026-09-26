@@ -1,0 +1,11 @@
+{
+ "id": "188420a780de",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "plot saved to <ROOT>/bootcamp/pendulum_data.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

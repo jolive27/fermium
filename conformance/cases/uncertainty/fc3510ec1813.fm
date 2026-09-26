@@ -1,0 +1,10 @@
+seed(1)
+N = 100000
+inside = sample(if rand()^2 + rand()^2 < 1 then 1 else 0, N)
+p = mean(inside)
+print "π ≈", 4 p, "±", 4 sqrt(p (1 - p) / N)
+
+# a pendulum's period when its length is known to ±1 cm (Monte Carlo error propagation)
+g = 9.81 m/s^2
+Ts = sample(2pi sqrt(randn(1.00 m, 0.01 m) / g), 20000)
+print mean(Ts), "±", std(Ts)

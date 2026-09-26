@@ -1,0 +1,47 @@
+# 22 — The Doppler effect and the expanding universe
+#
+# Light from a source moving away from us arrives stretched to longer
+# wavelengths (redshifted). Define z = (λ_observed − λ_emitted) / λ_emitted.
+#
+#     slow sources:        z ≈ v / c
+#     any speed (special relativity, straight away from us):
+#                          1 + z = √((1 + β) / (1 − β)),   β = v / c
+#     inverted:            β = ((1+z)² − 1) / ((1+z)² + 1)
+#
+# Hubble found that distant galaxies recede with v = H₀ d. We measure some
+# redshifts from the hydrogen-alpha line (656.28 nm in the lab), and turn them
+# into speeds and distances. (For very large z the "distance" of an expanding
+# universe needs cosmology; the Hubble-law number is only a rough guide there.)
+
+λ_Hα = 656.28 nm
+H0 = 70 km/s/Mpc
+
+z_of(λ_obs) = (λ_obs - λ_Hα) / λ_Hα
+β_of(z) = ((1 + z)² - 1) / ((1 + z)² + 1)
+
+# A star in our galaxy: Hα seen at 656.41 nm
+z1 = z_of(656.41 nm)
+print "star: z =", z1, "  v ≈ c z =", c z1 in km/s to 3 digits
+
+# A galaxy in the Virgo cluster: Hα at 658.9 nm
+z2 = z_of(658.90 nm)
+print "Virgo galaxy: z =", z2, "  v =", c β_of(z2) in km/s, "  distance ≈", c β_of(z2) / H0 in Mpc
+
+# A quasar with z = 2: the naive v = c z would be twice the speed of light!
+z3 = 2.000
+print "quasar z = 2:  naive c z =", c z3 in km/s, "  relativistic v =", β_of(z3), "c"
+print "  Hα from this quasar arrives at", λ_Hα (1 + z3) in nm, "(in the infrared)"
+
+# The age scale of the universe: 1/H0
+print "Hubble time 1/H0 =", 1 / H0 in Gyr to 3 digits
+
+# Sound: a police siren (700 Hz) passing at 30 m/s; sound speed 343 m/s
+f0 = 700 Hz
+v_s = 343 m/s
+v_car = 30 m/s
+print "siren approaching:", f0 v_s / (v_s - v_car) in Hz to 3 digits, "  receding:", f0 v_s / (v_s + v_car) in Hz to 3 digits
+
+# How z grows with speed: relativistic vs the slow-source formula
+z_rel(β) = √((1 + β) / (1 - β)) - 1
+z_slow(β) = β
+plot z_rel(β) vs β from 0 to 0.95, z_slow(β) vs β from 0 to 0.95 to "gallery/doppler.png"

@@ -1,0 +1,11 @@
+{
+ "id": "b30463672960",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.367879 kg\n0.135335 kg\nplot saved to /tmp/pytest-of-root/pytest-786/popen-gw3/test_passed_function_used_by_s0/v.svg\n6 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,3 @@
+K = [[2, -1], [-1, 2]] N/m
+print det(K)
+print det(K) in N²/m²

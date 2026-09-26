@@ -1,0 +1,17 @@
+{
+ "id": "7df453edf5ac",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "only ψ = 0 at the ends is supported for now (a wall, or far enough out that ψ has died away)",
+  "line": 1,
+  "col": 45,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

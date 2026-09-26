@@ -1,0 +1,11 @@
+{
+ "id": "dc43aca59941",
+ "area": "data",
+ "origin": "tests",
+ "dir": "research/pp_cno_crossover",
+ "stdout": "crossover (Carroll & Ostlie rates): T = 17.79 MK\nclosed form: 17.79 MK\nd ln ε/d ln T at 15 MK:  pp 3.90   CNO 19.9\ncrossover (Kippenhahn & Weigert rates): T = 18.06 MK\nplot saved to <ROOT>/research/pp_cno_crossover/pp_vs_cno.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

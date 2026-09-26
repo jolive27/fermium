@@ -1,0 +1,11 @@
+{
+ "id": "f76afbb968fb",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "π ≈ 3.14 ± 0.00519\n2.01 s ± 0.0101 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

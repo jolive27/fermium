@@ -1,0 +1,17 @@
+{
+ "id": "f6088e30a5c8",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the number of samples must be a plain number",
+  "line": 1,
+  "col": 21,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

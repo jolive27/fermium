@@ -1,0 +1,2 @@
+absolute = 3
+print absolute + 1

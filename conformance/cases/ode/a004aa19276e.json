@@ -1,0 +1,11 @@
+{
+ "id": "a004aa19276e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "flight time 3.41 s\nrange 56.1 m\nu halves at -0.693 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

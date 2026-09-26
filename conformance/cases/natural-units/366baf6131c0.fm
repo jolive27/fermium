@@ -1,0 +1,4 @@
+f(m) = m c^2
+print f(1 kg) to 6 digits
+units natural
+print f(1 kg) in J to 6 digits

@@ -1,0 +1,17 @@
+{
+ "id": "a49b2f4128f4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show a plain number (no units) in ft/s² (acceleration [m/s²])",
+  "line": 1,
+  "col": 5,
+  "hint": "the units you convert to must measure the same kind of quantity",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

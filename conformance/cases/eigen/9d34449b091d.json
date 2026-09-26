@@ -1,0 +1,11 @@
+{
+ "id": "9d34449b091d",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.49999999999659\n1.4999999999762\n2.4999999999149\n3.4999999997854\n4.4999999995606\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

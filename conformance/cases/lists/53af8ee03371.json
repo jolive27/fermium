@@ -1,0 +1,17 @@
+{
+ "id": "53af8ee03371",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this matrix has 2 rows, so there is no row 3",
+  "line": 2,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

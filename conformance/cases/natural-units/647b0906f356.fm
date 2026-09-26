@@ -1,0 +1,3 @@
+units natural
+print e^2/(4π ε_0) to 9 digits, α to 9 digits
+print e^2/(4π ε_0 * 1 fm) in MeV to 6 digits

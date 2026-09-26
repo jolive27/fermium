@@ -1,0 +1,4 @@
+data = load "data/pendulum.csv"
+g = 4 pi^2 data.L / data.T^2
+print g
+print "mean g =", mean(g), "+/-", std(g) / sqrt(len(g))

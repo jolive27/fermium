@@ -1,0 +1,6 @@
+Z = 3 Ω + 4i Ω
+print Z, Z in kΩ, |Z|, arg(Z) in °
+print exp(𝑖 π), (1.50 + 2.25i) [m], 0i / (0 + 0i)
+solve 1i ψ' = 2 ψ with ψ(0) = 1 for t from 0 to 1
+print ψ(1)
+print ∫ exp(1i π t² / 2) dt from 0 to 2

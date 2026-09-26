@@ -1,0 +1,4 @@
+θ = 2.5 mrad
+print θ in μrad
+print 3 μrad in mrad
+print 1 krad/s in rad/s

@@ -1,0 +1,5 @@
+energy(V, x) = V(x) + 1 J
+V1(x) = 2 N x
+V2(x) = 2 N
+print energy(V1, 1 m)
+print energy(V2, 1 m)

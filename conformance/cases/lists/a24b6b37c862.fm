@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+print xs[end], xs[end-1]
+xs[end] = 7
+print xs

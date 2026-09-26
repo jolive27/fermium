@@ -1,0 +1,11 @@
+{
+ "id": "3607ba84ffe7",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "15 squared is 225\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

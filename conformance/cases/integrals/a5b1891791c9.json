@@ -1,0 +1,17 @@
+{
+ "id": "a5b1891791c9",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)",
+  "line": 3,
+  "col": 5,
+  "hint": "give limits (from a to b) to compute it numerically",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

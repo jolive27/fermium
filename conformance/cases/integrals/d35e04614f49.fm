@@ -1,0 +1,11 @@
+# Measure g with a pendulum, then find the exact period of big swings
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print "g =", g to 4 digits
+print "g =", g in ft/s² to 4 digits
+
+period(θ0) = 4 √(L/g) * ∫ 1/√(1 - sin(θ0/2)² sin(φ)²) dφ from 0 to π/2
+
+for θ0 in [10°, 45°, 90°]
+    print "amplitude", θ0 in deg, "period", period(θ0) to 5 digits

@@ -1,0 +1,13 @@
+f(x) = x / (1 + x^2)
+d1 = f'
+d2 = f''
+print d1(-0.17965964387265387) to 17 digits
+print d2(-0.17965964387265387) to 17 digits
+print d1(2.527976286020529) to 17 digits
+print d2(2.527976286020529) to 17 digits
+print d1(-2.6994088364150413) to 17 digits
+print d2(-2.6994088364150413) to 17 digits
+print d1(0.5449901929376768) to 17 digits
+print d2(0.5449901929376768) to 17 digits
+print d1(1.7600442962392142) to 17 digits
+print d2(1.7600442962392142) to 17 digits

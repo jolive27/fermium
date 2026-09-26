@@ -1,0 +1,17 @@
+{
+ "id": "3b0801c80a26",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "F can't be made from L, A: F has mass and time, but nothing it depends on has mass or time",
+  "line": 1,
+  "col": 9,
+  "hint": "F must depend on something else too (a constant like G, c or ħ?)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

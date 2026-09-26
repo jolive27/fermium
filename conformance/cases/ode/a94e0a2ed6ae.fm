@@ -1,0 +1,5 @@
+solve y' = 1 m/s
+  with y(0 s) = 0 m
+  for t from 0 s to 10 s
+  until y = 5 m
+print y(6 s)

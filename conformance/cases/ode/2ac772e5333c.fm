@@ -1,0 +1,7 @@
+solve x' = cos(t) with x(0) = 0 for t from 0 to 20
+ts = times(x)
+e = 0
+for i from 1 to len(ts) - 1
+    tm = (ts[i] + ts[i+1]) / 2
+    e = max(e, abs(x'(tm) - cos(tm)))
+print e

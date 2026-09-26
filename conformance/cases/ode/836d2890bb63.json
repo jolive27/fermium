@@ -1,0 +1,17 @@
+{
+ "id": "836d2890bb63",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an absolute tolerance must be a positive constant, like 1e-16 or 1e-9 m",
+  "line": 4,
+  "col": 37,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

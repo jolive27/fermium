@@ -1,0 +1,17 @@
+{
+ "id": "7b8274827250",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the y range must go from the smaller value to the larger one; to have y decrease along the axis, add  reversed y",
+  "line": 3,
+  "col": 25,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

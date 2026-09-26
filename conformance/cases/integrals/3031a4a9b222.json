@@ -1,0 +1,11 @@
+{
+ "id": "3031a4a9b222",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "4.59\n",
+ "stderr": "warning: line 1: the ' - π' is part of the upper limit: this integral goes up to 1 - π\n    print 2 ∫ x dx from 0 to 1 - π to 3 digits\n                               ^\n  hint: if that's what you meant, write  to (1 - π);  to subtract it after integrating, write  (… to 1) - π\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

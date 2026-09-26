@@ -1,0 +1,4 @@
+f(t) = t^3
+g = d/dt f
+h = f'
+print g(2) == h(2), g(2)

@@ -1,0 +1,17 @@
+{
+ "id": "e267f880a921",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f expects E in MeV (energy or mass [MeV]), but got length or time (1/energy) [MeV⁻¹]",
+  "line": 3,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "c27430225a46",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "err(x) gives the standard error of a parameter found by fit, like err(g) after fit T = 2π √(L/g) to data",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

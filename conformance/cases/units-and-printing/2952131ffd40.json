@@ -1,0 +1,17 @@
+{
+ "id": "2952131ffd40",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add length [m] to time [s]",
+  "line": 1,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

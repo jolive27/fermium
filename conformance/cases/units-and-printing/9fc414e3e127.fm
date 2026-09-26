@@ -1,0 +1,4 @@
+a = 981.7222358102414 [ly]
+b = a in Å
+print b / (1 [Å]) to 15 digits
+print (a in Å) in ly to 15 digits

@@ -1,0 +1,7 @@
+xs = [1 m]
+g(a) =
+    xs = []
+    push(xs, a)
+    return len(xs)
+print g(3 m)
+print xs

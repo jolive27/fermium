@@ -1,0 +1,17 @@
+{
+ "id": "94b0ad2bc20c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unexpected character '`' (Grave Accent)",
+  "line": 2,
+  "col": 7,
+  "hint": "remove it, or check the cheat sheet for the symbols Fermium understands",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

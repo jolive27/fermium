@@ -1,0 +1,17 @@
+{
+ "id": "fc114496e09c",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "h can't be set to 1 in natural units (Fermium knows ħ, c, k_B, G and ε_0)",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

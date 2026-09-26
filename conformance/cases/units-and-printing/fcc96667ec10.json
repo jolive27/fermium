@@ -1,0 +1,11 @@
+{
+ "id": "fcc96667ec10",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2.5×10³ μrad\n0.00300 mrad\n1000 rad/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+F = ∫ x^2 dx
+print F

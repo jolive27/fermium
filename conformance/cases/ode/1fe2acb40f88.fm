@@ -1,0 +1,2 @@
+solve y' = 3 s y with y(0) = 1 for s from 0 to 1
+print y(1)

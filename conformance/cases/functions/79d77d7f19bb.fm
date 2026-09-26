@@ -1,0 +1,28 @@
+# Earth around the Sun, version 3: test it
+GM = G M_sun
+dt = 1 hr
+x = 1 AU
+y = 0 AU
+vx = 0 km/s
+vy = 29.78 km/s
+t = 0 s
+
+energy(x, y, vx, vy) = ½ (vx^2 + vy^2) - GM / sqrt(x^2 + y^2)
+E_start = energy(x, y, vx, vy)
+period = 0 s
+
+while t < 2 yr
+    r = sqrt(x^2 + y^2)
+    vx += -GM x / r^3 * dt
+    vy += -GM y / r^3 * dt
+    y_before = y
+    x += vx dt
+    y += vy dt
+    t += dt
+    if y_before < 0 AU and y >= 0 AU and period == 0 s
+        period = t
+
+E_end = energy(x, y, vx, vy)
+print "energy per kg at start:", E_start in J/kg
+print "relative energy change after 2 years:", (E_end - E_start) / E_start
+print "period:", period in day

@@ -1,0 +1,2 @@
+KE(m, v) = ½ m v²
+print KE(2 kg, 3 m/s)

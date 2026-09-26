@@ -1,0 +1,5 @@
+R0 = 1250 ± 35 s⁻¹
+R = 410 ± 20 s⁻¹
+t = 30.0 ± 0.1 min
+t_half = t ln(2) / ln(R0 / R)
+print "half-life:", t_half in min

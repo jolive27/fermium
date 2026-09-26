@@ -1,0 +1,5 @@
+times = [2.21 s, 2.19 s, 2.24 s, 2.20 s, 2.23 s]
+print times[1]
+print times[2]
+print times[end]
+print len(times)

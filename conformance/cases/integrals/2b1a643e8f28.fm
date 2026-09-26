@@ -1,0 +1,4 @@
+k = 5 N/m
+F(x) = k x
+W = ∫ F(x) dx from 0 m to 1 m
+print W + 1 N

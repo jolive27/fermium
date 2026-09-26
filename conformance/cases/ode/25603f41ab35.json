@@ -1,0 +1,17 @@
+{
+ "id": "25603f41ab35",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the two sides of this equation don't match: left is a plain number (no units), right is length or time (1/energy) [fm]",
+  "line": 2,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+v = 1e-12 m/s
+print v ≈ 0 m/s within 1e-9 m/s

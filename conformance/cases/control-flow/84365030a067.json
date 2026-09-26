@@ -1,0 +1,11 @@
+{
+ "id": "84365030a067",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "[2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]\n2046\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

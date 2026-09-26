@@ -1,0 +1,17 @@
+{
+ "id": "0e3aa646b6f2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show length [m] in s (time [s])",
+  "line": 1,
+  "col": 7,
+  "hint": "3 m is length; try  in m  or  in nm  or  in fm",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

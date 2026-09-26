@@ -1,0 +1,3 @@
+a = [0.387 AU, 0.723 AU, 1.000 AU, 1.524 AU, 5.203 AU]   # orbit size
+T = [0.241 yr, 0.615 yr, 1.000 yr, 1.881 yr, 11.86 yr]   # orbital period
+print T^2 / a^3 in yr^2/AU^3

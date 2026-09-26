@@ -1,0 +1,17 @@
+{
+ "id": "acbffc635708",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'MeV' after a bracket is read as a variable, and you haven't defined MeV",
+  "line": 2,
+  "col": 15,
+  "hint": "for the unit write it in brackets: [MeV]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

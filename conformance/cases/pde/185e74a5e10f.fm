@@ -1,0 +1,8 @@
+L = 1 m
+D = 0.1 m²/s
+S = 0.4 K/s
+solve ∂u/∂t = D * ∂²u/∂x² + S
+    with u(x, 0 s) = 0 K, u(0 m, t) = 0 K, u(L, t) = min(t / (1 s), 1) * 1 K
+    for x from 0 m to L, t from 0 s to 60 s
+    grid 200
+print u(0.3 m, 60 s) / (1 K) to 10 digits

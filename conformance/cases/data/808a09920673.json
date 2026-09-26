@@ -1,0 +1,11 @@
+{
+ "id": "808a09920673",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "data from table(t = xs, x = ys): columns t [s], x [m]\n[2.10, 3.90, 6.20, 7.80] m\nfit x = v t + x0   (4 data points from table(t = xs, x = ys))\n  v = 1.940 m/s   (standard error 0.091 m/s)\n  x0 = 0.1500 m   (standard error 0.25 m)\n  rms residual = 0.143 m\n1.94 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

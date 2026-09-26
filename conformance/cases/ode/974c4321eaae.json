@@ -1,0 +1,17 @@
+{
+ "id": "974c4321eaae",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'9.81 m/s²' is ambiguous: right after a number, m/s² is one unit (s is seconds there), but s is also your variable s",
+  "line": 2,
+  "col": 27,
+  "hint": "write  (9.81 m)/s²  to divide by your variable s, or  9.81 [m/s²]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

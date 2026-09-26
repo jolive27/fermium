@@ -1,0 +1,11 @@
+{
+ "id": "a5d4df30d5a5",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[20.0 ± 1.0, 40.0 ± 2.0] °C\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

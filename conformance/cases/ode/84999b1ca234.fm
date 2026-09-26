@@ -1,0 +1,10 @@
+solve x' = y, y' = -x with x(0) = 0, y(0) = 1 for t from 0 to 20
+ts = times(x)
+xs = values(x)
+en = 0
+em = 0
+for i from 1 to len(ts) - 1
+    en = max(en, abs(xs[i] - sin(ts[i])))
+    tm = (ts[i] + ts[i+1]) / 2
+    em = max(em, abs(x(tm) - sin(tm)))
+print en, em

@@ -1,0 +1,17 @@
+{
+ "id": "274e537665b4",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this equation has 2 undefined names (W, E); an eigenvalue problem has exactly one unknown constant (the eigenvalue)",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+units natural
+ω = 10 MeV
+solve x'' = -ω^2 x with x(0) = 1 fm, x'(0) = 0 for t from 0 to 1 fm
+print x(0.5 fm) in fm

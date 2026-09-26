@@ -1,0 +1,1 @@
+print solve_linear(identity(2) * 1 m, <1, 2, 3> N)

@@ -1,0 +1,11 @@
+{
+ "id": "12e6fa95a2e1",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) Wigner angle = 18.92464442°  closed form acos((γ1 + γ2)/(1 + γ1 γ2)) = 18.92464442°\n    composite speed = 0.8772684880  (sqrt(1 - 1/(γ1 γ2)²) = 0.8772684880 )\n(b) gamma = 1.25000  angle N = 1000: 89.99916726°  N = 2000: 89.99979181°\n    Richardson (4 t2 - t1)/3 = 90.00000000°  expected 2π(γ - 1) = 90.00000000°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "4afe7356f18b",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Chandrasekhar mass: 1.46 M☉  (often quoted as 1.4 solar masses)\nSirius B mean density: 2.426×10⁹ kg/m³  = 2426 kg per cm³\nsurface gravity: 4.039×10⁵ times Earth's\nρ = 1.0×10⁷ kg/m³   p_F c = 0.0882 MeV   p_F / (m_e c) = 0.173\nρ = 1.0×10⁸ kg/m³   p_F c = 0.190 MeV   p_F / (m_e c) = 0.372\nρ = 1.0×10⁹ kg/m³   p_F c = 0.409 MeV   p_F / (m_e c) = 0.801\nρ = 1.0×10¹⁰ kg/m³   p_F c = 0.882 MeV   p_F / (m_e c) = 1.73\nρ = 1.0×10¹¹ kg/m³   p_F c = 1.90 MeV   p_F / (m_e c) = 3.72\nelectrons become relativistic above 1.95×10⁹ kg/m³\nneutron star mean density: 3.8×10¹⁷ kg/m³  = 1.7 × nuclear density\ncompactness 2GM/(R c²): 0.34  (1 would be a black hole)\nsurface gravity: 1.3×10¹² m/s²  falling 1 m there ends at 1.6×10³ km/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

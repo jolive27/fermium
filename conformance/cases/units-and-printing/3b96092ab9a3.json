@@ -1,0 +1,17 @@
+{
+ "id": "3b96092ab9a3",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this '(' is never closed",
+  "line": 1,
+  "col": 11,
+  "hint": "add the missing ')'",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

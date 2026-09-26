@@ -1,0 +1,11 @@
+{
+ "id": "4b9022c6011f",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "linear rule: 0.010 ± 0.015 J\nMonte Carlo: 0.016 ± 0.017 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+sq(x) =
+    y = x * x
+    y
+print sq(3 m)

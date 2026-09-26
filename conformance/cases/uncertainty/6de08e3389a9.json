@@ -1,0 +1,11 @@
+{
+ "id": "6de08e3389a9",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "research/bbn_network",
+ "stdout": "η₁₀ = 6.132\nstart: T = 10 MeV  t = 0.007382 s  n/p = 0.8787\nweak era: 889 steps; T = 0.1 MeV at t = 119.237 s  n/p = 0.163293\nweak freeze-out, λ(n→p) = H: T = 0.7048 MeV\nT = 3 MeV : t = 0.08211 s  n/p = 0.65333  equilibrium exp(−Q/T) = 0.64979  λ(n→p)/H = 44.47\nT = 1 MeV : t = 0.7459 s  n/p = 0.34466  equilibrium exp(−Q/T) = 0.27436  λ(n→p)/H = 2.357\nT = 0.7 MeV : t = 1.539 s  n/p = 0.27627  equilibrium exp(−Q/T) = 0.15761  λ(n→p)/H = 0.9839\nT = 0.5 MeV : t = 3.075 s  n/p = 0.23494  equilibrium exp(−Q/T) = 0.075271  λ(n→p)/H = 0.4510\nT = 0.3 MeV : t = 9.117 s  n/p = 0.20275  equilibrium exp(−Q/T) = 0.013419  λ(n→p)/H = 0.1574\nnetwork: 5397 steps; end: t = 10000 s  T = 0.01149 MeV  T/T_ν = 1.40102  ((11/4)^(1/3) = 1.40102 )\ndeuterium peaks: t = 247 s  T = 0.0724 MeV  D/H = 0.00365\nhalf of the ⁴He is made by t = 246.7 s  T = 0.07244 MeV\nY_p = 0.242340\nD/H = 2.59588×10⁻⁵\n3He/H = 1.02875×10⁻⁵\n7Li/H = 4.36404×10⁻¹⁰\nfree neutrons left: Y_n = 4.21×10⁻⁹   (they decay: τ_n)\nbaryons conserved: Σ A Y − 1 = -2.9×10⁻¹⁵\nplot saved to <ROOT>/research/bbn_network/abundances.png\nplot saved to <ROOT>/research/bbn_network/n_over_p.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

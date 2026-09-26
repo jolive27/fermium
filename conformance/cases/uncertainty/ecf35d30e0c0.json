@@ -1,0 +1,11 @@
+{
+ "id": "ecf35d30e0c0",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Sun:            z = 2.12×10⁻⁶   c z = 636 m/s\nSirius B:       z = 0.0002575   c z = 77.20 km/s  (measured 80.4 ± 4.8 km/s)\nneutron star:   z = 0.24\nweak-field approximation for the Sun: 2.12×10⁻⁶\nPound–Rebka shift g h / c²: 2.46×10⁻¹⁵\nGPS orbital speed: 3.87 km/s\ngravity makes the satellite clock gain 45.7 μs per day\nits speed makes it lose               7.21 μs per day\nnet: 38.4 μs per day -> 11.5 km of position error per day\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

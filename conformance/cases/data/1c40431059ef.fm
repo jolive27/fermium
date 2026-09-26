@@ -1,0 +1,8 @@
+k = 50 N/m
+mass = 0.5 kg
+solve mass x'' = -k x
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 3 s
+print "x at 0.5 s:", x(0.5 s)
+print "exact:     ", 10 cm * cos(sqrt(k / mass) * 0.5 s)
+plot x vs t to "spring.png"

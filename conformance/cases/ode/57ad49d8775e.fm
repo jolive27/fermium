@@ -1,0 +1,2 @@
+solve x' = (1 + x^2) / 1 s with x(0) = 0 for t from 0 s to 2 s
+print x(2 s)

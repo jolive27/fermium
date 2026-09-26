@@ -1,0 +1,2 @@
+T = 20 degC
+print T in K, T in degF

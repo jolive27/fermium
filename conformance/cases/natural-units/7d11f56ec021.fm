@@ -1,0 +1,2 @@
+units natural
+print 1 MeV^2 + 1 MeV

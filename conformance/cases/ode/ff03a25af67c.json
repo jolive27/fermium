@@ -1,0 +1,17 @@
+{
+ "id": "ff03a25af67c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the tolerance is relative, so it must be between 0 and 1 (like 1e-8), but it is 2",
+  "line": 1,
+  "col": 73,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

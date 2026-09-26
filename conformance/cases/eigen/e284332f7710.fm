@@ -1,0 +1,14 @@
+m = m_e
+ħω = 1 eV
+ω = ħω / ħ
+V(x) = m ω² x² / 2
+solve -ħ²/(2*m) * u'' + V(x) u = F u
+    with u(-3 nm) = 0, u(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 3
+print (∫ u₁(x)² x² dx from -3 nm to 3 nm) / (0.5 ħ / (m ω)) - 1 to 4 digits
+print (∫ u₂(x)² x² dx from -3 nm to 3 nm) / (1.5 ħ / (m ω)) - 1 to 4 digits
+print (∫ u₃(x)² x² dx from -3 nm to 3 nm) / (2.5 ħ / (m ω)) - 1 to 4 digits
+for n from 1 to 3
+    print F[n] / ((n - 0.5) ħω) - 1 to 4 digits
+print ∫ u₁(x) u₃(x) dx from -3 nm to 3 nm to 4 digits

@@ -1,0 +1,5 @@
+one = 1 m²/s²
+z = 0 m²/s²
+g = [[-c^2, z, z, z], [z, one, z, z], [z, z, one, z], [z, z, z, one]]
+h = g / c^2
+print inverse(h)

@@ -1,0 +1,11 @@
+{
+ "id": "e6ef53ec455c",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of pendulum: T depends on L, m, g\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = T √(g/L)\n  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)\n  m drops out: nothing else has mass\n  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)\n2.01 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

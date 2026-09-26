@@ -1,0 +1,8 @@
+L = 1 m
+psi_end(k) =
+    solve ψ'' = -k² ψ
+      with ψ(0 m) = 0 m, ψ'(0 m) = 1
+      for x from 0 m to L
+    return ψ(L)
+solve psi_end(k) = 0 m for k from 0.5 / L to 10.5 / L
+print k * L to 12 digits

@@ -1,0 +1,17 @@
+{
+ "id": "722c67efea4e",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "sin needs a plain number, but got length [m]",
+  "line": 1,
+  "col": 11,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

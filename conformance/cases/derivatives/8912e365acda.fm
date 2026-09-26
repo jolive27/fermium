@@ -1,0 +1,4 @@
+g(x) = x^3
+f(x) = g(2 x) + sin(g(x))
+d = f'
+print d(1) to 6 digits

@@ -1,0 +1,5 @@
+k = 50 N/m
+F(x) = k x
+W = integral F(x) dx from 0 m to 20 cm
+print W
+print "check: ½ k x² =", ½ k (20 cm)^2

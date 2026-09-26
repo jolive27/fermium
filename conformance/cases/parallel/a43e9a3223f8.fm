@@ -1,0 +1,3 @@
+xs = [1, 2]
+parallel for x in xs
+    y = x

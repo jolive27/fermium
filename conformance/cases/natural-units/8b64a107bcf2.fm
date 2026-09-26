@@ -1,0 +1,5 @@
+units natural
+E = 2 MeV
+units SI
+print E in J to 6 digits
+print 1 m

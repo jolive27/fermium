@@ -1,0 +1,9 @@
+Z = complex([1.0, 2.0, -0.5, 0.25, 3.0, -1.0], [0.0, 0.5, 1.5, -2.0, 0.0, 0.7])
+W = ifft(Z)
+print re(W) to 15 digits
+print im(W) to 15 digits
+V = fft(Z)
+print re(V) to 15 digits
+print im(V) to 15 digits
+U = ifft([1.0, 2.0, -0.5, 0.25, 3.0, -1.0])
+print im(U) to 15 digits

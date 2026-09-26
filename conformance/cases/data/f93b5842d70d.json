@@ -1,0 +1,11 @@
+{
+ "id": "f93b5842d70d",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "[0.100, 0.200, 0.300, 0.400, 0.500] kg\n[1.90, 4.10, 5.90, 8.20, 9.90] cm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

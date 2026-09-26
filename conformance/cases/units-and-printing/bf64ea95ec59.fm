@@ -1,0 +1,4 @@
+a = 968.7017719375231 [kg]
+b = a in g
+print b / (1 [g]) to 15 digits
+print (a in g) in kg to 15 digits

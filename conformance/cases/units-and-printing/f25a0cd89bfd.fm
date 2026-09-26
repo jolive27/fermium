@@ -1,0 +1,2 @@
+x = 0.5
+print 2 sec(x) to 6 digits

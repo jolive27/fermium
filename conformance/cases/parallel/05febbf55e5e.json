@@ -1,0 +1,17 @@
+{
+ "id": "05febbf55e5e",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "y has no value here: it belongs to the iterations of the parallel for on line 1, so it isn't kept after the loop",
+  "line": 3,
+  "col": 7,
+  "hint": "to keep values from the loop, write them to a list made before it (ys[i] = …) or add them up (s += …)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

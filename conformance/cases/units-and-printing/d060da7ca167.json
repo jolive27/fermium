@@ -1,0 +1,17 @@
+{
+ "id": "d060da7ca167",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show temperature [K] in m (length [m])",
+  "line": 1,
+  "col": 7,
+  "hint": "20 °C is temperature; try  in K",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+use python numpy as np
+print d/dx np.sin(x) where x = 1

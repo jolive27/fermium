@@ -1,0 +1,4 @@
+import mechanics
+T(L) = mechanics.pendulum_period(L, 9.81 m/s²)
+print T''(1 m) to 6 digits
+print (d/dL mechanics.pendulum_period(L, 9.81 m/s²))(1 m) to 6 digits

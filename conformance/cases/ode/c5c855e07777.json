@@ -1,0 +1,11 @@
+{
+ "id": "c5c855e07777",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "R = 4.27494 fm   f'(R) = -3.84615×10¹⁴ 1/m\n1 l = 0  2j = 1  <l.s> = 0  E = -37.57375665 MeV\n2 l = 0  2j = 1  <l.s> = 0  E = -13.87868318 MeV\n1 l = 1  2j = 3  <l.s> = 0.500  E = -27.99865494 MeV\n1 l = 1  2j = 1  <l.s> = -1  E = -25.40888057 MeV\n1 l = 2  2j = 5  <l.s> = 1  E = -17.78233601 MeV\n1 l = 2  2j = 3  <l.s> = -1.50  E = -12.51719769 MeV\n(b) splitting 1p = 2.5897744 MeV   1d = 5.2651383 MeV   ratio d/p = 2.03305\n(c) shell-model order 1s½ 1p3/2 1p½ 1d5/2 2s½ 1d3/2: true\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

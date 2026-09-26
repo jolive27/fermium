@@ -1,0 +1,4 @@
+data = load "data/pendulum.csv"
+fit T = 2 pi sqrt(L / g) to data
+Ls = linspace(0.1 m, 1.5 m, 50)
+plot data.T vs data.L, 2 pi sqrt(Ls / g) vs Ls to "pendulum_fit.png"

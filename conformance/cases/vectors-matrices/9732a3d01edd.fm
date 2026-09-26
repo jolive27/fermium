@@ -1,0 +1,88 @@
+# Special relativity 23 — Lorentz boosts as 4×4 matrices; Thomas–Wigner rotation;
+# a two-body decay
+#
+# Four-vectors are written (ct, x, y, z), with the metric η = diag(−1, 1, 1, 1).
+# A boost with velocity β along a unit direction n has the symmetric matrix
+#
+#     Λ = [[γ, −γβn_x, −γβn_y, −γβn_z], [−γβn_x, 1 + (γ−1)n_x², (γ−1)n_x n_y, …], …].
+#
+# (a) Build Λ for β = 0.600 along x. Check Λᵀ η Λ = η and det Λ = 1, and that
+#     its eigenvalues are e^(−φ), 1, 1, e^(φ) with the rapidity φ = atanh β.
+# (b) Two collinear boosts (0.600 c, then 0.800 c): the product is a boost with
+#     the relativistic sum (β₁ + β₂)/(1 + β₁β₂); the rapidities add.
+# (c) Perpendicular boosts, 0.600 c along x then 0.800 c along y: the product is
+#     not symmetric (a boost times a rotation). Its time column gives the combined
+#     boost; the rotation left over, the Wigner rotation, has
+#         cos θ = (γ₁ + γ₂)/(1 + γ₁γ₂).
+#     Find θ from R = B⁻¹ Λ₂Λ₁, where B is the pure boost with the same γ and
+#     velocity.
+# (d) The decay π⁺ → μ⁺ ν_μ. Find the muon's momentum in the pion's rest frame,
+#     p* = (m_π² − m_μ²) c / (2 m_π). A pion of energy 10.0 GeV decays and the muon
+#     goes out at 90° in the pion's frame: boost the muon's 4-momentum to the lab
+#     with the matrix, and find its energy and its angle to the beam.
+# (Taylor & Wheeler ch. 3 and L; Jackson §11.3 and §11.8; Griffiths, Particles §3)
+
+η = [[-1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+
+boost(β, nx, ny, nz) =
+    γ = 1/√(1 - β²)
+    k = γ - 1
+    [[γ, -γ β nx, -γ β ny, -γ β nz],
+     [-γ β nx, 1 + k nx², k nx ny, k nx nz],
+     [-γ β ny, k ny nx, 1 + k ny², k ny nz],
+     [-γ β nz, k nz nx, k nz ny, 1 + k nz²]]
+
+# (a)
+β1 = 0.600
+L1 = boost(β1, 1, 0, 0)
+print "(a) Λ =", L1
+check = L1ᵀ η L1 - η
+# (abs and max don't work on a vector or matrix entry by entry: FRICTION S11)
+print "    size of Λᵀ η Λ − η =", √(|check[1]|² + |check[2]|² + |check[3]|² + |check[4]|²) to 3 digits
+print "    det Λ =", det(L1) to 10 digits
+ev = eigenvalues(L1)
+φ1 = atanh(β1)
+print "    eigenvalues:", ev[1] to 10 digits, ev[2] to 10 digits, ev[3] to 10 digits, ev[4] to 10 digits
+print "    exp(∓φ) =", exp(-φ1) to 10 digits, exp(φ1) to 10 digits
+
+# (b) collinear
+β2 = 0.800
+L12 = boost(β2, 1, 0, 0) L1
+β_sum = -L12[1, 2] / L12[1, 1]
+print "(b) combined β =", β_sum to 10 digits, "  (β1 + β2)/(1 + β1 β2) =", (β1 + β2)/(1 + β1 β2) to 10 digits
+print "    rapidity =", atanh(β_sum) to 10 digits, "  φ1 + φ2 =", atanh(β1) + atanh(β2) to 10 digits
+
+# (c) perpendicular: first β1 along x, then β2 along y
+Lp = boost(β2, 0, 1, 0) L1
+γ_tot = Lp[1, 1]
+bx = -Lp[2, 1] / γ_tot
+by = -Lp[3, 1] / γ_tot
+β_tot = √(bx² + by²)
+B = boost(β_tot, bx / β_tot, by / β_tot, 0)
+R = inverse(B) Lp
+θ_W = atan2(R[3, 2], R[2, 2])
+γ1 = 1/√(1 - β1²)
+γ2 = 1/√(1 - β2²)
+print "(c) combined γ =", γ_tot to 10 digits, "  γ1 γ2 =", γ1 γ2 to 10 digits
+print "    Λ2 Λ1 symmetric? entry [1,2] vs [2,1]:", Lp[1, 2] to 6 digits, Lp[2, 1] to 6 digits
+print "    R[1,1] =", R[1, 1] to 10 digits, "  R[4,4] =", R[4, 4] to 10 digits
+print "    Wigner angle =", abs(θ_W) in ° to 10 digits,
+      "  acos((γ1 + γ2)/(1 + γ1 γ2)) =", acos((γ1 + γ2)/(1 + γ1 γ2)) in ° to 10 digits
+
+# (d) π⁺ → μ⁺ ν
+m_π = 139.57039 MeV/c²
+m_μ = 105.6583755 MeV/c²
+p_star = (m_π² - m_μ²) c / (2 m_π)
+E_star = √((m_μ c²)² + (p_star c)²)
+print "(d) p* =", p_star in MeV/c to 10 digits, "  E*_μ =", E_star in MeV to 10 digits
+E_π = 10.0 GeV
+γ_π = E_π / (m_π c²)
+β_π = √(1 - 1/γ_π²)
+# the muon's 4-momentum (E/c, p) in the pion frame, out at 90° to the beam (along y)
+P_star = <E_star / c, 0 MeV/c, p_star, 0 MeV/c>
+# boost back to the lab: the lab moves at −β_π along x as seen from the pion
+P_lab = boost(β_π, -1, 0, 0) P_star
+print "    lab energy =", P_lab[1] c in MeV to 10 digits, "  γ E* =", γ_π E_star in MeV to 10 digits
+print "    lab angle =", atan2(P_lab[3], P_lab[2]) in ° to 10 digits,
+      "  atan(p*/(γ β E*/c)) =", atan(p_star / (γ_π β_π E_star / c)) in ° to 10 digits
+print "    invariant mass =", √(P_lab[1]² - P_lab[2]² - P_lab[3]² - P_lab[4]²) / c in MeV/c² to 10 digits

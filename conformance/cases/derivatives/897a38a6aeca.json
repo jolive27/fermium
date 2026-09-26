@@ -1,0 +1,11 @@
+{
+ "id": "897a38a6aeca",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "estimate: 36.0000180 m/s\nexact:    36.0000000 m/s\nx'(t) = 9 m/s³ t²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

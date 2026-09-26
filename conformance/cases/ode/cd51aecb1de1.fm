@@ -1,0 +1,7 @@
+f(k) =
+    F = <k, 2 k>
+    solve x'' = F · <1, 1> / (1 kg)
+      with x(0) = 0 m, x'(0) = 0 m/s
+      for t from 0 s to 1 s
+    return x(1 s)
+print f(1 N) to 6 digits

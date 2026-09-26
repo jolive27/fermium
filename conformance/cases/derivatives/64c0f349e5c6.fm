@@ -1,0 +1,2 @@
+term(n, x, y) = sin(n π x) sinh(n π y) / sinh(n π)
+print abs(∇²term(3, 0.2, 0.7)) < 1e-9

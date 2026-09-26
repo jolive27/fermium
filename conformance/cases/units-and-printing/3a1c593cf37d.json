@@ -1,0 +1,17 @@
+{
+ "id": "3a1c593cf37d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "ln needs a plain number, but got length [m]",
+  "line": 1,
+  "col": 10,
+  "hint": "divide by a reference value first, e.g. ln(p / (1 atm))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

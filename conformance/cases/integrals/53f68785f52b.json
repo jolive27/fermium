@@ -1,0 +1,11 @@
+{
+ "id": "53f68785f52b",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "8\n",
+ "stderr": "warning: line 2: c (the speed of light) is now your variable: from here on, c means your value\n        c = 3\n        ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+ω₀ = √(k/m) where k = 50 N/m, m = 0.5 kg
+print ω₀ in rad/s

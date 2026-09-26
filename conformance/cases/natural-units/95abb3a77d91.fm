@@ -1,0 +1,2 @@
+units natural
+print ħ, c, ħ c, ħ == 1, c == 1

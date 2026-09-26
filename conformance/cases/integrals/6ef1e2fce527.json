@@ -1,0 +1,17 @@
+{
+ "id": "6ef1e2fce527",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "integral is the ASCII spelling of ∫, so it can't be the name of a function or variable; pick another name",
+  "line": 1,
+  "col": 5,
+  "hint": "for example integral_ or I_int",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

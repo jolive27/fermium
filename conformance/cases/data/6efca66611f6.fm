@@ -1,0 +1,3 @@
+data = load "data/pendulum.csv"
+fit T = 2 pi sqrt(L / g) to data
+print "so g is", g

@@ -1,0 +1,2 @@
+solve x' = -x / (1 s) with x(0 s) = 1 m for t from 0 s to 1 s tolerance 0.001 s
+print x(1 s)

@@ -1,0 +1,4 @@
+epsilon_0 = 8.854e-12 F/m
+q = 1.0 uC
+r = 2.0 cm
+print q^2 / (4pi epsilon_0 r^2)

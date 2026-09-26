@@ -1,0 +1,6 @@
+expect(E) =
+    solve u'' = -E u / (1 m²)
+      with u(0 m) = 0, u'(0 m) = 1 / (1 m)
+      for r from 0 m to 1 m
+    return ∫ r u(r)² dr from 0 m to 1 m / ∫ u(r)² dr from 0 m to 1 m
+print expect(π²) to 8 digits

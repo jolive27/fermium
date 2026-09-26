@@ -1,0 +1,11 @@
+{
+ "id": "51450b355d2c",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.000000000\n1.414213562\n1.732050808\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

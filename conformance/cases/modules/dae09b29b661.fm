@@ -1,0 +1,12 @@
+import mechanics
+print mechanics.pendulum_period_large(1 m, g_n, 60°)       # 2.15 s: the exact period at 60°
+
+import astro as a
+print a.schwarzschild_radius(10 M☉)
+
+from nuclear import semf_binding, Q_value
+print semf_binding(56, 26)                                  # ⁵⁶Fe, about 495 MeV
+print Q_value(238.0507884 u, 234.0436014 u + 4.00260325 u)  # α decay of ²³⁸U: 4.27 MeV
+
+from quantum import hydrogen_level as E
+print E(2) - E(1)

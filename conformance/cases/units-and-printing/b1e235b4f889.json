@@ -1,0 +1,17 @@
+{
+ "id": "b1e235b4f889",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'M_sun' is not a unit Fermium knows",
+  "line": 2,
+  "col": 12,
+  "hint": "M_sun is the constant; the unit is M☉ (ASCII Msun): write  in M☉  (or divide by the constant: x / M_sun)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

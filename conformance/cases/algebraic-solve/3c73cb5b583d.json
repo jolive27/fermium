@@ -1,0 +1,11 @@
+{
+ "id": "3c73cb5b583d",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "(a) z0 = 11.45575017   N = ceil(2 z0/π) = 8\neven  z = 1.444376737   E = -19.68206093 eV\nodd   z = 2.886846485   E = -18.72992225 eV\neven  z = 4.325229471   E = -17.14897363 eV\nodd   z = 5.756680593   E = -14.94958350 eV\neven  z = 7.176937194   E = -12.15015251 eV\nodd   z = 8.578474422   E = -8.784902611 eV\neven  z = 9.944290908   E = -4.929399100 eV\nodd   z = 11.20513228   E = -0.8655094692 eV\n(c) states found = 8   ground state below infinite-well value -19.62396984 eV : true\n(d) P(outside) = 0.001285710906\n",
+ "stderr": "warning: line 61: 'κ0' and 'k0' look almost identical but are different names\n    κ0 = √(-2 m_e E_ground) / ħ\n    ^^\n  hint: rename one of them so they can't be confused (e.g. nu vs v)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

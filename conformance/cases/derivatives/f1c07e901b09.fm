@@ -1,0 +1,2 @@
+h(s) = s^2
+print d/ds h(2 s)

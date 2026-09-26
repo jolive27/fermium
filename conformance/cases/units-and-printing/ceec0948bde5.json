@@ -1,0 +1,17 @@
+{
+ "id": "ceec0948bde5",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'20 m/s/g' is ambiguous: right after a number, m/s/g is one unit (g is grams there), but g is also your variable g",
+  "line": 2,
+  "col": 15,
+  "hint": "write  (20 m/s)/g  to divide by your variable g, or  20 [m/s/g]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "e97dc583c819",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = 1/(3 (x + 2)^(2/3))\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

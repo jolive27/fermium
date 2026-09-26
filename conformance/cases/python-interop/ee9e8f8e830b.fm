@@ -1,0 +1,31 @@
+# 42 — Python interop: SciPy's special functions and your own Python code, with the units checked
+#
+# `use python <module> as <name>` lets a program call Python functions.  Python knows nothing about units,
+# so the boundary is checked: an argument must be a plain number (divide by a unit, like r / (1 m)) unless
+# the use line declares the unit, and the result is a plain number unless it declares one.
+# (fermium run only: an executable made by fermium build doesn't carry Python.)
+use python scipy.special as sp:
+    jn_zeros(n: int, count: int) -> list
+use python blackbody_py as bb:
+    planck(λ [m], T [K]) -> [W/m³]
+
+# 1. Diffraction by a circular aperture: the first dark ring of the Airy pattern is at the first zero of J₁
+λ = 550 nm
+D = 0.20 mm
+z1 = first(sp.jn_zeros(1, 3))                  # 3.8317…, the first zero of J₁
+θ1 = asin(z1 λ / (π D))
+print "first zero of J1:", z1 to 8 digits
+print "first dark ring:", θ1 in ° to 5 digits, " (the textbook 1.22 λ/D:", 1.22 λ / D in ° to 5 digits, ")"
+airy(θ) = (2 sp.j1(x) / x)² where x = π D sin(θ) / λ
+print "intensity halfway to the ring:", airy(θ1 / 2) to 6 digits
+
+# 2. Your own Python function, with the units declared at the boundary
+T_sun = 5772 K
+B = bb.planck(500 nm, T_sun)
+B_fm = 2 h c² / (500 nm)⁵ / expm1(h c / (500 nm k_B T_sun))     # the same formula in Fermium
+print "Planck at 500 nm (Python):", B to 6 digits
+print "Planck at 500 nm (Fermium):", B_fm to 6 digits
+λs = linspace(200 nm, 2000 nm, 1801)
+Bs = bb.planck(λs, T_sun)                      # a list goes in (as a NumPy array) and comes back
+peak = λs[argmax(Bs)]
+print "peak of the spectrum:", peak in nm to 4 digits, " Wien's law:", 2.897771955e-3 m K / T_sun in nm to 4 digits

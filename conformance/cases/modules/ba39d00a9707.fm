@@ -1,0 +1,3 @@
+import em
+f = em.cyclotron_frequency(e, 1 T, m_p)
+print f in rev/s to 6 digits

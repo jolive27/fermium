@@ -1,0 +1,2 @@
+solve x = 0 for x from -1 to 1
+print x to 17 digits

@@ -1,0 +1,17 @@
+{
+ "id": "4a46ed736cc1",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 0 is out of range: valid indexes here are 1 to 3; Fermium counts from 1",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

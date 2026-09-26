@@ -1,0 +1,3 @@
+units natural(ħ = c = 1)
+E = 2 MeV
+analyze x: t [s] depends on E, ħ

@@ -1,0 +1,2 @@
+solve y' = cos(1000 t / 1 s) with y(0) = 0 for t from 0 s to 10 s
+print y(1 s)

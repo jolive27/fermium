@@ -1,0 +1,17 @@
+{
+ "id": "5c2b9b440f6e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'5000 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 2,
+  "col": 18,
+  "hint": "write  5000*m  for 5000 × your variable m, or  5000 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

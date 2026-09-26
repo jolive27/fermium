@@ -1,0 +1,17 @@
+{
+ "id": "da76ab79eee1",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "ψ isn't defined: the eigenvalue problem's states are ψ₁, ψ₂",
+  "line": 2,
+  "col": 7,
+  "hint": "use ψ₁ (ASCII: psi_1) for the lowest state, ψ₁(x) for its value at x",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

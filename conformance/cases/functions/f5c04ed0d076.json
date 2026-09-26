@@ -1,0 +1,11 @@
+{
+ "id": "f5c04ed0d076",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 u c² = 931.494 MeV\nD + T  -> He-4 + n     Q = 17.589 MeV\nD + D  -> He-3 + n     Q = 3.2689 MeV\np + Li-7 -> 2 He-4     Q = 17.346 MeV\nn + Li-6 -> T + He-4   Q = 4.7835 MeV\nU-238 -> Th-234 + α    Q = 4.2697 MeV\nn -> p + e + ν         Q = 0.78235 MeV\n4 H -> He-4            Q = 26.731 MeV\nfraction of the mass converted: 0.00712\nα + N-14 -> O-17 + p   Q = -1.1919 MeV\nthreshold alpha energy: 1.5326 MeV\nD-T fusion: 337 TJ/kg  = 1.4×10⁷ times coal\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

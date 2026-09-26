@@ -1,0 +1,17 @@
+{
+ "id": "7e2af9caa164",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "Fermium doesn't use 'def': a function is written like a formula",
+  "line": 1,
+  "col": 1,
+  "hint": "write  f(x) = 2 x   (or put the body on the indented lines after f(x) =)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

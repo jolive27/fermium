@@ -1,0 +1,17 @@
+{
+ "id": "1a14d9755398",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't compare length [m] with time [s]",
+  "line": 2,
+  "col": 13,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

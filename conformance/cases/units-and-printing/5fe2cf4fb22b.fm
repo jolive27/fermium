@@ -1,0 +1,4 @@
+a = 552.6799447316738 [s]
+b = a in s
+print b / (1 [s]) to 15 digits
+print (a in s) in s to 15 digits

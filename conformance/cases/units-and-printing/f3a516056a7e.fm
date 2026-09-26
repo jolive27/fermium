@@ -1,0 +1,3 @@
+T = 2 s
+f = 1/T
+print f

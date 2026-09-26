@@ -1,0 +1,2 @@
+xs = [1, 2] [m]
+print max(xs, 1 s)

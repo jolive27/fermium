@@ -1,0 +1,13 @@
+{
+ "id": "ebc5fcabf6c7",
+ "area": "functions",
+ "origin": "benchmarks/fermium/nbody.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "N 1000000\nenergy_before -0.169075164\nenergy_after -0.169086185\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

@@ -1,0 +1,11 @@
+{
+ "id": "25faae8a349f",
+ "area": "appendix1",
+ "origin": "tests/programs/john/appendix1_hello.fm",
+ "dir": "tests/programs/john",
+ "stdout": "Hello Physics!\n29.4 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

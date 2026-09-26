@@ -1,0 +1,11 @@
+{
+ "id": "6251e5f53d0d",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]\n<0.707, 2.34×10⁻¹⁷, 0.707>\n[[1.00, 1.00×10⁻²⁰], [0, 1.00]]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+g = 9.81 m/s^2
+period(L) = 2 pi sqrt(L / g)
+lengths = [0.25 m, 0.5 m, 1 m, 2 m]
+print period(lengths)

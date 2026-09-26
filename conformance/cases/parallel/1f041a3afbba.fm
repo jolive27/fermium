@@ -1,0 +1,9 @@
+
+s = 0 s
+parallel for t from 0 [s] to 1 [s] step 0.1 [s]
+    s += t
+print s to 17 digits
+q = 0
+parallel for k from 10 to 1 step -3
+    q += k
+print q

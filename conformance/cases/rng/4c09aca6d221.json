@@ -1,0 +1,17 @@
+{
+ "id": "4c09aca6d221",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "seed(n) is a statement on its own line, like  seed(42)",
+  "line": 1,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

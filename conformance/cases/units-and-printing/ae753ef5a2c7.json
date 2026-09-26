@@ -1,0 +1,17 @@
+{
+ "id": "ae753ef5a2c7",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'100 km/h': in Fermium h is Planck's constant, not the hour, so this would divide by Planck's constant",
+  "line": 1,
+  "col": 14,
+  "hint": "write 100 km/hr for km per hour, or  (100 km)/h  to divide by Planck's constant",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

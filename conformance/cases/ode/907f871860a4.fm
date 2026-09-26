@@ -1,0 +1,15 @@
+
+k1 = 0.04 / 1 s
+k2 = 3e7 / 1 s
+k3 = 1e4 / 1 s
+solve
+    A' = -k1 A + k3 B C
+    B' = k1 A - k3 B C - k2 B²
+    C' = k2 B²
+    with A(0) = 1, B(0) = 0, C(0) = 0
+    for t from 0 s to 100000.0 s using radau
+print abs(A[end] / 0.017865921142099964 - 1)
+print abs(B[end] / 7.274751468436498e-08 - 1)
+print abs(C[end] / 0.9821340061103891 - 1)
+print abs(A[end] + B[end] + C[end] - 1)
+print len(times(A))

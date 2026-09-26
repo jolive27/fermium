@@ -1,0 +1,11 @@
+{
+ "id": "3cd5a90e3b41",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2.32×10⁸ W/m² 6.30×10⁷ W/m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

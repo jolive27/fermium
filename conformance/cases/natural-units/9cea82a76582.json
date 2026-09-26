@@ -1,0 +1,17 @@
+{
+ "id": "9cea82a76582",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this mixes values from different unit systems: a (natural units) and b (natural units)",
+  "line": 5,
+  "col": 7,
+  "hint": "convert each one on its own first, like  x_si = x in fm",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

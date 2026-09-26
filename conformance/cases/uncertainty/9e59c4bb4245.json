@@ -1,0 +1,11 @@
+{
+ "id": "9e59c4bb4245",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "ρ = 9.530 ± 0.084 g/cm³\nrelative: 0.00041 0.0079 0.0039\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,6 @@
+N = 5
+n = 0
+for i from 1 to N
+    N = 2
+    n += 1
+print n

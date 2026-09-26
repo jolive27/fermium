@@ -1,0 +1,1 @@
+print cot(1) to 10 digits, sec(1) to 10 digits, csc(1) to 10 digits, cot(30°) to 10 digits

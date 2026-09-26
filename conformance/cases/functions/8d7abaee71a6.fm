@@ -1,0 +1,7 @@
+v0 = 20 m/s
+g = 9.81 m/s^2
+y(t) = v0 t - ½ g t²
+v(t) = v0 - g t
+print "after 1 s:", y(1 s), v(1 s)
+print "after 3 s:", y(3 s), v(3 s)
+print y

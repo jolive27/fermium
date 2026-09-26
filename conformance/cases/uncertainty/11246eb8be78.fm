@@ -1,0 +1,78 @@
+# Gravitation 22 — A gravity assist at Jupiter: hyperbolic flyby, turning angle and Δv
+#
+# (Curtis, Orbital Mechanics for Engineering Students, §8.9; Bate, Mueller & White ch. 4;
+#  Taylor problem 8.x.)
+# A probe meets Jupiter (GM_J = 1.26686534 × 10¹⁷ m³/s², R_J = 71 492 km) with a
+# speed v∞ = 7.00 km/s relative to the planet and passes behind it at periapsis
+# r_p = 5.00 R_J. Jupiter moves at V_J = 13.07 km/s along −x in our axes; the probe's
+# velocity relative to Jupiter is along +y when it arrives. The Sun is ignored during
+# the encounter (Jupiter moves in a straight line).
+#
+#   (a) The hyperbola: e = 1 + r_p v∞²/GM, turning angle δ = 2 asin(1/e), impact
+#       parameter b = r_p √(1 + 2GM/(r_p v∞²)).
+#   (b) The heliocentric speed before, after, and the gain:
+#           |u_in|² = V² + v∞²,   |u_out|² = V² + v∞² + 2 V v∞ sin δ.
+#   (c) Integrate the flyby in the Sun's (inertial) frame with the moving Jupiter:
+#       start on the exact hyperbola at 1000 r_p, integrate until the probe is back
+#       at 1000 r_p (twice the hyperbolic time from periapsis,
+#       t = √(a³/GM)(e sinh H − H) with a = GM/v∞² and r = a(e cosh H − 1)).
+#       Compare the heliocentric speed gain and the turning of the relative velocity
+#       with the exact values between those two points (and with (a)–(b)), and find
+#       the closest approach from the ODE.
+
+GM = 1.26686534e17 m³/s²
+R_J = 71492 km
+v_inf = 7.00 km/s
+r_p = 5.00 R_J
+V = 13.07 km/s
+V_J = <-V, 0 km/s>
+
+# (a) the hyperbola
+ecc = 1 + r_p v_inf² / GM
+δ = 2 asin(1 / ecc)
+b = r_p √(1 + 2 GM / (r_p v_inf²))
+print "eccentricity:", ecc to 6 digits
+print "turning angle:", δ in ° to 6 digits
+print "impact parameter:", b in km to 6 digits
+
+# (b) the heliocentric speeds
+u_in = √(V² + v_inf²)
+u_out = √(V² + v_inf² + 2*V v_inf sin(δ))      # `2 V` is two volts (FRICTION G7)
+print "heliocentric speed before:", u_in in km/s to 6 digits
+print "heliocentric speed after:", u_out in km/s to 6 digits
+print "speed gain:", (u_out - u_in) in km/s to 6 digits
+print "|Δu| = 2 v∞ sin(δ/2):", 2 v_inf sin(δ / 2) to 6 digits
+
+# (c) the flyby, integrated
+a = GM / v_inf²
+p = a (ecc² - 1)
+d0 = 1000 r_p
+f_inf = acos(-1 / ecc)
+f0 = -acos((p / d0 - 1) / ecc)                        # on the incoming branch
+pos_pf = p / (1 + ecc cos(f0)) * <cos(f0), sin(f0)>
+vel_pf = √(GM / p) * <-sin(f0), ecc + cos(f0)>
+ψ = π/2 - atan2(ecc - 1 / ecc, sin(f_inf))            # turn the incoming asymptote to +y
+rot = [[cos(ψ), -sin(ψ)], [sin(ψ), cos(ψ)]]
+H0 = acosh((1 + d0 / a) / ecc)
+t_end = 2 √(a³ / GM) (ecc sinh(H0) - H0)
+print "time from 1000 r_p to 1000 r_p:", t_end in day to 6 digits
+
+solve r'' = -GM (r - V_J t) / |r - V_J t|^3
+  with r(0) = rot pos_pf, r'(0) = V_J + rot vel_pf
+  for t from 0 s to t_end tolerance 1e-12
+
+rel_in = r'(0 s) - V_J
+rel_out = r'(t_end) - V_J
+print "heliocentric speed gain, ODE:", (|r'(t_end)| - |r'(0 s)|) in km/s to 6 digits
+# At 1000 r_p the probe is still 0.36 % faster (relative to Jupiter) than v∞, so the gain there is a
+# little larger than the asymptotic one. The exact gain between the two mirror points ±f₀:
+vel_out_pf = √(GM / p) * <sin(f0), ecc + cos(f0)>
+print "speed gain between the mirror points, exact:", (|V_J + rot vel_out_pf| - |V_J + rot vel_pf|) in km/s to 6 digits
+print "turning of the relative velocity, ODE:", acos(rel_in · rel_out / (|rel_in| |rel_out|)) in ° to 6 digits
+# at 1000 r_p the velocity has not quite reached its asymptote; the exact turning there:
+print "turning at 1000 r_p, exact:", (2 atan2(ecc + cos(f0), sin(f0)) - π) in ° to 6 digits
+
+radial(t) = (r(t) - V_J t) · (r'(t) - V_J)
+solve radial(t_p) = 0 m²/s for t_p from 0 s to t_end
+print "periapsis time, ODE vs half the flight:", t_p in day to 6 digits, (t_end / 2) in day to 6 digits
+print "closest approach, ODE:", |r(t_p) - V_J t_p| / R_J to 6 digits, "R_J"

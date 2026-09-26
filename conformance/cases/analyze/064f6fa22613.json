@@ -1,0 +1,11 @@
+{
+ "id": "064f6fa22613",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "dimensional analysis of taylor: E depends on R, ρ, t\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = E t²/(R⁵ ρ)\n  so E ∝ R⁵ ρ/t²   (E = C R⁵ ρ/t², with C a pure number)\n  defined taylor(R, ρ, t) = R⁵ ρ/t², so E = C taylor(R, ρ, t)\nE ≈ 7.1×10¹³ J\n  ≈ 17 kilotons of TNT\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

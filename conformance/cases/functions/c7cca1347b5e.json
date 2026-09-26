@@ -1,0 +1,11 @@
+{
+ "id": "c7cca1347b5e",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[4, 10, 18] J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

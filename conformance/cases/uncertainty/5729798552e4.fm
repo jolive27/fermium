@@ -1,0 +1,5 @@
+L = 1.20 ± 0.01 m
+T10 = 22.1 ± 0.2 s
+T = T10 / 10
+print "one period:", T
+print "g =", 4π² L / T²

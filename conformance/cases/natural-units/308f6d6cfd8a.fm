@@ -1,0 +1,6 @@
+L = 2 m
+m = 3 kg
+units natural
+print L, L in fm
+print m in MeV to 12 digits
+print L m in 1 to 12 digits

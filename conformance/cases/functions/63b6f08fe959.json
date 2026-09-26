@@ -1,0 +1,17 @@
+{
+ "id": "63b6f08fe959",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'km/h' isn't a unit: in Fermium h is Planck's constant, not the hour",
+  "line": 1,
+  "col": 9,
+  "hint": "write km/hr for km per hour",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

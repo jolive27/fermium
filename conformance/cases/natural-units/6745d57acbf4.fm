@@ -1,0 +1,2 @@
+units natural
+print sin(1 MeV)

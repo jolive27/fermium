@@ -1,0 +1,11 @@
+{
+ "id": "deddb5251b76",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "<1.38196601125011, 3.61803398874989> N/m\n[[0.850650808352040, 0.525731112119133], [-0.525731112119133, 0.850650808352040]]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

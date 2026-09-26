@@ -1,0 +1,11 @@
+{
+ "id": "5ae5cec497b6",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.5000\n",
+ "stderr": "warning: line 2: the ' / ' after the upper limit divides the whole integral, not the limit\n    print ∫ 1 da from 0 to 1 / √(4 z) to 4 digits\n                             ^\n  hint: to divide the limit, write it without spaces (to L/2) or in parentheses (to (L / 2))\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

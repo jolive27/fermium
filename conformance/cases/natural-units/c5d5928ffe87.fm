@@ -1,0 +1,7 @@
+units natural
+p = 1 GeV
+τ = 2.1969811 μs
+E = sqrt(p^2 + m_μ^2)
+d = (p/m_μ) τ
+print d in km
+print d in m

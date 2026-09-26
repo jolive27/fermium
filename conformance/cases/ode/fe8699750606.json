@@ -1,0 +1,11 @@
+{
+ "id": "fe8699750606",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "a = 100.000 1/s  beta = 981.000 1/s²  a²/beta = 10.1937\n(a) u2 = 0.4191335115  theta2 = 65.22010547°\n(b) nutation period T = 0.06572883635 s  (fast top 2π/a = 0.0628319 s )\n    precession per nutation = 0.3293228943  mean rate = 5.010325947 1/s\n    fast-top precession rate M g l/(I3 w3) = 4.90500 1/s\n(c) first turning time = 0.03286441817 s  theta there = 65.22010547°\n    2 t1 = 0.06572883635 s  phi(T) = 0.3293228942\n    theta after 10 nutations = 60.000000°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

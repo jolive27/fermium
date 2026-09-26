@@ -1,0 +1,13 @@
+f(x) = ln(1 + x^2)
+d1 = f'
+d2 = f''
+print d1(-2.6035372527470653) to 17 digits
+print d2(-2.6035372527470653) to 17 digits
+print d1(2.1544416038500476) to 17 digits
+print d2(2.1544416038500476) to 17 digits
+print d1(0.8346966789620653) to 17 digits
+print d2(0.8346966789620653) to 17 digits
+print d1(-2.663871309380095) to 17 digits
+print d2(-2.663871309380095) to 17 digits
+print d1(1.2051241913900679) to 17 digits
+print d2(1.2051241913900679) to 17 digits

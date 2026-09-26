@@ -1,0 +1,11 @@
+{
+ "id": "fa1b6a5a87ef",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "(a) R at normal incidence = 0.04257999496   formula 0.04257999496\n(b) Brewster angle = 56.65929265°   atan(n2/n1) = 56.65929265°\n    angle between reflected and refracted rays = 90.00000000°\n(c) R_s = 0.1834382507  T_s = 0.8165617493  R_s + T_s = 1.000000000\n    R_p = 0.001527159925  T_p = 0.9984728401  R_p + T_p = 1.000000000\n(d) R unpolarised = 0.09248270530   polarisation = 0.9834870756\n(e) critical angle = 41.13951041°\n    TIR phase shift for s at 45° = 40.25946141°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

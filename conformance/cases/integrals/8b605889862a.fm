@@ -1,0 +1,3 @@
+k = 50 N/m
+W = ∫ k x dx
+print W(0.2 m)

@@ -1,0 +1,2 @@
+xs = [1, 2, 3, 5]
+print fft_re(xs), fft_im(xs)

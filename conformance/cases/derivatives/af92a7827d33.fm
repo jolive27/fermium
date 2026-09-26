@@ -1,0 +1,5 @@
+m = 1 kg
+U(r) = -G M_earth m / r
+F(r) = -U'(r)
+print "force on 1 kg at the surface:", F(R_earth)
+print "force at twice the radius:", F(2 R_earth)

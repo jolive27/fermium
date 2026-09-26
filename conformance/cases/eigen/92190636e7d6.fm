@@ -1,0 +1,8 @@
+m = m_e
+V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 2
+print ψ₂(-1 nm) / ψ₂(1 nm) to 6 digits
+print ∫ ψ₁(x) ψ₂(x) dx from -3 nm to 3 nm

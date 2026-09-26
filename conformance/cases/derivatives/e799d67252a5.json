@@ -1,0 +1,11 @@
+{
+ "id": "e799d67252a5",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = cosh(x) - sinh(x/2)/2\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

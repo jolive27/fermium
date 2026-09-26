@@ -1,0 +1,2 @@
+import nuclear
+nuclear.a_V = 16 MeV

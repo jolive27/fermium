@@ -1,0 +1,14 @@
+import astro
+
+print (astro.σ_T) / (1 m^2) to 12 digits
+print (astro.schwarzschild_radius(1 M☉)) / (1 km) to 12 digits
+print (astro.eddington_luminosity(1 M☉)) / (1 W) to 12 digits
+print (astro.kepler_period(1 au, 1 M☉)) / (1 day) to 12 digits
+print (astro.orbital_velocity(M_earth, R_earth)) / (1 m/s) to 12 digits
+print (astro.escape_velocity(M_earth, R_earth)) / (1 m/s) to 12 digits
+print (astro.wien_peak(5772 K)) / (1 nm) to 12 digits
+print (astro.stellar_luminosity(R_sun, 5772 K)) / (1 W) to 12 digits
+print astro.distance_modulus(250 pc) to 12 digits
+print (astro.hubble_distance(70 km/s/Mpc)) / (1 Mpc) to 12 digits
+print (astro.comoving_distance(1, 70 km/s/Mpc, 0.3)) / (1 Mpc) to 12 digits
+print (astro.luminosity_distance(1, 70 km/s/Mpc, 0.3)) / (1 Mpc) to 12 digits

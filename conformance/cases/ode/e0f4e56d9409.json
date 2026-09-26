@@ -1,0 +1,11 @@
+{
+ "id": "e0f4e56d9409",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "(a) E_x = -426.96874 V/m\n    E_y = -5.68×10⁻¹⁴ V/m\n    E_z = 2426.1039 V/m\n(b) V(P) = 433.98453 V\n    -∇V: E_x = -426.96874 V/m\n    -∇V: E_z = 2426.1039 V/m\n(c) E_z on axis (integral) = 1729.5378 V/m\n    E_z on axis (formula)  = 1729.5378 V/m\n    strongest at z = 7.0710678 cm   a/√2 = 7.0710678 cm\n(d) disk E_x = 2195.6047 V/m\n    disk E_z = 4832.3678 V/m\n    disk on axis (integral) = 3833.5293 V/m\n    disk on axis (formula)  = 3833.5293 V/m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+solve 2 u'' = -u / (1 s²) with u(0 s) = 1 m, u'(0 s) = 0 m/s for t from 0 s to 1 s
+print u(1 s) to 6 digits

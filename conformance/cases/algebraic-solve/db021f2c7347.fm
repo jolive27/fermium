@@ -1,0 +1,2 @@
+solve (x + 1000)² - x² = 3e20 for x from 1e16 to 1e18
+print x

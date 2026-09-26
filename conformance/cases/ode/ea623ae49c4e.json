@@ -1,0 +1,17 @@
+{
+ "id": "ea623ae49c4e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected a method name (rk4, rk45, radau or bdf) but found '3'",
+  "line": 3,
+  "col": 47,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

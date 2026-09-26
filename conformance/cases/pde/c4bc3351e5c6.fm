@@ -1,0 +1,8 @@
+L = 2 m
+D = 0.05 m²/s
+solve ∂T/∂t = D * ∂²T/∂x²
+    with T(x, 0 s) = 300 K + 10 K * cos(π x / L), ∂T/∂x(0 m, t) = 0 K/m, ∂T/∂x(L, t) = 0 K/m
+    for x from 0 m to L, t from 0 s to 20 s
+    grid 400
+print (T(0 m, 20 s) - 300 K) / (10 K) to 12 digits
+print ∫ T(x, 20 s) dx from 0 m to L / L in K to 12 digits

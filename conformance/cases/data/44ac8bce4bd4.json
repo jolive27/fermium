@@ -1,0 +1,11 @@
+{
+ "id": "44ac8bce4bd4",
+ "area": "data",
+ "origin": "tests",
+ "dir": "research/lane_emden_chandrasekhar",
+ "stdout": "n = 1:   ξ₁ = 3.141593   −ξ₁²θ'(ξ₁) = 3.141593   ρ_c/ρ̄ = 3.2899\nn = 1.5: ξ₁ = 3.653754   −ξ₁²θ'(ξ₁) = 2.714055   ρ_c/ρ̄ = 5.9907\nn = 3:   ξ₁ = 6.896849   −ξ₁²θ'(ξ₁) = 2.018236   ρ_c/ρ̄ = 54.182\nexact for n = 1: π = 3.141593\nM_Ch μ_e² = 5.825 M☉\nM_Ch (μ_e = 2, C/O or He white dwarf) = 1.456 M☉\nwith m_H instead of m_u: M_Ch μ_e² = 5.735 M☉   μ_e = 2: 1.434 M☉\nM_Ch (μ_e = 56/26, iron core) = 1.256 M☉\nn = 3/2 white dwarf of 0.6 M☉ (μ_e = 2): R = 10530 km   ρ_c = 1.46×10⁶ g/cm³\nplot saved to <ROOT>/research/lane_emden_chandrasekhar/lane_emden.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

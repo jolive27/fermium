@@ -1,0 +1,17 @@
+{
+ "id": "50f38c919af1",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'10^-4 T' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 2,
+  "col": 11,
+  "hint": "write  10^-4*T  for 10^-4 × your variable T, or  10^-4 [T]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

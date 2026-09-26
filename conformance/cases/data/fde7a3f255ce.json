@@ -1,0 +1,17 @@
+{
+ "id": "fde7a3f255ce",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "all series in one plot need the same y units (here time [s] and length [m])",
+  "line": 3,
+  "col": 16,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

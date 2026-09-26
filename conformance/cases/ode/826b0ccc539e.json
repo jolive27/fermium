@@ -1,0 +1,11 @@
+{
+ "id": "826b0ccc539e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "23.4851 °C\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "bdefba2d6124",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "Bi-214 atoms at 1 h: 2.68×10⁵\nA(Po-214) / A(Bi-214) at 5 h: 1.00\n8363 steps\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

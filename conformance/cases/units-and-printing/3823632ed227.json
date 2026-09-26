@@ -1,0 +1,17 @@
+{
+ "id": "3823632ed227",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "δ_T looks like a temperature change, but a value in °F is an absolute temperature (50 °F is 283.15 K)",
+  "line": 1,
+  "col": 11,
+  "hint": "write a change of temperature in K (50 °F → 27.8 K), or as a difference like T2 - T1",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

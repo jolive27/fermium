@@ -1,0 +1,4 @@
+m = 0.5 kg
+k = 50 [N/m]
+solve m x'' = -k x with x(0) = 0.1 [m], x'(0) = 0 m/s for t from 0 s to 1 s
+print x(1 s) to 3 digits

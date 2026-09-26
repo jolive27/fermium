@@ -1,0 +1,11 @@
+{
+ "id": "f047276a687c",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[H-1, He-4, C-12] 3\nH-1\nHe-4\nC-12\nHe-4\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

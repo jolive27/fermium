@@ -1,0 +1,2 @@
+T = [0 °C, 100 °C]
+print diff(T)

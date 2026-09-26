@@ -1,0 +1,7 @@
+
+sumsq(k) =
+    s = 0
+    parallel for j from 1 to k
+        s += j²
+    s
+print sumsq(1000), sumsq(1), sumsq(0)

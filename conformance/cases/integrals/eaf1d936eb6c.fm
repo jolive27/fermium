@@ -1,0 +1,1 @@
+print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1

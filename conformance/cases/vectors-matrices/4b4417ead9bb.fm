@@ -1,0 +1,13 @@
+
+K = [[5.0, 1.0, 0.5, 2.0], [1.0, 4.0, 1.5, 0.0], [0.5, 1.5, 6.0, 1.0], [2.0, 0.0, 1.0, 7.0]] N/m
+F = <1, -2, 0.5, 3> N
+x = solve_linear(K, F)
+print x to 17 digits
+print inverse(K) to 17 digits
+print det(K) to 17 digits
+print K Kᵀ to 17 digits
+print K x - F to 17 digits
+st = <1 m, 2 m/s>
+print st + <0.1 m, 0.2 m/s>, 3 s
+M = [[1, 2], [3, 4]] kg
+print M[2, 1], M[1], M * <1, 1> m/s

@@ -1,0 +1,11 @@
+{
+ "id": "334ee9d436d2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 rad/s\n",
+ "stderr": "warning: line 1: Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 Hz is 1 rad/s, not 6.28319 rad/s; 1 Hz = 1/(2π) rev/s\n    print 1 Hz in rad/s\n          ^\n  hint: if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is 3000 rpm), or multiply it by 2π:  2π f in rad/s\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

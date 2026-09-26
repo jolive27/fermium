@@ -1,0 +1,2 @@
+g(a, b) = a + b
+print g(1 m, 1 s)

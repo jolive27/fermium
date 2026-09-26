@@ -1,0 +1,11 @@
+{
+ "id": "2cee717257cc",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "1.89 eV\nwavelength: 656 nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

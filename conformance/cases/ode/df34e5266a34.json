@@ -1,0 +1,17 @@
+{
+ "id": "df34e5266a34",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "no absolute tolerance for x, which is length [m] (the values given are in time [s]); add one in its units after a comma, like  absolute 1e-9 s, 1e-12 m",
+  "line": 4,
+  "col": 37,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,35 @@
+# Astrophysics 03 — Where does a blackbody spectrum peak?
+#
+# (Carroll & Ostlie, §3.4.)  Planck's law per unit frequency
+# and per unit wavelength,
+#
+#     B_ν(T) = (2hν³/c²) / (exp(hν/kT) − 1),
+#     B_λ(T) = (2hc²/λ⁵) / (exp(hc/λkT) − 1),
+#
+# peak at different places: hν_max = 2.821 kT but hc/λ_max = 4.965 kT, so
+# λ_max ν_max ≠ c.
+#
+#  (a) For the Sun (T = 5772 K), find ν_max and λ_max from dB/dν = 0 and
+#      dB/dλ = 0, using symbolic derivatives and a root finder.
+#  (b) The dimensionless peak positions x = hν/kT and hc/λkT.
+#  (c) Where does the cosmic microwave background (T = 2.7255 K) peak, in
+#      frequency (GHz) and in wavelength (mm)?
+
+B_ν(ν, T) = (2 h ν³ / c²) / (exp(h ν / (k_B T)) - 1)
+B_λ(λ, T) = (2 h c² / λ⁵) / (exp(h c / (λ k_B T)) - 1)
+
+# ∂/∂ν and ∂/∂λ at fixed T
+dBν = ∂/∂ν B_ν
+dBλ = ∂/∂λ B_λ
+
+T_sun = 5772 K
+solve dBν(ν, T_sun) = 0 for ν from 1e13 Hz to 1e16 Hz
+solve dBλ(λ, T_sun) = 0 for λ from 50 nm to 5000 nm
+print "(a) Sun: nu_max =", ν in THz to 10 digits, "  lambda_max =", λ in nm to 10 digits
+print "    lambda_max nu_max / c =", λ ν / c to 10 digits
+print "(b) h nu_max / kT =", h ν / (k_B T_sun) to 10 digits, "  hc / (lambda_max kT) =", h c / (λ k_B T_sun) to 10 digits
+
+T_cmb = 2.7255 K
+solve dBν(ν_c, T_cmb) = 0 for ν_c from 1 GHz to 10000 GHz
+solve dBλ(λ_c, T_cmb) = 0 for λ_c from 0.01 mm to 100 mm
+print "(c) CMB: nu_max =", ν_c in GHz to 10 digits, "  lambda_max =", λ_c in mm to 10 digits

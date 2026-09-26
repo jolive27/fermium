@@ -1,0 +1,11 @@
+{
+ "id": "b41991d0fab2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "4.2 ly 2.7×10⁵ AU\n1.99×10³⁰ kg\n0.300 nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

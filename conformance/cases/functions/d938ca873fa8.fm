@@ -1,0 +1,4 @@
+proj_range(v0, theta) = v0^2 sin(2 theta) / g where g = 9.81 m/s^2
+print "30 deg:", proj_range(20 m/s, 30 deg)
+print "45 deg:", proj_range(20 m/s, 45 deg)
+print "60 deg:", proj_range(20 m/s, 60 deg)

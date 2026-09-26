@@ -1,0 +1,2 @@
+solve x' = -x with x(0) = 1 for t from 0 to 2
+print ∫ x(t) dt from 0 to 2 to 6 digits

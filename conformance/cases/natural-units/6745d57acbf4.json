@@ -1,0 +1,17 @@
+{
+ "id": "6745d57acbf4",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "sin needs a plain number, but got energy or mass [MeV]",
+  "line": 2,
+  "col": 11,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

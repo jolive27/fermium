@@ -1,0 +1,5 @@
+bump(v) =
+    v[end] += 1
+    0
+xs = [1, 2]
+print bump(xs), xs

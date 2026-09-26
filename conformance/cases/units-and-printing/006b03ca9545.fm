@@ -1,0 +1,5 @@
+T0 = 90 °C
+d = T0 - 20 °C
+print d in °C
+print (T0 - 20 °C) in °F
+print T0 in °F

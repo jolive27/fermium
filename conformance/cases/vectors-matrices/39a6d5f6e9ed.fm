@@ -1,0 +1,7 @@
+v = <3, 4> m/s
+m = 2 kg
+p = m v
+print p
+print v + <1, 1> m/s
+print -v / 2
+print unit(v)

@@ -1,0 +1,3 @@
+k = 0.1 1/min
+solve T' = -k (T - 20 °C) with T(0 min) = 90 °C for t from 0 min to 30 min tolerance 1e-10 absolute 1e-6 K
+print T(30 min) in °C to 6 digits

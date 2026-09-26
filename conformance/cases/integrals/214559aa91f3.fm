@@ -1,0 +1,2 @@
+g(a) = ∫ (∫ (∫ a dx from 0 to 1) dy from 0 to 1) dz from 0 to 1
+print g(5)

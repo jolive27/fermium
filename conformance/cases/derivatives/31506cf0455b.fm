@@ -1,0 +1,2 @@
+force(V, x) = -V'(x)
+print force(3 N, 2 m)

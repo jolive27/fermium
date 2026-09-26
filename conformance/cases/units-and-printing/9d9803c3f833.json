@@ -1,0 +1,11 @@
+{
+ "id": "9d9803c3f833",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 kg c² (= 1.80×10¹⁷ J)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

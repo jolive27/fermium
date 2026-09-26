@@ -1,0 +1,2 @@
+f(x) = x^2
+print (d/dx f)(3)

@@ -1,0 +1,2 @@
+for t from 0 s to 1 m step 0.1 s
+    print t

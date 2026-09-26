@@ -1,0 +1,11 @@
+{
+ "id": "d47cbe41c122",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "mean density of the Sun: 1.41 g/cm³\ncentral pressure (solve):   1.3447×10¹⁴ Pa\ncentral pressure (formula): 1.3447×10¹⁴ Pa\nmass reached at the surface / M_sun: 1.00000\nin atmospheres: 1.33×10⁹ atm\nestimated central temperature: 6.9×10⁶ K  (real: 1.6×10⁷ K)\nscale height H = 8.429 km\npressure at Everest's summit (8849 m): 35.4620 kPa   exact: 35.4620 kPa\npressure at 30 km: 2.88 kPa\nplot saved to <ROOT>/examples/gallery/atmosphere.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

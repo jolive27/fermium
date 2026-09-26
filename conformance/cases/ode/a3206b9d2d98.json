@@ -1,0 +1,11 @@
+{
+ "id": "a3206b9d2d98",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "(a) zeta(3/2) = 2.612375349  zeta(5/2) = 1.341487257\n    T_c = 158.07797 nK  check n λ(T_c)³ = 2.612375349\n(b) n λ³ = 1.421997027  z = 0.8511691245  series g(3/2, z) = 1.421997027\n(c) condensate fraction at 0.5 T_c = 0.646447  C/(N k) below T_c = 1.9256717\n(d) C/(N k) at 1.5 T_c = 1.7103442  (classical limit 1.5)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

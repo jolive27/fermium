@@ -1,0 +1,11 @@
+{
+ "id": "9a55d17d801f",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "268 MeV⁻¹\n5.29×10⁴ fm\n0.529 Å\n1.4138 fm\n1 1\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

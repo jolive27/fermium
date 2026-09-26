@@ -1,0 +1,17 @@
+{
+ "id": "f923745277b6",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "all entries of a matrix need the same units; this one is time [s] but the others are length [m]",
+  "line": 1,
+  "col": 26,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

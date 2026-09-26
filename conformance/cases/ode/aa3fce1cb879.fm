@@ -1,0 +1,65 @@
+# Oscillations 32 — The van der Pol limit cycle, from nearly harmonic to relaxation
+#
+# (Strogatz, Nonlinear Dynamics and Chaos, §7.5–7.6; Bender & Orszag, Advanced
+#  Mathematical Methods, §11.4 (Lindstedt) and Ex. 11.2; Grasman, Asymptotic Methods
+#  for Relaxation Oscillations (1987), eq. for the period.)
+# The van der Pol oscillator, in time units of 1/ω₀ with ω₀ = 1 rad/s:
+#     x'' − μ ω₀ (1 − x²) x' + ω₀² x = 0.
+#   (a) μ = 0.1 (weakly nonlinear). Lindstedt–Poincaré gives the limit-cycle
+#       amplitude 2 + O(μ²) and period T = 2π(1 + μ²/16) / ω₀ + O(μ⁴).
+#   (b) μ = 10: the relaxation regime.
+#   (c) μ = 100: very stiff; use the Radau solver. The asymptotic period is
+#       T ω₀ = (3 − 2 ln 2) μ + 3 a₀ μ^(−1/3) − (2/3) ln(μ)/μ + O(1/μ),
+#       with a₀ = 2.338107 the smallest zero of Ai(−z), so 3 a₀ = 7.014321 (Dorodnitsyn 1947).
+# In each case start at x = 2, x' = 0, let the transient die out, and measure
+# the period between successive upward zero crossings and the amplitude
+# (the largest x) over the last cycles.
+# Workaround: a function can't return an ODE solution (friction #48), so the
+# period and the amplitude are measured by two functions that each solve again;
+# μ = 100 is solved at the top level with `using radau`.
+
+ω0 = 1 rad/s
+
+# upward zero crossings of a solution between t_a and t_b, located by the
+# algebraic solve on the dense output; returns the mean period of the last n
+limit_cycle_period(μ, t_end, n) =
+    solve x'' = μ ω0 (1 - x²) x' - ω0² x
+      with x(0 s) = 2, x'(0 s) = 0 /s
+      for t from 0 s to t_end tolerance 1e-11
+    dt = t_end / 20000
+    ups = []
+    for i from 1 to 20000
+        if x((i - 1) dt) < 0 and x(i dt) >= 0
+            solve x(tc) = 0 for tc from (i - 1) dt to i dt
+            push(ups, tc)
+    k = len(ups)
+    return (ups[k] - ups[k - n]) / n
+
+amplitude(μ, t_end) =
+    solve y'' = μ ω0 (1 - y²) y' - ω0² y
+      with y(0 s) = 2, y'(0 s) = 0 /s
+      for t from 0 s to t_end tolerance 1e-11
+    big = 0
+    for i from 1 to 20000
+        big = max(big, y(t_end / 2 + i t_end / 40000))
+    return big
+
+T_a = limit_cycle_period(0.1, 400 s, 20)
+print "(a) mu = 0.1: T =", T_a to 9 digits, " Lindstedt 2π(1 + μ²/16) =", 2π (1 + 0.1² / 16) / ω0 to 9 digits, " amplitude =", amplitude(0.1, 400 s) to 7 digits
+T_b = limit_cycle_period(10, 400 s, 10)
+print "(b) mu = 10: T =", T_b to 9 digits, " amplitude =", amplitude(10, 400 s) to 7 digits
+
+solve z'' = 100 ω0 (1 - z²) z' - ω0² z
+  with z(0 s) = 2, z'(0 s) = 0 /s
+  for t from 0 s to 1000 s tolerance 1e-10 using radau
+dt = 1000 s / 20000
+ups = []
+for i from 1 to 20000
+    if z((i - 1) dt) < 0 and z(i dt) >= 0
+        solve z(tc) = 0 for tc from (i - 1) dt to i dt
+        push(ups, tc)
+k = len(ups)
+T_c = (ups[k] - ups[k - 3]) / 3
+μ = 100
+T_asym = ((3 - 2 ln(2)) μ + 7.014321 μ^(-1/3) - (2/3) ln(μ) / μ) / ω0
+print "(c) mu = 100: crossings =", k, " T =", T_c to 9 digits, " asymptotic =", T_asym to 7 digits, " steps =", len(times(z))

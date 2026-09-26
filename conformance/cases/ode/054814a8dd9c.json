@@ -1,0 +1,11 @@
+{
+ "id": "054814a8dd9c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "after 5 s:  368\nafter 10 s: 135\nexact:      135\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

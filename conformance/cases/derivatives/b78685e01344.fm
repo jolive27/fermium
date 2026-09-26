@@ -1,0 +1,2 @@
+F(x, y, z) = <x, y>
+print ∇·F

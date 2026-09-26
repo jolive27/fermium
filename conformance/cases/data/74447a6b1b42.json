@@ -1,0 +1,11 @@
+{
+ "id": "74447a6b1b42",
+ "area": "data",
+ "origin": "tests",
+ "dir": "tests/programs",
+ "stdout": "9.70 m/s²\n31.8 ft/s²\nplot saved to <ROOT>/tests/programs/x_vs_t.png\nfit T = 2π √(L/g)   (6 data points from pendulum.csv)\n  g = 9.806 m/s²   (standard error 0.017 m/s²)\n  rms residual = 0.00326 s\n10 1/s\nv(t) = -A ω sin(ω t)   [m/s, for t in s]\na(t) = -A ω² cos(ω t)   [m/s², for t in s]\n1.0 J\n0.035 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

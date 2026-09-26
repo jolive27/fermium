@@ -1,0 +1,11 @@
+{
+ "id": "ee4e764e5b84",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "(a) Sun: phi_inf = 1.57080057182  deflection = 1.751198 arcsec\n    Einstein 4m/r0 = 1.751190 arcsec  second order = 1.751198 arcsec\n(b) quadrature: Sun = 1.751198 arcsec\n(c) neutron star, r0 = 4m: deflection = 125.13972°  quadrature = 125.13972°  weak field = 57.2958°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

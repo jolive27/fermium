@@ -1,0 +1,17 @@
+{
+ "id": "0492695b3ef2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'0.300 /(m s²)' is ambiguous: right after a number, /(m s²) is the unit 1/(m s²), but m is also your variable m",
+  "line": 2,
+  "col": 13,
+  "hint": "write  0.300 [1/(m s²)]  for the unit, or give the units their own number to divide by your m",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+a = 961.1745331150053 [Torr]
+b = a in bar
+print b / (1 [bar]) to 15 digits
+print (a in bar) in Torr to 15 digits

@@ -1,0 +1,11 @@
+{
+ "id": "25d9f4ed7841",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 °C/min\n0.0333333 K/s\n4180 J/(kg K)\n100 °C\n30 °C/min\n0.555556 K/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

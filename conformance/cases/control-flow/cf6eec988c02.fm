@@ -1,0 +1,18 @@
+g = 9.81 m/s^2
+dt = 0.001 s        # time step
+y = 0 m             # height
+v = 20 m/s          # upward velocity
+t = 0 s             # clock
+y_max = 0 m
+
+while y >= 0 m
+    y += v dt
+    v -= g dt
+    t += dt
+    if y > y_max
+        y_max = y
+
+print "flight time:", t to 4 digits
+print "highest point:", y_max to 4 digits
+v0 = 20 m/s
+print "formula says:", 2 v0 / g, "and", v0^2 / (2 * g)

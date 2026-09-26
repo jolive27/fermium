@@ -1,0 +1,11 @@
+{
+ "id": "71b03deee8c1",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "∂V/∂x(x, y, z) = ∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds from -L to L   [V/m, for x in m, for y in m, for z in m]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

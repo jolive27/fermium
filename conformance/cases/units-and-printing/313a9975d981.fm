@@ -1,0 +1,4 @@
+k = 50 N/m
+m = 0.5 kg
+ω = √(k/m)
+print ω in rad/s

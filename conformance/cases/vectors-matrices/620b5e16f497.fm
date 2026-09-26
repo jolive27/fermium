@@ -1,0 +1,2 @@
+K = [[0.0, 2.0], [3.0, 1.0]] N/m
+print inverse(K) to 15 digits

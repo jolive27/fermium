@@ -1,0 +1,17 @@
+{
+ "id": "805eff45a9c0",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'70 kg g' is ambiguous: right after a number, kg g is one unit (g is grams there), but g is also your variable g",
+  "line": 2,
+  "col": 13,
+  "hint": "write  (70 kg) g  for 70 kg × your variable g, or  70 [kg g]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

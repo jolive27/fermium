@@ -1,0 +1,3 @@
+v = <3, 4> m/s
+print v, |v|
+print <1 m, 2 m, 3 m> in cm

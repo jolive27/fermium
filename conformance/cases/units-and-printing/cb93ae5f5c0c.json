@@ -1,0 +1,17 @@
+{
+ "id": "cb93ae5f5c0c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show mass [kg] in MeV (energy [J])",
+  "line": 1,
+  "col": 7,
+  "hint": "1 u is mass; try  in kg  or  in u  or  in MeV/c²",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "5a19aff9f12d",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the number of states after lowest must be a whole number from 1 to 500",
+  "line": 1,
+  "col": 91,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "ed226c6771bb",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't multiply a 2×2 matrix times a 3-vector: the matrix needs one column per component",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

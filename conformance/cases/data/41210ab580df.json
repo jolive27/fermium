@@ -1,0 +1,11 @@
+{
+ "id": "41210ab580df",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "n = 0   ξ₁ = 2.4495\nn = 1   ξ₁ = 3.1416\nn = 1.5   ξ₁ = 3.6538\nn = 2   ξ₁ = 4.3529\nn = 3   ξ₁ = 6.8968\nn = 4   ξ₁ = 14.972\nexact values: n = 0: 2.45   n = 1: 3.14\nn = 3:  -ξ₁² θ'(ξ₁) = 2.018   ρ_c / ρ̄ = 54.2\nSun: mean density 1.41 g/cm³ -> central density about 76 g/cm³\n(the Standard Solar Model gives about 150 g/cm³)\nplot saved to <ROOT>/examples/gallery/lane_emden.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

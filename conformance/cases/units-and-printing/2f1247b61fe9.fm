@@ -1,0 +1,4 @@
+a = 665.6488267115299 [day]
+b = a in min
+print b / (1 [min]) to 15 digits
+print (a in min) in day to 15 digits

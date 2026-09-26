@@ -1,0 +1,11 @@
+{
+ "id": "3101a345cc5e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "vacuum range: 153.263 m\nvacuum height: 26.8289 m\nvacuum flight time: 4.67748 s\ndrag constant k: 0.00622880 1/m\ndrag range: 94.5923 m\ndrag height: 20.3340 m\ndrag flight time: 4.05527 s\nimpact speed: 24.7986 m/s\nrange lost: 38.28%\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

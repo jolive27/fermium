@@ -1,0 +1,17 @@
+{
+ "id": "643545707be7",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 1: this divides by all of 'dt x': implicit multiplication binds tighter than '/'\n    print d^x/dt x\n             ^\n  hint: write …/dt * x if only dt is below the line, or …/(dt x) if all of it is\n",
+ "error": {
+  "message": "d isn't defined",
+  "line": 1,
+  "col": 7,
+  "hint": "give it a value on an earlier line, e.g.  d = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "d7e679b9d934",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "cot needs a plain number, but got length [m]",
+  "line": 1,
+  "col": 11,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

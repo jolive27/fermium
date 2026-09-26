@@ -1,0 +1,11 @@
+{
+ "id": "eb9c9a478702",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "v(t) = -A ω sin(ω t)   [m/s, for t in s]\na(t) = -A ω² cos(ω t)   [m/s², for t in s]\n-0.84 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

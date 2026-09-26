@@ -1,0 +1,17 @@
+{
+ "id": "6f5ec48ade88",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "angle(a, b) needs two 2-vectors or two 3-vectors, but got a 2-vector and a 3-vector",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

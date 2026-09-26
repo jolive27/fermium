@@ -1,0 +1,7 @@
+data = load "../data/pendulum.csv"
+g = 4 pi^2 data.L / data.T^2
+deviation = abs(g - 9.81 m/s^2)
+worst = max(deviation)
+for i from 1 to len(g)
+    if deviation[i] == worst
+        print "row", i, ": L =", data.L[i], "g =", g[i]

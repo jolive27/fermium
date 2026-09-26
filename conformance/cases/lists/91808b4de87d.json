@@ -1,0 +1,11 @@
+{
+ "id": "91808b4de87d",
+ "area": "lists",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "[4.5, 16, 25] J\ntotal: 46 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

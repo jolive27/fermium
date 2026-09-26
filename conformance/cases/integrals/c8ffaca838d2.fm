@@ -1,0 +1,5 @@
+
+λ = 2.0 nC/m
+L = 0.5 m
+V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)^2 + y^2 + z^2)) ds from -L to L
+print abs(∇²V(0.3 m, 0.4 m, 0.1 m)) < 1e-6 * 1 V/m^2

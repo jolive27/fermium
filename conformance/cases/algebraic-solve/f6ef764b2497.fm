@@ -1,0 +1,2 @@
+solve (x - 1) (x - 2) (x - 3) = 0 for x from 0.5 to 3.5
+print x to 16 digits

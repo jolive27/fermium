@@ -1,0 +1,11 @@
+{
+ "id": "c512033cac9a",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "-100 1/s²\n-100 1/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

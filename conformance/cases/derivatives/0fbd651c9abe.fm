@@ -1,0 +1,4 @@
+q = 1 nC
+φ(x, y, z) = q / (4π ε₀ √(x² + y² + z²))
+print -∇φ(1 m, 0 m, 0 m) to 6 digits
+print -∇φ(0 m, 3 m, 4 m) to 10 digits

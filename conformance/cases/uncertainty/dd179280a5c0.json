@@ -1,0 +1,17 @@
+{
+ "id": "dd179280a5c0",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the uncertainty after ± is a plain number (no units) but the value is length [m]; both need the same units",
+  "line": 1,
+  "col": 13,
+  "hint": "write the unit once at the end, like  L = 1.20 ± 0.01 m",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

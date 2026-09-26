@@ -1,0 +1,2 @@
+T = [10 °C, 20 °C]
+print std(T) to 6 digits

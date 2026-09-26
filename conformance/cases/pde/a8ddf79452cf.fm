@@ -1,0 +1,4 @@
+solve ∂u/∂t = 1e-3 m²/s * ∂²u/∂x²
+    with u(x, 0 s) = exp(-(x / 0.1 m)²), u(-1 m, t) = 0, u(1 m, t) = 0
+    for x from -1 m to 1 m, t from 0 s to 1 s
+plot u vs x, y from 0 to 1

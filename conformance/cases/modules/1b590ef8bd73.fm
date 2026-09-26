@@ -1,0 +1,5 @@
+import quantum
+
+print quantum.barrier_transmission(2 eV - 1e-9 eV, 2 eV, 0.5 nm, m_e) to 12 digits
+print quantum.barrier_transmission(2 eV, 2 eV, 0.5 nm, m_e) to 12 digits
+print quantum.barrier_transmission(2 eV + 1e-9 eV, 2 eV, 0.5 nm, m_e) to 12 digits

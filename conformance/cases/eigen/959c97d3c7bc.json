@@ -1,0 +1,17 @@
+{
+ "id": "959c97d3c7bc",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this equation has no lowest eigenvalues (they go down without end): check the sign of the ψ'' term; the standard form is -ħ²/(2m) ψ'' + V(x) ψ = E ψ",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

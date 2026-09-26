@@ -1,0 +1,11 @@
+{
+ "id": "5e0febbf6d19",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "omega = 2.86 rad/s\nT = 2.20 s\nsmall angle: the formula is accurate\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

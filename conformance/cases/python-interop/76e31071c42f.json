@@ -1,0 +1,17 @@
+{
+ "id": "76e31071c42f",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "np.sin: Python functions can't be called inside  units natural (ħ = c = 1)  yet",
+  "line": 4,
+  "col": 7,
+  "hint": "call it outside the region and bring the value in",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,3 @@
+solve y' = y / t
+  with y(0 s) = 0 m
+  for t from 0 s to 1 s

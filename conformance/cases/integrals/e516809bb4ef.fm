@@ -1,0 +1,21 @@
+f(t, τ) =
+    g(s) = exp(-s / τ)
+    return g(t) + g(2 t)
+print f(1 s, 2 s) to 6 digits
+
+area(r) =
+    circle(ρ) = π ρ²
+    ring(a, b) = circle(b) - circle(a)
+    return ring(r, 2 r)
+print area(1 m) to 4 digits
+print area(2) to 4 digits
+
+pulse(t, Ω0, τ) =
+    envelope(u) = Ω0 exp(-(u / τ)²)
+    return ∫ envelope(u) du from -5 τ to t
+print pulse(0 s, 1 /s, 2 s) to 6 digits
+
+h(x) =
+    g(s) = s * x
+    return ∫ g(x) dx from 0 to 1
+print h(3) to 6 digits

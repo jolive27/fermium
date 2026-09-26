@@ -1,0 +1,2 @@
+T = 20 °C
+print T in K to 5 digits

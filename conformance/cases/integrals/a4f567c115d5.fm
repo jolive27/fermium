@@ -1,0 +1,5 @@
+m_sat = 1000 kg
+F(r) = G M_earth m_sat / r^2
+W = integral F(r) dr from R_earth to inf
+print W
+print ½ m_sat (11.2 km/s)^2

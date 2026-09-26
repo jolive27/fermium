@@ -1,0 +1,11 @@
+{
+ "id": "ceb77dd59736",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "(3 + 4i) Ω\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

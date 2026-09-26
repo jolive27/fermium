@@ -1,0 +1,17 @@
+{
+ "id": "8d6463ca6cfb",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "random numbers can't be drawn inside a parallel for: the iterations run in a different order each time, so the results would change from run to run",
+  "line": 2,
+  "col": 5,
+  "hint": "draw them before the loop, into a list",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

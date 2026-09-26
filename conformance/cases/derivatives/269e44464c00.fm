@@ -1,0 +1,12 @@
+simpson(f, a, b, n) =
+    h = (b - a) / n
+    s = f(a) + f(b)
+    for i from 1 to n - 1
+        s += (if mod(i, 2) == 1 then 4 else 2) · f(a + i h)
+    s h / 3
+g(t) = 9.81 m/s² · t
+print simpson(g, 0 s, 2 s, 10), simpson(sin, 0, π, 100)
+
+force(V, x) = -V'(x)
+spring(x) = ½ (4 N/m) x²
+print force(spring, 3 m)

@@ -1,0 +1,11 @@
+{
+ "id": "cffef7158b10",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.370 ± 0.037 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

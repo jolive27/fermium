@@ -1,0 +1,17 @@
+{
+ "id": "0bb5f800f9b7",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "units astro sets no constants to 1 (it only chooses M☉, AU and yr for printing); for G = c = 1 write  units natural(G = c = 1)",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

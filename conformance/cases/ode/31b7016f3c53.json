@@ -1,0 +1,17 @@
+{
+ "id": "31b7016f3c53",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "z is complex, so it can't be evaluated at each element of a list (lists of complex numbers aren't supported yet)",
+  "line": 2,
+  "col": 7,
+  "hint": "loop over the list, or take the real or imaginary part, like z.re",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

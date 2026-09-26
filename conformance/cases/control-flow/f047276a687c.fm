@@ -1,0 +1,6 @@
+names = ["H-1", "He-4"]
+push(names, "C-12")
+print names, len(names)
+for n in names
+    print n
+print names[2]

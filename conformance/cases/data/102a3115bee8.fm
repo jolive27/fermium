@@ -1,0 +1,3 @@
+data = load "ba137m_decay.csv"
+fit rate = A exp(-t / τ) + B to data with A = 80 s⁻¹, τ = 150 s, B = 1 s⁻¹
+print "τ =", τ, rel(τ) to 2 digits

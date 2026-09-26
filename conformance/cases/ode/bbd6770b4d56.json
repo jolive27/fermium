@@ -1,0 +1,11 @@
+{
+ "id": "bbd6770b4d56",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "xi = 1  theta = 0.8414709817  sin(xi)/xi = 0.8414709848\nxi = 2  theta = 0.4546487136  sin(xi)/xi = 0.4546487134\nxi = 3  theta = 0.04704000503  sin(xi)/xi = 0.04704000269\n(b) xi_1 = 3.141592672   -xi_1² theta'(xi_1) = 3.141592632\n(c) mean density = 1.4097798 g/cm³   central density = 4.6379898 g/cm³\n    K = 2.0565054×10⁷ m⁵/(kg s²)   P_c = 4.4237384×10¹⁴ Pa\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

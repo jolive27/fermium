@@ -1,0 +1,11 @@
+{
+ "id": "d4de4c1dbd83",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "mass: 6 kg\ncentre of mass: 1.11 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

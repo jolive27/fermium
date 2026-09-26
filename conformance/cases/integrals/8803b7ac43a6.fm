@@ -1,0 +1,5 @@
+lambda = 2 nC/m
+L = 0.5 m
+V(x, y, z) = integral lambda / (4pi epsilon_0 sqrt((x - s)^2 + y^2 + z^2)) ds from -L to L
+print -grad(V)(0.3 m, 0.4 m, 0 m)          # the field of a finite line charge
+print partial/partial x V

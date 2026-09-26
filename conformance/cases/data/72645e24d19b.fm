@@ -1,0 +1,7 @@
+g = 9.81 m/s^2
+L = 1 m
+solve theta'' = -(g / L) sin(theta)
+  with theta(0) = 90 deg, theta'(0) = 0 rad/s
+  for t from 0 s to 5 s
+print "angle after 1 s:", theta(1 s) in deg
+plot theta in deg vs t to "pendulum_big.png"

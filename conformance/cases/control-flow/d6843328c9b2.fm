@@ -1,0 +1,2 @@
+for E in [0.50 eV, 0.75 eV, 1.00 eV]
+    print E

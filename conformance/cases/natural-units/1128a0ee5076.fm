@@ -1,0 +1,4 @@
+units natural
+r_s = 2 G M☉
+print r_s in km to 6 digits
+print G in GeV^-2 to 6 digits

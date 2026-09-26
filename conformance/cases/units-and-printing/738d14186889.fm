@@ -1,0 +1,4 @@
+a = 295.5060561984537 [°]
+b = a in rad
+print b / (1 [rad]) to 15 digits
+print (a in rad) in ° to 15 digits

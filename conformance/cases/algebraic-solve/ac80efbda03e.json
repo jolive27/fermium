@@ -1,0 +1,11 @@
+{
+ "id": "ac80efbda03e",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "(a) E_F = 3.2411629 eV  T_F = 37612.133 K\n(b) t = 0.10  mu/E_F = 0.9916412364  Sommerfeld = 0.9916535683\n(c) t = 0.10  C/(n k) = 0.47721866  Sommerfeld pi² t/2 = 0.49348022\n(b) t = 0.30  mu/E_F = 0.9145823015  Sommerfeld = 0.9161152965\n(c) t = 0.30  C/(n k) = 1.0545662  Sommerfeld pi² t/2 = 1.4804407\n(d) t = 0.00797615  1 - mu/E_F = 5.23×10⁻⁵  Sommerfeld (π²/12) t² = 5.23245×10⁻⁵\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

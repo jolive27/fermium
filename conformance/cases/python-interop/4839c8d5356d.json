@@ -1,0 +1,17 @@
+{
+ "id": "4839c8d5356d",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "give the Python module scipy.special a short name with as",
+  "line": 1,
+  "col": 25,
+  "hint": "write  use python scipy.special as sp",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

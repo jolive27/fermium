@@ -1,0 +1,11 @@
+{
+ "id": "dda9d572abde",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9 m² 4 s² 16\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

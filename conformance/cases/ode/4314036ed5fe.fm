@@ -1,0 +1,6 @@
+solve x' = -x / (1 s)
+  with x(0 s) = 2 m
+  for t from 0 s to 3 s
+ts = [0 s, 1 s, 2 s]
+print x(ts) to 5 digits
+print x'(ts) to 5 digits

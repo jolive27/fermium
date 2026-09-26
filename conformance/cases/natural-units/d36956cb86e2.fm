@@ -1,0 +1,5 @@
+units natural
+a0 = 1/(α m_e)
+print a0 in fm
+print a0 in Å
+print 1/(139.57 MeV) in fm

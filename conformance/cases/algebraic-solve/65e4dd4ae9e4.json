@@ -1,0 +1,17 @@
+{
+ "id": "65e4dd4ae9e4",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this equation has no solution between 1 and 2: the two sides never cross there (checked at 200 points)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

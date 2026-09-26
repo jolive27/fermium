@@ -1,0 +1,17 @@
+{
+ "id": "15b4d1812bcf",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unknown method 'rk4' for an eigenvalue problem (use matrix or shooting)",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

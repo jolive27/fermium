@@ -1,0 +1,11 @@
+{
+ "id": "8ec570f9a1f0",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "semi-major axis a = 1.00023 AU\nperiod from Kepler's third law: 365.383 day\neccentricity: 0.0169361\ndistance from start after one period: 0.629247 km\nrelative energy drift: 1.88883×10⁻⁸\naphelion distance: 1.017 AU\nplot saved to <ROOT>/examples/gallery/kepler_orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

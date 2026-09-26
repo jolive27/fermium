@@ -1,0 +1,2 @@
+I = ∫ (∫ x y dy from 0 to x) dx from 0 to 1
+print I

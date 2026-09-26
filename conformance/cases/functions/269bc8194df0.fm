@@ -1,0 +1,2 @@
+g(xs) = xs - mean(xs)
+print g([1, 2, 3])

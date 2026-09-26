@@ -1,0 +1,2 @@
+solve T' = -(T - 293.15 K) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min
+print T(30 min) in °C to 6 digits

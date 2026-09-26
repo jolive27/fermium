@@ -1,0 +1,11 @@
+{
+ "id": "0ccf2c1f48a6",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "acceleration: 1.20220 m/s²\ntension, incline side: 29.5262 N\ntension, hanging side: 30.1273 N\ntorque check (T2 - T1) R = I a/R: true\nminimum static coefficient: 0.433013\nspeed after 0.50 m: 0.881709 m/s\nlargest speed: 0.922276 m/s at 0.707532 m\nstops after: 1.41506 m\nwork done at the stop (should be 0): -2.55×10⁻¹⁵ J\nstop from W(s) = 0: 1.41506 m\ntime to stop: 2.41010 s\nODE position at that time: 1.41506 m\nODE speed after 0.50 m: 0.881709 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

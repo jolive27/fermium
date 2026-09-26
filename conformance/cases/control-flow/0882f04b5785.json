@@ -1,0 +1,17 @@
+{
+ "id": "0882f04b5785",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unexpected '='",
+  "line": 2,
+  "col": 6,
+  "hint": "use == to compare two values",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

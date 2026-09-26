@@ -1,0 +1,17 @@
+{
+ "id": "21c6b4df73b1",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the equations don't determine a'' and c'' at t = 0 s: the matrix of their coefficients is singular (a zero mass or length?)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

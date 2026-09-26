@@ -1,0 +1,5 @@
+seed(42)                       # the same numbers every run, in fermium run, fermium build and the interpreter
+print rand()                   # uniform in [0, 1)
+print rand(2 m, 3 m)           # uniform in [2 m, 3 m): both ends in the same units
+print randn()                  # standard normal (mean 0, standard deviation 1)
+print randn(9.81 m/s², 0.02 m/s²)   # normal with mean μ and standard deviation σ, in their units

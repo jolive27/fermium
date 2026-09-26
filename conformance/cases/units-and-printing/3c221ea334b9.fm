@@ -1,0 +1,4 @@
+a = 999.0 [dyn]
+b = a in dyn
+print b / (1 [dyn]) to 15 digits
+print (a in dyn) in dyn to 15 digits

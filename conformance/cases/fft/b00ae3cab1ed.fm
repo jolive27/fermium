@@ -1,0 +1,2 @@
+X = fft([1.5, 2, 3])
+print X to 4 digits

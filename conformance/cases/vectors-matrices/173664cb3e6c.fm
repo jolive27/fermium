@@ -1,0 +1,4 @@
+M = identity(2)
+M = M [[1, 2], [3, 4]]
+M = M + M
+print M

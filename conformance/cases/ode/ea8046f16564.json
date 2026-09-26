@@ -1,0 +1,17 @@
+{
+ "id": "ea8046f16564",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the two sides of the stop condition don't match: left is length [m], right is time [s]",
+  "line": 4,
+  "col": 3,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

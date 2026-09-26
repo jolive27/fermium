@@ -1,0 +1,5 @@
+v0 = 20 m/s
+theta = 45 deg
+g = 9.81 m/s^2
+R = v0^2 sin(2 theta) / g
+print R

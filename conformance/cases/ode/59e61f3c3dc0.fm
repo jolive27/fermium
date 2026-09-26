@@ -1,0 +1,5 @@
+k(t) = if t > 0.2 s and t < 0.5 s then 3 / (1 s) else 1 / (1 s)
+solve y' = k(t) y
+  with y(0 s) = 1
+  for t from 0 s to 1 s tolerance 1e-11
+print y(1 s) to 17 digits, y(0.35 s) to 17 digits

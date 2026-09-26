@@ -1,0 +1,7 @@
+B(x, y, z) = <-y, x, 0> T/m
+print ∇×B
+print ∇×B(1 m, 2 m, 3 m)
+print ∇·B(1 m, 2 m, 3 m)
+F(x, y, z) = <x², x y, z³>
+print div(F)(1, 2, 3)
+print curl(F)(1, 2, 3)

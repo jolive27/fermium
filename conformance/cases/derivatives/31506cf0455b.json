@@ -1,0 +1,17 @@
+{
+ "id": "31506cf0455b",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "force uses V as a function (V'), but was given force [N]",
+  "line": 2,
+  "col": 7,
+  "hint": "pass a function's name, like force(g, ...) after g(x) = ...",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

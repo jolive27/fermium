@@ -1,0 +1,14 @@
+m = m_e
+ħω = 1 eV
+ω = ħω / ħ
+V(x) = m ω² x² / 2
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3 nm) = 0
+    for x from -3 nm to 3 nm
+    lowest 5
+for n from 1 to 5
+    print E[n] / ħω to 14 digits
+x0 = sqrt(ħ / (m ω))
+print ψ₁(0 nm) * sqrt(x0) * π^(1/4) to 10 digits
+print ψ₁(x0) / ψ₁(0 nm) to 10 digits
+print ψ₂(x0) / (sqrt(2) exp(-1/2) / (sqrt(x0) π^(1/4))) to 10 digits

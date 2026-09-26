@@ -1,0 +1,17 @@
+{
+ "id": "137358582e2a",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 1: ifft(re, im) is deprecated and will be removed after Fermium 1.5: write ifft(complex(re, im))\n    x = ifft([1 m, 2 m], [1 s, 2 s])\n        ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\n",
+ "error": {
+  "message": "ifft(re, im): the real and imaginary parts need the same units",
+  "line": 1,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+R = 100 Ω
+L = 0.5 H
+C = 10 μF
+f = 50 Hz
+ω = 2π f
+Z = R + 1i ω L + 1 / (1i ω C)
+print Z to 12 digits
+print |Z| to 12 digits
+print arg(Z) in ° to 12 digits
+I = (230 + 0i) [V] / Z
+print |I| to 12 digits

@@ -1,0 +1,2 @@
+x(t) = t³
+print d²/dt² x, d/dt x

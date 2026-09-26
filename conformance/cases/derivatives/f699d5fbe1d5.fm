@@ -1,0 +1,3 @@
+f(x) = sinh(x) - cosh(x/2)
+d = f'
+print d(-1.236837361009246) to 15 digits

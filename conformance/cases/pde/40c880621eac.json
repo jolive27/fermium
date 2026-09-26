@@ -1,0 +1,17 @@
+{
+ "id": "40c880621eac",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "asked for the solution at 2 m, outside the range it was solved for (it ends at 1 m)",
+  "line": 6,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}
