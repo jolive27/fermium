@@ -856,7 +856,8 @@ pub fn tidy(e: &A::Expr) -> A::Expr {
     }
     // the plain canonical form, and the one with fractions put together; the shortest wins (like simplify)
     let mut best = e.clone();
-    for cand in [zero_sums(factor_terms(t.clone())), zero_sums(factor_terms(together(t)))] {
+    let tg = together(t.clone());
+    for cand in [zero_sums(t.clone()), zero_sums(factor_terms(t)), zero_sums(tg.clone()), zero_sums(factor_terms(tg))] {
         if key(&cand).contains("NaN") {
             continue;
         }
