@@ -275,7 +275,26 @@ fn to_t(e: &A::Expr) -> Option<T> {
             if func.name() == Some("sqrt") {
                 return pow_q(to_t(&args[0])?, (1, 2));
             }
-            T::Fun(f.into(), vec![to_t(&args[0])?])
+            let a = to_t(&args[0])?;
+            // SymPy's automatic evaluation: an odd function takes the sign out, an even one drops it
+            let negative_arg = match &a {
+                T::Mul(c, _) => *c < 0.0,
+                T::Num(v) => *v < 0.0,
+                T::Add(ts) => could_extract_minus(ts),
+                _ => false,
+            };
+            if negative_arg {
+                let odd = matches!(f, "sin" | "tan" | "cot" | "csc" | "sinh" | "tanh" | "asin" | "atan" | "asinh" | "atanh"
+                                      | "erf" | "sign");
+                let even = matches!(f, "cos" | "sec" | "cosh" | "abs");
+                if odd {
+                    return Some(mul_all(vec![T::Num(-1.0), T::Fun(f.into(), vec![neg_t(a)])]));
+                }
+                if even {
+                    return Some(T::Fun(f.into(), vec![neg_t(a)]));
+                }
+            }
+            T::Fun(f.into(), vec![a])
         }
         _ => return None,
     })
@@ -646,16 +665,19 @@ fn together(t: T) -> T {
 fn numeric_content(t: T) -> T {
     let T::Add(ts) = &t else { return t };
     let cs: Vec<f64> = ts.iter().map(|x| split_term(x.clone()).0).collect();
-    if cs.iter().any(|c| *c != c.trunc() || c.abs() > 1e15) {
+    let Some(rs) = cs.iter().map(|c| rational(*c)).collect::<Option<Vec<Q>>>() else { return t };
+    if rs.iter().any(|r| r.0.abs() > 1_000_000) {
         return t;
     }
-    let g = cs.iter().fold(0i64, |g, c| gcd(g, *c as i64));
-    if g <= 1 {
+    let g = rs.iter().fold(0i64, |g, r| gcd(g, r.0));
+    let l = rs.iter().fold(1i64, |l, r| l / gcd(l, r.1) * r.1);
+    if g == 0 || (g == 1 && l == 1) {
         return t;
     }
+    let content = g as f64 / l as f64;
     let T::Add(ts) = t else { unreachable!() };
-    let rest = add_all(ts.into_iter().map(|x| mul_all(vec![T::Num(1.0 / g as f64), x])).collect());
-    T::Mul(g as f64, vec![rest])
+    let rest = add_all(ts.into_iter().map(|x| mul_all(vec![T::Num(1.0 / content), x])).collect());
+    T::Mul(content, vec![rest])
 }
 
 /// Take the factors every term of a sum shares out of it (SymPy's factor_terms): -y² cos(x y) - x² cos(x y)
@@ -865,6 +887,109 @@ pub fn tidy(e: &A::Expr) -> A::Expr {
         best = shorter(out, &best);
     }
     best
+}
+
+/// v1's choice for an antiderivative: the shorter (as SymPy writes it) of SymPy's answer and its simplify();
+/// here the canonical form and its factored / together forms.
+pub fn sympy_best(e: &A::Expr) -> A::Expr {
+    let Some(t) = to_t(e) else { return e.clone() };
+    let plain = zero_sums(t.clone());
+    let mut best = (sympy_str(&plain).chars().count(), plain.clone());
+    let tg = together(t.clone());
+    for cand in [factor_terms(t), tg.clone(), factor_terms(tg)] {
+        let cand = signsimp(zero_sums(cand));
+        if key(&cand).contains("NaN") {
+            continue;
+        }
+        let n = sympy_str(&cand).chars().count();
+        if n < best.0 {
+            best = (n, cand);
+        }
+    }
+    simplify(&from_t(&best.1))
+}
+
+/// Roughly how SymPy's str() writes a term (for v1's length comparisons).
+fn sympy_str(t: &T) -> String {
+    fn num_s(v: f64) -> String {
+        if v == v.trunc() && v.abs() < 1e15 {
+            return format!("{}", v as i64);
+        }
+        match rational(v) {
+            Some((p, q)) => format!("{p}/{q}"),
+            None => format!("{v}"),
+        }
+    }
+    fn atom(t: &T) -> String {
+        let s = sympy_str(t);
+        match t {
+            T::Add(_) | T::Mul(..) => format!("({s})"),
+            T::Num(v) if *v < 0.0 || *v != v.trunc() => format!("({s})"),
+            _ => s,
+        }
+    }
+    match t {
+        T::Num(v) => num_s(*v),
+        T::Sym(s) => match s.as_str() {
+            "π" => "pi".into(),
+            "𝑖" => "I".into(),
+            _ => s.clone(),
+        },
+        T::Fun(f, a) => {
+            let name = match f.as_str() {
+                "ln" => "log",
+                "abs" => "Abs",
+                x => x,
+            };
+            format!("{name}({})", a.iter().map(sympy_str).collect::<Vec<_>>().join(", "))
+        }
+        T::Pow(b, e) => {
+            if *e == (1, 2) {
+                return format!("sqrt({})", sympy_str(b));
+            }
+            let ex = if is_int(*e) { format!("{}", e.0) } else { format!("({}/{})", e.0, e.1) };
+            format!("{}**{ex}", atom(b))
+        }
+        T::Mul(c, fs) => {
+            let (mut num_f, mut den_f) = (vec![], vec![]);
+            for f in fs {
+                match f {
+                    T::Pow(b, e) if e.0 < 0 => den_f.push(if (-e.0, e.1) == (1, 1) {
+                        atom(b)
+                    } else {
+                        atom(&T::Pow(b.clone(), (-e.0, e.1)))
+                    }),
+                    o => num_f.push(atom(o)),
+                }
+            }
+            let (cn, cd) = rational(c.abs()).unwrap_or(((c.abs() * 1e6) as i64, 1_000_000));
+            if cn != 1 || num_f.is_empty() {
+                num_f.insert(0, format!("{cn}"));
+            }
+            if cd != 1 {
+                den_f.insert(0, format!("{cd}"));
+            }
+            let mut s = format!("{}{}", if *c < 0.0 { "-" } else { "" }, num_f.join("*"));
+            if !den_f.is_empty() {
+                s += &if den_f.len() == 1 { format!("/{}", den_f[0]) } else { format!("/({})", den_f.join("*")) };
+            }
+            s
+        }
+        T::Add(ts) => {
+            let mut s = String::new();
+            for (i, x) in ts.iter().enumerate() {
+                let xs = sympy_str(x);
+                if i == 0 {
+                    s = xs;
+                } else if let Some(rest) = xs.strip_prefix('-') {
+                    s += &format!(" - {rest}");
+                } else {
+                    s += &format!(" + {xs}");
+                }
+            }
+            s
+        }
+    }
 }
 
 fn shorter(out: A::Expr, e: &A::Expr) -> A::Expr {

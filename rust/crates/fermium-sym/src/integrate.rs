@@ -30,8 +30,9 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
         }
         return Err(ferr0("Fermium couldn't find a formula for this integral", Some(HINT.into())));
     };
-    // SymPy's canonical form and order, as v1 printed its results
-    let r = crate::tidy::sympy_form(&r).unwrap_or_else(|| simplify(&r));
+    // SymPy's canonical form and order, as v1 printed its results; v1 kept the shorter of SymPy's answer and its
+    // simplify(), which the tidy candidates (factored, together) stand in for
+    let r = crate::tidy::sympy_best(&simplify(&r));
     if !antiderivative_ok(&r, &e, var, positive) {
         return Err(ferr0("Fermium's formula for this integral isn't right for every value of the constants in it, so \
                           Fermium won't use it", Some(HINT.into())));
@@ -390,7 +391,26 @@ impl Integrator {
             return None;
         }
         let pv = p.num_value();
-        if let Some((a, _)) = linear(b, &x) {
+        if let Some((a, c0)) = linear(b, &x) {
+            // (a x + b)ⁿ with whole n and numbers a, b: SymPy expands it and integrates term by term
+            if let (Some(n), Some(_), Some(bv)) = (pv, a.num_value(), c0.num_value()) {
+                if n >= 2.0 && n == n.trunc() && n <= 12.0 && bv != 0.0 && b.name() != Some(&x) {
+                    if let Some(c) = poly_coeffs(&pw(b.clone(), p.clone()), &x, 12) {
+                        let mut out: Option<A::Expr> = None;
+                        for (k, ck) in c.iter().enumerate() {
+                            if is_num_v(ck, 0.0) {
+                                continue;
+                            }
+                            let t = mul(div(ck.clone(), num(k as f64 + 1.0)), pwn(xn(), k as f64 + 1.0));
+                            out = Some(match out {
+                                None => t,
+                                Some(o) => add(o, t),
+                            });
+                        }
+                        return out;
+                    }
+                }
+            }
             if pv == Some(-1.0) {
                 return Some(div(call1("ln", b.clone()), a));
             }
@@ -414,6 +434,27 @@ impl Integrator {
         // sinⁿ, cosⁿ (n ≥ 3) by the reduction formulas; lnⁿ by parts
         if let Some(n) = pv.filter(|n| *n >= 3.0 && *n == n.trunc() && *n <= 12.0) {
             if let Some((fname @ ("sin" | "cos"), [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x).filter(|_| n % 2.0 == 1.0) {
+                    // odd n, as SymPy: sinⁿ u = (1 − cos² u)^m sin u, so ∫ = −Σ C(m,j) (−1)^j cos^(2j+1) u/(2j+1)
+                    let m = ((n - 1.0) / 2.0) as i64;
+                    let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
+                    let other = if fname == "sin" { c } else { s };
+                    let mut out: Option<A::Expr> = None;
+                    let mut binom = 1.0;
+                    for j in 0..=m {
+                        if j > 0 {
+                            binom = binom * (m - j + 1) as f64 / j as f64;
+                        }
+                        let coef = binom * if j % 2 == 0 { 1.0 } else { -1.0 } / (2 * j + 1) as f64;
+                        let coef = if fname == "sin" { -coef } else { coef };
+                        let t = mul(num(coef), pwn(other.clone(), (2 * j + 1) as f64));
+                        out = Some(match out {
+                            None => t,
+                            Some(o) => add(o, t),
+                        });
+                    }
+                    return Some(div(out?, a));
+                }
                 if let Some((a, _)) = linear(u, &x) {
                     // ∫ sinⁿ u = -sinⁿ⁻¹ u cos u / n + (n−1)/n ∫ sinⁿ⁻² u ; cos: +cosⁿ⁻¹ u sin u / n + …
                     let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
@@ -519,7 +560,12 @@ impl Integrator {
                 let sk = self.sqrt_of(&k)?;
                 let q = div(u.clone(), sk.clone());
                 if pv == -0.5 {
-                    let g = if rs { call1("asinh", q) } else { call1("acosh", q) };
+                    // SymPy: asinh(u/k), and ln(u + √(u² − k²)) for the other sign
+                    let g = if rs {
+                        call1("asinh", q)
+                    } else {
+                        call1("ln", add(u.clone(), sqrt(sub(pwn(u.clone(), 2.0), k.clone()), 2)))
+                    };
                     return Some(div(g, sqa));
                 }
                 let root = sqrt(add(pwn(u.clone(), 2.0), r.clone()), 2);
