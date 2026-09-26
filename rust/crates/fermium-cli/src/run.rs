@@ -32,9 +32,12 @@ impl BackendChoice {
     }
 }
 
-/// Stack of the thread programs run on: deep recursion gets a clear error from the compiled code (400 MB used,
-/// as in v1) instead of a crash.
-pub const STACK: usize = 512 << 20;
+/// Stack of the thread programs run on (reserved address space; pages are used only as the stack grows): deep
+/// recursion gets a clear error instead of a crash, from the compiled code at 400 MB used (as in v1), from the
+/// tree-walker at TREE_STACK (its frames are bigger than compiled ones, so it gets more room: recursion a million
+/// deep runs, as in v1's compiled code).
+pub const STACK: usize = 2 << 30;
+pub const TREE_STACK: usize = 1900 << 20;
 
 /// `fermium run`'s options (cli.py cmd_run, plus the back-end choice and --base-dir of the conformance runner).
 #[derive(Clone, Debug)]
@@ -56,7 +59,7 @@ impl Default for RunOptions {
 pub fn run_file(file: &str, o: RunOptions) -> ExitCode {
     let file = file.to_string();
     fermium_repl::stop_on_ctrl_c();
-    fermium_codegen::eval::STACK_LIMIT.store(400 << 20, std::sync::atomic::Ordering::Relaxed);
+    fermium_codegen::eval::STACK_LIMIT.store(TREE_STACK, std::sync::atomic::Ordering::Relaxed);
     let h = std::thread::Builder::new().stack_size(STACK).spawn(move || run_file_here(&file, &o));
     match h {
         Ok(h) => h.join().unwrap_or(ExitCode::from(101)),
@@ -86,7 +89,11 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
     };
     let t_parse = t0.elapsed();
     let base = base_dir.map(str::to_string).unwrap_or_else(|| {
-        std::path::Path::new(file).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or(".".into())
+        // `fermium run prog.fm` has an empty parent: the current folder, absolute (like v1's os.path.abspath), so
+        // `use python` finds a .py file beside the program
+        let dir = std::path::Path::new(file).parent().filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(std::path::Path::new("."));
+        std::path::absolute(dir).unwrap_or(dir.to_path_buf()).to_string_lossy().into_owned()
     });
     let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {

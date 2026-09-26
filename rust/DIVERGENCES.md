@@ -262,14 +262,19 @@ arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argume
 - `fermium doctor` (spec §B7): Fermium 2 is one self-contained program, so doctor no longer checks Python,
   llvmlite, NumPy, SciPy, SymPy, matplotlib, pygls, ipykernel or a C compiler. It reports the version (and
   where the program is), the LLVM version built into it, the platform, that nothing else is needed, that the
-  REPL, language server and Jupyter kernel are built in, that `fermium build` isn't there yet, and it still
-  compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
+  REPL, language server and Jupyter kernel are built in, that `fermium build` links executables with the
+  built-in lld, and it still compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
 - `fermium run` also takes `--backend auto|llvm|interp` and `--base-dir DIR` (the conformance runner uses
   them); `--interp` is `--backend interp`. Its help and usage list them.
 - `fermium run --time` prints `time: parse … ms, check … ms, run … ms (codegen, JIT and running)`: the back end
   is one number (v1 split it into codegen, LLVM+JIT and run).
-- `fermium build` (milestone B5.10, not done yet) says so and exits with 1; its help says "not yet in this
-  version" instead of "needs a C compiler".
+- `fermium build` (milestone B5.10) needs no C compiler: the object file is linked by the lld built into the
+  binary against an embedded run time (rust/BUILD.md). Linux only for now; the macOS path is written but not
+  yet tested (it needs the Command Line Tools' SDK for libSystem).
+- Recursion depth: the compiled code stops at 400 MB of stack, as v1's does (well past a million calls of a
+  small function). A program the tree-walker runs (one with ±, or a construct the LLVM back end doesn't
+  compile yet) has 1.9 GB but bigger frames: a one-line recursive function stops at about 500 000 calls deep
+  (v1's compiled code goes past 10⁶). Red team 10 #5; making the tree-walker's frames smaller is open.
 - `fermium --version` prints `fermium 2.0.0-dev (Rust)`.
 
 ## The REPL (fermium-repl)
@@ -289,7 +294,8 @@ session of tests/test_repl.py plus 30 more) print exactly what v1 prints
   past the terminal width are redrawn less neatly than readline does.
 - Inputs run on the tree-walker (the LLVM back end doesn't compile arena variables yet), so an input's
   output is the same as `fermium run --backend interp` would print.
-- `±` is refused by the checker as in `fermium run` (v1's REPL refused it with its own message).
+- `±` works in the REPL (inputs run on the tree-walker, which has uncertain values): v1's REPL refused it with
+  its own message. An improvement, noted by red team 10 #8.
 
 ## The language server (fermium-lsp)
 
