@@ -166,7 +166,25 @@ def run_binary(binary, path, case):
     with tempfile.TemporaryDirectory() as tmp:
         prog = os.path.join(tmp, os.path.basename(path))
         shutil.copy(path, prog)
-        base = os.path.join(ROOT, case["dir"]) if case["dir"] else tmp
+        base = tmp
+        if case["dir"]:
+            # a copy of the program's folder, so plots and other files it writes never land in the repository:
+            # the folder's own files, and any file the program names by a relative path (data/x.csv, lib/y.fm)
+            src_dir = os.path.join(ROOT, case["dir"])
+            base = os.path.join(tmp, "base")
+            os.makedirs(base)
+            for name in os.listdir(src_dir):
+                f = os.path.join(src_dir, name)
+                if os.path.isfile(f) and os.path.getsize(f) < 5_000_000:
+                    shutil.copy2(f, os.path.join(base, name))
+            src_text = open(path, encoding="utf-8").read()
+            for rel in re.findall(r'"([^"\n]+/[^"\n]+)"', src_text):
+                f = os.path.normpath(os.path.join(src_dir, rel))
+                if f.startswith(ROOT) and os.path.isfile(f):
+                    dst = os.path.join(base, os.path.relpath(f, src_dir))
+                    if os.path.normpath(dst).startswith(base):
+                        os.makedirs(os.path.dirname(dst), exist_ok=True)
+                        shutil.copy2(f, dst)
         empty = os.path.join(tmp, "empty-path")
         os.mkdir(empty)
         try:
@@ -176,7 +194,11 @@ def run_binary(binary, path, case):
             return "", "", {"message": "timed out after 300 s", "line": None}, None
         except OSError as ex:
             return "", "", {"message": f"could not run {binary}: {ex}", "line": None}, None
-    out, err = p.stdout.replace(ROOT, "<ROOT>"), p.stderr.replace(ROOT, "<ROOT>")
+    out, err = p.stdout, p.stderr
+    if case["dir"]:            # paths the program prints (plot saved to …) as if it ran in its own folder
+        out = out.replace(base, os.path.normpath(os.path.join(ROOT, case["dir"])))
+        err = err.replace(base, os.path.normpath(os.path.join(ROOT, case["dir"])))
+    out, err = out.replace(ROOT, "<ROOT>"), err.replace(ROOT, "<ROOT>")
     e = None
     if p.returncode != 0:
         # the error: the last line that looks like 'file, line N: message' and isn't a warning; its hint follows
