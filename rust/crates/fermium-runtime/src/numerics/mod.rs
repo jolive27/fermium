@@ -8,6 +8,7 @@
 pub mod dense;
 pub mod eigen;
 pub mod fit;
+pub mod linalg;
 pub mod ode;
 pub mod quad;
 pub mod roots;
