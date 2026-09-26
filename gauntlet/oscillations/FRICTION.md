@@ -100,7 +100,7 @@ Problems: `21_three_mass_chain.fm` (normal modes by `eigenvalues(K, M)`, modal p
 per mode), `22_parametric_resonance.fm` (Mathieu equation: the Floquet trace from two ODEs inside a
 function, exact band edges by an algebraic `solve` on that function), `23_duffing_oscillator.fm`
 (exact period integral, Lindstedt–Poincaré, driven steady state against harmonic balance).
-Tests: `tests/test_gauntlet2_oscillations.py`.
+Tests: `legacy/tests/test_gauntlet2_oscillations.py`.
 
 ### O10. A vector can't be indexed by a loop variable (awkward)
 

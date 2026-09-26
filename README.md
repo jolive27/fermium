@@ -26,7 +26,7 @@ pendulum.fm, line 6: can't add length [m] to time [s]
 Fermium is a small programming language for physicists.
 - **Units are part of the language.** The compiler checks them *before the program runs*, and they cost nothing at run time: they are erased before code generation.
 - **Calculus is built in:** `x'`, `d/dt`, `∫ … dx from a to b`, and `solve m x'' = -k x with …`.
-- **Programs compile to native code** through LLVM (via llvmlite).
+- **Programs compile to native code** through LLVM, built into the `fermium` binary: one file, nothing else to install.
 - **Errors are one line in physics terms**, with a caret and a hint.
 - **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
 
@@ -43,14 +43,24 @@ Fermium is a small programming language for physicists.
 
 ## Install
 
+Fermium is one program, `fermium`, with everything inside it: the compiler, LLVM, the units, the numerics, the plots, the REPL, the language server and the Jupyter kernel. Download the file for your computer from the Releases page (`fermium-macos-arm64` or `fermium-linux-x86_64`), put it on your PATH as `fermium`, and check it:
+
 ```
-git clone <this repository>
-cd fermium
-python3 -m pip install -e ".[full]"   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
-fermium doctor                   # checks everything and explains fixes
+fermium doctor                   # checks the installation and explains fixes
+fermium run pendulum.fm
 ```
 
 New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac or Linux PC, step by step.
+
+From a checkout, build and install it with Rust and the LLVM 18 development files ([rust/BUILD.md](rust/BUILD.md) lists what to install):
+
+```
+git clone <this repository>
+cd fermium
+make install                     # cargo install --locked --path rust/crates/fermium-cli  → ~/.cargo/bin/fermium
+```
+
+Fermium 2 (the Rust implementation in [rust/](rust/)) replaced Fermium 1.5 (Python) in v2.0: see [CHANGES_2.0.md](CHANGES_2.0.md). Fermium 1.5 is deprecated and kept in [legacy/](legacy/README.md) for one more phase; `python3 -m pip install -e ".[full]"` installs it as `fermium-legacy`.
 
 ## A 30-second tour
 
@@ -83,7 +93,7 @@ Also:
 - `plot x vs t` saves a PNG with labelled axes.
 - Vectors: `<3, 4> m/s`, `|v|`, `v.x`, `a · b`, `a × b`. ODEs can have vector unknowns: `solve r'' = -G M r / |r|³ with …`.
 - Leibniz notation: `dx/dt` works for functions and in `solve`.
-- `fermium build prog.fm` makes a standalone executable (needs a C compiler). `load`, `fit` and `plot` work in it too; plots are written as SVG, and data files are read from the folder you run the program in.
+- `fermium build prog.fm` makes a standalone executable. The linker is built into `fermium`, so Linux needs no C compiler (a Mac needs Apple's Command Line Tools for the system library). A program it can't compile yet says so: run that one with `fermium run`.
 
 ## Gallery
 
@@ -128,7 +138,7 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 
 ## Speed
 
-Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number.
+Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number. These numbers were measured with Fermium 1.5 (Python and llvmlite). The Rust binary also compiles through LLVM; its numbers will be re-measured for v2.0 (spec §B8) and replace these.
 
 | Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|
@@ -189,15 +199,17 @@ python3 -m http.server -d web 8000    # then open http://localhost:8000/
 ## Development
 
 ```
-./check.sh           # lint + all tests (including every ```fermium code block and bootcamp output box) + all examples
+python3 -m pip install -e ".[full,dev]"   # Fermium 1.5 (legacy): the conformance oracle and its test suite
+make check           # legacy lint + tests, then the Rust build, cargo test and the conformance suite
+make build           # rust/target/fast/fermium, for iterating
 python3 benchmarks/run.py
 ```
 
-Project layout:
-- `fermium/`: the compiler.
-  - `lexer.py`, `parser.py`, `checker.py` (units and types), `calculus.py`, `solve.py`
-  - `codegen_llvm.py` (the LLVM backend and numeric kernels)
-  - `runtime/` (printing, plots, data, fits)
-  - `repl.py`, `fmt.py`, `cli.py`
-  - `interp.py` (the reference interpreter: no LLVM, also used by the browser playground)
-- `tests/`: pytest suites.
+`make check` runs the Rust binary on the whole conformance suite (`conformance/`): every example, rosetta, gauntlet and research program, every ```fermium code block of the docs and bootcamp, and every test program, each with the output Fermium 1.5 gives. `FERMIUM_SKIP_RUST=1 make check` skips the Rust part and says so.
+
+Project layout ([docs/architecture.md](docs/architecture.md) is the guide for contributors):
+- `rust/`: Fermium 2, the compiler (a Cargo workspace; `rust/crates/fermium-cli` is the `fermium` binary). [rust/BUILD.md](rust/BUILD.md) explains the build; [rust/DIVERGENCES.md](rust/DIVERGENCES.md) lists where it deliberately differs from 1.5.
+- `conformance/`: the conformance suite and its runner; the score is in [CONFORMANCE.md](CONFORMANCE.md).
+- `legacy/`: Fermium 1.5 (Python), deprecated: `legacy/fermium/` (the package, still imported as `fermium`) and `legacy/tests/` (its pytest suite).
+- `examples/`, `bootcamp/`, `docs/`, `gauntlet/`, `research/`, `benchmarks/`: programs and documentation.
+- `web/`: the browser playground; `editors/vscode/`: the VS Code extension.

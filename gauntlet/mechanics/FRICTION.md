@@ -140,7 +140,7 @@ variable if it has one.
 Problems: `21_intermediate_axis.fm` (Euler's equations as one vector ODE, Landau's elliptic
 solution), `22_double_pendulum.fm` (Lagrange's equations, normal modes, energy, Lyapunov growth),
 `23_brachistochrone.fm` (a functional, its stationarity by differentiating under the integral sign,
-rolling). Tests: `tests/test_gauntlet2_mechanics.py`.
+rolling). Tests: `legacy/tests/test_gauntlet2_mechanics.py`.
 
 ### M9. Two second derivatives in one equation are refused, with a misleading error (bug)
 

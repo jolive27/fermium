@@ -39,7 +39,7 @@
 | `fermium fmt file.fm --pretty` / `--ascii` / `-w` | symbols ↔ ASCII (`-w` saves the file) |
 | `fermium doctor` | check the installation |
 | `cd folder` · `ls` · `open file.png` | change folder · list files · open a picture |
-| `fermium build file.fm` | make a standalone program `./file` (needs a C compiler; plots come out as .svg) |
+| `fermium build file.fm` | make a standalone program `./file` (not yet for programs that use `plot`, `fit` or `load`) |
 | Control+C | stop a running program |
 
 ### The language on one page

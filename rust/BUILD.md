@@ -11,6 +11,19 @@ CARGO_BUILD_JOBS=2 cargo build --release -p fermium-cli     # → target/release
 CARGO_BUILD_JOBS=2 cargo build --profile fast -p fermium-cli  # no LTO, for iterating → target/fast/fermium
 ```
 
+Since v2.0 this binary is *the* `fermium` (DECISIONS D269). To install it from a checkout, from the repository
+root:
+
+```sh
+make install        # = cargo install --locked --path rust/crates/fermium-cli  → ~/.cargo/bin/fermium
+```
+
+(`make build` is the `fast` build above; `make check` builds it, runs `cargo test` and scores it on the
+conformance suite, after the legacy Python suite.) Users without Rust download the release binary instead
+(bootcamp/lesson00_setup.md). The build reads two Fermium sources from the frozen Python implementation:
+the standard library (`legacy/fermium/stdlib/*.fm`, embedded by `fermium-check/build.rs`) and the unit
+database (`legacy/fermium/selfhost/units_db.fm`, compiled by `fermium-units/build.rs`).
+
 ## LLVM 18, linked statically
 
 The LLVM back end (`fermium-codegen/src/llvm/`, spec §B4) uses [inkwell](https://crates.io/crates/inkwell)

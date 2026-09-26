@@ -1,6 +1,6 @@
 # Uncertainties (`5.0 ± 0.2 m`): how they are implemented
 
-User documentation: [reference §21](reference.md#21-uncertainties--error-propagation-monte-carlo) and [bootcamp Lesson 12](../bootcamp/lesson12_lab_report.md). Design decisions: DECISIONS.md D120–D124. Tests: `tests/test_uncertainty.py`.
+User documentation: [reference §21](reference.md#21-uncertainties--error-propagation-monte-carlo) and [bootcamp Lesson 12](../bootcamp/lesson12_lab_report.md). Design decisions: DECISIONS.md D120–D124. Tests: `legacy/tests/test_uncertainty.py`.
 
 ## Pieces
 
