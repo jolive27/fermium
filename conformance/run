@@ -291,6 +291,9 @@ def main():
             lines.append("")
     open(a.out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     print("\n".join(lines[:len(areas) + 12]))
+    shown = [ln for ln in lines if ln.startswith("- `")][:60]
+    if shown:
+        print("\n".join(["", "Failures and divergences (first 60):"] + shown))
     passed_or_documented = passed + documented
     if a.min is not None:
         if passed < a.min:

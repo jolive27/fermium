@@ -38,6 +38,9 @@ impl<P: Printer + ?Sized> Printer for &mut P {
     fn num(&mut self, fmt: usize, v: f64) {
         (**self).num(fmt, v)
     }
+    fn num_capped(&mut self, fmt: usize, v: f64, max_sf: u32) {
+        (**self).num_capped(fmt, v, max_sf)
+    }
     fn list(&mut self, fmt: usize, v: &[f64]) {
         (**self).list(fmt, v)
     }

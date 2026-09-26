@@ -104,6 +104,22 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   extrapolation amplifies rounding).
 - Tests: `quad.rs` cases `bl3_06`, `bl3_08`.
 
+## Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)
+
+- v1: `print ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1` printed `7.93×10⁻⁹` (exact 8×10⁻⁹): the sine part cancels,
+  and summing it leaves a rounding error of about ε ∫|f| ≈ 2×10⁻¹⁰, so only the first figure is right. A
+  symmetric zero printed rounding noise with three figures (`∫ sin(x) dx from -1 to 1` → `2.78×10⁻¹⁷`).
+- v2: the quadrature returns ∫|f| with the value; when ε ∫|f| exceeds the relative tolerance's reach
+  (10⁻¹⁰ |value|), the printed value keeps floor(log10(|value| / (ε ∫|f|))) significant figures, at least one:
+  `8×10⁻⁹`, `3×10⁻¹⁷`. Every integral that converged to its tolerance prints exactly as in v1 (the limit never
+  applies when ∫|f| is within 4.5×10⁵ of |value|, and the quadrature's own error estimate isn't used, since
+  after the B2 extrapolations it is pessimistic: `∫ 1/√|x − 0.3| dx` still prints 12 correct digits). It
+  applies to an integral printed directly, alone or scaled by a constant (`2 ∫ …`, a unit conversion), including
+  with `to N digits`; a value stored in a variable first prints as before.
+- Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
+  conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
+
 ## Special functions and cbrt: the C library, as v1's compiled code
 
 v1's compiled code called the platform C library for erf, erfc, gamma, lgamma, besselj/bessely, asinh/acosh/atanh
@@ -116,8 +132,12 @@ platforms; the conformance goldens come from Linux.
 ## The browser playground (fermium-wasm): playground only, not `fermium run`
 
 The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
-`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
-prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run
+--backend interp` prints (`web/test/compare_native.js`, run by CI: 142 of 142 at 90a44c4). On the conformance
+suite (`conformance/run --impl rust --bin web/test/fermium-wasm`) the module scored 2679/3037 against 2713 for
+the native binary of the same commit (0f4840d, tree-walker); all 34 differences are floating-point: 23 in the
+last digits of numbers printed to 12–17 digits, 11 in values at rounding level (a 10⁻¹⁷ or 10⁻²² that should be 0,
+or a quantity found by cancellation). What differs, in the browser only:
 
 - **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
   gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on
@@ -260,3 +280,23 @@ v1's compiled code stopped with an internal error (`TypeError: Type of #1 arg mi
 <3 x double>`), and a straight port printed `3 m` for the second call. The Rust checker keys these arguments by
 their length (or rows and columns) and by the dimension of each component, so each call gets its own instance
 (`5 m 3 s`). No conformance case is affected (v1 crashed on every such program).
+
+## The Jupyter kernel (fermium-jupyter)
+
+v1's kernel ran on ipykernel (Python, pyzmq, libzmq). The Rust kernel has its own ZMTP 3.1 (TCP, NULL
+mechanism, ROUTER/PUB/REP) and HMAC-SHA256, so it needs nothing installed beside `fermium`. It behaves as
+kernel.py: one REPL session for all cells, stdout streamed, warnings on stderr, errors in the one-line form
+on stderr with an error reply, "plot saved to …" lines replaced by the inline picture (PNG, or SVG), Tab
+completion of `\name`, names, keywords and module members, and is_complete for unfinished blocks.
+Checked end to end with jupyter_client (rust/tools/jupyter_e2e.py: 14 checks) and with nbclient on
+examples/notebook.ipynb (every cell prints what v1's kernel prints, except the `plot` cell, which the Rust
+checker doesn't compile yet); `cargo test -p fermium-jupyter` plays a client over TCP. Differences:
+
+- kernel.json starts `fermium jupyter kernel -f {connection_file}` and says `"interrupt_mode": "message"`;
+  an interrupt is acknowledged but doesn't stop a running cell yet (the kernel ignores SIGINT rather than
+  die of it). v1's ipykernel could interrupt a cell.
+- `fermium jupyter install --sys-prefix` installs into the active conda or virtual environment (or
+  python3's prefix); `--prefix DIR` installs into DIR/share/jupyter (v1's install(prefix=…)).
+- Run-time warnings (they go to the process's stderr) are shown after the cell's printed output; v1 showed
+  them in the order they happened.
+- stdin (`input`) and comms are not used by Fermium; history, inspect and comm_info get empty replies.

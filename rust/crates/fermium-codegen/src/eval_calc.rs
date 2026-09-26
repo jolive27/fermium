@@ -13,8 +13,49 @@ use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
 thread_local! {
     /// fm.qzero: quiet first tries of a vector integral's components that came out exactly 0 (D110)
     static QZERO: Cell<f64> = const { Cell::new(0.0) };
+    /// the fewest significant figures an integral evaluated since the last take_quad_sf() can support
+    static QUAD_SF: Cell<Option<u32>> = const { Cell::new(None) };
     /// run-time warnings already shown (each distinct text once, like Runtime.warn_text)
     static WARNED: RefCell<HashSet<String>> = RefCell::new(HashSet::new());
+}
+
+/// The significant figures an integral's result supports (spec B2, OPEN_ITEMS L-2). Summing an integrand
+/// that cancels (a large oscillating part, a symmetric zero) leaves a rounding error of about ε ∫|f|, whatever
+/// the quadrature's own error estimate says (that estimate is pessimistic after the B2 extrapolations, and it
+/// can't see rounding). Only a result below the relative tolerance's reach, ε ∫|f| > 10⁻¹⁰ |value|, is
+/// limited, to floor(log10(|value| / (ε ∫|f|))) figures, at least 1: `∫ 1e6 sin(x) + 4e-9 dx from -1 to 1`
+/// prints 8×10⁻⁹, not 7.93×10⁻⁹.
+pub(crate) fn meaningful_sf(value: f64, _error: f64, abs_sum: f64) -> Option<u32> {
+    let u = f64::EPSILON * abs_sum;
+    if value == 0.0 || !value.is_finite() || !u.is_finite() || u <= 1e-10 * value.abs() {
+        return None;
+    }
+    Some((value.abs() / u).log10().floor().max(1.0) as u32)
+}
+
+/// Take (and clear) the figures limit recorded by the integrals evaluated since the last call.
+pub(crate) fn take_quad_sf() -> Option<u32> {
+    QUAD_SF.with(|q| q.replace(None))
+}
+
+fn note_quad_sf(n: Option<u32>) {
+    if let Some(n) = n {
+        QUAD_SF.with(|q| q.set(Some(q.get().map_or(n, |m| m.min(n)))));
+    }
+}
+
+/// An integral, possibly scaled by constants (a unit factor, a sign): its printed value can be limited to the
+/// figures the integral supports.
+pub(crate) fn integral_shaped(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Integral { .. } => true,
+        ExprKind::Neg(a) => integral_shaped(a),
+        ExprKind::Bin(fermium_ir::BinOp::Mul | fermium_ir::BinOp::Div, a, b) => {
+            (integral_shaped(a) && matches!(b.kind, ExprKind::Const(_)))
+                || (integral_shaped(b) && matches!(a.kind, ExprKind::Const(_)))
+        }
+        _ => false,
+    }
 }
 
 /// Show a run-time warning once per distinct text (Runtime.warn_text).
@@ -170,6 +211,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return Err(ex);
                 }
                 let r = r.map_err(|f| self.fail(f, *xfmt))?;
+                note_quad_sf(meaningful_sf(r.value, r.error, r.abs_sum));
                 if r.all_zero {
                     if atol < 0.0 {
                         QZERO.with(|q| q.set(q.get() + 1.0));
@@ -249,5 +291,23 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             _ => self.err("this isn't supported by the Rust back end yet"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::meaningful_sf;
+
+    #[test]
+    fn rounding_level_integrals_keep_only_their_meaningful_figures() {
+        // ∫ 1e6 sin(x) + 4e-9 dx from -1 to 1: 7.93×10⁻⁹ with ∫|f| = 9.19×10⁵ → 1 figure (8×10⁻⁹, exact 8×10⁻⁹)
+        assert_eq!(meaningful_sf(7.930793799459934e-9, 5.82e-11, 919395.39), Some(1));
+        // an integral that converged to its relative tolerance keeps every figure
+        assert_eq!(meaningful_sf(0.3333333333333333, 5.6e-17, 0.3333333333333333), None);
+        assert_eq!(meaningful_sf(1.0, 1e-11, 1.0), None);
+        // a large error estimate alone (a singular integrand) doesn't limit the figures
+        assert_eq!(meaningful_sf(2.7687651131, 1e-7, 2.7687651131), None);
+        // a symmetric zero: rounding noise, one figure
+        assert_eq!(meaningful_sf(2.7755575615628914e-17, 1.4e-17, 0.9193953882637206), Some(1));
     }
 }

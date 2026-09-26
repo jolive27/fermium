@@ -71,6 +71,10 @@ pub struct RunError {
 /// Printing, implemented by the runtime (the formats are in `module.tables.fmts`).
 pub trait Printer {
     fn num(&mut self, fmt: usize, v: f64);
+    /// A number printed with at most `max_sf` significant figures (an integral at its rounding level, spec B2).
+    fn num_capped(&mut self, fmt: usize, v: f64, _max_sf: u32) {
+        self.num(fmt, v)
+    }
     fn list(&mut self, fmt: usize, v: &[f64]);
     fn vec(&mut self, fmt: usize, v: &[f64]);
     fn mixed_vec(&mut self, fmts: &[usize], v: &[f64]);
@@ -432,9 +436,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for it in items {
             match it {
                 PrintItem::Num(e, f) => {
+                    crate::eval_calc::take_quad_sf();
                     let v = self.eval(e, fr)?;
                     if !self.unc_print(&v, *f) {
-                        self.printer.num(*f, v.num())
+                        let x = v.num();
+                        match crate::eval_calc::take_quad_sf() {
+                            Some(n) if crate::eval_calc::integral_shaped(e) => self.printer.num_capped(*f, x, n),
+                            _ => self.printer.num(*f, x),
+                        }
                     }
                 }
                 PrintItem::List(e, f) => {

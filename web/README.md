@@ -23,7 +23,8 @@ a build output and is not committed. The module is built with
 `cargo build --profile wasm --target wasm32-unknown-unknown -p fermium-wasm` in `rust/` (the `wasm` profile is
 release with whole-program LTO and no symbol names).
 
-**Size:** `fermium.wasm` is 3.3 MB (1.1 MB gzipped, as a web server sends it), measured 2026-09-26.
+**Size:** `fermium.wasm` is 3.6 MB (1.2 MB gzipped, as a web server sends it), measured 2026-09-26 at 90a44c4.
+It loads and is ready in about 0.3 s from a local server (headless Chromium).
 
 ## How it fits together
 

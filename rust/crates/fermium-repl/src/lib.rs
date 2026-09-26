@@ -153,10 +153,29 @@ pub fn run(lines: &mut dyn Lines, interactive: bool, out: &mut dyn Write, base_d
     }
 }
 
+/// Ctrl+C while a program runs: say so and stop with exit code 130 (v1's `driver._CtrlC`, which the REPL and
+/// `fermium run` both use; while the REPL edits a line, Ctrl+C arrives as a key instead and drops the line).
+pub fn stop_on_ctrl_c() {
+    #[cfg(unix)]
+    {
+        extern "C" fn stop(_: libc::c_int) {
+            let msg = b"\nstopped by Ctrl+C\n";
+            unsafe {
+                libc::write(2, msg.as_ptr() as *const libc::c_void, msg.len());
+                libc::_exit(130);
+            }
+        }
+        unsafe {
+            libc::signal(libc::SIGINT, stop as extern "C" fn(libc::c_int) as libc::sighandler_t);
+        }
+    }
+}
+
 /// The prompt with the line editor when stdin is a terminal, else reading stdin as a script (repl.py `main`).
 pub fn main() -> i32 {
     let base = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or(".".into());
     let interactive = unsafe { is_tty() };
+    stop_on_ctrl_c();
     let stdout = std::io::stdout();
     if interactive {
         let mut ed = editor::Editor::new(editor::history_path());
