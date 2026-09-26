@@ -477,9 +477,9 @@ pub extern "C" fn fm_print_msum(c: C, fmt: i64, site: i64, vals: *const f64, n: 
     };
     let node = c.msum_sites[site as usize].clone();
     let (v, p) = msum_combine(&node, vals, &mut 0, k);
-    match p.and_then(|p| crate::eval_calc::decimal_rule_sf(v / k, p)) {
-        Some(sf) => c.printer().num_sf(fmt, v, sf),
-        None => c.printer().num(fmt, v),
+    match p.map(|p| crate::eval_calc::round_to_place(v / k, p)) {
+        Some((x, Some(sf))) => c.printer().num_sf(fmt, x * k, sf),
+        _ => c.printer().num(fmt, v),
     }
 }
 

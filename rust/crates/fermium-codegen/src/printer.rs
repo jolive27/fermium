@@ -92,4 +92,9 @@ impl<W: Write> Printer for StdPrinter<W> {
         let _ = writeln!(self.out, "{}", self.line.join(" "));
         self.line.clear();
     }
+    fn flush_partial(&mut self) {
+        if !self.line.is_empty() {
+            self.end();
+        }
+    }
 }

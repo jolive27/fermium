@@ -224,3 +224,16 @@ fn a_program_without_python_never_loads_it() {
     let e = String::from_utf8_lossy(&o.stderr);
     assert!(e.contains("line 1: use python needs Python 3, but it couldn't be loaded"), "{e}");
 }
+
+/// `cd folder; fermium run prog.fm` (a bare file name, no --base-dir): the .py file beside the program is found
+/// (red team 10 #4: the empty folder name was skipped).
+#[test]
+fn a_bare_file_name_finds_the_module_beside_it() {
+    if !have_python() {
+        return;
+    }
+    let dir = helper_dir("bare");
+    std::fs::write(dir.join("prog.fm"), "use python physhelp as ph:\n    fall(t [s]) -> [m]\nprint ph.fall(1 s)\n").unwrap();
+    let o = Command::new(env!("CARGO_BIN_EXE_fermium")).args(["run", "prog.fm"]).current_dir(&dir).output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+}

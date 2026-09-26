@@ -21,12 +21,31 @@ pub const GENERIC: &str = "this operation needs a plain number, but got an uncer
 
 const STEP: &[&str] = &["floor", "ceil", "round", "sign"];
 
-/// interp's message for printing a vector or matrix of uncertain numbers.
-pub const VECMSG: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain numbers one at a time, or use value(x) to drop the uncertainty";
-
 /// Does a value hold an uncertain number (or a list with one, or Monte Carlo samples)?
 pub fn is_unc(v: &Value) -> bool {
-    matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_))
+    matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_) | Value::UVec(_))
+}
+
+/// UFloat.__round__'s message: printing a vector or matrix whose components are uncertain.
+pub const VEC_UNC: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain \
+                           numbers one at a time, or use value(x) to drop the uncertainty";
+
+/// A vector's components as values (numbers or uncertain numbers).
+pub fn vec_items(v: &Value) -> Option<Vec<Value>> {
+    match v {
+        Value::Vec(x) => Some(x.iter().map(|x| Value::Num(*x)).collect()),
+        Value::UVec(x) => Some(x.to_vec()),
+        _ => None,
+    }
+}
+
+/// A vector from its components: plain when none is uncertain (v1's tuple).
+pub fn make_vec(items: Vec<Value>) -> Value {
+    if items.iter().any(|x| matches!(x, Value::Unc(_))) {
+        Value::UVec(Rc::new(items))
+    } else {
+        Value::Vec(Rc::new(items.iter().map(Value::num).collect()))
+    }
 }
 
 fn unc(u: UFloat) -> Value {
@@ -213,14 +232,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     /// a op b where a or b holds uncertain numbers (e_IBin).
     pub(crate) fn unc_bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
-        // a vector times an uncertain number: interp makes a tuple of UFloats (kept here as a list of them)
-        let as_items = |v: &Value| match v {
-            Value::Vec(x) if matches!(a, Value::Unc(_)) || matches!(b, Value::Unc(_)) => {
-                Some(x.iter().map(|y| Value::Num(*y)).collect::<Vec<_>>())
-            }
-            v => list_items(v),
-        };
-        match (as_items(&a), as_items(&b)) {
+        match (list_items(&a), list_items(&b)) {
             (Some(xs), Some(ys)) => {
                 if xs.len() != ys.len() {
                     return self.err(format!("these two lists have different lengths ({} and {})", xs.len(), ys.len()));
@@ -245,10 +257,30 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Value::Arr(a) => Value::Arr(Rc::new(a.iter().map(|x| -x).collect())),
             v => Value::Num(-v.num()),
         };
+        if let Value::UVec(xs) = &a {
+            return Ok(make_vec(xs.iter().map(neg).collect())); // e_INeg on a tuple
+        }
         match list_items(&a) {
             Some(xs) => Ok(make_list(xs.iter().map(neg).collect())),
             None => Ok(neg(&a)),
         }
+    }
+
+    /// a op b whose result is a vector or matrix with an uncertain operand (e_IBin with VecTy/MatTy: component by
+    /// component, a number used for every component).
+    pub(crate) fn unc_vec_bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
+        let (xs, ys) = (vec_items(&a), vec_items(&b));
+        let ok = |v: &Value, items: &Option<Vec<Value>>| match items {
+            Some(_) => true,
+            None => matches!(v, Value::Num(_) | Value::Unc(_) | Value::Bool(_)),
+        };
+        if !ok(&a, &xs) || !ok(&b, &ys) || (xs.is_none() && ys.is_none()) {
+            return self.unc_bin(op, a, b);
+        }
+        let n = xs.as_ref().or(ys.as_ref()).map(|v| v.len()).unwrap_or(0);
+        let av = xs.unwrap_or_else(|| vec![a.clone(); n]);
+        let bv = ys.unwrap_or_else(|| vec![b.clone(); n]);
+        Ok(make_vec(av.iter().zip(&bv).map(|(x, y)| num_op(op, x, y)).collect()))
     }
 
     pub(crate) fn unc_powc(&self, a: Value, p: f64) -> Result<Value, RunError> {
@@ -387,6 +419,52 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                                            | "diff" | "slice" | "min_ew" | "max_ew" | "text_num")
         {
             return self.unc_err(GENERIC);
+        }
+        if name == "shuffle" {
+            // a transpose or a row/column picked out (matrix_op on a tuple of UFloat values)
+            let src = vec_items(&args[0]).unwrap_or_default();
+            return Ok(make_vec(args[1..].iter().map(|k| src[k.num() as usize].clone()).collect()));
+        }
+        if name == "matmul" {
+            // linalg.matmul with FloatOps on UFloat values: the same order of operations
+            let (a, b) = match (vec_items(&args[0]), vec_items(&args[1])) {
+                (Some(a), Some(b)) => (a, b),
+                _ => return self.unc_err(GENERIC),
+            };
+            let (r, k, c) = (args[2].num() as usize, args[3].num() as usize, args[4].num() as usize);
+            let mut out = Vec::with_capacity(r * c);
+            for i in 0..r {
+                for j in 0..c {
+                    let mut acc = num_op(BinOp::Mul, &a[i * k], &b[j]);
+                    for m in 1..k {
+                        acc = num_op(BinOp::Add, &acc, &num_op(BinOp::Mul, &a[i * k + m], &b[m * c + j]));
+                    }
+                    out.push(acc);
+                }
+            }
+            return Ok(if out.len() == 1 { out.pop().unwrap() } else { make_vec(out) });
+        }
+        if matches!(name, "vdot" | "cross") {
+            // sum_seq of the products / the cross product of the components (e_IBuiltin on tuples)
+            let (a, b) = match (vec_items(&args[0]), vec_items(&args[1])) {
+                (Some(a), Some(b)) => (a, b),
+                _ => return self.unc_err(GENERIC),
+            };
+            let mul = |x: &Value, y: &Value| num_op(BinOp::Mul, x, y);
+            let sub = |x: Value, y: Value| num_op(BinOp::Sub, &x, &y);
+            if name == "vdot" {
+                let mut acc = mul(&a[0], &b[0]);
+                for k in 1..a.len().min(b.len()) {
+                    acc = num_op(BinOp::Add, &acc, &mul(&a[k], &b[k]));
+                }
+                return Ok(acc);
+            }
+            if a.len() == 2 {
+                return Ok(sub(mul(&a[0], &b[1]), mul(&a[1], &b[0])));
+            }
+            return Ok(make_vec(vec![sub(mul(&a[1], &b[2]), mul(&a[2], &b[1])),
+                                    sub(mul(&a[2], &b[0]), mul(&a[0], &b[2])),
+                                    sub(mul(&a[0], &b[1]), mul(&a[1], &b[0]))]));
         }
         use crate::eval_core::cmath;
         use fermium_runtime::numerics::special as sp;
@@ -564,7 +642,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
         let q = num_op(BinOp::Div, &acc, &Value::Num(n as f64 - 1.0));
         match q {
-            Value::Unc(_) => self.unc_powc(q, 0.5),
+            // math.sqrt of a UFloat calls float(): UncertainUse (v1 has no uncertain std)
+            Value::Unc(_) => self.unc_err(GENERIC),
             q => Ok(Value::Num(q.num().sqrt())),
         }
     }

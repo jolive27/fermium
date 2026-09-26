@@ -81,6 +81,22 @@ fn tidy_like_sympy() {
     assert_eq!(to_source(&tidy(&lap)), "0", "{}", to_source(&lap));
 }
 
+#[test]
+fn tidy_nested_cancellation() {
+    let e = body("A y z·(√(x² + y² + z²)·(1/(x² + y² + z²) + a·(a + 1/√(x² + y² + z²))) + √(x² + y² + z²)·(-1/(x² + y² + z²) + a·(-a - 1/√(x² + y² + z²))))·exp(-a √(x² + y² + z²))/(x² + y² + z²)²");
+    assert_eq!(to_source(&tidy(&e)), "0");
+    let e = body("G M m·(2 √(x² + y²) - 3x²/√(x² + y²) - 3y²/√(x² + y²))/(x² + y²)²");
+    assert_eq!(to_source(&tidy(&e)), "-G M m/(x² + y²)^(3/2)");
+    let f = body("-G M m / √(x² + y²)");
+    let mut ts = vec![];
+    for p in ["x", "y", "z"] {
+        let d1 = diff(&f, p, &mut Plain).unwrap();
+        ts.push(diff(&d1, p, &mut Plain).unwrap());
+    }
+    let lap = simplify(&crate::build::add(crate::build::add(ts[0].clone(), ts[1].clone()), ts[2].clone()));
+    assert_eq!(to_source(&tidy(&lap)), "-G M m/(x² + y²)^(3/2)", "{:?}", lap);
+}
+
 fn integ(s: &str, var: &str, positive: &[&str]) -> Result<String, String> {
     let p: Vec<String> = positive.iter().map(|x| x.to_string()).collect();
     integrate(&body(s), var, &p).map(|e| to_source(&e)).map_err(|d| d.message)
@@ -94,6 +110,9 @@ fn antiderivatives_print_like_v1() {
     assert_eq!(integ("1 / √(a^2 + s^2)", "s", &["a"]).unwrap(), "asinh(s/a)");
     assert_eq!(integ("|x|", "x", &[]).unwrap(), "if x <= 0 then -x²/2 else x²/2");
     assert_eq!(integ("exp(1i x)", "x", &[]).unwrap(), "-𝑖 exp(𝑖 x)");
+    // red team 10: the log form (defined for |x| > 1, as v1's), not atanh
+    assert_eq!(integ("1/(x^2 - 1)", "x", &[]).unwrap(), "ln(-1 + x)/2 - ln(1 + x)/2");
+    assert_eq!(integ("1/(4 - x^2)", "x", &[]).unwrap(), "-ln(-2 + x)/4 + ln(2 + x)/4");
 }
 
 #[test]
