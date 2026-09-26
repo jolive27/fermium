@@ -69,6 +69,73 @@ fn one_math(name: &str, x: f64) -> f64 {
     }
 }
 
+/// one_math(name, ·) as a function pointer, or None for other names. Looked up once per call site: the IR's
+/// strings never move, so the answer is cached by the name's address (a built-in call in a hot loop then costs
+/// no string comparisons).
+pub(crate) fn math_fn(name: &str) -> Option<fn(f64) -> f64> {
+    use std::collections::HashMap;
+    #[derive(Default)]
+    struct AddrHasher(u64);
+    impl std::hash::Hasher for AddrHasher {
+        fn finish(&self) -> u64 {
+            self.0
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            for b in bytes {
+                self.0 = self.0.rotate_left(8) ^ u64::from(*b);
+            }
+        }
+        fn write_usize(&mut self, n: usize) {
+            self.0 = (n as u64).wrapping_mul(0x9E3779B97F4A7C15);
+        }
+    }
+    type Cache = HashMap<(usize, usize), Option<fn(f64) -> f64>, std::hash::BuildHasherDefault<AddrHasher>>;
+    thread_local! {
+        static CACHE: std::cell::RefCell<Cache> = std::cell::RefCell::new(Cache::default());
+    }
+    let key = (name.as_ptr() as usize, name.len());
+    if let Some(f) = CACHE.with(|c| c.borrow().get(&key).copied()) {
+        return f;
+    }
+    let f: Option<fn(f64) -> f64> = match name {
+        "sin" => Some(|x| one_math("sin", x)),
+        "cos" => Some(|x| one_math("cos", x)),
+        "exp" => Some(|x| one_math("exp", x)),
+        "ln" => Some(|x| one_math("ln", x)),
+        "log" => Some(|x| one_math("log", x)),
+        "log10" => Some(|x| one_math("log10", x)),
+        "log2" => Some(|x| one_math("log2", x)),
+        "abs" => Some(|x| one_math("abs", x)),
+        "floor" => Some(|x| one_math("floor", x)),
+        "ceil" => Some(|x| one_math("ceil", x)),
+        "round" => Some(|x| one_math("round", x)),
+        "tan" => Some(|x| one_math("tan", x)),
+        "asin" => Some(|x| one_math("asin", x)),
+        "acos" => Some(|x| one_math("acos", x)),
+        "atan" => Some(|x| one_math("atan", x)),
+        "sinh" => Some(|x| one_math("sinh", x)),
+        "cosh" => Some(|x| one_math("cosh", x)),
+        "tanh" => Some(|x| one_math("tanh", x)),
+        "asinh" => Some(|x| one_math("asinh", x)),
+        "acosh" => Some(|x| one_math("acosh", x)),
+        "atanh" => Some(|x| one_math("atanh", x)),
+        "erf" => Some(|x| one_math("erf", x)),
+        "erfc" => Some(|x| one_math("erfc", x)),
+        "gamma" => Some(|x| one_math("gamma", x)),
+        "lgamma" => Some(|x| one_math("lgamma", x)),
+        "expm1" => Some(|x| one_math("expm1", x)),
+        "log1p" => Some(|x| one_math("log1p", x)),
+        "cot" => Some(|x| one_math("cot", x)),
+        "sec" => Some(|x| one_math("sec", x)),
+        "csc" => Some(|x| one_math("csc", x)),
+        "sign" => Some(|x| one_math("sign", x)),
+        _ => None,
+    };
+    debug_assert!(f.is_none() || MATH_NAMES.contains(&name));
+    CACHE.with(|c| c.borrow_mut().insert(key, f));
+    f
+}
+
 /// The C library's math functions that v1's compiled code calls (MATH_LIBM, cbrt, jn, yn), so results agree to
 /// the last bit: Rust's own asinh/acosh/atanh and cbrt (compiler-builtins), and the pure-Rust ports in
 /// fermium-runtime, can differ by an ulp, which shows when a value is printed to 16 digits. Elsewhere:

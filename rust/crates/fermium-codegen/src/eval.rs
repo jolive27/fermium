@@ -748,6 +748,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Builtin(name, args) => {
+                // one plain number into a math function: straight there (the same function builtin_core calls)
+                if args.len() == 1 {
+                    if let Some(f) = crate::eval_core::math_fn(name) {
+                        let v = self.eval(&args[0], fr)?;
+                        return match v {
+                            Value::Num(x) => Ok(Value::Num(f(x))),
+                            v => self.builtin_slice(name, std::slice::from_ref(&v)),
+                        };
+                    }
+                }
                 if let Some(v) = self.sol_extreme(name, args, fr)? {
                     return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
                 }
