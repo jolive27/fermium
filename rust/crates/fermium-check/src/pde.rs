@@ -485,8 +485,9 @@ impl Checker {
             tdep_names.extend(free_names(&cond.rhs));
         }
         let tname = self.text(&tv);
+        let xname = self.text(&xv);
         let tfmt = self.fmt_of(&tdim, thint.clone());
-        let extra = I::SolveExtra { rtol: 0.0, event: None, evtext: -1, tname, tfmt, tdep: tdep_names.contains(&tv), grid,
+        let extra = I::SolveExtra { rtol: 0.0, event: None, evtext: -1, tname, xname, tfmt, tdep: tdep_names.contains(&tv), grid,
                                     xa: Some(xa_ref), xb: Some(xb_ref), order, pmethod, bc, is_complex,
                                     line: s.span.line, ..Default::default() };
         out.push(I::Stmt { kind: I::StmtKind::Solve { sol: sol_sym, rhs: lam, y0: vec![], t0, t1, step,

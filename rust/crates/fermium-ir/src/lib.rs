@@ -227,6 +227,8 @@ pub struct SolveExtra {
     /// text id of the independent variable's name, and the print format of its values (for errors)
     pub tname: usize,
     pub tfmt: usize,
+    /// a PDE's space variable name (text id), for the grid check's warning
+    pub xname: usize,
     /// the right side reads t itself (D40)
     pub tdep: bool,
     /// eigenvalue problems (method "eigen", D82): states, grid, 0 = matrix / 1 = shooting

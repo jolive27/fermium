@@ -18,6 +18,17 @@ pub(crate) struct SolData {
     pub sol: ode::Sol,
     pub rhs: Option<(usize, Frame)>,
     pub grid: Option<(f64, f64)>,
+    /// a PDE's grid check (Fermium 2, DIVERGENCES.md): the solution on half the grid, each component's range,
+    /// the names of x and t (text ids), and whether it has warned
+    pub check: Option<PdeCheck>,
+}
+
+pub(crate) struct PdeCheck {
+    coarse: ode::Sol,
+    ranges: Vec<f64>,
+    xname: usize,
+    tname: usize,
+    warned: std::cell::Cell<bool>,
 }
 
 /// Solutions made so far, and the run-time warnings already shown.
@@ -334,7 +345,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             self.rt_warn(kind, a, s.line);
         }
         let snap = self.snapshot(*rhs, fr);
-        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None }, fr);
         Ok(())
     }
 
@@ -402,7 +413,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             solv.push(xv, &row, &drow);
         }
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, check: None }, fr);
         Ok(())
     }
 
@@ -441,7 +452,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 out
             };
-            nx::pde::pde_solve(&mut f, xa, xb, t0, t1, opts)
+            nx::pde::pde_solve_checked(&mut f, xa, xb, t0, t1, opts)
         };
         if let Some(e) = err {
             return Err(e);
@@ -451,15 +462,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Ok(r) => r,
             Err(nx::pde::PdeFail(m)) => return self.err(m),
         };
-        for &(kind, est) in &r.warnings {
+        for &(kind, est) in &r.fine.warnings {
             self.rt_warn(kind, est, x.line);
         }
-        let dim = r.ncomp * (r.m + 1);
-        let mut solv = ode::Sol::new(dim);
-        solv.t = r.ts;
-        solv.y = r.ys;
-        solv.dy = r.dys;
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)) }, fr);
+        let check = r.coarse.as_ref().map(|c| PdeCheck { coarse: c.to_sol(), ranges: r.fine.ranges(), xname: x.xname,
+                                                          tname: x.tname, warned: std::cell::Cell::new(false) });
+        let solv = r.fine.to_sol();
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), check }, fr);
         Ok(())
     }
 
@@ -550,30 +559,26 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     let end = if xv < xa { xa } else { xb };
                     return Err(self.fail_solve(Fail::new(E::SOLRANGE, xv, end), *xfmt));
                 }
-                // cubic Lagrange interpolation in x through 4 grid points, Hermite in t at each (fm_pde_eval)
-                let m = *m as i64;
-                let h = (xb - xa) / m as f64;
-                let s = (xv - xa) / h;
-                let mut j = s.floor() as i64;
-                j = j.max(1);
-                j = j.min(m - 2);
-                let r = s - j as f64;
-                let r2 = r * r;
-                let (rm1, rm2, rp1) = (r - 1.0, r - 2.0, r + 1.0);
-                let wv = [((0.0 - r) * rm1) * rm2 / 6.0, (rp1 * rm1) * rm2 / 2.0, ((0.0 - rp1) * r) * rm2 / 2.0,
-                          (rp1 * r) * rm1 / 6.0];
-                let t3 = 3.0 * r2;
-                let wd = [(0.0 - ((t3 - 6.0 * r) + 2.0)) / (6.0 * h), ((t3 - 4.0 * r) - 1.0) / (2.0 * h),
-                          (0.0 - ((t3 - 2.0 * r) - 2.0)) / (2.0 * h), (t3 - 1.0) / (6.0 * h)];
-                let use_dy = *which == 2;
-                let base = *comp0 as i64 + (j - 1);
-                let mut acc = 0.0;
-                for k in 0..4 {
-                    let w = if *which == 1 { wd[k] } else { wv[k] };
-                    let val = self.sol_at(&d, (base + k as i64) as usize, tv, use_dy, *tfmt)?;
-                    acc += w * val;
+                self.line = e.line;
+                let v = nx::pde::pde_eval(&d.sol, xa, xb, *m, *comp0, xv, tv, *which)
+                    .map_err(|f| self.fail_solve(f, *tfmt))?;
+                if let (Some(ck), 0) = (&d.check, *which) {
+                    let c = comp0 / (m + 1);
+                    let est = nx::pde::grid_error(&d.sol, &ck.coarse, *m, xa, xb, c, ck.ranges[c], xv, tv);
+                    if est.is_some_and(|q| q > nx::pde::PDE_TOL) && !ck.warned.get() {
+                        ck.warned.set(true);
+                        let module = self.module;
+                        let msg = format!("the grid is too coarse for this PDE at {} = {}, {} = {}: the value there \
+                                           changes by {}% of the solution's range when the grid is made half as fine \
+                                           (a sharp front, a short wavelength, or the time right after a jump needs more \
+                                           grid points); raise  grid  (it is {m})",
+                                          text(module, ck.xname as f64), fmt_value(module, xv, *xfmt),
+                                          text(module, ck.tname as f64), fmt_value(module, tv, *tfmt),
+                                          fermium_units::format_number(3.0 * est.unwrap() * 100.0, 2, true));
+                        crate::eval_calc::warn_at(e.line, &msg);
+                    }
                 }
-                Ok(Value::Num(acc))
+                Ok(Value::Num(v))
             }
             ExprKind::OdeLinSolve { m, b, t, text, fmt } => {
                 let n = b.len();
