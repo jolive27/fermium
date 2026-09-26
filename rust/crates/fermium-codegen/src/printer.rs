@@ -16,7 +16,7 @@ pub struct StdPrinter<W: Write> {
     pub out: W,
 }
 
-fn print_fmt(f: &Fmt) -> PrintFmt {
+pub fn print_fmt(f: &Fmt) -> PrintFmt {
     PrintFmt {
         rdim: f.dim,
         hint: f.hint.as_ref().map(|h| Unit { name: h.name.clone(), dim: h.dim, factor: h.factor, offset: h.offset }),

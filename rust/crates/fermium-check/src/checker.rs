@@ -57,8 +57,8 @@ pub struct FuncInfo {
     pub stable: bool,
     /// the unit system it was defined in (None: SI, callable anywhere; D60)
     pub nat: Option<crate::systems::Sys>,
-    /// set by modules: the module it came from
-    pub module: Option<String>,
+    /// set by modules: the module it came from (index into Checker.mods.modules)
+    pub module: Option<usize>,
     /// printed instead of name(params) for an unnamed function: d/dt (3t²), ∫ x dx
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
@@ -180,6 +180,8 @@ pub struct SymExtra {
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
     pub list_sf: Option<u32>,
+    /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
+    pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }
 
 /// What the result of checking an expression can be: a value, or a function/solution used by name.
@@ -228,6 +230,8 @@ pub struct Checker {
     pub nat: crate::systems::Sys,
     /// unit-system bookkeeping (systems.rs)
     pub sys: crate::systems::SysState,
+    /// modules imported in this compilation (modules.rs)
+    pub mods: crate::modules::ModState,
     pub positive_names: std::collections::HashSet<String>,
     pub used_consts: std::collections::HashSet<String>,
     pub warned: std::collections::HashSet<String>,
@@ -250,6 +254,8 @@ pub struct Checker {
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
     /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
     pub solve: crate::solve::SolveTables,
+    /// calculus: derived functions made so far (calculus.rs)
+    pub calc: crate::calculus::CalcState,
 }
 
 impl Checker {
@@ -278,6 +284,7 @@ impl Checker {
             future_funcs: HashMap::new(),
             nat: Default::default(),
             sys: Default::default(),
+            mods: Default::default(),
             positive_names: Default::default(),
             used_consts: Default::default(),
             warned: Default::default(),
@@ -291,6 +298,7 @@ impl Checker {
             fmt_dims: vec![],
             nodes: HashMap::new(),
             solve: Default::default(),
+            calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -407,8 +415,12 @@ impl Checker {
                 let sugg = match f.name.as_str() {
                     "h" => "h is Planck's constant, not the hour; for hours write hr".to_string(),
                     "t" => "for metric tons write tonne".to_string(),
-                    _ => "see the units list in docs/reference.md".to_string(),
+                    n => match fermium_units::spelled_unit(n) {
+                        Some(sym) => format!("Fermium writes units as symbols: {sym}"),
+                        None => crate::convert::unit_name_suggestion(n),
+                    },
                 };
+                let sugg = if sugg.is_empty() { "see the units list in docs/reference.md".to_string() } else { sugg };
                 let n = f.name.chars().count() as u32;
                 return Err(Diagnostic::error(format!("'{}' is not a unit Fermium knows", f.name), f.span.line,
                                              f.span.col, n, Some(sugg)));
@@ -426,8 +438,9 @@ impl Checker {
             });
         }
         let mut total = total.unwrap_or_else(Unit::one);
-        if !uexpr.text.is_empty() {
-            total.name = uexpr.text.clone();
+        let canon = crate::convert::canonical_unit_name(uexpr);
+        if !canon.is_empty() {
+            total.name = canon;
         }
         Ok(total)
     }
@@ -488,7 +501,10 @@ impl Checker {
         let mut ctx = ctx;
         self.nodes.clear();
         self.index_nodes(prog);
+        self.positive_names = if self.opts.repl { Default::default() } else { crate::calculus::positive_names(prog) };
         self.note_top_units(prog);
+        let g = self.globals;
+        self.note_program(prog, g);
         self.future_funcs = prog
             .body
             .iter()
@@ -559,6 +575,9 @@ impl Checker {
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
             K::Solve(sv) => self.s_solve(s, sv, ctx),
+            K::Analyze { .. } => self.s_analyze(s, ctx),
+            K::Import { .. } => self.s_import(s, ctx),
+            K::UsePython { .. } => self.s_use_python(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }

@@ -247,6 +247,10 @@ impl Checker {
                     }
                 }
             }
+            let vm = crate::vecmat::mixed_of(&v);
+            if vm.is_some() && (ctx.loop_depth == 0 && ctx.branch == 0 || self.extra[s].mixed_hint.is_none()) {
+                self.extra[s].mixed_hint = vm; // a MixedHint as the new hint
+            }
             let ms = &mut self.module.syms[s];
             if ctx.loop_depth == 0 && ctx.branch == 0 {
                 // straight-line code: the variable now shows the new value's precision and unit
@@ -297,6 +301,7 @@ impl Checker {
             ms.hint = v.hint.clone();
             ms.direct = v.direct;
             self.extra[sym].tdelta = v.get_extra().is_some_and(|x| x.tdelta);
+            self.extra[sym].mixed_hint = crate::vecmat::mixed_of(&v);
         }
         self.extra[sym].assigned = true;
         self.note_assign(ctx, sym, !owned);

@@ -222,6 +222,8 @@ def main():
     ap.add_argument("--area")
     ap.add_argument("-j", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
+    ap.add_argument("--min", type=int, default=None,
+                    help="exit 0 if at least this many pass (CI's ratchet for the Rust implementation)")
     a = ap.parse_args()
     files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
     t0 = time.time()
@@ -258,6 +260,11 @@ def main():
             lines.append("")
     open(a.out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     print("\n".join(lines[:len(areas) + 12]))
+    if a.min is not None:
+        if passed < a.min:
+            print(f"REGRESSION: {passed} pass, fewer than the floor {a.min} (conformance/RUST_FLOOR)")
+            return 1
+        return 0
     return 0 if passed == total else 1
 
 

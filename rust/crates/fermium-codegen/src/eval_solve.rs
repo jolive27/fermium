@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use fermium_ir::{Expr, ExprKind, Lambda, Module, Stmt, StmtKind, SymId, Ty};
 use fermium_runtime::numerics::{self as nx, err as E, ode, Fail};
-use fermium_units::quantity::{format_value, PrintFmt};
+use fermium_units::quantity::format_quantity;
 use fermium_units::Unit;
 
 use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
@@ -24,34 +24,24 @@ pub(crate) struct SolData {
 #[derive(Default)]
 pub struct SolveState {
     pub(crate) sols: Vec<Rc<SolData>>,
-    pub(crate) warnings: Vec<String>,
 }
 
-/// v1's `fmt_value`: a number with a print format's units, else in SI.
+/// v1's `fmt_value` (eval_calc's).
 pub(crate) fn fmt_value(module: &Module, v: f64, fmt: usize) -> String {
-    match print_fmt(module, fmt, None) {
-        Some(f) => format_value(v, &f),
-        None => format!("{} (SI units)", fermium_units::format_number(v, 6, true)),
-    }
-}
-
-fn print_fmt(module: &Module, fmt: usize, sf: Option<i64>) -> Option<PrintFmt> {
-    let f = module.tables.fmts.get(fmt)?;
-    Some(PrintFmt {
-        rdim: f.dim,
-        hint: f.hint.as_ref().map(|h| Unit { name: h.name.clone(), dim: h.dim, factor: h.factor, offset: h.offset }),
-        sf,
-        direct: 0,
-        echo: true,
-    })
+    crate::eval_calc::fmt_value(module, v, Some(fmt))
 }
 
 /// Two values of one quantity with enough digits to tell them apart (D214).
 fn fmt_apart(module: &Module, a: f64, b: f64, fmt: usize) -> (String, String) {
     let mut out = (String::new(), String::new());
     for sf in [3, 4, 5, 6, 8, 10, 12, 15] {
-        out = match print_fmt(module, fmt, Some(sf)) {
-            Some(f) => (format_value(a, &f), format_value(b, &f)),
+        out = match module.tables.fmts.get(fmt) {
+            Some(f) => {
+                let hint = f.hint.as_ref().map(|h| Unit { name: h.name.clone(), dim: h.dim, factor: h.factor,
+                                                          offset: h.offset });
+                (format_quantity(a, &f.dim, hint.as_ref(), Some(sf), 0, true, true),
+                 format_quantity(b, &f.dim, hint.as_ref(), Some(sf), 0, true, true))
+            }
             None => (format!("{} (SI units)", fermium_units::format_number(a, sf, true)),
                      format!("{} (SI units)", fermium_units::format_number(b, sf, true))),
         };
@@ -165,28 +155,20 @@ fn referenced(module: &Module, es: &[Expr], out: &mut Vec<SymId>) {
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
-    /// A run-time warning (v1's rt.warn / warn_text): shown once per distinct text, on stderr.
-    pub(crate) fn rt_warn_text(&mut self, text: String) {
-        let text = if text.starts_with("warning: ") { text } else { format!("warning: {text}") };
-        if !self.solve.warnings.contains(&text) {
-            eprintln!("{text}");
-            self.solve.warnings.push(text);
-        }
-    }
-
+    /// v1's rt.warn for the solvers' kinds (eval_calc's warn_at), kind 7 once per solve.
     pub(crate) fn rt_warn(&mut self, kind: i64, a: f64, line: u32) {
-        let at = if line > 0 { format!("line {line}: ") } else { String::new() };
-        let text = format!("warning: {at}{}", warn_message(kind, a));
+        let msg = warn_message(kind, a);
         if kind == 7 {
-            let head = text.split(" is ").next().unwrap_or("").to_string();
-            if self.solve.warnings.iter().any(|w| w.starts_with(&head)) {
+            let at = if line > 0 { format!("line {line}: ") } else { String::new() };
+            let text = format!("warning: {at}{msg}");
+            if crate::eval_calc::warned_with_prefix(text.split(" is ").next().unwrap_or("")) {
                 return; // once per solve, not once per loop pass
             }
         }
-        self.rt_warn_text(text);
+        crate::eval_calc::warn_at(line, &msg);
     }
 
-    fn fail(&self, f: Fail, fmt: usize) -> RunError {
+    fn fail_solve(&self, f: Fail, fmt: usize) -> RunError {
         RunError { message: describe_error(self.module, f.kind, f.a, f.b, fmt), line: self.line, hint: None }
     }
 
@@ -347,7 +329,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for &(kind, a) in &early {
             self.rt_warn(kind, a, s.line);
         }
-        let solv = r.map_err(|f| self.fail(f, x.tfmt))?;
+        let solv = r.map_err(|f| self.fail_solve(f, x.tfmt))?;
         for &(kind, a) in &solv.warnings {
             self.rt_warn(kind, a, s.line);
         }
@@ -400,7 +382,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             let sub = |n: usize| -> String {
                 n.to_string().chars().map(|c| char::from_u32('₀' as u32 + c.to_digit(10).unwrap()).unwrap()).collect()
             };
-            self.rt_warn_text(format!("levels {n} and {} are nearly degenerate (ΔE/E = {}); their eigenfunctions ψ{}, ψ{} \
+            crate::eval_calc::warn_text(&format!("levels {n} and {} are nearly degenerate (ΔE/E = {}); their eigenfunctions ψ{}, ψ{} \
                                        can be any mixture of the two: use them only through combinations, or break the \
                                        symmetry", n + 1, fermium_units::format_number(rel, 2, true), sub(n), sub(n + 1)));
         }
@@ -514,7 +496,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             _ => d.sol.eval(comp, t, use_dy, None),
         };
-        r.map_err(|f| self.fail(f, fmt))
+        r.map_err(|f| self.fail_solve(f, fmt))
     }
 
     pub(crate) fn eval_solution(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
@@ -554,7 +536,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let slack = 1e-9 * (xb - xa).abs();
                 if xv < xa - slack || xv > xb + slack || xv != xv {
                     let end = if xv < xa { xa } else { xb };
-                    return Err(self.fail(Fail::new(E::SOLRANGE, xv, end), *xfmt));
+                    return Err(self.fail_solve(Fail::new(E::SOLRANGE, xv, end), *xfmt));
                 }
                 // cubic Lagrange interpolation in x through 4 grid points, Hermite in t at each (fm_pde_eval)
                 let m = *m as i64;
@@ -595,7 +577,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 if piv.iter().any(|p| *p == 0.0) {
                     let tv = self.eval(t, fr)?.num();
                     self.line = e.line;
-                    return Err(self.fail(Fail::new(E::ODE_SINGULAR, tv, *text as f64), *fmt));
+                    return Err(self.fail_solve(Fail::new(E::ODE_SINGULAR, tv, *text as f64), *fmt));
                 }
                 Ok(Value::Vec(Rc::new(xs)))
             }

@@ -338,11 +338,6 @@ impl Checker {
         self.fmt(&tf)
     }
 
-    fn same_dim(&self, a: &DExpr, b: &DExpr) -> bool {
-        let d = self.u.norm(&a.div(b));
-        d.is_concrete() && d.konst.is_dimensionless()
-    }
-
     // ============================================================ solve
     pub fn s_solve(&mut self, s: &A::Stmt, sv: &A::Solve, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         if sv.lowest.is_some() {
@@ -420,7 +415,7 @@ impl Checker {
             prime_uses(&eqs[0].rhs, &mut called, &mut bare);
             let known = orders.iter().all(|(x, _)| self.lookup(ctx.scope, x).is_some());
             if orders.is_empty() || (known && bare.is_empty()) {
-                return Ok(self.check_root(s, sv, &src_eqs[0], ctx)?);
+                return Ok(self.check_root(s, sv, ctx)?);
             }
         }
         if let Some(u) = &until {
@@ -1087,50 +1082,9 @@ impl Checker {
         Ok((self.module.lambdas.len() - 1, tid))
     }
 
-    /// `solve lhs = rhs for x from a to b`: an equation, not an ODE (Python check_root). Its root finder belongs to
-    /// the calculus evaluator (IR Root), which is not ported yet.
-    fn check_root(&mut self, s: &A::Stmt, _sv: &A::Solve, _q: &A::Equation, _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        Err(self.not_ported("solving an equation (solve … for x from a to b)", s.span))
-    }
-
     // ============================================================ solutions as values (checker.py)
-    /// Is this expression an ODE solution (a name bound to one, or its prime / component)? Looked up without
-    /// checking it, to route fields, primes and indexing here.
-    pub fn is_sol_expr(&self, e: &A::Expr, ctx: &Ctx) -> bool {
-        match &e.kind {
-            K::Name { name } => matches!(self.lookup(ctx.scope, name), Some((Binding::Sol(_), _))),
-            K::Prime { target, .. } => self.is_sol_expr(target, ctx),
-            K::Field { target, name } => {
-                matches!(name.as_str(), "x" | "y" | "z" | "re" | "im") && self.is_sol_expr(target, ctx)
-            }
-            _ => false,
-        }
-    }
-
-    /// Is this prime handled here: a state variable of an ODE right side (x' inside the equation), or the
-    /// derivative of a solution?
-    pub fn is_prime_mine(&self, target: &A::Expr, order: i64, ctx: &Ctx) -> bool {
-        if let K::Name { name } = &target.kind {
-            let key = format!("{name}{}", primes(order as usize));
-            if let Some((Binding::Sym(_), _)) = self.lookup(ctx.scope, &key) {
-                return true;
-            }
-        }
-        self.is_sol_expr(target, ctx)
-    }
-
-    /// x' of a solution, or a state variable inside an ODE right side (Python e_Prime, first part).
-    pub fn sol_prime(&mut self, e: &A::Expr, target: &A::Expr, order: i64, ctx: &mut Ctx) -> CResult<Checked> {
-        if let K::Name { name } = &target.kind {
-            let key = format!("{name}{}", primes(order as usize));
-            if let Some((Binding::Sym(b), _)) = self.lookup(ctx.scope, &key) {
-                return self.var_ref(b, ctx, e).map(Checked::Val);
-            }
-        }
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else {
-            return Err(self.err("' (prime) means a derivative; it only works on functions and ODE solutions", e.span,
-                                Some("to differentiate a formula write d/dt (formula)".into())));
-        };
+    /// x' of a solution (Python e_Prime, the SolRef part; called from calculus.rs e_prime).
+    pub fn sol_prime_of(&mut self, vid: SolViewId, order: i64) -> Checked {
         let v = self.sols[vid].clone();
         let order_u = order as usize;
         let tp = DExpr::of(DIMLESS).mul(&v.tdim.pow(Rational64::from_integer(order)));
@@ -1140,12 +1094,11 @@ impl Checker {
                            n: v.n, stride: v.stride, cplx: v.cplx, hint: v.hints.get(total).cloned().flatten(),
                            hints: v.hints.clone(), thint: v.thint.clone(), sf: v.sf };
         self.sols.push(nv);
-        Ok(Checked::Sol(self.sols.len() - 1))
+        Checked::Sol(self.sols.len() - 1)
     }
 
     /// r.x, z.re, x.t / x.times, x.values of a solution (Python e_Field, the SolRef part).
-    pub fn sol_field(&mut self, e: &A::Expr, target: &A::Expr, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else { unreachable!() };
+    pub fn sol_field(&mut self, e: &A::Expr, vid: SolViewId, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
         let v = self.sols[vid].clone();
         if (matches!(name, "x" | "y" | "z") && v.n > 1 && !v.cplx) || (matches!(name, "re" | "im") && v.cplx) {
             let k = match name {
@@ -1202,11 +1155,7 @@ impl Checker {
     }
 
     /// r[end], x[3] of a solution: an element of its values (Python e_Index, the SolRef part).
-    pub fn sol_index(&mut self, e: &A::Expr, target: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
-        if matches!(index.kind, K::Slice { .. }) {
-            return Err(self.not_ported("a slice of an ODE solution", e.span));
-        }
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else { unreachable!() };
+    pub fn sol_index(&mut self, vid: SolViewId, e: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
         let v = self.sols[vid].clone();
         let line = e.span.line;
         let index_of = |c: &mut Checker, vals: &I::Expr, ctx: &mut Ctx| -> CResult<I::Expr> {

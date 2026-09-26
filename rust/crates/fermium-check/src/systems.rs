@@ -412,21 +412,6 @@ impl Checker {
         Ok(Some(out))
     }
 
-    /// The hint of e_Convert's "can't show … in …" error inside a natural region (None outside one).
-    pub fn convert_mismatch_hint(&self) -> Option<String> {
-        if !self.nat.natural() {
-            return None;
-        }
-        let (name, consts) = (self.nat.name(), self.nat.consts_text());
-        if self.nat.consts().contains(&"G") {
-            // geometrized units: a mass is a length (red team 8 #14)
-            return Some(format!("in {name} units ({consts} = 1) a mass, a length and a time are all measured in the \
-                                 same unit; check the powers"));
-        }
-        Some(format!("in {name} units ({consts} = 1) a length or time is 1/energy and a mass is an energy; check the \
-                      powers of energy"))
-    }
-
     /// A value of `clock()` (seconds) or another SI time in the system in force (D60).
     pub fn seconds_here(&self, r: I::Expr) -> I::Expr {
         if !self.nat.natural() {
