@@ -261,7 +261,6 @@ struct Radau {
 }
 
 fn predict_factor(h_abs: f64, h_abs_old: Option<f64>, error_norm: f64, error_norm_old: Option<f64>) -> f64 {
-    if std::env::var("FM_TRACE").is_ok() { eprintln!("  predict h_abs={h_abs:e} error_norm={error_norm:?}"); }
     let multiplier = match (error_norm_old, h_abs_old) {
         (Some(eno), Some(hao)) if error_norm != 0.0 => h_abs / hao * (eno / error_norm).powf(0.25),
         _ => 1.0,
@@ -522,7 +521,6 @@ impl Radau {
             .map(|j| std::array::from_fn(|c| nb::chain3([z[0][j], z[1][j], z[2][j]], [p[0][c], p[1][c], p[2][c]])))
             .collect();
         self.sol = Some(RadauDense { t_old: t, h: t_new - t, y_old: y, q });
-        if std::env::var("FM_TRACE").is_ok() { eprintln!("step t={:?} h_abs={:?}", self.t, self.h_abs); }
         Ok(())
     }
 }
@@ -804,7 +802,6 @@ impl Bdf {
                 self.d[i][c] += v;
             }
         }
-        if std::env::var("FM_TRACE").is_ok() { eprintln!("T {:?}", self.t); }
         if self.n_equal_steps < order + 1 {
             return Ok(());
         }

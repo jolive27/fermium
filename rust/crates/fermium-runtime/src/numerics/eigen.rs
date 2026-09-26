@@ -2,8 +2,9 @@
 //! ψ(b) = 0 for x from a to b lowest N` (D82): a port of v1's `fermium/runtime/eigen.py`, with the
 //! library calls replaced natively:
 //! * SciPy's `eigh_tridiagonal(select='i')` (LAPACK stebz + stein) → [`tridiag_lowest`]: Sturm-sequence
-//!   bisection for the N lowest eigenvalues and inverse iteration for their vectors;
-//! * `solve_banded((2, 2), …)` (LAPACK gbsv) → [`band_solve`]: banded LU with partial pivoting;
+//!   bisection for the N lowest eigenvalues and inverse iteration for their vectors, both transcribed from
+//!   LAPACK so the values and vectors are v1's to the last bit;
+//! * `solve_banded((2, 2), …)` (LAPACK gbsv) → [`band_solve`]: banded LU with partial pivoting (dgbtf2/dgbtrs's rounding);
 //! * `brentq` → [`super::roots::brentq`]; the 2-column SVD of the degenerate-pair fix → the 2×2
 //!   eigenproblem of its Gram matrix.
 //!
@@ -182,26 +183,254 @@ fn on_grid(alpha: &[f64], w: &[f64], xs: &[f64], jumps: &[Jump], stride: usize) 
 
 // ------------------------------------------------------------------------------ tridiagonal
 
-/// The number of eigenvalues of the symmetric tridiagonal (d, e) below x (Sturm sequence).
-fn sturm_count(d: &[f64], e2: &[f64], x: f64, pivmin: f64) -> usize {
-    let mut count = 0;
-    let mut q = d[0] - x;
-    if q.abs() < pivmin {
-        q = -pivmin;
-    }
-    if q < 0.0 {
-        count += 1;
-    }
-    for i in 1..d.len() {
-        q = d[i] - x - e2[i - 1] / q;
-        if q.abs() < pivmin {
-            q = -pivmin;
+// ------------------------------------------------------------------------------ LAPACK dstebz
+const ULP: f64 = 2.220446049250313e-16; // dlamch('P')
+const SAFEMN: f64 = 2.2250738585072014e-308; // dlamch('S')
+const FUDGE: f64 = 2.1;
+const RELFAC: f64 = 2.0;
+
+/// LAPACK's dlaebz (serial version; dstebz calls it with NB = 0): bisection on intervals `ab` with the
+/// eigenvalue counts `nab`. ijob 1: counts at the ends; 2: refine every interval holding eigenvalues,
+/// splitting it when both halves hold some; 3: binary search for the points where the count is `nval`.
+/// Returns (the number of intervals, unconverged ones).
+#[allow(clippy::too_many_arguments)]
+fn laebz(ijob: u8, nitmax: usize, n: usize, mmax: usize, minp: usize, abstol: f64, reltol: f64, pivmin: f64,
+         d: &[f64], e2: &[f64], nval: &mut [usize], ab: &mut [[f64; 2]], c: &mut [f64], nab: &mut [[i64; 2]])
+         -> (usize, usize) {
+    if ijob == 1 {
+        let mut mout = 0i64;
+        for ji in 0..minp {
+            for jp in 0..2 {
+                let mut tmp1 = d[0] - ab[ji][jp];
+                if tmp1.abs() < pivmin {
+                    tmp1 = -pivmin;
+                }
+                nab[ji][jp] = i64::from(tmp1 <= 0.0);
+                for j in 1..n {
+                    tmp1 = d[j] - e2[j - 1] / tmp1 - ab[ji][jp];
+                    if tmp1.abs() < pivmin {
+                        tmp1 = -pivmin;
+                    }
+                    if tmp1 <= 0.0 {
+                        nab[ji][jp] += 1;
+                    }
+                }
+            }
+            mout += nab[ji][1] - nab[ji][0];
         }
-        if q < 0.0 {
-            count += 1;
+        return (mout.max(0) as usize, 0);
+    }
+    let (mut kf, mut kl) = (0usize, minp - 1);
+    if ijob == 2 {
+        for ji in 0..minp {
+            c[ji] = 0.5 * (ab[ji][0] + ab[ji][1]);
         }
     }
-    count
+    for _ in 0..nitmax {
+        let mut klnew = kl;
+        for ji in kf..=kl {
+            let tmp1 = c[ji];
+            let mut tmp2 = d[0] - tmp1;
+            let mut itmp1 = 0i64;
+            if tmp2 <= pivmin {
+                itmp1 = 1;
+                tmp2 = tmp2.min(-pivmin);
+            }
+            for j in 1..n {
+                tmp2 = d[j] - e2[j - 1] / tmp2 - tmp1;
+                if tmp2 <= pivmin {
+                    itmp1 += 1;
+                    tmp2 = tmp2.min(-pivmin);
+                }
+            }
+            if ijob <= 2 {
+                itmp1 = nab[ji][1].min(nab[ji][0].max(itmp1));
+                if itmp1 == nab[ji][1] {
+                    ab[ji][1] = tmp1;
+                } else if itmp1 == nab[ji][0] {
+                    ab[ji][0] = tmp1;
+                } else if klnew + 1 < mmax {
+                    klnew += 1;
+                    ab[klnew][1] = ab[ji][1];
+                    nab[klnew][1] = nab[ji][1];
+                    ab[klnew][0] = tmp1;
+                    nab[klnew][0] = itmp1;
+                    ab[ji][1] = tmp1;
+                    nab[ji][1] = itmp1;
+                } else {
+                    return (kl + 1, mmax + 1);
+                }
+            } else {
+                if itmp1 <= nval[ji] as i64 {
+                    ab[ji][0] = tmp1;
+                    nab[ji][0] = itmp1;
+                }
+                if itmp1 >= nval[ji] as i64 {
+                    ab[ji][1] = tmp1;
+                    nab[ji][1] = itmp1;
+                }
+            }
+        }
+        kl = klnew;
+        let mut kfnew = kf;
+        for ji in kf..=kl {
+            let tmp1 = (ab[ji][1] - ab[ji][0]).abs();
+            let tmp2 = ab[ji][1].abs().max(ab[ji][0].abs());
+            if tmp1 < abstol.max(pivmin).max(reltol * tmp2) || nab[ji][0] >= nab[ji][1] {
+                if ji > kfnew {
+                    ab.swap(ji, kfnew);
+                    nab.swap(ji, kfnew);
+                    if ijob == 3 {
+                        nval.swap(ji, kfnew);
+                    }
+                }
+                kfnew += 1;
+            }
+        }
+        kf = kfnew;
+        for ji in kf..=kl {
+            c[ji] = 0.5 * (ab[ji][0] + ab[ji][1]);
+        }
+        if kf > kl {
+            break;
+        }
+    }
+    (kl + 1, (kl + 1).saturating_sub(kf))
+}
+
+/// The `k` lowest eigenvalues of the symmetric tridiagonal (d, e): LAPACK's dstebz with RANGE = 'I',
+/// IL = 1, IU = k and the given ABSTOL, transcribed (SciPy's `eigh_tridiagonal(select='i')` calls it), so the
+/// bisection takes the same path and ends on the same midpoints (checked against SciPy on random matrices).
+pub fn stebz_lowest(d: &[f64], e: &[f64], k: usize, abstol: f64) -> Vec<f64> {
+    let n = d.len();
+    let (il, iu) = (1usize, k);
+    let rtoli = ULP * RELFAC;
+    let mut work = vec![0.0; n];
+    let mut pivmin = 1.0f64;
+    let mut isplit = vec![];
+    for j in 1..n {
+        let tmp1 = e[j - 1].powi(2);
+        if (d[j] * d[j - 1]).abs() * ULP.powi(2) + SAFEMN > tmp1 {
+            isplit.push(j);
+            work[j - 1] = 0.0;
+        } else {
+            work[j - 1] = tmp1;
+            pivmin = pivmin.max(tmp1);
+        }
+    }
+    isplit.push(n);
+    pivmin *= SAFEMN;
+    let (mut gu, mut gl) = (d[0], d[0]);
+    let mut tmp1 = 0.0;
+    for j in 0..n - 1 {
+        let tmp2 = work[j].sqrt();
+        gu = gu.max(d[j] + tmp1 + tmp2);
+        gl = gl.min(d[j] - tmp1 - tmp2);
+        tmp1 = tmp2;
+    }
+    gu = gu.max(d[n - 1] + tmp1);
+    gl = gl.min(d[n - 1] - tmp1);
+    let tnorm = gl.abs().max(gu.abs());
+    gl = gl - FUDGE * tnorm * ULP * n as f64 - FUDGE * 2.0 * pivmin;
+    gu = gu + FUDGE * tnorm * ULP * n as f64 + FUDGE * pivmin;
+    let itmax = (((tnorm + pivmin).ln() - pivmin.ln()) / 2f64.ln()) as usize + 2;
+    let atoli = if abstol > 0.0 { abstol } else { ULP * tnorm };
+    let mut ab = [[gl, gu], [gl, gu]];
+    let mut nab = [[-1i64, n as i64 + 1], [-1, n as i64 + 1]];
+    let mut nval = [il - 1, iu];
+    let mut c = [gl, gu];
+    laebz(3, itmax, n, 2, 2, atoli, rtoli, pivmin, d, &work, &mut nval, &mut ab, &mut c, &mut nab);
+    let (wl, wlu, wu, wul) = if nval[1] == iu {
+        (ab[0][0], ab[0][1], ab[1][1], ab[1][0])
+    } else {
+        (ab[1][0], ab[1][1], ab[0][1], ab[0][0])
+    };
+    let mut w = vec![0.0; n];
+    let mut m = 0usize;
+    let mut iend = 0usize;
+    let (mut nwl, mut nwu) = (0i64, 0i64);
+    for &isp in &isplit {
+        let ibegin = iend;
+        iend = isp;
+        let inn = iend - ibegin;
+        if inn == 1 {
+            if wl >= d[ibegin] - pivmin {
+                nwl += 1;
+            }
+            if wu >= d[ibegin] - pivmin {
+                nwu += 1;
+            }
+            if wl < d[ibegin] - pivmin && wu >= d[ibegin] - pivmin {
+                w[m] = d[ibegin];
+                m += 1;
+            }
+            continue;
+        }
+        let dd = &d[ibegin..iend];
+        let ee = &e[ibegin..iend - 1];
+        let e2 = &work[ibegin..iend - 1];
+        let (mut gu, mut gl) = (dd[0], dd[0]);
+        let mut tmp1 = 0.0;
+        for j in 0..inn - 1 {
+            let tmp2 = ee[j].abs();
+            gu = gu.max(dd[j] + tmp1 + tmp2);
+            gl = gl.min(dd[j] - tmp1 - tmp2);
+            tmp1 = tmp2;
+        }
+        gu = gu.max(dd[inn - 1] + tmp1);
+        gl = gl.min(dd[inn - 1] - tmp1);
+        let bnorm = gl.abs().max(gu.abs());
+        gl = gl - FUDGE * bnorm * ULP * inn as f64 - FUDGE * pivmin;
+        gu = gu + FUDGE * bnorm * ULP * inn as f64 + FUDGE * pivmin;
+        let atoli = if abstol > 0.0 { abstol } else { ULP * gl.abs().max(gu.abs()) };
+        if gu < wl {
+            nwl += inn as i64;
+            nwu += inn as i64;
+            continue;
+        }
+        gl = gl.max(wl);
+        gu = gu.min(wu);
+        if gl >= gu {
+            continue;
+        }
+        let mut ab = vec![[0.0f64; 2]; inn];
+        let mut nabb = vec![[0i64; 2]; inn];
+        ab[0] = [gl, gu];
+        let mut cc = vec![0.0; inn];
+        let mut nv: Vec<usize> = vec![];
+        let (im, _) = laebz(1, 0, inn, inn, 1, atoli, rtoli, pivmin, dd, e2, &mut nv, &mut ab, &mut cc, &mut nabb);
+        nwl += nabb[0][0];
+        nwu += nabb[0][1];
+        let iwoff = m as i64 - nabb[0][0];
+        let itmax = (((gu - gl + pivmin).ln() - pivmin.ln()) / 2f64.ln()) as usize + 2;
+        let (iout, _) = laebz(2, itmax, inn, inn, 1, atoli, rtoli, pivmin, dd, e2, &mut nv, &mut ab, &mut cc, &mut nabb);
+        for j in 0..iout {
+            let t = 0.5 * (ab[j][0] + ab[j][1]);
+            for je in (nabb[j][0] + iwoff)..(nabb[j][1] + iwoff) {
+                w[je as usize] = t;
+            }
+        }
+        m += im;
+    }
+    let mut idiscl = il as i64 - 1 - nwl;
+    let mut idiscu = nwu - iu as i64;
+    let mut w: Vec<f64> = w[..m].to_vec();
+    if idiscl > 0 || idiscu > 0 {
+        let mut out = vec![];
+        for &v in &w {
+            if v <= wlu && idiscl > 0 {
+                idiscl -= 1;
+            } else if v >= wul && idiscu > 0 {
+                idiscu -= 1;
+            } else {
+                out.push(v);
+            }
+        }
+        w = out;
+    }
+    w.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    w.truncate(k);
+    w
 }
 
 /// The `n` lowest eigenvalues (ascending) of the symmetric tridiagonal matrix with diagonal d and
@@ -210,143 +439,254 @@ fn sturm_count(d: &[f64], e2: &[f64], x: f64, pivmin: f64) -> usize {
 /// `eigh_tridiagonal(d, e, select='i', select_range=(0, n-1))`.
 pub fn tridiag_lowest(d: &[f64], e: &[f64], n: usize, vectors: bool) -> (Vec<f64>, Option<Vec<f64>>) {
     let m = d.len();
-    let e2: Vec<f64> = e.iter().map(|v| v * v).collect();
-    let mut tnorm = 0.0f64;
-    let (mut gl, mut gu) = (f64::INFINITY, f64::NEG_INFINITY);
-    for i in 0..m {
-        let r = if i > 0 { e[i - 1].abs() } else { 0.0 } + if i + 1 < m { e[i].abs() } else { 0.0 };
-        gl = gl.min(d[i] - r);
-        gu = gu.max(d[i] + r);
-        tnorm = tnorm.max(d[i].abs() + r);
-    }
-    let pivmin = f64::MIN_POSITIVE * e2.iter().fold(1.0f64, |a, &b| a.max(b));
-    let width = (gu - gl).max(tnorm * f64::EPSILON);
-    gl -= 2.0 * f64::EPSILON * tnorm * m as f64 + 2.0 * pivmin + 1e-300 * width;
-    gu += 2.0 * f64::EPSILON * tnorm * m as f64 + 2.0 * pivmin;
-    let mut vals = Vec::with_capacity(n);
-    let mut lo_bound = gl;
-    for k in 0..n {
-        // the (k+1)-th eigenvalue: count(lo) <= k < count(hi)
-        let (mut lo, mut hi) = (lo_bound, gu);
-        for _ in 0..2000 {
-            let mid = 0.5 * (lo + hi);
-            if mid <= lo || mid >= hi {
-                break;
-            }
-            if (hi - lo) <= 2.0 * f64::EPSILON * lo.abs().max(hi.abs()) {
-                break;
-            }
-            if sturm_count(d, &e2, mid, pivmin) > k {
-                hi = mid;
-            } else {
-                lo = mid;
-            }
-        }
-        let v = 0.5 * (lo + hi);
-        vals.push(v);
-        lo_bound = lo;
-    }
+    let vals = stebz_lowest(d, e, n, 4e-308);
     if !vectors {
         return (vals, None);
     }
+    let z = stein(d, e, &vals);
     let mut vecs = vec![0.0; m * n];
-    let mut done: Vec<Vec<f64>> = Vec::with_capacity(n);
-    let ortol = 1e-3 * tnorm;
-    for k in 0..n {
-        let lam = vals[k];
-        // cluster: earlier eigenvalues within ortol get Gram–Schmidt (as LAPACK's stein)
-        let cluster: Vec<usize> = (0..k).filter(|&j| (vals[j] - lam).abs() <= ortol).collect();
-        let x = inverse_iteration(d, e, lam, tnorm, k, &cluster.iter().map(|&j| &done[j][..]).collect::<Vec<_>>());
+    for (k, x) in z.iter().enumerate() {
         for i in 0..m {
             vecs[i * n + k] = x[i];
         }
-        done.push(x);
     }
     (vals, Some(vecs))
 }
 
-/// Inverse iteration for the eigenvector of (d, e) at lam (tridiagonal LU with partial pivoting as
-/// LAPACK's gttrf/gttrs), orthogonalised against the vectors in `orth`.
-fn inverse_iteration(d: &[f64], e: &[f64], lam: f64, tnorm: f64, seed: usize, orth: &[&[f64]]) -> Vec<f64> {
-    let n = d.len();
-    let tiny = f64::EPSILON * tnorm.max(f64::MIN_POSITIVE);
-    let mut dd: Vec<f64> = d.iter().map(|&v| v - lam).collect();
-    let mut dl: Vec<f64> = e.to_vec();
-    let mut du: Vec<f64> = e.to_vec();
-    let mut du2 = vec![0.0; n.saturating_sub(2)];
-    let mut swap = vec![false; n];
-    for i in 0..n.saturating_sub(1) {
-        if dd[i].abs() >= dl[i].abs() {
-            if dd[i] != 0.0 {
-                let fact = dl[i] / dd[i];
-                dl[i] = fact;
-                dd[i + 1] -= fact * du[i];
-            }
+// ------------------------------------------------------------------------------ LAPACK dstein
+const EPS_E: f64 = 1.1102230246251565e-16; // dlamch('E')
+
+/// LAPACK's dlarnv(2, …) with its seed: uniform (−1, 1) from dlaruv's generator (multiplier
+/// 33952834046453 mod 2⁴⁸; the 128 multipliers of its table are the powers of it, so the stream is consecutive).
+struct Larnv(u64);
+
+impl Larnv {
+    fn fill(&mut self, n: usize) -> Vec<f64> {
+        const A: u64 = 33952834046453;
+        const MASK: u64 = (1 << 48) - 1;
+        (0..n)
+            .map(|_| {
+                self.0 = ((self.0 as u128 * A as u128) as u64) & MASK;
+                2.0 * (self.0 as f64 / (1u64 << 48) as f64) - 1.0
+            })
+            .collect()
+    }
+}
+
+fn idamax(x: &[f64]) -> usize {
+    let mut j = 0;
+    for i in 1..x.len() {
+        if x[i].abs() > x[j].abs() {
+            j = i;
+        }
+    }
+    j
+}
+
+/// OpenBLAS's dnrm2 (x87 extended precision): the correctly rounded √(Σ x²), from a double-double sum.
+fn nrm2_exact(x: &[f64]) -> f64 {
+    let big = x.iter().fold(0.0f64, |a, v| a.max(v.abs()));
+    if big == 0.0 || !big.is_finite() {
+        return big;
+    }
+    // scale by a power of two (exact)
+    let k = big.log2().floor() as i32;
+    let sc = 2f64.powi(-k);
+    let (mut hi, mut lo) = (0.0f64, 0.0f64);
+    for &v in x {
+        let y = v * sc;
+        let p = y * y;
+        let pe = y.mul_add(y, -p);
+        let t = hi + p;
+        let bb = t - hi;
+        let err = (hi - (t - bb)) + (p - bb);
+        hi = t;
+        lo += err + pe;
+    }
+    let t = hi + lo;
+    lo -= t - hi;
+    hi = t;
+    let r = hi.sqrt();
+    let resid = |c: f64| -> f64 {
+        let c2 = c * c;
+        let c2e = c.mul_add(c, -c2);
+        ((c2 - hi) + c2e - lo).abs()
+    };
+    let mut best = r;
+    for c in [f64::from_bits(r.to_bits() - 1), f64::from_bits(r.to_bits() + 1)] {
+        if resid(c) < resid(best) {
+            best = c;
+        }
+    }
+    best * 2f64.powi(k)
+}
+
+/// LAPACK dlagtf: T − λI = P L U for the tridiagonal (a, b above, c below).
+fn lagtf(a: &[f64], lam: f64, b: &[f64], c: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<bool>) {
+    let n = a.len();
+    let (mut a, mut b, mut c) = (a.to_vec(), b.to_vec(), c.to_vec());
+    let mut d = vec![0.0; n.saturating_sub(2)];
+    let mut piv = vec![false; n];
+    a[0] -= lam;
+    let mut scale1 = a[0].abs() + b[0].abs();
+    for k in 0..n - 1 {
+        a[k + 1] -= lam;
+        let mut scale2 = c[k].abs() + a[k + 1].abs();
+        if k + 2 < n {
+            scale2 += b[k + 1].abs();
+        }
+        let piv1 = if a[k] == 0.0 { 0.0 } else { a[k].abs() / scale1 };
+        if c[k] == 0.0 {
+            scale1 = scale2;
         } else {
-            let fact = dd[i] / dl[i];
-            dd[i] = dl[i];
-            dl[i] = fact;
-            let temp = du[i];
-            du[i] = dd[i + 1];
-            dd[i + 1] = temp - fact * dd[i + 1];
-            if i + 2 < n {
-                du2[i] = du[i + 1];
-                du[i + 1] = -fact * du[i + 1];
-            }
-            swap[i] = true;
-        }
-    }
-    for v in dd.iter_mut() {
-        if *v == 0.0 {
-            *v = tiny;
-        }
-    }
-    let solve = |b: &mut Vec<f64>| {
-        for i in 0..n.saturating_sub(1) {
-            if !swap[i] {
-                let v = b[i];
-                b[i + 1] -= dl[i] * v;
+            let piv2 = c[k].abs() / scale2;
+            if piv2 <= piv1 {
+                scale1 = scale2;
+                c[k] /= a[k];
+                a[k + 1] -= c[k] * b[k];
             } else {
-                let temp = b[i];
-                b[i] = b[i + 1];
-                b[i + 1] = temp - dl[i] * b[i];
+                piv[k] = true;
+                let mult = a[k] / c[k];
+                a[k] = c[k];
+                let temp = a[k + 1];
+                a[k + 1] = b[k] - mult * temp;
+                if k + 2 < n {
+                    d[k] = b[k + 1];
+                    b[k + 1] = -mult * d[k];
+                }
+                b[k] = temp;
+                c[k] = mult;
             }
         }
-        let mut i = n;
-        while i > 0 {
-            i -= 1;
-            let mut s = b[i];
-            if i + 1 < n {
-                s -= du[i] * b[i + 1];
-            }
-            if i + 2 < n {
-                s -= du2[i] * b[i + 2];
-            }
-            b[i] = s / dd[i];
-        }
-    };
-    // a deterministic "random" start
-    let mut x: Vec<f64> = (0..n).map(|i| ((i as f64 + 1.0) * 0.618033988749895 + seed as f64 * 0.414213562).fract() - 0.5).collect();
-    let orthonormalise = |x: &mut Vec<f64>| {
-        for v in orth {
-            let p: f64 = x.iter().zip(v.iter()).map(|(a, b)| a * b).sum();
-            for i in 0..n {
-                x[i] -= p * v[i];
-            }
-        }
-        let nrm = x.iter().map(|v| v * v).sum::<f64>().sqrt();
-        if nrm > 0.0 && nrm.is_finite() {
-            for v in x.iter_mut() {
-                *v /= nrm;
-            }
-        }
-    };
-    for _ in 0..4 {
-        orthonormalise(&mut x);
-        solve(&mut x);
     }
-    orthonormalise(&mut x);
-    x
+    (a, b, c, d, piv)
+}
+
+/// LAPACK dlagts with JOB = −1 (perturbing tiny pivots); `tol` ≤ 0 is set on the first call, as LAPACK does.
+fn lagts(a: &[f64], b: &[f64], c: &[f64], d: &[f64], piv: &[bool], y: &mut [f64], tol: &mut f64) {
+    let n = a.len();
+    let sfmin = f64::MIN_POSITIVE;
+    let bignum = 1.0 / sfmin;
+    if *tol <= 0.0 {
+        let mut t = a[0].abs();
+        if n > 1 {
+            t = t.max(a[1].abs()).max(b[0].abs());
+        }
+        for k in 2..n {
+            t = t.max(a[k].abs()).max(b[k - 1].abs()).max(d[k - 2].abs());
+        }
+        t *= EPS_E;
+        *tol = if t == 0.0 { EPS_E } else { t };
+    }
+    for k in 1..n {
+        if !piv[k - 1] {
+            y[k] -= c[k - 1] * y[k - 1];
+        } else {
+            let temp = y[k - 1];
+            y[k - 1] = y[k];
+            y[k] = temp - c[k - 1] * y[k];
+        }
+    }
+    for k in (0..n).rev() {
+        let mut temp = if k + 3 <= n {
+            y[k] - b[k] * y[k + 1] - d[k] * y[k + 2]
+        } else if k + 2 == n {
+            y[k] - b[k] * y[k + 1]
+        } else {
+            y[k]
+        };
+        let mut ak = a[k];
+        let mut pert = tol.copysign(ak);
+        loop {
+            let absak = ak.abs();
+            if absak < 1.0 {
+                if absak < sfmin {
+                    if absak == 0.0 || temp.abs() * sfmin > absak {
+                        ak += pert;
+                        pert *= 2.0;
+                        continue;
+                    }
+                    temp *= bignum;
+                    ak *= bignum;
+                } else if temp.abs() > absak * bignum {
+                    ak += pert;
+                    pert *= 2.0;
+                    continue;
+                }
+            }
+            break;
+        }
+        y[k] = temp / ak;
+    }
+}
+
+/// The eigenvectors of the tridiagonal (d, e) at the ascending eigenvalues `w`: LAPACK dstein transcribed
+/// (inverse iteration from dlarnv's random start, modified Gram–Schmidt within clusters, OpenBLAS's ddot/axpy/
+/// nrm2 as on the oracle), so SciPy's `eigh_tridiagonal` vectors are reproduced bit for bit (checked on
+/// random matrices). The matrix is treated as one block (dstebz splits it only where an off-diagonal is
+/// negligible, which never happens for a discretised operator).
+fn stein(d: &[f64], e: &[f64], w: &[f64]) -> Vec<Vec<f64>> {
+    let n = d.len();
+    let mut seed = Larnv((1 << 36) + (1 << 24) + (1 << 12) + 1);
+    if n == 1 {
+        return w.iter().map(|_| vec![1.0]).collect();
+    }
+    let mut onenrm = (d[0].abs() + e[0].abs()).max(d[n - 1].abs() + e[n - 2].abs());
+    for i in 1..n - 1 {
+        onenrm = onenrm.max(d[i].abs() + e[i - 1].abs() + e[i].abs());
+    }
+    let ortol = 1e-3 * onenrm;
+    let dtpcrt = (0.1 / n as f64).sqrt();
+    let mut z: Vec<Vec<f64>> = Vec::with_capacity(w.len());
+    let mut gpind = 0usize;
+    let mut xjm = 0.0;
+    for (j, &w_j) in w.iter().enumerate() {
+        let mut xj = w_j;
+        if j > 0 {
+            let pertol = 10.0 * (ULP * xj).abs();
+            if xj - xjm < pertol {
+                xj = xjm + pertol;
+            }
+        }
+        let mut x = seed.fill(n);
+        let (a, b, c, dd, piv) = lagtf(d, xj, e, e);
+        let mut tol = 0.0;
+        let mut nrmchk = 0;
+        for _its in 0..5 {
+            let jmax = idamax(&x);
+            let scl = n as f64 * onenrm * ULP.max(a[n - 1].abs()) / x[jmax].abs();
+            x.iter_mut().for_each(|v| *v *= scl);
+            lagts(&a, &b, &c, &dd, &piv, &mut x, &mut tol);
+            if j > 0 {
+                if (xj - xjm).abs() > ortol {
+                    gpind = j;
+                }
+                for zi in &z[gpind..j] {
+                    let ztr = -super::npblas::ddot(&x, zi);
+                    for (xv, &q) in x.iter_mut().zip(zi) {
+                        *xv = ztr.mul_add(q, *xv);
+                    }
+                }
+            }
+            let nrm = x[idamax(&x)].abs();
+            if nrm < dtpcrt {
+                continue;
+            }
+            nrmchk += 1;
+            if nrmchk < 3 {
+                continue;
+            }
+            break;
+        }
+        let mut scl = 1.0 / nrm2_exact(&x);
+        if x[idamax(&x)] < 0.0 {
+            scl = -scl;
+        }
+        x.iter_mut().for_each(|v| *v *= scl);
+        z.push(x);
+        xjm = xj;
+    }
+    z
 }
 
 fn matrix(alpha: &[f64], w: &[f64], h: f64, nstates: usize, vectors: bool) -> Result<(Vec<f64>, Option<Vec<f64>>), EigenFail> {
@@ -540,25 +880,29 @@ fn derivative4(psi: &[f64], h: f64) -> Vec<f64> {
 }
 
 fn hermite_norm2(p: &[f64], d: &[f64], h: f64) -> f64 {
-    let g = [-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526];
+    // v1's Hermite basis at the 4 Gauss points, as NumPy evaluated it (its array power isn't libm's pow)
+    const BASIS: [[f64; 4]; 4] = [
+        [0.9862070884609109, 0.060124997938716174, 0.013792911539089075, -0.00448606527483153],
+        [0.7451614261182038, 0.1481370634132568, 0.25483857388179626, -0.07296615908748122],
+        [0.2548385738817962, 0.07296615908748116, 0.7451614261182038, -0.14813706341325683],
+        [0.013792911539088903, 0.004486065274831419, 0.9862070884609111, -0.060124997938716285],
+    ];
     let gw = [0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538];
-    let mut basis = [[0.0f64; 4]; 4];
-    for (k, &gk) in g.iter().enumerate() {
-        let t: f64 = 0.5 * (gk + 1.0);
-        let (t2, t3) = (t * t, t.powf(3.0));
-        basis[k] = [2.0 * t3 - 3.0 * t2 + 1.0, t3 - 2.0 * t2 + t, -2.0 * t3 + 3.0 * t2, t3 - t2];
-    }
-    let mut s = 0.0;
-    for i in 0..p.len() - 1 {
-        let mut row = 0.0;
-        for k in 0..4 {
-            let b = basis[k];
-            let v = p[i] * b[0] + h * d[i] * b[1] + p[i + 1] * b[2] + h * d[i + 1] * b[3];
-            row += v * v * gw[k];
-        }
-        s += row;
-    }
-    0.5 * h * s
+    let cells = p.len() - 1;
+    // (v * v) @ gw is a dgemv over rows of 4; np.sum of it is pairwise
+    let rows: Vec<f64> = (0..cells)
+        .map(|i| {
+            let sq: Vec<f64> = BASIS
+                .iter()
+                .map(|b| {
+                    let v = p[i] * b[0] + h * d[i] * b[1] + p[i + 1] * b[2] + h * d[i + 1] * b[3];
+                    v * v
+                })
+                .collect();
+            super::npblas::gemv_t(&sq, &gw, cells, i)
+        })
+        .collect();
+    0.5 * h * super::npblas::np_sum(&rows)
 }
 
 fn finish(h: f64, psi: &[f64], f: &[f64]) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
@@ -631,41 +975,45 @@ pub fn band_solve(n: usize, kl: usize, ku: usize, get: &dyn Fn(usize, usize) -> 
             }
             x.swap(k, p);
         }
-        let piv = at(&rows, k, k);
+        // LAPACK dgbtf2: the multipliers are scaled by the pivot's reciprocal (dscal), the update is a dger
+        // (OpenBLAS axpy per column: a = fma(-u, l, a)); dgbtrs applies L the same way
+        let r = 1.0 / at(&rows, k, k);
         let hi = (k + ku + kl).min(n - 1);
         for i in k + 1..=last {
-            let lik = at(&rows, i, k) / piv;
-            if lik == 0.0 {
-                continue;
-            }
-            for j in k..=hi {
+            let lik = at(&rows, i, k) * r;
+            let sk = (k as i64 - off(i)) as usize;
+            rows[i][sk] = lik;
+            for j in k + 1..=hi {
                 let sj = j as i64 - off(i);
                 if sj >= 0 && (sj as usize) < wdt {
                     let v = at(&rows, k, j);
-                    rows[i][sj as usize] -= lik * v;
+                    rows[i][sj as usize] = (-v).mul_add(lik, rows[i][sj as usize]);
                 }
             }
             let xk = x[k];
-            x[i] -= lik * xk;
+            x[i] = (-xk).mul_add(lik, x[i]);
         }
     }
+    // dtbsv (upper, column-oriented): divide, then an axpy up the column
     for k in (0..n).rev() {
-        let hi = (k + ku + kl).min(n - 1);
-        let mut s = x[k];
-        for j in k + 1..=hi {
-            s -= at(&rows, k, j) * x[j];
+        x[k] /= at(&rows, k, k);
+        let lo = k.saturating_sub(ku + kl);
+        let xk = x[k];
+        for i in lo..k {
+            x[i] = (-xk).mul_add(at(&rows, i, k), x[i]);
         }
-        x[k] = s / at(&rows, k, k);
     }
     Some(x)
 }
 
+/// `np.linalg.norm` (sqrt of OpenBLAS ddot, as on the oracle).
 fn norm2(x: &[f64]) -> f64 {
-    x.iter().map(|v| v * v).sum::<f64>().sqrt()
+    super::npblas::ddot(x, x).sqrt()
 }
 
+/// `np.dot` of two vectors (OpenBLAS ddot).
 fn dot(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
+    super::npblas::ddot(a, b)
 }
 
 /// Numerov's eigenvector nearest E by inverse iteration from `start` (v1's `_numerov_vector`).
@@ -977,6 +1325,18 @@ mod tests {
         let col = |k: usize| (0..n).map(|i| vecs[i * 3 + k]).collect::<Vec<f64>>();
         assert!((dot(&col(0), &col(0)) - 1.0).abs() < 1e-12);
         assert!(dot(&col(0), &col(1)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn stebz_stein_match_scipy() {
+        // SciPy: eigh_tridiagonal(2 + linspace(0, 1, 20)**2, -ones(19), select='i', select_range=(0, 2), tol=4e-308)
+        let n = 20;
+        let d: Vec<f64> = (0..n).map(|i| if i == n - 1 { 1.0 } else { i as f64 * (1.0 / 19.0) }).map(|x| 2.0 + x * x).collect();
+        let e = vec![-1.0; n - 1];
+        let (vals, vecs) = tridiag_lowest(&d, &e, 3, true);
+        assert_eq!(vals, vec![0.13205941765508392, 0.3259210797593231, 0.520473825436112]);
+        let v = vecs.unwrap();
+        assert_eq!((v[3 * 3], v[7 * 3 + 1], v[11 * 3 + 2]), (0.42164731837421227, 0.35339400744462435, 0.37275885942280657));
     }
 
     #[test]

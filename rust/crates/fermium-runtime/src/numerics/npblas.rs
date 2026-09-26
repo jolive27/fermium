@@ -414,3 +414,35 @@ mod tests {
         assert_eq!(ddot(&x3, &x3), 0.14);
     }
 }
+
+/// NumPy's `np.sum` of a contiguous float64 array: pairwise summation (blocks of 128 with 8 accumulators).
+pub fn np_sum(a: &[f64]) -> f64 {
+    let n = a.len();
+    if n < 8 {
+        let mut r = 0.0;
+        for &v in a {
+            r += v;
+        }
+        return r;
+    }
+    if n <= 128 {
+        let mut r = [0.0f64; 8];
+        r.copy_from_slice(&a[..8]);
+        let mut i = 8;
+        while i < n - n % 8 {
+            for j in 0..8 {
+                r[j] += a[i + j];
+            }
+            i += 8;
+        }
+        let mut res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+        while i < n {
+            res += a[i];
+            i += 1;
+        }
+        return res;
+    }
+    let mut n2 = n / 2;
+    n2 -= n2 % 8;
+    np_sum(&a[..n2]) + np_sum(&a[n2..])
+}
