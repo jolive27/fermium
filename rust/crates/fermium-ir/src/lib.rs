@@ -321,6 +321,27 @@ pub struct Tables {
     pub plots: Vec<serde_like::Json>,
     pub loads: Vec<serde_like::Json>,
     pub fits: Vec<serde_like::Json>,
+    /// calls into Python (`use python`, D140): one entry per call site, indexed by the first argument of the
+    /// `pycall` built-in
+    pub pycalls: Vec<PyCallSite>,
+    /// the program's folder, put on Python's sys.path when a module is imported
+    pub py_base_dir: String,
+}
+
+/// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
+/// (value passed = SI / factor) and int flag of each argument, and the result's shape and unit factor.
+#[derive(Clone, Debug, Default)]
+pub struct PyCallSite {
+    pub module: String,
+    pub func: String,
+    pub display: String,
+    pub facs: Vec<f64>,
+    pub ints: Vec<bool>,
+    pub pnames: Vec<String>,
+    pub rlist: bool,
+    pub rfac: f64,
+    /// the result's shape was declared in the use line
+    pub declared: bool,
 }
 
 /// A checked program: main, the function instances, lambdas, symbols and tables.

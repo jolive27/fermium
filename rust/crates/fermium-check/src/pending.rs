@@ -14,13 +14,7 @@ impl Checker {
 }
 
 impl Checker {
-    // ---- calls: pieces owned by other modules
-    pub fn py_ref_of(&mut self, _target: &A::Expr, _ctx: &mut Ctx) -> Option<usize> {
-        None
-    }
-    pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
-        Err(self.not_ported("calling Python", e.span))
-    }
+    // ---- calls: pieces owned by other modules (none left: Python calls are in pyinterop.rs)
 }
 
 impl Checker {
