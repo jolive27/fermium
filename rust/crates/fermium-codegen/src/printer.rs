@@ -47,6 +47,12 @@ impl<W: Write> Printer for StdPrinter<W> {
         let s = format_value(v, &capped);
         self.line.push(s);
     }
+    fn num_sf(&mut self, fmt: usize, v: f64, sf: u32) {
+        let f = &self.fmts[fmt];
+        let set = PrintFmt { sf: Some(sf as i64), direct: 1, ..f.clone() };
+        let s = format_value(v, &set);
+        self.line.push(s);
+    }
     fn list(&mut self, fmt: usize, v: &[f64]) {
         let s = format_list(v, &self.fmts[fmt]);
         self.line.push(s);

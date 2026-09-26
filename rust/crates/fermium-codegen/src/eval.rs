@@ -75,6 +75,10 @@ pub trait Printer {
     fn num_capped(&mut self, fmt: usize, v: f64, _max_sf: u32) {
         self.num(fmt, v)
     }
+    /// A number printed with exactly `sf` significant figures (a sum by the decimal-place rule, spec B2).
+    fn num_sf(&mut self, fmt: usize, v: f64, _sf: u32) {
+        self.num(fmt, v)
+    }
     fn list(&mut self, fmt: usize, v: &[f64]);
     fn vec(&mut self, fmt: usize, v: &[f64]);
     fn mixed_vec(&mut self, fmts: &[usize], v: &[f64]);
@@ -435,6 +439,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn print(&mut self, items: &[PrintItem], fr: &mut Frame) -> Result<(), RunError> {
         for it in items {
             match it {
+                PrintItem::Num(e, f) if crate::eval_calc::measured_sum(e) => {
+                    let (x, sf) = self.sum_sf(e, *f, fr)?;
+                    match sf {
+                        Some(n) => self.printer.num_sf(*f, x, n),
+                        None => self.printer.num(*f, x),
+                    }
+                }
                 PrintItem::Num(e, f) => {
                     crate::eval_calc::take_quad_sf();
                     let v = self.eval(e, fr)?;

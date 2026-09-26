@@ -270,11 +270,17 @@ impl Integrator {
     fn integ_product(&mut self, vf: &[A::Expr], whole: &A::Expr) -> Option<A::Expr> {
         let x = self.x.clone();
         if vf.len() == 1 {
+            if matches!(op_of(&vf[0]), Some("+") | Some("-")) {
+                return self.integ(&vf[0]); // (a + b)/2: term by term
+            }
             if let Some(r) = self.integ_atom(&vf[0]) {
                 return Some(r);
             }
         }
         if let Some(r) = self.linear_over_quadratic(vf) {
+            return Some(r);
+        }
+        if let Some(r) = self.trig_product(vf) {
             return Some(r);
         }
         if let Some(r) = self.exp_trig(vf) {
@@ -389,6 +395,45 @@ impl Integrator {
             }
             let p1 = simplify(&add(p.clone(), num(1.0)));
             return Some(div(pw(b.clone(), p1.clone()), mul(a, p1)));
+        }
+        // 1/(1 ± cos u): tan(u/2), −cot(u/2)
+        if pv == Some(-1.0) {
+            if let Some((op, l, r)) = bin(b) {
+                if (op == "+" || op == "-") && is_num_v(l, 1.0) {
+                    if let Some(("cos", [u])) = call_parts(r) {
+                        if let Some((a, _)) = linear(u, &x) {
+                            let h = div(u.clone(), num(2.0));
+                            let g = if op == "+" { call1("tan", h) } else { neg(call1("cot", h)) };
+                            return Some(div(g, a));
+                        }
+                    }
+                }
+            }
+        }
+        // sinⁿ, cosⁿ (n ≥ 3) by the reduction formulas; lnⁿ by parts
+        if let Some(n) = pv.filter(|n| *n >= 3.0 && *n == n.trunc() && *n <= 12.0) {
+            if let Some((fname @ ("sin" | "cos"), [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x) {
+                    // ∫ sinⁿ u = -sinⁿ⁻¹ u cos u / n + (n−1)/n ∫ sinⁿ⁻² u ; cos: +cosⁿ⁻¹ u sin u / n + …
+                    let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
+                    let head = if fname == "sin" {
+                        neg(div(mul(pwn(s, n - 1.0), c), num(n)))
+                    } else {
+                        div(mul(pwn(c, n - 1.0), s), num(n))
+                    };
+                    let rest = self.integ(&simplify(&pwn(b.clone(), n - 2.0)))?;
+                    return Some(add(div(head, a), mul(num((n - 1.0) / n), rest)));
+                }
+            }
+        }
+        if let Some(n) = pv.filter(|n| *n >= 2.0 && *n == n.trunc() && *n <= 12.0) {
+            if let Some(("ln" | "log", [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x) {
+                    // ∫ lnⁿ u du = u lnⁿ u − n ∫ lnⁿ⁻¹ u du
+                    let lower = self.integ(&simplify(&pwn(b.clone(), n - 1.0)))?;
+                    return Some(sub(div(mul(u.clone(), pw(b.clone(), num(n))), a), mul(num(n), lower)));
+                }
+            }
         }
         // trigonometric squares of a linear argument
         if pv == Some(2.0) {
@@ -524,6 +569,29 @@ impl Integrator {
             return Some(out);
         }
         None
+    }
+
+    /// ∫ sin A sin B, sin A cos B, cos A cos B (A, B linear): product to sum.
+    fn trig_product(&mut self, vf: &[A::Expr]) -> Option<A::Expr> {
+        if vf.len() != 2 {
+            return None;
+        }
+        let x = self.x.clone();
+        let (Some((f, [u])), Some((g, [v]))) = (call_parts(&vf[0]), call_parts(&vf[1])) else { return None };
+        if !matches!(f, "sin" | "cos") || !matches!(g, "sin" | "cos") {
+            return None;
+        }
+        linear(u, &x)?;
+        linear(v, &x)?;
+        let (dif, sum) = (simplify(&sub(u.clone(), v.clone())), simplify(&add(u.clone(), v.clone())));
+        let half = |e: A::Expr| div(e, num(2.0));
+        let e = match (f, g) {
+            ("sin", "sin") => half(sub(call1("cos", dif), call1("cos", sum))),
+            ("cos", "cos") => half(add(call1("cos", dif), call1("cos", sum))),
+            ("sin", "cos") => half(add(call1("sin", sum), call1("sin", dif))),
+            _ => half(sub(call1("sin", sum), call1("sin", dif))),
+        };
+        self.integ(&simplify(&e))
     }
 
     /// ∫ e^(a x + c) sin(b x + d) and cos: e(a sin − b cos)/(a² + b²), e(a cos + b sin)/(a² + b²).
