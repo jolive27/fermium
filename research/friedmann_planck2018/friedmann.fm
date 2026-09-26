@@ -1,0 +1,51 @@
+# The age of the universe and other distances for Planck 2018 ΛCDM, from the Friedmann equation.
+# Run from this folder:  fermium run friedmann.fm
+#
+#     H(a)² = H₀² (Ω_r/a⁴ + Ω_m/a³ + Ω_Λ),    a = 1/(1 + z),   flat: Ω_Λ = 1 − Ω_m − Ω_r
+# Planck 2018 (paper VI, Table 2, base ΛCDM): H₀ = 67.4 km/s/Mpc, Ω_m = 0.315.
+
+H0 = 67.4 km/s/Mpc
+Ω_m = 0.315
+T_cmb = 2.7255 K                  # Fixsen (2009)
+N_eff = 3.046
+
+# radiation: photons (energy density 4σT⁴/c) plus three neutrino species (7/8 (4/11)^(4/3) N_eff each)
+ρ_crit = 3 H0² / (8π G)
+Ω_γ = 4 σ T_cmb⁴ / c³ / ρ_crit
+Ω_r = Ω_γ (1 + (7/8) (4/11)^(4/3) N_eff)
+Ω_Λ = 1 - Ω_m - Ω_r
+print "Ω_γ =", Ω_γ to 4 digits, "  Ω_r =", Ω_r to 4 digits, "  Ω_Λ =", Ω_Λ to 5 digits
+print "Hubble time 1/H₀ =", 1 / H0 in Gyr to 5 digits
+
+H(a) = H0 √(Ω_r / a^4 + Ω_m / a^3 + Ω_Λ)
+
+# age: t₀ = ∫ da / (a H(a)) from 0 to 1
+t0 = ∫ 1 / (a H(a)) da from 0 to 1
+print "age of the universe t₀ =", t0 in Gyr to 5 digits, "  (Planck 2018: 13.787 ± 0.020 Gyr)"
+
+# the same age from the Friedmann equation as an ODE, a' = a H(a), started deep in the radiation era
+# where a = (2 H₀ √Ω_r t)^(1/2), and stopped when a = 1
+t_i = 1 yr
+solve a' = a H(a)
+  with a(t_i) = √(2 H0 √Ω_r t_i)
+  for t from t_i to 30 Gyr
+  until a = 1
+print "age from solving a' = a H(a) until a = 1:", times(a)[end] in Gyr to 5 digits
+
+# epochs
+solve Ω_m (1 + z)^3 = Ω_Λ for z from 0 to 10
+print "matter–Λ equality: z =", z to 4 digits
+solve Ω_m (1 + zq)^3 + 2 Ω_r (1 + zq)^4 = 2 Ω_Λ for zq from 0 to 10          # q = 0: ä changes sign
+print "deceleration → acceleration (q = 0): z =", zq to 4 digits,
+      "  at t =", ∫ 1 / (a H(a)) da from 0 to (1 / (1 + zq)) in Gyr to 4 digits
+solve Ω_r (1 + zeq) = Ω_m for zeq from 0 to 1e5
+print "matter–radiation equality: z =", zeq to 4 digits, "  (Planck 2018: 3387 ± 21)"
+
+# distances to the last-scattering surface, z = 1100
+z_ls = 1100
+D_C = c ∫ 1 / H(1 / (1 + z)) dz from 0 to z_ls
+print "comoving distance to z = 1100:", D_C in Mpc to 5 digits, "=", D_C in Gly to 4 digits
+print "age of the universe at z = 1100:", ∫ 1 / (a H(a)) da from 0 to (1 / (1 + z_ls)) in yr to 4 digits
+print "particle horizon today (comoving):", c ∫ 1 / (a² H(a)) da from 0 to 1 in Gly to 4 digits
+
+plot a vs t in Gyr with title "Scale factor a(t), Planck 2018 ΛCDM: a = 1 at 13.8 Gyr" to "scale_factor.png"

@@ -1,0 +1,72 @@
+# Gravitation 21 — The restricted three-body problem: Lagrange points, L4 stability, Jacobi constant
+#
+# (Murray & Dermott, Solar System Dynamics, ch. 3; Goldstein §3.12; Szebehely, Theory of Orbits.)
+# The Earth (GM₁ = 3.986004418 × 10¹⁴ m³/s²) and the Moon (GM₂ = 4.9028 × 10¹² m³/s²)
+# circle their barycentre at D = 384 400 km. In the frame rotating with them
+# (angular velocity Ω = √(G(M₁+M₂)/D³) along z) a spacecraft obeys
+#     r'' = −2 Ω × r' − Ω × (Ω × r) − GM₁ (r − r₁)/|r − r₁|³ − GM₂ (r − r₂)/|r − r₂|³
+# with the Earth at r₁ = <−μD, 0, 0>, the Moon at r₂ = <(1 − μ)D, 0, 0>, μ = M₂/(M₁ + M₂).
+#
+#   (a) Find L1 on the Earth–Moon line (where the effective force vanishes), and
+#       give L4 = <(½ − μ)D, (√3/2) D, 0>.
+#   (b) Linear stability of L4: small motions go as e^{iωt} with
+#       ω²/Ω² = (1 ± √(1 − 27μ(1 − μ)))/2, which is real when μ < μ_Routh = 0.03852.
+#       Give both periods.
+#   (c) Start a spacecraft 1000 km from L4 (radially outwards), at rest in the
+#       rotating frame, and integrate for 360 days. It librates about L4 but stays
+#       near it: the largest distance from L4. The Jacobi constant
+#           C = Ω²(x² + y²) + 2GM₁/r₁ + 2GM₂/r₂ − |r'|²
+#       must stay constant.
+#   (d) Make the "moon" 5 times heavier than Routh's limit allows (μ = 0.0500): the
+#       same start now runs away from L4. Distance from L4 after 120 days.
+
+GM1 = 3.986004418e14 m³/s²
+GM2 = 4.9028e12 m³/s²
+D = 384400 km
+
+μ = GM2 / (GM1 + GM2)
+Ω = √((GM1 + GM2) / D³)
+Ωv = <0 /s, 0 /s, Ω>
+r1 = <-μ D, 0 m, 0 m>
+r2 = <(1 - μ) D, 0 m, 0 m>
+print "mass ratio μ:", μ to 6 digits
+print "sidereal month 2π/Ω:", 2π / Ω in day to 6 digits
+
+# (a) L1: the effective force along the x axis vanishes
+fx(x) = -GM1 / (x + μ D)² + GM2 / ((1 - μ) D - x)² + Ω² x
+solve fx(x_L1) = 0 m/s² for x_L1 from 0 km to (1 - μ) D - 1000 km
+print "L1 from the barycentre:", x_L1 in km to 6 digits
+print "L1 from the Moon:", ((1 - μ) D - x_L1) in km to 6 digits
+L4 = <(½ - μ) D, √3 / 2 * D, 0 m>
+print "L4:", L4.x in km to 6 digits, L4.y in km to 6 digits
+
+# (b) linear stability
+disc = 1 - 27 μ (1 - μ)
+ω_short = Ω √((1 + √disc) / 2)
+ω_long = Ω √((1 - √disc) / 2)
+print "Routh limit:", (1 - √(23 / 27)) / 2 to 6 digits
+print "short libration period:", 2π / ω_short in day to 6 digits
+print "long libration period:", 2π / ω_long in day to 6 digits
+
+# (c) libration about L4
+accel(r, v, gm1, gm2, mu) = -2 Ωv × v - Ωv × (Ωv × r) - gm1 (r - <-mu D, 0 m, 0 m>) / |r - <-mu D, 0 m, 0 m>|^3 - gm2 (r - <(1 - mu) D, 0 m, 0 m>) / |r - <(1 - mu) D, 0 m, 0 m>|^3
+start = L4 + 1000 km * unit(L4)
+solve r'' = accel(r, r', GM1, GM2, μ)
+  with r(0) = start, r'(0) = <0, 0, 0> m/s
+  for t from 0 day to 360 day tolerance 1e-12
+jacobi(p, v) = Ω² (p.x² + p.y²) + 2 GM1 / |p - r1| + 2 GM2 / |p - r2| - |v|²
+print "Jacobi constant at the start:", jacobi(r(0 day), r'(0 day)) to 12 digits
+print "Jacobi constant after 360 days:", jacobi(r(360 day), r'(360 day)) to 12 digits
+far = 0 km
+for tt from 0 day to 360 day step 0.25 day
+    far = max(far, |r(tt) - L4|)
+print "largest distance from L4:", far in km to 5 digits
+print "position after 100 days (from L4):", (r(100 day) - L4).x in km to 6 digits, (r(100 day) - L4).y in km to 6 digits
+
+# (d) beyond Routh's limit: same D and total mass, μ = 0.05
+μ_big = 0.0500
+L4_big = <(½ - μ_big) D, √3 / 2 * D, 0 m>
+solve q'' = accel(q, q', (1 - μ_big) (GM1 + GM2), μ_big (GM1 + GM2), μ_big)
+  with q(0) = L4_big + 1000 km * unit(L4_big), q'(0) = <0, 0, 0> m/s
+  for t from 0 day to 120 day tolerance 1e-12
+print "μ = 0.05, distance from L4 after 120 days:", |q(120 day) - L4_big| in km to 5 digits

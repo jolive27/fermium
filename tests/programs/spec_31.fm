@@ -1,0 +1,36 @@
+# The spec §3.1 "target feel" snippet, verbatim except for two added definitions
+# (A and b are used but never defined in the spec's snippet).
+A = 0.1 m          # added: amplitude
+b = 0.2 kg/s       # added: damping coefficient
+
+# Pendulum: measure g
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print g                      # 9.70 m/s²
+print g in ft/s²
+
+# Mass on a spring
+k = 50 N/m
+m = 0.5 kg
+ω = √(k/m)                   # 10 rad/s
+x(t) = A cos(ω t)
+v = d/dt x                   # symbolic: -A ω sin(ω t), units m/s
+a = x''
+
+F(x) = k x
+W = ∫ F(x) dx from 0 [m] to 0.2 [m]     # 1.0 J
+
+solve m x'' = -k x - b x'
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
+  for t from 0 s to 5 s
+plot x vs t
+
+data = load "pendulum.csv"          # headers like: L [m], T [s]
+fit T = 2π √(L / g) to data         # reports g with units
+
+print ω
+print v
+print a
+print W
+print x(5 s)

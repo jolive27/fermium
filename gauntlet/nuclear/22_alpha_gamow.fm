@@ -1,0 +1,59 @@
+# Nuclear 22 — Alpha-decay half-lives from the Gamow factor, and Geiger–Nuttall
+#
+# (Krane §8.4, eqs. 8.16–8.19 and Fig. 8.6; Q-values from AME2020 and
+# half-lives from NUBASE2020, in data/alpha_emitters.csv.)
+# In Gamow's model the α (reduced mass μ) rattles inside a sphere of radius
+# R = r₀ (A_d^(1/3) + 4^(1/3)), r₀ = 1.20 fm, hitting the wall v/(2R) times a
+# second (v = √(2Q/μ)), and tunnels through the Coulomb barrier
+# V(r) = 2 Z_d e²/(4πε₀ r) with probability P = e^(−2G),
+#
+#     G = (1/ħ) ∫_R^b √(2μ (V(r) − Q)) dr,      b = 2 Z_d e²/(4πε₀ Q).
+#
+#  (a) For each emitter compute G by numerical integration, the predicted
+#      half-life t½ = ln 2 (2R/v) e^(2G), and compare with the measured one.
+#      Across 24 orders of magnitude the model should be right to within a
+#      factor of ~10–100 (it ignores the preformation factor).
+#  (b) Check G for U-238 against Krane's closed form
+#      G = √(2μ/(ħ² Q)) (Z_d e²/(2πε₀)) [arccos √x − √(x (1 − x))],  x = R/b.
+#  (c) Fit the measured half-lives to the Geiger–Nuttall law
+#      log₁₀(t½ / 1 s) = a₁ Z_d/√(Q / 1 MeV) + a₂.
+
+data = load "data/alpha_emitters.csv"
+r_0 = 1.20 fm
+
+barrier_G(Z, A, Q) =
+    Z_d = Z - 2
+    A_d = A - 4
+    μ = m_α A_d [u] / (m_α + A_d [u])
+    R = r_0 (A_d^(1/3) + 4^(1/3))
+    b = 2 Z_d e² / (4π ε₀ Q)
+    return ∫ √(2 μ (2 Z_d e² / (4π ε₀ r) - Q)) / ħ dr from R to b
+
+half_life(Z, A, Q) =
+    A_d = A - 4
+    μ = m_α A_d [u] / (m_α + A_d [u])
+    R = r_0 (A_d^(1/3) + 4^(1/3))
+    v = √(2 Q / μ)
+    return ln(2) (2 R / v) exp(2 barrier_G(Z, A, Q))
+
+# (a)
+for i from 1 to len(data.Z)
+    Z = data.Z[i]
+    A = data.A[i]
+    Q = data.Q[i]
+    t_calc = half_life(Z, A, Q)
+    print "Z =", Z, " A =", A, " Q =", Q in MeV to 6 digits, " G =", barrier_G(Z, A, Q) to 8 digits, " log10 t_calc/s =", log10(t_calc / (1 s)) to 6 digits, " log10 t_meas/s =", log10(data.t_half[i] / (1 s)) to 6 digits
+
+# (b) U-238 (the last row), closed form
+Z_d = 90
+Q_U = data.Q[end]
+μ_U = m_α 234 u / (m_α + 234 u)
+R_U = r_0 (234^(1/3) + 4^(1/3))
+b_U = 2 Z_d e² / (4π ε₀ Q_U)
+x = R_U / b_U
+G_closed = √(2 μ_U / (ħ² Q_U)) (Z_d e² / (2π ε₀)) (acos(√x) - √(x (1 - x)))
+print "(b) U-238: b =", b_U in fm to 8 digits, " G numeric =", barrier_G(92, 238, Q_U) to 10 digits, " G closed =", G_closed to 10 digits
+
+# (c)
+fit log10(t_half / (1 s)) = a1 (Z - 2) / √(Q / (1 MeV)) + a2 to data with a1 = 1.5, a2 = -50
+print "(c) Geiger-Nuttall: a1 =", a1 to 8 digits, "  a2 =", a2 to 8 digits

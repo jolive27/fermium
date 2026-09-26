@@ -1,0 +1,44 @@
+# em: electrostatics, circuits and charged particles in fields
+# Charges in C (or e), fields in V/m and T.  Angles are plain numbers in Fermium, so Hz is the same unit as
+# rad/s (D27): a turning rate ending in _frequency is shown in rev/s (turns per second: `in rev/s` and `in rpm`
+# are right), and the _angular_ ones are ω in rad/s.  A frequency you pass in, like skin_depth's f, is the
+# number of cycles per second written in Hz (60 Hz).
+
+# electric field of a point charge q at distance r: k_e q / r²
+coulomb_field(q [C], r [m]) = k_e q / r²
+
+# force between two point charges at distance r: k_e q1 q2 / r² (positive means they repel)
+coulomb_force(q1 [C], q2 [C], r [m]) = k_e q1 q2 / r²
+
+# electric potential of a point charge q at distance r: k_e q / r
+coulomb_potential(q [C], r [m]) = k_e q / r
+
+# capacitance of a parallel-plate capacitor, plate area A and gap d, vacuum: ε₀ A / d
+parallel_plate_capacitance(area [m²], d [m]) = ε_0 area / d
+
+# energy stored in a capacitor C charged to voltage V: ½ C V²
+capacitor_energy(cap [F], V [V]) = cap V² / 2
+
+# time constant of a resistor R and capacitor C: τ = R C
+rc_time_constant(R [Ω], cap [F]) = R cap
+
+# voltage on a charging capacitor after time t, supply V0, time constant τ: V0 (1 − e^(−t/τ))
+rc_charging_voltage(V0 [V], τ [s], t [s]) = V0 (1 - exp(-t/τ))
+
+# cyclotron angular frequency of a charge q, mass m in a field B: ω = |q| B / m
+cyclotron_angular_frequency(q [C], B [T], mass [kg]) = abs(q) B / mass in rad/s
+
+# cyclotron frequency in turns per second: f = |q| B / (2π m), shown in rev/s (1 rev = 2π, so the value is ω)
+cyclotron_frequency(q [C], B [T], mass [kg]) = abs(q) B / mass in rev/s
+
+# Larmor (gyro) radius of a charge q, mass m with speed v_perp across a field B: r = m v_perp / (|q| B)
+larmor_radius(mass [kg], v_perp [m/s], q [C], B [T]) = mass v_perp / (abs(q) B)
+
+# skin depth of a conductor with resistivity ρ at frequency f (Hz), relative permeability μ_r: √(ρ / (π f μ_r μ₀))
+skin_depth(ρ [Ω m], f [Hz], μ_r [1]) = √(ρ / (π f μ_r μ_0))
+
+# magnetic field at distance r from a long straight wire carrying current I: μ₀ I / (2π r)
+wire_field(I [A], r [m]) = μ_0 I / (2π r)
+
+# magnetic field inside a long solenoid with n turns per metre and current I: μ₀ n I
+solenoid_field(n [1/m], I [A]) = μ_0 n I

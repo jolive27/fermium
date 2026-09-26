@@ -1,0 +1,57 @@
+# Mechanics 32 — Nutation and precession of a heavy symmetric top
+#
+# (Goldstein, Classical Mechanics 3rd ed., §5.7, eqs. 5.62–5.75 and Fig. 5.9(c);
+#  Landau & Lifshitz, Mechanics, §35.)
+# A gyroscope of mass M = 0.150 kg has its centre of mass l = 4.00 cm from the fixed
+# tip. Its moments about the tip are I₁ = 1.20×10⁻⁴ kg m² and I₃ = 6.00×10⁻⁵ kg m²,
+# and it spins at ω₃ = 200 rad/s. It is released at θ₀ = 60.0° from the vertical
+# with θ' = φ' = 0 (the "cusp" case of Goldstein's Fig. 5.9(c)).
+# With Goldstein's a = I₃ω₃/I₁, b = p_φ/I₁ and β = 2Mgl/I₁, u = cos θ obeys
+#     u'² = f(u) = (1 − u²)(α − β u) − (b − a u)²,
+# and the release gives b = a u₀, α = β u₀, so f(u) = (u₀ − u)[β(1 − u²) − a²(u₀ − u)].
+#   (a) The lower turning point θ₂: the root of β(1 − u²) = a²(u₀ − u) in (−1, u₀).
+#   (b) The nutation period T = 2 ∫_{u₂}^{u₀} du / √f(u) and the precession per
+#       nutation Δφ = 2 ∫_{u₂}^{u₀} (b − a u)/(1 − u²) du / √f(u) (a pure number).
+#       The mean precession rate Δφ/T tends to the fast-top value Mgl/(I₃ω₃).
+#   (c) Integrate the equations of motion
+#          θ'' = φ'² sin θ cos θ − a φ' sin θ + (β/2) sin θ,  φ' = (b − a cos θ)/sin²θ,
+#       find the first time θ' = 0 after the release, and compare θ there with θ₂,
+#       twice that time with T, and φ at time T with Δφ.
+
+M = 0.150 kg
+l = 4.00 cm
+I1 = 1.20e-4 kg m²
+I3 = 6.00e-5 kg m²
+ω3 = 200 rad/s
+g = 9.81 m/s²
+θ0 = 60.0°
+
+a = I3 ω3 / I1
+β = 2 M g l / I1
+u0 = cos(θ0)
+b = a u0
+print "a =", a to 6 digits, " beta =", β to 6 digits, " a²/beta =", a² / β to 6 digits
+
+# (a) the lower turning point
+solve β (1 - u²) = a² (u0 - u) for u from -1 to u0
+u2 = u
+print "(a) u2 =", u2 to 10 digits, " theta2 =", acos(u2) in ° to 10 digits
+
+# (b) the nutation period and the precession per nutation, from the quadratures
+fu(w) = (u0 - w) (β (1 - w²) - a² (u0 - w))
+Tn = 2 ∫ 1 / √(fu(w)) dw from u2 to u0
+Δφ = 2 ∫ (b - a w) / ((1 - w²) √(fu(w))) dw from u2 to u0
+print "(b) nutation period T =", Tn to 10 digits, " (fast top 2π/a =", 2π/a to 6 digits, ")"
+print "    precession per nutation =", Δφ to 10 digits, " mean rate =", Δφ / Tn to 10 digits
+print "    fast-top precession rate M g l/(I3 w3) =", M g l / (I3 ω3) to 6 digits
+
+# (c) the equations of motion
+phidot(th) = (b - a cos(th)) / sin(th)²
+solve θ'' = phidot(θ)² sin(θ) cos(θ) - a phidot(θ) sin(θ) + (β/2) sin(θ),
+      φ' = phidot(θ)
+  with θ(0 s) = θ0, θ'(0 s) = 0 /s, φ(0 s) = 0
+  for t from 0 s to 1 s tolerance 1e-12
+solve θ'(t1) = 0 /s for t1 from 0.25 Tn to 0.75 Tn
+print "(c) first turning time =", t1 to 10 digits, " theta there =", θ(t1) in ° to 10 digits
+print "    2 t1 =", 2 t1 to 10 digits, " phi(T) =", φ(Tn) to 10 digits
+print "    theta after 10 nutations =", θ(10 Tn) in ° to 8 digits

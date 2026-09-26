@@ -1,0 +1,66 @@
+# 13 — The Lane–Emden equation: stars as balls of polytropic gas
+#
+# A simple model of a star assumes the pressure depends on density as
+# P = K ρ^(1 + 1/n)  (a "polytrope" with index n). Combining this with
+# hydrostatic equilibrium and Newton's gravity, and writing the density as
+# ρ = ρ_c θⁿ and the radius as r = a ξ, everything collapses into one
+# dimensionless equation:
+#
+#     θ'' + (2/ξ) θ' + θⁿ = 0,      θ(0) = 1,  θ'(0) = 0
+#
+# The surface of the star is where θ first reaches 0, at ξ = ξ₁.
+# Known values: n = 0 → √6 ≈ 2.449,  n = 1 → π,  n = 1.5 → 3.654,  n = 3 → 6.897.
+#
+# The equation has a 2/ξ term, which blows up at the centre ξ = 0, so a
+# solver cannot start exactly there. Instead we start at a tiny ξ₀ and use the
+# series solution near the centre for the starting values:
+#     θ ≈ 1 − ξ²/6 + n ξ⁴/120,     θ' ≈ −ξ/3 + n ξ³/30
+#
+# n = 1.5 describes fully convective stars and white dwarfs (non-relativistic),
+# n = 3 is Eddington's standard model of the Sun (and relativistic white dwarfs).
+
+ξ0 = 1.0e-4
+
+# Solve for one index n and return the first zero ξ₁ (found by bisection).
+# The θⁿ term is written as sign(θ)|θ|ⁿ so that fractional n stays defined if
+# the solver steps a little past the surface.
+first_zero(n) =
+    solve θ'' = -2 θ' / ξ - sign(θ) abs(θ)^n
+      with θ(ξ0) = 1 - ξ0²/6 + n ξ0⁴/120,
+           θ'(ξ0) = -ξ0/3 + n ξ0³/30
+      for ξ from ξ0 to 16
+    # walk outward until θ changes sign, then narrow down by bisection
+    hi = 0.5
+    while θ(hi) > 0 and hi < 16
+        hi += 0.25
+    lo = hi - 0.25
+    for i from 1 to 40
+        mid = (lo + hi) / 2
+        if θ(mid) > 0
+            lo = mid
+        else
+            hi = mid
+    return (lo + hi) / 2
+
+for n in [0, 1, 1.5, 2, 3, 4]
+    print "n =", n, "  ξ₁ =", first_zero(n) to 5 digits
+print "exact values: n = 0:", √6, "  n = 1:", π
+
+# A closer look at the Sun as an n = 3 polytrope (Eddington's standard model)
+n = 3
+solve θ'' = -2 θ' / ξ - θ^3
+  with θ(ξ0) = 1 - ξ0²/6 + n ξ0⁴/120,
+       θ'(ξ0) = -ξ0/3 + n ξ0³/30
+  for ξ from ξ0 to 7
+ξ1 = first_zero(3)
+
+# The mass is proportional to −ξ₁² θ'(ξ₁); the central density compared with
+# the mean density is ρ_c / ρ̄ = ξ₁ / (3 |θ'(ξ₁)|)  (about 54 for n = 3).
+ratio = ξ1 / (3 abs(θ'(ξ1)))
+print "n = 3:  -ξ₁² θ'(ξ₁) =", -ξ1² θ'(ξ1) to 4 digits, "  ρ_c / ρ̄ =", ratio to 3 digits
+
+ρ_mean = M_sun / ((4/3) π R_sun³)
+print "Sun: mean density", ρ_mean in g/cm³ to 3 digits, "-> central density about", ratio ρ_mean in g/cm³ to 2 digits
+print "(the Standard Solar Model gives about 150 g/cm³)"
+
+plot θ vs ξ to "gallery/lane_emden.png"

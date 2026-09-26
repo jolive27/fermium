@@ -1,0 +1,897 @@
+"""The Python half of the runtime: JIT engine setup and the callbacks compiled
+code uses for things that aren't on the hot path (printing, plots, CSV files, fits).
+"""
+from __future__ import annotations
+
+import ctypes
+import math
+import re
+import os
+import sys
+import time
+
+try:
+    import llvmlite.binding as llvm
+except ImportError:            # the reference interpreter works without llvmlite
+    llvm = None
+
+from ..errors import FermiumRuntimeError, decode_line
+from .pde import PDE_MAX_STEPS
+from ..units import preferred_unit, format_number, format_default, format_default_seq, _whole, Unit
+from ..uncertain import UFloat, format_uncertain, format_uncertain_list
+
+_initialized = False
+
+
+def init_llvm():
+    global _initialized
+    if not _initialized:
+        llvm.initialize_native_target()
+        llvm.initialize_native_asmprinter()
+        _initialized = True
+
+
+CB = ctypes.CFUNCTYPE
+c_double, c_int64, c_void_p = ctypes.c_double, ctypes.c_int64, ctypes.c_void_p
+DPTR = ctypes.POINTER(ctypes.c_double)
+STD_ONE_TEXT = ("std needs at least 2 values: it is the sample standard deviation, which divides by N − 1, so one "
+                "value says nothing about the spread (quote the instrument's uncertainty for a single measurement)")
+ERR_PENDING = -1        # fm_error kind: stop with the message a callback already put in rt.error
+
+
+class SolStruct(ctypes.Structure):
+    _fields_ = [("n", c_int64), ("dim", c_int64), ("cap", c_int64),
+                ("t", DPTR), ("y", DPTR), ("dy", DPTR),
+                ("rhs", ctypes.c_void_p), ("env", DPTR)]      # the right-hand side for x'(t) (D46), or null
+
+
+_LIBC = None
+
+
+def _libc():
+    """The C library's malloc, for solutions the compiled code owns (it may realloc them like its own)."""
+    global _LIBC
+    if _LIBC is None:
+        _LIBC = ctypes.CDLL(None)
+        _LIBC.malloc.restype = c_void_p
+        _LIBC.malloc.argtypes = [ctypes.c_size_t]
+    return _LIBC
+
+
+def display_unit(dim, hint):
+    if hint is not None and hint.dim == dim:
+        return hint
+    return preferred_unit(dim)
+
+
+def axis_label(name, unit_name, given=None):
+    """An axis label: the plotted name, or the label given with  xlabel "…" / ylabel "…"  (D161), then
+    the display unit in brackets, unless the unit is plain or the given label already has a '[' (it
+    names its own unit, like "T [MeV]").  Mirrored by fermium build (aot.py)."""
+    unit = unit_name not in ("", "1")
+    if given is not None:
+        return given + (f" [{unit_name}]" if unit and "[" not in given else "")
+    return name + (f" [{unit_name}]" if unit else "")
+
+
+def is_formula_label(label):
+    """A plotted formula (`2π √(L/g)`), not a name (`T`, `N_Mo`, `sol.x`)."""
+    return re.fullmatch(r"[\w.′']+", label) is None
+
+
+def y_axis_label(labels):
+    """The y axis's label from each series' (axis label, is a formula): the distinct labels, leaving out
+    formulas when a named series is there too (a fitted curve over the data: `T [s]`, not
+    `T [s], 2π √(L/g) [s]`; the legend names the curve) (spec A6.4, D253).  Mirrored by fermium build."""
+    named = [lab for lab, formula in labels if not formula]
+    return ", ".join(dict.fromkeys(named or [lab for lab, _ in labels]))
+
+
+def fit_sigfigs(val, err):
+    """Digits for a fitted value: at least 4, and enough to reach the second digit of its standard error
+    (0.69900, not 0.6990, when the error is 1.9×10⁻⁵) (gauntlet friction #35).  Mirrored in aot_data.c."""
+    if err is None or not (math.isfinite(err) and err > 0) or not (math.isfinite(val) and val != 0):
+        return 4
+    return max(4, min(12, math.floor(math.log10(abs(val))) - math.floor(math.log10(err)) + 2))
+
+
+DEFAULT_SF = 3     # output precision when the inputs don't say (DECISIONS D11)
+
+
+def format_written(x, sf, exact_items=False):
+    """An element of a list written out in the program: with the list's (fewest) significant figures if
+    that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
+    if exact_items and x == x and abs(x) < 1e7 and x == int(x):
+        return str(int(x))              # a whole number as written ([1.2345, 2], not 2.0000; red team round 4 #14)
+    # "exactly" up to rounding in the last bits: 1.20 mm is 1.2000000000000002 after the trip through metres (D242)
+    if x == x and abs(x) < math.inf and x != 0 and abs(float(f"{x:.{max(sf, 1) - 1}e}") - x) > 1e-13 * abs(x):
+        return format_number(x, 15, trim=True)
+    return format_number(x, sf, trim=False)
+
+
+def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
+    u = display_unit(dim, hint)
+    x = (v - u.offset) / u.factor
+    if sf is None:
+        if direct:                      # a literal as written (10000000, not 1×10⁷; red team round 4 #14)
+            s = str(int(x)) if abs(x) < 1e15 and x == int(x) else format_number(x, 15, trim=True)
+        else:
+            s = format_default(x, DEFAULT_SF, whole_ok)
+    elif direct in (4, 5):                  # a loop variable over a written list (D242)
+        s = format_written(x, sf, direct == 5)
+    else:
+        s = format_number(x, sf if direct else max(sf, 2), trim=False)
+    name = u.name
+    if name in ("", "1"):
+        return s
+    if name in ("°", "%", "′", "″"):
+        return f"{s}{name}"
+    if echo and hint is not None and u is hint and direct and name != "c" and any(
+            re.fullmatch(r"c([⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\^-?\d+)?", tok) for tok in re.split(r"[\s/()·*]+", name)):
+        si = preferred_unit(dim)
+        # the SI value with the same significant figures as the value itself (red team round 4 #13)
+        return f"{s} {name} (= {format_number(v, (sf if direct else max(sf, 2)) if sf else DEFAULT_SF, trim=False)} {si.name})"
+    return f"{s} {name}"
+
+
+class Runtime:
+    """Owns the callbacks; one instance per program run (or REPL session)."""
+
+    def __init__(self, out=None, base_dir=".", show_plots=False):
+        self.out = out or sys.stdout
+        self.base_dir = base_dir
+        self.tables = None
+        self.U = None
+        self.line = []
+        self.error = None
+        self.error_line = None
+        self.datasets = {}
+        self.keep = []
+        self.plot_series = {}
+        self.plot_err = {}          # (plot id, series index) -> (x errors, y errors, "bars" | "band") (D124)
+        self.last_fit_cov = None
+        self.plots_saved = []
+        self.engine_ref = None
+        self.err = sys.stderr
+        self.warnings = []
+        # the random-number state (D80): compiled code and the interpreter both use this array
+        from ..rng import DEFAULT_STATE
+        self.rng_state = (ctypes.c_uint64 * 4)(*DEFAULT_STATE)
+        self.rng_addr = ctypes.addressof(self.rng_state)
+        self._make_callbacks()
+
+    # ------------------------------------------------------------ callbacks
+    def _make_callbacks(self):
+        rt = self
+
+        def print_num(fid, v):
+            f = rt.tables.fmts[fid]
+            if type(v) is UFloat:              # 9.81 ± 0.12 m/s² (D121)
+                rt.line.append(format_uncertain(v, f["rdim"], f["hint"], display_unit))
+                return
+            rt.line.append(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"], f.get("echo", True)))
+
+        def print_list(fid, p, n):
+            f = rt.tables.fmts[fid]
+            u = display_unit(f["rdim"], f["hint"])
+            if any(type(p[i]) is UFloat for i in range(n)):
+                rt.line.append(format_uncertain_list([p[i] for i in range(n)], u))
+                return
+            vals = [(p[i] - u.offset) / u.factor for i in range(n)]
+            sf = f["sf"]
+            if sf is not None and not f["direct"]:
+                sf = max(sf, 2)            # same rule as single numbers (DECISIONS D11)
+            if n > 12:
+                vals = vals[:5] + vals[-3:]
+            if sf and f["direct"] in (True, 3):    # a list written out: each element as written ([0, 0.5, 1, 1.5])
+                shown = [format_written(x, sf, f["direct"] == 3) for x in vals]
+            else:
+                shown = [format_number(x, sf, trim=False) for x in vals] if sf else format_default_seq(vals, DEFAULT_SF)
+            if n > 12:
+                shown = shown[:5] + ["…"] + shown[5:]
+            s = "[" + ", ".join(shown) + "]"
+            if u.name not in ("", "1"):
+                s += " " + u.name
+            if n > 12:
+                s += f"  ({n} values)"
+            rt.line.append(s)
+
+        def seq_values(f, p, idx):
+            u = display_unit(f["rdim"], f["hint"])
+            sf = f["sf"]
+            xs = [p[i] / u.factor for i in idx]
+            vals = [format_written(x, sf, f["direct"] == 3) if f["direct"] in (True, 3) else format_number(x, sf, trim=False)
+                    if f["direct"] else format_number(x, max(sf, 2), trim=False)
+                    for x in xs] if sf \
+                else format_default_seq(xs, DEFAULT_SF)
+            return vals, ("" if u.name in ("", "1") else " " + u.name)
+
+        def denoise(f, p, n):
+            """A computed vector's or matrix's entries below 10⁻¹⁴ of its largest are rounding noise and
+            print as 0 (like a complex number's parts, D94; FRICTION #59, D197).  Mirrored in aot_rt.c."""
+            xs = [p[i] for i in range(n)]
+            # disabled (red team round 6 #1, #2): a legitimately small entry (the 1 of a Minkowski metric next
+            # to c², 1 mm in AU) can't be told from rounding noise, and zeroing it is a silent wrong answer
+            return xs
+            big = max((abs(x) for x in xs if math.isfinite(x)), default=0.0)
+            if big > 0:
+                xs = [0.0 if math.isfinite(x) and abs(x) < 1e-14 * big else x for x in xs]
+            return xs
+
+        def print_vec(fid, p, n):
+            f = rt.tables.fmts[fid]
+            vals, unit = seq_values(f, denoise(f, p, n), range(n))
+            rt.line.append("<" + ", ".join(vals) + ">" + unit)
+
+        def print_mvec(fid, p, n):
+            """A vector with a unit per component: <1 m, 2 m/s> (one format per component, D29)."""
+            fs = [rt.tables.fmts[fid + i] for i in range(n)]
+            # one number style for all components (D11): whole numbers bare only if every default one is whole
+            xs = [(p[i] - u.offset) / u.factor for i, u in ((i, display_unit(f["rdim"], f["hint"]))
+                                                            for i, f in enumerate(fs))
+                  if fs[i]["sf"] is None and not fs[i]["direct"]]
+            whole = all(_whole(x) or not math.isfinite(x) for x in xs)
+            parts = [format_quantity(p[i], f["rdim"], f["hint"], f["sf"], f["direct"], whole_ok=whole)
+                     for i, f in enumerate(fs)]
+            rt.line.append("<" + ", ".join(parts) + ">")
+
+        def print_mat(fid, p, r, c):
+            f = rt.tables.fmts[fid]
+            vals, unit = seq_values(f, denoise(f, p, r * c), range(r * c))   # one number style for the whole matrix
+            rows = ["[" + ", ".join(vals[i * c:i * c + c]) + "]" for i in range(r)]
+            rt.line.append("[" + ", ".join(rows) + "]" + unit)
+
+        def print_cplx(fid, re_, im_):
+            """A complex number: 3 + 4i, (3 + 4i) Ω (D94)."""
+            from ..cplx import format_complex
+            f = rt.tables.fmts[fid]
+            rt.line.append(format_complex(re_, im_, f["rdim"], f["hint"], f["sf"], f["direct"]))
+
+        def print_clist(fid, p, n):
+            """A list of complex numbers, (re, im) interleaved: [3 + 0i, -1 + 1i] V (D243)."""
+            from ..clist import format_clist
+            f = rt.tables.fmts[fid]
+            idx = list(range(5)) + list(range(n - 3, n)) if n > 12 else range(n)
+            rt.line.append(format_clist([(p[2 * i], p[2 * i + 1]) for i in idx], f["rdim"], f["hint"], f["sf"],
+                                        f["direct"], n))
+
+        def print_textlist(p, n):
+            rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
+
+        def print_bool(b):
+            rt.line.append("true" if b else "false")
+
+        def print_text(i):
+            rt.line.append(rt.tables.texts[i])
+
+        def text_concat(i, j):
+            return rt.text_concat(i, j)
+
+        def text_num(fid, v):
+            return rt.text_num(fid, v)
+
+        def print_end():
+            try:
+                rt.out.write(" ".join(rt.line) + "\n")
+                rt.out.flush()
+            except BrokenPipeError:        # e.g. `fermium run x.fm | head -1`
+                try:
+                    sys.stderr.close()
+                finally:
+                    os._exit(0)
+            rt.line = []
+
+        def error(kind, a, b, line, fmt=-1):
+            if kind != ERR_PENDING:          # ERR_PENDING: a callback already set rt.error
+                rt.error = rt.describe_error(kind, a, b, fmt)
+            rt.error_line = rt.locate(line)
+
+        def warn(kind, a, line, fmt):
+            rt.warn(kind, a, line, fmt)
+
+        def plot_series(pid, idx, xp, nx, yp, ny):
+            if nx != ny:
+                rt.error = f"plot: the two lists have different lengths ({ny} and {nx} values)"
+                rt.plot_series.pop(pid, None)
+                return 1
+            xs = [xp[i] for i in range(nx)]
+            ys = [yp[i] for i in range(ny)]
+            rt.plot_series.setdefault(pid, []).append((idx, xs, ys))
+            return 0
+
+        def plot_sol(pid, idx, solp, comp, dy, comp2, dy2):
+            s = ctypes.cast(solp, ctypes.POINTER(SolStruct)).contents
+            ts, ys = sample_solution(s, comp, dy)
+            if comp2 >= 0:
+                _, xs = sample_solution(s, comp2, dy2)
+            else:
+                xs = ts
+            rt.plot_series.setdefault(pid, []).append((idx, list(xs), list(ys)))
+
+        def plot_done(pid):
+            try:
+                rt.make_plot(pid)
+            except Exception as ex:  # plotting problems shouldn't crash the program
+                rt.out.write(f"(plot not saved: {ex})\n")
+
+        def load(i):
+            return rt.load(i)
+
+        def table(n, ptrs, lens):
+            return rt.table([ptrs[k][:lens[k]] for k in range(n)])
+
+        def column(h, col, outp):
+            arr = rt.datasets[h][col]
+            outp[0] = arr.ctypes.data_as(DPTR)
+            return len(arr)
+
+        def fit(fid, h, p):
+            try:
+                rt.fit(fid, h, p)
+            except FermiumRuntimeError as ex:
+                rt.error = ex.message
+                return 1
+            return 0
+
+        def sort(p, n):
+            vals = sorted((p[i] for i in range(n)), key=lambda v: (v != v, v if v == v else 0.0))  # NaN last
+            for i, v in enumerate(vals):
+                p[i] = v
+
+        def stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol):
+            try:
+                return rt.stiff(guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol)
+            except BaseException as ex:          # nothing may escape into the compiled code
+                rt.error = getattr(ex, "message", None) or f"the stiff ODE solver failed: {ex}"
+                return 1
+
+        def fft(kind, a, b, n, dt, out):
+            try:
+                from .spectral import spectrum
+                m = 2 * n if kind in (6, 7) else n       # a complex input list holds 2n doubles (D243)
+                vals = spectrum(kind, a[:m], b[:n] if b else None, dt)
+                for i, v in enumerate(vals):
+                    out[i] = v
+                return 0
+            except BaseException as ex:          # nothing may escape into the compiled code
+                rt.error = f"the Fourier transform failed: {ex}"
+                return 1
+
+        def pde(guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, line, out):
+            from .m3rt import pde_cb
+            return pde_cb(rt, guard, fn, env, xa, xb, t0, t1, step, grid, order, method, bcl, bcr, cx, tdep, out,
+                          line)
+
+        def animate(aid, solp, xa, xb):
+            from .m3rt import animate_cb
+            return animate_cb(rt, aid, solp, xa, xb)
+
+        def eigen(guard, fn, env, a, b, nstates, grid, method, tname, fmt, out):
+            from .m3rt import eigen_cb
+            return eigen_cb(rt, guard, fn, env, a, b, nstates, grid, method, out, tname, fmt)
+
+        def pycall(cid, ptrs, lens, out):        # use python (D140)
+            from .pycall import jit_call
+            return jit_call(rt, cid, ptrs, lens, out)
+
+        def pyfetch(dst):
+            from .pycall import jit_fetch
+            jit_fetch(rt, dst)
+
+        # the plain Python versions, used by the reference interpreter (fermium/interp.py)
+        self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
+                   "print_mvec": print_mvec, "print_mat": print_mat, "print_cplx": print_cplx,
+                   "print_clist": print_clist, "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
+                   "plot_series": plot_series, "plot_done": plot_done}
+        self.callbacks = {
+            "fm_print_num": CB(None, c_int64, c_double)(print_num),
+            "fm_print_list": CB(None, c_int64, DPTR, c_int64)(print_list),
+            "fm_print_bool": CB(None, c_int64)(print_bool),
+            "fm_print_vec": CB(None, c_int64, DPTR, c_int64)(print_vec),
+            "fm_print_mvec": CB(None, c_int64, DPTR, c_int64)(print_mvec),
+            "fm_print_mat": CB(None, c_int64, DPTR, c_int64, c_int64)(print_mat),
+            "fm_print_cplx": CB(None, c_int64, c_double, c_double)(print_cplx),
+            "fm_print_clist": CB(None, c_int64, DPTR, c_int64)(print_clist),
+            "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
+            "fm_print_text": CB(None, c_int64)(print_text),
+            "fm_text_concat": CB(c_int64, c_int64, c_int64)(text_concat),
+            "fm_text_num": CB(c_int64, c_int64, c_double)(text_num),
+            "fm_print_end": CB(None)(print_end),
+            "fm_error": CB(None, c_int64, c_double, c_double, c_int64, c_int64)(error),
+            "fm_warn": CB(None, c_int64, c_double, c_int64, c_int64)(warn),
+            "fm_plot_series": CB(c_int64, c_int64, c_int64, DPTR, c_int64, DPTR, c_int64)(plot_series),
+            "fm_plot_sol": CB(None, c_int64, c_int64, c_void_p, c_int64, c_int64, c_int64, c_int64)(plot_sol),
+            "fm_plot_done": CB(None, c_int64)(plot_done),
+            "fm_load": CB(c_int64, c_int64)(load),
+            "fm_column": CB(c_int64, c_int64, c_int64, ctypes.POINTER(DPTR))(column),
+            "fm_table": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64))(table),
+            "fm_fit": CB(c_int64, c_int64, c_int64, DPTR)(fit),
+            "fm_sort": CB(None, DPTR, c_int64)(sort),
+            "fm_stiff": CB(c_int64, c_void_p, c_void_p, DPTR, c_int64, DPTR, c_double, c_double, c_double, c_void_p,
+                           c_int64, c_double, c_double, c_int64, ctypes.POINTER(c_void_p), DPTR)(stiff),
+            "fm_clock": CB(c_double)(time.perf_counter),
+            "fm_fft": CB(c_int64, c_int64, DPTR, DPTR, c_int64, c_double, DPTR)(fft),
+            "fm_pde": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_double, c_double, c_double,
+                         c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64, c_int64,
+                         ctypes.POINTER(c_void_p))(pde),
+            "fm_animate": CB(c_int64, c_int64, c_void_p, c_double, c_double)(animate),
+            "fm_pycall": CB(c_int64, c_int64, ctypes.POINTER(DPTR), ctypes.POINTER(c_int64), DPTR)(pycall),
+            "fm_pyfetch": CB(None, DPTR)(pyfetch),
+            "fm_eigen": CB(c_int64, c_void_p, c_void_p, DPTR, c_double, c_double, c_int64, c_int64, c_int64,
+                           c_int64, c_int64, ctypes.POINTER(c_void_p))(eigen),
+        }
+        if llvm is not None:
+            for name, cb in self.callbacks.items():
+                llvm.add_symbol(name, ctypes.cast(cb, c_void_p).value)
+
+    def fmt_value(self, v, fmt):
+        """Format a number with a print format (units) if one is known, else as plain SI."""
+        if fmt is not None and fmt >= 0 and self.tables and fmt < len(self.tables.fmts):
+            f = self.tables.fmts[fmt]
+            if "rdim" in f:
+                return format_quantity(v, f["rdim"], f["hint"], None, False)
+        return f"{format_number(v)} (SI units)"
+
+    def tname(self, i):
+        """The name of a solve's independent variable (a text id), for ODE errors."""
+        i = int(i) if i == i else -1
+        return self.tables.texts[i] if self.tables and 0 <= i < len(self.tables.texts) else "t"
+
+    def locate(self, code):
+        """The program line of a run-time line code; for code in a module, the error message also says where
+        in the module (D185)."""
+        line, suf = decode_line(code, self.tables.texts if self.tables is not None else None)
+        if suf and self.error and not self.error.endswith(suf):
+            self.error += suf
+        return line
+
+    def warn(self, kind, a, line, fmt=-1):
+        """A warning found while the program runs (shown on stderr, and kept in self.warnings)."""
+        line, suf = decode_line(line, self.tables.texts if self.tables is not None else None)
+        if kind == 1:
+            msg = (f"the two sides of this equation agree only to rounding error near {self.fmt_value(a, fmt)}, so "
+                   f"the solution found there may be meaningless (large terms cancelling?); rewrite the equation "
+                   f"so they cancel on paper")
+        elif kind == 2:
+            msg = (f"this equation looks stiff: rk45 has taken {int(a)} steps, held small by stability rather than "
+                   f"accuracy (time scales far apart); add  using radau  after the range for an implicit solver "
+                   f"made for this")
+        elif kind == 3:
+            msg = ("this integral came out as exactly 0 because the integrand wa"
+                   "s 0 at every point where it was sampled; if it is non-zero s"
+                   "omewhere narrow (a peak in a wide range), integrate over a range that fits it")
+        elif kind == 7:
+            msg = (f"the step is too coarse for this equation: the estimated error is {format_number(a * 100, 2)}% "
+                   f"of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or "
+                   f"drop  step  to use the adaptive solver")
+        elif kind == 8:
+            msg = (f"the time step is too coarse for this PDE: the estimated error is {format_number(a * 100, 2)}% "
+                   f"of the solution's range (checked by step doubling); use a smaller step, or drop  step  to "
+                   f"let Fermium choose it")
+        elif kind == 9:
+            msg = (f"this PDE's time step could not be made fine enough: with {PDE_MAX_STEPS} steps the "
+                   f"estimated error is still {format_number(a * 100, 2)}% of the solution's range (checked by step "
+                   f"doubling); the result may be inaccurate")
+        else:
+            msg = "warning"
+        text = "warning: " + (f"line {line}: " if line else "") + msg + suf
+        if kind == 7 and any(w.startswith(text.split(" is ")[0]) for w in self.warnings):
+            return            # once per solve, not once per loop pass
+        self.warn_text(text)
+
+    def warn_text(self, text):
+        """Show a run-time warning (once per distinct text), as warn() does; used by solvers whose message
+        carries more than one number (the eigenvalue solver's nearly degenerate levels, D233)."""
+        if not text.startswith("warning: "):
+            text = "warning: " + text
+        if text not in self.warnings:
+            self.warnings.append(text)
+            try:
+                self.err.write(text + "\n")
+                self.err.flush()
+            except (BrokenPipeError, ValueError):
+                pass
+
+    def add_text(self, s):
+        """A text made while the program runs ("3p" + "1/2", str(x)): its id in the text table, one id per
+        distinct text so a loop doesn't grow the table (D216)."""
+        made = self.__dict__.setdefault("_made_texts", {})
+        i = made.get(s)
+        if i is None:
+            self.tables.texts.append(s)
+            i = made[s] = len(self.tables.texts) - 1
+        return i
+
+    def text_concat(self, i, j):
+        return self.add_text(self.tables.texts[int(i)] + self.tables.texts[int(j)])
+
+    def text_num(self, fid, v):
+        f = self.tables.fmts[int(fid)]
+        if type(v) is UFloat:
+            return self.add_text(format_uncertain(v, f["rdim"], f["hint"], display_unit))
+        return self.add_text(format_quantity(v, f["rdim"], f["hint"], f["sf"], f["direct"], f.get("echo", True)))
+
+    def fmt_apart(self, a, b, fmt):
+        """Two values of one quantity with enough digits to tell them apart (2499.4 s, not 2500 s next to a
+        start of 2500 s) (D214)."""
+        for sf in (3, 4, 5, 6, 8, 10, 12, 15):
+            if fmt is not None and fmt >= 0 and self.tables and fmt < len(self.tables.fmts) and \
+                    "rdim" in self.tables.fmts[fmt]:
+                f = self.tables.fmts[fmt]
+                x, y = (format_quantity(v, f["rdim"], f["hint"], sf, False) for v in (a, b))
+            else:
+                x, y = (f"{format_number(v, sf)} (SI units)" for v in (a, b))
+            if x != y:
+                break
+        return x, y
+
+    def describe_error(self, kind, a, b, fmt=-1):
+        if kind >= 1_000_000:         # "too many steps": a = the place reached, b = the start (D214)
+            stiff = kind >= 2_000_000
+            name = self.tname(kind - (2_000_001 if stiff else 1_000_001))
+            reached, start = self.fmt_apart(a, b, fmt)
+            where = f"it got from {name} = {start} only to {name} = {reached}"
+            if stiff:
+                return f"the stiff ODE solver needed too many steps ({where}); the solution may blow up or " \
+                       f"oscillate very fast there"
+            return f"the ODE solver needed too many steps (20 million: {where}); if the equation is stiff (time " \
+                   f"scales far apart, like a 164 μs half-life in a chain followed for hours), add  using radau  " \
+                   f"after the range; otherwise the solution may blow up"
+        if kind == 1:
+            n = int(b)
+            if a != a:
+                return "a list index must be a whole number (1, 2, 3, ...), not NaN"
+            if n < 0:       # a vector's component or a matrix's row/column picked at run time (#54)
+                if abs(a) < math.inf and a != int(a):
+                    return f"an index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
+                return f"index {format_number(a)} is out of range: valid indexes here are 1 to {-n}" + \
+                    ("; Fermium counts from 1" if a == 0 else "")
+            if abs(a) < math.inf and a != int(a):
+                return f"a list index must be a whole number (1, 2, 3, ...), not {format_number(a)}"
+            if n == 0:
+                return f"index {format_number(a)} is out of range: the list is empty"
+            return f"index {format_number(a)} is out of range: the list has {n} element{'s' if n != 1 else ''} " \
+                   f"(valid indexes are 1 to {n})" + ("; Fermium counts from 1, so the first element is [1]"
+                                                      if a == 0 else "")
+        if kind == 2:
+            return f"asked for the solution at {self.fmt_value(a, fmt)}, outside the range it was solved " \
+                   f"for (it ends at {self.fmt_value(b, fmt)})"
+        if kind == 3:
+            return f"the ODE solver needed too many steps (reached {self.tname(b)} = {self.fmt_value(a, fmt)}); " \
+                   f"if the equation is stiff (time scales far apart, like a 164 μs half-life in a chain " \
+                   f"followed for hours), add  using radau  after the range; otherwise the solution may blow up"
+        if kind == 23:
+            return f"the stiff ODE solver needed too many steps (reached {self.tname(b)} = " \
+                   f"{self.fmt_value(a, fmt)}); the solution may blow up or oscillate very fast there"
+        if kind == 4:
+            return self.tables.texts[int(a)]
+        if kind == 5:
+            return f"these two lists have different lengths ({int(a)} and {int(b)})"
+        if kind == 6:
+            return "this list is empty"
+        if kind == 24:
+            return STD_ONE_TEXT
+        if kind == 25:
+            return f"the number of samples must be a whole number, 0 or more, not {format_number(a)}"
+        if kind == 26:
+            return "randn(μ, σ): σ is a standard deviation, so it can't be negative"
+        if kind == 7:
+            return "the step must be a non-zero number that goes from the start towards the end"
+        if kind == 8:
+            return f"the ODE solver's step became too small near {self.tname(b)} = {self.fmt_value(a, fmt)}; " \
+                   f"the solution may blow up there"
+        if kind == 34:
+            return f"the ODE solver's step became too small near {self.tname(b)} = {self.fmt_value(a, fmt)}; " \
+                   f"no unknown has grown there, so this is probably not a blow-up: the error control asks for " \
+                   f"relative accuracy on values that are tiny or rounding noise (like an abundance of 10⁻²³); " \
+                   f"add an absolute tolerance after the range, e.g.  tolerance 1e-9 absolute 1e-16  (in the " \
+                   f"units of the unknowns)"
+        if kind == 16:
+            v = self.fmt_value(a, fmt)
+            return f"the right side of the equation is NaN or infinite at {self.tname(b)} = {v} (0/0? 1/0?); " \
+                   f"if the equation is singular there, start slightly away from {v}"
+        if kind == 17:
+            return f"the range of {self.tname(b)} is empty: it starts and ends at {self.fmt_value(a, fmt)}"
+        if kind == 33:
+            return (f"{self.tables.texts[int(b)]}{self.fmt_value(a, fmt)}: the matrix of their coefficients is "
+                    f"singular (a zero mass or length?)")
+        if kind == 18:
+            return f"{self.tables.texts[int(b)]}{self.fmt_value(a, fmt)}; make the range longer"
+        if kind == 10:
+            name = self.tables.texts[int(a)] if a >= 0 else "a function"
+            return (f"{name} called itself too many times (the program ran out of stack) -- is a base case "
+                    f"missing, like  if n <= 0 then ...?")
+        if kind == 9:
+            return ("couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate "
+                    "without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere "
+                    f"-- the estimate was {format_number(a)} ± {format_number(b)} in SI units")
+        if kind in (31, 32):
+            i = int(b) if b == b else -1
+            name = self.tables.texts[i] if self.tables and 0 <= i < len(self.tables.texts) else "x"
+            fix = "e.g. exp(x) / (exp(x) - 1)² as exp(-x) / (1 - exp(-x))², or 1 - cos(x) as 2 sin(x/2)²"
+            if kind == 31:
+                return (f"the integrand is NaN at {name} = {self.fmt_value(a, fmt)} (0/0? ∞/∞? an overflow like "
+                        f"exp(710)?), so this integral can't be computed; rewrite the integrand so it stays finite "
+                        f"there, {fix}")
+            return (f"couldn't compute this integral: the integrand is infinite at {name} = {self.fmt_value(a, fmt)} "
+                    f"(1/0? an overflow like exp(710)?), so it may blow up there (like 1/x at 0); if it shouldn't, "
+                    f"rewrite it so it stays finite, e.g. 1 - cos(x) as 2 sin(x/2)²")
+        if kind == 11:
+            if a != a:
+                return "the length of a list must be a number, not NaN"
+            return f"not enough memory for a list of {format_number(a)} numbers (the most is 10⁹)"
+        if kind == 13:
+            return (f"this equation has no solution between {self.fmt_value(a, fmt)} and {self.fmt_value(b, fmt)}: "
+                    f"the two sides never cross there (checked at 200 points)")
+        if kind == 14:
+            return (f"the two sides of this equation jump past each other near {self.fmt_value(a, fmt)} (like tan "
+                    f"at 90°) instead of crossing: that's not a solution; narrow the range")
+        if kind == 40:
+            return (f"{self.tables.texts[int(a)]} are the same list (one was set from the other), so the iterations "
+                    f"of this parallel for would write and read the same numbers at the same time; make a copy "
+                    f"first, e.g.  ys = xs * 1")
+        if kind == 12:
+            return (f"this for loop has no definite number of steps: it goes from {format_number(a)} to "
+                    f"{format_number(b)} (NaN in the start, end or step)")
+        if kind == 15:
+            return "this matrix is singular (its determinant is 0), so it has no inverse and M x = b has no " \
+                   "unique solution"
+        if kind == 21:
+            return ("eigenvalues and eigenvectors need a symmetric matrix (M[i, j] = M[j, i]), like a stiffness or "
+                    "mass matrix; for K v = ω² M v write eigenvalues(K, M) rather than eigenvalues(inverse(M) K)")
+        if kind == 22:
+            return ("in eigenvalues(K, M) the second matrix M must be positive definite, like a mass matrix "
+                    "(positive masses on the diagonal)")
+        return "runtime error"
+
+    # ------------------------------------------------------------ stiff ODEs (D42)
+    def stiff(self, guard, fn, env, n, y0, t0, t1, rtol, ev, method, tname, evtext, fmt, out, atol=None):
+        """`solve ... using radau` in compiled code: SciPy steps, calling the compiled right-hand side (and
+        stop condition) through fm_ode_guard; the solution goes into a malloc'ed SolStruct at *out.
+        Returns 0, 1 (a solver error: rt.error set here) or 2 (the right side stopped with its own error)."""
+        from .stiff import StiffFail, stiff_solve
+        call = ctypes.CFUNCTYPE(ctypes.c_int32, c_void_p, DPTR, c_double, DPTR, DPTR)(guard)
+        yb = (c_double * n)()
+        ob = (c_double * n)()
+
+        class _Inner(Exception):
+            pass
+
+        def rhs(f):
+            def g(t, y):
+                for j in range(n):
+                    yb[j] = y[j]
+                if call(f, env, t, yb, ob):
+                    raise _Inner()
+                return ob[:n]
+            return g
+        f = rhs(fn)
+        g = None
+        if ev:
+            gf = rhs(ev)
+
+            def g(t, y):
+                return gf(t, y)[:1]
+        try:
+            ts, ys, dys = stiff_solve(f, y0[:n], t0, t1, rtol, "bdf" if method == 1 else "radau", g, tname,
+                                      evtext, atol[:n] if atol else None)     # absolute tolerances (D160)
+        except _Inner:
+            return 2
+        except StiffFail as fl:
+            self.error = self.describe_error(fl.kind, fl.a, fl.b, fmt)
+            return 1
+        except FermiumRuntimeError as ex:
+            self.error = ex.message
+            return 1
+        libc = _libc()
+        m = len(ts)
+        sp = ctypes.cast(libc.malloc(ctypes.sizeof(SolStruct)), ctypes.POINTER(SolStruct))
+        s = sp.contents
+        s.n, s.dim, s.cap = m, n, m
+        s.rhs, s.env = None, None
+        for name, vals in (("t", ts), ("y", ys), ("dy", dys)):
+            buf = libc.malloc(max(1, len(vals)) * 8)
+            ctypes.memmove(buf, (c_double * len(vals))(*vals), len(vals) * 8)
+            setattr(s, name, ctypes.cast(buf, DPTR))
+        out[0] = ctypes.cast(sp, c_void_p).value
+        return 0
+
+    # ------------------------------------------------------------ data
+    def load(self, i):
+        import numpy as np
+        import csv
+        info = self.tables.loads[i]
+        cols = info["columns"]
+        rows = []
+        with open(info["full"], newline="", encoding="utf-8-sig") as fh:
+            r = csv.reader(fh)
+            next(r)
+            for ln, row in enumerate(r, start=2):
+                if not row or all(not c.strip() for c in row):
+                    continue
+                if len(row) != len(cols):
+                    self.error = f"{info['path']}, line {ln}: expected {len(cols)} values but found {len(row)}"
+                    return 0
+                try:
+                    rows.append([float(c) for c in row])
+                except ValueError:
+                    self.error = f"{info['path']}, line {ln}: not a number: {row}"
+                    return 0
+        arr = np.array(rows, dtype=float).reshape(-1, len(cols))
+        data = []
+        for k, c in enumerate(cols):
+            u = c["unit"]
+            data.append(np.ascontiguousarray(arr[:, k] * u.factor + u.offset))
+        h = len(self.datasets) + 1
+        self.datasets[h] = data
+        return h
+
+    def table(self, columns):
+        """table(x = xs, y = ys) (D193): the lists (already SI) as a new data set; 0 and a message if their
+        lengths differ."""
+        import numpy as np
+        n = len(columns[0]) if columns else 0
+        for c in columns[1:]:
+            if len(c) != n:
+                self.error = f"the columns of this table have different lengths ({n} and {len(c)})"
+                return 0
+        h = len(self.datasets) + 1
+        self.datasets[h] = [np.ascontiguousarray(np.array(c, dtype=float)) for c in columns]
+        return h
+
+    # ------------------------------------------------------------ fit
+    def fit(self, fid, h, p, model_fn=None):
+        """Fit parameters p (in/out).  model_fn(params) -> residuals (model - left side) for the
+        interpreter; otherwise the compiled model function is called through ctypes."""
+        import numpy as np
+        info = self.tables.fits[fid]
+        data = self.datasets[h]
+        cols = [data[c] for c in info["cols"]]
+        n = len(data[0]) if data else 0
+        y = np.zeros(n)          # the model returns (model - left side), fitted to zero
+        np_ = len(info["params"])
+        if model_fn is None:
+            addr = self.engine_ref.get_function_address("lam." + info["model"])
+            model = ctypes.CFUNCTYPE(None, DPTR, ctypes.POINTER(DPTR), c_int64, DPTR)(addr)
+            colptrs = (DPTR * max(1, len(cols)))(*[c.ctypes.data_as(DPTR) for c in cols])
+            out = np.zeros(n)
+
+            def f(params):
+                pa = (ctypes.c_double * np_)(*params)
+                model(pa, colptrs, n, out.ctypes.data_as(DPTR))
+                return out.copy()
+        else:
+            f = model_fn
+
+        guess = [p[i] for i in range(np_)]
+        guess = [g if math.isfinite(g) else math.nan for g in guess]
+        from .fitting import least_squares_fit
+        extra = {}
+        best, errs, rms = least_squares_fit(f, y, guess, extra)
+        self.last_fit_cov = extra.get("cov")
+        for i in range(np_):
+            p[i] = best[i]
+            p[np_ + i] = errs[i] if errs[i] is not None and math.isfinite(errs[i]) else math.nan
+        # report
+        lines = [f"fit {info['text']}   ({n} data points from {info['path']})"]
+        for i, name in enumerate(info["params"]):
+            dim = info["rdims"][i]
+            hint = info.get("col_units", {}).get(dim)   # e.g. show a time constant in the data's minutes
+            u = display_unit(dim, hint)
+            val = format_quantity(best[i], dim, hint, fit_sigfigs(best[i], errs[i]), False)
+            if errs[i] is not None and math.isfinite(errs[i]):
+                se = format_number(errs[i] / u.factor, 2, trim=False)
+                unit = f" {u.name}" if u.name not in ("", "1") else ""
+                lines.append(f"  {name} = {val}   (standard error {se}{unit})")
+            else:
+                lines.append(f"  {name} = {val}   (standard error could not be estimated)")
+        yu = display_unit(info["rydim"], info.get("col_units", {}).get(info["rydim"]))   # the data's unit
+        unit = f" {yu.name}" if yu.name not in ("", "1") else ""
+        lines.append(f"  rms residual = {format_number(rms / yu.factor, 3, trim=False)}{unit}")
+        bad = [nm for nm, e in zip(info["params"], errs) if e is None or not math.isfinite(e)]
+        if bad:          # A45: don't pass a failed fit off as a result
+            lines.append(f"  warning: the fit may not have converged; give a starting guess, like  "
+                         f"fit ... with {bad[0]} = ...")
+        self.out.write("\n".join(lines) + "\n")
+        self.out.flush()
+
+    # ------------------------------------------------------------ plots
+    def make_plot(self, pid):
+        info = self.tables.plots[pid]
+        series = sorted(self.plot_series.pop(pid, []), key=lambda s: s[0])
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self.out.write("(plot skipped: matplotlib is not installed -- in the fermium folder run: python3 -m pip install -e \".[full]\")\n")
+            return
+        fig, ax = plt.subplots(figsize=(7, 4.5), dpi=110)
+        ylabels, xlabels = [], []
+        for idx, xs, ys in series:
+            s = info["series"][idx]
+            yu = display_unit(s["rydim"], s.get("yhint"))
+            xu = display_unit(s["rxdim"], s.get("xhint"))
+            X = [(x - xu.offset) / xu.factor for x in xs]
+            Y = [(y - yu.offset) / yu.factor for y in ys]
+            eb = self.plot_err.pop((pid, idx), None)
+            if eb is not None and eb[2] == "bars":          # uncertain values: error bars (D124)
+                xe = [e / abs(xu.factor) for e in eb[0]] if eb[0] and any(eb[0]) else None
+                ye = [e / abs(yu.factor) for e in eb[1]] if eb[1] and any(eb[1]) else None
+                ax.errorbar(X, Y, yerr=ye, xerr=xe, fmt="o", label=s["ylabel"], markersize=5, capsize=3)
+            elif eb is not None:                             # an uncertain curve: a ±1σ band
+                ye = [e / abs(yu.factor) for e in eb[1]]
+                line, = ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
+                ax.fill_between(X, [a - b for a, b in zip(Y, ye)], [a + b for a, b in zip(Y, ye)],
+                                color=line.get_color(), alpha=0.25, linewidth=0)
+            elif s.get("points"):
+                ax.plot(X, Y, "o", label=s["ylabel"], markersize=5)     # measured data: markers, not lines
+            else:
+                ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
+            opts = info.get("options", {})
+            ylabels.append((axis_label(s["ylabel"], yu.name, opts.get("ylabel")), is_formula_label(s["ylabel"])))
+            xlabels.append(axis_label(s["xlabel"], xu.name, opts.get("xlabel")))
+        ax.set_xlabel(xlabels[0] if xlabels else "")
+        ax.set_ylabel(y_axis_label(ylabels))
+        if len(series) > 1:
+            ax.legend()
+        opts = info.get("options", {})
+        if opts.get("logx"):
+            ax.set_xscale("log")
+        if opts.get("logy"):
+            ax.set_yscale("log")
+        if opts.get("title"):
+            ax.set_title(opts["title"])
+        ax.grid(True, alpha=0.3)
+        ranged = "xlim" in opts or "ylim" in opts
+        if not ranged and all(s["kind"] == "solxy" or s["rxdim"] == s["rydim"] and not s["rxdim"].dimensionless
+                              for s in info["series"]):
+            ax.set_aspect("equal", adjustable="datalim")     # orbits look round (not with a range given)
+        s0 = info["series"][0]
+        for which, setlim in (("x", ax.set_xlim), ("y", ax.set_ylim)):     # D161
+            if which + "lim" in opts:
+                u = display_unit(s0["r" + which + "dim"], s0.get(which + "hint"))
+                setlim(*[(v - u.offset) / u.factor for v in opts[which + "lim"]])
+        if opts.get("revx"):
+            ax.invert_xaxis()
+        if opts.get("revy"):
+            ax.invert_yaxis()
+        fig.tight_layout()
+        full = info["full"]
+        d = os.path.dirname(full)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        fig.savefig(full)
+        plt.close(fig)
+        self.plots_saved.append(full)
+        self.out.write(f"plot saved to {os.path.abspath(full)}\n")      # absolute: findable from anywhere (D251)
+        self.out.flush()
+
+
+def sample_solution(s: SolStruct, comp, use_dy, npts=600):
+    """Dense samples of a solution component (cubic Hermite between steps)."""
+    import numpy as np
+    n, dim = s.n, s.dim
+    t = np.ctypeslib.as_array(s.t, shape=(n,)).copy()
+    y = np.ctypeslib.as_array(s.y, shape=(n * dim,)).reshape(n, dim)[:, comp].copy()
+    dy = np.ctypeslib.as_array(s.dy, shape=(n * dim,)).reshape(n, dim)[:, comp].copy()
+    if n >= npts or n < 2:
+        return t, (dy if use_dy else y)
+    tt = np.linspace(t[0], t[-1], npts)
+    sg = 1.0 if t[-1] >= t[0] else -1.0       # times decrease for a solve towards smaller t (D39)
+    i = np.clip(np.searchsorted(sg * t, sg * tt, side="right") - 1, 0, n - 2)
+    h = t[i + 1] - t[i]
+    u = (tt - t[i]) / h
+    h00 = 2 * u**3 - 3 * u**2 + 1
+    h10 = u**3 - 2 * u**2 + u
+    h01 = -2 * u**3 + 3 * u**2
+    h11 = u**3 - u**2
+    if use_dy:
+        d00, d10 = 6 * u**2 - 6 * u, 3 * u**2 - 4 * u + 1
+        d01, d11 = 6 * u - 6 * u**2, 3 * u**2 - 2 * u
+        return tt, (d00 * y[i] + d10 * h * dy[i] + d01 * y[i + 1] + d11 * h * dy[i + 1]) / h
+    yy = h00 * y[i] + h10 * h * dy[i] + h01 * y[i + 1] + h11 * h * dy[i + 1]
+    return tt, yy
+
+
+Unit  # re-export

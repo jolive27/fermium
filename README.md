@@ -1,0 +1,202 @@
+# Fermium
+
+**Experimental prototype. Designed by John Oliver (physics, UTK) and built with Claude Code. Expect rough edges; feedback welcome.**
+
+See [Known limitations](docs/reference.md#19-known-limitations) for what's partial, and [dev-notes/](dev-notes/) for the development logs. MIT licensed ([LICENSE](LICENSE)).
+
+**Physics code that reads like physics on paper. The compiler understands units and calculus, and the code runs at native speed.**
+
+```fermium
+L = 1.20 m
+T = 2.21 s
+g = 4π² L / T²
+print g                 # 9.70 m/s²
+print g in ft/s²        # 31.8 ft/s²
+```
+
+Add `y = L + T` as line 6 of that file (a length plus a time, by mistake), and the program doesn't run at all. The compiler stops it first:
+
+```
+pendulum.fm, line 6: can't add length [m] to time [s]
+    y = L + T
+        ^^^^^
+  hint: both sides of + and - must have the same units
+```
+
+Fermium is a small programming language for physicists.
+- **Units are part of the language.** The compiler checks them *before the program runs*, and they cost nothing at run time: they are erased before code generation.
+- **Calculus is built in:** `x'`, `d/dt`, `∫ … dx from a to b`, and `solve m x'' = -k x with …`.
+- **Programs compile to native code** through LLVM (via llvmlite).
+- **Errors are one line in physics terms**, with a caret and a hint.
+- **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
+
+**What else is in the box** (each item is tested; details in the [reference](docs/reference.md)):
+- **Vectors, matrices and ∇:** `<1 m, 2 m, 0 m>`, `r × v`, `grad(φ)`, `div`, `curl`, `laplacian`, eigenvalues, and 3-D vector ODEs.
+- **Complex numbers:** `(3 + 4i) Ω`, `exp(𝑖 π)`, complex ODEs such as `1i ħ ψ' = E ψ`.
+- **Uncertainties:** `L = 1.000 ± 0.002 m` propagates with correlations (`x - x` is `0 ± 0`), plus `propagate montecarlo`, uncertain fit parameters and error bars.
+- **Serious numerics:** stiff solvers (`using radau`), eigenvalue problems (`solve -ħ²/(2 m_e) * ψ'' + V(x) ψ = E ψ … lowest 3`), 1-D PDEs (heat, wave, Schrödinger; animated GIFs), FFT, seeded random numbers and Monte Carlo, root finding.
+- **Natural units:** `units natural(ħ = c = 1)`, `units nuclear`, `units astro`. **Dimensional analysis:** `analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]` gives T ∝ √(L/g).
+- **Modules and a standard library:** `import mechanics`, `from nuclear import semf_binding`, with `fermium.toml` ([stdlib](docs/stdlib.md)).
+- **Tools:** REPL, Jupyter kernel, language server (hover shows units), VS Code extension, browser playground, and `fermium build` for standalone executables.
+- **Research reproductions** in [research/](research/README.md): the SEMF fitted to AME2020, the neutron-star mass–radius relation (TOV), the Chandrasekhar mass, the U-238 chain, hydrogen levels, the age of the universe (Planck 2018), Rutherford scattering by Monte Carlo, the pp/CNO crossover. Each is compared with published numbers.
+- **Printing:** a result shows as many significant figures as its inputs justify, and 3 when that is unspecified (`print x to 6 digits` for more). This is display only.
+
+## Install
+
+```
+git clone <this repository>
+cd fermium
+python3 -m pip install -e ".[full]"   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
+fermium doctor                   # checks everything and explains fixes
+```
+
+New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac, step by step.
+
+## A 30-second tour
+
+```fermium
+# Mass on a spring
+k = 50 N/m
+m = 0.5 kg
+ω = √(k/m)
+print ω in rad/s                      # 10 rad/s
+
+A = 10 cm                             # cm, not 0.1 m: here m is also the mass (Fermium would warn)
+x(t) = A cos(ω t)
+v = d/dt x
+print v                               # v(t) = -A ω sin(ω t)   [m/s, for t in s]
+
+F(x) = k x
+W = ∫ F(x) dx from 0 cm to 20 cm
+print W                               # 1 J
+
+b = 0.2 kg/s
+solve m x'' = -k x - b x'
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 5 s
+print x(5 s)                          # 3.52 cm (to 6 digits: 3.52006 cm)
+```
+
+Also:
+- `data = load "pendulum.csv"` reads a CSV whose headers carry units, like `L [m], T [s]`.
+- `fit T = 2π √(L / g) to data` fits the model and reports g in m/s². The left side may be a formula of a column: `fit T² = k L to data`.
+- `plot x vs t` saves a PNG with labelled axes.
+- Vectors: `<3, 4> m/s`, `|v|`, `v.x`, `a · b`, `a × b`. ODEs can have vector unknowns: `solve r'' = -G M r / |r|³ with …`.
+- Leibniz notation: `dx/dt` works for functions and in `solve`.
+- `fermium build prog.fm` makes a standalone executable (needs a C compiler). `load`, `fit` and `plot` work in it too; plots are written as SVG, and data files are read from the folder you run the program in.
+
+## Gallery
+
+Every example program in [`examples/`](examples) is commented and tested. Here are some of their plots.
+
+**Kepler orbits** ([04_kepler_orbit.fm](examples/04_kepler_orbit.fm)):
+```
+solve x'' = -GM x / (x² + y²)^(3/2),
+      y'' = -GM y / (x² + y²)^(3/2)
+  with x(0) = r_peri, y(0) = 0 m,
+       x'(0) = 0 m/s, y'(0) = v_peri
+  for t from 0 s to 1 yr
+plot y in AU vs x in AU, comet_y in AU vs comet_x in AU to "gallery/kepler_orbit.png"
+```
+![Kepler orbits](examples/gallery/kepler_orbit.png)
+
+**Binding energy per nucleon**, from the semi-empirical mass formula ([09_binding_energy.fm](examples/09_binding_energy.fm)):
+```
+B(Z, A) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + pairing(Z, A)
+...
+plot BperA in MeV vs As to "gallery/binding_energy.png"
+```
+![Binding energy per nucleon](examples/gallery/binding_energy.png)
+
+**The Bateman decay chain Mo-99 → Tc-99m → Tc-99** ([08_bateman_chain.fm](examples/08_bateman_chain.fm)):
+```
+solve N_Mo' = -λ_Mo N_Mo,
+      N_Tc' = λ_Mo N_Mo - λ_Tc N_Tc,
+      N_99' = λ_Tc N_Tc
+  with N_Mo(0) = N0, N_Tc(0) = 0, N_99(0) = 0
+  for t from 0 hr to 240 hr
+plot N_Mo vs t, N_Tc vs t, N_99 vs t to "gallery/bateman_chain.png"
+```
+![Bateman chain](examples/gallery/bateman_chain.png)
+
+**Planck's law for the Sun** ([06_blackbody.fm](examples/06_blackbody.fm)):
+```
+flux = π * ∫ B(λ) dλ from 0 nm to ∞        # equals σT⁴ to 10 digits
+plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
+```
+![Blackbody spectrum](examples/gallery/blackbody.png)
+
+## Speed
+
+Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number.
+
+| Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
+|---|---|---|---|
+| N-body, 1M steps | 0.95× Julia (2.5× faster than before M5: integer loop counters, D150) | 1× | ~55× Julia |
+| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | 1.93× Julia | 1× | ~21× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 0.86× Julia | 1× | ~20× Julia |
+| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | 1.27× Julia | 1× | ~20× Julia |
+| Loop with units | 1.54× Julia | 1× | ~79× Julia |
+| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 0.65× Julia (faster) | 1× | ~54× Julia's 1-thread time (Python runs one thread) |
+| the same, 1 thread | 1.09× Julia | 1× | |
+
+Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.2–0.45 s against 0.9–2.9 s for the whole process), because Julia spends that time starting up: loading its runtime and packages, the untimed warm-up call each benchmark makes, and JIT-compiling. A program that computes one number takes 0.17 s in Fermium and 0.27 s in Julia (the `startup` row in RESULTS.md).
+
+## Gauntlet
+
+Textbook problems from ten fields of physics, solved in Fermium and checked against closed forms or SciPy ([gauntlet/](gauntlet/README.md)). Every rough edge they hit is logged in [gauntlet/FRICTION.md](gauntlet/FRICTION.md) and fixed in the language where possible.
+
+<!-- gauntlet-table -->
+| Topic | Pass 1 | Pass 2 | Pass 3 (graduate) |
+|---|---|---|---|
+| mechanics | 3 | 3 | 2 |
+| oscillations | 3 | 3 | 2 |
+| gravitation | 3 | 3 | 2 |
+| thermodynamics | 3 | 3 | 2 |
+| electromagnetism | 3 | 3 | 2 |
+| optics waves | 3 | 3 | 2 |
+| special relativity | 3 | 3 | 2 |
+| quantum | 3 | 3 | 2 |
+| nuclear | 3 | 3 | 2 |
+| astrophysics | 4 | 3 | 2 |
+| **total** | **31** | **30** | **20** |
+
+Friction items logged: 96; fixed in the language: 86.
+<!-- /gauntlet-table -->
+
+## Browser playground
+
+`web/` is a static site that runs Fermium in the browser with [Pyodide](https://pyodide.org): an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It uses the reference interpreter (`fermium run --interp`), because llvmlite doesn't exist in the browser, so it is slower than the desktop compiler; its output matches `fermium run`.
+
+```
+python3 web/build.py                  # examples, symbols and a wheel of fermium -> web/gen/
+python3 -m http.server -d web 8000    # then open http://localhost:8000/
+```
+
+Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` downloads it (about 45 MB) into `web/pyodide/`, and the page then works offline. `web/gen/` and `web/pyodide/` are build outputs and are not committed.
+
+## Documentation
+- [Language reference](docs/reference.md)
+- [Rosetta page](docs/rosetta.md): the same programs in Fermium, Julia and Python
+- [Design decisions](DECISIONS.md): why the language is the way it is
+- [Bootcamp](bootcamp/README.md): a course for people who have never programmed
+- [Cheat sheet](bootcamp/CHEATSHEET.md)
+- [Standard library](docs/stdlib.md) and [uncertainties](docs/uncertainties.md)
+- [Research reproductions](research/README.md), [textbook gauntlet](gauntlet/FRICTION.md), [red team log](dev-notes/REDTEAM.md)
+- [VS Code extension](editors/vscode/README.md)
+
+## Development
+
+```
+./check.sh           # lint + all tests (including every ```fermium code block and bootcamp output box) + all examples
+python3 benchmarks/run.py
+```
+
+Project layout:
+- `fermium/`: the compiler.
+  - `lexer.py`, `parser.py`, `checker.py` (units and types), `calculus.py`, `solve.py`
+  - `codegen_llvm.py` (the LLVM backend and numeric kernels)
+  - `runtime/` (printing, plots, data, fits)
+  - `repl.py`, `fmt.py`, `cli.py`
+  - `interp.py` (the reference interpreter: no LLVM, also used by the browser playground)
+- `tests/`: pytest suites.

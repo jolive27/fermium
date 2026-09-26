@@ -1,0 +1,60 @@
+# Special relativity 32 — The relativistic Kepler problem: Sommerfeld's rosette
+#
+# (Goldstein 3rd ed., §7.10 and Exercise 7.27; Jackson 3rd ed., Problem 12.4 (a similar setup);
+#  Sommerfeld, Ann. Phys. 51, 1 (1916); Landau & Lifshitz, Classical Theory of
+#  Fields, §39 and Problem 39.1.)
+# A (classical, spinless) electron moves in the Coulomb field of a gold nucleus,
+# Z = 79, with the relativistic equations of motion
+#     r' = p c² / E_kin,   p' = −k r / |r|³,   E_kin = √(p² c² + m² c⁴),  k = Z e²/(4π ε₀).
+# It starts at a turning point r₀ = 3 ħ/(m c) on the x axis with momentum p₀ = 0.500 m c
+# along y, so its angular momentum is L = r₀ p₀ = 1.5 ħ.
+#   (a) The total energy E = E_kin − k/r, and check it is bound (E < m c²).
+#   (b) The orbit does not close: each radial period the turning point advances by
+#         Δφ = 2π (1/√(1 − (k/(L c))²) − 1)     (Landau & Lifshitz §39),
+#       i.e. by 2π(1/√(1 − (Zα/1.5)²) − 1). Integrate for a few radial periods, find the
+#       times of the next two turning points of the same kind (where r · p changes sign
+#       the same way), and measure the advance of the turning-point angle.
+#   (c) The radial period from the ODE against T_r = ∮ dr / ṙ by quadrature:
+#       T_r = 2 ∫ E_kin(r) dr / (c² p_r(r)) from r_min to r_max, with E_kin = E + k/r and
+#       p_r² = ((E + k/r)² − m²c⁴)/c² − L²/r²; r₀ turns out to be r_min.
+
+Z = 79
+k = Z e² / (4π ε_0)
+r0 = 3 ħ / (m_e c)
+p0 = 0.500 m_e c
+L = r0 p0
+Ekin(p) = √(|p|² c² + m_e² c⁴)
+E = √(p0² c² + m_e² c⁴) - k / r0
+print "(a) L/hbar =", L / ħ to 8 digits, " Z alpha =", k / (ħ c) to 8 digits, " E/(m c²) =", E / (m_e c²) to 10 digits, " bound:", E < m_e c²
+
+solve r' = p c² / Ekin(p),
+      p' = -k r / |r|^3
+  with r(0 s) = <r0, 0 m>, p(0 s) = <0 kg m/s, p0>
+  for t from 0 s to 3e-19 s tolerance 1e-12
+
+# turning points: r · p crosses zero. At t = 0 the electron is at the far point
+# (apocentre) or the near one; find every crossing of the same sign as the first
+radial(t) = r(t) · p(t)
+n_scan = 30000
+dt = 3e-19 s / n_scan
+tps = []
+for i from 2 to n_scan
+    a = radial((i - 1) dt)
+    b = radial(i dt)
+    if a > 0 kg m²/s and b <= 0 kg m²/s
+        solve radial(tc) = 0 kg m²/s for tc from (i - 1) dt to i dt
+        push(tps, tc)
+angle(t) = atan2(r(t).y, r(t).x)
+T_r = tps[2] - tps[1]
+adv = angle(tps[2]) - angle(tps[1])
+adv = if adv < 0 then adv + 2π else adv
+print "(b) turning points found:", len(tps), " advance per radial period =", adv in ° to 8 digits
+print "    Sommerfeld 2π(1/√(1 − (k/Lc)²) − 1) =", 2π (1 / √(1 - (k / (L c))²) - 1) in ° to 8 digits
+print "    first turning angle =", angle(tps[1]) in ° to 8 digits, " |r| there =", |r(tps[1])| / r0 to 8 digits
+
+# (c) the radial period by quadrature between the turning points r_min, r_max
+pr2(x) = ((E + k / x)² - m_e² c⁴) / c² - L² / x²
+solve pr2(rmax) = 0 kg² m²/s² for rmax from 1.01 r0 to 20 r0
+print "(c) r_max/r0 =", rmax / r0 to 10 digits, " T_r (ODE) =", T_r to 9 digits
+T_q = 2 ∫ (E + k / x) / (c² √(pr2(x))) dx from r0 to rmax
+print "    T_r (quadrature) =", T_q to 9 digits

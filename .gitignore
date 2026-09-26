@@ -1,0 +1,28 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.tools/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.ruff_cache/
+tests/programs/*.png
+.claude/
+web/gen/
+web/pyodide/
+.DS_Store
+.venv/
+venv/
+.ipynb_checkpoints/
+# John's personal files at the top level: never committed (spec A9.5)
+/my_notes.md
+/hello.fm
+/me.fm
+/ke.fm
+/lesson*.fm
+# editors and Rust builds
+.idea/
+*.swp
+target/

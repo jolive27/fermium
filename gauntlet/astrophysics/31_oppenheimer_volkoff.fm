@@ -1,0 +1,81 @@
+# Astrophysics 31 — The Oppenheimer–Volkoff limit: TOV stars of an ideal neutron Fermi gas
+#
+# (Shapiro & Teukolsky, Black Holes, White Dwarfs and Neutron Stars, §2.3 and §9.1,
+#  eqs. 2.3.3–2.3.6 and 5.7.6–5.7.8; Oppenheimer & Volkoff, Phys. Rev. 55, 374 (1939);
+#  Weinberg, Gravitation and Cosmology §11.3–11.4.)
+# A star of free, cold neutrons: with x = p_F/(m_n c) and K = m_n⁴ c⁵ / (8π² ħ³),
+#     ε(x) = K [x (2x² + 1) √(1 + x²) − asinh x]      (energy density, rest mass included),
+#     P(x) = (K/3) [x (2x² − 3) √(1 + x²) + 3 asinh x],   dP/dx = (8K/3) x⁴ / √(1 + x²).
+# The Tolman–Oppenheimer–Volkoff equations, written for x(r) and the mass m(r):
+#     dP/dr = −G (ε + P)(m + 4π r³ P / c²) / (c² r² (1 − 2 G m / (r c²))),
+#     dm/dr = 4π r² ε / c²,     dx/dr = (dP/dr) / (dP/dx).
+#   (a) For a central x_c = 1, integrate from r = 1 m (m = 4π r³ ε_c / 3c²) out to the
+#       surface (stop at x = 10⁻³) and give M and R.
+#   (b) Find the maximum mass over x_c by golden-section search (the Oppenheimer–Volkoff
+#       limit, 0.71 M☉) and its radius and central density.
+#   (c) The compactness 2GM/(Rc²) of the maximum-mass star, and the Newtonian limit: a
+#       low-density star (x_c = 0.05) must match the n = 3/2 polytrope P = K₁ ρ^(5/3),
+#       K₁ = (3π²)^(2/3) ħ² / (5 m_n^(8/3)): R = ξ₁ a, M = 4π a³ ρ_c (ξ₁² |θ'(ξ₁)|), with
+#       a² = (5/2) K₁ ρ_c^(−1/3) / (4π G), ξ₁ = 3.65375 and ξ₁²|θ'(ξ₁)| = 2.71406.
+# Workaround: a function can't return an ODE solution (friction #48), so M and R need two
+# functions that each solve the same equations.
+
+K_n = m_n^4 c^5 / (8π² ħ³)
+ε(x) = K_n (x (2 x² + 1) √(1 + x²) - asinh(x))
+P(x) = (K_n / 3) (x (2 x² - 3) √(1 + x²) + 3 asinh(x))
+dPdx(x) = (8 K_n / 3) x^4 / √(1 + x²)
+r_start = 1 m
+
+tov_mass(xc) =
+    solve x' = -G (ε(x) + P(x)) (m + 4π r³ P(x) / c²) / (c² r² (1 - 2 G m / (r c²))) / dPdx(x),
+          m' = 4π r² ε(x) / c²
+      with x(r_start) = xc, m(r_start) = 4π r_start³ ε(xc) / (3 c²)
+      for r from r_start to 1000 km tolerance 1e-10
+      until x = 0.001
+    return m[end]
+
+tov_radius(xc) =
+    solve y' = -G (ε(y) + P(y)) (M + 4π r³ P(y) / c²) / (c² r² (1 - 2 G M / (r c²))) / dPdx(y),
+          M' = 4π r² ε(y) / c²
+      with y(r_start) = xc, M(r_start) = 4π r_start³ ε(xc) / (3 c²)
+      for r from r_start to 1000 km tolerance 1e-10
+      until y = 0.001
+    return times(y)[end]
+
+print "(a) x_c = 1: M =", tov_mass(1) in M☉ to 8 digits, " R =", tov_radius(1) in km to 8 digits
+
+# (b) golden-section search for the maximum of M(x_c) on [0.3, 3]. (M(x_c) spirals at
+#     higher x_c with more local maxima: on [1, 10] the search lands on one at x_c = 8.5.)
+lo = 0.3
+hi = 3.0
+gr = (√5 - 1) / 2
+x1 = hi - gr (hi - lo)
+x2 = lo + gr (hi - lo)
+f1 = tov_mass(x1)
+f2 = tov_mass(x2)
+for it from 1 to 40
+    if f1 > f2
+        hi = x2
+        x2 = x1
+        f2 = f1
+        x1 = hi - gr (hi - lo)
+        f1 = tov_mass(x1)
+    else
+        lo = x1
+        x1 = x2
+        f1 = f2
+        x2 = lo + gr (hi - lo)
+        f2 = tov_mass(x2)
+x_max = (lo + hi) / 2
+M_max = tov_mass(x_max)
+R_max = tov_radius(x_max)
+print "(b) x_c at the maximum =", x_max to 5 digits, " M_max =", M_max in M☉ to 7 digits, " R =", R_max in km to 6 digits
+print "    central mass density =", ε(x_max) / c² in g/cm³ to 5 digits
+print "(c) compactness 2GM/(Rc²) =", 2 G M_max / (R_max c²) to 6 digits
+
+xs = 0.05
+ρc = m_n (xs m_n c / ħ)³ / (3π²)
+K1 = (3π²)^(2/3) ħ² / (5 m_n^(8/3))
+a_poly = √((5/2) K1 ρc^(-1/3) / (4π G))
+print "    x_c = 0.05: M =", tov_mass(xs) in M☉ to 6 digits, " polytrope =", 2.71406 * 4π a_poly³ ρc in M☉ to 6 digits
+print "                R =", tov_radius(xs) in km to 6 digits, " polytrope =", 3.65375 a_poly in km to 6 digits

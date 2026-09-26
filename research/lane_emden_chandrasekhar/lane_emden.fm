@@ -1,0 +1,63 @@
+# Lane–Emden polytropes and the Chandrasekhar mass.
+# Run from this folder:  fermium run lane_emden.fm
+#
+# A polytrope P = K ρ^(1 + 1/n) in hydrostatic equilibrium, with ρ = ρ_c θⁿ and r = a ξ, obeys
+#     θ'' + (2/ξ) θ' + θⁿ = 0,     θ(0) = 1, θ'(0) = 0.
+# The surface is the first zero ξ₁ of θ, and the mass is M = 4π a³ ρ_c ω_n with ω_n = −ξ₁² θ'(ξ₁).
+# The 2/ξ term is 0/0 at the centre, so we start at ξ₀ with the series θ ≈ 1 − ξ²/6 + n ξ⁴/120.
+
+ξ0 = 1e-5
+
+# n = 1 (exact: θ = sin ξ / ξ, ξ₁ = π, ω = π)
+solve θ1'' = -2 θ1' / ξ - θ1
+  with θ1(ξ0) = 1 - ξ0²/6 + ξ0⁴/120, θ1'(ξ0) = -ξ0/3 + ξ0³/30
+  for ξ from ξ0 to 10 tolerance 1e-12
+  until θ1 = 0
+
+# n = 3/2 (non-relativistic degenerate electrons: low-mass white dwarfs). θ^1.5 needs θ ≥ 0,
+# so it is written sign(θ)|θ|^1.5 in case a trial step goes past the surface.
+n = 1.5
+solve θ15'' = -2 θ15' / ξ - sign(θ15) abs(θ15)^1.5
+  with θ15(ξ0) = 1 - ξ0²/6 + n ξ0⁴/120, θ15'(ξ0) = -ξ0/3 + n ξ0³/30
+  for ξ from ξ0 to 10 tolerance 1e-12
+  until θ15 = 0
+
+# n = 3 (ultra-relativistic degenerate electrons: the Chandrasekhar limit; also Eddington's standard model)
+solve θ3'' = -2 θ3' / ξ - θ3³
+  with θ3(ξ0) = 1 - ξ0²/6 + 3 ξ0⁴/120, θ3'(ξ0) = -ξ0/3 + 3 ξ0³/30
+  for ξ from ξ0 to 10 tolerance 1e-12
+  until θ3 = 0
+
+ξ1_1 = times(θ1)[end]
+ξ1_15 = times(θ15)[end]
+ξ1_3 = times(θ3)[end]
+ω1 = -ξ1_1² θ1'(ξ1_1)
+ω15 = -ξ1_15² θ15'(ξ1_15)
+ω3 = -ξ1_3² θ3'(ξ1_3)
+print "n = 1:   ξ₁ =", ξ1_1 to 7 digits, "  −ξ₁²θ'(ξ₁) =", ω1 to 7 digits, "  ρ_c/ρ̄ =", ξ1_1³ / (3 ω1) to 5 digits
+print "n = 1.5: ξ₁ =", ξ1_15 to 7 digits, "  −ξ₁²θ'(ξ₁) =", ω15 to 7 digits, "  ρ_c/ρ̄ =", ξ1_15³ / (3 ω15) to 5 digits
+print "n = 3:   ξ₁ =", ξ1_3 to 7 digits, "  −ξ₁²θ'(ξ₁) =", ω3 to 7 digits, "  ρ_c/ρ̄ =", ξ1_3³ / (3 ω3) to 5 digits
+print "exact for n = 1: π =", π to 7 digits
+
+# The Chandrasekhar mass. Fully relativistic degenerate electrons: P = K ρ^(4/3) with
+#     K = (ħ c / 4) (3π²)^(1/3) / (μ_e m_u)^(4/3)          (μ_e = nucleons per electron)
+# For n = 3, M = 4π a³ ρ_c ω₃ with a² = K ρ_c^(-2/3) / (π G): the central density drops out,
+#     M_Ch = 4π ω₃ (K / (π G))^(3/2)   — one mass, whatever the density.
+M_Ch(μ_e) = 4π ω3 ((ħ c / 4) (3π²)^(1/3) / ((μ_e m_u)^(4/3) π G))^(3/2)
+print "M_Ch μ_e² =", M_Ch(1) in M☉ to 4 digits
+print "M_Ch (μ_e = 2, C/O or He white dwarf) =", M_Ch(2) in M☉ to 4 digits
+# With the hydrogen-atom mass m_H = m_p + m_e per nucleon instead, the formula gives the often-quoted 1.44 M☉:
+M_Ch_H(μ_e) = M_Ch(μ_e) (m_u / (m_p + m_e))²
+print "with m_H instead of m_u: M_Ch μ_e² =", M_Ch_H(1) in M☉ to 4 digits, "  μ_e = 2:", M_Ch_H(2) in M☉ to 4 digits
+print "M_Ch (μ_e = 56/26, iron core) =", M_Ch(56/26) in M☉ to 4 digits
+
+# The mass–radius relation of the n = 3/2 branch (low-mass white dwarfs, non-relativistic electrons):
+# K = (3π²)^(2/3) ħ² / (5 m_e (μ_e m_u)^(5/3)), a² = 5K/(8πG) ρ_c^(-1/3), M = 4π a³ ρ_c ω, R = ξ₁ a.
+# For M = 0.6 M☉ this gives ρ_c, then R:
+K15 = (3π²)^(2/3) ħ² / (5 m_e (2 m_u)^(5/3))
+a3 = (5 K15 / (8π G))^(3/2)         # a³ ρ_c^(1/2), in m³ (kg/m³)^(1/2)
+ρc = (0.6 M☉ / (4π a3 ω15))^2
+R_wd = ξ1_15 (5 K15 / (8π G))^(1/2) ρc^(-1/6)
+print "n = 3/2 white dwarf of 0.6 M☉ (μ_e = 2): R =", R_wd in km to 4 digits, "  ρ_c =", ρc in g/cm³ to 3 digits
+
+plot θ1 vs ξ, θ15 vs ξ, θ3 vs ξ with title "Lane–Emden θ(ξ) for n = 1, 1.5, 3" to "lane_emden.png"

@@ -1,0 +1,73 @@
+# Thermodynamics 23 — A Carnot engine running on blackbody radiation, and a Stirling engine
+#
+# (Kittel & Kroemer, Thermal Physics, ch. 4 and 8 (problem 4.6); Callen §4.5 and §16.x;
+#  Schroeder, An Introduction to Thermal Physics, §4.1 and §7.4.)
+# Radiation in a cavity has U = aVT⁴ and P = aT⁴/3 with a = 4σ/c, so S = (4/3)aVT³.
+#
+#   (a) The adiabat. From dU = −P dV, the temperature obeys dT/dV = −T/(3V). Solve it
+#       from V = 1.00 L at T = 3000 K out to 8.00 L; VT³ is constant, so T should halve.
+#   (b) A Carnot cycle on the photon gas between T_h = 3000 K and T_c = 1500 K:
+#       isothermal expansion 1.00 L → 2.00 L at T_h, adiabatic to T_c, isothermal
+#       compression, adiabatic back. Find the four corner volumes, the work on every
+#       leg as ∫P dV, the heat taken in, Q_h = T_h ΔS, and the efficiency; compare
+#       with 1 − T_c/T_h. Check the Clausius sum Q_h/T_h + Q_c/T_c = 0.
+#   (c) A Stirling engine: 1.00 mol of a monatomic ideal gas between the same
+#       temperatures, volumes 1.00 L and 3.00 L (two isotherms, two isochores).
+#       Without a regenerator the isochoric heating also costs heat:
+#           η = R ln r (T_h − T_c) / (R T_h ln r + C_V (T_h − T_c)).
+#       With a perfect regenerator η = 1 − T_c/T_h. With a regenerator of
+#       effectiveness ε = 0.900 only (1 − ε) of the isochoric heat is bought.
+
+a_rad = 4σ / c
+print "radiation constant a:", a_rad to 6 digits
+
+# (a) the adiabat as an ODE in the volume
+# (`3 V` would be 3 volts, and the error doesn't say so: FRICTION T11)
+solve T' = -T / (3*V)
+  with T(1.00 L) = 3000 K
+  for V from 1.00 L to 8.00 L tolerance 1e-12
+print "adiabat: T at 8 L:", T(8.00 L) to 7 digits
+print "V T³ at 1 L and 8 L:", (1.00 L) (3000 K)³ to 7 digits, (8.00 L) T(8.00 L)³ to 7 digits
+
+# (b) the Carnot cycle on radiation
+T_h = 3000 K
+T_c = 1500 K
+V1 = 1.00 L
+V2 = 2.00 L
+V3 = V2 (T_h / T_c)³
+V4 = V1 (T_h / T_c)³
+print "corner volumes:", V1 in L, V2 in L, V3 in L to 6 digits, V4 in L to 6 digits
+
+P_iso(temp) = a_rad temp^4 / 3
+P_adiabat(V, V0, T0) = a_rad (T0 (V0 / V)^(1/3))^4 / 3
+W12 = ∫ P_iso(T_h) dV from V1 to V2
+W23 = ∫ P_adiabat(V, V2, T_h) dV from V2 to V3
+W34 = ∫ P_iso(T_c) dV from V3 to V4
+W41 = ∫ P_adiabat(V, V4, T_c) dV from V4 to V1
+W = W12 + W23 + W34 + W41
+print "work on each leg (μJ):", W12 in μJ to 6 digits, W23 in μJ to 6 digits, W34 in μJ to 6 digits, W41 in μJ to 6 digits
+print "net work:", W in μJ to 6 digits
+
+S(V, temp) = 4/3 * a_rad V temp³
+Q_h = T_h (S(V2, T_h) - S(V1, T_h))
+Q_c = T_c (S(V4, T_c) - S(V3, T_c))
+print "heat in, heat out:", Q_h in μJ to 6 digits, Q_c in μJ to 6 digits
+print "first law, W − (Q_h + Q_c):", (W - Q_h - Q_c) in μJ
+print "Clausius sum:", Q_h / T_h + Q_c / T_c
+print "photon Carnot efficiency:", W / Q_h to 6 digits, " 1 − T_c/T_h:", 1 - T_c / T_h to 6 digits
+
+# (c) the Stirling engine
+n = 1.00 mol
+C_V = 3/2 * R_gas
+Va = 1.00 L
+Vb = 3.00 L
+P_gas(V, temp) = n R_gas temp / V
+W_hot = ∫ P_gas(V, T_h) dV from Va to Vb
+W_cold = ∫ P_gas(V, T_c) dV from Vb to Va
+Q_isochoric = n C_V (T_h - T_c)
+W_st = W_hot + W_cold
+print "Stirling net work:", W_st in kJ to 6 digits
+print "Stirling, no regenerator:", W_st / (W_hot + Q_isochoric) to 6 digits
+print "Stirling, closed form:", R_gas ln(Vb / Va) (T_h - T_c) / (R_gas T_h ln(Vb / Va) + C_V (T_h - T_c)) to 6 digits
+print "Stirling, perfect regenerator:", W_st / W_hot to 6 digits
+print "Stirling, 90 % regenerator:", W_st / (W_hot + (1 - 0.900) Q_isochoric) to 6 digits

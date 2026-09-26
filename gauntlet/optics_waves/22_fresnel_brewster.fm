@@ -1,0 +1,58 @@
+# Optics 22 — Fresnel equations, Brewster's angle and total internal reflection
+#
+# Light goes from air (n₁ = 1.000) into crown glass (n₂ = 1.520). With θ_t from
+# Snell's law, n₁ sin θ_i = n₂ sin θ_t, the Fresnel amplitude coefficients are
+#
+#     r_s = (n₁ cos θ_i − n₂ cos θ_t) / (n₁ cos θ_i + n₂ cos θ_t),   t_s = 1 + r_s,
+#     r_p = (n₂ cos θ_i − n₁ cos θ_t) / (n₂ cos θ_i + n₁ cos θ_t),   t_p = (1 + r_p) n₁/n₂.
+#
+# (a) Find the reflectance at normal incidence, ((n₂ − n₁)/(n₂ + n₁))².
+# (b) Find Brewster's angle by solving r_p(θ) = 0; compare with atan(n₂/n₁), and
+#     check that the reflected and refracted rays are then perpendicular.
+# (c) At 60°, find R_s, R_p and the transmittances T = (n₂ cos θ_t / n₁ cos θ_i) t²,
+#     and check energy conservation, R + T = 1, for both polarisations.
+# (d) Unpolarised light at 60°: the reflectance and the degree of polarisation
+#     of the reflected light, (R_s − R_p)/(R_s + R_p).
+# (e) From inside the glass: the critical angle, and the phase shift of total
+#     internal reflection for s light at 45°,
+#     δ_s = 2 atan(√(sin²θ − (n₁/n₂)²) / cos θ).
+# (Hecht, Optics §4.6; Griffiths §9.3.3)
+
+n1 = 1.000
+n2 = 1.520
+
+θt(θ) = asin(n1 sin(θ) / n2)
+r_s(θ) = (n1 cos(θ) - n2 cos(θt(θ))) / (n1 cos(θ) + n2 cos(θt(θ)))
+r_p(θ) = (n2 cos(θ) - n1 cos(θt(θ))) / (n2 cos(θ) + n1 cos(θt(θ)))
+t_s(θ) = 1 + r_s(θ)
+t_p(θ) = (1 + r_p(θ)) n1 / n2
+T_factor(θ) = n2 cos(θt(θ)) / (n1 cos(θ))
+
+# (a)
+print "(a) R at normal incidence =", r_s(0°)² to 10 digits, "  formula", ((n2 - n1)/(n2 + n1))² to 10 digits
+
+# (b) Brewster
+solve r_p(θ_B) = 0 for θ_B from 1° to 89°
+print "(b) Brewster angle =", θ_B in ° to 10 digits, "  atan(n2/n1) =", atan(n2/n1) in ° to 10 digits
+print "    angle between reflected and refracted rays =", 180° - θ_B - θt(θ_B) in ° to 10 digits
+
+# (c) at 60°
+θ = 60°
+R_s = r_s(θ)²
+R_p = r_p(θ)²
+T_s = T_factor(θ) t_s(θ)²
+T_p = T_factor(θ) t_p(θ)²
+# `in 1`: without it T_s prints as 46.8°, because the plain number inherits the
+# degree display of the argument θ = 60° (FRICTION O5)
+print "(c) R_s =", R_s to 10 digits, " T_s =", T_s in 1 to 10 digits, " R_s + T_s =", R_s + T_s in 1 to 10 digits
+print "    R_p =", R_p to 10 digits, " T_p =", T_p in 1 to 10 digits, " R_p + T_p =", R_p + T_p in 1 to 10 digits
+
+# (d) unpolarised
+print "(d) R unpolarised =", (R_s + R_p)/2 to 10 digits, "  polarisation =", (R_s - R_p)/(R_s + R_p) to 10 digits
+
+# (e) from inside the glass
+θ_c = asin(n1 / n2)
+print "(e) critical angle =", θ_c in ° to 10 digits
+θ_g = 45°
+δ_s = 2 atan(√(sin(θ_g)² - (n1/n2)²) / cos(θ_g))
+print "    TIR phase shift for s at 45° =", δ_s in ° to 10 digits

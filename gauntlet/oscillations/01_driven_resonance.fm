@@ -1,0 +1,54 @@
+# Oscillations 01 — Resonance of a damped, driven oscillator
+#
+# (Taylor, Classical Mechanics, §5.5–5.6; Halliday ch. 15.)
+# A 0.200 kg mass on a spring (k = 80.0 N/m) with linear damping
+# b = 0.400 kg/s is driven by F(t) = F₀ cos(ω t), F₀ = 0.500 N.
+#
+#   (a) Natural frequency ω₀, damping rate γ = b/m, quality factor Q = ω₀/γ.
+#   (b) The steady-state amplitude A(ω) = (F₀/m) / √((ω₀² − ω²)² + γ² ω²) and
+#       phase lag δ(ω) = atan2(γ ω, ω₀² − ω²); the resonance frequency
+#       ω_r = √(ω₀² − γ²/2) and the peak amplitude. The full width of the
+#       resonance curve of A² at half maximum; compare with γ.
+#   (c) Integrate the equation of motion from rest for several driving
+#       frequencies, long enough for the transient (∝ e^{−γt/2}) to die out,
+#       and measure the amplitude and phase; compare with (b).
+
+m = 0.200 kg
+k = 80.0 [N/m]
+b = 0.400 kg/s
+F0 = 0.500 N
+
+ω0 = √(k / m)
+γ = b / m
+Q = ω0 / γ
+print "natural frequency:", ω0 to 6 digits
+print "damping rate:", γ to 6 digits
+print "quality factor:", Q to 6 digits
+
+A(ω) = (F0 / m) / √((ω0² - ω²)² + γ² ω²)
+δ(ω) = atan2(γ ω, ω0² - ω²)
+ω_r = √(ω0² - γ²/2)
+print "resonance frequency:", ω_r to 6 digits
+print "peak amplitude:", A(ω_r) in cm to 6 digits
+print "static deflection F0/k:", F0 / k in cm to 6 digits
+
+# Half-power points: A(ω)² = A(ω_r)²/2, one on each side of ω_r
+half = A(ω_r) / √2
+solve A(ω_minus) = half for ω_minus from 0 rad/s to ω_r
+solve A(ω_plus) = half for ω_plus from ω_r to 2 ω0
+print "half-power points:", ω_minus to 6 digits, ω_plus to 6 digits
+print "full width at half power:", ω_plus - ω_minus to 6 digits, " (γ =", γ, ")"
+
+# (c) numerical experiment: sweep the driving frequency
+t_end = 30 s                 # e^{-γ t/2} = e^{-30}: the transient is gone
+for ratio in [0.50, 0.90, 0.99, 1.00, 1.10, 2.00]
+    ω = ratio ω0
+    solve m x'' = -k x - b x' + F0 cos(ω t)
+      with x(0) = 0 [m], x'(0) = 0 m/s
+      for t from 0 s to t_end
+    # x = A cos(ω t − δ) in the steady state, so A² = x² + (x'/ω)²
+    xe = x(t_end)
+    ve = x'(t_end)
+    A_num = √(xe² + (ve / ω)²)
+    δ_num = mod(ω t_end - atan2(-ve / ω, xe), 2π)
+    print "ω/ω0 =", ratio, " A_ode =", A_num in cm to 6 digits, " A_formula =", A(ω) in cm to 6 digits, " phase_ode =", δ_num in deg to 6 digits, " phase_formula =", δ(ω) in deg to 6 digits

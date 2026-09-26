@@ -1,0 +1,76 @@
+# Neutron stars made of an ideal (non-interacting) neutron Fermi gas, in general relativity:
+# the Tolman–Oppenheimer–Volkoff equation. Oppenheimer & Volkoff (1939) found the largest mass
+# such a star can have, about 0.71 M☉. Run from this folder:  fermium run tov.fm
+#
+# The equation of state is written with the Fermi momentum x = p_F/(m_n c) as the parameter:
+#   energy density ε = K_n [(2x³ + x)√(1 + x²) − asinh x]       (rest mass included)
+#   pressure       P = K_n/3 [(2x³ − 3x)√(1 + x²) + 3 asinh x],   K_n = m_n⁴c⁵/(8π²ħ³)
+# TOV:  dP/dr = −G (ε + P)(m + 4π r³ P/c²) / (c² r² (1 − 2Gm/(r c²))),   dm/dr = 4π r² ε/c²
+# We integrate y = x² instead of P (dP/dr = P'(x) dx/dr): y falls linearly to 0 at the
+# surface, where P and dP/dx vanish, so `until y = 0` finds the radius precisely.
+
+K_n = m_n^4 c^5 / (8π² ħ³)
+ε(x) = K_n ((2x³ + x) √(1 + x²) - asinh(x))
+P(x) = (K_n/3) ((2x³ - 3x) √(1 + x²) + 3 asinh(x))
+dPdx(x) = 8 K_n x^4 / (3 √(1 + x²))
+dPdr(x, r, m) = -G (ε(x) + P(x)) (m + 4π r³ P(x) / c²) / (c² r² (1 - 2 G m / (r c²)))
+
+r0 = 1 m            # start just off-centre (m/r² is 0/0 at r = 0); m(r0) ≈ 4π r0³ ε/3c² is negligible
+
+# one star: the central Fermi momentum xc gives <mass, radius>
+star(xc) =
+    solve
+        y' = 2 √(abs(y)) dPdr(√(abs(y)), r, m) / dPdx(√(abs(y)))
+        m' = 4π r² ε(√(abs(y))) / c²
+        with y(r0) = xc², m(r0) = 0 kg
+        for r from r0 to 200 km
+        until y = 0
+    return <m[end], times(m)[end]>
+
+# the mass–radius curve: 80 central densities, xc from 0.05 to 6 (geometric spacing)
+mass = []
+radius = []
+x_c = []
+for i from 0 to 79
+    xc = 0.05 * 120^(i / 79)
+    s = star(xc)
+    push(x_c, xc)
+    push(mass, s.x)
+    push(radius, s.y)
+
+# the maximum: take the best grid point, then refine by golden-section search on M(xc)
+best = 1
+for i from 1 to len(mass)
+    if mass[i] > mass[best]
+        best = i
+a = x_c[max(best - 1, 1)]
+b = x_c[min(best + 1, len(mass))]
+φg = (√5 - 1) / 2
+for k from 1 to 40
+    x1 = b - φg (b - a)
+    x2 = a + φg (b - a)
+    if star(x1).x > star(x2).x
+        b = x2
+    else
+        a = x1
+xmax = (a + b) / 2
+top = star(xmax)
+n_c = xmax³ (m_n c / ħ)³ / (3π²)              # neutron number density at the centre
+print "maximum mass:", top.x in M☉ to 4 digits
+print "radius at maximum mass:", top.y in km to 4 digits
+print "central Fermi momentum x_c =", xmax to 4 digits
+print "central density (rest mass):", n_c m_n in g/cm³ to 3 digits, "  (ε/c²:", ε(xmax) / c² in g/cm³ to 3 digits, ")"
+print "compactness 2GM/(Rc²):", 2 G top.x / (top.y c²) to 3 digits
+
+# a few points of the curve, for the table in the README
+for xc in [0.2, 0.5, 1.0, 2.0]
+    s = star(xc)
+    print "x_c =", xc, ": M =", s.x in M☉ to 4 digits, "  R =", s.y in km to 4 digits
+
+# Newtonian limit check: at low density the gas is a non-relativistic n = 3/2 polytrope, so M R³ is constant
+lo1 = star(0.05)
+lo2 = star(0.07)
+print "M R³ at x_c = 0.05 and 0.07 (constant for n = 3/2):", lo1.x lo1.y³ in M☉ km³ to 3 digits, lo2.x lo2.y³ in M☉ km³ to 3 digits
+
+plot mass in M☉ vs radius in km with title "Ideal neutron gas (Oppenheimer–Volkoff 1939): M_max = 0.71 M☉" to "mass_radius.png"
+plot mass in M☉ vs x_c with log x, title "Mass against central Fermi momentum x_c = p_F/(m_n c)" to "mass_vs_xc.png"

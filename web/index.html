@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fermium Playground</title>
+<meta name="description" content="Run Fermium, the physics programming language with units and calculus, in your browser.">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="playground.css">
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="logo">Fm</span> Fermium <span class="sub">playground</span></div>
+  <label class="examples">
+    <span class="visually-hidden">Example</span>
+    <select id="examples" aria-label="Examples"></select>
+  </label>
+  <div class="actions">
+    <button id="run" class="primary" disabled title="Run (Ctrl+Enter / Cmd+Enter)">Run <kbd id="runkey">Ctrl+Enter</kbd></button>
+    <button id="stop" hidden title="Stop the running program">Stop</button>
+  </div>
+</header>
+<main>
+  <section class="pane editor-pane">
+    <div class="pane-head">
+      <span>program.fm</span>
+      <span class="hint">Type <code>\pi</code> then <kbd>Tab</kbd> for π · <code>\^2</code> <kbd>Tab</kbd> for ²</span>
+    </div>
+    <textarea id="code" wrap="off" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+              aria-label="Fermium program"></textarea>
+    <div id="complete" class="complete" aria-live="polite"></div>
+  </section>
+  <section class="pane output-pane">
+    <div class="pane-head"><span>Output</span><span id="status" class="status">starting…</span></div>
+    <div id="output" class="output" aria-live="polite"></div>
+  </section>
+</main>
+<footer class="foot">
+  Runs entirely in your browser with <a href="https://pyodide.org">Pyodide</a> and Fermium's reference
+  interpreter (the desktop <code>fermium run</code> compiles to native code with LLVM and is much faster).
+</footer>
+<script src="playground.js"></script>
+</body>
+</html>

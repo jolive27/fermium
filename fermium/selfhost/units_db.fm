@@ -1,0 +1,102 @@
+# The unit database of Fermium, written in Fermium (moonshot M8).
+#
+# Every non-SI unit the compiler knows is defined here from SI base units, the coherent SI derived
+# units (N, J, W, Pa, C, V, T -- factor 1 by definition) and exact defining numbers. Fermium's own unit
+# checker verifies every definition: each line divides a unit by the SI unit it must be a multiple of,
+# so a definition with the wrong dimension (say `ly = c` or `psi = lbf / one_inch`) is a compile error.
+# `python3 -m fermium.selfhost` runs this program and writes fermium/units_selfhosted.py, which
+# fermium/units.py loads. Only the base and coherent SI units stay in Python.
+
+# ---- time
+one_minute = 60 s
+one_hour = 60 one_minute
+day_ = 24 one_hour
+julian_year = 365.25 day_
+print "min", one_minute / (1 s) to 17 digits
+print "hr", one_hour / (1 s) to 17 digits
+print "hour", one_hour / (1 s) to 17 digits
+print "day", day_ / (1 s) to 17 digits
+print "yr", julian_year / (1 s) to 17 digits
+print "year", julian_year / (1 s) to 17 digits
+
+# ---- length: international one_inch (1959) and the imperial chain built on it
+one_inch = 2.54 cm
+one_foot = 12 one_inch
+one_yard = 3 one_foot
+one_mile = 1760 one_yard
+print "inch", one_inch / (1 m) to 17 digits
+print "in_", one_inch / (1 m) to 17 digits
+print "ft", one_foot / (1 m) to 17 digits
+print "yd", one_yard / (1 m) to 17 digits
+print "mi", one_mile / (1 m) to 17 digits
+print "mile", one_mile / (1 m) to 17 digits
+print "Å", 1e-10 * (1 m) / (1 m) to 17 digits
+print "angstrom", 1e-10 * (1 m) / (1 m) to 17 digits
+
+# ---- astronomy: au exact (IAU 2012 B2), light year from c and the Julian year, parsec exactly 648000/π au
+#      (IAU 2015 B2; the older au/tan(1″) differs by 8×10⁻¹² -- writing this file in Fermium caught it)
+au_ = 149597870700 * (1 m)
+speed_of_light = 299792458 m/s
+light_year = speed_of_light julian_year
+arcsecond = π/648000                      # radians (angles are plain numbers, DECISIONS D6)
+parsec = au_ / arcsecond
+print "au", au_ / (1 m) to 17 digits
+print "AU", au_ / (1 m) to 17 digits
+print "ly", light_year / (1 m) to 17 digits
+print "pc", parsec / (1 m) to 17 digits
+print "R☉", 6.957e8 * (1 m) / (1 m) to 17 digits
+print "Rsun", 6.957e8 * (1 m) / (1 m) to 17 digits
+print "R_E", 6.3781e6 * (1 m) / (1 m) to 17 digits
+print "Rearth", 6.3781e6 * (1 m) / (1 m) to 17 digits
+
+# ---- area and volume
+barn = 1e-28 m²
+litre = (10 cm)³
+print "b", barn / (1 m²) to 17 digits
+print "barn", barn / (1 m²) to 17 digits
+print "ha", (100 m) * (100 m) / (1 m²) to 17 digits
+print "L", litre / (1 m³) to 17 digits
+print "l", litre / (1 m³) to 17 digits
+
+# ---- mass: one_pound (1959), unified atomic mass unit (CODATA 2022), nominal solar mass GM☉/G (IAU 2015 B3)
+one_pound = 0.45359237 kg
+dalton = 1.66053906892e-27 kg
+GMsun = 1.3271244e20 m³/s²
+Gnewton = 6.67430e-11 m³/(kg s²)
+print "u", dalton / (1 kg) to 17 digits
+print "amu", dalton / (1 kg) to 17 digits
+print "Da", dalton / (1 kg) to 17 digits
+print "tonne", 1000 * (1 kg) / (1 kg) to 17 digits
+print "lb", one_pound / (1 kg) to 17 digits
+print "M☉", GMsun / Gnewton / (1 kg) to 17 digits
+print "Msun", GMsun / Gnewton / (1 kg) to 17 digits
+print "M_E", 5.9722e24 * (1 kg) / (1 kg) to 17 digits
+print "Mearth", 5.9722e24 * (1 kg) / (1 kg) to 17 digits
+
+# ---- force, pressure, energy, power: derived where a definition exists
+standard_gravity = 9.80665 m/s²
+pound_force = one_pound standard_gravity
+atmosphere = 101325 Pa
+mercury_density = 13.5951 g/cm³           # conventional, defines the mmHg
+print "lbf", pound_force / (1 N) to 17 digits
+print "dyn", (1 g) * (1 cm) / (1 s)² / (1 N) to 17 digits
+print "bar", 1e5 * (1 Pa) / (1 Pa) to 17 digits
+print "atm", atmosphere / (1 Pa) to 17 digits
+print "Torr", atmosphere / 760 / (1 Pa) to 17 digits
+print "mmHg", mercury_density standard_gravity * (1 mm) / (1 Pa) to 17 digits
+print "psi", pound_force / one_inch² / (1 Pa) to 17 digits
+elementary_charge = 1.602176634e-19 C     # exact since 2019
+print "eV", elementary_charge * (1 V) / (1 J) to 17 digits
+print "erg", (1 g) * (1 cm)² / (1 s)² / (1 J) to 17 digits
+print "cal", 4.184 * (1 J) / (1 J) to 17 digits
+print "hp", 550 * one_foot * pound_force / (1 s) / (1 W) to 17 digits
+print "L☉", 3.828e26 * (1 W) / (1 W) to 17 digits
+print "Lsun", 3.828e26 * (1 W) / (1 W) to 17 digits
+
+# ---- magnetic field (CGS), speeds, radioactivity
+print "gauss", 1e-4 * (1 T) / (1 T) to 17 digits
+print "Gs", 1e-4 * (1 T) / (1 T) to 17 digits
+print "c", speed_of_light / (1 m/s) to 17 digits
+print "kph", (1000 m) / one_hour / (1 m/s) to 17 digits
+print "mph", one_mile / one_hour / (1 m/s) to 17 digits
+print "Ci", 3.7e10 / (1 s) / (1 / (1 s)) to 17 digits

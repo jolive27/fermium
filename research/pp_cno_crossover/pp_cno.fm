@@ -1,0 +1,36 @@
+# Energy generation by the pp chain and the CNO cycle against temperature, and the crossover temperature.
+# Run from this folder:  fermium run pp_cno.fm
+#
+# Carroll & Ostlie, An Introduction to Modern Astrophysics (2nd ed.), ch. 10 (the approximate pp and CNO rates)
+# (screening and branching factors f, ψ, C set to 1; T₆ = T / 10⁶ K):
+#     ε_pp  = 0.241 W/kg      (ρ / 1 kg/m³) X²      T₆^(−2/3) exp(−33.80  T₆^(−1/3))
+#     ε_CNO = 8.67×10²⁰ W/kg  (ρ / 1 kg/m³) X X_CNO T₆^(−2/3) exp(−152.28 T₆^(−1/3))
+
+X = 0.70                 # hydrogen mass fraction
+X_CNO = 0.01             # C + N + O mass fraction (about half of Z = 0.02)
+ρ = 1.0e5 kg/m³          # the ratio doesn't depend on ρ; this is for the plot
+
+ε_pp(T) = 0.241 W/kg * (ρ / (1 kg/m³)) X² (T / 1 MK)^(-2/3) exp(-33.80 (T / 1 MK)^(-1/3))
+ε_CNO(T) = 8.67e20 W/kg * (ρ / (1 kg/m³)) X X_CNO (T / 1 MK)^(-2/3) exp(-152.28 (T / 1 MK)^(-1/3))
+
+solve ε_pp(T) = ε_CNO(T) for T from 5 MK to 50 MK
+print "crossover (Carroll & Ostlie rates): T =", T in MK to 4 digits
+
+# the same from the closed form: exp(−118.48 T₆^(−1/3)) = 0.241 X / (8.67×10²⁰ X_CNO)
+T_closed = (118.48 / ln(8.67e20 X_CNO / (0.241 X)))^3 * 1 MK
+print "closed form:", T_closed in MK to 4 digits
+
+# temperature sensitivity ν = d ln ε / d ln T at 15 MK (Carroll & Ostlie quote ε_pp ∝ T⁴ and ε_CNO ∝ T^19.9 there)
+ν(f, T) = T f'(T) / f(T)
+print "d ln ε/d ln T at 15 MK:  pp", ν(ε_pp, 15 MK) to 3 digits, "  CNO", ν(ε_CNO, 15 MK) to 3 digits
+
+# Kippenhahn & Weigert, Stellar Structure and Evolution, ch. 18 (cgs), with the g-factor polynomials
+# (ψ = f = 1; T₉ = T / 10⁹ K)
+g11(T9) = 1 + 3.82 T9 + 1.51 T9² + 0.144 T9³ - 0.0114 T9^4
+g141(T9) = 1 - 2.00 T9 + 3.41 T9² - 2.43 T9³
+ε_pp_KW(T) = 2.57e4 erg/(g s) * (ρ / (1 g/cm³)) X² g11(T / 1 GK) (T / 1 GK)^(-2/3) exp(-3.381 (T / 1 GK)^(-1/3))
+ε_CNO_KW(T) = 8.24e25 erg/(g s) * (ρ / (1 g/cm³)) X X_CNO g141(T / 1 GK) (T / 1 GK)^(-2/3) exp(-15.231 (T / 1 GK)^(-1/3) - (T / 0.8 GK)²)
+solve ε_pp_KW(T2) = ε_CNO_KW(T2) for T2 from 5 MK to 50 MK
+print "crossover (Kippenhahn & Weigert rates): T =", T2 in MK to 4 digits
+
+plot ε_pp(T) in W/kg vs T in MK from 5 MK to 50 MK, ε_CNO(T) in W/kg vs T in MK from 5 MK to 50 MK with log, title "pp chain vs CNO cycle (X = 0.70, X_CNO = 0.01, ρ = 10⁵ kg/m³)" to "pp_vs_cno.png"

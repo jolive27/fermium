@@ -1,0 +1,75 @@
+# Oscillations 22 — Parametric resonance: the Mathieu equation and its first instability tongue
+#
+# (Landau & Lifshitz, Mechanics, §27; Taylor, Classical Mechanics, problem 5.x; Nayfeh & Mook ch. 5.)
+# A cart m = 0.100 kg on a spring whose stiffness is modulated,
+#     k(t) = k₀ (1 + h cos(γ t)),   k₀ = 10.0 N/m,  h = 0.100,
+# obeys  x'' + ω₀² (1 + h cos(γ t)) x = 0  with ω₀ = √(k₀/m).
+#
+#   (a) Landau's first-order result: x = 0 is unstable for
+#           2ω₀ − hω₀/2 < γ < 2ω₀ + hω₀/2,
+#       with the amplitude growing like exp(s t), s = ½ √((hω₀/2)² − (γ − 2ω₀)²).
+#       Give the band edges and the largest growth rate, s_max = hω₀/4.
+#   (b) Floquet theory, exactly: integrate the two fundamental solutions over one
+#       drive period T = 2π/γ (x(0)=1, x'(0)=0 and x(0)=0, x'(0)=1). The motion is
+#       unstable when the trace of the monodromy matrix, D(γ) = x₁(T) + x₂'(T),
+#       has |D| > 2, and then the growth rate is ln(|μ|)/T with
+#       |μ| = (|D| + √(D² − 4))/2. Find the growth rate at γ = 2ω₀.
+#   (c) Find the exact edges of the instability band, D(γ) = −2, and compare them
+#       with (a).
+#   (d) Watch it happen: drive at γ = 2ω₀ starting from x = 1.00 mm at rest, for
+#       60 drive periods. The start excites both Floquet solutions, so measure the
+#       growth of the amplitude √(x² + (x'/ω₀)²) between periods 40 and 60, when the
+#       decaying one has died out, and compare it with s from (b).
+#   (e) Second-order perturbation theory moves both edges down by h²ω₀/32. Check.
+
+m = 0.100 kg
+k0 = 10.0 [N/m]
+h = 0.100
+ω0 = √(k0 / m)
+
+# (a) first-order perturbation theory
+γ_lo_1 = 2ω0 - h ω0 / 2
+γ_hi_1 = 2ω0 + h ω0 / 2
+print "first-order band, lower edge:", γ_lo_1 to 6 digits
+print "first-order band, upper edge:", γ_hi_1 to 6 digits
+print "first-order largest growth rate:", h ω0 / 4 to 6 digits
+
+# (b) the trace of the monodromy matrix, by integrating over one drive period
+D(γ) =
+    T = 2π / γ
+    solve x1'' = -ω0² (1 + h cos(γ t)) x1
+      with x1(0) = 1 [m], x1'(0) = 0 m/s
+      for t from 0 s to T tolerance 1e-12
+    solve x2'' = -ω0² (1 + h cos(γ t)) x2
+      with x2(0) = 0 [m], x2'(0) = 1 m/s
+      for t from 0 s to T tolerance 1e-12
+    return x1(T) / (1 [m]) + x2'(T) / (1 m/s)
+
+growth(γ) =
+    d = abs(D(γ))
+    return ln((d + √(d² - 4)) / 2) γ / (2π)
+
+γ_res = 2ω0
+print "trace at 2ω₀:", D(γ_res) to 8 digits
+print "Floquet growth rate at 2ω₀:", growth(γ_res) to 6 digits
+print "trace off resonance (γ = 1.5 ω₀):", D(1.5 ω0) to 6 digits
+
+# (c) the exact band edges: D(γ) = −2
+solve D(γ_lo) = -2 for γ_lo from 2ω0 (1 - h) to γ_res
+solve D(γ_hi) = -2 for γ_hi from γ_res to 2ω0 (1 + h)
+print "exact band, lower edge:", γ_lo to 6 digits
+print "exact band, upper edge:", γ_hi to 6 digits
+print "band width, exact vs first order:", (γ_hi - γ_lo) to 6 digits, (γ_hi_1 - γ_lo_1) to 6 digits
+
+# (d) the growing motion itself
+T_drive = 2π / γ_res
+solve y'' = -ω0² (1 + h cos(γ_res t)) y
+  with y(0) = 1.00 mm, y'(0) = 0 m/s
+  for t from 0 s to 60 T_drive tolerance 1e-12
+amp(t) = √(y(t)² + (y'(t) / ω0)²)
+print "amplitude after 60 periods:", amp(60 T_drive) in mm to 6 digits
+print "growth rate from the amplitude:", ln(amp(60 T_drive) / amp(40 T_drive)) / (20 T_drive) to 6 digits
+
+# (e) second order
+shift = h² ω0 / 32
+print "edge shifts, exact:", (γ_lo - γ_lo_1) to 4 digits, (γ_hi - γ_hi_1) to 4 digits, " second order:", -shift to 4 digits

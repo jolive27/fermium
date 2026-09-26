@@ -1,0 +1,12 @@
+# Damped spring, fixed-step classic RK4: 1,000,000 steps of 10 µs.
+m = 1 kg
+k = 100 [N/m]
+b = 0.5 kg/s
+t0 = clock()
+solve m x'' = -k x - b x'
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
+  for t from 0 s to 10 s step 1e-5 s
+t1 = clock()
+print "steps", len(x) - 1
+print "x_10s", x(10 s) / (1 [m]) to 10 digits
+print "TIME_INNER", (t1 - t0) / (1 s)

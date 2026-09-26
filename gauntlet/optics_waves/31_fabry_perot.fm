@@ -1,0 +1,37 @@
+# Optics 31 — The Fabry–Pérot etalon from a sum of complex amplitudes
+#
+# (Born & Wolf, Principles of Optics 7th ed., §7.6.1–7.6.2; Hecht, Optics §9.6;
+#  Saleh & Teich, Fundamentals of Photonics §2.5B and §10.1.)
+# Two identical lossless mirrors with intensity reflectance R = 0.900 (amplitude
+# r = √R, transmission t = √(1 − R)) face each other across an air gap d = 5.00 mm.
+# Light of frequency ν makes a round-trip phase δ = 4π ν d / c.
+#   (a) Add the transmitted waves one by one, E_t = Σ_k t² r^(2k) e^(i k δ)
+#       (400 terms), and compare |E_t|² with Airy's T = 1/(1 + F sin²(δ/2)),
+#       F = 4R/(1 − R)², at δ = 0, 0.1 and π.
+#   (b) The free spectral range FSR = c/(2d), and the full width at half maximum of a
+#       transmission peak, found by solving T = ½ next to the resonance.
+#   (c) The finesse FSR/FWHM, against the exact π/(2 asin(1/√F)) and the usual
+#       approximation π√R/(1 − R); and the resolving power ν/FWHM at λ = 632.8 nm.
+
+R = 0.900
+r = √R
+t = √(1 - R)
+d = 5.00 mm
+F = 4 R / (1 - R)²
+airy(δ) = 1 / (1 + F sin(δ/2)²)
+field_sum(δ) = Σ(t² r^(2 k) exp(1i k δ) for k from 0 to 399)
+
+for δ in [0, 0.1, π]
+    E = field_sum(δ)
+    print "(a) delta =", δ to 3 digits, " E_t =", E to 10 digits, " |E_t|² =", |E|^2 to 10 digits, " Airy =", airy(δ) to 10 digits
+
+# (b) near the resonance at ν₀ (δ = 2π m), T drops to ½ at δ = 2π m ± δ_half
+FSR = c / (2 d)
+solve airy(δh) = 0.5 for δh from 0 to π
+FWHM = FSR (2 δh) / (2π)
+print "(b) FSR =", FSR in GHz to 8 digits, " half-width phase =", δh to 10 digits, " FWHM =", FWHM in MHz to 8 digits
+
+# (c)
+print "(c) finesse =", FSR / FWHM to 10 digits, " exact pi/(2 asin(1/sqrt F)) =", π / (2 asin(1 / √F)) to 10 digits, " approx =", π √R / (1 - R) to 8 digits
+ν = c / 632.8 nm
+print "    resolving power =", ν / FWHM to 6 digits, " order m =", round(ν / FSR)

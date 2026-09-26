@@ -1,0 +1,65 @@
+# Mechanics 23 — The brachistochrone: a functional, its stationary point, and rolling
+#
+# (Goldstein §2.2 and problem 2.x; Taylor §6.2 and problem 6.x; Arfken ch. 22.)
+# A bead slides without friction from rest at the origin to a point X = 2.00 m
+# across and Y = 1.00 m below (y is measured downwards, g = 9.81 m/s²). Along a
+# curve the time is the functional
+#     T[y] = ∫ ds / v = ∫ √(1 + y'²) / √(2 g y) dx.
+#
+#   (a) The fastest curve is the cycloid x = a(θ − sin θ), y = a(1 − cos θ).
+#       Find θ_f and a from the end point, (θ_f − sin θ_f)/(1 − cos θ_f) = X/Y,
+#       and the time T = θ_f √(a/g).
+#   (b) Evaluate the functional numerically along the cycloid (parametrised by θ)
+#       and along the straight line (an integrable 1/√x blow-up at the start); the
+#       line has the closed form T = √(2(X² + Y²)/(gY)).
+#   (c) The cycloid makes T stationary. Perturb it, y → y + ε a sin²(πθ/θ_f), with
+#       the end points fixed: dT/dε at ε = 0 must vanish (differentiate under the
+#       integral sign), and T(ε) − T(0) must grow like ε² for either sign of ε.
+#   (d) A uniform solid ball rolling without slipping (I = ⅖ m r², radius small
+#       compared with the curve) has v = √(10 g y / 7): every time grows by √(7/5).
+#       Check along the cycloid; is the cycloid still the fastest curve?
+
+X = 2.00 m
+Y = 1.00 m
+g = 9.81 m/s²
+
+# (a) the cycloid through the end point
+solve (θf - sin(θf)) / (1 - cos(θf)) = X / Y for θf from 0.1 to 2π - 0.1
+a = Y / (1 - cos(θf))
+T_cycloid = θf √(a / g)
+print "cycloid: θ_f =", θf to 7 digits, " a =", a to 7 digits
+print "cycloid time, closed form:", T_cycloid to 7 digits
+
+# (b) the functional along each curve
+# (`2*g`: written `2 g`, it is two grams; only a warning, then a unit error on a later line; FRICTION M10)
+xc(θ) = a (θ - sin(θ))
+# y = a(1 − cos θ), written in a form that doesn't cancel near θ = 0: with 1 − cos θ, the
+# integrand of dT/dε below is 0/0 for tiny θ and the integral is refused ("doesn't converge",
+# on the wrong line); FRICTION M11
+yc(θ) = 2 a sin(θ / 2)²
+T_param = ∫ √(xc'(θ)² + yc'(θ)²) / √(2*g yc(θ)) dθ from 0 to θf
+print "cycloid time, functional:", T_param to 7 digits
+
+slope = Y / X
+T_line = ∫ √(1 + slope²) / √(2*g slope x) dx from 0 m to X
+print "straight line, functional:", T_line to 7 digits
+print "straight line, closed form:", √(2 (X² + Y²) / (g Y)) to 7 digits
+
+# (c) stationarity
+T_pert(ε) = ∫ √(xc'(θ)² + (yc'(θ) + ε a 2 sin(π θ / θf) cos(π θ / θf) π / θf)²) / √(2*g (yc(θ) + ε a sin(π θ / θf)²)) dθ from 0 to θf
+dT = d/dε T_pert
+print "dT/dε at ε = 0:", dT(0) to 3 digits
+d2T = d²/dε² T_pert
+print "d²T/dε² at ε = 0:", d2T(0) to 6 digits
+print "T(0) − cycloid:", T_pert(0) - T_cycloid
+print "T(+0.01) − T(0):", T_pert(0.01) - T_pert(0) to 5 digits
+print "T(−0.01) − T(0):", T_pert(-0.01) - T_pert(0) to 5 digits
+print "T(+0.02) − T(0):", T_pert(0.02) - T_pert(0) to 5 digits
+print "ratio for doubling ε:", (T_pert(0.02) - T_pert(0)) / (T_pert(0.01) - T_pert(0)) to 4 digits
+print "½ T'' ε² for ε = 0.01:", ½ d2T(0) 0.01² to 5 digits
+
+# (d) rolling without slipping
+T_roll = ∫ √(xc'(θ)² + yc'(θ)²) / √(10*g yc(θ) / 7) dθ from 0 to θf
+print "rolling ball on the cycloid:", T_roll to 7 digits
+print "ratio to the sliding bead:", T_roll / T_cycloid to 7 digits, " √(7/5) =", √(7/5) to 7 digits
+# Every curve slows by the same factor, so the cycloid is still the fastest.

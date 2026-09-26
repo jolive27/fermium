@@ -1,0 +1,61 @@
+# Oscillations 23 — The Duffing oscillator: amplitude-dependent frequency and the driven response
+#
+# (Landau & Lifshitz, Mechanics, §28–29; Nayfeh & Mook, Nonlinear Oscillations, ch. 4;
+#  Taylor §12.)
+# A hardening spring gives  x'' + ω₀² x + β x³ = 0  with ω₀ = 5.00 rad/s and
+# β = 40.0 m⁻² s⁻².
+#
+#   (a) Released from rest at amplitude A, the exact period is
+#           T(A) = 4 ∫₀^A dx / √(ω₀²(A² − x²) + ½ β (A⁴ − x⁴)).
+#       Evaluate it for A = 0.100, 0.200 and 0.400 m (an integrable 1/√ blow-up at
+#       the upper end).
+#   (b) Measure the same periods from the ODE: the first zero of x(t) is T/4.
+#   (c) Lindstedt–Poincaré: ω ≈ ω₀ + 3βA²/(8ω₀) − 21β²A⁴/(256 ω₀³) (A is the turning point;
+#       the often-quoted 15/256 is for the amplitude of the fundamental). Show that the
+#       first-order error falls like A⁴ (halving A cuts it about 16-fold).
+#   (d) Add damping and a drive:  x'' + c x' + ω₀² x + β x³ = (F/m) cos(ω t), with
+#       c = 0.500 /s, F/m = 1.00 m/s² and ω = 5.50 rad/s. Integrate to steady state
+#       (60 s) and measure the amplitude over the last few drive periods. Compare it
+#       with first-order harmonic balance:
+#           A² [(ω₀² − ω² + ¾ β A²)² + (c ω)²] = (F/m)²,
+#       which has a single root for these numbers.
+
+ω0 = 5.00 rad/s
+β = 40.0 /m²/s²
+
+# (a) exact period from the energy integral
+T_exact(A) = 4 ∫ 1 / √(ω0² (A² - x²) + ½ β (A^4 - x^4)) dx from 0 m to A
+ω_pert1(A) = ω0 + 3 β A² / (8 ω0)
+ω_pert2(A) = ω_pert1(A) - 21 β² A^4 / (256 ω0^3)
+
+for A in [0.100 m, 0.200 m, 0.400 m]
+    print "A =", A, "| exact period:", T_exact(A) to 7 digits, "| ω exact:", 2π / T_exact(A) to 7 digits, "| 1st order:", ω_pert1(A) to 7 digits, "| 2nd order:", ω_pert2(A) to 7 digits
+
+# (b) the ODE, one amplitude at a time
+for A in [0.100 m, 0.200 m, 0.400 m]
+    solve x'' = -ω0² x - β x³
+      with x(0) = A, x'(0) = 0 m/s
+      for t from 0 s to 2 s tolerance 1e-12
+    solve x(t_q) = 0 m for t_q from 0 s to 2π / ω0
+    print "A =", A, "| ODE period:", 4 t_q to 7 digits
+
+# (c) the first-order error ~ A⁴
+err1(A) = abs(2π / T_exact(A) - ω_pert1(A))
+print "first-order error ratio, A = 0.2 m vs 0.1 m:", err1(0.2 m) / err1(0.1 m) to 4 digits
+print "first-order error ratio, A = 0.1 m vs 0.05 m:", err1(0.1 m) / err1(0.05 m) to 4 digits
+
+# (d) driven, damped: steady state
+c_damp = 0.500 /s
+f_drive = 1.00 m/s²
+ω = 5.50 rad/s
+solve y'' + c_damp y' + ω0² y + β y³ = f_drive cos(ω t)
+  with y(0) = 0 m, y'(0) = 0 m/s
+  for t from 0 s to 60 s tolerance 1e-11
+A_ode = 0 m
+for tt from 55 s to 60 s step 0.001 s
+    A_ode = max(A_ode, abs(y(tt)))
+print "steady-state amplitude, ODE:", A_ode in cm to 5 digits
+
+hb(A) = A² ((ω0² - ω² + ¾ β A²)² + (c_damp ω)²) - f_drive²
+solve hb(A_hb) = 0 m²/s⁴ for A_hb from 0.1 mm to 1 m
+print "steady-state amplitude, harmonic balance:", A_hb in cm to 5 digits

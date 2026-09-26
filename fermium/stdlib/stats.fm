@@ -1,0 +1,39 @@
+# stats: weighted means, χ² and straight-line fits for lab data
+# xs, ys are lists with units; σs lists hold each value's uncertainty, in the same units.
+# (mean, std, sum and len are built in; std is the sample standard deviation.)
+
+# standard error of the mean of the measurements xs: std / √N
+standard_error(xs) = std(xs) / √(len(xs))
+
+# inverse-variance weighted mean Σ(x/σ²) / Σ(1/σ²) of values xs with uncertainties σs
+weighted_mean(xs, σs) = sum(xs / σs^2) / sum(1 / σs^2)
+
+# uncertainty of the weighted mean: 1 / √(Σ 1/σ²)
+weighted_mean_error(σs) = 1 / √(sum(1 / σs^2))
+
+# χ² of measurements ys (uncertainties σs) against model values model: Σ ((y − model)/σ)²
+chi_squared(ys, model, σs) = sum(((ys - model) / σs)^2)
+
+# reduced χ²: χ² divided by the degrees of freedom N − n_params
+reduced_chi_squared(ys, model, σs, n_params) = chi_squared(ys, model, σs) / (len(ys) - n_params)
+
+# slope of the least-squares straight line y = intercept + slope x through the points (xs, ys)
+linear_slope(xs, ys) = sum((xs - mean(xs)) * (ys - mean(ys))) / sum((xs - mean(xs))^2)
+
+# intercept of the least-squares straight line through the points (xs, ys)
+linear_intercept(xs, ys) = mean(ys) - linear_slope(xs, ys) * mean(xs)
+
+# standard error of the fitted slope, from the scatter of the points about the line (N − 2 degrees of freedom)
+linear_slope_error(xs, ys) =
+    n = len(xs)
+    resid = ys - linear_intercept(xs, ys) - linear_slope(xs, ys) * xs
+    √(sum(resid^2) / (n - 2) / sum((xs - mean(xs))^2))
+
+# standard error of the fitted intercept
+linear_intercept_error(xs, ys) = linear_slope_error(xs, ys) * √(mean(xs^2))
+
+# Pearson correlation coefficient r of the points (xs, ys), from −1 to 1
+correlation(xs, ys) =
+    dx = xs - mean(xs)
+    dy = ys - mean(ys)
+    sum(dx * dy) / √(sum(dx^2) * sum(dy^2))

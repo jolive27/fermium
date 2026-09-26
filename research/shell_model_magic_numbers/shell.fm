@@ -1,0 +1,221 @@
+# The nuclear shell model: neutron levels in a Woods–Saxon well with a spin–orbit term, and the magic numbers.
+# Run from this folder:  fermium run shell.fm
+#
+# Potential (Bohr & Mottelson, Nuclear Structure Vol. I, eqs. 2-181 and 2-182; see README):
+#     V(r) = −V₀ f(r) + V_ls r₀² (l·s) (1/r) df/dr,     f(r) = 1 / (1 + exp((r − R)/a)),   R = r₀ A^(1/3),
+#     V₀ = (51 − 33 (N − Z)/A) MeV for neutrons,   V_ls = 0.44 V₀,   r₀ = 1.27 fm,   a = 0.67 fm,
+#     l·s = [j(j + 1) − l(l + 1) − 3/4] / 2   (in units of ħ²).
+# With ψ = (u(r)/r) Y, each (l, j) is a one-dimensional eigenvalue problem for u:
+#     −ħ²/(2 m_n) u'' + [V(r) + ħ² l(l + 1)/(2 m_n r²)] u = E u,    u(0) = 0,  u(r_box) = 0.
+
+r0 = 1.27 fm
+a = 0.67 fm
+r_box = 40 fm                      # far outside the nucleus: bound states have died away (see README)
+f(r, R) = 1 / (1 + exp((r - R) / a))
+dfdr(r, R) = -f(r, R) (1 - f(r, R)) / a
+ħω(A) = 41 [MeV] / A^(1/3)           # the oscillator shell spacing, the natural unit for a shell gap
+
+# level names: with spin–orbit, index 1 is s1/2, then 2l for j = l + ½ and 2l + 1 for j = l − ½
+names = ["s1/2", "p3/2", "p1/2", "d5/2", "d3/2", "f7/2", "f5/2", "g9/2", "g7/2", "h11/2", "h9/2", "i13/2", "i11/2", "j15/2", "j13/2"]
+letters = ["s", "p", "d", "f", "g", "h", "i", "j"]
+
+# the bound levels of one nucleus, appended to the lists rawE (energy), rawn (radial number), rawk (name index)
+# and rawdeg (how many neutrons fit: 2j + 1 with spin–orbit, 2(2l + 1) without); so = 1 or 0 turns l·s on or off
+rawE = []
+rawn = []
+rawk = []
+rawdeg = []
+bound_levels(N, Z, so) =
+    A = N + Z
+    V0 = (51 - 33 (N - Z) / A) * 1 MeV
+    Vls = 0.44 V0
+    R = r0 A^(1/3)
+    for ℓ from 0 to 7
+        for s from 1 to (if ℓ == 0 or so == 0 then 1 else 2)
+            j = if s == 1 then ℓ + 0.5 else ℓ - 0.5
+            ls = so * (j (j + 1) - ℓ (ℓ + 1) - 0.75) / 2
+            solve -ħ²/(2*m_n) * ψ'' + (-V0 f(r, R) + Vls r0² ls dfdr(r, R) / r + ħ² ℓ (ℓ + 1) / (2 m_n r²)) ψ = E ψ
+                with ψ(0 fm) = 0, ψ(r_box) = 0
+                for r from 0 fm to r_box
+                lowest 5
+            for n from 1 to 5
+                if E[n] < 0 MeV
+                    push(rawE, E[n])
+                    push(rawn, n)
+                    push(rawk, if so == 1 then (if ℓ == 0 then 1 else 2 ℓ + s - 1) else ℓ + 1)
+                    push(rawdeg, if so == 1 then 2 j + 1 else 2 (2 ℓ + 1))
+    return len(rawE)
+
+# the same levels in order of energy (sort, then find each energy's level)
+lvE = []
+lvn = []
+lvk = []
+lvdeg = []
+in_order() =
+    for e in sort(rawE)
+        for i from 1 to len(rawE)
+            if rawE[i] == e
+                push(lvE, e)
+                push(lvn, rawn[i])
+                push(lvk, rawk[i])
+                push(lvdeg, rawdeg[i])
+    return len(lvE)
+
+# ---- 1. ²⁰⁸Pb neutrons, with and without the spin–orbit term ---------------------------------------------
+t_start = clock()
+count = bound_levels(126, 82, 0)
+count = in_order()
+print "²⁰⁸Pb neutrons, Woods–Saxon WITHOUT spin–orbit (V₀ =", (51 - 33 * 44 / 208) * 1 MeV to 5 digits, "):"
+noso_E = lvE
+filled = 0
+for i from 1 to len(lvE)
+    filled += lvdeg[i]
+    if i < len(lvE)
+        print "  ", lvn[i], letters[lvk[i]], ": E =", lvE[i] in MeV to 8 digits, " filled", filled, "  gap to next level", lvE[i + 1] - lvE[i] in MeV to 3 digits
+    else
+        print "  ", lvn[i], letters[lvk[i]], ": E =", lvE[i] in MeV to 8 digits, " filled", filled
+noso_k = lvk
+noso_n = lvn
+
+rawE = []
+rawn = []
+rawk = []
+rawdeg = []
+lvE = []
+lvn = []
+lvk = []
+lvdeg = []
+count = bound_levels(126, 82, 1)
+count = in_order()
+print "²⁰⁸Pb neutrons, Woods–Saxon WITH spin–orbit (V_ls = 0.44 V₀):"
+filled = 0
+E_fermi = 0 MeV
+E_above = 0 MeV
+for i from 1 to len(lvE)
+    filled += lvdeg[i]
+    if i < len(lvE)
+        print "  ", lvn[i], names[lvk[i]], ": E =", lvE[i] in MeV to 8 digits, " filled", filled, "  gap to next level", lvE[i + 1] - lvE[i] in MeV to 3 digits
+    else
+        print "  ", lvn[i], names[lvk[i]], ": E =", lvE[i] in MeV to 8 digits, " filled", filled
+    if filled == 126
+        E_fermi = lvE[i]
+        E_above = lvE[i + 1]
+print "N = 126 shell gap (3p1/2 → 2g9/2):", E_above - E_fermi in MeV to 4 digits, "  measured S_n(²⁰⁸Pb) − S_n(²⁰⁹Pb) = 3.431 MeV"
+
+# ---- 2. comparison with the measured single-particle energies near the Fermi surface ---------------------
+# E = −S_n(²⁰⁸Pb) − E_x(²⁰⁷Pb) for the holes, −S_n(²⁰⁹Pb) + E_x(²⁰⁹Pb) for the particles, rounded to 1 keV.
+# Sources (checked 2026-09-26, spec A8.3):
+#   S_n(²⁰⁸Pb) = 7367.869 keV, S_n(²⁰⁹Pb) = 3937.373 keV: AME2020, M. Wang et al., Chinese Phys. C 45, 030003
+#     (2021), file rct2_1.mas20.txt (https://www-nds.iaea.org/amdc/ame2020/rct2_1.mas20.txt)
+#   E_x(²⁰⁷Pb) = 569.698 (5/2−), 897.698 (3/2−), 1633.356 (13/2+), 2339.921 (7/2−), 3415.48 (9/2−) keV:
+#     ENSDF, F.G. Kondev & S. Lalkovski (cut-off 2010); E_x(²⁰⁹Pb) = 778.89 (11/2+), 1422.64 (15/2−),
+#     1567.086 (5/2+), 2032.21 (1/2+), 2491 (7/2+), 2537.6 (3/2+) keV: ENSDF, J. Chen & F.G. Kondev.
+#     Both read from the IAEA LiveChart API (https://nds.iaea.org/relnsd/v1/data?fields=levels&nuclides=207pb, 209pb)
+exp_n = [1, 2, 1, 3, 2, 3, 2, 1, 1, 3, 4, 2, 3]
+exp_k = [11, 6, 12, 2, 7, 3, 8, 13, 14, 4, 1, 9, 5]
+exp_E = [-10.783, -9.708, -9.001, -8.266, -7.938, -7.368, -3.937, -3.158, -2.515, -2.370, -1.905, -1.446, -1.400] * 1 MeV
+print "²⁰⁸Pb neutron single-particle energies, Woods–Saxon vs experiment:"
+sq = 0 MeV²
+calc_E = []
+for q from 1 to len(exp_E)
+    for i from 1 to len(lvE)
+        if lvn[i] == exp_n[q] and lvk[i] == exp_k[q]
+            push(calc_E, lvE[i])
+            sq += (lvE[i] - exp_E[q])²
+            print "  ", exp_n[q], names[exp_k[q]], ": Woods–Saxon", lvE[i] in MeV to 4 digits, "  measured", exp_E[q] in MeV to 4 digits,
+                  "  difference", lvE[i] - exp_E[q] in MeV to 2 digits
+print "rms difference over", len(calc_E), "levels:", √(sq / len(calc_E)) in MeV to 3 digits
+
+# ---- 3. the magic numbers: the shell gap at N in a nucleus with N neutrons ---------------------------------
+# For each neutron number N, take the nucleus on the valley of stability (Green's formula, Z = A/(1.98 + 0.0155 A^(2/3))),
+# compute its levels, and if N fills a level exactly, measure the gap to the next level in units of ħω = 41 A^(-1/3) MeV.
+# The next N tried is the next level-filling number of this nucleus.
+Z_stable(N) =
+    solve x - x / (1.98 + 0.0155 x^(2/3)) = N for x from N to 3*N + 2      # x = A
+    return round(x - N)
+
+gapN_so = []
+gap_so = []
+gapN_noso = []
+gap_noso = []
+for so in [1, 0]
+    print if so == 1 then "shell gaps WITH spin–orbit (N, Z, gap, gap/ħω):" else "shell gaps WITHOUT spin–orbit (N, Z, gap, gap/ħω):"
+    N = 2
+    while N > 0 and N <= 130
+        Z = Z_stable(N)
+        rawE = []
+        rawn = []
+        rawk = []
+        rawdeg = []
+        lvE = []
+        lvn = []
+        lvk = []
+        lvdeg = []
+        count = bound_levels(N, Z, so)
+        count = in_order()
+        filled = 0
+        N_next = 0
+        for i from 1 to len(lvE)
+            filled += lvdeg[i]
+            if filled == N and i < len(lvE)
+                gap = lvE[i + 1] - lvE[i]
+                print "   N =", N, " Z =", Z, ": gap", gap in MeV to 8 digits, " gap/ħω =", gap / ħω(N + Z) to 8 digits
+                if so == 1
+                    push(gapN_so, N)
+                    push(gap_so, gap / ħω(N + Z))
+                else
+                    push(gapN_noso, N)
+                    push(gap_noso, gap / ħω(N + Z))
+            if filled > N and N_next == 0
+                N_next = filled
+        N = N_next
+
+# the largest gaps are the magic numbers
+for so in [1, 0]
+    gaps = if so == 1 then gap_so else gap_noso
+    Ns = if so == 1 then gapN_so else gapN_noso
+    top = if so == 1 then 7 else 5
+    cut = reverse(sort(gaps))[top]
+    magic = []
+    for i from 1 to len(gaps)
+        if gaps[i] >= cut
+            push(magic, Ns[i])
+    print if so == 1 then "the 7 largest gaps WITH spin–orbit are at N =" else "the 5 largest gaps WITHOUT spin–orbit are at N =", magic,
+          "  next largest gap/ħω:", reverse(sort(gaps))[top + 1] to 3 digits, "vs", cut to 3 digits
+print "time:", clock() - t_start to 2 digits
+
+# ---- 4. plots --------------------------------------------------------------------------------------------
+# the level scheme of ²⁰⁸Pb: without spin–orbit, with spin–orbit, and the measured levels (horizontal bars;
+# a NaN between bars breaks the line)
+nan = 0 * ∞
+with_spin_orbit = gap_so
+without_spin_orbit = gap_noso
+column = []
+WS_no_ls = []
+col_so = []
+WS_with_ls = []
+col_exp = []
+measured = []
+for e in noso_E
+    push(column, 0.1)
+    push(column, 0.9)
+    push(column, 0.9)
+    push(WS_no_ls, e)
+    push(WS_no_ls, e)
+    push(WS_no_ls, nan * 1 MeV)
+for e in lvE
+    push(col_so, 1.1)
+    push(col_so, 1.9)
+    push(col_so, 1.9)
+    push(WS_with_ls, e)
+    push(WS_with_ls, e)
+    push(WS_with_ls, nan * 1 MeV)
+for e in exp_E
+    push(col_exp, 2.1)
+    push(col_exp, 2.9)
+    push(col_exp, 2.9)
+    push(measured, e)
+    push(measured, e)
+    push(measured, nan * 1 MeV)
+plot WS_no_ls in MeV vs column, WS_with_ls in MeV vs col_so, measured in MeV vs col_exp with title "²⁰⁸Pb neutron levels: Woods–Saxon without / with spin–orbit, and measured", xlabel "no spin–orbit  |  with spin–orbit  |  experiment", ylabel "single-particle energy" to "levels_pb208.png"
+plot with_spin_orbit vs gapN_so, without_spin_orbit vs gapN_noso with points, title "Shell gap at N (nucleus on the stability line): peaks are magic numbers", xlabel "neutron number N", ylabel "gap / ħω" to "shell_gaps.png"

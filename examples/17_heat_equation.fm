@@ -1,0 +1,60 @@
+# 17 — Heat flowing along a rod: the 1-D heat equation
+#
+# Temperature T(x, t) in a thin metal rod obeys the diffusion equation
+#
+#     ∂T/∂t = α ∂²T/∂x²
+#
+# where α is the thermal diffusivity (copper: 1.11×10⁻⁴ m²/s). Hot spots
+# spread out and flatten. We solve it the simplest way possible: chop the rod
+# into N points a distance Δx apart, keep the temperatures in a list, and step
+# forward in time with the "explicit finite-difference" rule
+#
+#     T_i(new) = T_i + α Δt / Δx² · (T_{i+1} − 2 T_i + T_{i−1})
+#
+# This is only stable if α Δt / Δx² ≤ ½, so we pick Δt from that.
+# The ends of the rod are held at room temperature. Starting from a
+# sine-shaped bump, the exact answer is that the bump keeps its shape and
+# decays like exp(−α π² t / L²), which we use to check the simulation.
+
+L = 0.50 m
+α_Cu = 1.11e-4 m²/s
+N = 51
+Δx = L / (N - 1)
+Δt = 0.4 Δx² / α_Cu            # r = α Δt/Δx² = 0.4, safely below ½
+r = α_Cu Δt / Δx²
+print "grid spacing", Δx in mm, "  time step", Δt, "  r =", r
+
+T_room = 293 K
+x = linspace(0 m, L, N)
+T = T_room + 80 K * sin(π x / L)       # a list: works element by element
+T_new = T + 0 K                        # a separate copy (T_new = T would share it)
+T_at_0s = T + 0 K
+
+t_end = 200 s
+steps = round(t_end / Δt)
+t = 0 s
+T_at_50s = T + 0 K
+T_at_100s = T + 0 K
+for n from 1 to steps
+    for i from 2 to N - 1
+        T_new[i] = T[i] + r * (T[i+1] - 2*T[i] + T[i-1])    # 2*T: `2 T` would be 2 tesla
+    for i from 2 to N - 1
+        T[i] = T_new[i]
+    t += Δt
+    if n == round(steps / 4)
+        T_at_50s = T + 0 K
+    if n == round(steps / 2)
+        T_at_100s = T + 0 K
+
+mid = (N + 1) / 2
+bump = T[mid] - T_room
+exact = 80 K * exp(-α_Cu π² t / L²)
+print "after", t, ": middle of the rod is", T[mid] in °C to 3 digits
+print "bump height: simulation", bump to 4 digits, "  exact", exact to 4 digits
+print "relative error:", abs(bump - exact) / exact to 2 digits
+
+# Total heat content above room temperature decays the same way
+print "average excess temperature:", mean(T) - T_room
+
+T_at_200s = T
+plot T_at_0s vs x, T_at_50s vs x, T_at_100s vs x, T_at_200s vs x to "gallery/heat_equation.png"
