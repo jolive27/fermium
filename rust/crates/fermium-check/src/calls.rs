@@ -515,7 +515,7 @@ impl Checker {
                     let b = if self.funcs[info].stable { self.stabilize(&b) } else { b };
                     let v = self.expr(&b, &mut fctx)?;
                     self.ret_types[fctx.ret_types].push(v.clone());
-                    self.module.funcs[inst].body = vec![I::Stmt { kind: I::StmtKind::Return(Some(v)), line: fdef.span.line }];
+                    self.module.funcs[inst].body = vec![I::Stmt { kind: I::StmtKind::Return(Some(v)), line: 0 }];
                 }
                 A::FuncBody::Block(stmts) => {
                     let mut stmts = stmts.clone();
