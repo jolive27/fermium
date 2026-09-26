@@ -74,6 +74,8 @@ pub struct PdeResult {
     pub ncomp: usize,
     pub m: usize,
     pub warnings: Vec<(i64, f64)>,
+    /// a Dirichlet boundary value differs from the initial value at that end (D206): the grid check applies
+    pub jump: bool,
 }
 
 type Probe<'a> = dyn FnMut(f64, &[f64; 6]) -> [f64; 6] + 'a;
@@ -786,6 +788,7 @@ pub fn pde_solve(probe: &mut Probe<'_>, xa: f64, xb: f64, t0: f64, t1: f64, opts
         ncomp,
         m,
         warnings,
+        jump,
     })
 }
 
@@ -794,9 +797,10 @@ pub fn pde_solve(probe: &mut Probe<'_>, xa: f64, xb: f64, t0: f64, t1: f64, opts
 // v1 controls the time step of a PDE but not the grid: right after a jump (a boundary value that differs from
 // the initial value), before the diffusion length √(D t) spans a few grid cells, u(x, t) between the boundary and
 // the first nodes is an interpolation and can be 60 % off with no warning (OPEN_ITEMS RT7-2, spec B2). Fermium 2
-// solves a first-order equation a second time on a grid half as fine, with the same time steps, and u(x, t)
-// compares the two there: the second-order scheme's error on the fine grid is about |fine − coarse| / 3. Where
-// that is over PDE_TOL of the solution's range, the evaluator warns (rust/DIVERGENCES.md). Values are unchanged.
+// solves such a first-order equation a second time on a grid half as fine, with the same time steps, and u(x, t)
+// compares the two there: for the second-order scheme the fine grid's error would be about |fine − coarse| / 3
+// (near an unresolved jump it is larger). Where that is over PDE_TOL of the solution's range, the evaluator warns
+// (rust/DIVERGENCES.md). Values are unchanged.
 
 impl PdeResult {
     /// The snapshots as a stored solution (t, rows of u, rows of ∂u/∂t), as v1's SolStruct holds them.
@@ -869,7 +873,7 @@ pub fn pde_solve_checked(probe: &mut Probe<'_>, xa: f64, xb: f64, t0: f64, t1: f
                          -> Result<CheckedPde, PdeFail> {
     let fine = pde_solve(probe, xa, xb, t0, t1, opts)?;
     let mut coarse = None;
-    if opts.order == 1 && opts.grid % 2 == 0 && opts.grid >= 8 && fine.ts.len() >= 2 {
+    if fine.jump && opts.order == 1 && opts.grid % 2 == 0 && opts.grid >= 8 && fine.ts.len() >= 2 {
         // the first recorded step is step 1, so the fine solve's step is ts[1] − t0
         let n = ((t1 - t0) / (fine.ts[1] - fine.ts[0])).round().max(1.0);
         let o = PdeOpts { grid: opts.grid / 2, step: Some((t1 - t0) / n), ..opts };
@@ -921,13 +925,16 @@ mod tests {
             // either accurate to the tolerance, or the check says so (and its estimate is not far below the error)
             assert!(wrong <= 2.0 * PDE_TOL || est > PDE_TOL, "u({x}, {t}) = {u} vs {exact}: error {wrong}, estimate {est}");
         }
-        // a smooth, resolved solution is not flagged
+        // later, once the solution has spread over many cells, it is accurate and not flagged
+        let (x, t) = (0.1, 50.0);
+        let u = pde_eval(&fine, 0.0, 1.0, m, 0, x, t, 0).unwrap();
+        assert!((u - 25.38484062903312).abs() < 1e-3 * range);
+        assert!(grid_error(&fine, &coarse, m, 0.0, 1.0, 0, range, x, t).unwrap() < PDE_TOL);
+        // no jump (the boundary values match the initial value): no check solution
         let pi = std::f64::consts::PI;
         let mut smooth = |x: f64, a: &[f64; 6]| [a[2], (pi * x).sin(), 0.0, 0.0, 0.0, 0.0];
         let r = pde_solve_checked(&mut smooth, 0.0, 1.0, 0.0, 0.1, PdeOpts { grid: 100, ..Default::default() }).unwrap();
-        let (fine, coarse) = (r.fine.to_sol(), r.coarse.as_ref().unwrap().to_sol());
-        let est = grid_error(&fine, &coarse, 100, 0.0, 1.0, 0, r.fine.ranges()[0], 0.37, 0.05).unwrap();
-        assert!(est < PDE_TOL, "{est}");
+        assert!(r.coarse.is_none() && !r.fine.jump);
     }
 
     #[test]
