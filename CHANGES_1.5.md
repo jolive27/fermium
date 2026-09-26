@@ -78,3 +78,15 @@ What that changes:
 ## Research reproductions (D254, D255)
 
 - The research inputs that had been typed from memory are now checked against cited sources, and the citations sit next to the data. The Geiger–Marsden table was right. Two ²⁰⁸Pb level energies moved by 5–6 keV (rms 0.476 → 0.478 MeV). One Big Bang nucleosynthesis rate coefficient was wrong: fixing it moves ⁷Li/H from 5.10×10⁻¹⁰ to 4.36×10⁻¹⁰; helium, deuterium and ³He did not change.
+
+## One of your programs needs two brackets
+
+`lesson2.fm` (Appendix 1 of the spec) has `a = 3 m` after `m = 1500 kg`. That is exactly the case the new rule
+asks about, so Fermium 1.5 stops at that line: *'3 m' is ambiguous … write 3*m … or 3 [m] for the unit*. Run
+`fermium fmt --fix lesson2.fm`, which writes `3 [m]` and `5 [m]`, and every value matches what Fermium 1 printed.
+Your other four programs run unchanged (DECISIONS D235 explains the choice).
+
+## The language is frozen
+
+From the `v1.5` tag on, this is the language Fermium 2 (the compiler in Rust) must match: the same syntax, rules,
+results and warnings. Changes after the freeze go in `DIVERGENCES.md`, each with a test.
