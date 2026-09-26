@@ -45,8 +45,12 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   pseudo-random points; a formula that fails is refused ("Fermium's formula for this integral isn't right for
   every value of the constants in it …").
 - **The printed formulas** match v1's for the programs in the conformance suite (`x³/3`, `x²/2`, `asinh(s/a)`,
-  `-𝑖 exp(𝑖 x)`, `if x <= 0 then -x²/2 else x²/2`); for other integrands the formula may be written
-  differently from SymPy's (an equivalent expression; the values agree).
+  `-𝑖 exp(𝑖 x)`, `if x <= 0 then -x²/2 else x²/2`): results are written in SymPy's canonical form and argument
+  order, and, like v1, the shorter (as SymPy writes it) of the plain and the factored form is kept. On a list
+  of 45 textbook integrands, 43 print exactly as v1; the other two: `∫ sec(x) dx` is `ln(sec(x) + tan(x))`
+  (v1 printed SymPy's `ln(1 + sin(x))/2 - ln(-1 + sin(x))/2`, which is NaN for every real x, so v1's formula
+  was wrong physics) and `∫ 1/(x³ + 1) dx` writes one atan argument unfactored. With symbolic constants the
+  formula can still be written differently (an equivalent expression; the values agree).
 - **Coverage vs v1:** SymPy's Risch-based integrator finds more antiderivatives (for example
   `∫ exp(sin(x)) cos(x)²…` style mixtures, products of several transcendental functions, rational functions
   with symbolic coefficients of degree > 2 in the denominator). For those v2 stops with
