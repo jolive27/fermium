@@ -8,6 +8,8 @@ pub mod ast_ext;
 pub mod builtins;
 pub mod calls;
 pub mod checker;
+pub mod clist;
+pub mod cplx;
 pub mod exprs;
 pub mod names;
 mod pending;
@@ -15,6 +17,7 @@ pub mod print;
 pub mod source;
 pub mod stmts;
 pub mod units;
+pub mod vecmat;
 pub mod walk;
 
 pub use checker::{check, CheckOptions, Checker};

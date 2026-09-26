@@ -1,12 +1,10 @@
 //! Checker methods not ported yet: each returns the honest "not supported yet" error. As each group is
 //! ported (see the table in checker.rs), its stubs move out of this file into the module that owns them.
 use fermium_ir as I;
-use fermium_ir::types::Ty;
 use fermium_syntax::ast as A;
 use fermium_syntax::diag::Diagnostic;
 
 use crate::checker::*;
-use crate::units::Unit;
 
 impl Checker {
     // ---- stmts / parallel
@@ -19,25 +17,25 @@ impl Checker {
         Err(self.not_ported("seed", e.span))
     }
     // ---- vectors and matrices
-    pub fn vec_unify(&mut self, _a: &Ty, _b: &Ty) -> Option<String> {
-        Some("vectors aren't supported yet".into())
-    }
-    pub fn entry_assign(&mut self, _b: I::SymId, s: &A::Stmt, _ctx: &mut Ctx) -> CResult<I::Stmt> {
-        Err(self.not_ported("setting a vector or matrix entry", s.span))
-    }
-    pub fn vec_quantity(&mut self, e: &A::Expr, _value: &A::Expr, _v: I::Expr, _u: &Unit) -> CResult<I::Expr> {
-        Err(self.not_ported("a vector or matrix with units", e.span))
-    }
-    pub fn index_expr(&mut self, index: &A::Expr, _tgt: &I::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing", index.span))
-    }
-    pub fn e_index(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
+    /// Indexing: only the vector/matrix/complex-list branches are ported (vecmat.rs); lists come with e_Index.
+    pub fn e_index(&mut self, e: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
+        if let Some(r) = self.index_matrix_entry(e, ctx)? {
+            return Ok(r);
+        }
+        let A::ExprKind::Index { target, .. } = &e.kind else { unreachable!() };
+        if let Checked::Val(t) = self.expr_any(target, ctx)? {
+            if let Some(r) = self.index_vecmat(e, &t, ctx)? {
+                return Ok(r);
+            }
+        }
         Err(self.not_ported("indexing", e.span))
     }
-    // ---- complex numbers
-    pub fn cplx_quantity(&mut self, _v: I::Expr, _u: &Unit, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("a complex number with units", e.span))
+    /// Fields of ODE solutions and data tables (not ported yet).
+    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, _name: &str, _t: Checked, _ctx: &mut Ctx)
+                       -> CResult<Checked> {
+        Err(self.not_ported("a field", e.span))
     }
+    // ---- complex numbers
     // ---- solutions
     pub fn sol_values(&mut self, _view: SolViewId, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("the values of an ODE solution", e.span))
@@ -78,20 +76,14 @@ impl Checker {
     pub fn e_where(&mut self, e: &A::Expr, _v: &A::Expr, _b: &[(String, A::Expr)], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("where", e.span))
     }
-    pub fn e_list_lit(&mut self, e: &A::Expr, _items: &[A::Expr], _ctx: &mut Ctx) -> CResult<I::Expr> {
+    pub fn e_list_lit(&mut self, e: &A::Expr, items: &[A::Expr], ctx: &mut Ctx) -> CResult<I::Expr> {
+        if let Some(m) = self.list_lit_matrix(e, items, ctx)? {
+            return Ok(m);
+        }
         Err(self.not_ported("a list", e.span))
     }
     pub fn e_convert(&mut self, e: &A::Expr, _v: &A::Expr, _u: &A::UnitExpr, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("in (unit conversion)", e.span))
-    }
-    pub fn e_digits(&mut self, e: &A::Expr, _v: &A::Expr, _d: u32, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("to N digits", e.span))
-    }
-    pub fn cplx_builtin(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("{name} of a complex number"), e.span))
-    }
-    pub fn clist_call(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("{name} of a list of complex numbers"), e.span))
     }
 }
 
@@ -103,36 +95,11 @@ impl Checker {
     }
     pub fn warn_limit_division(&mut self, _e: &A::Expr, _b: &I::Expr) {}
     pub fn warn_confusable_sum(&mut self, _op: &str, _a: &I::Expr, _b: &I::Expr, _e: &A::Expr) {}
-    pub fn cplx_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("complex arithmetic", e.span))
-    }
-    pub fn mat_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("matrix arithmetic", e.span))
-    }
-    pub fn vec_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("vector arithmetic", e.span))
-    }
-    pub fn shared_dim(&mut self, _v: &I::Expr, _what: &str, node: &A::Expr) -> CResult<fermium_ir::types::DExpr> {
-        Err(self.not_ported("vectors", node.span))
-    }
-    pub fn cplx_power(&mut self, e: &A::Expr, _a: I::Expr, _b: Option<I::Expr>, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("complex powers", e.span))
-    }
-    pub fn cplx_compare(&mut self, _op: I::CmpOp, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("comparing complex numbers", e.span))
-    }
-    pub fn cplx_approx(&mut self, _a: I::Expr, _b: I::Expr, e: &A::Expr, _atol: I::Expr, _rtol: I::Expr)
-                       -> CResult<I::Expr> {
-        Err(self.not_ported("comparing complex numbers", e.span))
-    }
 }
 
 impl Checker {
     pub fn data_description(&self, _v: &I::Expr) -> String {
         "data".into()
-    }
-    pub fn mixed_hints(&self, _v: &I::Expr, n: usize) -> Vec<Option<fermium_ir::Hint>> {
-        vec![None; n]
     }
     /// The units of a function for printing it (Python function_units): needs instantiate.
     pub fn function_units(&mut self, _info: FuncInfoId) -> String {
@@ -157,7 +124,26 @@ impl Checker {
     pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("err(…)", e.span))
     }
-    pub fn builtin(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
+    /// Built-ins: only the vector/matrix/complex/FFT ones are ported (vecmat.rs builtin_vecmat, row_column).
+    pub fn builtin(&mut self, name: &str, e: &A::Expr, ctx: &mut Ctx) -> CResult<Checked> {
+        if name == "row" || name == "column" {
+            return self.row_column(name, e, ctx).map(Checked::Val);
+        }
+        let A::ExprKind::Call { args: arg_asts, .. } = &e.kind else { unreachable!() };
+        let mut args = vec![];
+        for a in arg_asts {
+            match self.expr_any(a, ctx)? {
+                Checked::Val(v) => args.push(v),
+                Checked::Sol(view) => args.push(self.sol_values(view, a)?),
+                Checked::Func { info, .. } => {
+                    let dn = self.funcs[info].display_name.clone();
+                    return Err(self.err(format!("{dn} is a function; give it an argument"), a.span, None));
+                }
+            }
+        }
+        if let Some(r) = self.builtin_vecmat(name, args, e, ctx)? {
+            return Ok(Checked::Val(r));
+        }
         Err(self.not_ported(&format!("the built-in {name}"), e.span))
     }
     pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {

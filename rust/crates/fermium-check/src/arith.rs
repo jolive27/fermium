@@ -407,7 +407,9 @@ impl Checker {
                                 e.span, Some("write the negative number directly, like -5 °C, or use K".into())));
         }
         let (hint, sf, direct, ty) = (a.hint.clone(), a.sf, a.direct, a.ty.clone());
+        let m = crate::vecmat::mixed_of(&a);
         let mut r = ir(I::ExprKind::Neg(Box::new(a)), ty, e.span.line);
+        crate::vecmat::set_mixed(&mut r, m);
         r.hint = hint;
         r.sf = sf;
         r.direct = direct;
@@ -547,15 +549,17 @@ impl Checker {
                 return Err(self.err(format!("the two branches give {} and {}; they must match", self.type_desc(&a.ty),
                                             self.type_desc(&b.ty)), e.span, None));
             }
-        } else if matches!(a.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. }) {
+        } else if matches!(a.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_)) {
             let (da, db) = (ty_dim(&a.ty).unwrap(), ty_dim(&b.ty).unwrap());
             self.unify_or(&da, &db, |c| format!("the two branches give {} and {}; they must match", c.desc(&da),
                                                 c.desc(&db)), e.span, None)?;
         }
         let hint = a.hint.clone().or_else(|| b.hint.clone());
+        let m = crate::vecmat::mixed_of(&a).or_else(|| if a.hint.is_none() { crate::vecmat::mixed_of(&b) } else { None });
         let sf = minsf(&[&a, &b]);
         let ty = a.ty.clone();
         let mut r = ir(I::ExprKind::If(Box::new(c), Box::new(a), Box::new(b)), ty, e.span.line);
+        crate::vecmat::set_mixed(&mut r, m);
         r.hint = hint;
         r.sf = sf;
         Ok(r)

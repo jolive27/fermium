@@ -171,6 +171,8 @@ pub struct SymExtra {
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
     pub list_sf: Option<u32>,
+    /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
+    pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }
 
 /// What the result of checking an expression can be: a value, or a function/solution used by name.
