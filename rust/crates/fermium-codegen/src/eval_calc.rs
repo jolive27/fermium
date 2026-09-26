@@ -84,6 +84,22 @@ pub(crate) fn decimal_rule_sf(x: f64, place: i32) -> Option<u32> {
     (x != 0.0 && x.is_finite()).then(|| (x.abs().log10().floor() as i32 - place + 1).clamp(1, 17) as u32)
 }
 
+/// A sum's value and figures when its last meaningful decimal place is 10^place: a result smaller than that
+/// place (a cancellation, `12.0 kg - 11.99 kg`) is rounded to it, so it shows only the figures it has (`0 kg`:
+/// zero prints as 0, as every zero does; `10.0 m - 9.95 m` is `0.1 m`), red team 10 #7; otherwise the value with decimal_rule_sf's figures.
+pub(crate) fn round_to_place(x: f64, place: i32) -> (f64, Option<u32>) {
+    if x == 0.0 || !x.is_finite() || x.abs().log10().floor() as i32 >= place {
+        return (x, decimal_rule_sf(x, place));
+    }
+    let r = (x / 10f64.powi(place)).round() * 10f64.powi(place);
+    if r == 0.0 {
+        // zero to that place: 0.0 (place -1), 0.00 (place -2), 0 (place 0 or coarser)
+        (0.0, Some((1 - place).clamp(1, 17) as u32))
+    } else {
+        (r, decimal_rule_sf(r, place))
+    }
+}
+
 /// Show a run-time warning once per distinct text (Runtime.warn_text).
 pub(crate) fn warn_text(text: &str) {
     let text = if text.starts_with("warning: ") { text.to_string() } else { format!("warning: {text}") };
@@ -225,7 +241,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         };
         let (v, p) = self.sum_place(e, k, fr)?;
         let x = v / k;
-        Ok((v, p.and_then(|p| decimal_rule_sf(x, p))))
+        Ok(match p {
+            Some(p) => {
+                let (x, sf) = round_to_place(x, p);
+                (x * k, sf)
+            }
+            None => (v, None),
+        })
     }
 
     fn fail(&self, f: Fail, fmt: Option<usize>) -> RunError {
@@ -356,7 +378,20 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decimal_rule_sf, last_place, meaningful_sf};
+    use super::{decimal_rule_sf, last_place, meaningful_sf, round_to_place};
+
+    #[test]
+    fn cancellations_round_to_the_coarsest_place() {
+        // red team 10 #7: 12.0 kg - 11.99 kg is 0.0 kg, 10.0 m - 9.95 m is 0.1 m
+        let p = last_place(12.0, 3).unwrap().max(last_place(11.99, 4).unwrap());
+        assert_eq!(round_to_place(12.0 - 11.99, p), (0.0, Some(2)));
+        let p = last_place(10.0, 3).unwrap().max(last_place(9.95, 3).unwrap());
+        let (r, sf) = round_to_place(10.0 - 9.95, p);
+        assert!((r - 0.1).abs() < 1e-15 && sf == Some(1));
+        assert_eq!(round_to_place(1200.0 - 1200.0 + 1.0, 2), (0.0, Some(1)));
+        // not a cancellation: unchanged
+        assert_eq!(round_to_place(3.2, -1), (3.2, Some(2)));
+    }
 
     #[test]
     fn sums_keep_the_coarsest_decimal_place() {

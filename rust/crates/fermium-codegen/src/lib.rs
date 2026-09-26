@@ -38,6 +38,9 @@ pub trait Backend {
 }
 
 impl<P: Printer + ?Sized> Printer for &mut P {
+    fn flush_partial(&mut self) {
+        (**self).flush_partial()
+    }
     fn num(&mut self, fmt: usize, v: f64) {
         (**self).num(fmt, v)
     }
