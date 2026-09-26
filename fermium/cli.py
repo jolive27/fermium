@@ -152,7 +152,7 @@ def cmd_jupyter(args):
     try:
         from .jupyter.kernel import install
     except ImportError:
-        sys.stderr.write("the Jupyter kernel needs ipykernel: python3 -m pip install ipykernel jupyterlab\n")
+        sys.stderr.write("the Jupyter kernel needs ipykernel: in the fermium folder run  python3 -m pip install -e \".[full]\"\n")
         return 1
     where = install(user=not args.sys_prefix, prefix=sys.prefix if args.sys_prefix else None)
     print(f"installed the Fermium kernel in {where}\nstart Jupyter (jupyter lab) and pick 'Fermium' as the kernel")
@@ -163,7 +163,7 @@ def cmd_lsp(args):
     try:
         from .lsp import serve
     except ImportError:
-        sys.stderr.write("the language server needs pygls: python3 -m pip install pygls\n")
+        sys.stderr.write("the language server needs pygls: in the fermium folder run  python3 -m pip install -e \".[full]\"\n")
         return 1
     serve()
     return 0

@@ -94,7 +94,7 @@ plot ys in AU vs xs in AU to "my_orbit.png"
 <!-- output -->
 ```
 recorded 365 positions
-plot saved to my_orbit.png
+plot saved to /Users/ada/fermium/bootcamp/my_orbit.png
 ```
 
 `plot ys in AU vs xs in AU` shows both axes in AU rather than metres. Open `my_orbit.png`:
@@ -188,7 +188,7 @@ plot ys in AU vs xs in AU to "euler_orbit.png"
 <!-- output -->
 ```
 distance from the Sun after 5 years: 1.562 AU
-plot saved to euler_orbit.png
+plot saved to /Users/ada/fermium/bootcamp/euler_orbit.png
 ```
 
 ![The Euler method spirals outward](euler_orbit.png)
@@ -243,7 +243,7 @@ closest to the Sun: 0.291 AU
 furthest from the Sun: 1.00 AU
 period: 0.519 yr
 T^2 / a^3 = 1.00 yr²/AU³
-plot saved to eccentric_orbit.png
+plot saved to /Users/ada/fermium/bootcamp/eccentric_orbit.png
 ```
 
 ![An eccentric orbit](eccentric_orbit.png)

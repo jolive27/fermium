@@ -127,7 +127,7 @@ def animate(rt, aid, ts, Y, xa, xb):
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        rt.out.write("(animation skipped: matplotlib is not installed -- run: pip install matplotlib)\n")
+        rt.out.write("(animation skipped: matplotlib is not installed -- in the fermium folder run: python3 -m pip install -e \".[full]\")\n")
         return
     m, ncomp = info["m"], info["ncomp"]
     ts = np.asarray(ts, dtype=float)
@@ -159,7 +159,8 @@ def animate(rt, aid, ts, Y, xa, xb):
         v = (t - tu.offset) / tu.factor
         return f"{info['tname']} = {format_number(v, 4, trim=True)}" + (f" {tu.name}" if tu.name not in ("", "1")
                                                                          else "")
-    full, out = info["full"], info["out"]
+    full = info["full"]
+    out = os.path.abspath(full)            # messages show the absolute path (D251)
     d = os.path.dirname(full)
     if d:
         os.makedirs(d, exist_ok=True)
@@ -214,7 +215,7 @@ def animate(rt, aid, ts, Y, xa, xb):
             fig.savefig(os.path.join(folder, f"frame_{n:04d}.png"))
         rt.plots_saved.append(folder)
         why = "" if have_pillow else " (install pillow for a GIF)"
-        rt.out.write(f"animation saved as {len(idx)} PNG frames in {os.path.splitext(out)[0]}_frames/{why}\n")
+        rt.out.write(f"animation saved as {len(idx)} PNG frames in {os.path.splitext(out)[0]}_frames{os.sep}{why}\n")
     plt.close(fig)
     rt.out.flush()
 

@@ -74,6 +74,19 @@ def axis_label(name, unit_name, given=None):
     return name + (f" [{unit_name}]" if unit else "")
 
 
+def is_formula_label(label):
+    """A plotted formula (`2π √(L/g)`), not a name (`T`, `N_Mo`, `sol.x`)."""
+    return re.fullmatch(r"[\w.′']+", label) is None
+
+
+def y_axis_label(labels):
+    """The y axis's label from each series' (axis label, is a formula): the distinct labels, leaving out
+    formulas when a named series is there too (a fitted curve over the data: `T [s]`, not
+    `T [s], 2π √(L/g) [s]`; the legend names the curve) (spec A6.4, D253).  Mirrored by fermium build."""
+    named = [lab for lab, formula in labels if not formula]
+    return ", ".join(dict.fromkeys(named or [lab for lab, _ in labels]))
+
+
 def fit_sigfigs(val, err):
     """Digits for a fitted value: at least 4, and enough to reach the second digit of its standard error
     (0.69900, not 0.6990, when the error is 1.9×10⁻⁵) (gauntlet friction #35).  Mirrored in aot_data.c."""
@@ -778,7 +791,7 @@ class Runtime:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except ImportError:
-            self.out.write("(plot skipped: matplotlib is not installed -- run: pip install matplotlib)\n")
+            self.out.write("(plot skipped: matplotlib is not installed -- in the fermium folder run: python3 -m pip install -e \".[full]\")\n")
             return
         fig, ax = plt.subplots(figsize=(7, 4.5), dpi=110)
         ylabels, xlabels = [], []
@@ -803,10 +816,10 @@ class Runtime:
             else:
                 ax.plot(X, Y, label=s["ylabel"], linewidth=1.8)
             opts = info.get("options", {})
-            ylabels.append(axis_label(s["ylabel"], yu.name, opts.get("ylabel")))
+            ylabels.append((axis_label(s["ylabel"], yu.name, opts.get("ylabel")), is_formula_label(s["ylabel"])))
             xlabels.append(axis_label(s["xlabel"], xu.name, opts.get("xlabel")))
         ax.set_xlabel(xlabels[0] if xlabels else "")
-        ax.set_ylabel(", ".join(dict.fromkeys(ylabels)))
+        ax.set_ylabel(y_axis_label(ylabels))
         if len(series) > 1:
             ax.legend()
         opts = info.get("options", {})
@@ -838,7 +851,7 @@ class Runtime:
         fig.savefig(full)
         plt.close(fig)
         self.plots_saved.append(full)
-        self.out.write(f"plot saved to {info['out']}\n")
+        self.out.write(f"plot saved to {os.path.abspath(full)}\n")      # absolute: findable from anywhere (D251)
         self.out.flush()
 
 

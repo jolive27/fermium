@@ -39,7 +39,7 @@ The runner exits non-zero if any language's printed results disagree with Julia'
   ```
   (`benchmarks/julia/Project.toml` + `Manifest.toml` pin QuadGK and Unitful.)
 * **Python** 3 with `numpy` and `scipy`.
-* **Fermium** — `fermium` on `PATH` (`pip install -e .`), or set `FERMIUM_CMD`
+* **Fermium** — `fermium` on `PATH` (`python3 -m pip install -e ".[full]"`), or set `FERMIUM_CMD`
   (e.g. `FERMIUM_CMD="python -m fermium"`). Programs live in
   `benchmarks/fermium/<name>.fm` and run as `fermium run benchmarks/fermium/<name>.fm`
   from the repository root. A missing file or failing run is reported as

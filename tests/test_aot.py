@@ -221,11 +221,12 @@ def test_built_plot_fit_example_svg(tmp_path):
     shutil.copytree(os.path.join(ROOT, "examples", "data"), tmp_path / "data")
     src = open(os.path.join(ROOT, "examples", "18_fit_decay_data.fm"), encoding="utf-8").read()
     out = compare(src, tmp_path)
-    assert "plot saved to gallery/ba137m_fit.svg (standalone programs write SVG)" in out
+    assert f"plot saved to {tmp_path / 'gallery' / 'ba137m_fit.svg'} (standalone programs write SVG)" in out
     series, texts = _svg(tmp_path / "gallery" / "ba137m_fit.svg")
     assert len(series) == 2 and all(s.tag.endswith("path") for s in series)      # measured data: markers
-    assert "data.t [s]" in texts and "data.rate [1/s], model(data.t) [1/s]" in texts
-    assert "data.rate" in texts and "model(data.t)" in texts                      # the legend
+    # axes name the columns, not data.t (spec A6.4, D253); the formula is named by the legend only
+    assert "t [s]" in texts and "rate [1/s]" in texts and "data.t [s]" not in texts
+    assert "rate" in texts and "model(t)" in texts                                # the legend
 
 
 def test_built_plot_lines_legend_and_units(tmp_path):
@@ -249,7 +250,7 @@ def test_built_plot_log_scale_and_title(tmp_path):
 def test_built_plot_svg_name_and_escaping(tmp_path):
     src = 'xs = [1 m, 2 m, 3 m]\nys = [1 s, 4 s, 9 s]\nplot ys vs xs with title "a < b & c" to "out/sq.svg"\n'
     got = build_and_run(src, tmp_path)
-    assert got.stdout == "plot saved to out/sq.svg\n"
+    assert got.stdout == f"plot saved to {tmp_path / 'out' / 'sq.svg'}\n"   # absolute (spec A6.2, D251)
     series, texts = _svg(tmp_path / "out" / "sq.svg")
     assert len(series) == 1 and "a < b & c" in texts and "ys [s]" in texts and "xs [m]" in texts
 

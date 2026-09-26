@@ -231,8 +231,8 @@ def test_animation_and_snapshot_plot(tmp_path):
     src = HEAT.format(step="", grid=100, method="") + \
         'plot u vs x animate over t frames 12 to "heat.gif"\nplot u vs x to "heat.png"\n'
     out = run(src, base_dir=str(tmp_path))
-    assert "animation saved to heat.gif (12 frames)" in out
-    assert "plot saved to heat.png" in out
+    assert f"animation saved to {tmp_path / 'heat.gif'} (12 frames)" in out
+    assert f"plot saved to {tmp_path / 'heat.png'}" in out
     from PIL import Image
     with Image.open(tmp_path / "heat.gif") as im:
         assert im.n_frames == 12
@@ -242,7 +242,7 @@ def test_animation_and_snapshot_plot(tmp_path):
 def test_animation_of_a_wave_packet_shows_the_density(tmp_path):
     src = TDSE.format(grid=800).split("T = 2 τ")[0] + 'plot ψ vs x animate over t frames 5 to "packet.gif"\n'
     out = run(src, base_dir=str(tmp_path))
-    assert "animation saved to packet.gif (5 frames)" in out
+    assert f"animation saved to {tmp_path / 'packet.gif'} (5 frames)" in out
 
 
 # ---------------------------------------------------------------- errors
@@ -322,5 +322,5 @@ def test_animation_to_a_png_name_writes_png_frames(tmp_path):
     # fallback for a name that isn't .gif)
     src = HEAT.format(step="", grid=50, method="") + 'plot u vs x animate over t frames 4 to "heat.png"\n'
     out = run(src, base_dir=str(tmp_path))
-    assert "animation saved as 4 PNG frames in heat_frames/" in out
+    assert f"animation saved as 4 PNG frames in {tmp_path / 'heat_frames'}/" in out
     assert sorted(p.name for p in (tmp_path / "heat_frames").iterdir()) == [f"frame_000{i}.png" for i in range(4)]

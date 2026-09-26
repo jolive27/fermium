@@ -7,8 +7,17 @@ b = (d/2) cot(θ/2),   d = zZe²/(4πε₀T)  (the distance of closest approach 
 and since the beam is spread uniformly over the target, the cross-section is dσ/dΩ = (d/4)²/sin⁴(θ/2)
 (E. Rutherford, *Phil. Mag.* **21**, 669 (1911)). H. Geiger and E. Marsden, *Phil. Mag.* **25**, 604 (1913), counted
 scintillations at angles from 15° to 150° and found N sin⁴(θ/2) roughly constant, over a range where N changes by
-a factor of 4 000. Their gold counts (Table II, as widely reproduced): 150°: 33.1, 135°: 43.0, 120°: 51.9,
-105°: 69.5, 75°: 211, 60°: 477, 45°: 1435, 37.5°: 3300, 30°: 7800, 22.5°: 27300, 15°: 132000.
+a factor of 4 000. Their gold counts (Table II, "Variation of Scattering with Angle (collected results)", column V): 150°: 33.1,
+135°: 43.0, 120°: 51.9, 105°: 69.5, 75°: 211, 60°: 477, 45°: 1435, 37.5°: 3300, 30°: 7800, 22.5°: 27300,
+15°: 132000.
+
+**Source check (spec A8.3, 2026-09-26).** These values were first typed from memory. They were then checked
+against a typeset transcription of the 1913 paper (http://fisica.ufpr.br/mossanek/etc/geiger_marsden.pdf, the
+text and tables of *Phil. Mag.* **25**, 604): all 11 gold counts agree, and so does the paper's own column
+N sin⁴(φ/2) (28.8, 31.2, 29.0, 27.5, 29.1, 29.8, 30.8, 35.3, 35.0, 39.6, 38.4), which is what the last column of
+the table below normalises. No number changed. The table's second part (5° to 30°, a separate set of countings whose
+counts are on a different scale) is not used. The scan of the original journal page was not reached (the
+publisher's copy is paywalled), so the check is against the transcription, not the facsimile.
 
 **Code.** [`rutherford.fm`](rutherford.fm) fires 2×10⁷ α particles of 5 MeV at a gold nucleus: b = b_max √(rand()) is
 uniform over a disk whose edge scatters by 5°, θ = 2 atan(d/(2b)), and the angles go into 5° bins (35 bins from 5°

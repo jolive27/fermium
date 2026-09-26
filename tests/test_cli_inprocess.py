@@ -107,6 +107,50 @@ def test_doctor_missing_c_compiler_is_not_a_problem(monkeypatch, capsys):
     assert "Everything looks good" in out
 
 
+def _hide_modules(monkeypatch, names):
+    """Make `import <name>` fail for these modules, as on a machine where they aren't installed."""
+    import builtins
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name.split(".")[0] in names:
+            raise ImportError(f"No module named {name!r}")
+        return real_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+
+FIX = 'python3 -m pip install -e ".[full]"'
+
+
+def test_doctor_missing_optional_packages_prints_one_fix(monkeypatch, capsys):
+    # spec A6.1 / D250: however many packages are missing, one copy-pasteable command fixes them all
+    mods = ("scipy", "sympy", "matplotlib", "pygls", "ipykernel")
+    _hide_modules(monkeypatch, set(mods))
+    doctor()
+    out = capsys.readouterr().out
+    for mod in mods:
+        assert f"{mod} is not installed" in out
+    assert out.count(FIX) == 1 and out.count("pip install") == 1
+    assert "Missing: scipy, sympy, matplotlib, pygls, ipykernel." in out
+
+
+def test_doctor_missing_llvmlite_prints_one_fix(monkeypatch, capsys):
+    _hide_modules(monkeypatch, {"llvmlite"})
+
+    def broken(*a, **k):
+        raise ImportError("No module named 'llvmlite'")
+    monkeypatch.setattr("fermium.driver.run_source", broken)
+    assert doctor() == 1
+    out = capsys.readouterr().out
+    assert "llvmlite (the compiler back end) is missing" in out
+    assert out.count("pip install") == 1 and FIX in out
+
+
+def test_doctor_all_installed_prints_no_install_command(capsys):
+    assert doctor() == 0
+    assert "pip install" not in capsys.readouterr().out
+
+
 def test_repl_subcommand(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("print 2 m\n"))
     assert cli.main(["repl"]) == 0

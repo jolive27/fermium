@@ -14,9 +14,15 @@ def _bad(msg, fix):
     print(f"  ✗ {msg}\n      fix: {fix}")
 
 
+# The one install command (D234, spec A6.1): every runtime package is a core dependency, so this single line
+# fixes any missing package. `doctor` prints it once, however many packages are missing (D250).
+FIX_COMMAND = 'python3 -m pip install -e ".[full]"'
+
+
 def doctor():
     print("Checking your Fermium installation...\n")
     problems = 0
+    missing = []
     v = sys.version_info
     if v >= (3, 10):
         _ok(f"Python {v.major}.{v.minor}.{v.micro} ({platform.system()} {platform.machine()})")
@@ -30,20 +36,23 @@ def doctor():
         _ok(f"llvmlite {llvmlite.__version__} (LLVM {'.'.join(map(str, llvm.llvm_version_info))})")
     except ImportError:
         problems += 1
-        _bad("llvmlite (the compiler back end) is missing", "run:  pip install llvmlite")
+        missing.append("llvmlite")
+        print("  ✗ llvmlite (the compiler back end) is missing")
     try:
         import numpy
         _ok(f"numpy {numpy.__version__}")
     except ImportError:
         problems += 1
-        _bad("numpy is missing", "run:  pip install numpy")
+        missing.append("numpy")
+        print("  ✗ numpy is missing")
     for mod, why in (("scipy", "needed for fit"), ("sympy", "needed for integrals without limits"),
                      ("matplotlib", "needed for plot")):
         try:
             m = __import__(mod)
             _ok(f"{mod} {m.__version__}")
         except ImportError:
-            _bad(f"{mod} is not installed ({why}; everything else works)", f"run:  pip install {mod}")
+            missing.append(mod)
+            print(f"  - {mod} is not installed ({why}; everything else works)")
     # the editor and notebook tools: optional, each needs one package (red team 5 #16)
     for mod, what in (("pygls", "the language server, fermium lsp (VS Code hover and live errors)"),
                       ("ipykernel", "the Jupyter kernel (fermium jupyter install)")):
@@ -56,7 +65,8 @@ def doctor():
                 ver = ""
             _ok(f"{mod}{ver}: for {what}")
         except ImportError:
-            print(f"  - {mod} is not installed: only needed for {what}\n      to get it: pip install {mod}")
+            missing.append(mod)
+            print(f"  - {mod} is not installed: only needed for {what}")
     # a C compiler links `fermium build` executables; nothing else needs one
     try:
         from . import aot
@@ -84,9 +94,16 @@ def doctor():
             _bad(f"the test program printed {got!r} instead of '9.70 m/s²'", "please report this as a bug")
     except Exception as e:
         problems += 1
-        _bad(f"couldn't compile a test program ({type(e).__name__}: {e})",
-             "reinstall with:  pip install --force-reinstall llvmlite  then run fermium doctor again")
+        if "llvmlite" in missing:     # the install command below fixes this too: don't print a second fix
+            print("  ✗ couldn't compile a test program (llvmlite is missing)")
+        else:
+            _bad(f"couldn't compile a test program ({type(e).__name__}: {e})",
+                 "reinstall with:  python3 -m pip install --force-reinstall llvmlite  then run fermium doctor again")
     print()
+    if missing:
+        names = ", ".join(missing)
+        print(f"Missing: {names}. To install everything Fermium uses, run this in the fermium folder:\n\n"
+              f"    {FIX_COMMAND}\n")
     if problems:
         print(f"{problems} problem{'s' if problems > 1 else ''} found. Fix them and run  fermium doctor  again.")
         return 1

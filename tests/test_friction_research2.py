@@ -159,7 +159,7 @@ def _axes(src, tmp_path, monkeypatch, backend):
     figs = []
     monkeypatch.setattr(plt, "close", figs.append)
     out = backend(src, str(tmp_path))
-    assert out == "plot saved to p.png" and (tmp_path / "p.png").exists()
+    assert out == f"plot saved to {tmp_path / 'p.png'}" and (tmp_path / "p.png").exists()
     return figs[-1].axes[0]
 
 
@@ -182,7 +182,7 @@ def test_67_label_gets_the_unit_unless_it_names_one(tmp_path, monkeypatch, backe
 
 def test_67_options_without_with_even_for_a_variable_named_y(tmp_path):
     src = "y = [1, 2, 3] [m]\nx = [1, 2, 3] [s]\nplot y vs x, y from 0 m to 5 m, reversed y to \"p.png\""
-    assert both(src, str(tmp_path)) == "plot saved to p.png"
+    assert both(src, str(tmp_path)) == f"plot saved to {tmp_path / 'p.png'}"
 
 
 @pytest.mark.parametrize("opts,msg", [

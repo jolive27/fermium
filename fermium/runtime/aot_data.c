@@ -911,6 +911,7 @@ void fm_plot_done(int64_t pid) {
     fprintf(f, "<text transform=\"translate(%.2f %.2f) rotate(-90)\" font-size=\"13\" text-anchor=\"middle\">", 20.0, (T + B) / 2);
     for (int i = 0, shown = 0; i < acc->n; i++) {
         const char *yl = P->series[acc->s[i].idx].ylabel;
+        if (!yl[0]) continue;        /* a formula next to a named series: the legend names it (D253) */
         int dup = 0;
         for (int j = 0; j < i; j++) if (!strcmp(P->series[acc->s[j].idx].ylabel, yl)) dup = 1;
         if (dup) continue;
@@ -943,7 +944,11 @@ void fm_plot_done(int64_t pid) {
     if (fclose(f) != 0 || bad) {
         printf("(plot not saved: can't write %s)\n", P->svg);
     } else {
-        printf("plot saved to %s%s\n", P->shown, P->renamed ? " (standalone programs write SVG)" : "");
+        /* the absolute path, so the reader can find the file whatever folder it was run from (D251) */
+        char cwd[4096];
+        int rel = P->shown[0] != '/' && getcwd(cwd, sizeof cwd) != NULL;
+        printf("plot saved to %s%s%s%s\n", rel ? cwd : "", rel ? "/" : "", P->shown,
+               P->renamed ? " (standalone programs write SVG)" : "");
     }
     fflush(stdout);
     acc_clear(acc);

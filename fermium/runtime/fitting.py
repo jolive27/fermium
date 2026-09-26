@@ -52,7 +52,7 @@ def least_squares_fit(f, y, guess, extra=None):
     try:
         from scipy.optimize import least_squares
     except ImportError:
-        raise FermiumRuntimeError("fit needs SciPy: run  pip install scipy")
+        raise FermiumRuntimeError("fit needs SciPy: in the fermium folder run  python3 -m pip install -e \".[full]\"")
 
     def resid(p):
         r = f(p) - y

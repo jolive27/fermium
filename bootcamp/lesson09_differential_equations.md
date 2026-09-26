@@ -54,7 +54,7 @@ plot x vs t to "spring.png"
 ```
 x at 0.5 s: 2.8 cm
 exact:      2.8 cm
-plot saved to spring.png
+plot saved to /Users/ada/fermium/bootcamp/spring.png
 ```
 
 ![Spring oscillation](spring.png)
@@ -83,7 +83,7 @@ plot x vs t to "damped.png"
 ```
 x at 10 s: 0.146 cm
 velocity at 1 s: 0.360 m/s
-plot saved to damped.png
+plot saved to /Users/ada/fermium/bootcamp/damped.png
 ```
 
 ![Damped oscillation](damped.png)
@@ -130,7 +130,7 @@ plot theta in deg vs t to "pendulum_big.png"
 <!-- output -->
 ```
 angle after 1 s: -80.5°
-plot saved to pendulum_big.png
+plot saved to /Users/ada/fermium/bootcamp/pendulum_big.png
 ```
 
 `plot theta in deg vs t` shows the angle in degrees on the graph. Try exercise 2 to see how the period depends on the amplitude.
@@ -161,7 +161,7 @@ plot A vs t, B vs t to "chain.png"
 ```
 B after 5 hours: 476
 most B ever: 543
-plot saved to chain.png
+plot saved to /Users/ada/fermium/bootcamp/chain.png
 ```
 
 ![Decay chain](chain.png)
@@ -188,7 +188,7 @@ plot y in AU vs x in AU to "earth_orbit.png"
 <!-- output -->
 ```
 after one year: 1.00 AU -0.00983 AU
-plot saved to earth_orbit.png
+plot saved to /Users/ada/fermium/bootcamp/earth_orbit.png
 ```
 
 ![Earth's orbit](earth_orbit.png)

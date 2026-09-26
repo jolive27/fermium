@@ -370,8 +370,8 @@ def test_fit_shape():
 
 def test_plot_lists(datadir):
     out = run('data = load "pend.csv"\nplot data.T vs data.L to "p.png"', base_dir=datadir)
-    assert out == "plot saved to p.png"
     import os
+    assert out == f"plot saved to {os.path.join(datadir, 'p.png')}"   # absolute (spec A6.2)
     assert os.path.exists(os.path.join(datadir, "p.png"))
 
 
@@ -382,12 +382,12 @@ def test_plot_shape():
 
 def test_plot_solution(tmp_path):
     src = "solve x' = -x/(1 s) with x(0) = 1 m for t from 0 s to 1 s\nplot x vs t to \"x.png\""
-    assert run(src, base_dir=str(tmp_path)) == "plot saved to x.png"
+    assert run(src, base_dir=str(tmp_path)) == f"plot saved to {tmp_path / 'x.png'}"
 
 
 def test_plot_formula_from_to(tmp_path):
     src = 'k = 2 N/m\nF(x) = k x\nplot F(x) vs x from 0 m to 1 m to "F.png"'
-    assert run(src, base_dir=str(tmp_path)) == "plot saved to F.png"
+    assert run(src, base_dir=str(tmp_path)) == f"plot saved to {tmp_path / 'F.png'}"
 
 
 def test_plot_needs_vs():
@@ -751,7 +751,7 @@ def test_solve_clauses_indented_less_than_equations():
 def test_plot_options(tmp_path):
     out = run('solve N\' = -N/(1 s) with N(0) = 1000 for t from 0 s to 10 s\n'
               'plot N vs t to "n.png" with log y, title "decay"', base_dir=str(tmp_path))
-    assert out == "plot saved to n.png" and (tmp_path / "n.png").exists()
+    assert out == f"plot saved to {tmp_path / 'n.png'}" and (tmp_path / "n.png").exists()
     assert "plot options are" in str(error_of('xs = [1, 2]\nplot xs vs xs with sideways'))
 
 
