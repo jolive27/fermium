@@ -228,7 +228,19 @@ print terms, total
 ```
 
 - **A variable must have a value on every path.** Using a variable after an `if` or a loop that is the only place it was set is a compile error, because the `if` may be false and the loop may not run at all: `y might not have a value here: it is only set inside the if on line 1`. The same goes for a loop variable read after its loop (`for i from 1 to n` … `print i`), even a `for n from 1 to inf` loop. Give the variable a value before the `if` or loop, or copy the loop variable into another variable inside the loop, as `terms` above.
-- **Conditions:** comparisons are `==`, `!=` (`≠`), `<`, `>`, `<=` (`≤`), `>=` (`≥`) and `~=` (`≈`, "equal to within 10⁻⁶ relative"). Combine them with `and`, `or` and `not`.
+- **Conditions:** comparisons are `==`, `!=` (`≠`), `<`, `>`, `<=` (`≤`), `>=` (`≥`) and `~=` (`≈`, "approximately equal"). Combine them with `and`, `or` and `not`.
+- **How close is `≈`?** `a ≈ b` is true when a and b are equal, or when |a − b| ≤ 10⁻⁶ × the larger of |a| and |b| (a relative tolerance, the same at every scale). To choose the tolerance yourself, add `within`:
+  - `within` and a quantity in the same units as a and b is an absolute tolerance: `x ≈ 2 m within 1 mm` means |x − 2 m| ≤ 1 mm (and nothing else).
+  - `within` and a percentage is a relative tolerance: `100 ≈ 101 within 2%`. (When a and b are percentages themselves, `within 1 %` is one percentage point, as with `±`.)
+  - **Near zero you need an absolute tolerance.** 10⁻⁶ of 0 is 0, so `v ≈ 0 m/s` could only be true for exactly 0. Fermium refuses to compile it and shows the fix: *'v ≈ 0 m/s' is true only when v is exactly 0 … write v ≈ 0 m/s within 1e-9 m/s*. A literal zero (with or without units, or a vector of zeros) counts; `0 °C` doesn't, since it is 273.15 K.
+  - Vectors compare by length: `a ≈ b` means |a − b| ≤ 10⁻⁶ × max(|a|, |b|) (or the tolerance after `within`); complex numbers compare by modulus. `∞ ≈ ∞` is true, `∞ ≈` anything finite and anything with NaN is false. (These are Julia's `isapprox` rules.)
+
+```fermium
+v = 3e-15 m/s
+if v ≈ 0 m/s within 1e-12 m/s then print "at rest" else print "moving"
+print 1000 m ≈ 1000.0005 m, 1000 m ≈ 1000.0005 m within 0.1 mm
+print <3, 4> m ≈ <3.003, 4> m within 1 cm, 100 ≈ 101 within 2%
+```
 - **Chained comparisons:** `a < x < b` means `a < x and x < b`, and `x` is computed only once; any number of `<`, `<=`, `>`, `>=` can be chained (`E1 < E2 <= E3 < E4`), or only `==`. Mixing `==` or `!=` with `<` is an error.
 - **An if-expression over several lines:** continue it on indented lines that start with `else`, as a piecewise function is written on paper:
 
@@ -1144,6 +1156,7 @@ statement  := name = expr [where binds] | name op= expr | name[expr] = expr
             | from name import name [as name], name [as name], ...
 expr       := if expr then expr [NEWLINE INDENT] else expr | or-expression
 comparison := sum (cmp sum)*          a < x < b means a < x and x < b
+            | sum ≈ sum [within sum]   within 1 mm (absolute) or within 2% (relative)
 precedence := or < and < not < comparison < + - < * / < unary - < implicit × < ^ < postfix
 postfix    := atom ( (args) | [index] | [a:b] | .name | ' )*
 atom       := number [unit] | name | "text" | (expr) | [list] | <expr, expr[, expr]> [unit] | |expr|

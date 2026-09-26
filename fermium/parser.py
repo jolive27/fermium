@@ -1333,10 +1333,20 @@ class Parser:
             return e
         # a < x < b means a < x and x < b, with x evaluated once (D50)
         operands, ops = [e], []
+        within = "within" not in self.known
         while self.tok.kind == "OP" and self.tok.value in CMP_OPS:
-            ops.append(self.next().value)
-            operands.append(self.sum())
+            op_tok = self.next()
+            ops.append(op_tok.value)
+            saved = self.no_juxt_names
+            if op_tok.value == "~=" and within:
+                self.no_juxt_names = saved | {"within"}    # `x ≈ 0 m/s within 1e-9 m/s` (D260)
+            try:
+                operands.append(self.sum())
+            finally:
+                self.no_juxt_names = saved
         if len(ops) == 1:
+            if ops[0] == "~=":
+                return self._approx(operands[0], operands[1], t, op_tok, within)
             return self.span(A.Compare(ops[0], operands[0], operands[1]), t)
         if any(op in ("==", "!=", "~=") for op in ops) and not all(op == "==" for op in ops):
             raise self.error("a chain of comparisons can only use <, <=, > and >= (like a < x < b), or only ==",
@@ -1360,6 +1370,63 @@ class Parser:
         if binds:
             e = self.span(A.Where(e, binds), t)
         return e
+
+    @staticmethod
+    def _zero_literal(n):
+        """A literal zero: `0`, `0.0 m/s`, `0 [m]`, `-0 J`, `<0, 0> m/s` (not `0 °C`, which is 273.15 K).
+        Returns the unit text to suggest for the tolerance ('' for a pure number), or None (D260)."""
+        from .units import _AFFINE
+        while isinstance(n, A.Neg):
+            n = n.operand
+        unit = ""
+        if isinstance(n, A.Quantity):
+            if any(f.name in _AFFINE for f in n.unit.factors):
+                return None
+            txt = n.unit.text.strip()
+            unit = " " + (f"[{txt}]" if n.bracket else txt)
+            n = n.value
+        if isinstance(n, A.VecLit):
+            zeros = [Parser._zero_literal(x) for x in n.items]
+            if not zeros or any(z is None for z in zeros):
+                return None
+            inner = {z for z in zeros if z}
+            return unit or (next(iter(inner)) if len(inner) == 1 else "")
+        if isinstance(n, A.Num) and n.value == 0:
+            return unit
+        return None
+
+    def _approx(self, left, right, t, op_tok, within):
+        """`a ≈ b [within tol]` (D260): |a − b| ≤ max(atol, rtol·max(|a|, |b|)).  Without `within` the
+        tolerance is 10⁻⁶ relative, so comparing with a literal zero is an error that shows the fix."""
+        tol = None
+        if within and self.tok.kind == "NAME" and self.tok.value == "within":
+            wt = self.next()
+            if self.tok.kind in ("NEWLINE", "EOF", "DEDENT") or self.at_op(")") or self.at_op(","):
+                raise self.error("'within' needs a tolerance after it, like  x ≈ 0 m/s within 1e-9 m/s", wt)
+            tol = self.sum()
+            v = tol.value if isinstance(tol, A.Quantity) else tol
+            if isinstance(v, A.Neg) or (isinstance(v, A.Num) and v.value < 0):
+                raise self.error("a tolerance can't be negative", wt,
+                                 hint=f"write the size of the allowed difference, like within {self._src_of(tol).lstrip('-− ')}")
+        zero_unit = self._zero_literal(right)
+        other = left
+        if zero_unit is None:
+            zero_unit, other = self._zero_literal(left), right
+        relative = isinstance(tol, A.Quantity) and tol.unit.text.strip() in ("%", "percent")
+        if zero_unit is not None and self._zero_literal(other) is None and (tol is None or relative):
+            op = op_tok.raw if op_tok.raw in ("≈", "~=") else "≈"
+            written = f"{self._src_of(left)} {op} {self._src_of(right)}"
+            fix = f"{written} within 1e-9{zero_unit}"
+            if tol is None:
+                msg = (f"'{written}' is true only when {self._src_of(other)} is exactly 0: ≈ allows a difference "
+                       f"of 10⁻⁶ × the larger size, which is 0 here")
+            else:
+                msg = (f"'{written} within {self._src_of(tol)}' is true only when {self._src_of(other)} is "
+                       f"exactly 0: a percentage of 0 is 0")
+            raise FermiumError(msg, op_tok.line, op_tok.col, max(1, len(op_tok.raw)),
+                               f"give an absolute tolerance: write {fix} (the difference you can accept)")
+        c = self.span(A.Compare("~=", left, right, tol), t)
+        return c
 
     def sum(self):
         t = self.tok

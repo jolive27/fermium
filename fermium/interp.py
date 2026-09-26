@@ -1503,8 +1503,6 @@ class Interpreter:
         a, b = self.eval(e.a, fr), self.eval(e.b, fr)
         if isinstance(e.a.ty, BoolTy):
             return {"==": a == b, "!=": a != b}[e.op]
-        if e.op == "~=":
-            return abs(a - b) <= max(abs(a), abs(b)) * 1e-6 + 1e-300
         return {"==": a == b, "!=": a != b, "<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b}[e.op]
 
     def e_ILogic(self, e, fr):
@@ -1900,6 +1898,9 @@ class Interpreter:
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
             from . import cplx
             return cplx.py_builtin(e, args)
+        if name == "approx":                            # a ≈ b [within t] (D260)
+            from . import cplx
+            return cplx.py_approx(e, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             if hasattr(e, "sing_t"):
                 self._sing_t = self.eval(e.sing_t, fr)

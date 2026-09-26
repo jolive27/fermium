@@ -33,6 +33,18 @@ What that changes:
 - Typing a terminal command like `fermium run ke.fm` at the `fm>` prompt tells you to type `:quit` first.
 - `sqrt(-4)` written with a number is an error that suggests the complex square root `√(-4 + 0i)`.
 
+## `≈` near zero, and choosing the tolerance with `within` (D260)
+
+- `a ≈ b` still means "equal to within 10⁻⁶ of the larger size", so programs that compare non-zero values print what they printed.
+- **New:** `x ≈ 2 m within 1 mm` checks |x − 2 m| ≤ 1 mm. The tolerance must have the same units as the values. `100 ≈ 101 within 2%` is a relative tolerance.
+- **Comparing with zero:** `v ≈ 0 m/s` could only ever be true for exactly zero (10⁻⁶ of 0 is 0), so it is now a compile error that shows the fix: write `v ≈ 0 m/s within 1e-9 m/s`, with the difference you can accept.
+- `≈` works for vectors (it compares lengths: `|a − b|` against `|a|` and `|b|`) as well as numbers and complex numbers.
+- `∞ ≈ ∞` is true; `∞ ≈ 1e308` is now false (it used to be true).
+
+## Under the hood
+
+- An ODE solution used inside an integral or equation in a function is now passed to it as a pointer, not disguised as a number. Nothing prints differently; it just can't break under fast-math or flush-to-zero settings (D261).
+
 ## Tools
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.

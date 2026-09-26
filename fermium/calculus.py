@@ -90,6 +90,8 @@ def map_children(e, f):
         return e
     if isinstance(e, A.Quantity):
         return _copy(e, value=f(e.value))
+    if isinstance(e, A.Compare) and e.tol is not None:
+        return _copy(e, left=f(e.left), right=f(e.right), tol=f(e.tol))
     if isinstance(e, (A.BinOp, A.Compare, A.Logic)):
         return _copy(e, left=f(e.left), right=f(e.right))
     if isinstance(e, (A.Neg, A.Not, A.Sqrt, A.Abs)):
@@ -813,7 +815,8 @@ def _src(e, pretty):
     if isinstance(e, A.Field):
         return f"{_src(e.target, pretty)[0]}.{e.name}", PREC_ATOM
     if isinstance(e, A.Compare):
-        return f"{_src(e.left, pretty)[0]} {e.op} {_src(e.right, pretty)[0]}", 0
+        tol = f" within {_src(e.tol, pretty)[0]}" if e.tol is not None else ""
+        return f"{_src(e.left, pretty)[0]} {e.op} {_src(e.right, pretty)[0]}{tol}", 0
     if isinstance(e, A.Logic):
         return f"{_src(e.left, pretty)[0]} {e.op} {_src(e.right, pretty)[0]}", 0
     if isinstance(e, A.Not):
