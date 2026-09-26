@@ -47,12 +47,15 @@ pub struct DivFactor {
 pub struct DivInfo {
     /// Product form: the '/' token (line, col), first and past-the-end token index of the denominator.
     pub op: Option<(u32, u32)>,
+    /// The index of the '/' token (not printed).
+    pub op_i: Option<usize>,
     pub start: Option<usize>,
     pub end: Option<usize>,
     pub factors: Option<Vec<DivFactor>>,
     pub warned: Option<bool>,
     /// Integral form.
     pub tok: Option<(u32, u32)>,
+    pub tok_i: Option<usize>,
     pub hi_text: Option<String>,
     pub divisor: Option<NodeRef>,
     pub div_text: Option<String>,
