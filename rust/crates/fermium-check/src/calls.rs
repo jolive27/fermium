@@ -455,7 +455,8 @@ impl Checker {
         let placeholder = DExpr::fresh();
         let inst_name = self.fresh_name(&self.funcs[info].name.clone());
         self.module.funcs.push(I::Func { name: inst_name, params: vec![], ret_ty: Ty::Num(placeholder.clone()),
-                                         body: vec![], locals: vec![], sf: None });
+                                         body: vec![], locals: vec![], sf: None, display: display.clone(),
+                                         def_line: fdef.span.line });
         let inst = self.module.funcs.len() - 1;
         self.func_extra.resize(inst + 1, FuncExtra::default());
         self.func_extra[inst] = FuncExtra { display: display.clone(), ret_placeholder: Some(placeholder.clone()),

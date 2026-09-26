@@ -200,6 +200,15 @@ pub struct Frame {
     pub(crate) vars: HashMap<SymId, Value>,
 }
 
+thread_local! {
+    /// The stack address where the program started (Interpreter::run), for the recursion check.
+    static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The bytes of stack a program may use before runaway recursion stops it. The default suits a main thread's
+/// 8 MB stack; a driver that runs the program on a thread with a big stack raises it (v1: 400 MB of 512 MB).
+pub static STACK_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(6 << 20);
+
 /// Runs a checked module.
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
@@ -220,6 +229,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub fn run(&mut self) -> Result<(), RunError> {
+        let here = 0u8;
+        STACK_BASE.with(|b| b.set(&here as *const u8 as usize));
         let mut fr = Frame::default();
         let main = &self.module.main;
         match self.block(main, &mut fr)? {
@@ -635,15 +646,29 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     pub(crate) fn call(&mut self, f: usize, args: Vec<Value>) -> Result<Value, RunError> {
         let func = &self.module.funcs[f];
+        // runaway recursion: stop with the compiled path's error before the stack overflows (stack_check)
+        let here = 0u8;
+        let sp = &here as *const u8 as usize;
+        let base = STACK_BASE.with(|b| b.get());
+        if base != 0 && base.saturating_sub(sp) > STACK_LIMIT.load(std::sync::atomic::Ordering::Relaxed) {
+            let name = if func.display.is_empty() { "a function" } else { func.display.as_str() };
+            return Err(RunError { message: format!("{name} called itself too many times (the program ran out of \
+                                                    stack) -- is a base case missing, like  if n <= 0 then ...?"),
+                                  line: if func.def_line != 0 { func.def_line } else { self.line }, hint: None });
+        }
         let mut fr = Frame::default();
         for (p, v) in func.params.iter().zip(args) {
             fr.vars.insert(*p, v);
         }
         let body = &func.body;
-        match self.block(body, &mut fr)? {
+        // an error after the call is reported on the caller's line (the compiled path's lines are fixed per statement)
+        let line = self.line;
+        let r = match self.block(body, &mut fr)? {
             Flow::Return(v) => Ok(v),
             _ => Ok(Value::Void),
-        }
+        };
+        self.line = line;
+        r
     }
 
     pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {
