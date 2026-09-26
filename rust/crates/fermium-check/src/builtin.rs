@@ -466,7 +466,7 @@ impl Checker {
             return Err(self.err(format!("can't show a vector with different units per component in {}", u.name),
                                 e.span, Some("convert one component at a time, like to(s.x, cm)".into())));
         }
-        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. }) {
+        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_)) {
             return Err(self.err("to(x, unit) needs a number", e.span, None));
         }
         let d = self.dim_of(&v);
