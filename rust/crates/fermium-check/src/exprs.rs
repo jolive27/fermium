@@ -86,6 +86,8 @@ impl Checker {
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
+            K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
+            K::Field { target, name } => return self.e_field(e, target, name, ctx),
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))
@@ -352,6 +354,9 @@ impl Checker {
         }
         if self.extra[sym].tdelta {
             r.extra().tdelta = true;
+        }
+        if let Some(m) = &self.extra[sym].mixed_hint {
+            r.extra().mixed = Some(m.clone());
         }
         r
     }

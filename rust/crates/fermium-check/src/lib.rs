@@ -9,7 +9,9 @@ pub mod builtin;
 pub mod builtins;
 pub mod calls;
 pub mod checker;
+pub mod clist;
 pub mod convert;
+pub mod cplx;
 pub mod exprs;
 pub mod lists;
 pub mod names;
@@ -20,6 +22,7 @@ pub mod source;
 pub mod stmts;
 pub mod systems;
 pub mod units;
+pub mod vecmat;
 pub mod walk;
 
 pub use checker::{check, CheckOptions, Checker};

@@ -91,6 +91,8 @@ pub struct ExprExtra {
     pub tdelta: bool,
     /// text-table id of a string literal
     pub text_id: Option<usize>,
+    /// the display units of a vector whose components have different units, one each (Python MixedHint, D29)
+    pub mixed: Option<Vec<Option<Hint>>>,
 }
 
 impl Expr {

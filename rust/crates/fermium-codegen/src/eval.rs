@@ -336,6 +336,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::List(l) => l.borrow().iter().map(|x| Value::Num(*x)).collect(),
                     Value::TextList(l) => l.borrow().iter().map(|t| Value::Str(t.clone())).collect(),
                     Value::Vec(v) => v.iter().map(|x| Value::Num(*x)).collect(),
+                    // for z in fft(xs): each z a complex number (D243)
+                    Value::CList(l) => l.borrow().iter().map(|z| Value::Vec(Rc::new(vec![z.0, z.1]))).collect(),
                     _ => vec![],
                 };
                 for v in items {
