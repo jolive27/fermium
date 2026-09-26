@@ -12,6 +12,7 @@ pub mod fit;
 pub mod linalg;
 pub mod ode;
 pub mod quad;
+pub mod rng;
 pub mod roots;
 pub mod special;
 pub mod stiff;
