@@ -1,0 +1,12 @@
+[package]
+name = "fermium-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "fermium"
+path = "src/main.rs"
+
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }
