@@ -499,6 +499,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         r.map_err(|f| self.fail_solve(f, fmt))
     }
 
+    /// max(x) / min(x) of a solution component: the largest step value refined by the quintic Hermite through
+    /// its neighbours (v1's fm_sol_ext), not just the largest stored value.
+    pub(crate) fn sol_extreme(&mut self, name: &str, args: &[Expr], fr: &mut Frame) -> Result<Option<Value>, RunError> {
+        if !matches!(name, "max_list" | "min_list") || args.len() != 1 {
+            return Ok(None);
+        }
+        let ExprKind::SolList { sol, comp, what: 0 } = &args[0].kind else { return Ok(None) };
+        let d = self.sol_data(*sol, fr)?;
+        let sg = if name == "max_list" { 1.0 } else { -1.0 };
+        Ok(Some(Value::Num(d.sol.extreme(*comp, sg))))
+    }
+
     pub(crate) fn eval_solution(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
         match &e.kind {
             ExprKind::SolEval { sol, comp, t, use_dy, tfmt } => {

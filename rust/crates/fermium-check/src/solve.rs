@@ -1280,3 +1280,29 @@ fn set_sing_fmt(body: &mut [I::Expr], fmt: usize) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use fermium_syntax::ast as A;
+
+    fn parse_expr(s: &str) -> A::Expr {
+        let (prog, _) = fermium_syntax::parse(&format!("zz = {s}\n"), &[]).unwrap();
+        match &prog.body[0].kind {
+            A::StmtKind::Assign { value, .. } => value.clone(),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn isolated_right_sides_match_python() {
+        // python3 -c "from fermium import calculus as C ...; C.to_source(C.isolate(l, r, x''), pretty=False)"
+        let cases = [("-ħ²/(2*m) * ψ''  + V(x) ψ", "E ψ", "ψ", "-(psi V(x) - E psi)/(-hbar^2/(2*m))"),
+                     ("-ħ^2 / (2 m_e) * ψ'' + V0 ψ", "E ψ", "ψ", "-(V0 psi - E psi)/(-hbar^2/(2 m_e))"),
+                     ("m x''", "-k x - b x' + F0 cos(ω t)", "x", "(-k x - b x' + F0 cos(omega t))/m")];
+        for (l, r, x, want) in cases {
+            let t = fermium_sym::build::prime(fermium_sym::build::name(x), 2);
+            let got = fermium_sym::isolate(&parse_expr(l), &parse_expr(r), &t).unwrap();
+            assert_eq!(fermium_sym::to_source_p(&got, false), want);
+        }
+    }
+}

@@ -610,6 +610,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Builtin(name, args) => {
+                if let Some(v) = self.sol_extreme(name, args, fr)? {
+                    return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
+                }
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
                 self.builtin(name, vals)?
             }
