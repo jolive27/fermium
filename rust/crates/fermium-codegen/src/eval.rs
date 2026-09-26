@@ -533,11 +533,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         _ => {}
                     }
                 }
-                PrintItem::Complex(e, f) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.complex(*f, v[0], v[1])
-                    }
-                }
+                PrintItem::Complex(e, f) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.complex(*f, v[0], v[1]),
+                    // format_complex takes math.hypot of the parts
+                    Value::UVec(_) => return self.err(crate::eval_unc::GENERIC),
+                    _ => {}
+                },
                 PrintItem::ComplexList(e, f) => {
                     if let Value::CList(l) = self.eval(e, fr)? {
                         let v = l.borrow().clone();
@@ -604,7 +605,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
-                if matches!(e.ty, Ty::Vec { .. } | Ty::Mat { .. })
+                // (a complex number is a pair too: cplx.py's (re, im) tuple)
+                if matches!(e.ty, Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_))
                     && (crate::eval_unc::is_unc(&va) || crate::eval_unc::is_unc(&vb))
                 {
                     return self.unc_vec_bin(*op, va, vb);
@@ -933,7 +935,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 return f(args).map_err(|m| RunError { message: m, line: self.line, hint: None });
             }
         }
-        if !name.starts_with("pm") && !name.starts_with("unc_") && args.iter().any(crate::eval_unc::is_unc) {
+        if !name.starts_with("pm") && !name.starts_with("unc_") && !name.starts_with("c.")
+            && args.iter().any(crate::eval_unc::is_unc)
+        {
             return self.unc_apply(name, args);
         }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,

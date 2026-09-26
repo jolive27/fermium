@@ -34,7 +34,7 @@ fn neg(a: &Value) -> Value {
     }
 }
 
-fn abs(a: &Value) -> Value {
+pub(crate) fn abs(a: &Value) -> Value {
     match a {
         Value::Unc(u) => Value::Unc(Rc::new(u.abs())),
         Value::Arr(x) => Value::Arr(Rc::new(x.iter().map(|y| y.abs()).collect())),

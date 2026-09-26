@@ -30,6 +30,25 @@ pub fn is_unc(v: &Value) -> bool {
 pub const VEC_UNC: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain \
                            numbers one at a time, or use value(x) to drop the uncertainty";
 
+/// Is this one of the errors v1 raises as UncertainUse (not a kernel failure)? Those unwind through its
+/// kernels (interp.kernel's `finally` restores the line), so they report the line where the outermost kernel
+/// started: see kernel_line.
+pub fn is_unc_error(e: &RunError) -> bool {
+    let m = &e.message;
+    m.contains("uncertain value (±)") || m.contains("uncertain values (±)") || m.contains("can't be uncertain (±)")
+}
+
+/// A kernel's result (an integral, root, ODE, PDE or eigenvalue solve started on `line0`): an uncertain-value
+/// error from inside it reports line0, as v1's interpreter does.
+pub fn kernel_line<T>(r: Result<T, RunError>, line0: u32) -> Result<T, RunError> {
+    r.map_err(|mut e| {
+        if is_unc_error(&e) {
+            e.line = line0;
+        }
+        e
+    })
+}
+
 /// A vector's components as values (numbers or uncertain numbers).
 pub fn vec_items(v: &Value) -> Option<Vec<Value>> {
     match v {

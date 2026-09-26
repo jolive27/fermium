@@ -217,8 +217,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for e in &lam.body {
             match self.eval(e, fr)? {
                 // interp.ode_rhs (D122)
-                Value::Unc(_) => return self.err("a differential equation (solve) can't use uncertain values (±) yet; \
-                                                  put the solve inside a  propagate montecarlo  block, or use value(x)"),
+                Value::Unc(_) | Value::UVec(_) | Value::UList(_) => {
+                    return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the \
+                                     solve inside a  propagate montecarlo  block, or use value(x)")
+                }
                 Value::Vec(v) => {
                     for x in v.iter() {
                         if j < out.len() {
@@ -239,10 +241,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub(crate) fn stmt_solve(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
+        use crate::eval_unc::kernel_line;
+        let line0 = self.line;
         match &s.kind {
-            StmtKind::Solve { method, .. } if method == "eigen" => self.solve_eigen(s, fr),
-            StmtKind::Solve { method, .. } if method == "pde" => self.solve_pde(s, fr),
-            StmtKind::Solve { .. } => self.solve_ode(s, fr),
+            StmtKind::Solve { method, .. } if method == "eigen" => kernel_line(self.solve_eigen(s, fr), line0),
+            StmtKind::Solve { method, .. } if method == "pde" => kernel_line(self.solve_pde(s, fr), line0),
+            StmtKind::Solve { .. } => kernel_line(self.solve_ode(s, fr), line0),
             StmtKind::Plot(..) => self.stmt_plot(s, fr),
             StmtKind::Fit { .. } => self.stmt_fit(s, fr),
             StmtKind::Animate { .. } => self.stmt_animate(s, fr),
@@ -250,16 +254,21 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn flat(&mut self, es: &[Expr], fr: &mut Frame) -> Result<Vec<f64>, RunError> {
+    fn flat(&mut self, es: &[Expr], line: u32, fr: &mut Frame) -> Result<Vec<f64>, RunError> {
         let mut y0 = vec![];
+        let mut unc = false;
         for e in es {
             match self.eval(e, fr)? {
                 Value::Vec(v) => y0.extend(v.iter()),
-                // interp.s_SSolve (D122)
-                Value::Unc(_) => return self.err("a starting value of solve can't be uncertain (±) yet; put the solve \
-                                                  inside a  propagate montecarlo  block, or use value(x)"),
+                Value::Unc(_) | Value::UVec(_) => unc = true,
                 v => y0.push(v.num()),
             }
+        }
+        if unc {
+            // interp.s_SSolve (D122): checked once they are all evaluated, on the solve's line
+            self.line = line;
+            return self.err("a starting value of solve can't be uncertain (±) yet; put the solve inside a  propagate \
+                             montecarlo  block, or use value(x)");
         }
         Ok(y0)
     }
@@ -292,9 +301,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     fn solve_ode(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
         let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
-        let y0 = self.flat(y0, fr)?;
-        let t0 = self.eval(t0, fr)?.num();
-        let t1 = self.eval(t1, fr)?.num();
+        let y0 = self.flat(y0, s.line, fr)?;
+        let (t0, t1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
+        if matches!(t0, Value::Unc(_)) || matches!(t1, Value::Unc(_)) {
+            // uncertain limits: v1's steppers make t, and so the state, uncertain; the right side then is (ode_rhs)
+            self.line = s.line;
+            return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the solve inside \
+                             a  propagate montecarlo  block, or use value(x)");
+        }
+        let (t0, t1) = (t0.num(), t1.num());
         let h0 = match step {
             Some(e) => Some(self.eval(e, fr)?.num()),
             None => None,
@@ -601,12 +616,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::OdeLinSolve { m, b, t, text, fmt } => {
                 let n = b.len();
                 let mut a = vec![];
+                // an uncertain coefficient or right side needs a plain number (as in v1's interpreter)
                 for x in m {
-                    a.push(self.eval(x, fr)?.num());
+                    let v = self.eval(x, fr)?;
+                    a.push(self.plain(&v)?);
                 }
                 let mut bv = vec![];
                 for x in b {
-                    bv.push(self.eval(x, fr)?.num());
+                    let v = self.eval(x, fr)?;
+                    bv.push(self.plain(&v)?);
                 }
                 let (xs, piv) = solve_linear(&a, n, &bv);
                 if piv.iter().any(|p| *p == 0.0) {
