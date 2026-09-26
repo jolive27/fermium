@@ -136,7 +136,7 @@ pub fn powc(x: f64, p: f64) -> f64 {
         return if x >= 0.0 { fdiv(1.0, x * x.sqrt()) } else { f64::NAN };
     }
     if (p - 1.0 / 3.0).abs() < 1e-15 {
-        return x.cbrt();
+        return crate::eval_calc::cbrt(x); // glibc's, as the compiled v1 code calls
     }
     if let Some(n) = odd_root_numerator(p) {
         // x^(n/q), q odd: the real root, also for x < 0 (like cbrt)
