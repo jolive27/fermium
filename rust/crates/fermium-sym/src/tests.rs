@@ -110,6 +110,9 @@ fn antiderivatives_print_like_v1() {
     assert_eq!(integ("1 / √(a^2 + s^2)", "s", &["a"]).unwrap(), "asinh(s/a)");
     assert_eq!(integ("|x|", "x", &[]).unwrap(), "if x <= 0 then -x²/2 else x²/2");
     assert_eq!(integ("exp(1i x)", "x", &[]).unwrap(), "-𝑖 exp(𝑖 x)");
+    // red team 10: the log form (defined for |x| > 1, as v1's), not atanh
+    assert_eq!(integ("1/(x^2 - 1)", "x", &[]).unwrap(), "ln(-1 + x)/2 - ln(1 + x)/2");
+    assert_eq!(integ("1/(4 - x^2)", "x", &[]).unwrap(), "-ln(-2 + x)/4 + ln(2 + x)/4");
 }
 
 #[test]

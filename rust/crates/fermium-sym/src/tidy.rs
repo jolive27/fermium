@@ -731,7 +731,12 @@ fn factor_terms(t: T) -> T {
 /// SymPy's ordering_of_classes index (Basic.compare): numbers, π, 𝑖, symbols, Pow, Mul, Add, then functions.
 fn class_rank(t: &T) -> (u32, String) {
     match t {
-        T::Num(v) => (if *v == v.trunc() { 7 } else { 8 }, String::new()),
+        // SymPy's singleton numbers come first: Zero, One, Half, …, NegativeOne; then Integer, Rational, Float
+        T::Num(v) if *v == 0.0 => (0, String::new()),
+        T::Num(v) if *v == 1.0 => (1, String::new()),
+        T::Num(v) if *v == 0.5 => (2, String::new()),
+        T::Num(v) if *v == -1.0 => (5, String::new()),
+        T::Num(v) => (if *v == v.trunc() { 7 } else if rational(*v).is_some() { 8 } else { 9 }, String::new()),
         T::Sym(s) if s == "π" => (11, String::new()),
         T::Sym(s) if s == "𝑖" => (12, String::new()),
         T::Sym(_) => (13, String::new()),
@@ -767,7 +772,11 @@ fn compare(a: &T, b: &T) -> Ordering {
         return ra.cmp(&rb);
     }
     match (a, b) {
-        (T::Num(x), T::Num(y)) => x.total_cmp(y),
+        (T::Num(x), T::Num(y)) => match (rational(*x), rational(*y)) {
+            // Rational's hashable content is (p, q)
+            (Some(a), Some(b)) if a.1 != 1 || b.1 != 1 => a.cmp(&b),
+            _ => x.total_cmp(y),
+        },
         (T::Sym(x), T::Sym(y)) => x.cmp(y),
         _ => {
             let (aa, ab) = (args(a), args(b));
@@ -830,6 +839,12 @@ fn from_t(t: &T) -> A::Expr {
             out
         }
     }
+}
+
+/// The formula in SymPy's canonical form and argument order (what v1 printed for a SymPy result), or None where
+/// it isn't made of what SymPy's conversion accepted.
+pub fn sympy_form(e: &A::Expr) -> Option<A::Expr> {
+    Some(simplify(&from_t(&to_t(e)?)))
 }
 
 /// calculus.sympy_tidy: a shorter equivalent formula, or `e` itself.
