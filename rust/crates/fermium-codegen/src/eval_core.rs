@@ -69,6 +69,106 @@ fn one_math(name: &str, x: f64) -> f64 {
     }
 }
 
+/// Built-ins with a direct path in the evaluator (the result is the same as through builtin()).
+#[derive(Clone, Copy)]
+pub(crate) enum Fast {
+    /// one_math on one plain number
+    Math(fn(f64) -> f64),
+    /// len of a list
+    Len,
+    /// rand()
+    Rand,
+}
+
+/// The direct paths, by name: each Math entry computes exactly what one_math(name, x) does.
+const FAST_TABLE: &[(&str, Fast)] = &[
+    ("sin", Fast::Math(|x| x.sin())),
+    ("cos", Fast::Math(|x| x.cos())),
+    ("exp", Fast::Math(|x| x.exp())),
+    ("ln", Fast::Math(|x| x.ln())),
+    ("log", Fast::Math(|x| x.ln())),
+    ("log10", Fast::Math(|x| x.log10())),
+    ("log2", Fast::Math(|x| x.log2())),
+    ("abs", Fast::Math(|x| x.abs())),
+    ("floor", Fast::Math(|x| x.floor())),
+    ("ceil", Fast::Math(|x| x.ceil())),
+    ("round", Fast::Math(|x| x.round())),
+    ("tan", Fast::Math(|x| x.tan())),
+    ("asin", Fast::Math(|x| x.asin())),
+    ("acos", Fast::Math(|x| x.acos())),
+    ("atan", Fast::Math(|x| x.atan())),
+    ("sinh", Fast::Math(|x| x.sinh())),
+    ("cosh", Fast::Math(|x| x.cosh())),
+    ("tanh", Fast::Math(|x| x.tanh())),
+    ("asinh", Fast::Math(cmath::asinh)),
+    ("acosh", Fast::Math(cmath::acosh)),
+    ("atanh", Fast::Math(cmath::atanh)),
+    ("erf", Fast::Math(cmath::erf)),
+    ("erfc", Fast::Math(cmath::erfc)),
+    ("gamma", Fast::Math(cmath::tgamma)),
+    ("lgamma", Fast::Math(cmath::lgamma)),
+    ("expm1", Fast::Math(|x| x.exp_m1())),
+    ("log1p", Fast::Math(|x| x.ln_1p())),
+    ("cot", Fast::Math(|x| fdiv(1.0, x.tan()))),
+    ("sec", Fast::Math(|x| fdiv(1.0, x.cos()))),
+    ("csc", Fast::Math(|x| fdiv(1.0, x.sin()))),
+    ("sign", Fast::Math(|x| f64::from(i8::from(x > 0.0) - i8::from(x < 0.0)))),
+    ("len", Fast::Len),
+    ("rand", Fast::Rand),
+];
+
+/// The direct path for a built-in's name, if it has one. Looked up once per call site: the IR's strings never
+/// move, so the answer is kept in a small direct-mapped cache by the name's address (a built-in call in a hot
+/// loop then costs no string comparisons).
+#[inline]
+pub(crate) fn fast_builtin(name: &str) -> Option<Fast> {
+    use std::cell::Cell;
+    const N: usize = 256;
+    const NONE: u8 = 255;
+    thread_local! {
+        /// (address, length, index into FAST_TABLE + 1, or NONE; 0: empty)
+        static CACHE: [Cell<(usize, usize, u8)>; N] = const { [const { Cell::new((0, 0, 0)) }; N] };
+    }
+    let addr = name.as_ptr() as usize;
+    let slot = (addr >> 3) % N;
+    let hit = CACHE.with(|c| {
+        let (a, l, i) = c[slot].get();
+        if a == addr && l == name.len() && i != 0 { Some(i) } else { None }
+    });
+    let i = match hit {
+        Some(i) => i,
+        None => {
+            let i = FAST_TABLE.iter().position(|(n, _)| *n == name).map(|k| k as u8 + 1).unwrap_or(NONE);
+            CACHE.with(|c| c[slot].set((addr, name.len(), i)));
+            i
+        }
+    };
+    if i == NONE { None } else { Some(FAST_TABLE[i as usize - 1].1) }
+}
+
+#[cfg(test)]
+mod fast_tests {
+    use super::*;
+
+    #[test]
+    fn fast_math_is_one_math() {
+        let xs = [0.0, -0.0, 0.3, -1.7, 2.5, -2.5, 0.49999999999999994, 1e-300, 7.1e2, f64::INFINITY, f64::NAN, 1.0,
+                  -1.0, 0.999, 3.9];
+        for (name, f) in FAST_TABLE {
+            if let Fast::Math(f) = f {
+                assert!(MATH_NAMES.contains(name), "{name}");
+                for &x in &xs {
+                    let (a, b) = (f(x), one_math(name, x));
+                    assert!(a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()), "{name}({x}): {a} vs {b}");
+                }
+            }
+        }
+        for name in MATH_NAMES {
+            assert!(FAST_TABLE.iter().any(|(n, _)| n == name), "{name}");
+        }
+    }
+}
+
 /// The C library's math functions that v1's compiled code calls (MATH_LIBM, cbrt, jn, yn), so results agree to
 /// the last bit: Rust's own asinh/acosh/atanh and cbrt (compiler-builtins), and the pure-Rust ports in
 /// fermium-runtime, can differ by an ulp, which shows when a value is printed to 16 digits. Elsewhere:

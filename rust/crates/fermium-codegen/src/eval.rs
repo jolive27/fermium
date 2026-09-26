@@ -748,6 +748,31 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Builtin(name, args) => {
+                // a math function of one plain number, len of a list, rand(): straight there (the same results as
+                // through builtin_slice)
+                use crate::eval_core::Fast;
+                match (crate::eval_core::fast_builtin(name), args.len()) {
+                    (Some(Fast::Math(f)), 1) => {
+                        let v = self.eval(&args[0], fr)?;
+                        return match v {
+                            Value::Num(x) => Ok(Value::Num(f(x))),
+                            v => self.builtin_slice(name, std::slice::from_ref(&v)),
+                        };
+                    }
+                    (Some(Fast::Len), 1) => {
+                        let v = self.eval(&args[0], fr)?;
+                        return match &v {
+                            Value::List(l) => Ok(Value::Num(l.borrow().len() as f64)),
+                            _ => self.builtin_slice(name, std::slice::from_ref(&v)),
+                        };
+                    }
+                    (Some(Fast::Rand), 0) if self.builtins.is_empty() => {
+                        if let Some(r) = self.builtin_m3("rand", &[]) {
+                            return r;
+                        }
+                    }
+                    _ => {}
+                }
                 if let Some(v) = self.sol_extreme(name, args, fr)? {
                     return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
                 }
