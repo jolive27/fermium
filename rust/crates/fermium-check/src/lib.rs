@@ -7,6 +7,7 @@ pub mod arith;
 pub mod ast_ext;
 pub mod builtin;
 pub mod builtins;
+pub mod calculus;
 pub mod calls;
 pub mod checker;
 pub mod clist;

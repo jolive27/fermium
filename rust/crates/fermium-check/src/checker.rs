@@ -241,6 +241,8 @@ pub struct Checker {
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
+    /// calculus: derived functions made so far (calculus.rs)
+    pub calc: crate::calculus::CalcState,
 }
 
 impl Checker {
@@ -281,6 +283,7 @@ impl Checker {
             par_stack: vec![],
             fmt_dims: vec![],
             nodes: HashMap::new(),
+            calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -483,6 +486,7 @@ impl Checker {
         let mut ctx = ctx;
         self.nodes.clear();
         self.index_nodes(prog);
+        self.positive_names = if self.opts.repl { Default::default() } else { crate::calculus::positive_names(prog) };
         self.note_top_units(prog);
         self.future_funcs = prog
             .body

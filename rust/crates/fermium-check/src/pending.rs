@@ -37,20 +37,11 @@ impl Checker {
 }
 
 impl Checker {
-    // ---- arithmetic helpers not ported yet
-    /// dx/dt written as a fraction: a derivative (calculus module).
-    pub fn leibniz(&mut self, _e: &A::Expr, _ctx: &mut Ctx) -> Option<A::Expr> {
-        None
-    }
 }
 
 impl Checker {
     pub fn data_description(&self, _v: &I::Expr) -> String {
         "data".into()
-    }
-    /// The units of a function for printing it (Python function_units): needs instantiate.
-    pub fn function_units(&mut self, _info: FuncInfoId) -> String {
-        String::new()
     }
 }
 
@@ -79,10 +70,6 @@ impl Checker {
         Err(self.not_ported("calling a module's function", node.span))
     }
     pub fn module_body_error(&mut self, _e: &mut Diagnostic, _info: FuncInfoId, _node: &A::Expr) {}
-    /// C.stabilize: a numerically stable form of a derivative's body (calculus module).
-    pub fn stabilize(&self, e: &A::Expr) -> A::Expr {
-        e.clone()
-    }
 }
 
 impl Checker {
@@ -94,14 +81,6 @@ impl Checker {
     /// zs[k] of a list of complex numbers (clist.index, D243).
     pub fn clist_index(&mut self, _t: I::Expr, _idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("indexing a list of complex numbers", e.span))
-    }
-    /// `d/dt (…) where a = 3` substituted into the derivative (calculus: C.inline_where); None: not that case.
-    pub fn where_deriv(&mut self, e: &A::Expr, value: &A::Expr, _b: &[(String, A::Expr)], _ctx: &mut Ctx)
-                       -> Option<CResult<Checked>> {
-        if matches!(value.kind, A::ExprKind::Deriv { .. }) {
-            return Some(Err(self.not_ported("a derivative with where", e.span)));
-        }
-        None
     }
 }
 
