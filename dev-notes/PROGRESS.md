@@ -4,7 +4,7 @@ _Plan: `dev-notes/FERMIUM_SPEC_V1.5_V2.md`. End: Sun 2026-09-27 13:00 UTC (9 AM 
 _The first run's log is `dev-notes/PROGRESS_v1.md`._
 
 ## Status
-- **Phase:** A (v1.5), branch `claude/v1.5`.
+- **Phase:** B (v2, Rust), branch `claude/v2-rust`. Phase A done: v1.5 frozen at `ccdb288` (D263).
 
 ## Done
 - 22:40 UTC Fri: branch `claude/v1.5` created (D234); hourly check-in Routine set; CLAUDE.md rewritten for this plan; dev logs moved to `dev-notes/` (A9.3); README note and LICENSE name per A9.1–A9.2.
@@ -21,11 +21,14 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 02:00 UTC: A8.1/A8.2 merged (≈ with `within`, D260; typed pointer handle, D261).
 - 02:30 UTC: **red team round 8** (25 findings, several silent wrong answers in the first A1/A2): all fixed or documented (D238, tests/test_redteam8.py, REDTEAM.md). **A4/A5 merged** (J m display, ½ ⇄ (1/2) in fmt, list-element figures, complex fft; D240–D244). Full suite 3951 passed. PR jolive27/fermium#2 opened (draft) for macOS CI.
 
+- 02:40–03:35 UTC: macOS CI (first ever) found two real problems: a degenerate fit not detected by `fermium build` on macOS (D262, scale-free test in both runtimes) and a parser crash on an unclosed bracket found by the fuzz test. Both fixed; **CI green on Linux and macOS at `ccdb288`**.
+- 03:40 UTC: **A10 — v1.5 frozen** at `ccdb288` (tag `v1.5` local; tag push refused with 403, so the branch `claude/v1.5-freeze` marks it; D263). CHANGES_1.5.md written; PR #2 open.
+
 ## In progress
-- A10 freeze: waiting for CI (Linux + macOS on PR #2); then CHANGES_1.5.md final pass, tag `v1.5`.
+- **Phase B** (v2, Rust): branch `claude/v2-rust` from `ccdb288`; conformance suite first.
 
 ## Next
-- Phase B (after the tag): `claude/v2-rust` from `v1.5`; conformance suite first (dev-notes/PHASE_B_PLAN.md).
+- B3 conformance harvest + runner + CONFORMANCE.md; B4 Cargo workspace; B5 milestones in order.
 
 ## Blocked
 - (none)
@@ -36,3 +39,4 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 2026-09-26 00:17 UTC — A2 done, A3 in its final test run; A4–A6, A8 with three agents; A7 (bootcamp) after they merge.
 - 2026-09-26 01:50 UTC — A3, A6, A8.3 in; A7 mostly done; waiting on A4/A5 and A8.1/A8.2 agents and red team 8. CI green on Linux (A2).
 - 2026-09-26 02:40 UTC — all Phase A items merged; red team 8 fixed; PR #2 open; waiting for macOS CI before the v1.5 tag.
+- 2026-09-26 03:40 UTC — v1.5 frozen (CI green on both platforms); starting Phase B.
