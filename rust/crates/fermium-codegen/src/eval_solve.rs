@@ -302,14 +302,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
         let y0 = self.flat(y0, s.line, fr)?;
-        let (t0, t1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
-        if matches!(t0, Value::Unc(_)) || matches!(t1, Value::Unc(_)) {
-            // uncertain limits: v1's steppers make t, and so the state, uncertain; the right side then is (ode_rhs)
+        let (vt0, vt1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
+        let (t0, t1) = (vt0.num(), vt1.num());
+        if matches!(vt0, Value::Unc(_)) || matches!(vt1, Value::Unc(_)) {
+            // uncertain limits: v1's stepper calls the right side at the start (its own errors come first), then its
+            // steps make t, and so the state, uncertain; the right side then is (ode_rhs)
+            let lam = &module.lambdas[*rhs];
+            let mut out = vec![0.0; y0.len()];
+            self.ode_call(lam, t0, &y0, &mut out, fr)?;
             self.line = s.line;
             return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the solve inside \
                              a  propagate montecarlo  block, or use value(x)");
         }
-        let (t0, t1) = (t0.num(), t1.num());
         let h0 = match step {
             Some(e) => Some(self.eval(e, fr)?.num()),
             None => None,
@@ -541,6 +545,30 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         r.map_err(|f| self.fail_solve(f, fmt))
     }
 
+    /// A solution at a time that may be uncertain (v1's interpreter: Sol.eval's cubic Hermite on a UFloat t, so the
+    /// value's uncertainty is the interpolant's slope times t's); y'(t) at an uncertain t calls the right side with
+    /// uncertain values, which ode_rhs refuses.
+    fn sol_at_unc(&mut self, d: &SolData, comp: usize, t: &Value, use_dy: bool, fmt: usize) -> Result<Value, RunError> {
+        let Value::Unc(u) = t else { return Ok(Value::Num(self.sol_at(d, comp, t.num(), use_dy, fmt)?)) };
+        let line = self.line;
+        let x = self.sol_at(d, comp, u.v, use_dy, fmt)?; // the range check, on the nominal value
+        self.line = line;
+        if use_dy {
+            return self.err(if d.rhs.is_some() {
+                "a differential equation (solve) can't use uncertain values (±) yet; put the solve inside a  propagate \
+                 montecarlo  block, or use value(x)"
+            } else {
+                crate::eval_unc::GENERIC
+            });
+        }
+        if d.sol.n() <= 1 {
+            return Ok(Value::Num(x));
+        }
+        let slope = d.sol.eval(comp, u.v, true, None).map_err(|f| self.fail_solve(f, fmt))?;
+        let dd = fermium_runtime::numerics::uncertain::scale(&u.d, slope);
+        Ok(Value::Unc(Rc::new(fermium_runtime::numerics::uncertain::UFloat::new(x, dd))))
+    }
+
     /// max(x) / min(x) of a solution component: the largest step value refined by the quintic Hermite through
     /// its neighbours (v1's fm_sol_ext), not just the largest stored value.
     pub(crate) fn sol_extreme(&mut self, name: &str, args: &[Expr], fr: &mut Frame) -> Result<Option<Value>, RunError> {
@@ -568,6 +596,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         }
                         Ok(Value::List(Rc::new(RefCell::new(out))))
                     }
+                    Value::UList(l) => {
+                        let ts = l.borrow().clone();
+                        let mut out = Vec::with_capacity(ts.len());
+                        for t in &ts {
+                            out.push(self.sol_at_unc(&d, *comp, t, *use_dy, *tfmt)?);
+                        }
+                        Ok(crate::eval_unc::make_list(out))
+                    }
+                    v @ Value::Unc(_) => self.sol_at_unc(&d, *comp, &v, *use_dy, *tfmt),
                     v => Ok(Value::Num(self.sol_at(&d, *comp, v.num(), *use_dy, *tfmt)?)),
                 }
             }

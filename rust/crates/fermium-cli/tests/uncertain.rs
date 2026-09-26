@@ -102,6 +102,12 @@ fn uncertain_values_where_plain_numbers_are_needed() {
     assert_eq!(error_of("kode", "T = 1.0 ± 0.1\nsolve y' = -y with y(0) = 1 for t from 0 to T\nprint y(0.5)\n"),
                "prog.fm, line 2: a differential equation (solve) can't use uncertain values (±) yet; put the solve \
                 inside a  propagate montecarlo  block, or use value(x)");
+    // a solution at an uncertain time: the interpolant's slope carries t's uncertainty; y' there calls the right side
+    let sol = "solve y' = -y with y(0) = 1 for t from 0 to 2\nT = 1.0 ± 0.1\nprint y(T)\nprint y([0.5, T])\n";
+    assert_eq!(stdout_of("ksol", sol), "0.368 ± 0.037\n[0.606531, 0.368 ± 0.037]\n");
+    assert_eq!(error_of("ksoldy", "solve y' = -y with y(0) = 1 for t from 0 to 2\nT = 1.0 ± 0.1\nprint y'(T)\n"),
+               "prog.fm, line 3: a differential equation (solve) can't use uncertain values (±) yet; put the solve \
+                inside a  propagate montecarlo  block, or use value(x)");
     // an integrand that errors over an infinite range stops at once
     assert_eq!(error_of("kinf", "I = 2.0 ± 0.02\nprint ∫ I / (1 + z²) dz from -∞ to ∞\n"), kernel("an integral"));
 }
