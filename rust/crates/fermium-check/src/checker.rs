@@ -574,6 +574,7 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Propagate { samples, body } => self.s_propagate(s, samples.as_ref(), body, ctx),
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),

@@ -17,6 +17,7 @@ pub mod rng;
 pub mod roots;
 pub mod special;
 pub mod stiff;
+pub mod uncertain;
 
 /// A run-time failure with v1's error kind and its two numbers (see `describe_error` in
 /// `fermium/runtime/core.py`, which turns them into the message).

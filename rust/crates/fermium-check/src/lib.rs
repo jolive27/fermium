@@ -28,6 +28,7 @@ pub mod solve;
 pub mod source;
 pub mod stmts;
 pub mod systems;
+pub mod uncertain;
 pub mod units;
 pub mod vecmat;
 pub mod walk;
