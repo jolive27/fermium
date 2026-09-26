@@ -88,6 +88,7 @@ impl Checker {
             K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Slice { .. } => self.e_slice(e)?,
+            K::Uncertain { value, err } => self.e_uncertain(e, value, err, ctx)?,
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,

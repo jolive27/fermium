@@ -7,9 +7,6 @@ use crate::checker::*;
 
 impl Checker {
     // ---- stmts / parallel
-    pub fn seed_stmt(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        Err(self.not_ported("seed", e.span))
-    }
     // ---- vectors and matrices
     /// Fields of ODE solutions and data tables (not ported yet).
     pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, name: &str, t: Checked, ctx: &mut Ctx)
@@ -35,9 +32,6 @@ impl Checker {
     pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("calling Python", e.span))
     }
-    pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
-        Err(self.not_ported("err(…)", e.span))
-    }
 }
 
 impl Checker {
@@ -50,16 +44,12 @@ impl Checker {
             None => Err(self.not_ported(&format!("{name} of vectors and matrices"), e.span)),
         }
     }
-    /// value(x), uncertainty(x), rel(x) of an uncertain value (D121).
-    pub fn unc_part(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("the built-in {name}"), e.span))
-    }
-    /// rand(), rand(a, b), randn(), randn(μ, σ) (D80).
-    pub fn m3_random(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("the built-in {name}"), e.span))
-    }
-    /// sample(dist, n) (D80).
-    pub fn m3_sample(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("the built-in sample", e.span))
+}
+
+impl Checker {
+    /// err(g) of a parameter found by fit: its standard-error variable (the fit module); None: not a fitted
+    /// parameter.
+    pub fn fit_err(&mut self, _e: &A::Expr, _a0: Option<&A::Expr>, _ctx: &mut Ctx) -> Option<CResult<I::Expr>> {
+        None
     }
 }

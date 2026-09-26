@@ -161,6 +161,9 @@ pub enum ExprKind {
     OdeLinSolve { m: Vec<Expr>, b: Vec<Expr>, t: Box<Expr>, text: usize, fmt: usize },
     /// ± and the parts of an uncertain value (D120–D124).
     Uncertain(Box<Expr>, Box<Expr>),
+    /// sample(expr, n): a list of n values of the lambda `expr`, evaluated afresh each time (its parameter is the
+    /// 1-based sample number; D80).
+    Sample { lam: LambdaId, n: Box<Expr> },
 }
 
 /// One item of a print statement.
@@ -408,7 +411,7 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
             v.extend(step.iter().map(|x| &**x));
             v
         }
-        K::SolEval { t, .. } => vec![t],
+        K::SolEval { t, .. } | K::Sample { n: t, .. } => vec![t],
         K::PdeEval { x, t, .. } => vec![x, t],
         K::OdeLinSolve { m, b, t, .. } => {
             let mut v: Vec<&Expr> = m.iter().chain(b.iter()).collect();
@@ -421,7 +424,8 @@ pub fn expr_children(e: &Expr) -> Vec<&Expr> {
 /// The lambda an expression uses (integrand, summand, root function), if any.
 pub fn lambda_of(e: &Expr) -> Option<LambdaId> {
     match &e.kind {
-        ExprKind::Integral { lam, .. } | ExprKind::Sum { lam, .. } | ExprKind::Root { lam, .. } => Some(*lam),
+        ExprKind::Integral { lam, .. } | ExprKind::Sum { lam, .. } | ExprKind::Root { lam, .. }
+        | ExprKind::Sample { lam, .. } => Some(*lam),
         _ => None,
     }
 }

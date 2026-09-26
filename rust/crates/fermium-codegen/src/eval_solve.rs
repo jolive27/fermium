@@ -204,6 +204,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let mut j = 0;
         for e in &lam.body {
             match self.eval(e, fr)? {
+                // interp.ode_rhs (D122)
+                Value::Unc(_) => return self.err("a differential equation (solve) can't use uncertain values (±) yet; \
+                                                  put the solve inside a  propagate montecarlo  block, or use value(x)"),
                 Value::Vec(v) => {
                     for x in v.iter() {
                         if j < out.len() {
@@ -240,6 +243,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for e in es {
             match self.eval(e, fr)? {
                 Value::Vec(v) => y0.extend(v.iter()),
+                // interp.s_SSolve (D122)
+                Value::Unc(_) => return self.err("a starting value of solve can't be uncertain (±) yet; put the solve \
+                                                  inside a  propagate montecarlo  block, or use value(x)"),
                 v => y0.push(v.num()),
             }
         }

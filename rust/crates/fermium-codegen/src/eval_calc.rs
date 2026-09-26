@@ -111,6 +111,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let p = l.params[0];
         let old = fr.vars.insert(p, Value::Num(x));
         let r = self.eval(&l.body[0], fr);
+        let r = match r {
+            // a callback given to a numerical kernel must return plain numbers (interp.plain_fn, D122)
+            Ok(v @ (Value::Unc(_) | Value::UList(_))) => Err(crate::eval_unc::kernel_unc_error(&l.name, &v, self.line)),
+            r => r,
+        };
         match old {
             Some(v) => {
                 fr.vars.insert(p, v);
@@ -192,6 +197,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return Err(self.fail(Fail::new(12, a, b), None));
                 }
                 let n = cnt.min(2f64.powi(62)) as i64;
+                if self.module.uses_uncertainty {
+                    return self.unc_sum(*lam, a, st, n, fr); // the terms may be uncertain (interp.e_ISum)
+                }
                 let line = self.line;
                 let mut acc = 0.0;
                 for i in 0..n {
