@@ -193,12 +193,24 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let mut i = 0;
         for &s in &lam.state {
             let n = slots(&module.syms[s].ty);
-            let v = if matches!(module.syms[s].ty, Ty::Num(_)) {
-                Value::Num(y[i])
+            if matches!(module.syms[s].ty, Ty::Num(_)) {
+                fr.vars.insert(s, Value::Num(y[i]));
             } else {
-                Value::Vec(Rc::new(y[i..i + n].to_vec()))
-            };
-            fr.vars.insert(s, v);
+                // reuse last call's vector when nothing else holds it (no allocation in the hot loop)
+                let reused = match fr.vars.get_mut(&s) {
+                    Some(Value::Vec(rc)) => match Rc::get_mut(rc) {
+                        Some(v) if v.len() == n => {
+                            v.copy_from_slice(&y[i..i + n]);
+                            true
+                        }
+                        _ => false,
+                    },
+                    _ => false,
+                };
+                if !reused {
+                    fr.vars.insert(s, Value::Vec(Rc::new(y[i..i + n].to_vec())));
+                }
+            }
             i += n;
         }
         let mut j = 0;

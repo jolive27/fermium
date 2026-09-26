@@ -63,43 +63,46 @@ fn det_small(a: &[f64], n: usize) -> f64 {
     acc
 }
 
-/// linalg.solve (n <= 4): (X flat n×m, pivots)
+/// linalg.solve (n <= 4): (X flat n×m, pivots). The same operations in the same order as v1, on one flat
+/// working array (row i at i·w) instead of a vector per row.
 fn solve_small(a: &[f64], n: usize, b: &[f64], m: usize) -> (Vec<f64>, Vec<f64>) {
     let w = n + m;
-    let mut rows: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| a[i * n + j]).chain((0..m).map(|j| b[i * m + j])).collect()).collect();
+    let mut rows = vec![0.0f64; n * w];
+    for i in 0..n {
+        rows[i * w..i * w + n].copy_from_slice(&a[i * n..i * n + n]);
+        rows[i * w + n..i * w + w].copy_from_slice(&b[i * m..i * m + m]);
+    }
     let mut pivots = Vec::with_capacity(n);
     for k in 0..n {
         for i in k + 1..n {
-            let swap = rows[i][k].abs() > rows[k][k].abs();
+            let swap = rows[i * w + k].abs() > rows[k * w + k].abs();
             if swap {
                 for j in k..w {
-                    let (x, y) = (rows[k][j], rows[i][j]);
-                    rows[k][j] = y;
-                    rows[i][j] = x;
+                    rows.swap(k * w + j, i * w + j);
                 }
             }
         }
-        let p = rows[k][k];
+        let p = rows[k * w + k];
         pivots.push(p);
         for i in k + 1..n {
-            let f = rows[i][k] / p;
+            let f = rows[i * w + k] / p;
             for j in k + 1..w {
-                let v = rows[k][j];
-                rows[i][j] -= f * v;
+                let v = rows[k * w + j];
+                rows[i * w + j] -= f * v;
             }
         }
     }
-    let mut x = vec![vec![0.0; m]; n];
+    let mut x = vec![0.0f64; n * m];
     for i in (0..n).rev() {
         for j in 0..m {
-            let mut acc = rows[i][n + j];
+            let mut acc = rows[i * w + n + j];
             for q in i + 1..n {
-                acc -= rows[i][q] * x[q][j];
+                acc -= rows[i * w + q] * x[q * m + j];
             }
-            x[i][j] = acc / rows[i][i];
+            x[i * m + j] = acc / rows[i * w + i];
         }
     }
-    (x.into_iter().flatten().collect(), pivots)
+    (x, pivots)
 }
 
 /// linalg_big.solve: (X, the smallest |pivot|, det)

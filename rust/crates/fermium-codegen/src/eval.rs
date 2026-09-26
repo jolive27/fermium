@@ -215,7 +215,7 @@ pub(crate) enum Flow {
 /// Local variables of one call.
 #[derive(Default)]
 pub struct Frame {
-    pub(crate) vars: HashMap<SymId, Value>,
+    pub(crate) vars: crate::varmap::VarMap,
 }
 
 thread_local! {
@@ -231,7 +231,7 @@ pub static STACK_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::Atom
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
     pub printer: P,
-    pub(crate) globals: HashMap<SymId, Value>,
+    pub(crate) globals: crate::varmap::GlobalMap,
     pub(crate) line: u32,
     /// the program line that called into a module's code (errors inside it point there, D185)
     pub(crate) call_line: u32,
@@ -245,7 +245,7 @@ pub struct Interpreter<'m, P: Printer> {
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
+        Interpreter { module, printer, globals: Default::default(), line: 0, call_line: 0, builtins: HashMap::new(),
                       solve: Default::default(), data: Default::default() }
     }
 
@@ -625,7 +625,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 self.eval(value, fr)?
             }
             ExprKind::Call(f, args) => {
-                let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
+                let vals = self.eval_args(args, fr)?;
                 self.call(*f, vals)?
             }
             ExprKind::List(items) if matches!(e.ty, Ty::TextList) => {
@@ -709,17 +709,29 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 if let Some(v) = self.sol_extreme(name, args, fr)? {
                     return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
                 }
-                let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
+                let vals = self.eval_args(args, fr)?;
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
                 }
-                self.builtin(name, vals)?
+                let r = self.builtin_slice(name, &vals);
+                crate::varmap::give_args(vals);
+                r?
             }
             _ => return self.eval_more(e, fr),
         })
     }
 
     pub(crate) fn bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
+        if let (Value::Num(x), Value::Num(y)) = (&a, &b) {
+            // the common case first
+            let (x, y) = (*x, *y);
+            return Ok(Value::Num(match op {
+                BinOp::Add => x + y,
+                BinOp::Sub => x - y,
+                BinOp::Mul => x * y,
+                BinOp::Div => fdiv(x, y),
+            }));
+        }
         if crate::eval_unc::is_unc(&a) || crate::eval_unc::is_unc(&b) {
             return self.unc_bin(op, a, b);
         }
@@ -759,10 +771,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                                                     stack) -- is a base case missing, like  if n <= 0 then ...?"),
                                   line: if func.def_line != 0 { func.def_line } else { self.line }, hint: None });
         }
-        let mut fr = Frame::default();
-        for (p, v) in func.params.iter().zip(args) {
+        // room for the parameters and locals up front (no regrowing in a hot call), from the pool of frames
+        let mut fr = Frame { vars: crate::varmap::take_frame(func.params.len() + func.locals.len()) };
+        let mut args = args;
+        for (p, v) in func.params.iter().zip(args.drain(..)) {
             fr.vars.insert(*p, v);
         }
+        crate::varmap::give_args(args);
         let body = &func.body;
         let caller_line = self.line;
         if body.first().is_some_and(|s| s.line > MODLINE_MAX) && 0 < caller_line && caller_line <= MODLINE_MAX {
@@ -772,6 +787,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Flow::Return(v) => Ok(v),
             _ => Ok(Value::Void),
         };
+        crate::varmap::give_frame(std::mem::take(&mut fr.vars));
         self.line = caller_line; // later errors in the caller are on its own line
         r
     }
@@ -792,16 +808,32 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         e
     }
 
+    /// The values of a call's arguments, in order.
+    #[inline]
+    pub(crate) fn eval_args(&mut self, args: &[Expr], fr: &mut Frame) -> Result<Vec<Value>, RunError> {
+        let mut vals = crate::varmap::take_args(args.len());
+        for a in args {
+            vals.push(self.eval(a, fr)?);
+        }
+        Ok(vals)
+    }
+
     pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {
-        if let Some(f) = self.builtins.get(name) {
-            return f(&args).map_err(|m| RunError { message: m, line: self.line, hint: None });
+        self.builtin_slice(name, &args)
+    }
+
+    pub(crate) fn builtin_slice(&mut self, name: &str, args: &[Value]) -> Result<Value, RunError> {
+        if !self.builtins.is_empty() {
+            if let Some(f) = self.builtins.get(name) {
+                return f(args).map_err(|m| RunError { message: m, line: self.line, hint: None });
+            }
         }
         if !name.starts_with("pm") && !name.starts_with("unc_") && args.iter().any(crate::eval_unc::is_unc) {
-            return self.unc_apply(name, &args);
+            return self.unc_apply(name, args);
         }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
                      Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {
-            if let Some(r) = area(self, name, &args) {
+            if let Some(r) = area(self, name, args) {
                 return r;
             }
         }
