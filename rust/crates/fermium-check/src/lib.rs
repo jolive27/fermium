@@ -5,11 +5,13 @@ pub use fermium_ir::{types, Dim, DIMLESS};
 
 pub mod arith;
 pub mod ast_ext;
+pub mod builtin;
 pub mod builtins;
 pub mod calls;
 pub mod checker;
 pub mod convert;
 pub mod exprs;
+pub mod lists;
 pub mod names;
 mod pending;
 pub mod parallel;
