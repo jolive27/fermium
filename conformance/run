@@ -101,8 +101,24 @@ def warnings_of(stderr):
     return [(int(m.group(1)), m.group(2)) for m in (WARN.match(ln) for ln in stderr.splitlines()) if m]
 
 
+def _norm_paths(e, fix=None):
+    """An error with the repository's path written as <ROOT> (and a copied folder mapped back), in message and hint."""
+    if not e:
+        return e
+    e = dict(e)
+    for k in ("message", "hint"):
+        if e.get(k):
+            v = e[k]
+            if fix:
+                v = fix(v)
+            e[k] = v.replace(ROOT, "<ROOT>")
+    return e
+
+
 def judge(case, out, err, error, exit_code=None):
     """(passed, reason)"""
+    case = dict(case, error=_norm_paths(case["error"]))
+    error = _norm_paths(error)
     drop = tuple(case.get("drop_prefixes") or ())
     if drop:
         out = "".join(ln for ln in out.splitlines(True) if not ln.startswith(drop))
@@ -218,6 +234,9 @@ def run_binary(binary, path, case):
             e = {"message": (err.strip().splitlines() or ["(no message)"])[-1], "line": None, "hint": None}
             rest = lines
         err = "\n".join(ln for ln in rest if ln.startswith("warning:"))
+    if case["dir"] and e:
+        real = os.path.normpath(os.path.join(ROOT, case["dir"]))
+        e = _norm_paths(e, lambda v: v.replace(base, real))
     return out, err, e, p.returncode
 
 
