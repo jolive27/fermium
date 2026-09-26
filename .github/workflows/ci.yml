@@ -65,7 +65,7 @@ jobs:
         run: python3 -m pip install -e ".[full,dev]"
       - name: Conformance, legacy (must be 100%)
         run: python3 conformance/run --impl legacy --out conformance-legacy.md
-      - name: Conformance, Rust (ratchet: never below conformance/RUST_FLOOR)
+      - name: "Conformance, Rust (ratchet: never below conformance/RUST_FLOOR)"
         run: python3 conformance/run --impl rust --bin rust/target/fast/fermium --out conformance-rust.md --min "$(cat conformance/RUST_FLOOR)"
       - uses: actions/upload-artifact@v4
         if: always()
