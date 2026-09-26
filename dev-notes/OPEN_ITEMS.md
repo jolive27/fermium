@@ -236,3 +236,8 @@ CHEATSHEET:108 and TROUBLESHOOTING:254 (the spacing-dependent `/` rule, which A1
 | A3-NaN | √ and log of a negative value computed at run time give NaN (a literal is a compile-time error since D237) | fix natively in B | Julia raises DomainError; a check in every √ touches three back ends and the benchmark loops right before the freeze |
 | A8.3-SKM93 | BBN rates checked against Kawano's NUC123 code, not against the printed SKM93 tables (the PDFs were image-only or unreachable) | C/D (research) | D255; ⁷Li/H corrected 5.10 → 4.36 ×10⁻¹⁰ |
 | A8.3-WS | Woods–Saxon parameters (Bohr & Mottelson) in research/shell_model_magic_numbers are still marked "from memory" | C/D (research) | not in the A8.3 list; check against B&M Vol. I |
+| A4-F59 | γ = 1.25 prints `1.2` when an input has 2 significant figures (half to even, D11); a computed matrix prints an exact 1 as `1.0` (one style per matrix) | by design (D11) | a change would move golden outputs; revisit in B with the printing rules |
+| A4-BC-B23 | `r'(t) = 0` shows no units when t's units are unknown (`r(t) = 1 AU`) | C/D | needs wording like "m per unit of t" |
+| A4-RT4 | `20.0 °C in K` → `293 K` (offset conversions keep significant figures, not decimal places) | by design (D11) | a decimal-places rule for offsets would be new |
+| A4-FFT-V2 | the reference FFT example prints Parseval's sum in kg² m⁴/(s⁶ A²), not V² | fix in B | display-unit choice for squared units |
+| A5-D39 | the "not yet: `until` on the range line" note in D39 is stale (it works) | closed | |

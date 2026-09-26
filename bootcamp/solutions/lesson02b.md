@@ -4,19 +4,17 @@
 
 ## 1. Translate to ASCII
 
-`½` becomes `0.5 *` (with the `*`, because of the metre gotcha) and `v²` becomes `v^2`:
+`½` becomes `(1/2)` and `v²` becomes `v^2`:
 
 ```fermium
-E = 0.5 * m * v^2 where m = 2 kg, v = 3 m/s
+E = (1/2) m v^2 where m = 2 kg, v = 3 m/s
 print E
 ```
 
 <!-- output -->
 ```
-9.0 J
+9 J
 ```
-
-`(1/2) m v^2` works too.
 
 ## 2. Translate to symbols
 
@@ -35,11 +33,11 @@ print ω₀ in rad/s
 `fermium fmt ke.fm --pretty` prints
 
 ```
-E = 0.5 · m · v² where m = 2 kg, v = 3 m/s
+E = ½ m v² where m = 2 kg, v = 3 m/s
 print E
 ```
 
-`-w` writes that into the file, and `fermium fmt ke.fm --ascii` turns it back into `E = 0.5 * m * v^2 ...`. Every version prints `9.0 J`.
+followed by the note `formatted ke.fm (not run — use fermium run)`. `-w` writes that into the file, and `fermium fmt ke.fm --ascii` turns it back into `E = (1/2) m v^2 ...`. Every version prints `9 J`.
 
 ## 4. Tab completion
 
