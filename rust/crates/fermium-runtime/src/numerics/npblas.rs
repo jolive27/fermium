@@ -16,8 +16,9 @@
 //! - 3×3 by 3×n products and Q (n, 3) by (3, 3) (dgemm): FMA chains. Exact for n ≤ 8.
 //! - Q (n, 3) · p (3,) (dgemv 'T', contiguous rows): fma(q2,p2, fma(q0,p0, q1 p1)). Exact for n ≤ 8.
 //! - complex × complex array (NumPy's SIMD loop): re = fma(ar, br, −(ai bi)), im = fma(ar, bi, ai br).
-//! - `lu_factor` real (OpenBLAS dgetf2, left-looking): exact for n ≤ 5.
-//! - `lu_solve` real (dgetrs): exact for n ≤ 6.
+//! - `lu_factor` real (OpenBLAS dgetf2, left-looking: strided ddot for the triangular part, dgemv 'N' for the
+//!   rest): exact for n ≤ 9 (not 12).
+//! - `lu_solve` real (dgetrs): exact for n ≤ 9 (probed with the factorization: `probe_file` below).
 //! - `lu_factor` complex (zgetf2): exact for n ≤ 6. `lu_solve` complex (zgetrs): exact for n ≤ 4.
 use super::dense::C64;
 
@@ -169,6 +170,53 @@ pub fn cmul(a: C64, b: C64) -> C64 {
     C64::new(fma(a.re, b.re, -(a.im * b.im)), fma(a.re, b.im, a.im * b.re))
 }
 
+/// OpenBLAS's ddot with a strided x (the C loop: four products per pass into two sums, contracted by GCC).
+fn ddot_strided(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len();
+    let n1 = n & !3;
+    let (mut t1, mut t2) = (0.0, 0.0);
+    let mut i = 0;
+    while i < n1 {
+        t1 += fma(y[i], x[i], y[i + 2] * x[i + 2]);
+        t2 += fma(y[i + 1], x[i + 1], y[i + 3] * x[i + 3]);
+        i += 4;
+    }
+    while i < n {
+        t1 = fma(y[i], x[i], t1);
+        i += 1;
+    }
+    t1 + t2
+}
+
+/// An FMA chain from 0 (the first product rounded alone).
+fn chain0(a: &[f64], x: &[f64]) -> f64 {
+    let mut t = 0.0;
+    for (p, q) in a.iter().zip(x) {
+        t = fma(*p, *q, t);
+    }
+    t
+}
+
+/// y − (row · x) for a row in dgemv 'N''s blocks of 4 rows (OpenBLAS dgemv_n_4.c's C kernels, contracted by GCC):
+/// the columns in blocks of 4 (y −= fma(a3,x3, fma(a2,x2, fma(a0,x0, a1 x1)))), then 2 (fma(a0,x0, a1 x1)),
+/// then 1 (a0 x0). The rows past the last block of 4 are y − chain0(row, x).
+fn gemv_n_block_row(mut y: f64, a: &[f64], x: &[f64]) -> f64 {
+    let n = a.len();
+    let mut k = 0;
+    while k + 4 <= n {
+        y -= fma(a[k + 3], x[k + 3], fma(a[k + 2], x[k + 2], fma(a[k], x[k], a[k + 1] * x[k + 1])));
+        k += 4;
+    }
+    if n - k >= 2 {
+        y -= fma(a[k], x[k], a[k + 1] * x[k + 1]);
+        k += 2;
+    }
+    if n - k == 1 {
+        y -= a[k] * x[k];
+    }
+    y
+}
+
 /// SciPy's `lu_factor` of a real n×n matrix (row-major): the packed LU and the pivots (row i was swapped with
 /// piv[i]); None if a pivot is zero or not finite (LAPACK reports it; the solvers treat it as a failure).
 pub fn lu_real(a: &[f64], n: usize) -> (Vec<f64>, Vec<usize>, bool) {
@@ -181,19 +229,16 @@ pub fn lu_real(a: &[f64], n: usize) -> (Vec<f64>, Vec<usize>, bool) {
         for i in 0..j {
             b.swap(i, piv[i]);
         }
+        // the triangular part: b[i] -= ddot(i, row i of L (strided), b)
         for i in 1..j {
-            let mut d = 0.0;
-            for k in 0..i {
-                d = fma(at(&a, i, k), b[k], d);
-            }
-            b[i] -= d;
+            let row = &a[i * n..i * n + i];
+            b[i] -= ddot_strided(row, &b[..i]);
         }
+        // the gemv part: b[j..] -= A[j.., ..j] · b[..j] (dgemv 'N', alpha = -1)
+        let rows = n - j;
         for i in j..n {
-            let mut d = 0.0;
-            for k in 0..j {
-                d = fma(at(&a, i, k), b[k], d);
-            }
-            b[i] -= d;
+            let row = &a[i * n..i * n + j];
+            b[i] = if i - j < 4 * (rows / 4) { gemv_n_block_row(b[i], row, &b[..j]) } else { b[i] - chain0(row, &b[..j]) };
         }
         let mut jp = j;
         for i in j + 1..n {
@@ -412,6 +457,70 @@ mod tests {
         assert_eq!(ddot(&x, &y), 31.42857142857143);
         let x3 = [0.1, 0.2, 0.3];
         assert_eq!(ddot(&x3, &x3), 0.14);
+    }
+
+    /// Probe against NumPy/SciPy: FERMIUM_NPBLAS_PROBE=in.txt writes in.txt.out (one result line per input line).
+    /// Input lines: `op n v…` (Python float reprs); see the ops below.
+    #[test]
+    #[ignore]
+    fn probe_file() {
+        let Some(path) = std::env::var_os("FERMIUM_NPBLAS_PROBE") else { return };
+        let text = std::fs::read_to_string(&path).unwrap();
+        let mut out = String::new();
+        for line in text.lines() {
+            let mut it = line.split_whitespace();
+            let op = it.next().unwrap();
+            let n: usize = it.next().unwrap().parse().unwrap();
+            let v: Vec<f64> = it.map(|x| x.parse().unwrap()).collect();
+            let col = |m: &[f64], j: usize| [m[j], m[n + j], m[2 * n + j]];
+            let r: Vec<f64> = match op {
+                // M (3, 3) . X (3, n)
+                "tw" => (0..3).flat_map(|r| (0..n).map(move |j| (r, j))).map(|(r, j)| {
+                    chain3([v[3 * r], v[3 * r + 1], v[3 * r + 2]], col(&v[9..], j))
+                }).collect(),
+                // Z (3, n) -> Z.T . P (3, 3)
+                "zp" => (0..n).flat_map(|j| (0..3).map(move |c| (j, c))).map(|(j, c)| {
+                    let p = &v[3 * n..];
+                    chain3(col(&v, j), [p[c], p[3 + c], p[6 + c]])
+                }).collect(),
+                // Q (n, 3) . p (3,)
+                "qp" => (0..n).map(|j| qdotp(&[v[3 * j], v[3 * j + 1], v[3 * j + 2]], &[v[3 * n], v[3 * n + 1], v[3 * n + 2]])).collect(),
+                // Q (n, 3) . P (3, 3)
+                "qpm" => (0..n).flat_map(|j| (0..3).map(move |c| (j, c))).map(|(j, c)| {
+                    let p = &v[3 * n..];
+                    chain3([v[3 * j], v[3 * j + 1], v[3 * j + 2]], [p[c], p[3 + c], p[6 + c]])
+                }).collect(),
+                // F (3, n) -> F.T . v (3,)
+                "gv" => (0..n).map(|j| gemv_t3(col(&v, j), &[v[3 * n], v[3 * n + 1], v[3 * n + 2]], n, j)).collect(),
+                // F (3, n) -> F.T . (a + i b), a, b (3,)
+                "cgv" => (0..n).flat_map(|j| {
+                    let (a, b) = ([v[3 * n], v[3 * n + 1], v[3 * n + 2]], [v[3 * n + 3], v[3 * n + 4], v[3 * n + 5]]);
+                    [cgemv_t3(col(&v, j), &a, n, j), cgemv_t3(col(&v, j), &b, n, j)]
+                }).collect(),
+                // A (n, n), b (n): lu_factor, piv, lu_solve
+                "lur" => {
+                    let (lu, piv, _) = lu_real(&v[..n * n], n);
+                    let mut b = v[n * n..].to_vec();
+                    lu_solve_real(&lu, &piv, n, &mut b);
+                    lu.iter().copied().chain(piv.iter().map(|&p| p as f64)).chain(b).collect()
+                }
+                // A (n, n) complex, b (n) complex, as re, im pairs
+                "luc" => {
+                    let c: Vec<C64> = v.chunks(2).map(|p| C64::new(p[0], p[1])).collect();
+                    let (lu, piv, _) = lu_complex(&c[..n * n], n);
+                    let mut b = c[n * n..].to_vec();
+                    lu_solve_complex(&lu, &piv, n, &mut b);
+                    lu.iter().flat_map(|z| [z.re, z.im]).chain(piv.iter().map(|&p| p as f64))
+                        .chain(b.iter().flat_map(|z| [z.re, z.im])).collect()
+                }
+                _ => panic!("{op}"),
+            };
+            out += &r.iter().map(|x| format!("{x:?}")).collect::<Vec<_>>().join(" ");
+            out.push('\n');
+        }
+        let mut o = path.clone();
+        o.push(".out");
+        std::fs::write(o, out).unwrap();
     }
 }
 
