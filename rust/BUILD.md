@@ -57,6 +57,16 @@ echo "LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)" >> "$GITHUB_ENV"
 
 Homebrew's `llvm@18` ships static libraries (`lib/libLLVM*.a`); `build.rs` links `libzstd.a` from Homebrew's
 `zstd` statically, so the binary runs on a Mac without Homebrew. The system linker is used (no lld needed).
+lld's static libraries and headers (linked in for `fermium build`) are looked for beside LLVM's, then in
+`$LLD_PREFIX`, `/opt/homebrew/opt/lld@18` and `/usr/local/opt/lld@18` (Homebrew's separate `lld@18` formula; CI
+sets `LLD_PREFIX=$(brew --prefix lld@18)` when that formula installs).
+
+## Releases
+
+`.github/workflows/release.yml` builds `cargo build --release -p fermium-cli` on Linux x86_64 and macOS arm64,
+strips it and publishes `fermium-linux-x86_64` and `fermium-macos-arm64` (plus `SHA256SUMS`) as assets of the
+release when a `v*` tag is pushed (`git tag v2.0 && git push origin v2.0`); started by hand (Actions → Release →
+Run workflow) it only keeps them as workflow artifacts. bootcamp/lesson00_setup.md is the install guide for them.
 
 ## `fermium build`: executables linked with the built-in lld (spec B5.10)
 

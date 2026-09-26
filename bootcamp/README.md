@@ -24,7 +24,7 @@ Each lesson takes roughly 30–60 minutes.
 
 | Lesson | Topic | You will learn |
 |---|---|---|
-| [0](lesson00_setup.md) | Setup | Install Fermium on your Mac and run your first program |
+| [0](lesson00_setup.md) | Setup | Install Fermium on your Mac or Linux PC and run your first program |
 | [1](lesson01_numbers_units.md) | Numbers & units | Fermium as a calculator that understands units |
 | [2](lesson02_variables_formulas.md) | Variables & formulas | Give values names, write formulas like on paper |
 | [2b](lesson02b_symbols.md) | Symbols | Write `π`, `θ`, `√`, `²` (or their plain-keyboard spellings) |
@@ -58,7 +58,7 @@ print 2 m + 30 cm
 2.30 m
 ```
 
-Lines you type into the **Terminal** (the Mac's command window) look like this:
+Lines you type into the **Terminal** (the command window on a Mac or Linux) look like this:
 
 ```
 fermium run hello.fm

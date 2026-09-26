@@ -61,6 +61,7 @@ jobs:
       - name: Build and test the Rust compiler
         working-directory: rust
         run: cargo build --profile fast && cargo test --profile fast && ldd target/fast/fermium && cargo test --profile fast -p fermium-pyapi -p fermium-wasm
+      - run: rust/target/fast/fermium doctor
       - name: Browser playground (the compiler as WebAssembly; every example must print what fermium run prints)
         run: |
           rustup target add wasm32-unknown-unknown
@@ -78,6 +79,9 @@ jobs:
           name: conformance
           path: conformance-*.md
 
+  # macOS jobs (Python and Rust): only on pull requests and hand-started runs, never on plain pushes (macOS minutes
+  # count 10x on this private repo). The Python job runs make check, which runs every program the conformance suite
+  # was harvested from (tests, examples, rosetta, gauntlet, research), so the legacy conformance run is Linux only.
   macos:
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.macos)
     runs-on: macos-14
@@ -92,3 +96,42 @@ jobs:
       - run: fermium doctor
       - name: make check
         run: make check
+
+  # The Rust compiler on macOS arm64. A separate job with the same gate as `macos`, so the two run side by side
+  # (the same minutes, half the wall time, and neither hits its timeout). It runs the whole conformance suite
+  # (about 12 minutes on the runner's 3 cores), not a subset.
+  rust-macos:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.macos)
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-macos-${{ hashFiles('rust/Cargo.lock') }}
+      - name: LLVM 18 static libraries and lld from Homebrew (rust/BUILD.md)
+        run: |
+          brew install llvm@18 zstd
+          # lld's static libraries ship with llvm@18, or in newer Homebrew in the separate lld@18 formula
+          # (fermium-codegen/build.rs looks in LLD_PREFIX too)
+          if brew install lld@18; then echo "LLD_PREFIX=$(brew --prefix lld@18)" >> "$GITHUB_ENV"; fi
+          echo "LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)" >> "$GITHUB_ENV"
+      - name: Build and test the Rust compiler
+        working-directory: rust
+        # the default members first, then the shared libraries on their own (see rust/Cargo.toml default-members)
+        run: cargo build --profile fast && cargo test --profile fast && otool -L target/fast/fermium && cargo test --profile fast -p fermium-pyapi -p fermium-wasm
+      - run: rust/target/fast/fermium doctor
+      - name: "Conformance, Rust (ratchet: never below conformance/RUST_FLOOR)"
+        run: python3 conformance/run --impl rust --bin rust/target/fast/fermium --out conformance-rust-macos.md --min "$(cat conformance/RUST_FLOOR)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conformance-macos
+          path: conformance-rust-macos.md

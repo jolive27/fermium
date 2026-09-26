@@ -39,6 +39,7 @@ fn find_static(name: &str, dirs: &[String]) -> Option<String> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LLVM_SYS_180_PREFIX");
+    println!("cargo:rerun-if-env-changed=LLD_PREFIX");
     println!("cargo:rerun-if-changed=build.rs");
     if std::env::var("CARGO_FEATURE_LLVM").is_err() {
         return;
@@ -58,6 +59,14 @@ fn main() {
     let mut shim = cc::Build::new();
     shim.cpp(true).file("src/llvm/lld_shim.cpp").include(&includedir).flag("-std=c++17").flag("-fno-exceptions")
         .flag_if_supported("-fno-rtti").warnings(false);
+    // lld's headers and static libraries: beside LLVM's (apt's liblld-18-dev, Homebrew's llvm@18), or in a
+    // separate prefix (Homebrew's lld@18 formula): LLD_PREFIX, else Homebrew's usual places
+    let lld_prefix = std::env::var("LLD_PREFIX").ok().into_iter()
+        .chain(["/opt/homebrew/opt/lld@18", "/usr/local/opt/lld@18"].map(String::from))
+        .find(|p| Path::new(p).join("include").join("lld").is_dir());
+    if let Some(p) = &lld_prefix {
+        shim.include(Path::new(p).join("include"));
+    }
     if target_os_mac {
         shim.define("FERMIUM_LLD_MACHO", None);
     }
@@ -75,6 +84,9 @@ fn main() {
     shim.file(&stub_path);
     shim.compile("fermium_lld_shim");
     println!("cargo:rerun-if-changed=src/llvm/lld_shim.cpp");
+    if let Some(p) = &lld_prefix {
+        println!("cargo:rustc-link-search=native={}", Path::new(p).join("lib").display());
+    }
     let lld_libs: &[&str] = if target_os_mac { &["lldMachO", "lldCommon"] } else { &["lldELF", "lldCommon"] };
     for l in lld_libs {
         println!("cargo:rustc-link-lib=static={l}");

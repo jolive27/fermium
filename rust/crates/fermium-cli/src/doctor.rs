@@ -26,6 +26,27 @@ pub fn platform() -> String {
     format!("{os} {arch}")
 }
 
+/// The Python a program that says `use python` would use, found the way the run time looks for it
+/// (fermium-runtime/src/python.rs: FERMIUM_PYTHON, else python3 on the PATH, else the usual places), without
+/// starting it. None: no Python, which is fine for every program that doesn't `use python`.
+pub fn python_for_use_python() -> Option<String> {
+    if let Ok(p) = std::env::var("FERMIUM_PYTHON") {
+        if !p.is_empty() {
+            return Some(p);
+        }
+    }
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let c = dir.join("python3");
+            if c.is_file() {
+                return Some(c.display().to_string());
+            }
+        }
+    }
+    ["/usr/local/bin/python3", "/usr/bin/python3", "/opt/homebrew/bin/python3"].into_iter()
+        .find(|c| std::path::Path::new(c).is_file()).map(String::from)
+}
+
 pub fn llvm_version() -> String {
     fermium_codegen::llvm::llvm_version().to_string()
 }
@@ -51,6 +72,10 @@ pub fn doctor() -> ExitCode {
     ok(&format!("LLVM {} is built in (the compiler back end)", llvm_version()));
     ok(&format!("platform: {}", platform()));
     ok("nothing else is needed: no Python, C compiler or LLVM to install");
+    match python_for_use_python() {
+        Some(p) => ok(&format!("Python is optional, only for programs that say  use python : found {p}")),
+        None => println!("  - Python is optional, only for programs that say  use python : none found (that's fine)"),
+    }
     ok("built in too: the REPL (fermium), the language server (fermium lsp) and the Jupyter kernel \
         (fermium jupyter install)");
     if crate::aot::available() {

@@ -1070,3 +1070,22 @@ checks every example in CI); a 3 MB download instead of Pyodide's ~50 MB; no Pyt
 parts for six functions); `wasm32-wasip1` with a WASI shim for files and stderr (a JS shim or a dependency either
 way, and std's WASI file layer for three files); keeping one instance across runs (needs every thread-local reset;
 a trap in the middle of a run leaves Rust state inconsistent); the LLVM back end (LLVM doesn't run in the browser).
+
+## D267. Distribution (B7): one plain binary per platform from a tag-triggered workflow; macOS CI only on PRs
+- **What:** `.github/workflows/release.yml` runs on `v*` tags and by hand. It builds `cargo build --release -p
+fermium-cli` on ubuntu-latest and macos-14, strips the binary and uploads it as `fermium-linux-x86_64` /
+`fermium-macos-arm64` (plain files, not archives) plus `SHA256SUMS`; one `publish` job attaches them to the tag's
+release (softprops/action-gh-release), so the two builds never race to create it. A hand-started run only keeps
+workflow artifacts. In CI, the Rust compiler on macOS is its own job (`rust-macos`: build, `cargo test`, the whole
+conformance suite against `conformance/RUST_FLOOR`) with the same gate as the Python `macos` job: pull requests
+and workflow_dispatch only. `tests/test_workflows.py` loads the workflows with a duplicate-key-refusing YAML loader
+and checks those gates. Lesson 0 now installs the binary (download, `~/bin`, PATH, Gatekeeper's quarantine,
+`fermium doctor`), with the pip install of Fermium 1.5 kept in a labelled section until the B8 cutover.
+- **Why:** "download one file, put it on your PATH" (spec §B7) is literal with a plain file; beginners don't have to
+unpack anything. macOS minutes cost 10x on the private repo (CLAUDE.md rule 11). Separate macOS jobs run side by
+side, so neither approaches its timeout. The Linux binary is built on ubuntu-latest, so it needs a glibc as new
+as the runner's.
+- **Alternatives:** .tar.gz archives (keep the executable bit, but one more step for beginners); a Homebrew tap or
+an install script (later: needs a public download URL); building Linux on an older image for an older glibc (the
+apt LLVM 18 path is only tested on ubuntu-latest); running the Rust steps inside the existing macOS job (over its
+45-minute timeout with make check).

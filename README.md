@@ -50,7 +50,7 @@ python3 -m pip install -e ".[full]"   # needs Python 3.10+; installs every depen
 fermium doctor                   # checks everything and explains fixes
 ```
 
-New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac, step by step.
+New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac or Linux PC, step by step.
 
 ## A 30-second tour
 

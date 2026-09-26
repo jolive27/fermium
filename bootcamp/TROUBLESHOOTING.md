@@ -45,13 +45,17 @@ Below are the problems beginners meet most often, with the exact message Fermium
 zsh: command not found: fermium
 ```
 
-**Means:** the Terminal can't find the Fermium program. Either it isn't installed, or this Terminal window was opened before it was installed.
+**Means:** the Terminal can't find the Fermium program. Either it isn't installed, it isn't in a folder on your PATH, or this Terminal window was opened before it was installed.
 
-**Fix:**
+**Fix (the downloaded `fermium`):**
 1. Quit the Terminal (⌘Q) and open it again.
-2. Run `python3 --version`. It must say 3.10 or higher (see [Lesson 0, Step 2](lesson00_setup.md#step-2-install-python-3)).
-3. `cd ~/fermium` and run `python3 -m pip install -e ".[full]"` again. Read the last lines it prints: `Successfully installed` means it worked.
-4. If pip warned that a script was installed in a folder "which is not on PATH", reinstall Python from python.org and repeat step 3.
+2. `ls ~/bin` must list `fermium`. If not, redo [Lesson 0, Step 3](lesson00_setup.md#step-3-put-it-on-your-path).
+3. `echo $PATH` must show your home folder followed by `/bin` (for example `/Users/you/bin`). If not, redo Step 3e of Lesson 0, then open a new Terminal window.
+
+**Fix (the Python version, Fermium 1.5):**
+1. Run `python3 --version`. It must say 3.10 or higher (see [Lesson 0, the Python version](lesson00_setup.md#the-python-version-fermium-15)).
+2. `cd ~/fermium` and run `python3 -m pip install -e ".[full]"` again. Read the last lines it prints: `Successfully installed` means it worked.
+3. If pip warned that a script was installed in a folder "which is not on PATH", reinstall Python from python.org and repeat step 2.
 
 Also run `fermium doctor` whenever something seems wrong with the installation itself.
 
