@@ -91,6 +91,8 @@ pub struct ExprExtra {
     pub tdelta: bool,
     /// text-table id of a string literal
     pub text_id: Option<usize>,
+    /// the display units of a vector whose components have different units, one each (Python MixedHint, D29)
+    pub mixed: Option<Vec<Option<Hint>>>,
 }
 
 impl Expr {
@@ -134,11 +136,15 @@ pub enum ExprKind {
     If(Box<Expr>, Box<Expr>, Box<Expr>),
     /// `value where name = e, …`.
     Let(Vec<(SymId, Expr)>, Box<Expr>),
-    Integral { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr> },
+    /// xname: text id of the variable's name and xfmt: print format of a value of it, for the integrand's NaN
+    /// message (D45); soft: the quiet first try of a vector component, atol: its second try (D44).
+    Integral { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr>, xname: Option<usize>, xfmt: Option<usize>, soft: bool,
+               atol: Option<Box<Expr>> },
     /// Σ(body for k from lo to hi step st) (D51).
     Sum { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr>, step: Option<Box<Expr>> },
     /// The x in [lo, hi] where lam(x) = 0 (D32).
-    Root { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr> },
+    /// scale: |lhs| + |rhs| for the rounding-noise warning; tfmt: print format of the unknown (for messages).
+    Root { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr>, scale: Option<LambdaId>, tfmt: Option<usize> },
     /// A solution component (or its derivative) at time t.
     SolEval { sol: SymId, comp: usize, t: Box<Expr>, use_dy: bool },
     /// All samples of a solution component (what = 0) or its times (what = 1) as a list.

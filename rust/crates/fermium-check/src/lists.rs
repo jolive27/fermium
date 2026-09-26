@@ -59,7 +59,7 @@ impl Checker {
     pub fn e_list_lit(&mut self, e: &A::Expr, items: &[A::Expr], ctx: &mut Ctx) -> CResult<I::Expr> {
         let is_list = |x: &A::Expr| matches!(x.kind, A::ExprKind::ListLit { .. });
         if !items.is_empty() && items.iter().all(is_list) {
-            return self.matrix_literal(e, ctx);
+            return self.matrix_literal(e, items, ctx);
         }
         if items.iter().any(is_list) {
             return Err(self.err("a matrix is written as a list of rows, like [[1, 2], [3, 4]]; lists of lists aren't \
@@ -255,10 +255,9 @@ impl Checker {
         }
         if let A::ExprKind::Index { target: inner_t, index: Some(inner_i) } = &target.kind {
             // M[i, j] (parsed as M[i][j]) or M[i][j]
-            if let Checked::Val(inner) = self.expr_any(inner_t, ctx)? {
-                if matches!(inner.ty, Ty::Mat { .. }) {
-                    return self.index_mat2(e, inner, inner_i, index, ctx);
-                }
+            let _ = (inner_t, inner_i);
+            if let Some(r) = self.index_matrix_entry(e, ctx)? {
+                return Ok(r);
             }
         }
         let t = self.expr_any(target, ctx)?;
@@ -270,7 +269,10 @@ impl Checker {
                 }
                 Ty::Mat { .. } | Ty::Vec { .. } => {
                     let Checked::Val(v) = t else { unreachable!() };
-                    return self.index_vecmat(e, v, index, ctx);
+                    return match self.index_vecmat(e, &v, ctx)? {
+                        Some(r) => Ok(r),
+                        None => Err(self.not_ported("indexing", e.span)),
+                    };
                 }
                 _ => {}
             }
