@@ -25,6 +25,8 @@ pub(super) struct Saved<'c> {
     block: Option<BasicBlock<'c>>,
     known_line: Option<u32>,
     ctx_ptr: PointerValue<'c>,
+    hoisted: HashMap<SymId, (PointerValue<'c>, IntValue<'c>)>,
+    int_vars: HashMap<SymId, IntValue<'c>>,
 }
 
 /// Every variable an expression uses (lambda bodies included), and every variable its where-bindings make.
@@ -67,6 +69,8 @@ impl<'c, 'm> Gen<'c, 'm> {
             block: self.b.get_insert_block(),
             known_line: self.known_line,
             ctx_ptr: self.ctx_ptr,
+            hoisted: std::mem::take(&mut self.hoisted),
+            int_vars: std::mem::take(&mut self.int_vars),
         }
     }
 
@@ -81,6 +85,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.b.position_at_end(s.block.unwrap());
         self.known_line = s.known_line;
         self.ctx_ptr = s.ctx_ptr;
+        self.hoisted = s.hoisted;
+        self.int_vars = s.int_vars;
     }
 
     /// Is this variable one of the current function's own (a local, or living in an override)?
@@ -127,10 +133,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             let ty = self.llty(k);
             let p = self.alloca(ty, &self.m.syms[s].name.clone())?;
-            let zero = match k {
-                Kind::F => self.fconst(0.0).as_basic_value_enum(),
-                _ => ty.const_zero(),
-            };
+            let zero = self.init_value(k);
             self.st(p, zero, "var")?;
             self.overrides.insert(s, (p, k));
         }

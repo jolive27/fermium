@@ -340,9 +340,12 @@ impl Radau {
         let (n, k, t, y) = (self.n, &self.k, self.t, &self.y);
         let m_real = k.mu_real / h;
         let m_complex = C64::new(k.mu_complex.re / h, k.mu_complex.im / h);
+        // M.dot(X) for the 3×3 TI and T and X of shape (3, n): a dgemm (FMA chains), but for n = 1 X is a column
+        // and NumPy calls dgemv 'T' instead, which sums in another order (qdotp)
+        let m3 = |a: [f64; 3], x: [f64; 3]| if n == 1 { nb::qdotp(&a, &x) } else { nb::chain3(a, x) };
         // W = TI.dot(Z0)
         let mut w: [Vec<f64>; 3] =
-            std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.ti[r], [z0[0][j], z0[1][j], z0[2][j]])).collect());
+            std::array::from_fn(|r| (0..n).map(|j| m3(k.ti[r], [z0[0][j], z0[1][j], z0[2][j]])).collect());
         let mut z = z0.clone();
         let ch = [h * k.c[0], h * k.c[1], h * k.c[2]];
         let mut dw_norm_old: Option<f64> = None;
@@ -387,7 +390,7 @@ impl Radau {
                     w[r][j] += dw[r][j];
                 }
             }
-            z = std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.t[r], [w[0][j], w[1][j], w[2][j]])).collect());
+            z = std::array::from_fn(|r| (0..n).map(|j| m3(k.t[r], [w[0][j], w[1][j], w[2][j]])).collect());
             if dw_norm == 0.0 || rate.map(|rt| rt / (1.0 - rt) * dw_norm < self.newton_tol).unwrap_or(false) {
                 converged = true;
                 break;
@@ -415,6 +418,9 @@ impl Radau {
         let mut lu_c = self.lu_complex.take();
         let mut current_jac = self.current_jac;
         let mut rejected = false;
+        let mut dbg_rej = 0u32;
+        let mut dbg_jac = 0u32;
+        let mut dbg_nc = 0u32;
         let (mut t_new, mut y_new, mut z, mut n_iter, mut rate, mut error_norm, mut safety);
         loop {
             if h_abs < min_step {
@@ -450,12 +456,14 @@ impl Radau {
                         break;
                     }
                     self.j = num_jac(f, t, &y, &fy, &self.atol, &mut self.jac_factor);
+                    dbg_jac += 1;
                     current_jac = true;
                     lu_r = None;
                     lu_c = None;
                 }
             }
             if !converged {
+                dbg_nc += 1;
                 h_abs *= 0.5;
                 lu_r = None;
                 lu_c = None;
@@ -486,6 +494,7 @@ impl Radau {
                 lu_r = None;
                 lu_c = None;
                 rejected = true;
+                dbg_rej += 1;
             } else {
                 break;
             }
@@ -506,6 +515,12 @@ impl Radau {
         } else {
             current_jac = false;
         }
+        if radau_log() {
+            eprintln!(
+                "RADAU {:e} {:e} {} {} {} {} {} {:e} {:e}",
+                t_new, h_abs, n_iter, dbg_rej, dbg_nc, dbg_jac, recompute_jac as u8, error_norm, rate.unwrap_or(f64::NAN)
+            );
+        }
         self.h_abs_old = Some(self.h_abs);
         self.error_norm_old = Some(error_norm);
         self.h_abs = h_abs * factor;
@@ -523,6 +538,13 @@ impl Radau {
         self.sol = Some(RadauDense { t_old: t, h: t_new - t, y_old: y, q });
         Ok(())
     }
+}
+
+/// FERMIUM_RADAU_LOG set: log each accepted Radau step to stderr (t, h, Newton iterations, rejections,
+/// Newton failures, Jacobians recomputed in the step, Jacobian recompute after it, error norm, rate)
+fn radau_log() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FERMIUM_RADAU_LOG").is_some())
 }
 
 /// numpy's nextafter(t, toward)

@@ -21,6 +21,8 @@ pub struct GenTables {
     pub mvec_fmts: Vec<Vec<usize>>,
     pub ode_sites: Vec<OdeSite>,
     pub msum_sites: Vec<MNode>,
+    /// constructs run by the tree-walker (never in an executable: build_object refuses them)
+    pub interp_sites: Vec<super::delegate::InterpSite>,
 }
 
 /// Everything an executable carries.
@@ -29,6 +31,15 @@ pub struct Blob {
     pub tables: GenTables,
     pub source: String,
     pub file_name: String,
+    /// the checked module's shape when it was built (fingerprint)
+    pub fingerprint: (u64, u64),
+}
+
+impl Blob {
+    /// Does the executable need the program's IR (constructs the tree-walker runs)?
+    pub fn needs_ir(&self) -> bool {
+        !self.tables.interp_sites.is_empty()
+    }
 }
 
 const MAGIC: &[u8; 8] = b"FMBLOB01";
@@ -114,6 +125,7 @@ impl W {
                 self.u(n as u64)
             }
             Kind::H => self.u(6),
+            Kind::Obj => self.u(8),
             Kind::Void => self.u(7),
         }
     }
@@ -181,7 +193,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.i(f.sf.map(i64::from).unwrap_or(-1));
     }
     // the code generator's tables
-    let GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites } = t;
+    let GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites, interp_sites } = t;
     w.u(texts.len() as u64);
     texts.iter().for_each(|s| w.s(s));
     w.u(builtins.len() as u64);
@@ -227,7 +239,29 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
     }
     w.u(msum_sites.len() as u64);
     msum_sites.iter().for_each(|n| w.mnode(n));
+    // constructs the tree-walker runs: the executable re-checks its program to get the IR (needs_ir)
+    w.u(interp_sites.len() as u64);
+    for super::delegate::InterpSite { ptr: _, node, is_stmt, syms, writes, ret } in interp_sites {
+        w.u(u64::from(*node));
+        w.b(*is_stmt);
+        w.u(syms.len() as u64);
+        for (s, k) in syms {
+            w.u(*s as u64);
+            w.kind(*k);
+        }
+        w.u(writes.len() as u64);
+        writes.iter().for_each(|s| w.u(*s as u64));
+        w.kind(*ret);
+    }
+    let (nn, ns) = fingerprint(module);
+    w.u(nn);
+    w.u(ns);
     w.0
+}
+
+/// The module's shape (nodes, symbols): an executable that re-checks its program compares it.
+pub fn fingerprint(m: &Module) -> (u64, u64) {
+    (super::delegate::nodes(m).len() as u64, m.syms.len() as u64)
 }
 
 // ---------------------------------------------------------------- reader
@@ -309,6 +343,7 @@ impl Rd<'_> {
             4 => Kind::TL,
             5 => Kind::V(self.n()?),
             6 => Kind::H,
+            8 => Kind::Obj,
             _ => Kind::Void,
         })
     }
@@ -421,5 +456,17 @@ pub fn read(bytes: &[u8]) -> RR<Blob> {
     }
     let n = r.n()?;
     t.msum_sites = (0..n).map(|_| r.mnode()).collect::<RR<_>>()?;
-    Ok(Blob { module, tables: t, source, file_name })
+    let n = r.n()?;
+    for _ in 0..n {
+        let node = r.u()? as u32;
+        let is_stmt = r.b()?;
+        let k = r.n()?;
+        let syms = (0..k).map(|_| Ok((r.u()? as usize, r.kind()?))).collect::<RR<Vec<_>>>()?;
+        let k = r.n()?;
+        let writes = (0..k).map(|_| Ok(r.u()? as usize)).collect::<RR<Vec<_>>>()?;
+        let ret = r.kind()?;
+        t.interp_sites.push(super::delegate::InterpSite { ptr: 0, node, is_stmt, syms, writes, ret });
+    }
+    let fp = (r.u()?, r.u()?);
+    Ok(Blob { module, tables: t, source, file_name, fingerprint: fp })
 }

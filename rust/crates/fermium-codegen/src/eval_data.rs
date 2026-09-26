@@ -232,21 +232,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     /// The (x, y) samples of one plotted series, in SI.
-    fn plot_samples(&mut self, sj: &Json, exprs: &[Expr], fr: &mut Frame) -> Result<(Vec<f64>, Vec<f64>), RunError> {
+    /// With the (x, y) errors of a list series whose values are uncertain (error bars, D124).
+    #[allow(clippy::type_complexity)]
+    fn plot_samples(&mut self, sj: &Json, exprs: &[Expr], fr: &mut Frame)
+                    -> Result<(Vec<f64>, Vec<f64>, Option<(Vec<f64>, Vec<f64>)>), RunError> {
         let idx: Vec<usize> = list(get(sj, "exprs")).iter().map(|k| num(k) as usize).collect();
-        let lst = |v: Value| match v {
-            Value::List(l) => l.borrow().clone(),
-            _ => vec![],
-        };
+        let items = |v: &Value| -> Vec<Value> { crate::eval_unc::list_items(v).unwrap_or_default() };
         match text(get(sj, "kind")).as_str() {
             "lists" => {
-                let y = lst(self.eval(&exprs[idx[0]], fr)?);
-                let x = lst(self.eval(&exprs[idx[1]], fr)?);
+                let yv = self.eval(&exprs[idx[0]], fr)?;
+                let xv = self.eval(&exprs[idx[1]], fr)?;
+                let (y, x) = (items(&yv), items(&xv));
                 if x.len() != y.len() {
                     return self.err(format!("plot: the two lists have different lengths ({} and {} values)", y.len(),
                                             x.len()));
                 }
-                Ok((x, y))
+                let nominal = |l: &[Value]| -> Vec<f64> { l.iter().map(Value::num).collect() };
+                let sigma = |l: &[Value]| -> Vec<f64> {
+                    l.iter().map(|v| if let Value::Unc(u) = v { u.s() } else { 0.0 }).collect()
+                };
+                let errs = (matches!(xv, Value::UList(_)) || matches!(yv, Value::UList(_)))
+                    .then(|| (sigma(&x), sigma(&y)));
+                Ok((nominal(&x), nominal(&y), errs))
             }
             "func" => {
                 let npts = 400;
@@ -260,7 +267,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     xs.push(x);
                     ys.push(self.call_scalar_lambda(lam, x, fr)?);
                 }
-                Ok((xs, ys))
+                Ok((xs, ys, None))
             }
             _ => {
                 let h = match self.eval(&exprs[idx[0]], fr)? {
@@ -277,7 +284,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                     _ => ts,
                 };
-                Ok((xs, ys))
+                Ok((xs, ys, None))
             }
         }
     }
@@ -291,7 +298,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let mut series = vec![];
         let mut ylabels = vec![];
         for sj in sjs {
-            let (xs, ys) = self.plot_samples(sj, exprs, fr)?;
+            let (xs, ys, errs) = self.plot_samples(sj, exprs, fr)?;
             let (yu, xu) = (unit(get(sj, "yunit")), unit(get(sj, "xunit")));
             let x: Vec<f64> = xs.iter().map(|v| (v - xu.2) / xu.1).collect();
             let y: Vec<f64> = ys.iter().map(|v| (v - yu.2) / yu.1).collect();
@@ -300,7 +307,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             let xlabel = plot::axis_label(&text(get(sj, "xlabel")), &xu.0, opt_text(get(info, "xlabel")).as_deref());
             let formula = plot::is_formula_label(&yl);
             ylabels.push((ylabel.clone(), formula));
-            series.push(Series { x, y, style: if flag(get(sj, "points")) { Style::Points } else { Style::Line },
+            let style = match errs {
+                // uncertain values: markers with error bars; an axis without errors gets none (core.make_plot)
+                Some((ex, ey)) => {
+                    let conv = |e: Vec<f64>, f: f64| e.iter().any(|v| *v != 0.0).then(|| e.iter().map(|v| v / f.abs()).collect());
+                    Style::ErrorBars { xerr: conv(ex, xu.1), yerr: conv(ey, yu.1) }
+                }
+                None if flag(get(sj, "points")) => Style::Points,
+                None => Style::Line,
+            };
+            series.push(Series { x, y, style,
                                  legend: yl, xlabel, ylabel, y_is_formula: formula });
         }
         let (yu0, xu0) = sjs.first().map(|s| (unit(get(s, "yunit")), unit(get(s, "xunit"))))

@@ -113,6 +113,13 @@ fn antiderivatives_print_like_v1() {
     // red team 10: the log form (defined for |x| > 1, as v1's), not atanh
     assert_eq!(integ("1/(x^2 - 1)", "x", &[]).unwrap(), "ln(-1 + x)/2 - ln(1 + x)/2");
     assert_eq!(integ("1/(4 - x^2)", "x", &[]).unwrap(), "-ln(-2 + x)/4 + ln(2 + x)/4");
+    // more of v1's printed forms (SymPy's answer or its simplify(), whichever SymPy writes shorter)
+    for (f, want) in [("x^2 exp(-x)", "(-2 - x² - 2x)·exp(-x)"), ("cos(x)^3", "-sin(x)³/3 + sin(x)"),
+                      ("sin(x)^3", "-cos(x) + cos(x)³/3"), ("1/sqrt(x^2 - 1)", "ln(x + √(-1 + x²))"),
+                      ("ln(x)^2", "x·(2 + ln(x)² - 2 ln(x))"), ("x^3 exp(x^2)", "(-1 + x²)·exp(x²)/2"),
+                      ("sin(2x) sin(3x)", "sin(x)/2 - sin(5x)/10")] {
+        assert_eq!(integ(f, "x", &[]).unwrap(), want, "{f}");
+    }
 }
 
 #[test]
@@ -130,9 +137,19 @@ fn antiderivatives_are_right() {
 }
 
 #[test]
+fn integrals_of_products_of_sums() {
+    for (f, v) in [("x ln(x)", "x"), ("x * (ln(x) - 2)", "x"), ("x^2 * (ln(x) - 2)", "x"), ("(x - x^2) * (ln(x) - 2)", "x"), ("(x * 2) * (exp(2 x) - b)", "x"), ("sqrt(x) * x^2", "x"),
+                   ("x exp(x) - x", "x"), ("(ln(x) - sqrt(x)) * (1/x * 1/x)", "x"),
+                   ("x exp(x) * x exp(x)", "x"), ("ln(x)/x^3", "x")] {
+        assert!(integ(f, v, &[]).is_ok(), "{f}: {:?}", integ(f, v, &[]));
+    }
+}
+
+#[test]
 fn non_elementary_integrals_are_refused() {
     let e = integ("exp(s) / s", "s", &[]).unwrap_err();
     assert_eq!(e, "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)");
     assert!(integ("sin(x)/x", "x", &[]).unwrap_err().contains("Si"));
+    assert!(integ("exp(2 x) x exp(x) - exp(2 x)/x", "x", &[]).unwrap_err().ends_with("Ei(2*x)"));
     assert_eq!(integ("exp(sin(x))", "x", &[]).unwrap_err(), "Fermium couldn't find a formula for this integral");
 }

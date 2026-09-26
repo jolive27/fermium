@@ -275,7 +275,26 @@ fn to_t(e: &A::Expr) -> Option<T> {
             if func.name() == Some("sqrt") {
                 return pow_q(to_t(&args[0])?, (1, 2));
             }
-            T::Fun(f.into(), vec![to_t(&args[0])?])
+            let a = to_t(&args[0])?;
+            // SymPy's automatic evaluation: an odd function takes the sign out, an even one drops it
+            let negative_arg = match &a {
+                T::Mul(c, _) => *c < 0.0,
+                T::Num(v) => *v < 0.0,
+                T::Add(ts) => could_extract_minus(ts),
+                _ => false,
+            };
+            if negative_arg {
+                let odd = matches!(f, "sin" | "tan" | "cot" | "csc" | "sinh" | "tanh" | "asin" | "atan" | "asinh" | "atanh"
+                                      | "erf" | "sign");
+                let even = matches!(f, "cos" | "sec" | "cosh" | "abs");
+                if odd {
+                    return Some(mul_all(vec![T::Num(-1.0), T::Fun(f.into(), vec![neg_t(a)])]));
+                }
+                if even {
+                    return Some(T::Fun(f.into(), vec![neg_t(a)]));
+                }
+            }
+            T::Fun(f.into(), vec![a])
         }
         _ => return None,
     })
@@ -646,16 +665,19 @@ fn together(t: T) -> T {
 fn numeric_content(t: T) -> T {
     let T::Add(ts) = &t else { return t };
     let cs: Vec<f64> = ts.iter().map(|x| split_term(x.clone()).0).collect();
-    if cs.iter().any(|c| *c != c.trunc() || c.abs() > 1e15) {
+    let Some(rs) = cs.iter().map(|c| rational(*c)).collect::<Option<Vec<Q>>>() else { return t };
+    if rs.iter().any(|r| r.0.abs() > 1_000_000) {
         return t;
     }
-    let g = cs.iter().fold(0i64, |g, c| gcd(g, *c as i64));
-    if g <= 1 {
+    let g = rs.iter().fold(0i64, |g, r| gcd(g, r.0));
+    let l = rs.iter().fold(1i64, |l, r| l / gcd(l, r.1) * r.1);
+    if g == 0 || (g == 1 && l == 1) {
         return t;
     }
+    let content = g as f64 / l as f64;
     let T::Add(ts) = t else { unreachable!() };
-    let rest = add_all(ts.into_iter().map(|x| mul_all(vec![T::Num(1.0 / g as f64), x])).collect());
-    T::Mul(g as f64, vec![rest])
+    let rest = add_all(ts.into_iter().map(|x| mul_all(vec![T::Num(1.0 / content), x])).collect());
+    T::Mul(content, vec![rest])
 }
 
 /// Take the factors every term of a sum shares out of it (SymPy's factor_terms): -y² cos(x y) - x² cos(x y)
@@ -685,7 +707,8 @@ fn factor_terms(t: T) -> T {
                     .filter_map(|(k, b, e)| {
                         let (_, _, e2) = fx.iter().find(|f| f.0 == k)?;
                         let (a, c) = (qf(e), qf(*e2));
-                        if a * c <= 0.0 {
+                        // like SymPy's factor_terms: only whole powers are taken out
+                        if a * c <= 0.0 || !is_int(e) || !is_int(*e2) {
                             return None;
                         }
                         let m = if a > 0.0 { if a <= c { e } else { *e2 } } else if a >= c { e } else { *e2 };
@@ -777,7 +800,11 @@ fn compare(a: &T, b: &T) -> Ordering {
             (Some(a), Some(b)) if a.1 != 1 || b.1 != 1 => a.cmp(&b),
             _ => x.total_cmp(y),
         },
-        (T::Sym(x), T::Sym(y)) => x.cmp(y),
+        // a positive symbol has more assumptions, so a longer _hashable_content: it sorts after the real ones
+        (T::Sym(x), T::Sym(y)) => POSITIVE.with(|p| {
+            let p = p.borrow();
+            (p.contains(x), x).cmp(&(p.contains(y), y))
+        }),
         _ => {
             let (aa, ab) = (args(a), args(b));
             if aa.len() != ab.len() {
@@ -856,7 +883,8 @@ pub fn tidy(e: &A::Expr) -> A::Expr {
     }
     // the plain canonical form, and the one with fractions put together; the shortest wins (like simplify)
     let mut best = e.clone();
-    for cand in [zero_sums(factor_terms(t.clone())), zero_sums(factor_terms(together(t)))] {
+    let tg = together(t.clone());
+    for cand in [zero_sums(t.clone()), zero_sums(factor_terms(t)), zero_sums(tg.clone()), zero_sums(factor_terms(tg))] {
         if key(&cand).contains("NaN") {
             continue;
         }
@@ -866,7 +894,216 @@ pub fn tidy(e: &A::Expr) -> A::Expr {
     best
 }
 
+thread_local! {
+    /// the names SymPy saw as positive symbols (an indefinite integral's positive constants, D37)
+    static POSITIVE: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// sympy_best with the names SymPy took as positive symbols (they sort after the others).
+pub fn sympy_best_with(e: &A::Expr, positive: &[String], heurisch: bool) -> A::Expr {
+    POSITIVE.with(|p| *p.borrow_mut() = positive.to_vec());
+    let r = sympy_best_h(e, heurisch);
+    POSITIVE.with(|p| p.borrow_mut().clear());
+    r
+}
+
+/// v1's choice for an antiderivative: the shorter (as SymPy writes it) of SymPy's answer and its simplify();
+/// here the canonical form and its factored / together forms.
+pub fn sympy_best(e: &A::Expr) -> A::Expr {
+    sympy_best_h(e, true)
+}
+
+/// `heurisch`: SymPy's answer comes with its exponentials grouped (its heurisch method, used for exponentials
+/// of a linear argument), else fully expanded (manualintegrate).
+fn sympy_best_h(e: &A::Expr, heurisch: bool) -> A::Expr {
+    let Some(t) = to_t(e) else { return e.clone() };
+    let t = match expand(t.clone()) {
+        x if key(&x).contains("NaN") => t,
+        x => x,
+    };
+    // SymPy's answer comes expanded, with exponentials grouped (heurisch); simplify() puts it over a common
+    // denominator and takes out common factors. v1 kept the shorter, SymPy's answer on a tie.
+    let raw = zero_sums(if heurisch { collect_funs(t.clone()) } else { t.clone() });
+    let mut best = (sympy_str(&raw).chars().count(), raw);
+    let simp = signsimp(zero_sums(factor_terms(together(t))));
+    if !key(&simp).contains("NaN") {
+        let n = sympy_str(&simp).chars().count();
+        if n < best.0 {
+            best = (n, simp);
+        }
+    }
+    simplify(&from_t(&best.1))
+}
+
+/// Products distributed over sums (not inside functions or powers): SymPy's integrate returns its answers in
+/// this expanded form.
+fn expand(t: T) -> T {
+    match t {
+        T::Add(ts) => add_all(ts.into_iter().map(expand).collect()),
+        T::Mul(c, fs) => {
+            let mut terms: Vec<T> = vec![T::Num(c)];
+            for f in fs {
+                let f = expand(f);
+                match f {
+                    T::Add(parts) => {
+                        let mut next = vec![];
+                        for a in &terms {
+                            for b in &parts {
+                                next.push(mul_all(vec![a.clone(), b.clone()]));
+                            }
+                        }
+                        terms = next;
+                        if terms.len() > 64 {
+                            return T::Num(f64::NAN);
+                        }
+                    }
+                    other => terms = terms.into_iter().map(|a| mul_all(vec![a, other.clone()])).collect(),
+                }
+            }
+            add_all(terms)
+        }
+        other => other,
+    }
+}
+
+/// Group the terms of a sum that share a function factor (SymPy's integrate returns x e^x − e^x − x²/2 as
+/// −x²/2 + (x − 1)·exp(x)).
+fn collect_funs(t: T) -> T {
+    let T::Add(ts) = t else { return t };
+    let fun_of = |x: &T| -> Vec<String> {
+        match x {
+            // exponentials only: SymPy's heurisch returns (x − 1)·exp(x), but keeps 2x sin(x) + 2 cos(x) − x² cos(x)
+            T::Mul(_, fs) => fs.iter().filter(|f| matches!(f, T::Fun(n, _) if n == "exp")).map(key).collect(),
+            T::Fun(n, _) if n == "exp" => vec![key(x)],
+            _ => vec![],
+        }
+    };
+    let mut counts: Vec<(String, usize)> = vec![];
+    for x in &ts {
+        for k in fun_of(x) {
+            match counts.iter_mut().find(|c| c.0 == k) {
+                Some(c) => c.1 += 1,
+                None => counts.push((k, 1)),
+            }
+        }
+    }
+    let Some((k, _)) = counts.into_iter().filter(|c| c.1 >= 2).max_by_key(|c| c.1) else { return T::Add(ts) };
+    let (with, without): (Vec<T>, Vec<T>) = ts.into_iter().partition(|x| fun_of(x).contains(&k));
+    let f = match &with[0] {
+        T::Mul(_, fs) => fs.iter().find(|g| key(g) == k).unwrap().clone(),
+        o => o.clone(),
+    };
+    let inv = T::Pow(Box::new(f.clone()), (-1, 1));
+    let inner = add_all(with.into_iter().map(|x| mul_all(vec![x, inv.clone()])).collect());
+    let mut items = without;
+    // heurisch keeps whole coefficients in the sum and a fraction outside: (2x − 1)·exp(2x)/4
+    let lcm = match &inner {
+        T::Add(ts) => ts.iter().try_fold(1i64, |l, x| rational(split_term(x.clone()).0).map(|r| l / gcd(l, r.1) * r.1)),
+        _ => None,
+    };
+    match lcm {
+        Some(l) if l > 1 && l < 1_000_000 => {
+            let scaled = mul_all(vec![T::Num(l as f64), inner]);
+            items.push(T::Mul(1.0 / l as f64, vec![scaled, f]));
+        }
+        _ => items.push(mul_all(vec![inner, f])),
+    }
+    add_all(items)
+}
+
+/// How SymPy's str() writes a formula (for messages that quote SymPy, like "Ei(2*x)").
+pub fn sympy_text(e: &A::Expr) -> String {
+    match to_t(e) {
+        Some(t) => sympy_str(&t),
+        None => crate::source::key(e),
+    }
+}
+
+/// Roughly how SymPy's str() writes a term (for v1's length comparisons).
+fn sympy_str(t: &T) -> String {
+    fn num_s(v: f64) -> String {
+        if v == v.trunc() && v.abs() < 1e15 {
+            return format!("{}", v as i64);
+        }
+        match rational(v) {
+            Some((p, q)) => format!("{p}/{q}"),
+            None => format!("{v}"),
+        }
+    }
+    fn atom(t: &T) -> String {
+        let s = sympy_str(t);
+        match t {
+            T::Add(_) | T::Mul(..) => format!("({s})"),
+            T::Num(v) if *v < 0.0 || *v != v.trunc() => format!("({s})"),
+            _ => s,
+        }
+    }
+    match t {
+        T::Num(v) => num_s(*v),
+        T::Sym(s) => match s.as_str() {
+            "π" => "pi".into(),
+            "𝑖" => "I".into(),
+            _ => s.clone(),
+        },
+        T::Fun(f, a) => {
+            let name = match f.as_str() {
+                "ln" => "log",
+                "abs" => "Abs",
+                x => x,
+            };
+            format!("{name}({})", a.iter().map(sympy_str).collect::<Vec<_>>().join(", "))
+        }
+        T::Pow(b, e) => {
+            if *e == (1, 2) {
+                return format!("sqrt({})", sympy_str(b));
+            }
+            let ex = if is_int(*e) { format!("{}", e.0) } else { format!("({}/{})", e.0, e.1) };
+            format!("{}**{ex}", atom(b))
+        }
+        T::Mul(c, fs) => {
+            let (mut num_f, mut den_f) = (vec![], vec![]);
+            for f in fs {
+                match f {
+                    T::Pow(b, e) if e.0 < 0 => den_f.push(if (-e.0, e.1) == (1, 1) {
+                        atom(b)
+                    } else {
+                        atom(&T::Pow(b.clone(), (-e.0, e.1)))
+                    }),
+                    o => num_f.push(atom(o)),
+                }
+            }
+            let (cn, cd) = rational(c.abs()).unwrap_or(((c.abs() * 1e6) as i64, 1_000_000));
+            if cn != 1 || num_f.is_empty() {
+                num_f.insert(0, format!("{cn}"));
+            }
+            if cd != 1 {
+                den_f.insert(0, format!("{cd}"));
+            }
+            let mut s = format!("{}{}", if *c < 0.0 { "-" } else { "" }, num_f.join("*"));
+            if !den_f.is_empty() {
+                s += &if den_f.len() == 1 { format!("/{}", den_f[0]) } else { format!("/({})", den_f.join("*")) };
+            }
+            s
+        }
+        T::Add(ts) => {
+            let mut s = String::new();
+            for (i, x) in ts.iter().enumerate() {
+                let xs = sympy_str(x);
+                if i == 0 {
+                    s = xs;
+                } else if let Some(rest) = xs.strip_prefix('-') {
+                    s += &format!(" - {rest}");
+                } else {
+                    s += &format!(" + {xs}");
+                }
+            }
+            s
+        }
+    }
+}
+
 fn shorter(out: A::Expr, e: &A::Expr) -> A::Expr {
     if to_source(&out).chars().count() < to_source(e).chars().count() { out } else { e.clone() }
 }
+
 

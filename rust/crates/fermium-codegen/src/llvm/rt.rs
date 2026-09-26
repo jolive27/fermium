@@ -54,7 +54,53 @@ impl Drop for FmList {
 /// A list of texts (text ids into `Ctx::texts`).
 pub struct FmTList(pub Vec<i64>);
 
-/// A printer that prints nothing: the tree-walker the context keeps for built-ins and messages never prints.
+/// The printer the compiled code prints through, for the tree-walker the context keeps (built-ins and the
+/// constructs it runs for the compiled code print in the same stream, in order).
+pub struct PrinterRef<'m>(*mut (dyn Printer + 'm));
+
+impl Printer for PrinterRef<'_> {
+    fn num(&mut self, fmt: usize, v: f64) {
+        unsafe { (*self.0).num(fmt, v) }
+    }
+    fn num_capped(&mut self, fmt: usize, v: f64, max_sf: u32) {
+        unsafe { (*self.0).num_capped(fmt, v, max_sf) }
+    }
+    fn num_sf(&mut self, fmt: usize, v: f64, sf: u32) {
+        unsafe { (*self.0).num_sf(fmt, v, sf) }
+    }
+    fn list(&mut self, fmt: usize, v: &[f64]) {
+        unsafe { (*self.0).list(fmt, v) }
+    }
+    fn vec(&mut self, fmt: usize, v: &[f64]) {
+        unsafe { (*self.0).vec(fmt, v) }
+    }
+    fn mixed_vec(&mut self, fmts: &[usize], v: &[f64]) {
+        unsafe { (*self.0).mixed_vec(fmts, v) }
+    }
+    fn mat(&mut self, fmt: usize, v: &[f64], r: usize, c: usize) {
+        unsafe { (*self.0).mat(fmt, v, r, c) }
+    }
+    fn complex(&mut self, fmt: usize, re: f64, im: f64) {
+        unsafe { (*self.0).complex(fmt, re, im) }
+    }
+    fn clist(&mut self, fmt: usize, v: &[(f64, f64)]) {
+        unsafe { (*self.0).clist(fmt, v) }
+    }
+    fn boolean(&mut self, b: bool) {
+        unsafe { (*self.0).boolean(b) }
+    }
+    fn text(&mut self, s: &str) {
+        unsafe { (*self.0).text(s) }
+    }
+    fn textlist(&mut self, v: &[Rc<str>]) {
+        unsafe { (*self.0).textlist(v) }
+    }
+    fn end(&mut self) {
+        unsafe { (*self.0).end() }
+    }
+}
+
+/// A printer that prints nothing.
 pub struct NullPrinter;
 
 impl Printer for NullPrinter {
@@ -88,6 +134,9 @@ pub enum Kind {
     V(usize),
     /// a solution made by the compiled code (an index into `Ctx::sols`, i64)
     H,
+    /// any other value, kept as the tree-walker's Value (an index into `Ctx::objs`, i64): data sets, lists of
+    /// complex numbers; only built-ins and the tree-walker use them
+    Obj,
     Void,
 }
 
@@ -121,11 +170,17 @@ pub struct Ctx<'m> {
     pub texts: Vec<Rc<str>>,
     lists: Vec<*mut FmList>,
     tlists: Vec<*mut FmTList>,
-    pub interp: Interpreter<'m, NullPrinter>,
+    pub interp: Interpreter<'m, PrinterRef<'m>>,
     pub builtins: Vec<BuiltinSite>,
     pub mvec_fmts: Vec<Vec<usize>>,
     pub ode_sites: Vec<super::solve_rt::OdeSite>,
     pub sols: Vec<super::solve_rt::CSol>,
+    /// constructs run by the tree-walker for the compiled code (mixed mode, native::delegate)
+    pub interp_sites: Vec<super::delegate::InterpSite>,
+    /// values of kind Obj
+    pub objs: Vec<Value>,
+    /// the module's nodes by position (executables' tree-walker constructs, native::delegate)
+    pub nodes: Vec<super::delegate::NodeRef>,
     /// printed measured sums (spec B2 decimal-place rule): the shape of each sum
     pub msum_sites: Vec<MNode>,
     /// the fewest figures the integrals since the last print can support (eval_calc's QUAD_SF, spec B2)
@@ -145,11 +200,14 @@ impl<'m> Ctx<'m> {
             texts: module.tables.texts.iter().map(|s| Rc::from(s.as_str())).collect(),
             lists: vec![],
             tlists: vec![],
-            interp: Interpreter::new(module, NullPrinter),
+            interp: Interpreter::new(module, PrinterRef(printer as *mut _)),
             builtins: vec![],
             mvec_fmts: vec![],
             ode_sites: vec![],
             sols: vec![],
+            interp_sites: vec![],
+            objs: vec![],
+            nodes: vec![],
             msum_sites: vec![],
             quad_sf: None,
             lock: Mutex::new(()),
@@ -158,7 +216,8 @@ impl<'m> Ctx<'m> {
 
     /// The code generator's tables (texts it made, built-in and solve sites, …).
     pub fn set_tables(&mut self, t: super::blob::GenTables) {
-        let super::blob::GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites } = t;
+        let super::blob::GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites, interp_sites } = t;
+        self.interp_sites = interp_sites;
         self.texts = texts;
         self.builtins = builtins;
         self.mvec_fmts = mvec_fmts;
@@ -175,6 +234,15 @@ impl<'m> Ctx<'m> {
             Some(e) => Err(self.locate(e)),
             None => Ok(()),
         }
+    }
+
+    /// An Obj value.
+    pub fn obj(&self, i: i64) -> Value {
+        usize::try_from(i).ok().and_then(|i| self.objs.get(i)).cloned().unwrap_or(Value::Void)
+    }
+
+    pub(super) fn printer_mut(&mut self) -> &mut (dyn Printer + 'm) {
+        self.printer()
     }
 
     fn printer(&mut self) -> &mut (dyn Printer + 'm) {
@@ -214,7 +282,7 @@ impl<'m> Ctx<'m> {
     }
 
     /// A value of the compiled code as the tree-walker's Value (lists are copied).
-    unsafe fn to_value(&self, k: Kind, slot: u64) -> Value {
+    pub(super) unsafe fn to_value(&self, k: Kind, slot: u64) -> Value {
         match k {
             Kind::F => Value::Num(f64::from_bits(slot)),
             Kind::B => Value::Bool(slot != 0),
@@ -229,12 +297,18 @@ impl<'m> Ctx<'m> {
                 None => Value::Void,
             },
             Kind::V(n) => Value::Vec(Rc::new(std::slice::from_raw_parts(slot as *const f64, n).to_vec())),
-            Kind::H | Kind::Void => Value::Void,
+            // a solution: the tree-walker's copy of it (the compiled solve made both)
+            Kind::H => match self.sols.get(slot as usize) {
+                Some(s) => Value::Handle(s.interp_h),
+                None => Value::Void,
+            },
+            Kind::Obj => self.obj(slot as i64),
+            Kind::Void => Value::Void,
         }
     }
 
     /// Store a Value where the compiled code expects a value of kind `k` (`out` holds n f64 for V(n)).
-    unsafe fn from_value(&mut self, k: Kind, v: Value, out: *mut u64) {
+    pub(super) unsafe fn from_value(&mut self, k: Kind, v: Value, out: *mut u64) {
         match k {
             Kind::F => *out = v.num().to_bits(),
             Kind::B => *out = u64::from(v.truth()),
@@ -274,7 +348,11 @@ impl<'m> Ctx<'m> {
                     *o.add(i) = src.get(i).copied().unwrap_or(f64::NAN);
                 }
             }
-            Kind::H => *out = 0,
+            Kind::H => *out = u64::MAX,
+            Kind::Obj => {
+                self.objs.push(v);
+                *out = (self.objs.len() - 1) as u64;
+            }
             Kind::Void => {}
         }
     }
@@ -477,9 +555,17 @@ pub extern "C" fn fm_print_msum(c: C, fmt: i64, site: i64, vals: *const f64, n: 
     };
     let node = c.msum_sites[site as usize].clone();
     let (v, p) = msum_combine(&node, vals, &mut 0, k);
-    match p.map(|p| crate::eval_calc::round_to_place(v / k, p)) {
-        Some((x, Some(sf))) => c.printer().num_sf(fmt, x * k, sf),
-        _ => c.printer().num(fmt, v),
+    // eval_calc sum_sf: rounded to the coarsest place (a cancellation shows the figures it has)
+    let (v, sf) = match p {
+        Some(p) => {
+            let (x, sf) = crate::eval_calc::round_to_place(v / k, p);
+            (x * k, sf)
+        }
+        None => (v, None),
+    };
+    match sf {
+        Some(sf) => c.printer().num_sf(fmt, v, sf),
+        None => c.printer().num(fmt, v),
     }
 }
 
@@ -624,6 +710,9 @@ fn fmt_opt(i: i64) -> Option<usize> {
     }
 }
 
+/// Integrand evaluations so far (FERMIUM_LLVM_TIME reports them: performance work).
+pub static QUAD_EVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// ∫ f from a to b (eval_calc Integral): fermium-runtime's quad; once the integrand has stopped with an error
 /// it isn't called again (NaN), and that error is the one reported.
 #[no_mangle]
@@ -632,7 +721,10 @@ pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol:
     use std::sync::atomic::Ordering::SeqCst;
     let flag = err_flag(c);
     let r = fermium_runtime::numerics::quad::quad(
-        |x| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } },
+        |x| {
+            QUAD_EVALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } }
+        },
         a, b, 1e-10, atol, xname);
     if flag.load(SeqCst) != 0 {
         return f64::NAN;
@@ -796,13 +888,12 @@ pub extern "C" fn fm_tlist_copy(c: C, l: *const FmTList) -> *mut FmTList {
 #[no_mangle]
 pub extern "C" fn fm_builtin(c: C, site: i64, args: *const u64, out: *mut u64, line: i32) {
     locked(c, |c| {
-        let (name, kinds, ret) = {
-            let s = &c.builtins[site as usize];
-            (s.name.clone(), s.args.clone(), s.ret)
-        };
+        // (the sites don't change while the program runs)
+        let s: *const BuiltinSite = &c.builtins[site as usize];
+        let (name, kinds, ret) = unsafe { (&(*s).name, &(*s).args, (*s).ret) };
         let vals: Vec<Value> = kinds.iter().enumerate().map(|(i, k)| unsafe { c.to_value(*k, *args.add(i)) }).collect();
         c.interp.line = line.max(0) as u32;
-        match c.interp.builtin(&name, vals) {
+        match c.interp.builtin(name, vals) {
             Ok(v) if kind_matches(ret, &v) => unsafe { c.from_value(ret, v, out) },
             Ok(v) => {
                 // never convert silently: the compiled code expected another kind of value
@@ -825,14 +916,36 @@ pub extern "C" fn fm_builtin(c: C, site: i64, args: *const u64, out: *mut u64, l
 }
 
 /// Does a built-in's result fit the kind the compiled code expects (as the tree-walker would go on using it)?
-fn kind_matches(k: Kind, v: &Value) -> bool {
+pub(super) fn kind_matches(k: Kind, v: &Value) -> bool {
     match (k, v) {
         (Kind::F, Value::Num(_) | Value::Bool(_) | Value::Void) => true,
         (Kind::B, Value::Bool(_) | Value::Num(_)) => true,
         (Kind::S, Value::Str(_)) | (Kind::L, Value::List(_)) | (Kind::TL, Value::TextList(_)) => true,
         (Kind::V(n), Value::Vec(x)) => x.len() == n,
-        (Kind::Void, _) => true,
+        (Kind::Void | Kind::Obj, _) => true,
         _ => false,
+    }
+}
+
+/// rand, rand(a, b), randn, randn(μ, σ) (kind 0-3): the tree-walker's own generator (eval_m3), called
+/// directly (random numbers in a hot loop; the general built-in path costs more than the draw).
+#[no_mangle]
+pub extern "C" fn fm_rng(c: C, kind: i32, a: f64, b: f64, line: i32) -> f64 {
+    let c = unsafe { &mut *c };
+    let (name, args) = match kind {
+        0 => ("rand", vec![]),
+        1 => ("rand2", vec![Value::Num(a), Value::Num(b)]),
+        2 => ("randn", vec![]),
+        _ => ("randn2", vec![Value::Num(a), Value::Num(b)]),
+    };
+    c.interp.line = line.max(0) as u32;
+    match c.interp.builtin_m3(name, &args) {
+        Some(Ok(v)) => v.num(),
+        Some(Err(e)) => {
+            c.fail(e);
+            f64::NAN
+        }
+        None => f64::NAN,
     }
 }
 

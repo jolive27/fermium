@@ -15,7 +15,8 @@ How outputs are compared (D264, strict since red team round 9):
   - warnings (stderr): the same warnings (line and message), in the same order;
   - a program that should run must exit with code 0.
 The Rust binary runs on a copy of the program in an empty temporary directory, with an empty PATH, so it can't
-read the expected output or call the Python implementation.
+read the expected output or call the Python implementation. FERMIUM_PYTHON names the runner's own Python (with
+NumPy and SciPy), which the binary loads only for `use python` programs.
 """
 import argparse
 import glob
@@ -206,7 +207,7 @@ def run_binary(binary, path, case):
         os.mkdir(empty)
         try:
             p = subprocess.run([os.path.abspath(binary), "run", "--base-dir", base, prog], capture_output=True,
-                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8"})
+                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8", "FERMIUM_PYTHON": sys.executable})
         except subprocess.TimeoutExpired:
             return "", "", {"message": "timed out after 300 s", "line": None}, None
         except OSError as ex:
@@ -285,8 +286,15 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
     ap.add_argument("--min", type=int, default=None,
                     help="exit 0 if at least this many pass (CI's ratchet for the Rust implementation)")
+    ap.add_argument("--skip-file", help="a file of case ids (one per line, # comments) not run here; they are listed in "
+                                        "the report (CI: the oracle's BLAS-kernel-dependent cases on another CPU type)")
     a = ap.parse_args()
     files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
+    skipped = []
+    if a.skip_file:
+        ids = {ln.split("#")[0].strip() for ln in open(a.skip_file, encoding="utf-8")} - {""}
+        skipped = sorted(os.path.basename(f)[:-3] for f in files if os.path.basename(f)[:-3] in ids)
+        files = [f for f in files if os.path.basename(f)[:-3] not in ids]
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=a.j) as ex:
         results = list(ex.map(one, [(a.impl, a.bin, f) for f in files], chunksize=4))
@@ -303,6 +311,8 @@ def main():
                 f"output the divergence describes): **{passed + documented} of {total} "
                 f"({100.0 * (passed + documented) / max(total, 1):.1f} %) pass or are documented.**" if documented else ""),
              "",
+             *([f"**{len(skipped)} cases not run here** (--skip-file {os.path.relpath(a.skip_file, ROOT)}): "
+                + " ".join(skipped), ""] if skipped else []),
              "The suite (conformance/cases, see conformance/MANIFEST.md) was harvested from Fermium 1.5: every program the",
              "test suite runs, every example, rosetta, gauntlet and research program, the benchmarks, and John's Appendix 1",
              "programs. Comparison (D264): output exactly, except that a number with a decimal point or a power of ten",

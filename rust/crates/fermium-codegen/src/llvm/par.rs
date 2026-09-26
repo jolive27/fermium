@@ -34,7 +34,7 @@ fn assigned_expr(m: &Module, e: &Expr, out: &mut HashSet<SymId>) {
 }
 
 /// Every variable a block (re)binds.
-fn assigned(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
+pub(super) fn assigned(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
     for s in body {
         match &s.kind {
             StmtKind::Assign(sym, _) | StmtKind::ForIn(sym, _, _) => {
@@ -209,10 +209,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             let ty = self.llty(k);
             let p = self.alloca(ty, &self.m.syms[s].name.clone())?;
-            let zero = match k {
-                Kind::F => self.fconst(0.0).as_basic_value_enum(),
-                _ => ty.const_zero(),
-            };
+            let zero = self.init_value(k);
             self.st(p, zero, "var")?;
             self.overrides.insert(s, (p, k));
         }

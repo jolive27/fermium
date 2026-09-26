@@ -277,12 +277,14 @@ pub struct Interpreter<'m, P: Printer> {
     pub(crate) solve: crate::eval_solve::SolveState,
     /// data sets made by load and table (eval_data.rs)
     pub(crate) data: crate::eval_data::DataState,
+    /// pure calls remembered within one ODE right-hand side (eval_memo.rs, D270)
+    pub(crate) memo: crate::eval_memo::Memo,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
         Interpreter { module, printer, globals: Default::default(), line: 0, call_line: 0, builtins: HashMap::new(),
-                      solve: Default::default(), data: Default::default() }
+                      solve: Default::default(), data: Default::default(), memo: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -697,10 +699,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 self.eval(value, fr)?
             }
-            ExprKind::Call(f, args) => {
-                let vals = self.eval_args(args, fr)?;
-                self.call(*f, vals)?
-            }
+            ExprKind::Call(f, args) => self.call_expr(*f, args, fr)?,
             ExprKind::List(items) if matches!(e.ty, Ty::TextList) => {
                 let mut out: Vec<Rc<str>> = Vec::with_capacity(items.len());
                 for it in items {

@@ -1,0 +1,8 @@
+{
+ "id": "8b62468279c8",
+ "section": "Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)",
+ "stdout": "0.37603016209703 eV\n1.5041206484964 eV\n3.3842714589389 eV\n6.0164825937199 eV\n1.000000000\n1.803×10⁻¹¹\n0.8090169944\n1.000000000\n-1.000000000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

@@ -241,6 +241,8 @@ def main(harvest_dir: str | None):
         if drop:        # timings vary: keep the physics, drop the timing lines
             stdout = "".join(ln for ln in stdout.splitlines(True) if not ln.startswith(tuple(drop)))
         e = r["error"]
+        if e:           # the harvest machine's path in an error is <ROOT> (the runner writes the checkout's so too)
+            e = {k: normalise(v, base) if k in ("message", "hint") and isinstance(v, str) else v for k, v in e.items()}
         case = {"id": key, "area": area, "origin": r["origin"], "dir": rel, "stdout": stdout,
                 "stderr": normalise(r["stderr"], base), "error": e, "exit": 1 if e else 0,
                 "drop_prefixes": drop}
