@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Fermium 2's run-time library: native numerics (this crate replaces v1's SciPy/NumPy calls),
+//! and later CSV, plotting and uncertainties.
+//!
+//! Everything in [`numerics`] works on plain `f64` values, slices and closures: the checker has
+//! already verified and erased the units.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod numerics;
