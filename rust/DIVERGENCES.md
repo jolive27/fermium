@@ -118,7 +118,7 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   with `to N digits`; a value stored in a variable first prints as before.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
   conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
-  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 (recorded divergences).
 
 ## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
 
@@ -132,11 +132,13 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
   variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
   same.
-- Measured on the whole conformance suite before adopting it: 3 cases change (the three above), no others.
+- Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
+  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`, v1
+  `-6.78×10⁻¹⁵ μJ`).
   An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
   worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`sums_keep_the_coarsest_decimal_place`); conformance cases
-  89747a9eb10a 664786f7f30f 09fe8fafb686 (recorded divergences).
+  89747a9eb10a 664786f7f30f 09fe8fafb686 47680448a9da (recorded divergences).
 
 ## Special functions and cbrt: the C library, as v1's compiled code
 
