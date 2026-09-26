@@ -21,9 +21,9 @@ pub const GENERIC: &str = "this operation needs a plain number, but got an uncer
 
 const STEP: &[&str] = &["floor", "ceil", "round", "sign"];
 
-/// Does a value hold an uncertain number (or a list with one)?
+/// Does a value hold an uncertain number (or a list with one, or Monte Carlo samples)?
 pub fn is_unc(v: &Value) -> bool {
-    matches!(v, Value::Unc(_) | Value::UList(_))
+    matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_))
 }
 
 fn unc(u: UFloat) -> Value {
@@ -94,8 +94,67 @@ pub fn interp_powc(x: f64, p: f64) -> f64 {
     U::pow(x, p)
 }
 
+/// interp.powc on a NumPy array of samples (x ** p with NumPy's fast paths, np.cbrt, real odd roots).
+fn np_powc(a: &[f64], p: f64) -> Vec<f64> {
+    let npow = |x: f64, p: f64| -> f64 {
+        // ndarray ** scalar: NumPy's fast_scalar_power for these exponents
+        if p == 2.0 {
+            x * x
+        } else if p == 0.5 {
+            x.sqrt()
+        } else if p == -1.0 {
+            1.0 / x
+        } else if p == 1.0 {
+            x
+        } else if p == 0.0 {
+            1.0
+        } else {
+            x.powf(p)
+        }
+    };
+    if p == p.trunc() {
+        return a.iter().map(|&x| npow(x, p)).collect();
+    }
+    if (p - 1.0 / 3.0).abs() < 1e-15 {
+        return a.iter().map(|&x| crate::eval_core::glibc_cbrt(x)).collect();
+    }
+    let n = crate::eval::odd_root_numerator(p);
+    a.iter()
+        .map(|&x| {
+            let r = npow(x.abs(), p);
+            match n {
+                None => if x < 0.0 { f64::NAN } else { r },
+                Some(n) => if x < 0.0 { if n % 2 != 0 { -r } else { r } } else { r },
+            }
+        })
+        .collect()
+}
+
 /// One element-wise arithmetic operation, where either side may be uncertain.
 fn num_op(op: BinOp, a: &Value, b: &Value) -> Value {
+    let f = |x: f64, y: f64| match op {
+        BinOp::Add => x + y,
+        BinOp::Sub => x - y,
+        BinOp::Mul => x * y,
+        BinOp::Div => fdiv(x, y),
+    };
+    match (a, b) {
+        // Monte Carlo samples, element by element (NumPy)
+        (Value::Arr(x), Value::Arr(y)) => return Value::Arr(Rc::new(x.iter().zip(y.iter()).map(|(p, q)| f(*p, *q)).collect())),
+        (Value::Arr(x), Value::Num(_) | Value::Bool(_)) => {
+            let y = b.num();
+            return Value::Arr(Rc::new(x.iter().map(|p| f(*p, y)).collect()));
+        }
+        (Value::Num(_) | Value::Bool(_), Value::Arr(y)) => {
+            let x = a.num();
+            return Value::Arr(Rc::new(y.iter().map(|q| f(x, *q)).collect()));
+        }
+        (Value::Arr(_), _) | (_, Value::Arr(_)) => {
+            vec_fail();
+            return Value::Num(f64::NAN);
+        }
+        _ => {}
+    }
     match (a, b) {
         (Value::Unc(x), Value::Unc(y)) => unc(match op {
             BinOp::Add => x.add(y),
@@ -161,7 +220,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             (Some(xs), None) => Ok(make_list(xs.iter().map(|x| num_op(op, x, &b)).collect())),
             (None, Some(ys)) => Ok(make_list(ys.iter().map(|y| num_op(op, &a, y)).collect())),
             (None, None) => match (&a, &b) {
-                (Value::Unc(_) | Value::Num(_) | Value::Bool(_), Value::Unc(_) | Value::Num(_) | Value::Bool(_)) => {
+                (Value::Unc(_) | Value::Num(_) | Value::Bool(_) | Value::Arr(_),
+                 Value::Unc(_) | Value::Num(_) | Value::Bool(_) | Value::Arr(_)) => {
                     Ok(num_op(op, &a, &b))
                 }
                 _ => self.unc_err(GENERIC),
@@ -172,6 +232,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn unc_neg(&self, a: Value) -> Result<Value, RunError> {
         let neg = |v: &Value| match v {
             Value::Unc(u) => unc(u.neg()),
+            Value::Arr(a) => Value::Arr(Rc::new(a.iter().map(|x| -x).collect())),
             v => Value::Num(-v.num()),
         };
         match list_items(&a) {
@@ -183,6 +244,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn unc_powc(&self, a: Value, p: f64) -> Result<Value, RunError> {
         let f = |v: &Value| match v {
             Value::Unc(u) => unc(u.powc(p, interp_powc)),
+            Value::Arr(a) => Value::Arr(Rc::new(np_powc(a, p))),
             v => Value::Num(interp_powc(v.num(), p)),
         };
         match list_items(&a) {
@@ -194,6 +256,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// a ** b (interp.fpow), a element by element for a list base.
     pub(crate) fn unc_pow(&self, a: Value, b: Value) -> Result<Value, RunError> {
         let f = |x: &Value| match (x, &b) {
+            // np.power on samples
+            (Value::Arr(a), Value::Arr(o)) => Value::Arr(Rc::new(a.iter().zip(o.iter()).map(|(p, q)| p.powf(*q)).collect())),
+            (Value::Arr(a), Value::Num(q)) => Value::Arr(Rc::new(a.iter().map(|p| p.powf(*q)).collect())),
+            (Value::Num(p), Value::Arr(o)) => Value::Arr(Rc::new(o.iter().map(|q| p.powf(*q)).collect())),
+            (Value::Arr(_), _) | (_, Value::Arr(_)) => {
+                vec_fail();
+                Value::Num(f64::NAN)
+            }
             (Value::Unc(u), Value::Unc(o)) => unc(u.pow(o)),
             (Value::Unc(u), o) => unc(u.powc(o.num(), U::pow)),
             (x, Value::Unc(o)) => unc(o.rpow_f(x.num())),
@@ -207,6 +277,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     /// Comparisons use the nominal values.
     pub(crate) fn unc_cmp(&self, op: CmpOp, a: &Value, b: &Value) -> Result<Value, RunError> {
+        if matches!(a, Value::Arr(_)) || matches!(b, Value::Arr(_)) {
+            vec_fail(); // an array of true/false can't decide an if
+            return Ok(Value::Bool(false));
+        }
         if is_list(a) || is_list(b) {
             return self.unc_err(GENERIC);
         }
@@ -224,6 +298,17 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// name(x) for an uncertain x (uncertain.apply1 over interp.math1).
     fn apply1(&self, name: &str, v: &Value) -> Result<Value, RunError> {
         match v {
+            Value::Arr(a) => {
+                // interp.math1 on a NumPy array: NumPy's function, except the ones it doesn't vectorize
+                const VEC: &[&str] = &["sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh",
+                                       "acosh", "atanh", "exp", "ln", "log", "log10", "log2", "expm1", "log1p", "abs",
+                                       "floor", "ceil", "sign"];
+                if !VEC.contains(&name) {
+                    vec_fail();
+                    return Ok(Value::Num(f64::NAN));
+                }
+                Ok(Value::Arr(Rc::new(a.iter().map(|x| interp_math1(name, *x)).collect())))
+            }
             Value::Unc(x) => {
                 let r = interp_math1(name, x.v);
                 if STEP.contains(&name) {
@@ -539,14 +624,482 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         true
     }
 
+    /// Σ over terms that may be uncertain (interp.e_ISum: acc = acc + f(lo + i·st)).
+    pub(crate) fn unc_sum(&mut self, lam: usize, a: f64, st: f64, n: i64, fr: &mut Frame) -> Result<Value, RunError> {
+        let m: &'m fermium_ir::Module = self.module;
+        let l = &m.lambdas[lam];
+        let p = l.params[0];
+        let line = self.line;
+        let old = fr.vars.get(&p).cloned();
+        let mut acc = Value::Num(0.0);
+        let mut res = Ok(());
+        for i in 0..n {
+            fr.vars.insert(p, Value::Num(a + i as f64 * st));
+            match self.eval(&l.body[0], fr) {
+                Ok(v) => acc = num_op(BinOp::Add, &acc, &v),
+                Err(e) => {
+                    res = Err(e);
+                    break;
+                }
+            }
+        }
+        match old {
+            Some(v) => {
+                fr.vars.insert(p, v);
+            }
+            None => {
+                fr.vars.remove(&p);
+            }
+        }
+        res?;
+        self.line = line;
+        Ok(acc)
+    }
+
     pub(crate) fn eval_uncertain(&mut self, _e: &Expr, _fr: &mut Frame) -> Result<Value, RunError> {
         self.err("this isn't supported by the Rust back end yet")
     }
 
-    pub(crate) fn stmt_propagate(&mut self, s: &Stmt, _fr: &mut Frame) -> Result<(), RunError> {
-        let StmtKind::Propagate { .. } = &s.kind else { unreachable!() };
-        self.err("propagate montecarlo isn't supported by the Rust back end yet")
+}
+
+// ---------------------------------------------------------------- propagate montecarlo (D123)
+
+/// A Monte Carlo sample stream: an uncertainty source of the inputs, or a ± written inside the block (its IR node
+/// and list element).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Key {
+    Src(u64),
+    Pm(usize, usize),
+}
+
+/// The sampler of interp._Sampler: all samples at once (v1's NumPy arrays) or the k-th one.
+struct Mc {
+    /// None: vectorized; Some(k): the k-th sample
+    k: Option<usize>,
+    /// samples per stream (drawn at a stream's first use)
+    n: usize,
+    zs: Vec<(Key, Vec<f64>)>,
+}
+
+thread_local! {
+    static MC: RefCell<Option<Mc>> = const { RefCell::new(None) };
+    static VEC_FAIL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Is a propagate montecarlo block running?
+pub fn mc_active() -> bool {
+    MC.with(|m| m.borrow().is_some())
+}
+
+/// The vectorized Monte Carlo attempt reached something NumPy arrays can't do: fall back to one sample at a time.
+pub fn vec_fail() {
+    VEC_FAIL.with(|f| f.set(true));
+}
+
+fn failed() -> bool {
+    VEC_FAIL.with(|f| f.get())
+}
+
+/// The samples of one stream (drawn from the program's random numbers at its first use).
+fn z_of(m: &mut Mc, key: Key) -> usize {
+    if let Some(i) = m.zs.iter().position(|(k, _)| *k == key) {
+        return i;
     }
+    let v: Vec<f64> = (0..m.n).map(|_| crate::eval_m3::randn_draw()).collect();
+    m.zs.push((key, v));
+    m.zs.len() - 1
+}
+
+/// A variable's value inside the block: uncertain numbers become samples (_Sampler.sample).
+pub fn mc_sample(v: &Value) -> Value {
+    MC.with(|m| {
+        let mut g = m.borrow_mut();
+        let Some(m) = g.as_mut() else { return v.clone() };
+        sample_in(m, v)
+    })
+}
+
+fn sample_in(m: &mut Mc, v: &Value) -> Value {
+    match v {
+        Value::Unc(u) => match m.k {
+            None => {
+                let mut out = vec![u.v; m.n];
+                for &(key, c) in &u.d {
+                    let i = z_of(m, Key::Src(key));
+                    let z = &m.zs[i].1;
+                    for (o, zk) in out.iter_mut().zip(z) {
+                        *o += c * zk;
+                    }
+                }
+                Value::Arr(Rc::new(out))
+            }
+            Some(k) => {
+                let mut parts = vec![];
+                for &(key, c) in &u.d {
+                    let i = z_of(m, Key::Src(key));
+                    parts.push(c * m.zs[i].1[k]);
+                }
+                Value::Num(u.v + U::fsum(parts))
+            }
+        },
+        Value::UList(l) => {
+            if m.k.is_none() {
+                vec_fail(); // a list of arrays
+                return v.clone();
+            }
+            let items: Vec<Value> = l.borrow().iter().map(|x| sample_in(m, x)).collect();
+            Value::List(Rc::new(RefCell::new(items.iter().map(Value::num).collect())))
+        }
+        v => v.clone(),
+    }
+}
+
+/// numpy's pairwise summation of a contiguous float64 array (pairwise_sum_DOUBLE), as np.add.reduce uses it: the
+/// first element, plus the pairwise sum of the rest.
+pub fn np_sum(a: &[f64]) -> f64 {
+    fn pw(a: &[f64]) -> f64 {
+        let n = a.len();
+        if n < 8 {
+            let mut res = 0.0;
+            for x in a {
+                res += x;
+            }
+            res
+        } else if n <= 128 {
+            let mut r = [0.0f64; 8];
+            r.copy_from_slice(&a[..8]);
+            let mut i = 8;
+            while i < n - (n % 8) {
+                for j in 0..8 {
+                    r[j] += a[i + j];
+                }
+                i += 8;
+            }
+            let mut res = ((r[0] + r[1]) + (r[2] + r[3])) + ((r[4] + r[5]) + (r[6] + r[7]));
+            while i < n {
+                res += a[i];
+                i += 1;
+            }
+            res
+        } else {
+            let mut n2 = n / 2;
+            n2 -= n2 % 8;
+            pw(&a[..n2]) + pw(&a[n2..])
+        }
+    }
+    if a.is_empty() {
+        return 0.0;
+    }
+    a[0] + pw(&a[1..])
+}
+
+/// The least-squares solution of Zc β ≈ y (numpy.linalg.lstsq) by Householder QR; Zc is n×k, column-major.
+fn lstsq(cols: &[Vec<f64>], y: &[f64]) -> Vec<f64> {
+    let k = cols.len();
+    let n = y.len();
+    let mut a: Vec<Vec<f64>> = cols.to_vec();
+    let mut b = y.to_vec();
+    let mut diag = vec![0.0; k];
+    for j in 0..k {
+        let norm = a[j][j..].iter().map(|x| x * x).sum::<f64>().sqrt();
+        if norm == 0.0 {
+            diag[j] = 0.0;
+            continue;
+        }
+        let alpha = if a[j][j] > 0.0 { -norm } else { norm };
+        let mut v: Vec<f64> = a[j][j..].to_vec();
+        v[0] -= alpha;
+        let vn = v.iter().map(|x| x * x).sum::<f64>();
+        if vn == 0.0 {
+            diag[j] = alpha;
+            continue;
+        }
+        for c in a.iter_mut().skip(j) {
+            let dot: f64 = v.iter().zip(&c[j..]).map(|(p, q)| p * q).sum();
+            let f = 2.0 * dot / vn;
+            for (x, vi) in c[j..].iter_mut().zip(&v) {
+                *x -= f * vi;
+            }
+        }
+        let dot: f64 = v.iter().zip(&b[j..]).map(|(p, q)| p * q).sum();
+        let f = 2.0 * dot / vn;
+        for (x, vi) in b[j..].iter_mut().zip(&v) {
+            *x -= f * vi;
+        }
+        diag[j] = a[j][j];
+    }
+    let _ = n;
+    let mut beta = vec![0.0; k];
+    for j in (0..k).rev() {
+        if diag[j] == 0.0 {
+            beta[j] = 0.0;
+            continue;
+        }
+        let mut s = b[j];
+        for (c, bc) in a.iter().zip(&beta).skip(j + 1) {
+            s -= c[j] * bc;
+        }
+        beta[j] = s / diag[j];
+    }
+    beta
+}
+
+fn walk_assigned(stmts: &[Stmt], out: &mut Vec<fermium_ir::SymId>) {
+    for s in stmts {
+        match &s.kind {
+            StmtKind::Assign(sym, _) => {
+                if !out.contains(sym) {
+                    out.push(*sym);
+                }
+            }
+            StmtKind::If(_, a, b) => {
+                walk_assigned(a, out);
+                walk_assigned(b, out);
+            }
+            StmtKind::While(_, b) | StmtKind::For { body: b, .. } | StmtKind::ForIn(_, _, b) => walk_assigned(b, out),
+            StmtKind::Propagate { body, .. } => walk_assigned(body, out),
+            _ => {}
+        }
+    }
+}
+
+impl<'m, P: Printer> Interpreter<'m, P> {
+    /// a ± σ inside the block: a new stream, the same one for every sample of this ± and list element
+    /// (_Sampler.new, through interp.pm).
+    pub(crate) fn mc_pm(&mut self, id: usize, rel: bool, args: &[Value]) -> Result<Value, RunError> {
+        let off = args.get(2).map(Value::num).unwrap_or(0.0);
+        let one = |me: &Self, i: usize, v: &Value, sg: &Value| -> Result<Value, RunError> {
+            let mut sgv = match sg {
+                Value::Unc(u) => Value::Num(u.v),
+                s => s.clone(),
+            };
+            if rel {
+                sgv = num_op(BinOp::Mul, &me.unc_abs(num_op(BinOp::Sub, &Value::Num(nominal_or(v)), &Value::Num(off))),
+                             &sgv);
+                if let Value::Unc(_) = v {
+                    // U.nominal of an uncertain v, as a plain number: done above
+                }
+            }
+            let sgf = match &sgv {
+                Value::Arr(_) => {
+                    vec_fail(); // a sampled uncertainty
+                    return Ok(Value::Num(f64::NAN));
+                }
+                s => s.num(),
+            };
+            if sgf < 0.0 || sgf.is_nan() {
+                return me.err(format!("an uncertainty after ± can't be negative or NaN (got {} in SI units)", py_g(sgf)));
+            }
+            MC.with(|m| {
+                let mut g = m.borrow_mut();
+                let m = g.as_mut().unwrap();
+                let zi = z_of(m, Key::Pm(id, i));
+                let v = sample_in(m, v);
+                let z = &m.zs[zi].1;
+                Ok(match (m.k, v) {
+                    (None, Value::Arr(a)) => Value::Arr(Rc::new(a.iter().zip(z).map(|(x, zk)| x + sgf * zk).collect())),
+                    (None, v) => {
+                        let x = v.num();
+                        Value::Arr(Rc::new(z.iter().map(|zk| x + sgf * zk).collect()))
+                    }
+                    (Some(k), v) => Value::Num(v.num() + sgf * z[k]),
+                })
+            })
+        };
+        if let Some(vs) = list_items(&args[0]) {
+            let sgs = list_items(&args[1]).unwrap_or_else(|| vec![args[1].clone(); vs.len()]);
+            if sgs.len() != vs.len() {
+                return self.err(format!("these two lists have different lengths ({} and {})", vs.len(), sgs.len()));
+            }
+            let out: Vec<Value> = vs.iter().zip(&sgs).enumerate().map(|(i, (x, y))| one(self, i, x, y))
+                .collect::<Result<_, _>>()?;
+            if out.iter().any(|x| matches!(x, Value::Arr(_))) {
+                vec_fail(); // a list of arrays
+                return Ok(Value::Num(f64::NAN));
+            }
+            return Ok(make_list(out));
+        }
+        one(self, 0, &args[0], &args[1])
+    }
+
+    fn unc_abs(&self, v: Value) -> Value {
+        match v {
+            Value::Num(x) => Value::Num(x.abs()),
+            Value::Arr(a) => Value::Arr(Rc::new(a.iter().map(|x| x.abs()).collect())),
+            v => v,
+        }
+    }
+
+    /// propagate montecarlo (D123): the block runs with every uncertain input replaced by samples, first all at
+    /// once (v1's NumPy arrays), else one sample at a time; the outputs become mean ± standard deviation, linked to
+    /// the input sources by regression so later formulas keep the correlations (interp.s_SPropagate).
+    pub(crate) fn stmt_propagate(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
+        const MC_DEFAULT: usize = 100_000;
+        const MC_DEFAULT_SLOW: usize = 10_000;
+        let StmtKind::Propagate { n: ne, body, outs } = &s.kind else { unreachable!() };
+        let given = ne.is_some();
+        let n = match ne {
+            Some(e) => {
+                let x = self.eval(e, fr)?.num();
+                if x.is_nan() {
+                    return self.err("the length of a list must be a number, not NaN");
+                }
+                if x > crate::eval_core::MAX_LIST {
+                    return self.err(format!("not enough memory for a list of {} numbers (the most is 10⁹)",
+                                            format_number6(x)));
+                }
+                if x < 0.0 { 0 } else { x as usize }
+            }
+            None => MC_DEFAULT,
+        };
+        if n < 2 {
+            return self.err("propagate montecarlo needs at least 2 samples");
+        }
+        let mut assigned = vec![];
+        walk_assigned(body, &mut assigned);
+        let snap: Vec<(fermium_ir::SymId, Option<Value>)> =
+            assigned.iter().map(|&sym| (sym, self.get(sym, fr).ok())).collect();
+        let restore = |me: &mut Self, fr: &mut Frame| {
+            for (sym, v) in &snap {
+                if let Some(v) = v {
+                    me.set(*sym, v.clone(), fr);
+                }
+            }
+        };
+        let line0 = self.line;
+        // all the samples at once
+        restore(self, fr);
+        VEC_FAIL.with(|f| f.set(false));
+        MC.with(|m| *m.borrow_mut() = Some(Mc { k: None, n, zs: vec![] }));
+        let r = self.block(body, fr);
+        let mut results: Option<Vec<Vec<f64>>> = None;
+        if r.is_ok() && !failed() {
+            let mut rs = vec![];
+            for &sym in outs {
+                match self.get(sym, fr) {
+                    Ok(Value::Arr(a)) if !failed() => rs.push(a.to_vec()),
+                    Ok(Value::Num(x)) => rs.push(vec![x; n]),
+                    _ => {
+                        vec_fail();
+                        break;
+                    }
+                }
+            }
+            if !failed() {
+                results = Some(rs);
+            }
+        }
+        let zs = MC.with(|m| m.borrow_mut().take()).map(|m| m.zs).unwrap_or_default();
+        VEC_FAIL.with(|f| f.set(false));
+        self.line = line0;
+        let mut zs = zs;
+        let mut n = n;
+        let results = match results {
+            Some(r) => r,
+            None => {
+                // one sample at a time (the streams drawn so far are kept)
+                let m = if given { n } else { MC_DEFAULT_SLOW };
+                let mut cols: Vec<Vec<f64>> = vec![vec![]; outs.len()];
+                let mut err = None;
+                for k in 0..m {
+                    restore(self, fr);
+                    MC.with(|mc| *mc.borrow_mut() = Some(Mc { k: Some(k), n, zs: std::mem::take(&mut zs) }));
+                    let r = self.block(body, fr);
+                    zs = MC.with(|mc| mc.borrow_mut().take()).map(|mc| mc.zs).unwrap_or_default();
+                    if let Err(e) = r {
+                        err = Some(e);
+                        break;
+                    }
+                    for (c, &sym) in cols.iter_mut().zip(outs) {
+                        let v = self.get(sym, fr)?;
+                        c.push(match v {
+                            Value::Unc(_) => f64::NAN,
+                            v => v.num(),
+                        });
+                    }
+                }
+                VEC_FAIL.with(|f| f.set(false));
+                if let Some(e) = err {
+                    return Err(e);
+                }
+                n = m;
+                cols
+            }
+        };
+        // link the ± inside the block to new sources, shared by all the outputs
+        let src: Vec<u64> = zs.iter().map(|(k, _)| match k {
+            Key::Src(id) => *id,
+            Key::Pm(..) => U::new_source(),
+        }).collect();
+        for (&sym, y) in outs.iter().zip(&results) {
+            let bad = y.iter().filter(|x| !x.is_finite()).count();
+            if bad > 0 {
+                let name = self.module.syms[sym].name.clone();
+                return Err(RunError { message: format!("propagate montecarlo: {bad} of the {n} samples of {name} aren't \
+                                                        finite numbers (the formula fails for some sampled inputs)"),
+                                      line: line0, hint: None });
+            }
+            let nf = n as f64;
+            let ymean = np_sum(y) / nf;
+            let mut mean = ymean;
+            let dev: Vec<f64> = y.iter().map(|x| x - ymean).collect();
+            let var = np_sum(&dev.iter().map(|x| x * x).collect::<Vec<_>>()) / (nf - 1.0);
+            if !(var > 0.0) {
+                self.set(sym, unc(UFloat::new(mean, vec![])), fr);
+                continue;
+            }
+            let dy: Vec<f64> = y.iter().map(|x| x - ymean).collect();
+            let mut d: Vec<(u64, f64)> = vec![];
+            let mut r = dy.clone();
+            if !zs.is_empty() {
+                let zmeans: Vec<f64> = zs.iter().map(|(_, z)| np_sum(&z[..n]) / nf).collect();
+                let zc: Vec<Vec<f64>> = zs.iter().zip(&zmeans).map(|((_, z), m)| z[..n].iter().map(|x| x - m).collect())
+                    .collect();
+                let beta = lstsq(&zc, &dy);
+                for (i, ri) in r.iter_mut().enumerate() {
+                    let mut s = 0.0;
+                    for (c, b) in zc.iter().zip(&beta) {
+                        s += c[i] * b;
+                    }
+                    *ri = dy[i] - s;
+                }
+                // the value: the fitted linear model at z = 0 (the inputs' true values)
+                let mut corr = 0.0;
+                for (m, b) in zmeans.iter().zip(&beta) {
+                    corr += m * b;
+                }
+                mean -= corr;
+                d = src.iter().zip(&beta).filter(|(_, b)| **b != 0.0).map(|(k, b)| (*k, *b)).collect();
+            }
+            let resid = r.iter().map(|x| x * x).sum::<f64>() / (nf - 1.0);
+            if resid > 1e-20 * var {
+                d.push((U::new_source(), resid.sqrt())); // the nonlinear part: its own source
+            }
+            self.set(sym, unc(UFloat::new(mean, d)), fr);
+        }
+        Ok(())
+    }
+}
+
+fn nominal_or(v: &Value) -> f64 {
+    match v {
+        Value::Unc(u) => u.v,
+        v => v.num(),
+    }
+}
+
+/// The error for a numerical kernel's callback that returned an uncertain value (interp.plain_fn).
+pub fn kernel_unc_error(lambda_name: &str, v: &Value, line: u32) -> RunError {
+    let what = if lambda_name.starts_with("integrand") {
+        "an integral"
+    } else if lambda_name.starts_with("root") {
+        "solve … for x"
+    } else {
+        return RunError { message: GENERIC.into(), line, hint: None };
+    };
+    let _ = v;
+    RunError { message: format!("{what} can't use uncertain values (±) yet; put it inside a  propagate montecarlo  \
+                                 block, or use value(x)"), line, hint: None }
 }
 
 /// Python's `f"{x:g}"`.

@@ -26,6 +26,8 @@ pub enum Value {
     Unc(Rc<fermium_runtime::numerics::uncertain::UFloat>),
     /// A list holding uncertain numbers (and plain ones, as `Num`).
     UList(Rc<RefCell<Vec<Value>>>),
+    /// All the samples of a number at once, inside `propagate montecarlo` (v1's NumPy arrays, D123).
+    Arr(Rc<Vec<f64>>),
     Void,
 }
 
@@ -35,6 +37,11 @@ impl Value {
             Value::Num(x) => *x,
             // comparisons and the like use the nominal value, as v1's UFloat does
             Value::Unc(u) => u.v,
+            // an operation that needs one number got all the samples: v1's vectorized Monte Carlo fails there
+            Value::Arr(_) => {
+                crate::eval_unc::vec_fail();
+                f64::NAN
+            }
             Value::Bool(b) => f64::from(u8::from(*b)),
             _ => f64::NAN,
         }
@@ -522,13 +529,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Const(x) => Value::Num(*x),
             ExprKind::Bool(b) => Value::Bool(*b),
             ExprKind::Str(s) => Value::Str(s.as_str().into()),
-            ExprKind::Var(sym) => self.get(*sym, fr)?,
+            ExprKind::Var(sym) => {
+                let v = self.get(*sym, fr)?;
+                if crate::eval_unc::mc_active() { crate::eval_unc::mc_sample(&v) } else { v }
+            }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
                 self.bin(*op, va, vb)?
             }
             ExprKind::PowC(a, p) => match self.eval(a, fr)? {
-                v @ (Value::Unc(_) | Value::UList(_)) => self.unc_powc(v, *p)?,
+                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_powc(v, *p)?,
                 Value::Num(x) => Value::Num(powc(x, *p)),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| powc(*x, *p)).collect()))),
                 _ => Value::Num(f64::NAN),
@@ -547,7 +557,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Neg(a) => match self.eval(a, fr)? {
-                v @ (Value::Unc(_) | Value::UList(_)) => self.unc_neg(v)?,
+                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_neg(v)?,
                 Value::Num(x) => Value::Num(-x),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| -x).collect()))),
                 Value::Vec(v) => Value::Vec(Rc::new(v.iter().map(|x| -x).collect())),
@@ -651,7 +661,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     match self.eval(it, fr)? {
                         Value::Num(x) => out.push(x),
                         Value::Vec(v) => out.extend(v.iter()),
-                        _ => {}
+                        // interp.e_IVec: float() of an uncertain value
+                        Value::Unc(_) => return self.err(crate::eval_unc::GENERIC),
+                        _ => return self.err("not yet supported by the Rust back end: this vector"),
                     }
                 }
                 Value::Vec(Rc::new(out))
@@ -684,6 +696,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Builtin(name, args) => {
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
+                if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
+                    return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
+                }
                 self.builtin(name, vals)?
             }
             _ => return self.eval_more(e, fr),

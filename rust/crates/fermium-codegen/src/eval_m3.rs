@@ -17,6 +17,11 @@ thread_local! {
     static RNG: RefCell<Rng> = RefCell::new(Rng::default());
 }
 
+/// A standard normal from the program's stream (propagate montecarlo draws its samples here, as v1 does).
+pub(crate) fn randn_draw() -> f64 {
+    RNG.with(|r| r.borrow_mut().randn())
+}
+
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn builtin_m3(&mut self, name: &str, args: &[Value]) -> Option<Result<Value, RunError>> {
         let num = |v: &Value| match v {
