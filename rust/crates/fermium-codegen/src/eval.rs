@@ -606,7 +606,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::PowC(a, p) => match self.eval(a, fr)? {
                 v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_powc(v, *p)?,
+                // v1 runs a program with uncertainties in its interpreter: interp.powc there (D120)
+                Value::Num(x) if self.module.uses_uncertainty => Value::Num(crate::eval_unc::interp_powc(x, *p)),
                 Value::Num(x) => Value::Num(powc(x, *p)),
+                Value::List(l) if self.module.uses_uncertainty => Value::List(Rc::new(RefCell::new(
+                    l.borrow().iter().map(|x| crate::eval_unc::interp_powc(*x, *p)).collect()))),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| powc(*x, *p)).collect()))),
                 _ => Value::Num(f64::NAN),
             },
@@ -618,7 +622,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 let y = vb.num();
                 match va {
+                    Value::List(l) if self.module.uses_uncertainty => Value::List(Rc::new(RefCell::new(
+                        l.borrow().iter().map(|x| fermium_runtime::numerics::uncertain::pow(*x, y)).collect()))),
                     Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| x.powf(y)).collect()))),
+                    // interp.fpow in a program with uncertainties (v1 runs those in its interpreter)
+                    Value::Num(x) if self.module.uses_uncertainty => Value::Num(fermium_runtime::numerics::uncertain::pow(x, y)),
                     Value::Num(x) => Value::Num(x.powf(y)),
                     _ => return self.err("not yet supported by the Rust back end: this power"),
                 }
@@ -770,6 +778,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     (Some(Fast::Math(f)), 1) => {
                         let v = self.eval(&args[0], fr)?;
                         return match v {
+                            // interp's round in a program with uncertainties (v1 runs those in its interpreter)
+                            Value::Num(x) if self.module.uses_uncertainty && name == "round" => {
+                                Ok(Value::Num(crate::eval_unc::interp_math1(name, x)))
+                            }
                             Value::Num(x) => Ok(Value::Num(f(x))),
                             v => self.builtin_slice(name, std::slice::from_ref(&v)),
                         };

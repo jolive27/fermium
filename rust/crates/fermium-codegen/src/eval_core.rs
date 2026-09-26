@@ -493,6 +493,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     fn bi_math(&self, name: &str, args: &[Value]) -> Result<Value, RunError> {
+        // v1 runs a program with uncertainties in its interpreter: interp.math1 there
+        let one_math: fn(&str, f64) -> f64 =
+            if self.module.uses_uncertainty { crate::eval_unc::interp_math1 } else { one_math };
         match &args[0] {
             Value::List(l) => Ok(new_list(l.borrow().iter().map(|x| one_math(name, *x)).collect())),
             v => Ok(Value::Num(one_math(name, self.num_arg(v)?))),

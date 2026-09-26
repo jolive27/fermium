@@ -153,7 +153,7 @@ fn np_powc(a: &[f64], p: f64) -> Vec<f64> {
 }
 
 /// One element-wise arithmetic operation, where either side may be uncertain.
-fn num_op(op: BinOp, a: &Value, b: &Value) -> Value {
+pub(crate) fn num_op(op: BinOp, a: &Value, b: &Value) -> Value {
     let f = |x: f64, y: f64| match op {
         BinOp::Add => x + y,
         BinOp::Sub => x - y,
@@ -443,6 +443,20 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             return Ok(if out.len() == 1 { out.pop().unwrap() } else { make_vec(out) });
+        }
+        if matches!(name, "det" | "inverse" | "solve_linear" | "eigenvalues" | "eigenvectors") {
+            // matrix_op: linalg.py / linalg_big.py with FloatOps on UFloat values (B-U1)
+            use crate::eval_unc_la::LaOut;
+            use fermium_runtime::numerics::{err, Fail};
+            let mats: Option<Vec<Vec<Value>>> = args.iter().map(vec_items).collect();
+            let Some(mats) = mats else { return self.unc_err(GENERIC) };
+            return match crate::eval_unc_la::unc_matrix_op(name, &mats) {
+                Some(LaOut::Val(v)) => Ok(v),
+                Some(LaOut::Singular) => Err(self.fail_kind(Fail::new(err::SINGULAR, 0.0, 0.0))),
+                Some(LaOut::NotSymmetric) => Err(self.fail_kind(Fail::new(err::NOT_SYMMETRIC, 0.0, 0.0))),
+                Some(LaOut::NotPosDef) => Err(self.fail_kind(Fail::new(err::NOT_POSDEF, 0.0, 0.0))),
+                Some(LaOut::Generic) | None => self.unc_err(GENERIC),
+            };
         }
         if matches!(name, "vdot" | "cross") {
             // sum_seq of the products / the cross product of the components (e_IBuiltin on tuples)

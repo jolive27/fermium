@@ -59,13 +59,14 @@ pub(crate) fn integral_shaped(e: &Expr) -> bool {
 }
 
 /// A printed sum or difference whose every operand carries measured precision (significant figures from a
-/// written value; whole literals are exact and don't count), not asked for `to N digits`.
+/// written value; whole literals are exact and don't count, and neither do fitted parameters, B-F1), not asked
+/// for `to N digits`.
 pub(crate) fn measured_sum(e: &Expr) -> bool {
     fn leaves_measured(e: &Expr) -> bool {
         match &e.kind {
             ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, a, b)
                 if matches!(e.ty, fermium_ir::Ty::Num(_)) => leaves_measured(a) && leaves_measured(b),
-            _ => e.sf.is_some(),
+            _ => e.sf.is_some() && !fermium_ir::uses_fit_sf(e),
         }
     }
     matches!(e.kind, ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, ..))
