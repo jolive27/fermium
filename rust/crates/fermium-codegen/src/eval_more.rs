@@ -14,6 +14,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             | ExprKind::OdeLinSolve { .. } => self.eval_solution(e, fr),
             ExprKind::Load(_) | ExprKind::Table(_) | ExprKind::Column(..) => self.eval_data(e, fr),
             ExprKind::Uncertain(..) => self.eval_uncertain(e, fr),
+            ExprKind::Sample { .. } => self.eval_m3(e, fr),
             _ => self.err("this isn't supported by the Rust back end yet"),
         }
     }

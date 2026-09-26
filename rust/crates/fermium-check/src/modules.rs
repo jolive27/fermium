@@ -529,7 +529,8 @@ fn encode_expr(e: &mut I::Expr, k: usize) {
 fn lambdas_in_stmts(stmts: &[I::Stmt], out: &mut Vec<I::LambdaId>) {
     fn ex(e: &I::Expr, out: &mut Vec<I::LambdaId>) {
         match &e.kind {
-            I::ExprKind::Integral { lam, .. } | I::ExprKind::Sum { lam, .. } | I::ExprKind::Root { lam, .. } => {
+            I::ExprKind::Integral { lam, .. } | I::ExprKind::Sum { lam, .. } | I::ExprKind::Root { lam, .. }
+            | I::ExprKind::Sample { lam, .. } => {
                 out.push(*lam)
             }
             _ => {}

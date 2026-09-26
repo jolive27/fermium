@@ -23,6 +23,7 @@ mod pending;
 pub mod pde;
 pub mod parallel;
 pub mod print;
+pub mod rng;
 pub mod solve;
 pub mod source;
 pub mod stmts;

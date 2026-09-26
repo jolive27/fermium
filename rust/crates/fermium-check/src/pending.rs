@@ -7,9 +7,6 @@ use crate::checker::*;
 
 impl Checker {
     // ---- stmts / parallel
-    pub fn seed_stmt(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        Err(self.not_ported("seed", e.span))
-    }
     // ---- vectors and matrices
     /// Fields of ODE solutions and data tables (not ported yet).
     pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, _name: &str, _t: Checked, _ctx: &mut Ctx)
@@ -54,13 +51,5 @@ impl Checker {
     /// value(x), uncertainty(x), rel(x) of an uncertain value (D121).
     pub fn unc_part(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported(&format!("the built-in {name}"), e.span))
-    }
-    /// rand(), rand(a, b), randn(), randn(μ, σ) (D80).
-    pub fn m3_random(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("the built-in {name}"), e.span))
-    }
-    /// sample(dist, n) (D80).
-    pub fn m3_sample(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("the built-in sample", e.span))
     }
 }
