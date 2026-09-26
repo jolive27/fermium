@@ -112,7 +112,8 @@ tree-walker. `fermium run --backend llvm|interp FILE` or `FERMIUM_BACKEND=llvm|i
 on a program it can't compile yet exits with code 3). `FERMIUM_BACKEND_INFO=1` prints which back end ran;
 `FERMIUM_LLVM_TIME=1` prints the compile / JIT / run times; `FERMIUM_DUMP_LLVM=1` (`_OPT=1`) prints the LLVM IR
 before (after) optimization. For experiments only: `FERMIUM_LLVM_PASSES='default<O3>'` replaces the pass
-pipeline (default `default<O2>`: O3 cost nbody about 300 ms more compile time for about 15% less run time),
+pipeline (default `default<O2>`; on 2026-09-26 O3 gave no measurable run-time gain on the benchmarks for 3–30 ms
+more compile time),
 `FERMIUM_LLVM_NOVEC=1` turns loop vectorization off, `FERMIUM_LLVM_CG3=1` makes machine code generation aggressive.
 
 The differential test: `python3 rust/tools/llvm_diff.py --bin rust/target/fast/fermium -j 2` runs every

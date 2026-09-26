@@ -1169,6 +1169,6 @@ itself solves an equation is safe). (6) The quadrature's sentinel cache uses a c
 blackbody. Every change keeps the printed results bit for bit (llvm_diff, full conformance).
 - **Alternatives:** a Gauss–Kronrod panel compiled into the module with the integrand inlined, as v1 did
 (tried: only ~15% fewer instructions per integral on blackbody, the rest being the adaptive bookkeeping and
-`exp`, and ~0.3 s more compile time for the 15 inlined copies; rejected); `default<O3>` (≈15% faster nbody for
-≈300 ms more compile time: kept as the `FERMIUM_LLVM_PASSES` experiment switch only); fast-math flags (change
-results: never).
+`exp`, and ~0.3 s more compile time for the 15 inlined copies; rejected); `default<O3>` (no measurable gain on
+the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` experiment switch); fast-math flags
+(they change results: never).
