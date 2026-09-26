@@ -498,16 +498,17 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         self.printer.list(*f, &v)
                     }
                 }
-                PrintItem::Vec(e, f) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.vec(*f, &v)
-                    }
-                }
-                PrintItem::MixedVec(e, fs) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.mixed_vec(fs, &v)
-                    }
-                }
+                PrintItem::Vec(e, f) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.vec(*f, &v),
+                    // a vector of uncertain numbers (interp: printing rounds its UFloat components)
+                    Value::UList(_) => return self.err(crate::eval_unc::VECMSG),
+                    _ => {}
+                },
+                PrintItem::MixedVec(e, fs) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.mixed_vec(fs, &v),
+                    Value::UList(_) => return self.err(crate::eval_unc::VECMSG),
+                    _ => {}
+                },
                 PrintItem::Mat(e, f) => {
                     let (r, c) = match &e.ty {
                         Ty::Mat { r, c, .. } => (*r, *c),
@@ -723,6 +724,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::VecElem(v, k) => match self.eval(v, fr)? {
                 Value::Vec(v) => Value::Num(v[*k]),
+                // a component of a vector of uncertain numbers (interp: a tuple of UFloats)
+                Value::UList(l) => l.borrow().get(*k).cloned().unwrap_or(Value::Num(f64::NAN)),
                 _ => Value::Num(f64::NAN),
             },
             ExprKind::Index(l, i) => {

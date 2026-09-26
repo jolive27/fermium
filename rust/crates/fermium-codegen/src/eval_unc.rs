@@ -21,6 +21,9 @@ pub const GENERIC: &str = "this operation needs a plain number, but got an uncer
 
 const STEP: &[&str] = &["floor", "ceil", "round", "sign"];
 
+/// interp's message for printing a vector or matrix of uncertain numbers.
+pub const VECMSG: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain numbers one at a time, or use value(x) to drop the uncertainty";
+
 /// Does a value hold an uncertain number (or a list with one, or Monte Carlo samples)?
 pub fn is_unc(v: &Value) -> bool {
     matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_))
@@ -210,7 +213,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     /// a op b where a or b holds uncertain numbers (e_IBin).
     pub(crate) fn unc_bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
-        match (list_items(&a), list_items(&b)) {
+        // a vector times an uncertain number: interp makes a tuple of UFloats (kept here as a list of them)
+        let as_items = |v: &Value| match v {
+            Value::Vec(x) if matches!(a, Value::Unc(_)) || matches!(b, Value::Unc(_)) => {
+                Some(x.iter().map(|y| Value::Num(*y)).collect::<Vec<_>>())
+            }
+            v => list_items(v),
+        };
+        match (as_items(&a), as_items(&b)) {
             (Some(xs), Some(ys)) => {
                 if xs.len() != ys.len() {
                     return self.err(format!("these two lists have different lengths ({} and {})", xs.len(), ys.len()));
