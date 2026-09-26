@@ -10,11 +10,6 @@ use crate::units::Unit;
 
 impl Checker {
     // ---- stmts / parallel
-    #[allow(clippy::too_many_arguments)]
-    pub fn parallel_for(&mut self, s: &A::Stmt, _var: &str, _lo: I::Expr, _hi: I::Expr, _st: Option<I::Expr>,
-                        _body: &[A::Stmt], _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        Err(self.not_ported("parallel for", s.span))
-    }
     pub fn seed_stmt(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         Err(self.not_ported("seed", e.span))
     }
@@ -44,25 +39,6 @@ impl Checker {
     }
     pub fn sol_names(&self, _sol: usize) -> Vec<String> {
         vec![]
-    }
-    // ---- unit systems (D60)
-    pub fn natural(&self) -> bool {
-        !self.nat.is_empty()
-    }
-    pub fn nat_label(&self) -> String {
-        "SI".into()
-    }
-    pub fn nat_name(&self) -> String {
-        "SI".into()
-    }
-    pub fn nat_display(&self) -> &str {
-        ""
-    }
-    pub fn natural_const(&mut self, _c: &ConstInfo, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("constants in natural units", e.span))
-    }
-    pub fn from_system(&mut self, _sym: I::SymId, r: I::Expr, _node: &A::Expr) -> CResult<I::Expr> {
-        Ok(r)
     }
     // ---- modules
     pub fn module_as_value(&self, _m: usize, name: &str, e: &A::Expr) -> Diagnostic {
@@ -160,15 +136,6 @@ impl Checker {
         Err(self.not_ported("calling a module's function", node.span))
     }
     pub fn module_body_error(&mut self, _e: &mut Diagnostic, _info: FuncInfoId, _node: &A::Expr) {}
-    pub fn nat_contains(&self, other: &str) -> bool {
-        other.is_empty() || other == self.nat
-    }
-    pub fn system_name(&self, sys: &str) -> String {
-        sys.to_string()
-    }
-    pub fn system_consts(&self, sys: &str) -> String {
-        sys.to_string()
-    }
     /// C.stabilize: a numerically stable form of a derivative's body (calculus module).
     pub fn stabilize(&self, e: &A::Expr) -> A::Expr {
         e.clone()

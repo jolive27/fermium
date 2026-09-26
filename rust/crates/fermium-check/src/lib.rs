@@ -12,9 +12,11 @@ pub mod convert;
 pub mod exprs;
 pub mod names;
 mod pending;
+pub mod parallel;
 pub mod print;
 pub mod source;
 pub mod stmts;
+pub mod systems;
 pub mod units;
 pub mod walk;
 

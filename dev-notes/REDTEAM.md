@@ -1274,3 +1274,9 @@ Nothing here is fixed yet; the status of each finding is "open".
   oldest), and `limit_denominator` matches Python's tie rule.
 - `fdiv` (x/0 = ±∞ by the sign of 0, 0/0 = NaN), NaN comparisons, `sign(NaN) = 0` and `fpow` with 0 to a
   negative power (+∞, including −0) match the oracle.
+
+**Status of round 9 (04:40 UTC):** #1, #2, #3 fixed (D264: strict comparison, hint/line/exit code compared, isolated
+runs with an empty PATH, self-test with fake implementations in tests/test_conformance_suite.py); #11 partly (every
+failure listed; first vs last error line fixed). #6 fixed (round = llvm.round, the compiled oracle). #8 partly
+(unknown built-ins are errors now; the rest is assigned to the core-expressions port). #7 assigned to the core port.
+#4, #5, #9, #10 open (PROGRESS.md "Next").
