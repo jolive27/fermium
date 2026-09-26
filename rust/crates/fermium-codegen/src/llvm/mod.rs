@@ -38,7 +38,25 @@ pub fn supports(module: &Module) -> Result<(), String> {
     init();
     let cx = Context::create();
     let mut g = compile::Gen::new(&cx, module, 0);
-    g.compile_module()
+    guarded(|| g.compile_module())
+}
+
+/// Run a compile step; a panic in it (a bug in the back end) is reported as a construct it can't compile, so
+/// the program still runs, in the tree-walker, instead of crashing (quietly: the panic message would change the
+/// program's output).
+fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    std::panic::set_hook(hook);
+    match r {
+        Ok(r) => r,
+        Err(p) => {
+            let what = p.downcast_ref::<&str>().map(|s| s.to_string())
+                .or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_default();
+            Err(format!("internal error in the LLVM back end ({what})"))
+        }
+    }
 }
 
 fn target_machine() -> Result<TargetMachine, String> {
@@ -59,7 +77,7 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     let addr = &mut *ctx as *mut rt::Ctx as usize;
     let cx = Context::create();
     let mut g = compile::Gen::new(&cx, module, addr);
-    g.compile_module()?;
+    guarded(|| g.compile_module())?;
     let timing = std::env::var_os("FERMIUM_LLVM_TIME").is_some();
     let t0 = std::time::Instant::now();
     if std::env::var_os("FERMIUM_DUMP_LLVM").is_some() {
@@ -67,6 +85,20 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     }
     g.lm.verify().map_err(|e| format!("LLVM verifier: {}", e.to_string()))?;
     let tm = target_machine()?;
+    // this computer's CPU (the JIT's code runs only here): MCJIT's code generator follows these attributes
+    {
+        use inkwell::attributes::AttributeLoc;
+        let cpu = TargetMachine::get_host_cpu_name().to_string();
+        let features = TargetMachine::get_host_cpu_features().to_string();
+        let mut f = g.lm.get_first_function();
+        while let Some(fv) = f {
+            if fv.count_basic_blocks() > 0 {
+                fv.add_attribute(AttributeLoc::Function, cx.create_string_attribute("target-cpu", &cpu));
+                fv.add_attribute(AttributeLoc::Function, cx.create_string_attribute("target-features", &features));
+            }
+            f = fv.get_next_function();
+        }
+    }
     g.lm.set_triple(&tm.get_triple());
     g.lm.set_data_layout(&tm.get_target_data().get_data_layout());
     g.lm.run_passes("default<O2>", &tm, PassBuilderOptions::create()).map_err(|e| e.to_string())?;
@@ -86,8 +118,9 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     let t2 = std::time::Instant::now();
     unsafe { main.call() };
     if timing {
-        eprintln!("llvm: codegen+opt {:.2} ms, jit {:.2} ms, run {:.2} ms", (t1 - t0).as_secs_f64() * 1e3,
-                  (t2 - t1).as_secs_f64() * 1e3, t2.elapsed().as_secs_f64() * 1e3);
+        eprintln!("llvm: codegen+opt {:.2} ms, jit {:.2} ms, run {:.2} ms, {} integrand evaluations",
+                  (t1 - t0).as_secs_f64() * 1e3, (t2 - t1).as_secs_f64() * 1e3, t2.elapsed().as_secs_f64() * 1e3,
+                  rt::QUAD_EVALS.load(std::sync::atomic::Ordering::Relaxed));
     }
     Ok(match ctx.error.take() {
         Some(e) => Err(ctx.locate(e)),
@@ -103,7 +136,7 @@ pub fn build_object(module: &Module, source: &str, file_name: &str) -> Result<Ve
     init();
     let cx = Context::create();
     let mut g = compile::Gen::new_aot(&cx, module);
-    g.compile_module()?;
+    guarded(|| g.compile_module())?;
     let data = blob::write(module, &g.tables, source, file_name);
     let arr = cx.const_string(&data, false);
     let gb = g.lm.add_global(arr.get_type(), None, "fm_blob");

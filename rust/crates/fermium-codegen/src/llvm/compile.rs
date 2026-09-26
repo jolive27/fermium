@@ -46,7 +46,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
         Ty::Complex(_) => Kind::V(2),
         Ty::Void => Kind::Void,
         Ty::Sol(_) => Kind::H,
-        other => return Err(format!("values of type {} aren't compiled yet", other.kind())),
+        Ty::Data(_) | Ty::ComplexList(_) => Kind::Obj,
     })
 }
 
@@ -73,6 +73,7 @@ pub struct Gen<'c, 'm> {
     ctx_ptr: PointerValue<'c>,
     line_g: GlobalValue<'c>,
     stackbase_g: GlobalValue<'c>,
+    empty_g: GlobalValue<'c>,
     externs: HashMap<&'static str, FunctionValue<'c>>,
     /// declared callbacks and the addresses they are mapped to in the JIT
     pub mappings: Vec<(&'static str, usize)>,
@@ -89,6 +90,8 @@ pub struct Gen<'c, 'm> {
     /// variables that live somewhere else in the function being compiled (a parallel for's body function)
     overrides: HashMap<SymId, (PointerValue<'c>, Kind)>,
     par_count: usize,
+    /// list variables whose header (data, length) was read before the current loops (hoist_lists)
+    hoisted: HashMap<SymId, (PointerValue<'c>, IntValue<'c>)>,
     /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
     /// not an address known now
     aot: Option<GlobalValue<'c>>,
@@ -118,14 +121,21 @@ impl<'c, 'm> Gen<'c, 'm> {
         let line_g = lm.add_global(cx.i32_type(), None, "fm.line");
         line_g.set_initializer(&cx.i32_type().const_zero());
         line_g.set_linkage(Linkage::Internal);
+        // the list a list variable holds before it is set (never null, so list headers can be read speculatively)
+        let empty_g = lm.add_global(cx.struct_type(&[ptr.into(), i64t.into(), i64t.into()], false), None, "fm.empty");
+        empty_g.set_initializer(&cx.const_struct(&[i64t.const_int(8, false).const_to_pointer(ptr).into(),
+                                                   i64t.const_zero().into(), i64t.const_zero().into()], false));
+        empty_g.set_linkage(Linkage::Internal);
         let stackbase_g = lm.add_global(i64t, None, "fm.stackbase");
         stackbase_g.set_initializer(&i64t.const_zero());
         stackbase_g.set_linkage(Linkage::Internal);
         let tables = Tables { texts: m.tables.texts.iter().map(|s| Rc::from(s.as_str())).collect(), ..Default::default() };
-        let mut g = Gen { cx, lm, b: cx.create_builder(), m, tables, ctx_ptr, line_g, stackbase_g, externs: HashMap::new(),
+        let mut g = Gen { cx, lm, b: cx.create_builder(), m, tables, ctx_ptr, line_g, stackbase_g, empty_g,
+                          externs: HashMap::new(),
                           mappings: vec![], globals: HashMap::new(), funcs: vec![], fnv: None, entry_b: None,
                           locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None,
-                          overrides: HashMap::new(), par_count: 0, aot: None };
+                          overrides: HashMap::new(), par_count: 0, aot: None,
+                          hoisted: HashMap::new() };
         g.declare_runtime();
         g
     }
@@ -205,6 +215,11 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_print_msum", None, &[p, i, i, p, i], rt::fm_print_msum as *const () as usize, false);
         self.declare("fm_quad_sf_clear", None, &[p], rt::fm_quad_sf_clear as *const () as usize, false);
         self.declare("fm_print_num_capped", None, &[p, i, f], rt::fm_print_num_capped as *const () as usize, false);
+        self.declare("fm_interp", Some(i32t), &[p, i, p, p, i32t],
+                     crate::native::delegate::fm_interp as *const () as usize, false);
+        self.declare("fm_print_obj", None, &[p, i, i], crate::native::delegate::fm_print_obj as *const () as usize,
+                     false);
+        self.declare("fm_rng", Some(f), &[p, i32t, f, f, i32t], rt::fm_rng as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
@@ -246,7 +261,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         match k {
             Kind::F => self.f64t().into(),
             Kind::B => self.cx.bool_type().into(),
-            Kind::S | Kind::H => self.cx.i64_type().into(),
+            Kind::S | Kind::H | Kind::Obj => self.cx.i64_type().into(),
             Kind::L | Kind::TL => self.ptrt().into(),
             Kind::V(n) => self.f64t().array_type(n as u32).into(),
             Kind::Void => self.cx.i8_type().into(),
@@ -257,8 +272,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         Some(match k {
             Kind::F => self.nan().into(),
             Kind::B => self.cx.bool_type().const_zero().into(),
-            Kind::S | Kind::H => self.cx.i64_type().const_zero().into(),
-            Kind::L | Kind::TL => self.ptrt().const_null().into(),
+            Kind::S => self.cx.i64_type().const_zero().into(),
+            Kind::H | Kind::Obj => self.cx.i64_type().const_all_ones().into(),
+            Kind::L => self.empty_g.as_pointer_value().into(),
+            Kind::TL => self.ptrt().const_null().into(),
             Kind::V(n) => {
                 let nan = self.nan();
                 self.f64t().const_array(&vec![nan; n]).into()
@@ -407,10 +424,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             let ty = self.llty(k);
             let g = self.lm.add_global(ty, None, &format!("g{}.{}", sym, s.name));
             g.set_linkage(Linkage::Internal);
-            let init = match k {
-                Kind::F => self.fconst(0.0).as_basic_value_enum(),
-                _ => ty.const_zero(),
-            };
+            let init = self.init_value(k);
             g.set_initializer(&init);
             let r = (g.as_pointer_value(), k);
             self.globals.insert(sym, r);
@@ -424,18 +438,42 @@ impl<'c, 'm> Gen<'c, 'm> {
         let p = self.alloca(ty, &name)?;
         // a fresh local starts as 0 / null, like a zeroed frame slot
         let eb = self.entry_b.as_ref().unwrap();
-        bl!(eb.build_store(p, match k {
-            Kind::F => self.fconst(0.0).as_basic_value_enum(),
-            _ => ty.const_zero(),
-        }));
+        bl!(eb.build_store(p, self.init_value(k)));
         self.locals.insert(sym, (p, k));
         Ok((p, k))
     }
 
     fn load_var(&mut self, sym: SymId) -> R<Val<'c>> {
         let (p, k) = self.slot(sym)?;
+        if k == Kind::L {
+            return Ok(Val { k, v: Some(self.ld_list(p)?.into()) });
+        }
         let v = self.ld(self.llty(k), p, &self.m.syms[sym].name, "var")?;
         Ok(Val { k, v: Some(v) })
+    }
+
+    /// The list a list variable's slot holds: always a live list (fm.empty before it is set), so its header
+    /// (data, length) may be read ahead of time (LICM hoists them out of loops).
+    pub(super) fn ld_list(&self, p: PointerValue<'c>) -> R<PointerValue<'c>> {
+        let v = self.ld(self.ptrt(), p, "l", "var")?;
+        if let Some(i) = v.as_instruction_value() {
+            let i64t = self.cx.i64_type();
+            let _ = i.set_metadata(self.cx.metadata_node(&[i64t.const_int(24, false).into()]),
+                                   self.cx.get_kind_id("dereferenceable"));
+            let _ = i.set_metadata(self.cx.metadata_node(&[i64t.const_int(8, false).into()]),
+                                   self.cx.get_kind_id("align"));
+        }
+        Ok(v.into_pointer_value())
+    }
+
+    /// The value a fresh variable slot starts with (0, false, "", fm.empty, null text list).
+    pub(super) fn init_value(&self, k: Kind) -> BasicValueEnum<'c> {
+        match k {
+            Kind::F => self.fconst(0.0).into(),
+            Kind::L => self.empty_g.as_pointer_value().into(),
+            Kind::H | Kind::Obj => self.cx.i64_type().const_all_ones().into(),
+            _ => self.llty(k).const_zero(),
+        }
     }
 
     fn store_var(&mut self, sym: SymId, v: Val<'c>) -> R<()> {
@@ -628,6 +666,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.entry_b = Some(eb);
         self.locals.clear();
         self.overrides.clear();
+        self.hoisted.clear();
         self.loops.clear();
         self.ret_kind = ret;
         let err = self.cx.append_basic_block(fv, "err");
@@ -729,10 +768,16 @@ impl<'c, 'm> Gen<'c, 'm> {
                 if k != Kind::L {
                     return Err("index assignment to a non-list".into());
                 }
-                let l = self.ld(self.ptrt(), p, "l", "var")?.into_pointer_value();
+                let parts = match self.hoisted.get(sym) {
+                    Some(x) => *x,
+                    None => {
+                        let l = self.ld_list(p)?;
+                        self.list_parts(l)?
+                    }
+                };
                 let iv = self.expr(idx)?;
                 let i = self.to_f(iv)?;
-                let ep = self.list_elem_ptr(l, i)?;
+                let ep = self.elem_ptr(parts, i)?;
                 let vv = self.expr(value)?;
                 let v = self.to_f(vv)?;
                 self.st(ep, v, "elem")?;
@@ -836,10 +881,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let (a, z) = (self.fconst(*msg as f64), self.fconst(0.0));
                 self.guard(t, rt::E_ASSERT, a, z)?;
             }
-            StmtKind::Plot(..) => return Err("plot isn't compiled yet".into()),
+            StmtKind::Plot(..) | StmtKind::Fit { .. } | StmtKind::Animate { .. } => self.delegate_stmt(s)?,
             StmtKind::Solve { .. } => self.solve_stmt(s)?,
-            StmtKind::Fit { .. } => return Err("fit isn't compiled yet".into()),
-            StmtKind::Animate { .. } => return Err("animate isn't compiled yet".into()),
             StmtKind::Propagate { .. } => return Err("propagate isn't compiled yet".into()),
         }
         Ok(())
@@ -899,6 +942,18 @@ impl<'c, 'm> Gen<'c, 'm> {
     /// for i in 0..count { set(i); body } with break / continue.
     fn counted_loop(&mut self, count: IntValue<'c>, body: &[Stmt],
                     set: impl Fn(&mut Self, IntValue<'c>) -> R<()>) -> R<()> {
+        // the lists the body indexes, when nothing in it can change their length or where their numbers are:
+        // read their headers once, before the loop
+        let hoisted = self.hoist_lists(body)?;
+        let r = self.counted_loop_in(count, body, set);
+        for s in hoisted {
+            self.hoisted.remove(&s);
+        }
+        r
+    }
+
+    fn counted_loop_in(&mut self, count: IntValue<'c>, body: &[Stmt],
+                       set: impl Fn(&mut Self, IntValue<'c>) -> R<()>) -> R<()> {
         let i64t = self.cx.i64_type();
         let ip = self.alloca(i64t.into(), "i")?;
         bl!(self.b.build_store(ip, i64t.const_zero()));
@@ -969,7 +1024,11 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     /// The address of element i (1-based, a float) of a list, with the tree-walker's index check.
     fn list_elem_ptr(&mut self, l: PointerValue<'c>, i: FloatValue<'c>) -> R<PointerValue<'c>> {
-        let (data, len) = self.list_parts(l)?;
+        let parts = self.list_parts(l)?;
+        self.elem_ptr(parts, i)
+    }
+
+    fn elem_ptr(&mut self, (data, len): (PointerValue<'c>, IntValue<'c>), i: FloatValue<'c>) -> R<PointerValue<'c>> {
         let k = self.index_check(i, len)?;
         Ok(unsafe { bl!(self.b.build_gep(self.f64t(), data, &[k], "ep")) })
     }
@@ -1094,7 +1153,13 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                     self.call("fm_print_tlist", &[ctx, v.v.unwrap()])?;
                 }
-                PrintItem::ComplexList(..) => return Err("lists of complex numbers aren't compiled yet".into()),
+                PrintItem::ComplexList(e, f) => {
+                    let v = self.expr(e)?;
+                    if v.k != Kind::Obj {
+                        return Err("print of a list of complex numbers that isn't one".into());
+                    }
+                    self.call("fm_print_obj", &[ctx, self.i64c(*f as i64).into(), v.v.unwrap()])?;
+                }
             }
         }
         self.call("fm_print_end", &[ctx])?;
@@ -1366,6 +1431,15 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let a = vv.v.unwrap().into_array_value();
                 fv(bl!(self.b.build_extract_value(a, *k as u32, "c")).into_float_value())
             }
+            ExprKind::Index(l, i) if matches!(&l.kind, ExprKind::Var(s) if self.hoisted.contains_key(s)) => {
+                let ExprKind::Var(s) = &l.kind else { return Err("an indexed list that isn't a variable".into()) };
+                let parts = self.hoisted[s];
+                self.set_line(l.line)?;
+                let iv = self.expr(i)?;
+                let i = self.to_f(iv)?;
+                let ep = self.elem_ptr(parts, i)?;
+                fv(self.ld(self.f64t(), ep, "x", "elem")?.into_float_value())
+            }
             ExprKind::Index(l, i) => {
                 let lv = self.expr(l)?;
                 let iv = self.expr(i)?;
@@ -1388,6 +1462,8 @@ impl<'c, 'm> Gen<'c, 'm> {
             ExprKind::Integral { .. } | ExprKind::Sum { .. } | ExprKind::Root { .. } => self.calculus(e)?,
             ExprKind::SolEval { .. } | ExprKind::SolList { .. } | ExprKind::PdeEval { .. }
             | ExprKind::OdeLinSolve { .. } => self.solution_expr(e)?,
+            ExprKind::Map { .. } | ExprKind::VecSet { .. } | ExprKind::VecIndex { .. } | ExprKind::Load(_)
+            | ExprKind::Table(_) | ExprKind::Column(..) => self.delegate_expr(e)?,
             other => return Err(format!("{} isn't compiled yet", expr_name(other))),
         })
     }
@@ -1525,6 +1601,24 @@ impl<'c, 'm> Gen<'c, 'm> {
                 return Ok(fv(self.intrinsic("llvm.minnum", &[a, hi])?));
             }
         }
+        // random numbers (all-number arguments): the tree-walker's generator, directly
+        let rng = match (name, vals.len()) {
+            ("rand", 0) => Some(0),
+            ("rand2", 2) if all_num => Some(1),
+            ("randn", 0) => Some(2),
+            ("randn2", 2) if all_num => Some(3),
+            _ => None,
+        };
+        if let Some(kind) = rng {
+            let (a, b) = if vals.len() == 2 { (self.to_f(vals[0])?, self.to_f(vals[1])?) } else { (self.nan(), self.nan()) };
+            let line = self.line_val()?;
+            let ctx: BasicValueEnum = self.ctx_ptr.into();
+            let r = self.fcall("fm_rng", &[ctx, self.i32c(kind).into(), a.into(), b.into(), line.into()])?;
+            if kind == 3 {
+                self.check_err()?;
+            }
+            return Ok(fv(r));
+        }
         if name == "len" && vals.len() == 1 {
             match vals[0].k {
                 Kind::L => {
@@ -1538,7 +1632,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         // anything else: the tree-walker's own implementation, through a callback
         let ret = kind_of(&e.ty)?;
         let kinds: Vec<Kind> = vals.iter().map(|v| v.k).collect();
-        if kinds.iter().any(|k| matches!(k, Kind::Void | Kind::H)) || ret == Kind::H {
+        if kinds.iter().any(|k| matches!(k, Kind::Void)) {
             return Err(format!("built-in {name} with an argument without a value"));
         }
         self.tables.builtins.push(BuiltinSite { name: name.to_string(), args: kinds, ret });
@@ -1556,7 +1650,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                     let p = self.spill(*v)?;
                     bl!(self.b.build_ptr_to_int(p, i64t, "p"))
                 }
-                Kind::Void | Kind::H => unreachable!(),
+                Kind::Void => return Err("a built-in argument without a value".into()),
+                Kind::H | Kind::Obj => v.v.unwrap().into_int_value(),
             };
             let sp = unsafe { bl!(self.b.build_gep(i64t.array_type(n), argp, &[self.i64c(0), self.i64c(i as i64)], "a")) };
             bl!(self.b.build_store(sp, slot));
@@ -1580,7 +1675,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                     Kind::B => bl!(self.b.build_int_compare(IntPredicate::NE, raw, i64t.const_zero(), "b")).into(),
                     Kind::S => raw.into(),
                     Kind::L | Kind::TL => bl!(self.b.build_int_to_ptr(raw, self.ptrt(), "p")).into(),
-                    _ => unreachable!(),
+                    Kind::H | Kind::Obj => raw.into(),
+                    Kind::V(_) | Kind::Void => return Err("a built-in result of an unexpected kind".into()),
                 };
                 Val { k: ret, v: Some(v) }
             }
@@ -1616,6 +1712,10 @@ fn expr_name(k: &ExprKind) -> &'static str {
     }
 }
 
+#[path = "deleg.rs"]
+mod deleg;
+#[path = "hoist.rs"]
+mod hoist;
 #[path = "par.rs"]
 mod par;
 #[path = "lam.rs"]

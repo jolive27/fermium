@@ -50,6 +50,8 @@ pub struct PdeCheck {
 
 /// A solution made by the compiled code.
 pub struct CSol {
+    /// the index of the tree-walker's copy of it (for plots and the other constructs the tree-walker runs)
+    pub interp_h: usize,
     pub sol: ode::Sol,
     pub rhs: Option<(OdeFn, Snapshot)>,
     pub grid: Option<(f64, f64)>,
@@ -164,7 +166,8 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
             c.interp.rt_warn(kind, a, line);
         }
         let snap = unsafe { snapshot(env as *const *mut u8, &kinds) };
-        c.sols.push(CSol { sol: solv, rhs: Some((f, snap)), grid: None, check: None });
+        let interp_h = mirror(c, &solv, None);
+        c.sols.push(CSol { interp_h, sol: solv, rhs: Some((f, snap)), grid: None, check: None });
         c.sols.len() as i64 - 1
     })
 }
@@ -231,7 +234,8 @@ pub extern "C" fn fm_eigen(c: C, site: i64, f: OdeFn, env: *mut u8, a: f64, b: f
             }
             solv.push(xv, &row, &drow);
         }
-        c.sols.push(CSol { sol: solv, rhs: None, grid: None, check: None });
+        let interp_h = mirror(c, &solv, None);
+        c.sols.push(CSol { interp_h, sol: solv, rhs: None, grid: None, check: None });
         c.sols.len() as i64 - 1
     })
 }
@@ -279,9 +283,19 @@ pub extern "C" fn fm_pde(c: C, site: i64, f: OdeFn, env: *mut u8, t0: f64, t1: f
         }
         let check = r.coarse.as_ref().map(|co| PdeCheck { coarse: co.to_sol(), ranges: r.fine.ranges(), xname, tname,
                                                            warned: std::cell::Cell::new(false) });
-        c.sols.push(CSol { sol: r.fine.to_sol(), rhs: None, grid: Some((xa, xb)), check });
+        let solv = r.fine.to_sol();
+        let interp_h = mirror(c, &solv, Some((xa, xb)));
+        c.sols.push(CSol { interp_h, sol: solv, rhs: None, grid: Some((xa, xb)), check });
         c.sols.len() as i64 - 1
     })
+}
+
+/// The tree-walker's copy of a solution (plots and the other constructs it runs read it; they don't ask for
+/// x'(t) or a PDE's grid check, which only the compiled code answers).
+fn mirror(c: &mut Ctx, sol: &ode::Sol, grid: Option<(f64, f64)>) -> usize {
+    c.interp.solve.sols.push(std::rc::Rc::new(crate::eval_solve::SolData { sol: sol.clone(), rhs: None, grid,
+                                                                          check: None }));
+    c.interp.solve.sols.len() - 1
 }
 
 fn tname_of(module: &Module, i: f64) -> String {

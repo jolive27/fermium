@@ -209,10 +209,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             let ty = self.llty(k);
             let p = self.alloca(ty, &self.m.syms[s].name.clone())?;
-            let zero = match k {
-                Kind::F => self.fconst(0.0).as_basic_value_enum(),
-                _ => ty.const_zero(),
-            };
+            let zero = self.init_value(k);
             self.st(p, zero, "var")?;
             self.overrides.insert(s, (p, k));
         }
