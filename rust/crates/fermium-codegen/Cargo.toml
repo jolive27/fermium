@@ -3,7 +3,16 @@ name = "fermium-codegen"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+build = "build.rs"
+
+[features]
+default = ["llvm"]
+# the LLVM back end (LLVM 18 through inkwell, linked statically by build.rs; see rust/BUILD.md)
+llvm = ["dep:inkwell"]
 
 [dependencies]
 fermium-ir = { path = "../fermium-ir" }
 fermium-units = { path = "../fermium-units" }
+# LLVM 18, one pinned version (spec §B4). llvm-sys doesn't link LLVM itself ("no-llvm-linking"): build.rs links
+# the static libraries and their system libraries (statically too where possible), so the binary needs nothing.
+inkwell = { version = "=0.5.0", default-features = false, features = ["llvm18-0-no-llvm-linking", "target-x86", "target-aarch64"], optional = true }
