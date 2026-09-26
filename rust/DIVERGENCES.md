@@ -161,3 +161,10 @@ v1's compiled code never freed lists (a documented trap: a long loop that builds
 In the Rust implementation a list is a reference-counted value (`Rc<RefCell<Vec<f64>>>` in the tree-walker),
 freed when the last variable holding it goes away; list aliasing semantics (D26: `ys = xs` shares the list) are
 unchanged, so no program prints anything different.
+
+## parallel for: the first failing iteration's error is reported
+
+When a run-time error happens in several iterations of a `parallel for`, v1's compiled code reported the error
+of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
+for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
+iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
