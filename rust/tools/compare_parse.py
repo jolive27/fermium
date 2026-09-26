@@ -43,9 +43,19 @@ def main():
     ap.add_argument("--show", type=int, default=15)
     ap.add_argument("--only", default="")
     ap.add_argument("--list", action="store_true", help="print every disagreeing file")
+    ap.add_argument("--snippets", action="store_true",
+                    help="compare on the harvested test-suite strings (rust/tools/harvest_snippets.py) instead")
+    ap.add_argument("--fuzz", action="store_true",
+                    help="compare on the mutated programs of rust/tools/fuzz_snippets.py instead")
     a = ap.parse_args()
     mode = "--tokens" if a.tokens else "--fix" if a.fix else "--oracle"
-    files = [f for f in programs() if a.only in f]
+    ap_fuzz = "--fuzz" in sys.argv
+    if a.snippets or ap_fuzz:
+        sub = "fuzz" if ap_fuzz else "snippets"
+        files = sorted(glob.glob(os.path.join(ROOT, "rust", "target", sub, "*.fm")))
+    else:
+        files = programs()
+    files = [f for f in files if a.only in f]
     cache = os.path.join(ROOT, "rust", "target", "parse-oracle", mode.strip("-"))
     os.makedirs(cache, exist_ok=True)
     keys, todo = {}, []

@@ -125,7 +125,13 @@ pub struct Parser {
     pub stmt_done: bool,
     pub chain_count: u32,
     next_id: u32,
+    /// Nesting depth of the recursive descent: deeper than MAX_DEPTH is an error, not a stack overflow.
+    pub depth: u32,
 }
+
+/// Fermium 1.5 stops at Python's recursion limit (20000 frames: about 1300 nested brackets); the port stops at
+/// a similar depth (PARITY.md). The parser runs on a thread with a large stack (`with_big_stack`).
+pub const MAX_DEPTH: u32 = 5000;
 
 impl Parser {
     pub fn new(tokens: Vec<Token>, diags: Diagnostics, known: &[String]) -> Self {
@@ -150,10 +156,24 @@ impl Parser {
             stmt_done: false,
             chain_count: 0,
             next_id: 1,
+            depth: 0,
         }
     }
 
     // ------------------------------------------------------------ helpers
+    /// Run a recursive step with the nesting depth checked.
+    pub fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
+        if self.depth >= MAX_DEPTH {
+            return Err(Diagnostic { message: "this program is nested too deeply for Fermium to compile".into(),
+                                    line: None, col: None, length: 1, hint: None,
+                                    severity: crate::diag::Severity::Error, fix: vec![] });
+        }
+        self.depth += 1;
+        let r = f(self);
+        self.depth -= 1;
+        r
+    }
+
     pub fn tok(&self) -> &Token {
         &self.toks[self.i]
     }
@@ -474,6 +494,10 @@ impl Parser {
 
     // ------------------------------------------------------------ statements
     pub fn statement(&mut self, end_line: bool) -> R<Stmt> {
+        self.nested(|p| p.statement_(end_line))
+    }
+
+    fn statement_(&mut self, end_line: bool) -> R<Stmt> {
         let t = self.i;
         let tt = self.tok().clone();
         let nx = self.peek(1).clone();
