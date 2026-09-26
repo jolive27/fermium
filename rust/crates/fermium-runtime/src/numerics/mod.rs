@@ -7,6 +7,7 @@
 
 pub mod dense;
 pub mod eigen;
+pub mod fft;
 pub mod fit;
 pub mod linalg;
 pub mod ode;
