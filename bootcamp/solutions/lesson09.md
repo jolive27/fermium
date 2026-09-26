@@ -111,7 +111,7 @@ plot x vs t to "driven.png"
 ```
 largest amplitude: 0.250 m
 theory at resonance, F0 / (b omega): 0.25 m
-plot saved to driven.png
+plot saved to /Users/ada/fermium/bootcamp/solutions/driven.png
 ```
 
 The amplitude grows and then levels off at F₀/(bω): **resonance**. With less damping (smaller b) it would grow much larger.

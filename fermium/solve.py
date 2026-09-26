@@ -1,8 +1,10 @@
 """Checking for `solve` (ODEs), `fit` (least squares) and `plot`."""
 from __future__ import annotations
 
+import dataclasses
 import math
 import os
+import re
 
 from . import ast as A
 from . import calculus as C
@@ -796,6 +798,31 @@ def _label(ck, node):
     return C.to_source(node)
 
 
+def _data_names(node, ctx, found):
+    """The names of loaded data sets used as `name.column` inside node."""
+    if isinstance(node, A.Field) and isinstance(node.target, A.Name):
+        b, _ = ctx.scope.lookup(node.target.name)
+        if isinstance(getattr(b, "ty", None), DataTy):
+            found.add(node.target.name)
+    if isinstance(node, A.Node):
+        for f in dataclasses.fields(node):
+            _data_names(getattr(node, f.name), ctx, found)
+    elif isinstance(node, (list, tuple)):
+        for x in node:
+            _data_names(x, ctx, found)
+    return found
+
+
+def _axis_name(ck, node, ctx):
+    """What an axis and the legend call a plotted thing: its source, with a data set's name dropped before
+    its columns (`T`, not `data.T`; `T^2`, not `data.T^2`) (spec A6.4, D253)."""
+    src = C.to_source(node)
+    for nm in _data_names(node, ctx, set()):
+        src = re.sub(rf"(?<![\w.]){re.escape(nm)}\.(?=\w)", "", src)
+    return src
+
+
+
 def check_plot(ck, s: A.Plot, ctx):
     from .m3solve import plots_pde, check_animate
     if getattr(s, "options", {}).get("animate") or plots_pde(ck, s, ctx):
@@ -876,7 +903,7 @@ def _plot_series(ck, sr, ctx, s):
         else:
             xv = _plot_side(ck, sr.x, ctx)
     if True:
-        entry = {"ylabel": _label(ck, sr.y), "xlabel": _label(ck, sr.x)}
+        entry = {"ylabel": _axis_name(ck, sr.y, ctx), "xlabel": _axis_name(ck, sr.x, ctx)}
         for side, node in ((yv, sr.y), (xv, sr.x)):
             if isinstance(side, SolRef) and side.view.n > 1:
                 nm = side.view.name

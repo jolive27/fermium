@@ -249,7 +249,7 @@ def test_65_title_before_vs_has_a_clear_error():
 
 def test_65_plot_with_bare_title_runs(tmp_path):
     out = run('xs = [1, 2, 3] [m]\nplot xs vs xs, title "sq" to "p.png"', base_dir=str(tmp_path))
-    assert out == "plot saved to p.png" and (tmp_path / "p.png").exists()
+    assert out == f"plot saved to {tmp_path / 'p.png'}" and (tmp_path / "p.png").exists()
 
 
 # ---------------------------------------------------------------- fermium build: the new code paths

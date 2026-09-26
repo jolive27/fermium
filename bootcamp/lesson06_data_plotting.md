@@ -71,7 +71,7 @@ plot data.T vs data.L to "pendulum_data.png"
 
 <!-- output -->
 ```
-plot saved to pendulum_data.png
+plot saved to /Users/ada/fermium/bootcamp/pendulum_data.png
 ```
 
 `plot Y vs X` puts Y on the vertical axis and X on the horizontal axis. `to "pendulum_data.png"` chooses the file name (without it, Fermium makes up a name, here `data_T_vs_data_L.png`). The picture is saved in the same folder as your program. Open it by double-clicking it in Finder, or from the Terminal with:
@@ -149,7 +149,7 @@ plot data.T vs data.L, 2 pi sqrt(Ls / g) vs Ls to "pendulum_fit.png"
 fit T = 2π √(L/g)   (7 data points from data/pendulum.csv)
   g = 9.856 m/s²   (standard error 0.038 m/s²)
   rms residual = 0.00850 s
-plot saved to pendulum_fit.png
+plot saved to /Users/ada/fermium/bootcamp/pendulum_fit.png
 ```
 
 ![Data with the fitted curve](pendulum_fit.png)
@@ -165,7 +165,7 @@ plot T_of_L(L) vs L from 0 m to 2 m to "pendulum_theory.png"
 
 <!-- output -->
 ```
-plot saved to pendulum_theory.png
+plot saved to /Users/ada/fermium/bootcamp/pendulum_theory.png
 ```
 
 ## Example 2: radioactive decay
@@ -196,7 +196,7 @@ fit counts = N0 exp(-t/τ)   (13 data points from data/decay.csv)
   τ = 20.10 min   (standard error 0.26 min)
   rms residual = 10.8
 half-life: 13.9 min
-plot saved to decay.png
+plot saved to /Users/ada/fermium/bootcamp/decay.png
 ```
 
 ![Counts against time](decay.png)

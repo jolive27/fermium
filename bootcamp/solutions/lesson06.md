@@ -44,7 +44,7 @@ fit x = M·9.81 [m/s²]/k   (5 data points from ../data/spring.csv)
   k = 49.01 N/m   (standard error 0.47 N/m)
   rms residual = 0.126 cm
 49.0 N/m
-plot saved to spring_data.png
+plot saved to /Users/ada/fermium/bootcamp/solutions/spring_data.png
 ```
 
 About 49 N/m: a 1 kg mass would stretch this spring by about 20 cm.
@@ -101,5 +101,5 @@ plot d.counts vs d.t, model vs ts to "decay_model.png"
 
 <!-- output -->
 ```
-plot saved to decay_model.png
+plot saved to /Users/ada/fermium/bootcamp/solutions/decay_model.png
 ```

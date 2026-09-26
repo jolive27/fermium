@@ -69,7 +69,7 @@ def test_plot_series_need_the_same_y_units():
 
 def test_plot_series_with_matching_units_is_fine(tmp_path):
     src = 'xs = [1 m, 2 m]\nys = [1 s, 2 s]\nzs = [3 s, 4 s]\nplot ys vs xs, zs in ms vs xs to "h.png"'
-    assert run(src, base_dir=str(tmp_path)) == "plot saved to h.png"
+    assert run(src, base_dir=str(tmp_path)) == f"plot saved to {tmp_path / 'h.png'}"
 
 
 def test_plot_length_mismatch_stops_and_leaves_no_png(tmp_path):

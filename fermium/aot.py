@@ -26,7 +26,7 @@ from .errors import Diagnostics, FermiumError
 from .parser import parse
 from llvmlite import ir
 
-from .runtime.core import axis_label, display_unit, init_llvm
+from .runtime.core import axis_label, display_unit, init_llvm, is_formula_label
 
 RT_C = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtime", "aot_rt.c")
 
@@ -116,10 +116,13 @@ def tables_c(tables) -> str:
     for i, info in enumerate(tables.plots):
         ss = []
         opts = info.get("options", {})
+        named = any(not is_formula_label(s["ylabel"]) for s in info["series"])
         for s in info["series"]:
             yu = display_unit(s["rydim"], s.get("yhint"))
             xu = display_unit(s["rxdim"], s.get("xhint"))
             yl = axis_label(s["ylabel"], _unit_name(yu), opts.get("ylabel"))
+            if named and is_formula_label(s["ylabel"]):
+                yl = ""                  # left off the y axis, as runtime.core.y_axis_label does (D253)
             xl = axis_label(s["xlabel"], _unit_name(xu), opts.get("xlabel"))
             ss.append(f"{{{cs(escape(s['ylabel']))}, {cs(escape(yl))}, {cs(escape(xl))}, {yu.factor!r}, "
                       f"{yu.offset!r}, {xu.factor!r}, {xu.offset!r}, {1 if s.get('points') else 0}}}")

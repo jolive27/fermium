@@ -19,6 +19,8 @@ Two patterns are recognised:
 
 ```fermium blocks run in the markdown file's folder (so data/ and plot files resolve). "run as" blocks
 run in a temporary folder under the given file name, so error messages show a friendly file name.
+Absolute paths (`plot saved to ...`) are shown as if the repository were at /Users/ada/fermium, so the boxes
+are the same on every computer.
 
 The programs run in this process with the Fermium next to this file (not whatever `fermium` is on the
 PATH), and the output is what `fermium run` prints: warnings first, then the program's output, then a
@@ -40,7 +42,8 @@ if ROOT not in sys.path:
 PAT = re.compile(
     r"(?P<head>(?:<!-- run as (?P<name>[\w.\-]+) -->\n```\n|```fermium\n))(?P<code>(?:(?!```).)*?)```\n\n"
     r"<!-- output -->\n```\n(?P<old>(?:(?!```).)*?)```", re.S)
-SHOWN_DIR = "/Users/ada/fermium/bootcamp"   # what a temp folder is shown as in messages
+SHOWN_ROOT = "/Users/ada/fermium"           # what this repository's folder is shown as in messages (D251)
+SHOWN_DIR = SHOWN_ROOT + "/bootcamp"        # what a temp folder is shown as in messages
 
 
 def default_files():
@@ -75,6 +78,8 @@ def run(code, name, mddir):
         out, err = out.replace(cwd, SHOWN_DIR), err.replace(cwd, SHOWN_DIR)
     elif failed:
         print(f"  !! a ```fermium block failed in {mddir}:\n{code}\n{err}", file=sys.stderr)
+    # `plot saved to` prints an absolute path; show the same, machine-independent one on every computer
+    out, err = out.replace(ROOT, SHOWN_ROOT), err.replace(ROOT, SHOWN_ROOT)
     # warnings are printed before running, runtime errors after the output
     text = err + out if err.startswith("warning") else out + err
     return text if text.endswith("\n") or not text else text + "\n"

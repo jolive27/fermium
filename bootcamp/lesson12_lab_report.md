@@ -127,7 +127,7 @@ fit T = 2π √(L/g)   (7 data points from data/pendulum.csv)
   rms residual = 0.00850 s
 g from the fit: 9.856 ± 0.038 m/s²
 g − g_n = 0.049 ± 0.038 m/s² which is 1.3 standard deviations
-plot saved to pendulum_errorbars.png
+plot saved to /Users/ada/fermium/bootcamp/pendulum_errorbars.png
 ```
 
 ![the pendulum data with error bars](pendulum_errorbars.png)

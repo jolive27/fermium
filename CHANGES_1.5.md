@@ -29,3 +29,9 @@ What that changes:
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.
 - `fermium doctor` prints one command to copy when packages are missing: `python3 -m pip install -e ".[full]"` (run it in the fermium folder), instead of one `pip install` per package (D250).
+
+## Plots (D251–D253)
+
+- `plot saved to` shows the full path of the picture, like `plot saved to /Users/ada/lab/gallery/pendulum.png`, so you can find it whichever folder you ran the program from. (It used to show the name relative to the program's folder.) The same for animations and for programs made with `fermium build`.
+- Axis labels use the column's name: `T [s]`, not `data.T [s]`. When you draw a fitted curve over your data, the y axis says `T [s]` and the legend names the curve.
+- `examples/01_pendulum.fm` draws the fitted curve over the measurements: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm`.

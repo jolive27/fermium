@@ -96,8 +96,9 @@ def test_example_runs(name):
     for line in out.splitlines():
         if line.startswith("plot saved to"):
             saved = line.split("plot saved to", 1)[1].strip()
-            assert saved.startswith("gallery/"), f"plots go to examples/gallery/, got {saved}"
-            assert os.path.exists(os.path.join(EXAMPLES, saved))
+            # the absolute path (spec A6.2, D251), in examples/gallery/
+            assert saved == os.path.join(os.path.abspath(EXAMPLES), "gallery", os.path.basename(saved)), saved
+            assert os.path.exists(saved)
 
 
 # --- physics checks ---------------------------------------------------------------------
@@ -510,7 +511,7 @@ def test_pde_heat_waves_tunnelling():
     r = num(out, "reflected:")
     assert 0.08 < t < 0.2 and t + r == pytest.approx(1, abs=1e-3)
     assert num(out, "total probability (Crank–Nicolson keeps it):") == pytest.approx(1, abs=1e-4)
-    assert "animation saved to gallery/tunnelling.gif (40 frames)" in out
+    assert f"animation saved to {os.path.join(os.path.abspath(EXAMPLES), 'gallery', 'tunnelling.gif')} (40 frames)" in out
     assert os.path.exists(os.path.join(EXAMPLES, "gallery", "heat_pde.png"))
 
 

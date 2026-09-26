@@ -15,7 +15,7 @@ def test_spec_snippet_runs_from_file():
     out = run(src, base_dir=os.path.join(HERE, "programs")).split("\n")
     assert out[0] == "9.70 m/s²"
     assert out[1] == "31.8 ft/s²"
-    assert out[2] == "plot saved to x_vs_t.png"
+    assert out[2] == "plot saved to " + os.path.join(HERE, "programs", "x_vs_t.png")
     assert out[3].startswith("fit T = 2π √(L/g)")
     assert out[4].strip().startswith("g = 9.8")
     assert "m/s²" in out[4] and "standard error" in out[4]

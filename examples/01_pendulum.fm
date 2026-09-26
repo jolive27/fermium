@@ -36,4 +36,7 @@ data = load "data/pendulum.csv"
 fit T = 2π √(L / g) to data
 print "g from the fit:", g, " (standard gravity:", g_n, ")"
 
-plot data.T vs data.L to "gallery/pendulum_data.png"
+# The measurements as dots, and the fitted curve T = 2π √(L/g) drawn over them.
+# A formula is plotted over a range (`vs L from 20 cm to 120 cm`); L there is
+# the formula's own variable, and g is the fitted value.
+plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm to "gallery/pendulum_data.png"

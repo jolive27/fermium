@@ -188,7 +188,7 @@ def test_page_backslash_tab_completion(page):
 def test_page_shows_plots(page):
     code = 'x = [1 s, 2 s, 3 s]\ny = [1 m, 4 m, 9 m]\nplot y vs x to "parabola.png"\n'
     out = run_in_page(page, code)
-    assert "plot saved to parabola.png" in out
+    assert "plot saved to " in out and "parabola.png" in out
     assert page.locator("#output img").count() == 1
     assert page.eval_on_selector("#output img", "img => img.naturalWidth") > 300
 
