@@ -1,0 +1,5 @@
+data = load "pendulum.csv"
+fit T = 2π √(L/g) to data
+d = load "decay.csv"
+fit N = N0 exp(-t/τ) to d
+fit N = N0 exp(-t/τ) + B to d with τ = 5 min

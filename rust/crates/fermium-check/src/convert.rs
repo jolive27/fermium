@@ -164,7 +164,7 @@ impl Checker {
             if self.natural() {
                 hint = self.natural_convert_hint();
             }
-            return Err(self.err(format!("can't show {} in {} ({})", self.desc(&vd), u.name, units::dim_name(&u.dim)),
+            return Err(self.err(format!("can't show {} in {} ({})", self.desc(&vd), u.name, self.desc(&DExpr::of(u.dim))),
                                 e.span, Some(hint)));
         }
         let uh = hint_of(&u);
@@ -275,7 +275,7 @@ impl Checker {
     /// `x to N digits`.
     pub fn e_digits(&mut self, e: &A::Expr, value: &A::Expr, digits: u32, ctx: &mut Ctx) -> CResult<I::Expr> {
         let mut v = self.expr(value, ctx)?;
-        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::ComplexList(_)) {
+        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_) | Ty::ComplexList(_)) {
             return Err(self.err("'to N digits' only works on numbers", e.span, None));
         }
         if !(1..=17).contains(&digits) {

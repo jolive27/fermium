@@ -36,64 +36,6 @@ pub(crate) fn warn_at(line: u32, msg: &str) {
     }
 }
 
-/// glibc's cbrt (sysdeps/ieee754/dbl-64/s_cbrt.c), which v1's compiled code calls: Rust's `f64::cbrt` is
-/// correctly rounded and so differs from it in the last bit for some arguments (visible with `to 17 digits`).
-pub fn cbrt(x: f64) -> f64 {
-    fn frexp(x: f64) -> (f64, i32) {
-        if x == 0.0 || !x.is_finite() {
-            return (x, 0);
-        }
-        let bits = x.to_bits();
-        let e = ((bits >> 52) & 0x7ff) as i32;
-        if e == 0 {
-            let (m, e2) = frexp(x * 2f64.powi(54));
-            return (m, e2 - 54);
-        }
-        (f64::from_bits((bits & !(0x7ffu64 << 52)) | (1022u64 << 52)), e - 1022)
-    }
-    fn ldexp(mut x: f64, mut e: i32) -> f64 {
-        while e > 1000 {
-            x *= 2f64.powi(1000);
-            e -= 1000;
-        }
-        while e < -1000 {
-            x *= 2f64.powi(-1000);
-            e += 1000;
-        }
-        x * 2f64.powi(e)
-    }
-    const CBRT2: f64 = 1.2599210498948731648;
-    const SQR_CBRT2: f64 = 1.5874010519681994748;
-    let factor = [1.0 / SQR_CBRT2, 1.0 / CBRT2, 1.0, CBRT2, SQR_CBRT2];
-    let (xm, xe) = frexp(x.abs());
-    if xe == 0 && (x == 0.0 || !x.is_finite()) {
-        return x + x;
-    }
-    let u = 0.354895765043919860
-        + ((1.50819193781584896
-            + ((-2.11499494167371287
-                + ((2.44693122563534430
-                    + ((-1.83469277483613086 + (0.784932344976639262 - 0.145263899385486377 * xm) * xm) * xm))
-                    * xm))
-                * xm))
-            * xm);
-    let t2 = u * u * u;
-    let ym = u * (t2 + 2.0 * xm) / (2.0 * t2 + xm) * factor[(2 + xe % 3) as usize];
-    ldexp(if x > 0.0 { ym } else { -ym }, xe / 3)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn cbrt_is_glibcs() {
-        // values from glibc 2.36's cbrt (python3 ctypes)
-        for (x, want) in [(6.348380305380394, 1.8516304404461712), (-27.0, -3.0000000000000004), (0.001, 0.1),
-                          (1e-310, 4.641588833612775e-104), (-5.5, -1.7651741676630317), (0.7, 0.8879040017426008)] {
-            assert_eq!(super::cbrt(x), want, "{x}");
-        }
-    }
-}
-
 const QZERO_MSG: &str = "this integral came out as exactly 0 because the integrand was 0 at every point where it was \
                          sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range \
                          that fits it";

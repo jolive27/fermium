@@ -10,7 +10,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Map { .. } => self.eval_core(e, fr),
             ExprKind::VecSet { .. } | ExprKind::VecIndex { .. } => self.eval_vecmat(e, fr),
             ExprKind::Integral { .. } | ExprKind::Sum { .. } | ExprKind::Root { .. } => self.eval_calculus(e, fr),
-            ExprKind::SolEval { .. } | ExprKind::SolList { .. } | ExprKind::PdeEval { .. } => self.eval_solution(e, fr),
+            ExprKind::SolEval { .. } | ExprKind::SolList { .. } | ExprKind::PdeEval { .. }
+            | ExprKind::OdeLinSolve { .. } => self.eval_solution(e, fr),
             ExprKind::Load(_) | ExprKind::Table(_) | ExprKind::Column(..) => self.eval_data(e, fr),
             ExprKind::Uncertain(..) => self.eval_uncertain(e, fr),
             _ => self.err("this isn't supported by the Rust back end yet"),

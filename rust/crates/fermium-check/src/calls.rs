@@ -455,7 +455,8 @@ impl Checker {
         let placeholder = DExpr::fresh();
         let inst_name = self.fresh_name(&self.funcs[info].name.clone());
         self.module.funcs.push(I::Func { name: inst_name, params: vec![], ret_ty: Ty::Num(placeholder.clone()),
-                                         body: vec![], locals: vec![], sf: None });
+                                         body: vec![], locals: vec![], sf: None, display: display.clone(),
+                                         def_line: fdef.span.line });
         let inst = self.module.funcs.len() - 1;
         self.func_extra.resize(inst + 1, FuncExtra::default());
         self.func_extra[inst] = FuncExtra { display: display.clone(), ret_placeholder: Some(placeholder.clone()),
@@ -467,6 +468,8 @@ impl Checker {
         let scope = self.new_scope(Some(fscope), "func");
         let mut fctx = Ctx { func: Owner::Func(inst), scope, is_main: false, lam: None, loop_depth: 0, branch: 0,
                              ret_types: self.new_ret_types(), regions: vec![], lam_parents: vec![] };
+        // Python checks the parameters before its try: their errors get no call note (D101: nor a module note)
+        let mut in_body = false;
         let result: CResult<()> = (|| {
             for (p, a) in params.iter().zip(&fargs) {
                 match a {
@@ -505,6 +508,7 @@ impl Checker {
                     Checked::Sol(_) => unreachable!(),
                 }
             }
+            in_body = true;
             match body {
                 A::FuncBody::Expr(_) => {
                     let b = self.body_expr(info).unwrap();
@@ -535,6 +539,9 @@ impl Checker {
         self.func_extra[inst].checking = false;
         if let Err(mut e) = result {
             self.funcs[info].instances.remove(&key);
+            if !in_body {
+                return Err(e);
+            }
             if e.line.is_none() {
                 e.line = Some(node.span.line).filter(|l| *l != 0);
                 e.col = Some(node.span.col).filter(|c| *c != 0);

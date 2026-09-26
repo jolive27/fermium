@@ -57,8 +57,8 @@ pub struct FuncInfo {
     pub stable: bool,
     /// the unit system it was defined in (None: SI, callable anywhere; D60)
     pub nat: Option<crate::systems::Sys>,
-    /// set by modules: the module it came from
-    pub module: Option<String>,
+    /// set by modules: the module it came from (index into Checker.mods.modules)
+    pub module: Option<usize>,
     /// printed instead of name(params) for an unnamed function: d/dt (3t²), ∫ x dx
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
@@ -83,6 +83,13 @@ pub struct SolView {
     pub name: String,
     pub n: usize,
     pub stride: usize,
+    /// a complex unknown: two slots per derivative (D93)
+    pub cplx: bool,
+    /// display units: of this derivative, of each derivative order, of the time; significant figures
+    pub hint: Option<I::Hint>,
+    pub hints: Vec<Option<I::Hint>>,
+    pub thint: Option<I::Hint>,
+    pub sf: Option<u32>,
 }
 
 /// A one-line helper defined inside a function (D194), expanded at each call.
@@ -106,6 +113,8 @@ pub enum Binding {
     Module(usize),
     /// `use python numpy as np` (pyinterop.py PyModRef)
     PyModule(usize),
+    /// the unknown of a PDE after its solve (m3solve.py PdeView); index into Checker::solve.pdes
+    Pde(usize),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -171,6 +180,8 @@ pub struct SymExtra {
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
     pub list_sf: Option<u32>,
+    /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
+    pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }
 
 /// What the result of checking an expression can be: a value, or a function/solution used by name.
@@ -219,6 +230,8 @@ pub struct Checker {
     pub nat: crate::systems::Sys,
     /// unit-system bookkeeping (systems.rs)
     pub sys: crate::systems::SysState,
+    /// modules imported in this compilation (modules.rs)
+    pub mods: crate::modules::ModState,
     pub positive_names: std::collections::HashSet<String>,
     pub used_consts: std::collections::HashSet<String>,
     pub warned: std::collections::HashSet<String>,
@@ -241,6 +254,8 @@ pub struct Checker {
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
     /// calculus: derived functions made so far (calculus.rs)
     pub calc: crate::calculus::CalcState,
+    /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
+    pub solve: crate::solve::SolveTables,
 }
 
 impl Checker {
@@ -269,6 +284,7 @@ impl Checker {
             future_funcs: HashMap::new(),
             nat: Default::default(),
             sys: Default::default(),
+            mods: Default::default(),
             positive_names: Default::default(),
             used_consts: Default::default(),
             warned: Default::default(),
@@ -282,6 +298,7 @@ impl Checker {
             fmt_dims: vec![],
             nodes: HashMap::new(),
             calc: Default::default(),
+            solve: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -486,6 +503,8 @@ impl Checker {
         self.index_nodes(prog);
         self.positive_names = if self.opts.repl { Default::default() } else { crate::calculus::positive_names(prog) };
         self.note_top_units(prog);
+        let g = self.globals;
+        self.note_program(prog, g);
         self.future_funcs = prog
             .body
             .iter()
@@ -555,6 +574,10 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Analyze { .. } => self.s_analyze(s, ctx),
+            K::Import { .. } => self.s_import(s, ctx),
+            K::UsePython { .. } => self.s_use_python(s, ctx),
+            K::Solve(sv) => self.s_solve(s, sv, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }

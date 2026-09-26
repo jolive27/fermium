@@ -42,6 +42,11 @@ impl Value {
     }
 }
 
+/// Run-time line codes of module code (errors.py, D185): `(k << MODLINE_SHIFT) | line`, k − 1 the text id of the
+/// module's file name.
+pub const MODLINE_SHIFT: u32 = 20;
+pub const MODLINE_MAX: u32 = (1 << MODLINE_SHIFT) - 1;
+
 /// A run-time error in plain physics language (the program line it happened on).
 #[derive(Clone, Debug)]
 pub struct RunError {
@@ -136,7 +141,7 @@ pub fn powc(x: f64, p: f64) -> f64 {
         return if x >= 0.0 { fdiv(1.0, x * x.sqrt()) } else { f64::NAN };
     }
     if (p - 1.0 / 3.0).abs() < 1e-15 {
-        return crate::eval_calc::cbrt(x); // glibc's, as the compiled v1 code calls
+        return crate::eval_core::cmath::cbrt(x);
     }
     if let Some(n) = odd_root_numerator(p) {
         // x^(n/q), q odd: the real root, also for x < 0 (like cbrt)
@@ -200,19 +205,33 @@ pub struct Frame {
     pub(crate) vars: HashMap<SymId, Value>,
 }
 
+thread_local! {
+    /// The stack address where the program started (Interpreter::run), for the recursion check.
+    static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The bytes of stack a program may use before runaway recursion stops it. The default suits a main thread's
+/// 8 MB stack; a driver that runs the program on a thread with a big stack raises it (v1: 400 MB of 512 MB).
+pub static STACK_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(6 << 20);
+
 /// Runs a checked module.
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
     pub printer: P,
     pub(crate) globals: HashMap<SymId, Value>,
     pub(crate) line: u32,
+    /// the program line that called into a module's code (errors inside it point there, D185)
+    pub(crate) call_line: u32,
     /// Builtins the runtime provides (special functions, numerics), looked up by name.
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
+    /// ODE / eigenvalue / PDE solutions and run-time warnings shown (eval_solve.rs)
+    pub(crate) solve: crate::eval_solve::SolveState,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, builtins: HashMap::new() }
+        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
+                      solve: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -220,9 +239,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub fn run(&mut self) -> Result<(), RunError> {
+        let here = 0u8;
+        STACK_BASE.with(|b| b.set(&here as *const u8 as usize));
         let mut fr = Frame::default();
         let main = &self.module.main;
-        match self.block(main, &mut fr)? {
+        let r = self.block(main, &mut fr).map_err(|e| self.locate(e));
+        match r? {
             Flow::Normal | Flow::Return(_) => Ok(()),
             Flow::Break | Flow::Continue => Ok(()),
         }
@@ -289,12 +311,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         l.borrow_mut().extend(ys)
                     }
                     (Value::TextList(l), Value::Str(t)) => l.borrow_mut().push(t),
-                    _ => {}
+                    (Value::CList(l), Value::Vec(z)) if z.len() == 2 => l.borrow_mut().push((z[0], z[1])),
+                    _ => return self.err("not yet supported by the Rust back end: pushing this value"),
                 }
             }
             StmtKind::Clear(sym) => {
-                if let Value::List(l) = self.get(*sym, fr)? {
-                    l.borrow_mut().clear();
+                match self.get(*sym, fr)? {
+                    Value::List(l) => l.borrow_mut().clear(),
+                    Value::TextList(l) => l.borrow_mut().clear(),
+                    Value::CList(l) => l.borrow_mut().clear(),
+                    _ => return self.err("not yet supported by the Rust back end: clearing this value"),
                 }
             }
             StmtKind::If(c, then, other) => {
@@ -336,6 +362,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::List(l) => l.borrow().iter().map(|x| Value::Num(*x)).collect(),
                     Value::TextList(l) => l.borrow().iter().map(|t| Value::Str(t.clone())).collect(),
                     Value::Vec(v) => v.iter().map(|x| Value::Num(*x)).collect(),
+                    // for z in fft(xs): each z a complex number (D243)
+                    Value::CList(l) => l.borrow().iter().map(|z| Value::Vec(Rc::new(vec![z.0, z.1]))).collect(),
                     _ => vec![],
                 };
                 for v in items {
@@ -631,15 +659,47 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     pub(crate) fn call(&mut self, f: usize, args: Vec<Value>) -> Result<Value, RunError> {
         let func = &self.module.funcs[f];
+        // runaway recursion: stop with the compiled path's error before the stack overflows (stack_check)
+        let here = 0u8;
+        let sp = &here as *const u8 as usize;
+        let base = STACK_BASE.with(|b| b.get());
+        if base != 0 && base.saturating_sub(sp) > STACK_LIMIT.load(std::sync::atomic::Ordering::Relaxed) {
+            let name = if func.display.is_empty() { "a function" } else { func.display.as_str() };
+            return Err(RunError { message: format!("{name} called itself too many times (the program ran out of \
+                                                    stack) -- is a base case missing, like  if n <= 0 then ...?"),
+                                  line: if func.def_line != 0 { func.def_line } else { self.line }, hint: None });
+        }
         let mut fr = Frame::default();
         for (p, v) in func.params.iter().zip(args) {
             fr.vars.insert(*p, v);
         }
         let body = &func.body;
-        match self.block(body, &mut fr)? {
+        let caller_line = self.line;
+        if body.first().is_some_and(|s| s.line > MODLINE_MAX) && 0 < caller_line && caller_line <= MODLINE_MAX {
+            self.call_line = caller_line; // calling a module's function from the program (D185)
+        }
+        let r = match self.block(body, &mut fr)? {
             Flow::Return(v) => Ok(v),
             _ => Ok(Value::Void),
+        };
+        self.line = caller_line; // later errors in the caller are on its own line
+        r
+    }
+
+    /// A run-time error's program line: in a module's code, the line that called into it, and the message says
+    /// where in the module it happened (errors.py decode_line, D185).
+    fn locate(&self, mut e: RunError) -> RunError {
+        if e.line > MODLINE_MAX {
+            let (k, ml) = ((e.line >> MODLINE_SHIFT) as usize, e.line & MODLINE_MAX);
+            let texts = &self.module.tables.texts;
+            let name = if 0 < k && k <= texts.len() { texts[k - 1].as_str() } else { "a module" };
+            let suf = format!(" (in {name}, line {ml})");
+            if !e.message.ends_with(&suf) {
+                e.message += &suf;
+            }
+            e.line = self.call_line;
         }
+        e
     }
 
     pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {

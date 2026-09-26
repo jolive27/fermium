@@ -52,3 +52,22 @@ values on every other fixture case). `quad_v1` keeps v1's exact behaviour for co
   energies agree to 4e-12 relative.
 - FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
 - PDE: a tridiagonal LU instead of SuperLU; 3e-13.
+
+### Plots: native SVG/PNG/GIF instead of matplotlib (spec B6)
+
+- v1 drew `plot` with matplotlib (PNG by default) and `plot … animate` with matplotlib + pillow; `fermium build`
+  had its own SVG plotter (aot_data.c). v2 draws everything natively (`src/plot/`): SVG, PNG (own rasterizer
+  and deflate encoder) and animated GIF (own LZW), with text in DejaVu Sans (the font matplotlib uses; outlines
+  embedded from `rust/tools/font_subset.py`, Bitstream Vera licence reproduced in `font_data.rs`).
+- Same semantics as v1: file names, the messages "plot saved to <absolute path>", "animation saved to … (N
+  frames)" and "animation saved as N PNG frames in …_frames/", axis labels with units in brackets (`axis_label`,
+  `y_axis_label` with D253's formula rule), markers for data, error bars and ±1σ bands (D124), log axes,
+  xlim/ylim (D161), reversed axes, equal aspect for orbits, the 6-time PDE plot and the time label of animation
+  frames.
+- Not pixel-identical to matplotlib: the layout is v1's native plotter's (770×495, matplotlib's colours and
+  5 % margins, 1-2-2.5-5 ticks, the legend in the corner with the fewest data points, like loc="best" restricted
+  to corners); log axes have no minor ticks; `plot … animate` without a .gif path writes PNG frames (v1 did so
+  only without pillow).
+- A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
+- Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
+  deflate (round trip), LZW (round trip), labels and number format.
