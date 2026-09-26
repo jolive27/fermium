@@ -23,6 +23,17 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
     let mut ig = Integrator { x: var.to_string(), positive: positive.to_vec(), depth: 0, fresh: 0, budget: 400, subs: 0 };
     let e = simplify(integrand);
     let Some(r) = ig.integ(&e) else {
+        // the term of a sum that has no formula, for the special-function message
+        let mut bad = e.clone();
+        for (_, t) in sum_terms(&e, 1) {
+            let mut ig2 = Integrator { x: var.to_string(), positive: positive.to_vec(), depth: 0, fresh: 0, budget: 400,
+                                       subs: 0 };
+            if ig2.integ(&simplify(&t)).is_none() {
+                bad = simplify(&t);
+                break;
+            }
+        }
+        let e = bad;
         if let Some(f) = non_elementary(&e, var) {
             return Err(ferr0(format!("SymPy's formula for this integral uses the function {f}, which Fermium doesn't \
                                       have yet: {f}({})", sympy_str(&ig.nonelem_arg(&e).unwrap_or_else(|| name(var)))),
@@ -30,8 +41,11 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
         }
         return Err(ferr0("Fermium couldn't find a formula for this integral", Some(HINT.into())));
     };
-    // SymPy's canonical form and order, as v1 printed its results
-    let r = crate::tidy::sympy_form(&r).unwrap_or_else(|| simplify(&r));
+    // SymPy's canonical form and order, as v1 printed its results; v1 kept the shorter of SymPy's answer and its
+    // simplify(), which the tidy candidates (factored, together) stand in for
+    let pos: Vec<String> = positive.iter().filter(|p| p.as_str() != var).cloned().collect();
+    let heurisch = e.walk().iter().any(|n| matches!(call_parts(n), Some(("exp", [u])) if linear(u, var).is_some()));
+    let r = crate::tidy::sympy_best_with(&simplify(&r), &pos, heurisch);
     if !antiderivative_ok(&r, &e, var, positive) {
         return Err(ferr0("Fermium's formula for this integral isn't right for every value of the constants in it, so \
                           Fermium won't use it", Some(HINT.into())));
@@ -41,7 +55,7 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
 
 /// A formula in SymPy's spelling (for the message about a missing special function).
 fn sympy_str(e: &A::Expr) -> String {
-    key(e).replace('^', "**")
+    crate::tidy::sympy_text(e)
 }
 
 /// The special function a known non-elementary integral needs (Ei, Si, Ci, li, erfi), if it is one.
@@ -55,12 +69,23 @@ fn non_elementary(e: &A::Expr, x: &str) -> Option<&'static str> {
         for ((fb, fp), (gb, gp)) in [((&b0, p0), (&b1, p1)), ((&b1, p1), (&b0, p0))] {
             if fp == 1.0 && gp == -1.0 && lin(gb) {
                 for (f, name) in [("exp", "Ei"), ("sin", "Si"), ("cos", "Ci"), ("sinh", "Shi"), ("cosh", "Chi")] {
-                    if is_call(fb, f) && key(&call_parts(fb).unwrap().1[0]) == key(gb) {
-                        return Some(name);
+                    // f(c u)/u for a constant c: Ei(c u), Si(c u), …
+                    if is_call(fb, f) {
+                        let arg = &call_parts(fb).unwrap().1[0];
+                        let ratio = simplify(&div(arg.clone(), gb.clone()));
+                        if key(arg) == key(gb) || !depends_on(&ratio, x) {
+                            return Some(name);
+                        }
                     }
                 }
             }
         }
+    }
+    // ln(u) · exp(c u) (times a power of u): by parts leaves exp(c u)/u
+    if vf.iter().any(|f| matches!(call_parts(f), Some(("ln" | "log", [u])) if lin(u)))
+        && vf.iter().any(|f| matches!(call_parts(f), Some(("exp", [u])) if lin(u)))
+    {
+        return Some("Ei");
     }
     if vf.len() == 1 {
         let (b, p) = base_pow(vf[0]);
@@ -262,6 +287,7 @@ impl Integrator {
         let (c, fs) = factors(e);
         let (vf, kf): (Vec<A::Expr>, Vec<A::Expr>) = fs.into_iter().partition(|f| depends_on(f, &x));
         let konst = build_product(c, &kf);
+        let vf = merge_powers(vf);
         let vpart = build_product(1.0, &vf);
         let (_, vf) = factors(&vpart);
         let g = self.integ_product(&vf, &vpart)?;
@@ -290,9 +316,6 @@ impl Integrator {
         if let Some(r) = self.by_parts(vf) {
             return Some(r);
         }
-        if let Some(r) = self.substitution(whole) {
-            return Some(r);
-        }
         // a polynomial written as a product (x (x + 1)²): expand and integrate term by term
         if let Some(c) = poly_coeffs(whole, &x, 12) {
             if c.len() > 1 && vf.len() > 1 || vf.iter().any(|f| matches!(op_of(f), Some("+") | Some("-"))) {
@@ -314,7 +337,7 @@ impl Integrator {
             if let Some(i) = vf.iter().position(|f| matches!(op_of(f), Some("+") | Some("-"))) {
                 let others: Vec<A::Expr> = vf.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
                 let mut out: Option<A::Expr> = None;
-                for (s, t) in sum_terms(&vf[i], 1) {
+                for (s, t) in crate::simplify::terms(&vf[i]) {
                     let mut fs = others.clone();
                     fs.push(t);
                     let g = self.integ(&simplify(&build_product(s as f64, &fs)))?;
@@ -325,6 +348,9 @@ impl Integrator {
                 }
                 return out;
             }
+        }
+        if let Some(r) = self.substitution(whole) {
+            return Some(r);
         }
         self.partial_fractions(whole)
     }
@@ -390,7 +416,26 @@ impl Integrator {
             return None;
         }
         let pv = p.num_value();
-        if let Some((a, _)) = linear(b, &x) {
+        if let Some((a, c0)) = linear(b, &x) {
+            // (a x + b)ⁿ with whole n and numbers a, b: SymPy expands it and integrates term by term
+            if let (Some(n), Some(_), Some(bv)) = (pv, a.num_value(), c0.num_value()) {
+                if n >= 2.0 && n == n.trunc() && n <= 12.0 && bv != 0.0 && b.name() != Some(&x) {
+                    if let Some(c) = poly_coeffs(&pw(b.clone(), p.clone()), &x, 12) {
+                        let mut out: Option<A::Expr> = None;
+                        for (k, ck) in c.iter().enumerate() {
+                            if is_num_v(ck, 0.0) {
+                                continue;
+                            }
+                            let t = mul(div(ck.clone(), num(k as f64 + 1.0)), pwn(xn(), k as f64 + 1.0));
+                            out = Some(match out {
+                                None => t,
+                                Some(o) => add(o, t),
+                            });
+                        }
+                        return out;
+                    }
+                }
+            }
             if pv == Some(-1.0) {
                 return Some(div(call1("ln", b.clone()), a));
             }
@@ -414,6 +459,27 @@ impl Integrator {
         // sinⁿ, cosⁿ (n ≥ 3) by the reduction formulas; lnⁿ by parts
         if let Some(n) = pv.filter(|n| *n >= 3.0 && *n == n.trunc() && *n <= 12.0) {
             if let Some((fname @ ("sin" | "cos"), [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x).filter(|_| n % 2.0 == 1.0) {
+                    // odd n, as SymPy: sinⁿ u = (1 − cos² u)^m sin u, so ∫ = −Σ C(m,j) (−1)^j cos^(2j+1) u/(2j+1)
+                    let m = ((n - 1.0) / 2.0) as i64;
+                    let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
+                    let other = if fname == "sin" { c } else { s };
+                    let mut out: Option<A::Expr> = None;
+                    let mut binom = 1.0;
+                    for j in 0..=m {
+                        if j > 0 {
+                            binom = binom * (m - j + 1) as f64 / j as f64;
+                        }
+                        let coef = binom * if j % 2 == 0 { 1.0 } else { -1.0 } / (2 * j + 1) as f64;
+                        let coef = if fname == "sin" { -coef } else { coef };
+                        let t = mul(num(coef), pwn(other.clone(), (2 * j + 1) as f64));
+                        out = Some(match out {
+                            None => t,
+                            Some(o) => add(o, t),
+                        });
+                    }
+                    return Some(div(out?, a));
+                }
                 if let Some((a, _)) = linear(u, &x) {
                     // ∫ sinⁿ u = -sinⁿ⁻¹ u cos u / n + (n−1)/n ∫ sinⁿ⁻² u ; cos: +cosⁿ⁻¹ u sin u / n + …
                     let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
@@ -519,7 +585,12 @@ impl Integrator {
                 let sk = self.sqrt_of(&k)?;
                 let q = div(u.clone(), sk.clone());
                 if pv == -0.5 {
-                    let g = if rs { call1("asinh", q) } else { call1("acosh", q) };
+                    // SymPy: asinh(u/k), and ln(u + √(u² − k²)) for the other sign
+                    let g = if rs {
+                        call1("asinh", q)
+                    } else {
+                        call1("ln", add(u.clone(), sqrt(sub(pwn(u.clone(), 2.0), k.clone()), 2)))
+                    };
                     return Some(div(g, sqa));
                 }
                 let root = sqrt(add(pwn(u.clone(), 2.0), r.clone()), 2);
@@ -636,7 +707,13 @@ impl Integrator {
             let Some((gname, [u])) = call_parts(g) else { continue };
             let others: Vec<A::Expr> = vf.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
             let p = simplify(&build_product(1.0, &others));
-            if poly_coeffs(&p, &x, 12).is_none() {
+            let is_poly = poly_coeffs(&p, &x, 12).is_some();
+            // x^p (any p ≠ −1) is fine for the logarithm and inverse functions: ∫ x^p ln x = x^(p+1) ln x/(p+1) − …
+            let x_power = others.len() == 1 && {
+                let (b, e) = base_exp(&others[0]);
+                b.name() == Some(x.as_str()) && !depends_on(&e, &x) && !is_num_v(&e, -1.0)
+            };
+            if !is_poly && !(x_power && matches!(gname, "ln" | "log" | "atan" | "asin" | "acos" | "asinh" | "atanh")) {
                 continue;
             }
             if linear(u, &x).is_none() {
@@ -837,6 +914,15 @@ impl Integrator {
     }
 
     fn nonelem_arg(&self, e: &A::Expr) -> Option<A::Expr> {
+        // the argument of the exponential / trigonometric factor (Ei(2*x) for exp(2x)/x)
+        let (_, fs) = factors(e);
+        for f in &fs {
+            if let Some((fname, [u])) = call_parts(f) {
+                if matches!(fname, "exp" | "sin" | "cos" | "sinh" | "cosh") && depends_on(u, &self.x) {
+                    return Some(u.clone());
+                }
+            }
+        }
         let (_, fs) = factors(e);
         for f in fs {
             let (b, p) = base_pow(&f);
@@ -859,6 +945,47 @@ fn over(g: A::Expr, a: A::Expr) -> A::Expr {
         return mul(neg(name("𝑖")), g);
     }
     div(g, a)
+}
+
+/// Factors with the same base combined, √ and nested powers included: √x · x² → x^(5/2).
+fn merge_powers(fs: Vec<A::Expr>) -> Vec<A::Expr> {
+    // exp(a) exp(b) = exp(a + b) and exp(a)ⁿ = exp(n a), as SymPy combines them
+    let fs: Vec<A::Expr> = fs
+        .into_iter()
+        .map(|f| {
+            let (b, e) = base_exp(&f);
+            match call_parts(&b) {
+                Some(("exp", [u])) if !is_num_v(&e, 1.0) && e.num_value().is_some() => {
+                    call1("exp", simplify(&mul(e, u.clone())))
+                }
+                _ => f,
+            }
+        })
+        .collect();
+    let (exps, others): (Vec<A::Expr>, Vec<A::Expr>) = fs.into_iter().partition(|f| is_call(f, "exp"));
+    let mut fs = others;
+    if exps.len() > 1 {
+        let mut arg = call_parts(&exps[0]).unwrap().1[0].clone();
+        for e in &exps[1..] {
+            arg = add(arg, call_parts(e).unwrap().1[0].clone());
+        }
+        fs.push(call1("exp", simplify(&arg)));
+    } else {
+        fs.extend(exps);
+    }
+    let mut out: Vec<(String, A::Expr, A::Expr)> = vec![];
+    for f in fs {
+        let (b, e) = base_exp(&f);
+        let k = key(&b);
+        match out.iter_mut().find(|x| x.0 == k) {
+            Some(x) => x.2 = simplify(&add(x.2.clone(), e)),
+            None => out.push((k, b, e)),
+        }
+    }
+    out.into_iter()
+        .filter(|(_, _, e)| !is_num_v(e, 0.0))
+        .map(|(_, b, e)| if is_num_v(&e, 1.0) { b } else { pw(b, e) })
+        .collect()
 }
 
 fn clean(v: f64) -> f64 {
