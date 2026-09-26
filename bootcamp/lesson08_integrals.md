@@ -69,7 +69,7 @@ Fermium knows that the result has the units of the integrand **times** the units
 A 2 m rod gets denser toward one end: its linear density is λ(x) = 2 kg/m + (1 kg/m²) x. Its mass is M = ∫λ dx, and its centre of mass is x_cm = (∫ x λ dx) / M:
 
 ```fermium
-density(x) = 2 kg/m + 1 kg/m^2 * x
+density(x) = 2 kg/m + 1 kg/m^2 x
 M = integral density(x) dx from 0 m to 2 m
 x_cm = (integral x density(x) dx from 0 m to 2 m) / M
 print "mass:", M
@@ -89,7 +89,7 @@ centre of mass: 1.11 m
 The upper limit can be a variable. Here's the velocity of a car that starts from rest and whose acceleration grows with time, a(t) = (2 m/s³) t. The velocity at time T is v = ∫₀ᵀ a dt:
 
 ```fermium
-a(t) = 2 m/s^3 * t
+a(t) = 2 m/s^3 t
 for T from 0 s to 3 s step 1 s
     v = integral a(t) dt from 0 s to T
     print "at", T, "velocity is", v

@@ -9,7 +9,7 @@ This lesson assumes you've met derivatives in a calculus class. If they're rusty
 Start with a function (Lesson 3), then put a prime after its name:
 
 ```fermium
-y(t) = 20 m/s * t - ½ * 9.81 m/s^2 * t^2
+y(t) = 20 m/s t - ½ 9.81 m/s^2 t^2
 v = y'
 a = y''
 print y
@@ -29,7 +29,7 @@ Fermium did the calculus for you, **exactly**, the way you would on paper (it is
 `v` and `a` are new functions. Call them like any other:
 
 ```fermium
-y(t) = 20 m/s * t - ½ * 9.81 m/s^2 * t^2
+y(t) = 20 m/s t - ½ 9.81 m/s^2 t^2
 v = y'
 print "velocity at 1 s:", v(1 s)
 print "velocity at 3 s:", v(3 s)
@@ -50,7 +50,7 @@ You can write `y'(2 s)` directly without giving the derivative a name.
 If you prefer the notation dy/dt, you can write exactly that: `dy/dt`, or `d/dt y` (the variable after `d/d` must be the function's parameter). Both mean the same as `y'`:
 
 ```fermium
-y(t) = 20 m/s * t - ½ * 9.81 m/s^2 * t^2
+y(t) = 20 m/s t - ½ 9.81 m/s^2 t^2
 v = dy/dt
 print v
 print dy/dt(2 s)
@@ -124,7 +124,7 @@ The force is negative because it points *inward* (toward smaller r), and it's ab
 Evaluate a derivative at many times at once:
 
 ```fermium
-x(t) = 5 m * sin(2 t / 1 s)
+x(t) = 5 m sin(2 t / 1 s)
 ts = linspace(0 s, 1 s, 5)
 print ts
 print x'(ts)
@@ -141,7 +141,7 @@ print x'(ts)
 You might wonder whether Fermium estimates the derivative with a small step, like (x(t+h) − x(t))/h. It doesn't: it applies the rules of differentiation (sum rule, product rule, chain rule, derivatives of sin, exp, ln, …) to your formula, just as you would. Compare with the small-step estimate:
 
 ```fermium
-x(t) = 3 m/s^3 * t^3
+x(t) = 3 m/s^3 t^3
 h = 1e-6 s
 print "estimate:", (x(2 s + h) - x(2 s)) / h to 9 digits
 print "exact:   ", x'(2 s) to 9 digits

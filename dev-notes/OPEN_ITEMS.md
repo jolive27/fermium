@@ -229,3 +229,10 @@ CHEATSHEET:108 and TROUBLESHOOTING:254 (the spacing-dependent `/` rule, which A1
 - **A8 (review items):** D21 (`≈` near zero: `1e-12 m/s ≈ 0 m/s` is false), D48 (pointer as a double).
   A8.3 (research data citations) wasn't in these sources and wasn't checked here.
 - **A9 (hygiene):** remove the empty untracked top-level `stdlib/` folder (BL-16).
+
+## Added during Phase A (after the triage)
+| ID | Item | Class | Notes |
+|---|---|---|---|
+| A3-NaN | √ and log of a negative value computed at run time give NaN (a literal is a compile-time error since D237) | fix natively in B | Julia raises DomainError; a check in every √ touches three back ends and the benchmark loops right before the freeze |
+| A8.3-SKM93 | BBN rates checked against Kawano's NUC123 code, not against the printed SKM93 tables (the PDFs were image-only or unreachable) | C/D (research) | D255; ⁷Li/H corrected 5.10 → 4.36 ×10⁻¹⁰ |
+| A8.3-WS | Woods–Saxon parameters (Bohr & Mottelson) in research/shell_model_magic_numbers are still marked "from memory" | C/D (research) | not in the A8.3 list; check against B&M Vol. I |

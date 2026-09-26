@@ -92,7 +92,7 @@ Do arithmetic on a list and it happens to **every element**. This is one of the 
 
 ```fermium
 ts = [0 s, 1 s, 2 s, 3 s, 4 s]
-ys = 20 m/s * ts - ½ * 9.81 m/s^2 * ts^2
+ys = 20 m/s ts - ½ 9.81 m/s^2 ts^2
 print ys
 ```
 
