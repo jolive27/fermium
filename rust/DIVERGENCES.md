@@ -318,3 +318,20 @@ checker doesn't compile yet); `cargo test -p fermium-jupyter` plays a client ove
 - Run-time warnings (they go to the process's stderr) are shown after the cell's printed output; v1 showed
   them in the order they happened.
 - stdin (`input`) and comms are not used by Fermium; history, inspect and comm_info get empty replies.
+
+## Python interop (use python, and calling Fermium from Python)
+
+`use python` behaves as in v1 (conformance area python-interop: 24 of 24). Differences in how it is set up, and
+in the API for calling Fermium from Python (D142), which no conformance case covers:
+
+- The binary loads libpython with dlopen the first time a program says `use python` (spec §B5.14), from the
+  `python3` found on the PATH, then /usr/local/bin/python3 and /usr/bin/python3, or from `FERMIUM_PYTHON` /
+  `FERMIUM_LIBPYTHON`. v1 *was* Python, so it used its own interpreter. A Python built without its shared
+  library can't be used; the error at the `use python` line says so.
+- Calling Fermium from Python is the module `fermium2` (rust/crates/fermium-pyapi/python), a ctypes wrapper
+  of the library libfermium_pyapi, instead of `fermium.compile` / `fermium.load` in the `fermium` package.
+  It has v1's API (compile, load, Module, Quantity, Q, QuantityArray, ComplexQuantity; the same errors and
+  warnings); python/test_fermium2.py ports v1's tests of it.
+- It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
+  (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
+  faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.
