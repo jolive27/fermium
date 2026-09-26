@@ -932,6 +932,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         for it in items {
             match it {
                 PrintItem::Num(e, f) => {
+                    if crate::eval_calc::measured_sum(e) {
+                        // printed by the decimal-place rule at run time (eval_calc::sum_sf): the tree-walker's
+                        return Err("a measured sum printed by the decimal-place rule".into());
+                    }
                     let v = self.expr(e)?;
                     let x = self.to_f(v)?;
                     self.call("fm_print_num", &[ctx, self.i64c(*f as i64).into(), x.into()])?;

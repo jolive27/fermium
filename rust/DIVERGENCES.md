@@ -134,6 +134,24 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
   ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
 
+## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
+
+- v1 gave a sum or difference the significant figures of its most precise operand (D95: the textbook rule
+  counts decimal places, which needs the magnitudes, known only at run time): `293.15 K + 0.5 K` printed
+  `293.65 K`, `1.20 m + 2.0 m` printed `3.20 m`, `0.1 + 0.2` printed `0.30`.
+- v2 applies the textbook rule when a printed sum's operands all carry measured precision (significant figures
+  from written values; whole literals like `1` or `300` are exact, so `1 - r` keeps v1's rule): at run time each
+  operand's last significant decimal place is found in the unit the result prints in, the sum keeps the
+  coarsest one, and that sets its figures (at least one): `293.6 K` (293.65 is 293.6499… in binary),
+  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
+  variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
+  same.
+- Measured on the whole conformance suite before adopting it: 3 cases change (the three above), no others.
+  An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
+  worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
+- Tests: `fermium-codegen/src/eval_calc.rs` (`sums_keep_the_coarsest_decimal_place`); conformance cases
+  89747a9eb10a 664786f7f30f 09fe8fafb686 (recorded divergences).
+
 ## Special functions and cbrt: the C library, as v1's compiled code
 
 v1's compiled code called the platform C library for erf, erfc, gamma, lgamma, besselj/bessely, asinh/acosh/atanh

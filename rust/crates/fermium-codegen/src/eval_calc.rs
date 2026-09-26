@@ -58,6 +58,32 @@ pub(crate) fn integral_shaped(e: &Expr) -> bool {
     }
 }
 
+/// A printed sum or difference whose every operand carries measured precision (significant figures from a
+/// written value; whole literals are exact and don't count), not asked for `to N digits`.
+pub(crate) fn measured_sum(e: &Expr) -> bool {
+    fn leaves_measured(e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, a, b)
+                if matches!(e.ty, fermium_ir::Ty::Num(_)) => leaves_measured(a) && leaves_measured(b),
+            _ => e.sf.is_some(),
+        }
+    }
+    matches!(e.kind, ExprKind::Bin(fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub, ..))
+        && matches!(e.ty, fermium_ir::Ty::Num(_))
+        && e.direct != 2
+        && leaves_measured(e)
+}
+
+/// The decimal place (power of ten) of the last significant figure of x with sf figures.
+fn last_place(x: f64, sf: u32) -> Option<i32> {
+    (x != 0.0 && x.is_finite()).then(|| x.abs().log10().floor() as i32 - sf as i32 + 1)
+}
+
+/// The significant figures of x when its last meaningful decimal place is 10^place (at least 1).
+pub(crate) fn decimal_rule_sf(x: f64, place: i32) -> Option<u32> {
+    (x != 0.0 && x.is_finite()).then(|| (x.abs().log10().floor() as i32 - place + 1).clamp(1, 17) as u32)
+}
+
 /// Show a run-time warning once per distinct text (Runtime.warn_text).
 pub(crate) fn warn_text(text: &str) {
     let text = if text.starts_with("warning: ") { text.to_string() } else { format!("warning: {text}") };
@@ -166,6 +192,40 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
         }
         Ok(r?.num())
+    }
+
+    /// (value, last significant decimal place in the display unit, k = its SI factor) of a measured sum: the
+    /// coarsest place of its operands (the textbook rule).
+    fn sum_place(&mut self, e: &Expr, k: f64, fr: &mut Frame) -> Result<(f64, Option<i32>), RunError> {
+        if let ExprKind::Bin(op @ (fermium_ir::BinOp::Add | fermium_ir::BinOp::Sub), a, b) = &e.kind {
+            if matches!(e.ty, fermium_ir::Ty::Num(_)) {
+                let (va, pa) = self.sum_place(a, k, fr)?;
+                let (vb, pb) = self.sum_place(b, k, fr)?;
+                let v = self.bin(*op, Value::Num(va), Value::Num(vb))?.num();
+                let p = match (pa, pb) {
+                    (Some(x), Some(y)) => Some(x.max(y)),
+                    _ => None,
+                };
+                return Ok((v, p));
+            }
+        }
+        let v = self.eval(e, fr)?.num();
+        Ok((v, e.sf.and_then(|s| last_place(v / k, s))))
+    }
+
+    /// The value of a printed measured sum and its significant figures by the decimal-place rule (spec B2).
+    pub(crate) fn sum_sf(&mut self, e: &Expr, fmt: usize, fr: &mut Frame) -> Result<(f64, Option<u32>), RunError> {
+        let k = match self.module.tables.fmts.get(fmt) {
+            Some(f) => {
+                let hint = f.hint.as_ref().map(|h| fermium_units::Unit { name: h.name.clone(), dim: h.dim,
+                                                                           factor: h.factor, offset: h.offset });
+                fermium_units::display_unit(&f.dim, hint.as_ref()).factor
+            }
+            None => 1.0,
+        };
+        let (v, p) = self.sum_place(e, k, fr)?;
+        let x = v / k;
+        Ok((v, p.and_then(|p| decimal_rule_sf(x, p))))
     }
 
     fn fail(&self, f: Fail, fmt: Option<usize>) -> RunError {
@@ -296,7 +356,22 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
 #[cfg(test)]
 mod tests {
-    use super::meaningful_sf;
+    use super::{decimal_rule_sf, last_place, meaningful_sf};
+
+    #[test]
+    fn sums_keep_the_coarsest_decimal_place() {
+        // 293.15 K + 0.5 K: places −2 and −1 → 293.65 to the tenths, 4 figures (293.6 K; 293.65 is 293.6499…)
+        let p = last_place(293.15, 5).unwrap().max(last_place(0.5, 1).unwrap());
+        assert_eq!(p, -1);
+        assert_eq!(decimal_rule_sf(293.65, p), Some(4));
+        // 1.20 m + 2.0 m → 3.2 m; 938.272 MeV + 2.2 MeV → 940.5 MeV; 0.1 + 0.2 → 0.3
+        assert_eq!(decimal_rule_sf(3.2, last_place(1.2, 3).unwrap().max(last_place(2.0, 2).unwrap())), Some(2));
+        assert_eq!(decimal_rule_sf(940.472, last_place(938.272, 6).unwrap().max(last_place(2.2, 2).unwrap())), Some(4));
+        assert_eq!(decimal_rule_sf(0.30000000000000004, last_place(0.1, 1).unwrap().max(last_place(0.2, 1).unwrap())),
+                   Some(1));
+        // 1.00 m − 0.999 m: nothing is left at the hundredths, so one figure
+        assert_eq!(decimal_rule_sf(0.0010000000000000009, -2), Some(1));
+    }
 
     #[test]
     fn rounding_level_integrals_keep_only_their_meaningful_figures() {
