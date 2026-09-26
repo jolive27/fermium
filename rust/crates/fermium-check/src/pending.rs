@@ -81,12 +81,6 @@ impl Checker {
     pub fn e_list_lit(&mut self, e: &A::Expr, _items: &[A::Expr], _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("a list", e.span))
     }
-    pub fn e_convert(&mut self, e: &A::Expr, _v: &A::Expr, _u: &A::UnitExpr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("in (unit conversion)", e.span))
-    }
-    pub fn e_digits(&mut self, e: &A::Expr, _v: &A::Expr, _d: u32, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("to N digits", e.span))
-    }
     pub fn cplx_builtin(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported(&format!("{name} of a complex number"), e.span))
     }
@@ -101,8 +95,6 @@ impl Checker {
     pub fn leibniz(&mut self, _e: &A::Expr, _ctx: &mut Ctx) -> Option<A::Expr> {
         None
     }
-    pub fn warn_limit_division(&mut self, _e: &A::Expr, _b: &I::Expr) {}
-    pub fn warn_confusable_sum(&mut self, _op: &str, _a: &I::Expr, _b: &I::Expr, _e: &A::Expr) {}
     pub fn cplx_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("complex arithmetic", e.span))
     }

@@ -8,6 +8,7 @@ pub mod ast_ext;
 pub mod builtins;
 pub mod calls;
 pub mod checker;
+pub mod convert;
 pub mod exprs;
 pub mod names;
 mod pending;
