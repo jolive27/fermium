@@ -55,6 +55,7 @@ impl Default for RunOptions {
 
 pub fn run_file(file: &str, o: RunOptions) -> ExitCode {
     let file = file.to_string();
+    fermium_repl::stop_on_ctrl_c();
     fermium_codegen::eval::STACK_LIMIT.store(400 << 20, std::sync::atomic::Ordering::Relaxed);
     let h = std::thread::Builder::new().stack_size(STACK).spawn(move || run_file_here(&file, &o));
     match h {
