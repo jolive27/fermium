@@ -1022,13 +1022,18 @@ impl Checker {
     // ------------------------------------------------------------ using a module's names
     /// The module a Name / Field node refers to, or None.
     pub fn module_of(&self, node: &A::Expr, ctx: &Ctx) -> Option<usize> {
+        self.module_of_in(node, ctx.scope)
+    }
+
+    /// The module a Name / Field node refers to from a scope, or None.
+    pub fn module_of_in(&self, node: &A::Expr, scope: ScopeId) -> Option<usize> {
         match &node.kind {
-            A::ExprKind::Name { name } => match self.lookup(ctx.scope, name) {
+            A::ExprKind::Name { name } => match self.lookup(scope, name) {
                 Some((Binding::Module(m), _)) => Some(m),
                 _ => None,
             },
             A::ExprKind::Field { target, name } => {
-                let m = self.module_of(target, ctx)?;
+                let m = self.module_of_in(target, scope)?;
                 match self.scopes[self.mods.modules[m].scope].names.get(name) {
                     Some(Binding::Module(x)) => Some(*x),
                     _ => None,
