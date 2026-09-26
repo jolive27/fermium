@@ -140,7 +140,7 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
   same.
 - Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
-  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`, v1
+  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`; since the cancellation rounding of red team 10 #7, `0 μJ`; v1
   `-6.78×10⁻¹⁵ μJ`).
   An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
   worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
