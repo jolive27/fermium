@@ -41,3 +41,4 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 ## Known traps (by design, documented)
 - `2 g h` means 2 grams times h (a unit right after a number, D7). Fermium warns only if you have defined your own `g`. Write `2*g*h` or `2 g_n h`.
 - Lists are never freed while a program runs (no GC). Fine for scripts, bad for very long loops that allocate.
+- A bundled correctly-rounded libm (CORE-MATH or similar) so printed last digits are identical on every platform (D271); needs re-checking every golden against v1 on Linux.
