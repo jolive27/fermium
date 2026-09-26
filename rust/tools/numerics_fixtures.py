@@ -389,8 +389,40 @@ name/method N E1..EN [psi_k(x_i) psi_k'(x_i) at i = round(f*(len-1)) for f in EI
     w.close()
 
 
+# --------------------------------------------------------------------------------------- linalg
+# v1's fermium/linalg.py (n <= 4) and linalg_big.py (n > 4) with FloatOps (what both back ends compute).
+def gen_linalg():
+    from fermium import linalg, linalg_big
+    ops = linalg.FloatOps
+    w = Writer("linalg.txt", """
+v1's small/big linear algebra (fermium.linalg / linalg_big with FloatOps).
+name:A a...  name:B b...  name:M m... (SPD)  then  name:det d  name:solve x...  name:inv x...  name:eig vals... vecs...  name:geig vals... vecs...""")
+    for n in (2, 3, 4, 5, 8, 16):
+        la = linalg_big if linalg_big.is_big(n) else linalg
+        for variant in range(2):
+            name = f"n{n}v{variant}"
+            A = [sin(1.3 * (i + 1) + 0.7 * variant) * 3.0 + (4.0 if i % (n + 1) == 0 else 0.0) for i in range(n * n)]
+            if variant == 1:
+                A = [float(round(x * 4)) / 2 for x in A]           # half-integers: exact arithmetic paths
+            S = [0.5 * (A[i * n + j] + A[j * n + i]) for i in range(n) for j in range(n)]
+            B = [cos(0.9 * (i + 1)) for i in range(n)]
+            M = [(n + 1.0 if i == j else 0.3 / (1 + abs(i - j))) for i in range(n) for j in range(n)]
+            w.row(name + ":A", *A)
+            w.row(name + ":B", *B)
+            w.row(name + ":M", *M)
+            w.row(name + ":det", la.det(ops, A, n))
+            x = la.solve(ops, A, n, B, 1)[0]
+            w.row(name + ":solve", *x)
+            w.row(name + ":inv", *la.inverse(ops, A, n, 1.0, 0.0)[0])
+            vals, vecs = la.jacobi_eigen(ops, S, n)
+            w.row(name + ":eig", *vals, *vecs)
+            gv = la.generalized_eigen(ops, S, M, n)
+            w.row(name + ":geig", *gv[0], *gv[1])
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen}
+            "eigen": gen_eigen, "linalg": gen_linalg}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
