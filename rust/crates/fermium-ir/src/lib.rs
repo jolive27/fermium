@@ -7,6 +7,7 @@
 //! sees a unit. Variables, functions and lambdas are indices into the module's tables, which suits both the
 //! evaluator and the LLVM back end.
 pub mod dim;
+pub mod pyfrac;
 pub mod types;
 
 pub use dim::{Dim, DIMLESS};
@@ -190,7 +191,8 @@ pub enum StmtKind {
     If(Expr, Vec<Stmt>, Vec<Stmt>),
     While(Expr, Vec<Stmt>),
     /// for sym from lo to hi step st (inclusive, lo + i·st); parallel: blocks as in par_blocks (D152).
-    For { sym: SymId, lo: Expr, hi: Expr, step: Option<Expr>, body: Vec<Stmt>, parallel: bool },
+    For { sym: SymId, lo: Expr, hi: Expr, step: Option<Expr>, body: Vec<Stmt>, parallel: bool,
+          par: Option<Box<ParInfo>> },
     ForIn(SymId, Expr, Vec<Stmt>),
     Print(Vec<PrintItem>),
     Plot(usize, Vec<Expr>),
@@ -234,6 +236,17 @@ pub struct SolveExtra {
     pub is_complex: bool,
     /// the source line (PDE warnings)
     pub line: u32,
+}
+
+/// What the back ends need to run a parallel for (D152): the sums (added up block by block, in order), the lists
+/// written as xs[i], the other lists read, and the pairs checked at run time not to be the same list (with the
+/// text id naming them, for ERR_PAR_ALIAS).
+#[derive(Clone, Debug, Default)]
+pub struct ParInfo {
+    pub reductions: Vec<SymId>,
+    pub written: Vec<SymId>,
+    pub lists: Vec<SymId>,
+    pub alias: Vec<(SymId, SymId, usize)>,
 }
 
 /// A monomorphic instance of a user function.
@@ -341,5 +354,107 @@ mod tests {
         assert_eq!(b.len(), 256);
         assert_eq!(b[0], (0, 4));
         assert_eq!(b.last().unwrap().1, 1000);
+    }
+}
+
+/// The direct sub-expressions of an IR expression (lambda bodies are reached through `lambda_of`).
+pub fn expr_children(e: &Expr) -> Vec<&Expr> {
+    use ExprKind as K;
+    match &e.kind {
+        K::Const(_) | K::Bool(_) | K::Str(_) | K::Var(_) | K::Load(_) | K::SolList { .. } => vec![],
+        K::Bin(_, a, b) | K::Pow(a, b) | K::Cmp(_, a, b) | K::Logic { a, b, .. } | K::Index(a, b)
+        | K::Uncertain(a, b) => vec![a, b],
+        K::PowC(a, _) | K::Neg(a) | K::Not(a) | K::VecElem(a, _) | K::Column(a, _) => vec![a],
+        K::Approx { a, b, atol, .. } => {
+            let mut v: Vec<&Expr> = vec![a, b];
+            v.extend(atol.iter().map(|x| &**x));
+            v
+        }
+        K::Call(_, args) | K::Map { args, .. } | K::Builtin(_, args) | K::List(args) | K::Vec(args) | K::Table(args) => {
+            args.iter().collect()
+        }
+        K::VecSet { v, idxs, value } => {
+            let mut out: Vec<&Expr> = vec![v];
+            out.extend(idxs.iter().map(|(i, _, _)| i));
+            out.push(value);
+            out
+        }
+        K::VecIndex { v, idxs, .. } => {
+            let mut out: Vec<&Expr> = vec![v];
+            out.extend(idxs.iter().map(|(i, _, _)| i));
+            out
+        }
+        K::If(c, a, b) => vec![c, a, b],
+        K::Let(binds, v) => {
+            let mut out: Vec<&Expr> = binds.iter().map(|(_, x)| x).collect();
+            out.push(v);
+            out
+        }
+        K::Integral { lo, hi, .. } | K::Root { lo, hi, .. } => vec![lo, hi],
+        K::Sum { lo, hi, step, .. } => {
+            let mut v: Vec<&Expr> = vec![lo, hi];
+            v.extend(step.iter().map(|x| &**x));
+            v
+        }
+        K::SolEval { t, .. } => vec![t],
+        K::PdeEval { x, t, .. } => vec![x, t],
+        K::OdeLinSolve { m, b, t, .. } => {
+            let mut v: Vec<&Expr> = m.iter().chain(b.iter()).collect();
+            v.push(t);
+            v
+        }
+    }
+}
+
+/// The lambda an expression uses (integrand, summand, root function), if any.
+pub fn lambda_of(e: &Expr) -> Option<LambdaId> {
+    match &e.kind {
+        ExprKind::Integral { lam, .. } | ExprKind::Sum { lam, .. } | ExprKind::Root { lam, .. } => Some(*lam),
+        _ => None,
+    }
+}
+
+/// The expressions directly inside a statement, and its sub-blocks.
+pub fn stmt_parts(s: &Stmt) -> (Vec<&Expr>, Vec<&Vec<Stmt>>) {
+    use StmtKind as K;
+    match &s.kind {
+        K::Assign(_, e) | K::Push(_, e) | K::Expr(e) | K::Assert(e, _) => (vec![e], vec![]),
+        K::IndexAssign(_, i, v) => (vec![i, v], vec![]),
+        K::Clear(_) | K::Break | K::Continue | K::Animate { .. } => (vec![], vec![]),
+        K::If(c, a, b) => (vec![c], vec![a, b]),
+        K::While(c, b) => (vec![c], vec![b]),
+        K::For { lo, hi, step, body, .. } => {
+            let mut v: Vec<&Expr> = vec![lo, hi];
+            v.extend(step.iter());
+            (v, vec![body])
+        }
+        K::ForIn(_, l, b) => (vec![l], vec![b]),
+        K::Print(items) => (items.iter().filter_map(print_item_expr).collect(), vec![]),
+        K::Plot(_, es) => (es.iter().collect(), vec![]),
+        K::Solve { y0, t0, t1, step, rtol, x, .. } => {
+            let mut v: Vec<&Expr> = y0.iter().collect();
+            v.push(t0);
+            v.push(t1);
+            v.extend(step.iter());
+            v.extend(rtol.iter());
+            v.extend(x.xa.iter().chain(x.xb.iter()));
+            (v, vec![])
+        }
+        K::Fit { data, guesses, .. } => {
+            let mut v: Vec<&Expr> = vec![data];
+            v.extend(guesses.iter());
+            (v, vec![])
+        }
+        K::Return(e) => (e.iter().collect(), vec![]),
+        K::Propagate { n, body, .. } => (n.iter().collect(), vec![body]),
+    }
+}
+
+pub fn print_item_expr(it: &PrintItem) -> Option<&Expr> {
+    match it {
+        PrintItem::Num(e, _) | PrintItem::List(e, _) | PrintItem::Complex(e, _) | PrintItem::Vec(e, _)
+        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::TextList(e)
+        | PrintItem::Bool(e) | PrintItem::TextVar(e) | PrintItem::Data(e, _) => Some(e),
+        PrintItem::Text(_) => None,
     }
 }

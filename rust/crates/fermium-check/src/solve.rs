@@ -13,7 +13,15 @@ use num_rational::Rational64;
 
 use crate::checker::*;
 use crate::stmts::ty_dim;
-use crate::sym_isolate as C;
+/// The calculus helpers solve uses (fermium-sym, the port of calculus.py).
+#[allow(non_snake_case)]
+mod C {
+    pub use fermium_sym::build::{at, is_num, mk, name, neg};
+    pub use fermium_sym::{isolate, linear_coeffs, map_children};
+    pub fn to_source(e: &fermium_syntax::ast::Expr, pretty: bool) -> String {
+        fermium_sym::to_source_p(e, pretty)
+    }
+}
 use crate::walk::free_names;
 
 /// What a solution holds (Python SolTy.info).
@@ -65,10 +73,6 @@ impl From<Diagnostic> for SErr {
 }
 
 type SResult<T> = Result<T, SErr>;
-
-pub(crate) fn sym_err(c: &Checker, e: C::SymError) -> Diagnostic {
-    c.err(e.message, A::Span { length: 1, ..e.span }, e.hint)
-}
 
 fn primes(k: usize) -> String {
     "'".repeat(k)
@@ -737,7 +741,7 @@ impl Checker {
                         .into());
                 };
                 let target = C::mk(K::Prime { target: Box::new(C::name(&x)), order: ord(&x) as i64 });
-                let iso = C::isolate(&q.lhs, &q.rhs, &target).map_err(|e| sym_err(self, e))?;
+                let iso = C::isolate(&q.lhs, &q.rhs, &target)?;
                 assigned.push((x, iso));
             }
         }

@@ -194,7 +194,10 @@ def fix_run(source):
     from fermium.lexer import tokenize
     from fermium.parser import Parser
     d = Diagnostics()
-    toks = tokenize(source, d)
+    try:
+        toks = tokenize(source, d)
+    except FermiumError as e:            # a lexer error: no edits
+        return f"ERROR {e.line}:{e.col}+{e.length} {q(e.message)}\nFIXES \n"
     p = Parser(toks, d)
     p.fix_mode = True
     out = []

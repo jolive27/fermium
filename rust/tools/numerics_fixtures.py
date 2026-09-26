@@ -389,8 +389,189 @@ name/method N E1..EN [psi_k(x_i) psi_k'(x_i) at i = round(f*(len-1)) for f in EI
     w.close()
 
 
+# --------------------------------------------------------------------------------------- linalg
+# v1's fermium/linalg.py (n <= 4) and linalg_big.py (n > 4) with FloatOps (what both back ends compute).
+def gen_linalg():
+    from fermium import linalg, linalg_big
+    ops = linalg.FloatOps
+    w = Writer("linalg.txt", """
+v1's small/big linear algebra (fermium.linalg / linalg_big with FloatOps).
+name:A a...  name:B b...  name:M m... (SPD)  then  name:det d  name:solve x...  name:inv x...  name:eig vals... vecs...  name:geig vals... vecs...""")
+    for n in (2, 3, 4, 5, 8, 16):
+        la = linalg_big if linalg_big.is_big(n) else linalg
+        for variant in range(2):
+            name = f"n{n}v{variant}"
+            A = [sin(1.3 * (i + 1) + 0.7 * variant) * 3.0 + (4.0 if i % (n + 1) == 0 else 0.0) for i in range(n * n)]
+            if variant == 1:
+                A = [float(round(x * 4)) / 2 for x in A]           # half-integers: exact arithmetic paths
+            S = [0.5 * (A[i * n + j] + A[j * n + i]) for i in range(n) for j in range(n)]
+            B = [cos(0.9 * (i + 1)) for i in range(n)]
+            M = [(n + 1.0 if i == j else 0.3 / (1 + abs(i - j))) for i in range(n) for j in range(n)]
+            w.row(name + ":A", *A)
+            w.row(name + ":B", *B)
+            w.row(name + ":M", *M)
+            w.row(name + ":det", la.det(ops, A, n))
+            x = la.solve(ops, A, n, B, 1)[0]
+            w.row(name + ":solve", *x)
+            w.row(name + ":inv", *la.inverse(ops, A, n, 1.0, 0.0)[0])
+            vals, vecs = la.jacobi_eigen(ops, S, n)
+            w.row(name + ":eig", *vals, *vecs)
+            gv = la.generalized_eigen(ops, S, M, n)
+            w.row(name + ":geig", *gv[0], *gv[1])
+    w.close()
+
+
+# --------------------------------------------------------------------------------------- fft
+# v1's spectrum (fermium/runtime/spectral.py over numpy.fft). Inputs by formula (same in tests/fft.rs):
+# x_j = sin(0.37 j + 0.1) + 0.5 cos(0.013 j j), y_j = cos(1.1 j) * 0.5
+FFT_SIZES = [1, 2, 3, 4, 5, 7, 8, 12, 16, 30, 97, 100, 128, 210, 256, 1000, 1024, 1031, 2003, 4096]
+
+
+def gen_fft():
+    from fermium.runtime.spectral import spectrum
+    w = Writer("fft.txt", """
+v1's spectrum() over numpy.fft: per size n and kind, all outputs (n <= 128) or 16 evenly spaced samples + the sum of squares.
+n:kind values...""")
+    for n in FFT_SIZES:
+        x = [sin(0.37 * j + 0.1) + 0.5 * cos(0.013 * j * j) for j in range(n)]
+        y = [cos(1.1 * j) * 0.5 for j in range(n)]
+        z = [v for pair in zip(x, y) for v in pair]
+        for kind in range(9):
+            if kind == 4:
+                out = spectrum(4, x, y)
+            elif kind in (6, 7):
+                out = spectrum(kind, z)
+            else:
+                out = spectrum(kind, x, dt=0.01)
+            if len(out) > 256:
+                idx = [int(round(i * (len(out) - 1) / 15)) for i in range(16)]
+                vals = [out[i] for i in idx] + [sum(v * v for v in out)]
+            else:
+                vals = list(out)
+            w.row(f"{n}:{kind}", *vals)
+    w.close()
+
+
+# --------------------------------------------------------------------------------------- special
+# v1's special functions: the C library (what compiled v1 calls: erf erfc tgamma lgamma jn yn), v1's own
+# besseli/besselk/ellipk/ellipe (fermium/special.py), and SciPy as an independent reference.
+SPECIAL_X = [-30.0, -5.5, -2.5, -1.0, -0.3, -1e-8, 0.0, 1e-300, 1e-8, 0.1, 0.5, 1.0, 1.5, 2.0, 2.404825557695773,
+             3.0, 5.0, 7.5, 10.0, 17.3, 25.0, 50.0, 100.0, 170.5, 300.0, 1e3, 1e5]
+SPECIAL_N = [0, 1, 2, 3, 5, 10, 30, -1, -4]
+SPECIAL_M = [-5.0, -1.0, 0.0, 1e-10, 0.1, 0.5, 0.9, 0.99, 0.999999, 1 - 1e-12, 1.0]
+
+
+def gen_special():
+    import ctypes
+    import ctypes.util
+    import scipy.special as sc
+    from fermium import special as S
+    lib = ctypes.CDLL(ctypes.util.find_library("m"))
+    for f in ("erf", "erfc", "tgamma", "lgamma"):
+        getattr(lib, f).restype = ctypes.c_double
+        getattr(lib, f).argtypes = [ctypes.c_double]
+    for f in ("jn", "yn"):
+        getattr(lib, f).restype = ctypes.c_double
+        getattr(lib, f).argtypes = [ctypes.c_int, ctypes.c_double]
+    w = Writer("special.txt", """
+v1's special functions. fn:x v1 scipy   or   fn:n:x v1 scipy   or   ellip:m K E K_scipy E_scipy""")
+    for x in SPECIAL_X:
+        w.row(f"erf:{r(x)}", lib.erf(x), sc.erf(x))
+        w.row(f"erfc:{r(x)}", lib.erfc(x), sc.erfc(x))
+        w.row(f"gamma:{r(x)}", lib.tgamma(x), sc.gamma(x))
+        w.row(f"lgamma:{r(x)}", lib.lgamma(x), sc.gammaln(x))
+    for n in SPECIAL_N:
+        for x in SPECIAL_X:
+            if x < 0 and n not in (0, 1):
+                continue
+            w.row(f"besselj:{n}:{r(x)}", lib.jn(n, x), sc.jv(n, x))
+            if x > 0:
+                w.row(f"bessely:{n}:{r(x)}", lib.yn(n, x), sc.yn(n, x))
+            if abs(x) <= 300:
+                w.row(f"besseli:{n}:{r(x)}", S.besseli(n, x), sc.iv(n, x))
+            if 1e-100 < x <= 700:
+                w.row(f"besselk:{n}:{r(x)}", S.besselk(n, x), sc.kn(abs(n), x))
+    for m in SPECIAL_M:
+        w.row(f"ellip:{r(m)}", S.ellipk(m), S.ellipe(m), sc.ellipk(m), sc.ellipe(m))
+    w.close()
+
+
+# --------------------------------------------------------------------------------------- rng
+def gen_rng():
+    from fermium import rng
+    w = Writer("rng.txt", """
+v1's seeded RNG (fermium/rng.py): per seed, 20 rand(), then 20 randn(), then 5 rand(2, 7) interleaved with randn(1, 0.5).
+seed:<s> values...   (seed:default = never seeded)""")
+    for s in ["default", 0.0, 1.0, 42.0, -7.0, 3.9, 123456789.0, 1e18, 1e19, math.nan, -2.5e17]:
+        st = list(rng.DEFAULT_STATE)
+        if s != "default":
+            rng.seed(st, s)
+        vals = [rng.rand(st) for _ in range(20)] + [rng.randn(st) for _ in range(20)]
+        for _ in range(5):
+            vals.append(2.0 + (7.0 - 2.0) * rng.rand(st))
+            vals.append(1.0 + 0.5 * rng.randn(st))
+        w.row(f"seed:{s if s == 'default' else r(s)}", *vals)
+    w.close()
+
+
+# --------------------------------------------------------------------------------------- pde
+# v1's pde_solve (fermium/runtime/pde.py over scipy.sparse splu). Probes f(x, [u, ux, uxx, t, ut, i]) ->
+# [rhs, u0, phase0, v0, left, right]; the same in tests/pde.rs (by name).
+def _barrier(x):
+    return 1.0 if abs(x) < 0.5 else 0.0
+
+
+PDE_CASES = [
+    # name, probe, xa, xb, t0, t1, options
+    ("heat_cn", lambda x, a: [0.1 * a[2], sin(pi * x) + 0.3 * sin(3 * pi * x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0,
+     0.5, dict(grid=100)),
+    ("heat_jump", lambda x, a: [a[2], 0.0, 0.0, 0.0, 1.0, 0.0], 0.0, 1.0, 0.0, 0.2, dict(grid=50)),
+    ("heat_neumann_step", lambda x, a: [0.5 * a[2] - 0.2 * a[1], cos(pi * x), 0.0, 0.0, 0.0, 0.3], 0.0, 1.0, 0.0,
+     1.0, dict(grid=80, step=0.05, bc=(1, 1))),
+    ("heat_implicit_src", lambda x, a: [a[2] - a[0] + sin(3 * a[3]) * x, x * (1 - x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0,
+     0.0, 2.0, dict(grid=60, method="implicit", tdep=True)),
+    ("heat_explicit", lambda x, a: [a[2], exp(-40 * (x - 0.3) * (x - 0.3)), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 0.05,
+     dict(grid=40, method="explicit")),
+    ("tdse_free", lambda x, a: [a[5] * (0.5 * a[2]), exp(-(x + 5) * (x + 5) / 4), 2.0 * x, 0.0, 0.0, 0.0], -20.0,
+     20.0, 0.0, 2.0, dict(grid=400, is_complex=True)),
+    ("tdse_barrier", lambda x, a: [a[5] * (0.5 * a[2] - _barrier(x) * a[0]), exp(-(x + 5) * (x + 5) / 4), 1.5 * x,
+                                   0.0, 0.0, 0.0], -20.0, 20.0, 0.0, 3.0, dict(grid=400, is_complex=True)),
+    ("wave", lambda x, a: [4.0 * a[2], exp(-50 * (x - 0.5) * (x - 0.5)), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 1.0,
+     dict(grid=200, order=2)),
+    ("wave_damped", lambda x, a: [a[2] - 0.5 * a[4], sin(pi * x), 0.0, 1.0, 0.0, 0.0], 0.0, 1.0, 0.0, 2.0,
+     dict(grid=100, order=2, step=0.004)),
+    ("explicit_unstable", lambda x, a: [a[2], sin(pi * x), 0.0, 0.0, 0.0, 0.0], 0.0, 1.0, 0.0, 0.1,
+     dict(grid=100, method="explicit", step=0.01)),
+]
+
+
+def gen_pde():
+    from fermium.runtime.pde import pde_solve, PdeFail
+    w = Writer("pde.txt", """
+v1's PDE solver (fermium.runtime.pde.pde_solve). name nsnap M ncomp nwarn wkind west  t,y,dy at (snap, point) samples
+snaps: 0, 1, n//3, n//2, n-1; points: round(f*(width-1)) for f in 0, 0.21, 0.5, 0.77, 1 over the row width  or  name ERR message""")
+    for name, probe, xa, xb, t0, t1, opts in PDE_CASES:
+        warns = []
+        try:
+            ts, ys, dys, ncomp, M = pde_solve(probe, xa, xb, t0, t1, warn=lambda k, e: warns.append((k, e)), **opts)
+        except PdeFail as fl:
+            w.row(name, "ERR", fl.message.replace(" ", "_"))
+            continue
+        width = (M + 1) * ncomp
+        n = len(ts)
+        vals = [float(n), float(M), float(ncomp), float(len(warns))] + (list(warns[0]) if warns else [0.0, 0.0])
+        for s in (0, 1, n // 3, n // 2, n - 1):
+            vals.append(ts[s])
+            for f in (0.0, 0.21, 0.5, 0.77, 1.0):
+                i = int(round(f * (width - 1)))
+                vals += [ys[s * width + i], dys[s * width + i]]
+        w.row(name, *vals)
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen}
+            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft, "special": gen_special, "rng": gen_rng,
+            "pde": gen_pde}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)

@@ -83,6 +83,10 @@ impl Parser {
     }
 
     pub fn expr(&mut self) -> R<Expr> {
+        self.nested(|p| p.expr_())
+    }
+
+    fn expr_(&mut self) -> R<Expr> {
         if self.at_kw("if") {
             let t = self.next();
             let c = self.expr()?;
@@ -151,6 +155,10 @@ impl Parser {
     }
 
     fn not_expr(&mut self) -> R<Expr> {
+        self.nested(|p| p.not_expr_())
+    }
+
+    fn not_expr_(&mut self) -> R<Expr> {
         if self.at_kw("not") {
             let t = self.next();
             let e = self.not_expr()?;
@@ -718,6 +726,10 @@ impl Parser {
     }
 
     fn unary(&mut self) -> R<Expr> {
+        self.nested(|p| p.unary_())
+    }
+
+    fn unary_(&mut self) -> R<Expr> {
         if self.at_op("-") {
             let t = self.next();
             let e = self.unary()?;
@@ -1004,6 +1016,10 @@ impl Parser {
     }
 
     fn power(&mut self) -> R<Expr> {
+        self.nested(|p| p.power_())
+    }
+
+    fn power_(&mut self) -> R<Expr> {
         let t = self.i;
         let base = self.postfix()?;
         if self.kind() == Kind::Sup {
@@ -1055,6 +1071,10 @@ impl Parser {
 
     /// The thing after ^ : a signed atom, possibly itself raised (right-assoc).
     fn exponent(&mut self) -> R<Expr> {
+        self.nested(|p| p.exponent_())
+    }
+
+    fn exponent_(&mut self) -> R<Expr> {
         let t = self.i;
         if self.at_op("-") {
             self.next();

@@ -56,7 +56,7 @@ pub struct FuncInfo {
     /// a derivative: evaluate the stabilised body (A52)
     pub stable: bool,
     /// the unit system it was defined in (None: SI, callable anywhere; D60)
-    pub nat: Option<String>,
+    pub nat: Option<crate::systems::Sys>,
     /// set by modules: the module it came from
     pub module: Option<String>,
     /// printed instead of name(params) for an unnamed function: d/dt (3t²), ∫ x dx
@@ -170,8 +170,8 @@ impl Ctx {
 #[derive(Clone, Debug, Default)]
 pub struct SymExtra {
     pub assigned: bool,
-    /// the unit system it was made in (D60); "" = SI
-    pub nat: String,
+    /// the unit system it was made in (D60)
+    pub nat: crate::systems::Sys,
     /// holds a temperature difference (D181)
     pub tdelta: bool,
     pub par_private: bool,
@@ -224,8 +224,10 @@ pub struct Checker {
     pub main_count: usize,
     /// names of top-level functions defined anywhere in the program, with their line (used-before-defined)
     pub future_funcs: HashMap<String, u32>,
-    /// the unit system in force ("" = SI; `units natural(ħ = c = 1)`, D60)
-    pub nat: String,
+    /// the unit system in force (SI by default; `units natural(ħ = c = 1)`, D60)
+    pub nat: crate::systems::Sys,
+    /// unit-system bookkeeping (systems.rs)
+    pub sys: crate::systems::SysState,
     pub positive_names: std::collections::HashSet<String>,
     pub used_consts: std::collections::HashSet<String>,
     pub warned: std::collections::HashSet<String>,
@@ -274,7 +276,8 @@ impl Checker {
             counter: 0,
             main_count: 0,
             future_funcs: HashMap::new(),
-            nat: String::new(),
+            nat: Default::default(),
+            sys: Default::default(),
             positive_names: Default::default(),
             used_consts: Default::default(),
             warned: Default::default(),
@@ -348,6 +351,9 @@ impl Checker {
     }
 
     pub fn desc(&self, d: &DExpr) -> String {
+        if self.nat.natural() {
+            return self.nat.describe(&self.u.resolve(d)); // U.namer inside a natural region (D60)
+        }
         units::dim_name(&self.u.resolve(d))
     }
 
@@ -428,7 +434,7 @@ impl Checker {
 
     /// The unit mapped into the system in force (natural units map it into powers of energy, D60).
     pub fn resolve_unit(&self, uexpr: &A::UnitExpr) -> CResult<Unit> {
-        self.resolve_unit_si(uexpr)
+        Ok(self.nat.canon_unit(&self.resolve_unit_si(uexpr)?))
     }
 
     // ============================================================ symbols
@@ -482,6 +488,7 @@ impl Checker {
         let mut ctx = ctx;
         self.nodes.clear();
         self.index_nodes(prog);
+        self.note_top_units(prog);
         self.future_funcs = prog
             .body
             .iter()
@@ -552,6 +559,7 @@ impl Checker {
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
             K::Solve(sv) => self.s_solve(s, sv, ctx),
+            K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }

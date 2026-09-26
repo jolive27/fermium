@@ -1,0 +1,5 @@
+solve u'' = -u with u(0) = 0, u'(0) = 1 for x from 0 m to 1 m, t from 0 s to 1 s step 0.1 s tolerance 1e-9 using implicit until u = 1
+solve -u'' = E u for x from 0 to 1
+    lowest 3 states using matrix
+    grid 400
+    absolute 1e-9, 1e-12
