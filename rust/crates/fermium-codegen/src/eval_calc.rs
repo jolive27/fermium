@@ -85,8 +85,8 @@ pub(crate) fn decimal_rule_sf(x: f64, place: i32) -> Option<u32> {
 }
 
 /// A sum's value and figures when its last meaningful decimal place is 10^place: a result smaller than that
-/// place (a cancellation, `12.0 kg - 11.99 kg`) is rounded to it, so it shows the figures it has (`0.0 kg`;
-/// `10.0 m - 9.95 m` is `0.1 m`), red team 10 #7; otherwise the value with decimal_rule_sf's figures.
+/// place (a cancellation, `12.0 kg - 11.99 kg`) is rounded to it, so it shows only the figures it has (`0 kg`:
+/// zero prints as 0, as every zero does; `10.0 m - 9.95 m` is `0.1 m`), red team 10 #7; otherwise the value with decimal_rule_sf's figures.
 pub(crate) fn round_to_place(x: f64, place: i32) -> (f64, Option<u32>) {
     if x == 0.0 || !x.is_finite() || x.abs().log10().floor() as i32 >= place {
         return (x, decimal_rule_sf(x, place));

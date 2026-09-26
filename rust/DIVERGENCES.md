@@ -135,7 +135,8 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   from written values; whole literals like `1` or `300` are exact, so `1 - r` keeps v1's rule): at run time each
   operand's last significant decimal place is found in the unit the result prints in, the sum keeps the
   coarsest one, and that sets its figures (at least one): `293.6 K` (293.65 is 293.6499… in binary),
-  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
+  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. A cancellation smaller than that place is rounded to
+  it (red team 10 #7): `12.0 kg - 11.99 kg` prints `0 kg` (v1 `0.01 kg`), `10.0 m - 9.95 m` prints `0.1 m`. `to N digits` always wins, and a sum stored in a
   variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
   same.
 - Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
