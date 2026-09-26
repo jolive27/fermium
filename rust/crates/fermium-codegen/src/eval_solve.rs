@@ -235,9 +235,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             StmtKind::Solve { method, .. } if method == "eigen" => self.solve_eigen(s, fr),
             StmtKind::Solve { method, .. } if method == "pde" => self.solve_pde(s, fr),
             StmtKind::Solve { .. } => self.solve_ode(s, fr),
-            StmtKind::Plot(..) => self.err("plot isn't supported by the Rust back end yet"),
-            StmtKind::Fit { .. } => self.err("fit isn't supported by the Rust back end yet"),
-            StmtKind::Animate { .. } => self.err("animate isn't supported by the Rust back end yet"),
+            StmtKind::Plot(..) => self.stmt_plot(s, fr),
+            StmtKind::Fit { .. } => self.stmt_fit(s, fr),
+            StmtKind::Animate { .. } => self.stmt_animate(s, fr),
             _ => Ok(()),
         }
     }

@@ -94,6 +94,8 @@ impl Checker {
             K::Slice { .. } => self.e_slice(e)?,
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
+            K::Load { path } => self.e_load(e, path)?,
+            K::Table { names, items } => self.e_table(e, names, items, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
             // x.t, x.values, r.x, x' and r[end] of an ODE solution (solve.rs); other uses belong to other modules
             K::Field { target, name } if self.is_sol_expr(target, ctx) => return self.sol_field(e, target, name, ctx),

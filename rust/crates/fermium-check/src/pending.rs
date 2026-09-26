@@ -11,17 +11,9 @@ impl Checker {
         Err(self.not_ported("seed", e.span))
     }
     // ---- vectors and matrices
-    /// Fields of ODE solutions and data tables (not ported yet).
-    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, _name: &str, _t: Checked, _ctx: &mut Ctx)
-                       -> CResult<Checked> {
-        Err(self.not_ported("a field", e.span))
-    }
 }
 
 impl Checker {
-    pub fn data_description(&self, _v: &I::Expr) -> String {
-        "data".into()
-    }
 }
 
 impl Checker {
@@ -31,9 +23,6 @@ impl Checker {
     }
     pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("calling Python", e.span))
-    }
-    pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
-        Err(self.not_ported("err(…)", e.span))
     }
 }
 

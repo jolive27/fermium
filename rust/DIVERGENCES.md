@@ -168,3 +168,12 @@ When a run-time error happens in several iterations of a `parallel for`, v1's co
 of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
 for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
 iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
+
+## Function instances are keyed by the shape and units of vector and matrix arguments
+
+v1 made one instance of a user function per argument type, but it keyed a vector or matrix argument by its
+kind alone. So `f(v) = |v|` called first with `<3, 4> m` and then with `<1, 2, 2> s` reused the first instance:
+v1's compiled code stopped with an internal error (`TypeError: Type of #1 arg mismatch: <2 x double> !=
+<3 x double>`), and a straight port printed `3 m` for the second call. The Rust checker keys these arguments by
+their length (or rows and columns) and by the dimension of each component, so each call gets its own instance
+(`5 m 3 s`). No conformance case is affected (v1 crashed on every such program).
