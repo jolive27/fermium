@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 mod check;
 mod doctor;
+mod aot;
 mod run;
 
 use fermium_syntax::{sexpr, Diagnostic, Diagnostics};
@@ -172,12 +173,15 @@ fn cmd_build(args: &[String]) -> ExitCode {
     if BUILD.wants_help(args) {
         return ExitCode::SUCCESS;
     }
+    let mut output: Option<String> = None;
     let pos: Vec<&String> = {
         let mut v = vec![];
         let mut it = args.iter();
         while let Some(a) = it.next() {
             if a == "-o" || a == "--output" {
-                it.next();
+                output = it.next().cloned();
+            } else if let Some(o) = a.strip_prefix("--output=") {
+                output = Some(o.to_string());
             } else if !a.starts_with('-') {
                 v.push(a);
             }
@@ -187,9 +191,7 @@ fn cmd_build(args: &[String]) -> ExitCode {
     if pos.is_empty() {
         return BUILD.missing("file");
     }
-    eprintln!("fermium build isn't in this version of Fermium 2 yet (it is coming: standalone executables linked \
-               with a bundled linker)\n  hint: run the program with  fermium run {}  for now", pos[0]);
-    ExitCode::from(1)
+    aot::build_file(pos[0], output.as_deref())
 }
 
 fn cmd_jupyter(args: &[String]) -> ExitCode {

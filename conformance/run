@@ -185,22 +185,23 @@ def run_binary(binary, path, case):
         base = tmp
         if case["dir"]:
             # a copy of the program's folder, so plots and other files it writes never land in the repository:
-            # the folder's own files, and any file the program names by a relative path (data/x.csv, lib/y.fm)
-            src_dir = os.path.join(ROOT, case["dir"])
-            base = os.path.join(tmp, "base")
-            os.makedirs(base)
+            # the folder's own files, and any repository file the program names by a relative path (data/x.csv,
+            # ../data/y.csv, lib/z.fm), copied into a mirror of the repository under tmp/root
+            src_dir = os.path.normpath(os.path.join(ROOT, case["dir"]))
+            mirror = os.path.join(tmp, "root")
+            base = os.path.normpath(os.path.join(mirror, case["dir"]))
+            os.makedirs(base, exist_ok=True)
             for name in os.listdir(src_dir):
                 f = os.path.join(src_dir, name)
                 if os.path.isfile(f) and os.path.getsize(f) < 5_000_000:
                     shutil.copy2(f, os.path.join(base, name))
             src_text = open(path, encoding="utf-8").read()
-            for rel in re.findall(r'"([^"\n]+/[^"\n]+)"', src_text):
+            for rel in re.findall(r'"([^"\n]+\.[A-Za-z0-9]+)"', src_text):
                 f = os.path.normpath(os.path.join(src_dir, rel))
-                if f.startswith(ROOT) and os.path.isfile(f):
-                    dst = os.path.join(base, os.path.relpath(f, src_dir))
-                    if os.path.normpath(dst).startswith(base):
-                        os.makedirs(os.path.dirname(dst), exist_ok=True)
-                        shutil.copy2(f, dst)
+                if f.startswith(ROOT + os.sep) and os.path.isfile(f):
+                    dst = os.path.join(mirror, os.path.relpath(f, ROOT))
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(f, dst)
         empty = os.path.join(tmp, "empty-path")
         os.mkdir(empty)
         try:

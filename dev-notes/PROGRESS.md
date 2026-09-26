@@ -61,3 +61,4 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 2026-09-26 05:20 UTC — Rust at 73.9 % (before the ODE/eigen/PDE merge); agents A–E + LLVM back end running; harvest being widened (notes, red-team, docs blocks).
 - 2026-09-26 06:25 UTC — Rust 91.4 % + 8 documented; agents: data/plot (B), speed of the evaluator (A), solve precision (D), calculus B2 (C), LLVM ODE + build (LLVM), Jupyter (tools), playground wrap-up.
 - 2026-09-26 07:15 UTC — Rust 98.2 % (+9 documented) on the 3366-case suite; B5.1, B5.9, B5.11–B5.14 done; B5.10 (build) and LLVM ODE in progress; red team 10 started.
+- 2026-09-26 08:10 UTC — Rust 98.6 % + 27 documented (99.4 %); runner mirrors each program's folder; module call-line fix; `fermium build` (B5.10) merged: lld linked in, fermium-aotrt runtime, executables identical to `fermium run` on the sample; next PERF.md.

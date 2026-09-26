@@ -19,6 +19,8 @@ pub mod session;
 #[cfg(feature = "llvm")]
 pub mod llvm;
 
+pub mod native;
+
 use eval::{Printer, RunError};
 use fermium_ir::Module;
 
