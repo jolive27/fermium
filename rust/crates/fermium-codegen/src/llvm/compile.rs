@@ -1432,7 +1432,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 fv(bl!(self.b.build_extract_value(a, *k as u32, "c")).into_float_value())
             }
             ExprKind::Index(l, i) if matches!(&l.kind, ExprKind::Var(s) if self.hoisted.contains_key(s)) => {
-                let ExprKind::Var(s) = &l.kind else { unreachable!() };
+                let ExprKind::Var(s) = &l.kind else { return Err("an indexed list that isn't a variable".into()) };
                 let parts = self.hoisted[s];
                 self.set_line(l.line)?;
                 let iv = self.expr(i)?;
@@ -1650,8 +1650,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                     let p = self.spill(*v)?;
                     bl!(self.b.build_ptr_to_int(p, i64t, "p"))
                 }
-                Kind::Void => unreachable!(),
-            Kind::H | Kind::Obj => v.v.unwrap().into_int_value(),
+                Kind::Void => return Err("a built-in argument without a value".into()),
+                Kind::H | Kind::Obj => v.v.unwrap().into_int_value(),
             };
             let sp = unsafe { bl!(self.b.build_gep(i64t.array_type(n), argp, &[self.i64c(0), self.i64c(i as i64)], "a")) };
             bl!(self.b.build_store(sp, slot));
@@ -1675,7 +1675,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                     Kind::B => bl!(self.b.build_int_compare(IntPredicate::NE, raw, i64t.const_zero(), "b")).into(),
                     Kind::S => raw.into(),
                     Kind::L | Kind::TL => bl!(self.b.build_int_to_ptr(raw, self.ptrt(), "p")).into(),
-                    _ => unreachable!(),
+                    Kind::H | Kind::Obj => raw.into(),
+                    Kind::V(_) | Kind::Void => return Err("a built-in result of an unexpected kind".into()),
                 };
                 Val { k: ret, v: Some(v) }
             }

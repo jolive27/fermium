@@ -59,6 +59,9 @@ def one(args):
     if cl == 3 and errl and "LLVM back end can't compile" in (errl.get("message") or ""):
         return case["area"], case["id"], "unsupported", errl["message"].split("yet: ", 1)[-1], None
     if not os.path.exists(mark):
+        if cl not in (0, 1):
+            # a crash (a panic, a signal): the LLVM path failed where the program should have run or stopped
+            return case["area"], case["id"], "disagree", f"llvm crashed (exit {cl}): {errl}", "llvm-worse"
         return case["area"], case["id"], "not-run", "", None
     oi, ei, erri, ci = RUN.run_binary(wi, path, case)
     # lines that read the clock (the case's drop_prefixes, e.g. TIME_INNER) differ from run to run

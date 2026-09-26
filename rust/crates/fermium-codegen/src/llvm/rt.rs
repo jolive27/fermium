@@ -707,6 +707,9 @@ fn fmt_opt(i: i64) -> Option<usize> {
     }
 }
 
+/// Integrand evaluations so far (FERMIUM_LLVM_TIME reports them: performance work).
+pub static QUAD_EVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// ∫ f from a to b (eval_calc Integral): fermium-runtime's quad; once the integrand has stopped with an error
 /// it isn't called again (NaN), and that error is the one reported.
 #[no_mangle]
@@ -715,7 +718,10 @@ pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol:
     use std::sync::atomic::Ordering::SeqCst;
     let flag = err_flag(c);
     let r = fermium_runtime::numerics::quad::quad(
-        |x| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } },
+        |x| {
+            QUAD_EVALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } }
+        },
         a, b, 1e-10, atol, xname);
     if flag.load(SeqCst) != 0 {
         return f64::NAN;

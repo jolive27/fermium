@@ -100,7 +100,9 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     pub(super) fn solve_stmt(&mut self, s: &Stmt) -> R<()> {
-        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else { unreachable!() };
+        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else {
+            return Err("a solve that isn't one".into());
+        };
         let m = self.m;
         let ctx: BasicValueEnum = self.ctx_ptr.into();
         let site = OdeSite {
