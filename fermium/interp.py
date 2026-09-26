@@ -1137,6 +1137,9 @@ class Interpreter:
             elif kind == "textlist":
                 v = self.eval(payload, fr)
                 py["print_textlist"](v, len(v))
+            elif kind == "clist":
+                v = self.eval(payload, fr)
+                py["print_clist"](fid, [x for z in v for x in z], len(v))
             elif kind == "textvar":
                 py["print_text"](self.eval(payload, fr))
         py["print_end"]()
@@ -1900,6 +1903,9 @@ class Interpreter:
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py
             from . import cplx
             return cplx.py_builtin(e, args)
+        if name.startswith("cl."):                      # lists of complex numbers (D243): fermium/clist.py
+            from . import clist
+            return clist.py_builtin(self, name, args)
         if name in ("shuffle", "matmul", "det", "inverse", "solve_linear", "eigenvalues", "eigenvectors"):
             if hasattr(e, "sing_t"):
                 self._sing_t = self.eval(e.sing_t, fr)

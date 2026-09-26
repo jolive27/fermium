@@ -33,6 +33,11 @@ What that changes:
 - `for E in [0.50 eV, 0.75 eV, 1 eV]` prints `0.50 eV` (it lost the zero and printed `0.5 eV`): each element prints the way the whole list prints.
 - `[1.20 mm, 1.30 mm]` style lists keep their written zeros even after a unit conversion.
 
+## Fourier transforms return complex numbers (D243)
+
+- `fft(xs)` gives the transform as a list of complex numbers, like `[10 + 0i, -2 + 2i, -2 + 0i, -2 - 2i] V`. `ifft(X)` transforms back. Take `X[k]`, `abs(X)`, `arg(X)`, `re(X)`, `im(X)`, `conj(X)`, `len(X)`, or loop with `for z in X`.
+- `fft_re(xs)`, `fft_im(xs)` and `ifft(re, im)` still work but warn: write `re(fft(xs))`, `im(fft(xs))` and `ifft(complex(re, im))`. They will be removed after 1.5.
+
 ## Tools
 
 - `fermium fmt --pretty` writes `(1/2)` as `½` (and `(3/4)` as `¾`, and so on); `--ascii` writes it back. It leaves `x^(1/3)`, calls like `f(1/2)`, and `(0.5)` alone (0.5 is a measured value with one significant figure, ½ is exact).

@@ -234,6 +234,14 @@ class Runtime:
             f = rt.tables.fmts[fid]
             rt.line.append(format_complex(re_, im_, f["rdim"], f["hint"], f["sf"], f["direct"]))
 
+        def print_clist(fid, p, n):
+            """A list of complex numbers, (re, im) interleaved: [3 + 0i, -1 + 1i] V (D243)."""
+            from ..clist import format_clist
+            f = rt.tables.fmts[fid]
+            idx = list(range(5)) + list(range(n - 3, n)) if n > 12 else range(n)
+            rt.line.append(format_clist([(p[2 * i], p[2 * i + 1]) for i in idx], f["rdim"], f["hint"], f["sf"],
+                                        f["direct"], n))
+
         def print_textlist(p, n):
             rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
 
@@ -327,7 +335,8 @@ class Runtime:
         def fft(kind, a, b, n, dt, out):
             try:
                 from .spectral import spectrum
-                vals = spectrum(kind, a[:n], b[:n] if b else None, dt)
+                m = 2 * n if kind in (6, 7) else n       # a complex input list holds 2n doubles (D243)
+                vals = spectrum(kind, a[:m], b[:n] if b else None, dt)
                 for i, v in enumerate(vals):
                     out[i] = v
                 return 0
@@ -359,7 +368,7 @@ class Runtime:
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat, "print_cplx": print_cplx,
-                   "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
+                   "print_clist": print_clist, "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
                    "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
             "fm_print_num": CB(None, c_int64, c_double)(print_num),
@@ -369,6 +378,7 @@ class Runtime:
             "fm_print_mvec": CB(None, c_int64, DPTR, c_int64)(print_mvec),
             "fm_print_mat": CB(None, c_int64, DPTR, c_int64, c_int64)(print_mat),
             "fm_print_cplx": CB(None, c_int64, c_double, c_double)(print_cplx),
+            "fm_print_clist": CB(None, c_int64, DPTR, c_int64)(print_clist),
             "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_text_concat": CB(c_int64, c_int64, c_int64)(text_concat),

@@ -10,18 +10,27 @@ kind 2 amplitude_spectrum(xs) one-sided amplitudes, k = 0 … n//2: |X_k|/n, dou
 kind 3 power_spectrum(xs, dt) one-sided power spectral density, k = 0 … n//2: |X_k|² dt/n, doubled like the
                               amplitudes; Σ P_k Δf = mean(x²) (Parseval) with Δf = 1/(n dt)
 kind 4 ifft(re, im)           Re of the inverse transform (1/n Σ_k X_k e^{+2πi jk/n}), k = 0 … n-1
+
+The complex versions (D243) return X_k as 2n doubles, (re, im) interleaved, and take a complex input the same way:
+kind 5 fft(real xs), kind 6 ifft(complex X), kind 7 fft(complex X), kind 8 ifft(real xs).
 """
 from __future__ import annotations
 
 
 def out_len(kind: int, n: int) -> int:
-    return n // 2 + 1 if kind in (2, 3) else n
+    return n // 2 + 1 if kind in (2, 3) else 2 * n if kind >= 5 else n
 
 
 def spectrum(kind: int, a, b=None, dt: float = 1.0) -> list:
     import numpy as np
     x = np.asarray(a, dtype=float)
     n = len(x)
+    if kind >= 5:
+        z = x[0::2] + 1j * x[1::2] if kind in (6, 7) else x
+        Z = np.fft.fft(z) if kind in (5, 7) else np.fft.ifft(z)
+        out = np.empty(2 * len(Z))
+        out[0::2], out[1::2] = Z.real, Z.imag
+        return [float(v) for v in out]
     if kind == 4:
         z = x + 1j * np.asarray(b, dtype=float)
         return [float(v) for v in np.fft.ifft(z).real]
