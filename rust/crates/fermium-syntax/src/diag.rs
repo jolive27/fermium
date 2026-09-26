@@ -71,7 +71,11 @@ pub struct Diagnostics {
 }
 
 impl Diagnostics {
+    /// Add a warning, once per (message, line, column) as in the Python Diagnostics.
     pub fn warn(&mut self, d: Diagnostic) {
+        if self.warnings.iter().any(|w| w.message == d.message && w.line == d.line && w.col == d.col) {
+            return;
+        }
         self.warnings.push(Diagnostic { severity: Severity::Warning, ..d });
     }
 }

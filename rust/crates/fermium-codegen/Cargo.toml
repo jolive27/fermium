@@ -6,3 +6,4 @@ license.workspace = true
 
 [dependencies]
 fermium-ir = { path = "../fermium-ir" }
+fermium-units = { path = "../fermium-units" }
