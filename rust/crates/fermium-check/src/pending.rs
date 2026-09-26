@@ -10,11 +10,6 @@ use crate::units::Unit;
 
 impl Checker {
     // ---- stmts / parallel
-    #[allow(clippy::too_many_arguments)]
-    pub fn parallel_for(&mut self, s: &A::Stmt, _var: &str, _lo: I::Expr, _hi: I::Expr, _st: Option<I::Expr>,
-                        _body: &[A::Stmt], _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        Err(self.not_ported("parallel for", s.span))
-    }
     pub fn seed_stmt(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         Err(self.not_ported("seed", e.span))
     }

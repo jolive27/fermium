@@ -614,7 +614,7 @@ impl Checker {
         ctx.loop_depth -= 1;
         let b = b?;
         self.after_loop(sym, s.span.line);
-        Ok(vec![self.stmt_at(I::StmtKind::For { sym, lo, hi, step: st, body: b, parallel: false }, s)])
+        Ok(vec![self.stmt_at(I::StmtKind::For { sym, lo, hi, step: st, body: b, parallel: false, par: None }, s)])
     }
 
     pub fn s_for_in(&mut self, s: &A::Stmt, var: &str, iterable: &A::Expr, body: &[A::Stmt], ctx: &mut Ctx)

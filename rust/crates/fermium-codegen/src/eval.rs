@@ -310,7 +310,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                 }
             }
-            StmtKind::For { sym, lo, hi, step, body, .. } => {
+            StmtKind::For { sym, lo, hi, step, body, par, .. } => {
                 // inclusive, computed as lo + i·st (so rounding never adds or drops the last value)
                 let lo = self.eval(lo, fr)?.num();
                 let hi = self.eval(hi, fr)?.num();
@@ -323,6 +323,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 let n = ((hi - lo) / st + 1e-9).floor();
                 let n = if n.is_finite() && n >= 0.0 { n as i64 + 1 } else { 0 };
+                if let Some(info) = par {
+                    return self.parallel_for(info, *sym, lo, st, n.max(0) as usize, body, fr);
+                }
                 for i in 0..n {
                     self.set(*sym, Value::Num(lo + i as f64 * st), fr);
                     match self.block(body, fr)? {

@@ -11,6 +11,7 @@ pub mod checker;
 pub mod exprs;
 pub mod names;
 mod pending;
+pub mod parallel;
 pub mod print;
 pub mod source;
 pub mod stmts;
