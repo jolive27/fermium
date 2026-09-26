@@ -97,11 +97,6 @@ impl Checker {
 
 impl Checker {
     // ---- arithmetic helpers not ported yet
-    /// dx/dt written as a fraction: a derivative (calculus module).
-    pub fn leibniz(&mut self, _e: &A::Expr, _ctx: &mut Ctx) -> Option<A::Expr> {
-        None
-    }
-    pub fn warn_limit_division(&mut self, _e: &A::Expr, _b: &I::Expr) {}
     pub fn warn_confusable_sum(&mut self, _op: &str, _a: &I::Expr, _b: &I::Expr, _e: &A::Expr) {}
     pub fn cplx_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("complex arithmetic", e.span))
@@ -133,10 +128,6 @@ impl Checker {
     }
     pub fn mixed_hints(&self, _v: &I::Expr, n: usize) -> Vec<Option<fermium_ir::Hint>> {
         vec![None; n]
-    }
-    /// The units of a function for printing it (Python function_units): needs instantiate.
-    pub fn function_units(&mut self, _info: FuncInfoId) -> String {
-        String::new()
     }
 }
 
@@ -176,9 +167,5 @@ impl Checker {
     }
     pub fn system_consts(&self, sys: &str) -> String {
         sys.to_string()
-    }
-    /// C.stabilize: a numerically stable form of a derivative's body (calculus module).
-    pub fn stabilize(&self, e: &A::Expr) -> A::Expr {
-        e.clone()
     }
 }

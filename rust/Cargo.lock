@@ -13,6 +13,7 @@ name = "fermium-check"
 version = "2.0.0-dev"
 dependencies = [
  "fermium-ir",
+ "fermium-sym",
  "fermium-syntax",
  "fermium-units",
  "num-rational",
@@ -33,6 +34,7 @@ name = "fermium-codegen"
 version = "2.0.0-dev"
 dependencies = [
  "fermium-ir",
+ "fermium-runtime",
  "fermium-units",
 ]
 

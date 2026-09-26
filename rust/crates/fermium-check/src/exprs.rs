@@ -84,6 +84,11 @@ impl Checker {
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
+            K::Prime { target, order } => return self.e_prime(e, target, *order, ctx),
+            K::Deriv { .. } => return self.e_deriv(e, ctx),
+            K::VecCalc { .. } => return self.e_veccalc(e, ctx),
+            K::Integral { .. } => return self.e_integral(e, ctx),
+            K::Sum { .. } => return self.e_sum(e, ctx),
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))
