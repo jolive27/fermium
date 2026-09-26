@@ -1,14 +1,12 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! fermium-codegen: the back ends, behind one trait (spec §B4). `eval` is the tree-walking back end (a port of
+//! interp.py, the reference); the LLVM back end (inkwell, LLVM 18, statically linked) implements the same trait
+//! and must print identically.
+pub mod eval;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+use fermium_ir::Module;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+/// A back end runs a checked module.
+pub trait Backend {
+    type Error;
+    fn run(&mut self, module: &Module) -> Result<(), Self::Error>;
 }
