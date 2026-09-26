@@ -1,0 +1,8 @@
+{
+ "id": "3605dc185659",
+ "section": "Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)",
+ "stdout": "(a) Earth twin ages 10.0000 yr\n    traveller ages 6.901531326 yr   exact 6.901531326 yr\n    top speed = 0.8401327190 c\n(b) turning point at 3.314361268 ly   exact 3.314361268 ly\n    back home: x(T) = 6×10⁻¹⁷ ly\n(c) ODE: traveller ages 6.901531326 yr   turning point 3.314359129 ly\n(d) each leg lasts 14782.594 yr of Earth time; Earth ages 59130.374 yr\n    farthest point 29563.250 ly\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}
