@@ -117,7 +117,15 @@ fn antiderivatives_print_like_v1() {
     for (f, want) in [("x^2 exp(-x)", "(-2 - x² - 2x)·exp(-x)"), ("cos(x)^3", "-sin(x)³/3 + sin(x)"),
                       ("sin(x)^3", "-cos(x) + cos(x)³/3"), ("1/sqrt(x^2 - 1)", "ln(x + √(-1 + x²))"),
                       ("ln(x)^2", "x·(2 + ln(x)² - 2 ln(x))"), ("x^3 exp(x^2)", "(-1 + x²)·exp(x²)/2"),
-                      ("sin(2x) sin(3x)", "sin(x)/2 - sin(5x)/10")] {
+                      ("sin(2x) sin(3x)", "sin(x)/2 - sin(5x)/10"),
+                      // red team 11 #5: textbook integrals v1 did, and a common factor cancelled before partial
+                      // fractions
+                      ("x^3 ln(x)^2", "x⁴·(1 - 4 ln(x) + 8 ln(x)²)/32"),
+                      ("x asin(x)", "-asin(x)/4 + x² asin(x)/2 + x √(1 - x²)/4"),
+                      ("1/(x^2 sqrt(x^2 + 1))", "-√(1 + x²)/x"), ("x^2/sqrt(4 - x^2)", "2 asin(x/2) - x √(4 - x²)/2"),
+                      ("1/cosh(x)", "2 atan(tanh(x/2))"), ("1/sinh(x)", "ln(tanh(x/2))"),
+                      ("(x + 1)/(x^2 - 1)", "ln(-1 + x)"), ("x/(x^2 - 4 x + 3)", "-ln(-1 + x)/2 + 1.5 ln(-3 + x)"),
+                      ("x/(x^2 - 1)", "ln(-1 + x²)/2"), ("(x + 1)/(x^2 + 1)", "ln(1 + x²)/2 + atan(x)")] {
         assert_eq!(integ(f, "x", &[]).unwrap(), want, "{f}");
     }
 }
@@ -187,4 +195,52 @@ fn autodiff_of_multi_line_functions() {
     assert_eq!(ad_of(src, "x", 2).unwrap(), "ddy/dx/dx = 6x\nddy/dx/dx\n");
     // refused: lists changed with values depending on x, solve
     assert!(ad_of("f(x) =\n    xs = [1, 2]\n    xs[0] = x\n    xs[0]\n", "x", 1).unwrap_err().contains("list xs"));
+}
+
+/// F as evaluated (real_logs) at x, with the constants in `env`.
+fn eval_f(integrand: &str, x: f64, env: &[(&str, f64)], dimensioned: &dyn Fn(&A::Expr) -> bool) -> f64 {
+    let f = body(integrand);
+    let big_f = integrate(&f, "x", &[]).unwrap();
+    let ev = real_logs(&big_f, &f, "x", dimensioned);
+    let mut m: std::collections::HashMap<String, f64> = env.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+    m.insert("x".into(), x);
+    crate::numeval::eval(&ev, &m).unwrap()
+}
+
+#[test]
+fn antiderivatives_are_real_on_both_sides_of_a_pole() {
+    // red team 11 #2: ln|u| where the printed formula (v1's) has ln(u); F(b) − F(a) is the definite integral
+    let none = |_: &A::Expr| false;
+    let cases: [(&str, f64, f64, f64); 8] = [
+        ("1/(9 - x^2)", 0.0, 1.0, (1.0f64 / 3.0).atanh() / 3.0),        // |x| < 3
+        ("1/(9 - x^2)", 4.0, 5.0, (4.0f64.ln() - 7.0f64.ln()) / 6.0),
+        ("1/(1 - x^2)", 0.0, 0.5, 0.5f64.atanh()),
+        ("1/(x - 5)", 1.0, 2.0, (3.0f64 / 4.0).ln()),                     // x < 5
+        ("1/(x - 5)", 6.0, 7.0, 2.0f64.ln()),                             // x > 5
+        ("1/(2 - x)", 0.0, 1.0, 2.0f64.ln()),
+        ("1/(2 - x)", 3.0, 4.0, -(2.0f64.ln())),
+        ("3/(x^2 - 5 x + 6)", 2.2, 2.5, 3.0 * ((0.5f64 / 0.5).ln() - (0.8f64 / 0.2).ln())), // between the roots
+    ];
+    for (f, a, b, want) in cases {
+        let got = eval_f(f, b, &[], &none) - eval_f(f, a, &[], &none);
+        assert!((got - want).abs() < 1e-12 * (1.0 + want.abs()), "∫ {f} from {a} to {b}: {got} vs {want}");
+    }
+    // a logarithm that is in the integrand stays ln(u): ∫ ln(x) isn't real for x < 0
+    assert!(eval_f("ln(x)", -2.0, &[], &none).is_nan());
+    // with a dimensioned constant the argument is a ratio (red team 11 #3); the values are unchanged
+    let dims = |c: &A::Expr| c.walk().iter().any(|n| n.name() == Some("a"));
+    let f = body("1/(x^2 - a^2)");
+    let big_f = integrate(&f, "x", &[]).unwrap();
+    let ev = real_logs(&big_f, &f, "x", &dims);
+    for n in ev.walk() {
+        if let Some(("ln", [u])) = crate::build::call_parts(n) {
+            let s = key(u);
+            assert!(s.contains('/'), "ln argument not a ratio: {s}");
+        }
+    }
+    let d = eval_f("1/(x^2 - a^2)", 3.0, &[("a", 2.0)], &dims) - eval_f("1/(x^2 - a^2)", 2.5, &[("a", 2.0)], &dims);
+    let want = ((1.0f64 / 5.0).ln() - (0.5f64 / 4.5).ln()) / 4.0;
+    assert!((d - want).abs() < 1e-12, "{d} vs {want}");
+    let d = eval_f("1/(x - a)", 1.0, &[("a", 2.0)], &dims) - eval_f("1/(x - a)", 0.0, &[("a", 2.0)], &dims);
+    assert!((d - 0.5f64.ln()).abs() < 1e-12, "{d}");
 }

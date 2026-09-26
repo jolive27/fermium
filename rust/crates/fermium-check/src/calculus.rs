@@ -135,7 +135,7 @@ impl Checker {
     fn new_func_info(&mut self, name: String, fdef: A::Stmt, scope: ScopeId) -> FuncInfoId {
         self.funcs.push(FuncInfo { name: name.clone(), fdef: Some(fdef), scope, instances: HashMap::new(),
                                    display_name: name, checked_generic: false, stable: false, nat: None, module: None,
-                                   anon_label: None, parent: None });
+                                   anon_label: None, parent: None, eval_body: None });
         self.funcs.len() - 1
     }
 
@@ -951,6 +951,25 @@ impl Checker {
                 return Err(ex);
             }
         };
+        // evaluated with ln|u| (a plain-number argument when the constants have units): red team 11 #2, #3
+        let eval_body = {
+            let dimensioned = |c: &A::Expr| -> bool {
+                c.walk().iter().any(|n| match &n.kind {
+                    A::ExprKind::Quantity { .. } => true,
+                    A::ExprKind::Name { name } => match self.lookup(ctx.scope, name) {
+                        Some((Binding::Const(k), _)) => !k.unit.dim.is_dimensionless(),
+                        Some((Binding::Sym(s), _)) => ty_dim(&self.module.syms[s].ty).is_some_and(|d| {
+                            let d = self.u.norm(&d);
+                            !(d.is_concrete() && d.konst.is_dimensionless())
+                        }),
+                        _ => false,
+                    },
+                    _ => false,
+                })
+            };
+            let r = C::real_logs(&body, &integrand2, var, &dimensioned);
+            (C::key(&r) != C::key(&body)).then_some(r)
+        };
         let fd = new_fdef(&format!("∫d{var}"), vec![param(var)], body, e.span);
         let scope = if ctx.is_main { ctx.scope } else { self.globals };
         let fname = self.fresh_name("antideriv");
@@ -960,6 +979,7 @@ impl Checker {
         f.nat = nat;
         f.display_name = format!("∫d{var}");
         f.anon_label = Some(format!("∫ {} d{var}", C::to_source(integrand)));
+        f.eval_body = eval_body;
         Ok(self.func_ref(info))
     }
 

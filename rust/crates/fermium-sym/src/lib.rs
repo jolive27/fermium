@@ -33,7 +33,7 @@ pub mod walk;
 pub use ad::ad_body;
 pub use build::SymResult;
 pub use diff::{builtin_deriv, d, diff, tidy, DiffContext, Plain, BUILTIN_DERIV_NAMES};
-pub use integrate::integrate;
+pub use integrate::{integrate, real_logs};
 pub use ode::{isolate, isolate_with, linear_coeffs};
 pub use simplify::{factor_common, simplify, stabilize};
 pub use source::{canonical_unit_name, key, to_source, to_source_p};

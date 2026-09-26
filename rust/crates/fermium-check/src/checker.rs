@@ -63,6 +63,9 @@ pub struct FuncInfo {
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
     pub parent: Option<(FuncInfoId, usize, u32)>,
+    /// evaluated instead of the printed body: an antiderivative's ln|u| where v1's printed formula has ln(u)
+    /// (fermium_sym::real_logs, red team 11 #2)
+    pub eval_body: Option<A::Expr>,
 }
 
 impl FuncInfo {
