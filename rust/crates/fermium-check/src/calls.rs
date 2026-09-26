@@ -391,6 +391,22 @@ impl Checker {
                         }
                         keyparts.push(format!("{}{:?}", v.ty.kind(), n.konst.0));
                     }
+                    // v1 keyed vectors and matrices by kind alone, so f(<3, 4> m) then f(<1, 2, 2> s) reused the
+                    // first instance (a crash in v1's compiled code; a wrong unit here): key them by shape and units
+                    Ty::Vec { .. } | Ty::Mat { .. } => {
+                        let mut k = format!("{}{:?}", v.ty.kind(), match &v.ty {
+                            Ty::Mat { r, c, .. } => (*r, *c),
+                            _ => (crate::vecmat::vec_n(&v.ty), 0),
+                        });
+                        for d in crate::vecmat::comp_dims(&v.ty).iter().take(if matches!(v.ty, Ty::Mat { .. }) { 1 } else { usize::MAX }) {
+                            let n = self.u.norm(d);
+                            if !n.is_concrete() {
+                                concrete = false;
+                            }
+                            k += &format!(",{:?}", n.konst.0);
+                        }
+                        keyparts.push(k);
+                    }
                     t => keyparts.push(t.kind().to_string()),
                 },
                 Checked::Sol(_) => keyparts.push("sol".into()),
