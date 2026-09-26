@@ -16,3 +16,10 @@ codegen-units = 16
 
 [profile.dev]
 opt-level = 1
+
+# for iterating: release speed without LTO (cargo build --profile fast → target/fast/fermium)
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 64
+incremental = true

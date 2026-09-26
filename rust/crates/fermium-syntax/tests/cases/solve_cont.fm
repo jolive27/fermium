@@ -1,0 +1,4 @@
+solve x' = -x
+    with x(0) = 1
+  for t from 0 s to 1 s
+  foo
