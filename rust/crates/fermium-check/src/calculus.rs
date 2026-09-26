@@ -943,6 +943,67 @@ impl Checker {
         None
     }
 
+    /// `solve lhs = rhs for x from a to b` (D32; Python solve.check_root): the first x in [a, b] where the two
+    /// sides are equal, stored in x.
+    pub fn check_root(&mut self, s: &A::Stmt, sv: &A::Solve, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
+        if sv.step.is_some() || sv.method.is_some() || sv.tolerance.is_some()
+            || sv.absolute.as_ref().is_some_and(|a| !a.is_empty())
+        {
+            return Err(self.err("step, tolerance, absolute and using are for differential equations; an equation is \
+                                 solved to full precision", s.span, None));
+        }
+        let x = sv.var.as_str();
+        let lo = self.expr(&sv.lo, ctx)?;
+        let hi = self.expr(&sv.hi, ctx)?;
+        self.need_num(&lo, &sv.lo, "the start of the search range")?;
+        self.need_num(&hi, &sv.hi, "the end of the search range")?;
+        let (ld, hd) = (ty_dim(&lo.ty).unwrap(), ty_dim(&hi.ty).unwrap());
+        self.unify_or(&ld, &hd, |c| format!("the search range goes from {} to {}; both ends need the same units",
+                                             c.desc(&ld), c.desc(&hd)), sv.lo.span, None)?;
+        let (lam, mut lctx, _) = self.scalar_lambda("root", x, ld.clone(), ctx);
+        let q = &sv.equations[0];
+        let left = self.expr(&q.lhs, &mut lctx)?;
+        let right = self.expr(&q.rhs, &mut lctx)?;
+        self.need_num(&left, &q.lhs, "the left side")?;
+        self.need_num(&right, &q.rhs, "the right side")?;
+        let (a, b) = (ty_dim(&left.ty).unwrap(), ty_dim(&right.ty).unwrap());
+        self.unify_or(&a, &b, |c| format!("the two sides of this equation don't match: left is {}, right is {}",
+                                           c.desc(&a), c.desc(&b)), q.span, None)?;
+        let qnode = mk(A::ExprKind::Name { name: String::new() }, q.span);
+        let body = self.arith("-", left.clone(), right.clone(), &qnode)?;
+        self.module.lambdas[lam].body = vec![body];
+        // the size of the terms added up on the two sides (|A| + |B| + |C| for A - B = C), to notice a root in
+        // rounding noise (#36); it shares the equation's argument and env
+        let sdim = Ty::Num(a.clone());
+        fn terms(e: &I::Expr, sdim: &Ty) -> I::Expr {
+            match &e.kind {
+                I::ExprKind::Bin(op @ (I::BinOp::Add | I::BinOp::Sub), x, y) if matches!(e.ty, Ty::Num(_)) => {
+                    let _ = op;
+                    ir(I::ExprKind::Bin(I::BinOp::Add, Box::new(terms(x, sdim)), Box::new(terms(y, sdim))), sdim.clone(),
+                       e.line)
+                }
+                I::ExprKind::Neg(x) => terms(x, sdim),
+                _ => ir(I::ExprKind::Builtin("abs".into(), vec![e.clone()]), e.ty.clone(), e.line),
+            }
+        }
+        let sbody = ir(I::ExprKind::Bin(I::BinOp::Add, Box::new(terms(&left, &sdim)), Box::new(terms(&right, &sdim))),
+                       sdim.clone(), q.span.line);
+        let mut slam = self.module.lambdas[lam].clone();
+        slam.name = self.fresh_name("rootscale");
+        slam.body = vec![sbody];
+        self.module.lambdas.push(slam);
+        let sl = self.module.lambdas.len() - 1;
+        let hint = lo.hint.clone().or_else(|| hi.hint.clone());
+        let mut tf = ir(I::ExprKind::Const(0.0), Ty::Num(ld.clone()), 0);
+        tf.hint = hint.clone();
+        let tfmt = self.fmt(&tf);
+        let mut r = ir(I::ExprKind::Root { lam, lo: Box::new(lo), hi: Box::new(hi), scale: Some(sl), tfmt: Some(tfmt) },
+                       Ty::Num(ld), s.span.line);
+        r.hint = hint;
+        r.sf = None;
+        Ok(vec![self.assign_to(x, r, s.span, None, ctx)?])
+    }
+
     /// `g = d/dt (a t^2) where a = 3`: substitute, so the derivative can still be a function of t (e_Where).
     pub fn where_deriv(&mut self, e: &A::Expr, value: &A::Expr, b: &[(String, A::Expr)], ctx: &mut Ctx)
                        -> Option<CResult<Checked>> {
