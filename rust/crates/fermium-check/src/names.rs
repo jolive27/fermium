@@ -40,7 +40,7 @@ pub fn loose(name: &str) -> String {
 }
 
 pub fn undefined(c: &mut Checker, name: &str, e: &A::Expr, ctx: &Ctx) -> Diagnostic {
-    let unit_left = e.attrs.unit_left.as_deref();
+    let unit_left = e.attrs.unit_left.as_ref().and_then(|r| c.node(r.id));
     if name == "g" && unit_left.is_none() {
         // spec A3.2
         return c.err("g isn't defined. For standard gravity use g_n (9.80665 m/s²), or define your own: g = 9.81 m/s²",
@@ -201,15 +201,15 @@ pub fn undefined(c: &mut Checker, name: &str, e: &A::Expr, ctx: &Ctx) -> Diagnos
 fn unit_only_ancestor(c: &Checker, e: &A::Expr, known: &HashSet<String>) -> Option<A::Expr> {
     fn unit_only(n: &A::Expr, known: &HashSet<String>) -> bool {
         match &n.kind {
-            A::ExprKind::Name(x) => !known.contains(x) && units::lookup_unit(x).is_some(),
-            A::ExprKind::BinOp { op: A::BinOpKind::Mul | A::BinOpKind::Div, left, right, .. } => {
+            A::ExprKind::Name { name: x } => !known.contains(x) && units::lookup_unit(x).is_some(),
+            A::ExprKind::BinOp { op, left, right, .. } if op == "*" || op == "/" => {
                 unit_only(left, known) && unit_only(right, known)
             }
-            A::ExprKind::BinOp { op: A::BinOpKind::Pow, left, right, .. } => {
+            A::ExprKind::BinOp { op, left, right, .. } if op == "^" => {
                 unit_only(left, known)
                     && match &right.kind {
                         A::ExprKind::Num { .. } => true,
-                        A::ExprKind::Neg(x) => matches!(x.kind, A::ExprKind::Num { .. }),
+                        A::ExprKind::Neg { operand: x } => matches!(x.kind, A::ExprKind::Num { .. }),
                         _ => false,
                     }
             }

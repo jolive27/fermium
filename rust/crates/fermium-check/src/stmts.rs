@@ -42,20 +42,20 @@ pub fn ty_dim(t: &Ty) -> Option<DExpr> {
 impl Checker {
     pub fn s_expr_stmt(&mut self, s: &A::Stmt, e: &A::Expr, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         if let A::ExprKind::Call { func, args } = &e.kind {
-            if let A::ExprKind::Name(fname) = &func.kind {
+            if let A::ExprKind::Name { name: fname } = &func.kind {
                 let shadowed = self.lookup(ctx.scope, fname).is_some();
                 match fname.as_str() {
                     "push" | "append" => return self.push_stmt(e, args, ctx).map(|x| vec![x]),
                     "clear" if !shadowed => {
                         let name_arg = match args.as_slice() {
-                            [a @ A::Expr { kind: A::ExprKind::Name(_), .. }] => a,
+                            [a @ A::Expr { kind: A::ExprKind::Name { .. }, .. }] => a,
                             _ => return Err(self.err("clear needs a list variable: clear(xs)", e.span, None)),
                         };
                         let lst = self.expr(name_arg, ctx)?;
                         if let (I::ExprKind::Var(sym), Ty::List(_) | Ty::TextList) = (&lst.kind, &lst.ty) {
                             return Ok(vec![self.stmt_at(I::StmtKind::Clear(*sym), s)]);
                         }
-                        let A::ExprKind::Name(n) = &name_arg.kind else { unreachable!() };
+                        let A::ExprKind::Name { name: n } = &name_arg.kind else { unreachable!() };
                         return Err(self.err(format!("clear empties a list, and {n} is {}", self.type_desc(&lst.ty)),
                                             name_arg.span, None));
                     }
@@ -87,7 +87,7 @@ impl Checker {
     }
 
     pub fn push_stmt(&mut self, e: &A::Expr, args: &[A::Expr], ctx: &mut Ctx) -> CResult<I::Stmt> {
-        if args.len() != 2 || !matches!(args[0].kind, A::ExprKind::Name(_)) {
+        if args.len() != 2 || !matches!(args[0].kind, A::ExprKind::Name { .. }) {
             return Err(self.err("push needs a list variable and a value: push(xs, x)", e.span, None));
         }
         let lst = self.expr(&args[0], ctx)?;
@@ -125,14 +125,9 @@ impl Checker {
     pub fn s_assign(&mut self, s: &A::Stmt, name: &str, value: &A::Expr, op: &str, ctx: &mut Ctx)
                     -> CResult<Vec<I::Stmt>> {
         if op != "=" {
-            let target = A::Expr::new(A::ExprKind::Name(name.to_string()), s.span);
-            let bop = match op.chars().next() {
-                Some('+') => A::BinOpKind::Add,
-                Some('-') => A::BinOpKind::Sub,
-                Some('*') => A::BinOpKind::Mul,
-                _ => A::BinOpKind::Div,
-            };
-            let val_ast = A::Expr::new(A::ExprKind::BinOp { op: bop, left: Box::new(target),
+            let target = crate::ast_ext::mk(A::ExprKind::Name { name: name.to_string() }, s.span);
+            let bop: String = op.chars().next().unwrap().to_string();
+            let val_ast = crate::ast_ext::mk(A::ExprKind::BinOp { op: bop, left: Box::new(target),
                                                             right: Box::new(value.clone()), implicit: false },
                                        s.span);
             let v = self.expr(&val_ast, ctx)?;
@@ -142,7 +137,7 @@ impl Checker {
             return self.assign_to(name, v, s.span, Some(value), ctx).map(|x| vec![x]);
         }
         if !ctx.is_main {
-            if let A::ExprKind::ListLit(items) = &value.kind {
+            if let A::ExprKind::ListLit { items } = &value.kind {
                 if items.is_empty() {
                     if let Some((Binding::Sym(b), _)) = self.lookup(ctx.scope, name) {
                         let bs = &self.module.syms[b];
@@ -329,19 +324,14 @@ impl Checker {
             return Err(self.err(format!("{target} isn't a list, so you can't set {target}[...]"), s.span, None));
         }
         let Some((Binding::Sym(b), _)) = found else { unreachable!() };
-        let name_ast = A::Expr::new(A::ExprKind::Name(target.clone()), s.span);
+        let name_ast = crate::ast_ext::mk(A::ExprKind::Name { name: target.clone() }, s.span);
         let tgt = self.expr(&name_ast, ctx)?;
         let idx = self.index_expr(index, &tgt, ctx)?;
         let v = if op != "=" {
-            let cur = A::Expr::new(A::ExprKind::Index { target: Box::new(name_ast.clone()),
-                                                        index: Box::new(index.clone()) }, s.span);
-            let bop = match op.chars().next() {
-                Some('+') => A::BinOpKind::Add,
-                Some('-') => A::BinOpKind::Sub,
-                Some('*') => A::BinOpKind::Mul,
-                _ => A::BinOpKind::Div,
-            };
-            let val_ast = A::Expr::new(A::ExprKind::BinOp { op: bop, left: Box::new(cur),
+            let cur = crate::ast_ext::mk(A::ExprKind::Index { target: Box::new(name_ast.clone()),
+                                                        index: Some(Box::new(index.clone())) }, s.span);
+            let bop: String = op.chars().next().unwrap().to_string();
+            let val_ast = crate::ast_ext::mk(A::ExprKind::BinOp { op: bop, left: Box::new(cur),
                                                             right: Box::new(value.clone()), implicit: false },
                                        s.span);
             self.expr(&val_ast, ctx)?

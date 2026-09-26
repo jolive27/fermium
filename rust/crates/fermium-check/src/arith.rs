@@ -29,8 +29,8 @@ pub fn is_affine(h: &Option<I::Hint>) -> bool {
 impl Checker {
     pub fn e_binop(&mut self, e: &A::Expr, ctx: &mut Ctx) -> CResult<Checked> {
         let A::ExprKind::BinOp { op, left, right, implicit } = &e.kind else { unreachable!() };
-        let (op, implicit) = (*op, *implicit);
-        if op == A::BinOpKind::Pow {
+        let (op, implicit) = (op.as_str(), *implicit);
+        if op == "^" {
             return self.power(e, left, right, ctx).map(Checked::Val);
         }
         if let Some(lz) = self.leibniz(e, ctx) {
@@ -38,7 +38,7 @@ impl Checker {
         }
         // 2 h c² is Planck's law, not "2 hours": only a lone `2 h` warns (Python sets left.in_product)
         let in_product = self.in_product.contains(&(e as *const A::Expr));
-        if matches!(op, A::BinOpKind::Mul | A::BinOpKind::Div) && matches!(left.kind, A::ExprKind::BinOp { .. }) {
+        if matches!(op, "*" | "/") && matches!(left.kind, A::ExprKind::BinOp { .. }) {
             self.in_product.insert(left.as_ref() as *const A::Expr);
         }
         let a = if implicit { self.expr_any(left, ctx)? } else { Checked::Val(self.expr(left, ctx)?) };
@@ -46,7 +46,7 @@ impl Checker {
             Checked::Val(v) => v,
             other => {
                 if implicit && right.paren {
-                    let call = A::Expr::new(A::ExprKind::Call { func: left.clone(), args: vec![(**right).clone()] },
+                    let call = crate::ast_ext::mk(A::ExprKind::Call { func: left.clone(), args: vec![(**right).clone()] },
                                             e.span);
                     return self.e_call(&call, ctx);
                 }
@@ -56,12 +56,12 @@ impl Checker {
         };
         self.after_number = implicit
             && matches!(left.kind, A::ExprKind::Num { .. } | A::ExprKind::Quantity { .. })
-            && matches!(right.kind, A::ExprKind::Name(_));
+            && matches!(right.kind, A::ExprKind::Name { .. });
         let b = self.expr(right, ctx);
         self.after_number = false;
         let b = b?;
         self.warn_limit_division(e, &b);
-        if let (true, A::ExprKind::Num { value, .. }, A::ExprKind::Name(rn)) = (implicit, &left.kind, &right.kind) {
+        if let (true, A::ExprKind::Num { value, .. }, A::ExprKind::Name { name: rn }) = (implicit, &left.kind, &right.kind) {
             if !in_product {
                 if let Some((_, what, unit0, unit1)) = UNIT_LOOKALIKE_CONSTANTS.iter().find(|x| x.0 == rn) {
                     if !matches!(self.lookup(ctx.scope, rn), Some((Binding::Sym(_), _))) {
@@ -82,9 +82,9 @@ impl Checker {
 
     /// "3p" + "1/2" joins two texts (D216); a number must be turned into text first: str(x).
     #[allow(clippy::too_many_arguments)]
-    fn text_op(&mut self, e: &A::Expr, op: A::BinOpKind, implicit: bool, left: &A::Expr, right: &A::Expr,
+    fn text_op(&mut self, e: &A::Expr, op: &str, implicit: bool, left: &A::Expr, right: &A::Expr,
                a: I::Expr, b: I::Expr) -> CResult<I::Expr> {
-        if op != A::BinOpKind::Add || implicit {
+        if op != "+" || implicit {
             return Err(self.err("text can only be joined with +, like  \"3p\" + \"1/2\"", e.span, None));
         }
         if !(matches!(a.ty, Ty::Str) && matches!(b.ty, Ty::Str)) {
@@ -102,7 +102,7 @@ impl Checker {
         Ok(ir(I::ExprKind::Builtin("text_concat".into(), vec![a, b]), Ty::Str, e.span.line))
     }
 
-    pub fn arith(&mut self, op: A::BinOpKind, a: I::Expr, b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
+    pub fn arith(&mut self, op: &str, a: I::Expr, b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         if matches!(a.ty, Ty::Complex(_)) || matches!(b.ty, Ty::Complex(_)) {
             return self.cplx_arith(op, a, b, e);
         }
@@ -113,15 +113,16 @@ impl Checker {
             return self.vec_arith(op, a, b, e);
         }
         let line = e.span.line;
+        let op = if op == "×" { "*" } else { op };
         let is_list = matches!(a.ty, Ty::List(_)) || matches!(b.ty, Ty::List(_));
         let mk = |d: DExpr| if is_list { Ty::List(d) } else { Ty::Num(d) };
         let (da, db) = (ty_dim(&a.ty).unwrap(), ty_dim(&b.ty).unwrap());
-        let sf = if matches!(op, A::BinOpKind::Add | A::BinOpKind::Sub) { sumsf(&[&a, &b]) } else { minsf(&[&a, &b]) };
+        let sf = if matches!(op, "+" | "-") { sumsf(&[&a, &b]) } else { minsf(&[&a, &b]) };
         let mut r = match op {
-            A::BinOpKind::Add | A::BinOpKind::Sub => {
+            "+" | "-" => {
                 if !self.u.unify(&da, &db) {
                     let (sa, sb) = (self.desc(&da), self.desc(&db));
-                    let msg = if op == A::BinOpKind::Add {
+                    let msg = if op == "+" {
                         format!("can't add {sa} to {sb}")
                     } else {
                         format!("can't subtract {sb} from {sa}")
@@ -130,13 +131,13 @@ impl Checker {
                 }
                 self.warn_confusable_sum(op, &a, &b, e);
                 let (aff_a, aff_b) = (is_affine(&a.hint), is_affine(&b.hint));
-                if op == A::BinOpKind::Add && aff_a && aff_b {
+                if op == "+" && aff_a && aff_b {
                     return Err(self.err(format!("can't add two absolute temperatures ({} + {})",
                                                 a.hint.as_ref().unwrap().name, b.hint.as_ref().unwrap().name),
                                         e.span, Some("to add a temperature change, write it in K, e.g. 20 °C + 5 K".into())));
                 }
-                let bop = if op == A::BinOpKind::Add { I::BinOp::Add } else { I::BinOp::Sub };
-                if op == A::BinOpKind::Sub && aff_b {
+                let bop = if op == "+" { I::BinOp::Add } else { I::BinOp::Sub };
+                if op == "-" && aff_b {
                     // the difference of two temperatures is a difference: shown in K (A47)
                     let mut r = bin(bop, a, b, mk(da), line);
                     r.extra().tdelta = true;
@@ -148,11 +149,11 @@ impl Checker {
                     r
                 }
             }
-            A::BinOpKind::Mul => {
+            "*" => {
                 let hint = self.keep_hint(&a, &b);
                 let mut hint = hint;
                 if hint.is_some() {
-                    hint = self.drop_turn_hint(hint, &a, &b, A::BinOpKind::Mul);
+                    hint = self.drop_turn_hint(hint, &a, &b, "*");
                 }
                 if is_affine(&hint) {
                     let k = if a.hint == hint { &b } else { &a };
@@ -165,10 +166,10 @@ impl Checker {
                 r.hint = hint;
                 r
             }
-            A::BinOpKind::Div => {
+            "/" => {
                 let mut hint = if self.dimless(&b) && a.hint.is_some() && b.hint.is_none() { a.hint.clone() } else { None };
                 if hint.is_some() {
-                    hint = self.drop_turn_hint(hint, &a, &b, A::BinOpKind::Div);
+                    hint = self.drop_turn_hint(hint, &a, &b, "/");
                 }
                 if is_affine(&hint) {
                     self.warn_scaled_temperature(hint.as_ref().unwrap(), "/", &b, e);
@@ -179,7 +180,7 @@ impl Checker {
                 r.hint = hint;
                 r
             }
-            A::BinOpKind::Pow => unreachable!(),
+            _ => return Err(self.err(format!("unknown operator {op}"), e.span, None)),
         };
         r.sf = sf;
         Ok(r)
@@ -197,7 +198,7 @@ impl Checker {
 
     /// 2π f with f in Hz is an angular frequency, and ω/(2π) with ω in rad/s a frequency: don't keep showing the
     /// old unit (redteam #2).
-    fn drop_turn_hint(&self, hint: Option<I::Hint>, a: &I::Expr, b: &I::Expr, op: A::BinOpKind) -> Option<I::Hint> {
+    fn drop_turn_hint(&self, hint: Option<I::Hint>, a: &I::Expr, b: &I::Expr, op: &str) -> Option<I::Hint> {
         let src_is_a = a.hint == hint;
         let k = if src_is_a { b } else { a };
         let v = match const_value(k) {
@@ -206,7 +207,7 @@ impl Checker {
         };
         let two_pi = 2.0 * std::f64::consts::PI;
         let kind = crate::units::unit_kind(hint.as_ref().unwrap());
-        let mul = op == A::BinOpKind::Mul;
+        let mul = op == "*";
         let up = (mul && (v / two_pi - 1.0).abs() < 1e-12) || (!mul && (v * two_pi - 1.0).abs() < 1e-12);
         let down = (!mul && (v / two_pi - 1.0).abs() < 1e-12) || (mul && (v * two_pi - 1.0).abs() < 1e-12);
         if (kind == "cycles" && up) || (kind == "angular" && down) {
@@ -326,19 +327,19 @@ impl Checker {
     pub fn power(&mut self, e: &A::Expr, left: &A::Expr, right: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
         // k(x + 1)^2 with a number k means k·(x + 1)², not (k·(x + 1))²
         if let A::ExprKind::Call { func, args } = &left.kind {
-            if let (A::ExprKind::Name(fname), 1, false) = (&func.kind, args.len(), left.paren) {
+            if let (A::ExprKind::Name { name: fname }, 1, false) = (&func.kind, args.len(), left.paren) {
                 if matches!(self.lookup(ctx.scope, fname), Some((Binding::Sym(_) | Binding::Const(_), _))) {
-                    let inner = A::Expr::new(A::ExprKind::BinOp { op: A::BinOpKind::Pow, left: Box::new(args[0].clone()),
+                    let inner = crate::ast_ext::mk(A::ExprKind::BinOp { op: "^".into(), left: Box::new(args[0].clone()),
                                                                   right: Box::new(right.clone()), implicit: false },
                                              e.span);
-                    let prod = A::Expr::new(A::ExprKind::BinOp { op: A::BinOpKind::Mul, left: func.clone(),
+                    let prod = crate::ast_ext::mk(A::ExprKind::BinOp { op: "*".into(), left: func.clone(),
                                                                  right: Box::new(inner), implicit: true }, e.span);
                     return self.expr(&prod, ctx);
                 }
             }
         }
         let pconst = const_exponent(right);
-        if let A::ExprKind::Name(n) = &left.kind {
+        if let A::ExprKind::Name { name: n } = &left.kind {
             if n == "e" && pconst.is_none_or(|p| p <= Rational64::zero()) {
                 if matches!(self.lookup(ctx.scope, "e"), Some((Binding::Const(_), _))) {
                     return Err(self.err("e is the elementary charge (1.602×10⁻¹⁹ C) in Fermium", left.span,
@@ -391,8 +392,8 @@ impl Checker {
                 let u = self.resolve_unit(unit)?;
                 if u.affine() {
                     // -40 °C is minus forty degrees, not -(313.15 K)
-                    let num = A::Expr::new(A::ExprKind::Num { value: -x, sigfigs: *sigfigs, digit: *digit }, value.span);
-                    let neg = A::Expr::new(A::ExprKind::Quantity { value: Box::new(num), unit: unit.clone(),
+                    let num = crate::ast_ext::mk(A::ExprKind::Num { value: -x, sigfigs: *sigfigs, digit: *digit }, value.span);
+                    let neg = crate::ast_ext::mk(A::ExprKind::Quantity { value: Box::new(num), unit: unit.clone(),
                                                                    bracket: *bracket }, e.span);
                     let A::ExprKind::Quantity { value, unit, .. } = &neg.kind else { unreachable!() };
                     return self.e_quantity(&neg, value, unit, ctx);
@@ -418,14 +419,15 @@ impl Checker {
         let a = self.expr(left, ctx)?;
         let b = self.expr(right, ctx)?;
         let line = e.span.line;
-        let cop = match op {
-            A::CmpOp::Eq => I::CmpOp::Eq,
-            A::CmpOp::Ne => I::CmpOp::Ne,
-            A::CmpOp::Lt => I::CmpOp::Lt,
-            A::CmpOp::Gt => I::CmpOp::Gt,
-            A::CmpOp::Le => I::CmpOp::Le,
-            A::CmpOp::Ge => I::CmpOp::Ge,
-            A::CmpOp::Approx => return self.approx(e, left, right, tol.as_deref(), a, b, ctx),
+        let cop = match op.as_str() {
+            "==" => I::CmpOp::Eq,
+            "!=" => I::CmpOp::Ne,
+            "<" => I::CmpOp::Lt,
+            ">" => I::CmpOp::Gt,
+            "<=" => I::CmpOp::Le,
+            ">=" => I::CmpOp::Ge,
+            "~=" => return self.approx(e, left, right, tol.as_deref(), a, b, ctx),
+            other => return Err(self.err(format!("unknown comparison {other}"), e.span, None)),
         };
         if matches!(a.ty, Ty::Bool) && matches!(b.ty, Ty::Bool) && matches!(cop, I::CmpOp::Eq | I::CmpOp::Ne) {
             return Ok(ir(I::ExprKind::Cmp(cop, Box::new(a), Box::new(b)), Ty::Bool, line));
@@ -674,15 +676,15 @@ fn integer_decode(x: f64) -> (u64, i32, i64) {
 pub fn const_exponent(e: &A::Expr) -> Option<Rational64> {
     match &e.kind {
         A::ExprKind::Num { value, .. } => limit_denominator(*value, 10000),
-        A::ExprKind::Neg(x) => const_exponent(x).map(|v| -v),
-        A::ExprKind::BinOp { op, left, right, .. } if *op != A::BinOpKind::Pow => {
+        A::ExprKind::Neg { operand: x } => const_exponent(x).map(|v| -v),
+        A::ExprKind::BinOp { op, left, right, .. } if op != "^" => {
             let (a, b) = (const_exponent(left)?, const_exponent(right)?);
-            match op {
-                A::BinOpKind::Add => Some(a + b),
-                A::BinOpKind::Sub => Some(a - b),
-                A::BinOpKind::Mul => Some(a * b),
-                A::BinOpKind::Div => if b.is_zero() { None } else { Some(a / b) },
-                A::BinOpKind::Pow => None,
+            match op.as_str() {
+                "+" => Some(a + b),
+                "-" => Some(a - b),
+                "*" | "×" => Some(a * b),
+                "/" => if b.is_zero() { None } else { Some(a / b) },
+                _ => None,
             }
         }
         _ => None,
@@ -745,16 +747,16 @@ impl Checker {
     /// -1, -4.0, (-2): a negative number written as a literal, or None (Python _negative_literal).
     fn negative_literal(n: &A::Expr) -> Option<f64> {
         let mut n = n.clone();
-        if let A::ExprKind::Neg(q) = &n.kind {
+        if let A::ExprKind::Neg { operand: q } = &n.kind {
             if let A::ExprKind::Quantity { value, unit, .. } = &q.kind {
                 let t = unit.text.trim();
                 if matches!(value.kind, A::ExprKind::Num { .. }) && !(t.starts_with('°') || t.starts_with("deg")) {
-                    n = A::Expr::new(A::ExprKind::Neg(value.clone()), n.span); // `√(-4 m²)` (red team 8 #20)
+                    n = crate::ast_ext::mk(A::ExprKind::Neg { operand: value.clone() }, n.span); // `√(-4 m²)` (red team 8 #20)
                 }
             }
         }
         match &n.kind {
-            A::ExprKind::Neg(q) => match q.kind {
+            A::ExprKind::Neg { operand: q } => match q.kind {
                 A::ExprKind::Num { value, .. } if value != 0.0 => Some(-value),
                 _ => None,
             },
@@ -767,10 +769,10 @@ impl Checker {
     pub fn domain_check(&self, name: &str, arg: &A::Expr, e: &A::Expr) -> CResult<()> {
         let Some(v) = Self::negative_literal(arg) else { return Ok(()) };
         if name == "sqrt" || name == "√" {
-            let is_neg = matches!(arg.kind, A::ExprKind::Neg(_));
+            let is_neg = matches!(arg.kind, A::ExprKind::Neg { .. });
             let txt = if is_neg { crate::source::to_source(arg) } else { num_text(arg) };
             let simple = matches!(arg.kind, A::ExprKind::Num { .. })
-                || matches!(&arg.kind, A::ExprKind::Neg(q) if matches!(q.kind, A::ExprKind::Num { .. }));
+                || matches!(&arg.kind, A::ExprKind::Neg { operand: q } if matches!(q.kind, A::ExprKind::Num { .. }));
             let hint = if simple {
                 format!("for the complex square root write  √({txt} + 0i)  (√(-1) is 𝑖)")
             } else {

@@ -30,42 +30,42 @@ fn src(e: &A::Expr) -> (String, u8) {
             };
             (s, if v >= 0.0 { ATOM } else { NEG })
         }
-        K::Name(n) => (n.clone(), ATOM),
-        K::Str(s) => (format!("\"{s}\""), ATOM),
-        K::Bool(b) => ((if *b { "true" } else { "false" }).into(), ATOM),
+        K::Name { name: n } => (n.clone(), ATOM),
+        K::Str { value: s } => (format!("\"{s}\""), ATOM),
+        K::Bool { value: b } => ((if *b { "true" } else { "false" }).into(), ATOM),
         K::Quantity { value, unit, bracket } => {
             let v = src(value).0;
             (if *bracket { format!("{v} [{}]", unit.text) } else { format!("{v} {}", unit.text) }, JUXT)
         }
-        K::Neg(x) => {
+        K::Neg { operand: x } => {
             let (s, p) = src(x);
-            let need = if matches!(x.kind, K::BinOp { op: A::BinOpKind::Mul | A::BinOpKind::Div, .. }) { PROD } else { JUXT };
+            let need = if matches!(&x.kind, K::BinOp { op, .. } if op == "*" || op == "/") { PROD } else { JUXT };
             (format!("-{}", paren(s, p, need).0), NEG)
         }
         K::BinOp { op, left, right, .. } => {
             let (l, lp) = src(left);
             let (r, rp) = src(right);
-            match op {
-                A::BinOpKind::Add | A::BinOpKind::Sub => {
+            match op.as_str() {
+                "+" | "-" => {
                     let (mut r, rp) = paren(r, rp, PROD);
-                    if *op == A::BinOpKind::Sub && rp == SUM {
+                    if op == "-" && rp == SUM {
                         r = format!("({r})");
                     }
-                    (format!("{l} {} {r}", if *op == A::BinOpKind::Add { "+" } else { "-" }), SUM)
+                    (format!("{l} {} {r}", op), SUM)
                 }
-                A::BinOpKind::Mul => {
+                "*" | "×" => {
                     if lp >= JUXT && rp >= JUXT && !r.starts_with('-') {
                         let sep = if matches!(right.kind, K::Num { .. } | K::Quantity { .. }) { "·" } else { " " };
                         return (format!("{l}{sep}{r}"), JUXT);
                     }
                     (format!("{}·{}", paren(l, lp, PROD).0, paren(r, rp, NEG + 1).0), PROD)
                 }
-                A::BinOpKind::Div => {
+                "/" => {
                     let l = paren(l, lp, PROD).0;
                     let r = if rp <= JUXT { format!("({r})") } else { r };
                     (format!("{l}/{r}"), PROD)
                 }
-                A::BinOpKind::Pow => (format!("{}^{}", paren(l, lp, POW + 1).0, paren(r, rp, POW).0), POW),
+                _ => (format!("{}^{}", paren(l, lp, POW + 1).0, paren(r, rp, POW).0), POW),
             }
         }
         K::Call { func, args } => {
@@ -73,14 +73,12 @@ fn src(e: &A::Expr) -> (String, u8) {
             (format!("{}({})", src(func).0, a.join(", ")), ATOM)
         }
         K::Compare { op, left, right, .. } => {
-            let o = match op {
-                A::CmpOp::Eq => "==",
-                A::CmpOp::Ne => "≠",
-                A::CmpOp::Lt => "<",
-                A::CmpOp::Gt => ">",
-                A::CmpOp::Le => "≤",
-                A::CmpOp::Ge => "≥",
-                A::CmpOp::Approx => "≈",
+            let o = match op.as_str() {
+                "!=" => "≠",
+                "<=" => "≤",
+                ">=" => "≥",
+                "~=" => "≈",
+                x => x,
             };
             (format!("{} {o} {}", to_source(left), to_source(right)), 1)
         }

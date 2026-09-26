@@ -4,6 +4,7 @@
 pub use fermium_ir::{types, Dim, DIMLESS};
 
 pub mod arith;
+pub mod ast_ext;
 pub mod builtins;
 pub mod calls;
 pub mod checker;

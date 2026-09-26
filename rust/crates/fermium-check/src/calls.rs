@@ -41,13 +41,13 @@ impl Checker {
             }
         }
         if let A::ExprKind::Deriv { operand, .. } = &f.kind {
-            if let A::ExprKind::Name(n) = &operand.kind {
+            if let A::ExprKind::Name { name: n } = &operand.kind {
                 if self.is_pde_name(n, ctx) {
                     return self.pde_call(n, e, ctx, true); // ∂u/∂x(x, t) of a PDE solution (D83)
                 }
             }
         }
-        if let A::ExprKind::Name(fname) = &f.kind {
+        if let A::ExprKind::Name { name: fname } = &f.kind {
             let b = self.lookup(ctx.scope, fname).map(|x| x.0);
             if b.is_none() && matches!(fname.as_str(), "sqrt" | "log" | "ln" | "log10" | "log2" | "factorial")
                 && args.len() == 1
@@ -67,16 +67,16 @@ impl Checker {
                 return self.err_call(e, args, ctx); // err(g): the standard error of a fitted parameter
             }
             if b.is_none() && matches!(fname.as_str(), "grad" | "div" | "curl" | "laplacian") && args.len() == 1
-                && matches!(args[0].kind, A::ExprKind::Name(_))
+                && matches!(args[0].kind, A::ExprKind::Name { .. })
             {
                 // ASCII for ∇f, ∇·F, ∇×F, ∇²f
                 let kind = match fname.as_str() {
-                    "grad" => A::VecCalcKind::Grad,
-                    "div" => A::VecCalcKind::Div,
-                    "curl" => A::VecCalcKind::Curl,
-                    _ => A::VecCalcKind::Lap,
+                    "grad" => "grad",
+                    "div" => "div",
+                    "curl" => "curl",
+                    _ => "lap",
                 };
-                let vc = A::Expr::new(A::ExprKind::VecCalc { kind, func: Box::new(args[0].clone()) }, e.span);
+                let vc = crate::ast_ext::mk(A::ExprKind::VecCalc { kind: kind.to_string(), func: Box::new(args[0].clone()) }, e.span);
                 return self.expr_any(&vc, ctx);
             }
             let Some(b) = b else {
@@ -108,7 +108,7 @@ impl Checker {
                             // k(x + 1) means k × (x + 1)
                             let arg = self.expr(&args[0], ctx)?;
                             self.need_numlike(&arg, &args[0], "this value", false)?;
-                            return self.arith(A::BinOpKind::Mul, v, arg, e).map(Checked::Val);
+                            return self.arith("*", v, arg, e).map(Checked::Val);
                         }
                     }
                     return Err(self.err(format!("{fname} isn't a function, so it can't be called with ( )"), f.span,
@@ -145,7 +145,7 @@ impl Checker {
                 let arg = self.expr(&args[0], ctx)?;
                 self.need_numlike(&v, f, "this value", false)?;
                 self.need_numlike(&arg, &args[0], "this value", false)?;
-                return self.arith(A::BinOpKind::Mul, v, arg, e).map(Checked::Val);
+                return self.arith("*", v, arg, e).map(Checked::Val);
             }
         }
         Err(self.err("this can't be called like a function", e.span, None))
@@ -155,7 +155,7 @@ impl Checker {
     pub fn call_args(&mut self, arg_asts: &[A::Expr], ctx: &mut Ctx) -> CResult<Vec<Checked>> {
         let mut out = vec![];
         for a in arg_asts {
-            if let A::ExprKind::Name(n) = &a.kind {
+            if let A::ExprKind::Name { name: n } = &a.kind {
                 if self.lookup(ctx.scope, n).is_none() && PASSABLE_BUILTINS.contains(&n.as_str()) && is_builtin(n) {
                     let info = self.builtin_info(n);
                     out.push(Checked::Func { info, name: n.clone(), param: false });
@@ -180,8 +180,8 @@ impl Checker {
             return id;
         }
         let z = A::Span::default();
-        let x = A::Expr::new(A::ExprKind::Name("x".into()), z);
-        let body = A::Expr::new(A::ExprKind::Call { func: Box::new(A::Expr::new(A::ExprKind::Name(name.into()), z)),
+        let x = crate::ast_ext::mk(A::ExprKind::Name { name: "x".into() }, z);
+        let body = crate::ast_ext::mk(A::ExprKind::Call { func: Box::new(crate::ast_ext::mk(A::ExprKind::Name { name: name.into() }, z)),
                                                     args: vec![x] }, z);
         let fd = A::Stmt { kind: A::StmtKind::FuncDef { name: name.into(),
                                                         params: vec![A::Param { name: "x".into(), unit: None, span: z }],
@@ -222,28 +222,28 @@ impl Checker {
         for n in exprs.iter().rev() {
             match &n.kind {
                 A::ExprKind::Prime { target, order } => {
-                    if let A::ExprKind::Name(t) = &target.kind {
+                    if let A::ExprKind::Name { name: t } = &target.kind {
                         if names.contains(&t.as_str()) {
                             uses.insert(t.clone(), (true, format!("{t}{}", "'".repeat(*order as usize))));
                         }
                     }
                 }
                 A::ExprKind::Deriv { operand, var, .. } => {
-                    if let A::ExprKind::Name(t) = &operand.kind {
+                    if let A::ExprKind::Name { name: t } = &operand.kind {
                         if names.contains(&t.as_str()) {
                             uses.insert(t.clone(), (true, format!("d/d{var} {t}")));
                         }
                     }
                 }
                 A::ExprKind::VecCalc { func, .. } => {
-                    if let A::ExprKind::Name(t) = &func.kind {
+                    if let A::ExprKind::Name { name: t } = &func.kind {
                         if names.contains(&t.as_str()) {
                             uses.insert(t.clone(), (true, format!("∇{t}")));
                         }
                     }
                 }
                 A::ExprKind::Call { func, args } => {
-                    if let A::ExprKind::Name(t) = &func.kind {
+                    if let A::ExprKind::Name { name: t } = &func.kind {
                         if names.contains(&t.as_str()) {
                             let sure = args.len() != 1;
                             let a = args.iter().map(crate::source::to_source).collect::<Vec<_>>().join(", ");
@@ -314,10 +314,10 @@ impl Checker {
             return false;
         };
         let names: Vec<&str> = params.iter().map(|p| p.name.as_str()).collect();
-        let is_param = |e: &A::Expr| matches!(&e.kind, A::ExprKind::Name(n) if names.contains(&n.as_str()));
+        let is_param = |e: &A::Expr| matches!(&e.kind, A::ExprKind::Name { name: n } if names.contains(&n.as_str()));
         let mut exprs: Vec<&A::Expr> = vec![];
         let stmts: Vec<A::Stmt> = match body {
-            A::FuncBody::Expr(b) => vec![A::Stmt { kind: A::StmtKind::Expr(b.clone()), span: b.span }],
+            A::FuncBody::Expr(b) => vec![A::Stmt { kind: A::StmtKind::ExprStmt { value: b.clone() }, span: b.span }],
             A::FuncBody::Block(s) => s.clone(),
         };
         let mut tops = vec![];
@@ -329,7 +329,7 @@ impl Checker {
             match &n.kind {
                 A::ExprKind::Index { target, .. } if is_param(target) => return true,
                 A::ExprKind::Call { func, args } => {
-                    if let A::ExprKind::Name(fname) = &func.kind {
+                    if let A::ExprKind::Name { name: fname } = &func.kind {
                         let f = fname.as_str();
                         if LIST_FUNCS.contains(&f) || matches!(f, "push" | "append" | "max" | "min" | "dot") {
                             for a in args {
@@ -354,7 +354,7 @@ impl Checker {
             for s in stmts {
                 match &s.kind {
                     A::StmtKind::ForIn { iterable, .. } => {
-                        if matches!(&iterable.kind, A::ExprKind::Name(n) if names.contains(&n.as_str())) {
+                        if matches!(&iterable.kind, A::ExprKind::Name { name: n } if names.contains(&n.as_str())) {
                             return true;
                         }
                     }
@@ -516,8 +516,8 @@ impl Checker {
                 A::FuncBody::Block(stmts) => {
                     let mut stmts = stmts.clone();
                     if let Some(last) = stmts.last_mut() {
-                        if let A::StmtKind::Expr(v) = &last.kind {
-                            last.kind = A::StmtKind::Return(Some(v.clone()));
+                        if let A::StmtKind::ExprStmt { value: v } = &last.kind {
+                            last.kind = A::StmtKind::Return { value: Some(v.clone()) };
                         }
                     }
                     let b = self.block(&stmts, &mut fctx)?;

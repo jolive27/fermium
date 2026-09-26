@@ -61,29 +61,29 @@ impl Checker {
         use A::ExprKind as K;
         let v = match &e.kind {
             K::Num { value, sigfigs, digit } => self.e_num(*value, *sigfigs, *digit),
-            K::Str(s) => {
+            K::Str { value: s } => {
                 let mut r = ir(I::ExprKind::Str(s.clone()), Ty::Str, e.span.line);
                 let t = self.text(s);
                 r.extra().text_id = Some(t);
                 r
             }
-            K::Bool(b) => ir(I::ExprKind::Bool(*b), Ty::Bool, e.span.line),
+            K::Bool { value: b } => ir(I::ExprKind::Bool(*b), Ty::Bool, e.span.line),
             K::Quantity { value, unit, .. } => self.e_quantity(e, value, unit, ctx)?,
-            K::Name(n) => return self.e_name(e, n, ctx),
+            K::Name { name: n } => return self.e_name(e, n, ctx),
             K::BinOp { .. } => return self.e_binop(e, ctx),
-            K::Neg(x) => self.e_neg(e, x, ctx)?,
+            K::Neg { operand: x } => self.e_neg(e, x, ctx)?,
             K::Compare { .. } => self.e_compare(e, ctx)?,
-            K::Logic { and, left, right } => self.e_logic(e, *and, left, right, ctx)?,
-            K::Not(x) => self.e_not(e, x, ctx)?,
+            K::Logic { op, left, right } => self.e_logic(e, op == "and", left, right, ctx)?,
+            K::Not { operand: x } => self.e_not(e, x, ctx)?,
             K::IfExpr { cond, then, other } => self.e_if_expr(e, cond, then, other, ctx)?,
             K::Where { value, bindings } => return self.e_where(e, value, bindings, ctx),
             K::Call { .. } => return self.e_call(e, ctx),
-            K::Sqrt { operand, root } => self.e_sqrt(e, operand, *root, ctx)?,
-            K::Abs(x) => self.e_abs(e, x, ctx)?,
-            K::ListLit(items) => self.e_list_lit(e, items, ctx)?,
+            K::Sqrt { operand, root } => self.e_sqrt(e, operand, *root as u32, ctx)?,
+            K::Abs { operand: x } => self.e_abs(e, x, ctx)?,
+            K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
-            K::Digits { value, digits } => self.e_digits(e, value, *digits, ctx)?,
+            K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))
@@ -113,7 +113,7 @@ impl Checker {
             _ => {}
         }
         let value_is_num = matches!(value.kind, A::ExprKind::Num { .. });
-        if e.attrs.times_unit && matches!(v.ty, Ty::Num(_) | Ty::List(_)) && !u.affine() {
+        if e.attrs.times_unit == Some(true) && matches!(v.ty, Ty::Num(_) | Ty::List(_)) && !u.affine() {
             let vd = self.u.norm(&ty_dim(&v.ty).unwrap());
             if !(vd.is_concrete() && vd.konst.is_dimensionless()) {
                 // `(a + b) MeV`, `100 h km/s/Mpc` with h Planck's: times 1 unit, like `* 1 MeV` (D215)
@@ -384,14 +384,14 @@ pub fn expr_kind_name(k: &A::ExprKind) -> &'static str {
     match k {
         K::Num { .. } => "a number",
         K::Quantity { .. } => "a quantity",
-        K::Str(_) => "text",
-        K::Bool(_) => "true/false",
-        K::Name(_) => "a name",
+        K::Str { .. } => "text",
+        K::Bool { .. } => "true/false",
+        K::Name { .. } => "a name",
         K::BinOp { .. } => "arithmetic",
-        K::Neg(_) => "negation",
+        K::Neg { .. } => "negation",
         K::Compare { .. } => "a comparison",
         K::Logic { .. } => "and/or",
-        K::Not(_) => "not",
+        K::Not { .. } => "not",
         K::Call { .. } => "a call",
         K::Index { .. } => "indexing",
         K::Slice { .. } => "a slice",
@@ -402,15 +402,15 @@ pub fn expr_kind_name(k: &A::ExprKind) -> &'static str {
         K::Integral { .. } => "an integral",
         K::Sum { .. } => "Σ",
         K::Sqrt { .. } => "√",
-        K::Abs(_) => "|…|",
-        K::ListLit(_) => "a list",
+        K::Abs { .. } => "|…|",
+        K::ListLit { .. } => "a list",
         K::Table { .. } => "table(…)",
         K::VecCalc { .. } => "∇",
-        K::VecLit(_) => "a vector",
+        K::VecLit { .. } => "a vector",
         K::IfExpr { .. } => "if … else",
         K::Convert { .. } => "in (unit conversion)",
         K::Digits { .. } => "to N digits",
-        K::Load(_) => "load",
+        K::Load { .. } => "load",
         K::Where { .. } => "where",
         K::Uncertain { .. } => "±",
     }

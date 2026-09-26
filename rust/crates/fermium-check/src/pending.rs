@@ -102,14 +102,14 @@ impl Checker {
         None
     }
     pub fn warn_limit_division(&mut self, _e: &A::Expr, _b: &I::Expr) {}
-    pub fn warn_confusable_sum(&mut self, _op: A::BinOpKind, _a: &I::Expr, _b: &I::Expr, _e: &A::Expr) {}
-    pub fn cplx_arith(&mut self, _op: A::BinOpKind, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
+    pub fn warn_confusable_sum(&mut self, _op: &str, _a: &I::Expr, _b: &I::Expr, _e: &A::Expr) {}
+    pub fn cplx_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("complex arithmetic", e.span))
     }
-    pub fn mat_arith(&mut self, _op: A::BinOpKind, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
+    pub fn mat_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("matrix arithmetic", e.span))
     }
-    pub fn vec_arith(&mut self, _op: A::BinOpKind, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
+    pub fn vec_arith(&mut self, _op: &str, _a: I::Expr, _b: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
         Err(self.not_ported("vector arithmetic", e.span))
     }
     pub fn shared_dim(&mut self, _v: &I::Expr, _what: &str, node: &A::Expr) -> CResult<fermium_ir::types::DExpr> {

@@ -231,6 +231,8 @@ pub struct Checker {
     pub calling: bool,
     /// the length of each `10 °C` written out, by (line, col), for warnings pointing at it
     pub abs_at_len: HashMap<(u32, u32), u32>,
+    /// every expression of the program by its id (the parser refers to nodes by id: unit_left, …)
+    pub nodes: HashMap<u32, *const A::Expr>,
     /// the dimension of each print format, resolved when checking ends
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
@@ -273,6 +275,7 @@ impl Checker {
             abs_at_len: HashMap::new(),
             par_stack: vec![],
             fmt_dims: vec![],
+            nodes: HashMap::new(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -465,6 +468,8 @@ impl Checker {
         let ctx = Ctx { func: Owner::Main, scope: self.globals, is_main: true, lam: None, loop_depth: 0, branch: 0,
                         ret_types: self.new_ret_types(), regions: vec![], lam_parents: vec![] };
         let mut ctx = ctx;
+        self.nodes.clear();
+        self.index_nodes(prog);
         self.future_funcs = prog
             .body
             .iter()
@@ -479,6 +484,22 @@ impl Checker {
         self.module.main = main;
         self.module.uses_uncertainty = self.uses_unc;
         Ok(std::mem::take(&mut self.module))
+    }
+
+    fn index_nodes(&mut self, prog: &A::Program) {
+        let mut tops = vec![];
+        crate::walk::all_exprs_in_stmts(&prog.body, &mut tops);
+        for t in tops {
+            for n in t.walk() {
+                self.nodes.entry(n.id).or_insert(n as *const A::Expr);
+            }
+        }
+    }
+
+    /// The program's expression with this id, if it is in the tree.
+    pub fn node(&self, id: u32) -> Option<&A::Expr> {
+        // SAFETY: the program outlives the checker's use of it (check_program borrows it throughout)
+        self.nodes.get(&id).map(|p| unsafe { &**p })
     }
 
     pub fn new_ret_types(&mut self) -> usize {
@@ -503,9 +524,9 @@ impl Checker {
     pub fn stmt(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         use A::StmtKind as K;
         match &s.kind {
-            K::Expr(e) => self.s_expr_stmt(s, e, ctx),
+            K::ExprStmt { value: e } => self.s_expr_stmt(s, e, ctx),
             K::Assign { name, value, op } => self.s_assign(s, name, value, op, ctx),
-            K::Print(items) => self.s_print(items, ctx).map(|p| vec![p]),
+            K::Print { items } => self.s_print(items, ctx).map(|p| vec![p]),
             K::FuncDef { .. } => self.s_funcdef(s, ctx),
             K::If { cond, then, other } => self.s_if(s, cond, then, other.as_deref(), ctx),
             K::While { cond, body } => self.s_while(s, cond, body, ctx),
@@ -513,12 +534,11 @@ impl Checker {
                 self.s_for(s, var, lo, hi, step.as_ref(), body, *parallel, ctx)
             }
             K::ForIn { var, iterable, body } => self.s_for_in(s, var, iterable, body, ctx),
-            K::Return(v) => self.s_return(s, v.as_ref(), ctx),
+            K::Return { value: v } => self.s_return(s, v.as_ref(), ctx),
             K::Break => self.s_break(s, ctx),
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
-            K::Pass => Ok(vec![]),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }
@@ -540,26 +560,24 @@ pub fn stmt_kind_name(k: &A::StmtKind) -> &'static str {
         K::Assign { .. } => "assignment",
         K::IndexAssign { .. } => "setting an element",
         K::FuncDef { .. } => "a function definition",
-        K::Print(_) => "print",
+        K::Print { .. } => "print",
         K::Plot { .. } => "plot",
         K::Solve { .. } => "solve",
-        K::SolveAlgebraic { .. } => "solve … for",
         K::Fit { .. } => "fit",
         K::Analyze { .. } => "analyze",
         K::If { .. } => "if",
         K::For { .. } => "for",
         K::ForIn { .. } => "for … in",
         K::While { .. } => "while",
-        K::Return(_) => "return",
+        K::Return { .. } => "return",
         K::Break => "break",
         K::Continue => "continue",
-        K::Expr(_) => "an expression",
+        K::ExprStmt { .. } => "an expression",
         K::Assert { .. } => "assert",
         K::Units { .. } => "units",
         K::Import { .. } => "import",
         K::UsePython { .. } => "use python",
         K::Propagate { .. } => "propagate montecarlo",
-        K::Pass => "pass",
     }
 }
 

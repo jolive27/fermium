@@ -154,6 +154,6 @@ impl Checker {
         if where_.is_empty() {
             return Some(b.clone());
         }
-        Some(A::Expr::new(A::ExprKind::Where { value: Box::new(b.clone()), bindings: where_.clone() }, *span))
+        Some(crate::ast_ext::mk(A::ExprKind::Where { value: Box::new(b.clone()), bindings: where_.clone() }, *span))
     }
 }

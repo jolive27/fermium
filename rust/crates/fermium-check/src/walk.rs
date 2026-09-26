@@ -60,7 +60,7 @@ pub fn for_each_stmt_expr(s: &A::Stmt, f: &mut dyn FnMut(&A::Expr)) {
             where_.iter().for_each(|(_, x)| f(x));
         }
         K::FuncDef { where_, .. } => where_.iter().for_each(|(_, x)| f(x)),
-        K::Print(items) => items.iter().for_each(|x| f(x)),
+        K::Print { items } => items.iter().for_each(|x| f(x)),
         K::If { cond, .. } | K::While { cond, .. } => f(cond),
         K::For { lo, hi, step, .. } => {
             f(lo);
@@ -70,24 +70,19 @@ pub fn for_each_stmt_expr(s: &A::Stmt, f: &mut dyn FnMut(&A::Expr)) {
             }
         }
         K::ForIn { iterable, .. } => f(iterable),
-        K::Return(Some(e)) | K::Expr(e) => f(e),
+        K::Return { value: Some(e) } | K::ExprStmt { value: e } => f(e),
         K::Assert { cond, .. } => f(cond),
-        K::Solve { equations, initial, lo, hi, step, tolerance, until, absolute, extra, .. } => {
-            for eq in equations.iter().chain(initial.iter()).chain(until.iter()) {
+        K::Solve(sv) => {
+            for eq in sv.equations.iter().chain(sv.initial.iter()).chain(sv.until.iter()) {
                 f(&eq.lhs);
                 f(&eq.rhs);
             }
-            f(lo);
-            f(hi);
-            step.iter().chain(tolerance.iter()).for_each(|x| f(x));
-            absolute.iter().flatten().for_each(|x| f(x));
-            extra.iter().for_each(|(_, x)| f(x));
-        }
-        K::SolveAlgebraic { eq, lo, hi, .. } => {
-            f(&eq.lhs);
-            f(&eq.rhs);
-            f(lo);
-            f(hi);
+            f(&sv.lo);
+            f(&sv.hi);
+            for x in [&sv.step, &sv.tolerance, &sv.lowest, &sv.grid, &sv.lo2, &sv.hi2, &sv.step2].into_iter().flatten() {
+                f(x);
+            }
+            sv.absolute.iter().flatten().for_each(|x| f(x));
         }
         K::Fit { model, data, guesses } => {
             f(&model.lhs);
@@ -101,81 +96,28 @@ pub fn for_each_stmt_expr(s: &A::Stmt, f: &mut dyn FnMut(&A::Expr)) {
                 f(&p.x);
                 p.lo.iter().chain(p.hi.iter()).for_each(|x| f(x));
             }
-            options.iter().for_each(|(_, x)| f(x));
+            for (_, o) in options {
+                if let A::PlotOpt::Range(a, b) = o {
+                    f(a);
+                    f(b);
+                }
+            }
         }
         K::Propagate { samples: Some(e), .. } => f(e),
         _ => {}
     }
 }
 
-/// The direct sub-expressions of an expression.
+/// The direct sub-expressions of an expression (ast.children).
 pub fn children(e: &A::Expr) -> Vec<&A::Expr> {
-    use A::ExprKind as K;
-    let mut v: Vec<&A::Expr> = vec![];
-    match &e.kind {
-        K::Quantity { value, .. } | K::Convert { value, .. } | K::Digits { value, .. } => v.push(value),
-        K::BinOp { left, right, .. } | K::Logic { left, right, .. } => {
-            v.push(left);
-            v.push(right);
-        }
-        K::Compare { left, right, tol, .. } => {
-            v.push(left);
-            v.push(right);
-            if let Some(t) = tol {
-                v.push(t);
-            }
-        }
-        K::Neg(x) | K::Not(x) | K::Abs(x) => v.push(x),
-        K::Call { func, args } => {
-            v.push(func);
-            v.extend(args.iter());
-        }
-        K::Index { target, index } => {
-            v.push(target);
-            v.push(index);
-        }
-        K::Slice { lo, hi } => {
-            v.extend(lo.iter().map(|b| b.as_ref()));
-            v.extend(hi.iter().map(|b| b.as_ref()));
-        }
-        K::Field { target, .. } | K::Prime { target, .. } => v.push(target),
-        K::Deriv { operand, .. } | K::Sqrt { operand, .. } => v.push(operand),
-        K::Integral { integrand, lo, hi, .. } => {
-            v.push(integrand);
-            v.extend(lo.iter().map(|b| b.as_ref()));
-            v.extend(hi.iter().map(|b| b.as_ref()));
-        }
-        K::Sum { body, lo, hi, step, .. } => {
-            v.push(body);
-            v.push(lo);
-            v.push(hi);
-            v.extend(step.iter().map(|b| b.as_ref()));
-        }
-        K::ListLit(items) | K::VecLit(items) | K::Table { items, .. } => v.extend(items.iter()),
-        K::VecCalc { func, .. } => v.push(func),
-        K::IfExpr { cond, then, other } => {
-            v.push(cond);
-            v.push(then);
-            v.push(other);
-        }
-        K::Where { value, bindings } => {
-            v.push(value);
-            v.extend(bindings.iter().map(|(_, x)| x));
-        }
-        K::Uncertain { value, err } => {
-            v.push(value);
-            v.push(err);
-        }
-        K::Num { .. } | K::Str(_) | K::Bool(_) | K::Name(_) | K::End | K::Load(_) => {}
-    }
-    v
+    e.children()
 }
 
 /// Names used in an expression, not counting variables bound inside (ast.free_names).
 pub fn free_names(n: &A::Expr) -> Vec<String> {
     use A::ExprKind as K;
     match &n.kind {
-        K::Name(x) => vec![x.clone()],
+        K::Name { name: x } => vec![x.clone()],
         K::Integral { integrand, var, lo, hi } => {
             let mut out: Vec<String> = free_names(integrand).into_iter().filter(|x| x != var).collect();
             for b in lo.iter().chain(hi.iter()) {

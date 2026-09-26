@@ -1,6 +1,8 @@
 //! `fermium`: the command-line tool (spec §B4, fermium-cli).
 use std::process::ExitCode;
 
+mod run;
+
 use fermium_syntax::{sexpr, Diagnostics};
 
 fn usage() -> ExitCode {
@@ -84,21 +86,17 @@ fn main() -> ExitCode {
         Some("parse") => cmd_parse(&args[1..]),
         Some("run") => {
             let mut file = None;
+            let mut base = None;
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 if a == "--base-dir" {
-                    it.next();
+                    base = it.next().cloned();
                 } else {
                     file = Some(a.clone());
                 }
             }
             let Some(file) = file else { return usage() };
-            if std::fs::read_to_string(&file).is_err() {
-                eprintln!("can't find the file '{file}'");
-                return ExitCode::from(1);
-            }
-            eprintln!("{file}, line 1: the Rust compiler can't run programs yet (Phase B in progress)");
-            ExitCode::from(1)
+            run::run_file(&file, base.as_deref())
         }
         _ => usage(),
     }
