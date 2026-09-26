@@ -88,18 +88,6 @@ fn used(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
     }
 }
 
-/// The per-function state saved while the body function is compiled.
-struct Saved<'c> {
-    fnv: Option<FunctionValue<'c>>,
-    entry_b: Option<Builder<'c>>,
-    locals: HashMap<SymId, (PointerValue<'c>, Kind)>,
-    overrides: HashMap<SymId, (PointerValue<'c>, Kind)>,
-    err_bb: Option<BasicBlock<'c>>,
-    loops: Vec<(BasicBlock<'c>, BasicBlock<'c>)>,
-    ret_kind: Kind,
-    block: Option<BasicBlock<'c>>,
-}
-
 impl<'c, 'm> Gen<'c, 'm> {
     pub(super) fn parallel_for(&mut self, sym: SymId, lo: &Expr, hi: &Expr, step: Option<&Expr>, body: &[Stmt],
                                info: &ParInfo) -> R<()> {
@@ -147,25 +135,9 @@ impl<'c, 'm> Gen<'c, 'm> {
         let fty = self.cx.void_type().fn_type(&args, false);
         self.par_count += 1;
         let pf = self.lm.add_function(&format!("par{}", self.par_count), fty, Some(Linkage::Internal));
-        let saved = Saved {
-            fnv: self.fnv.take(),
-            entry_b: self.entry_b.take(),
-            locals: std::mem::take(&mut self.locals),
-            overrides: std::mem::take(&mut self.overrides),
-            err_bb: self.err_bb.take(),
-            loops: std::mem::take(&mut self.loops),
-            ret_kind: self.ret_kind,
-            block: self.b.get_insert_block(),
-        };
+        let saved = self.save_fn();
         let r = self.par_body(pf, sym, body, info, &env_syms, &env_kinds, &own, nenv);
-        self.fnv = saved.fnv;
-        self.entry_b = saved.entry_b;
-        self.locals = saved.locals;
-        self.overrides = saved.overrides;
-        self.err_bb = saved.err_bb;
-        self.loops = saved.loops;
-        self.ret_kind = saved.ret_kind;
-        self.b.position_at_end(saved.block.unwrap());
+        self.restore_fn(saved);
         self.known_line = None;
         r?;
         // run the blocks (the recursion check is off meanwhile: the threads have stacks of their own)

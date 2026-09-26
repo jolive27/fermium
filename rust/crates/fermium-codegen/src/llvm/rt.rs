@@ -104,6 +104,8 @@ pub const E_STEP0: i64 = 7;
 pub const E_RANGE: i64 = 12;
 pub const E_DEEP: i64 = 10;
 pub const E_PAR_ALIAS: i64 = 40;
+pub const E_SUM_STEP: i64 = 1007;
+pub const E_SUM_RANGE: i64 = 1012;
 
 /// What the compiled code runs against. `err` is first so the compiled code finds it at offset 0.
 #[repr(C)]
@@ -305,6 +307,11 @@ fn error(c: &mut Ctx, kind: i64, a: f64, b: f64, line: i32) {
             Err(e) => e,
             Ok(_) => RunError { message: "the step must be non-zero".into(), line, hint: None },
         },
+        E_SUM_STEP | E_SUM_RANGE => {
+            use fermium_runtime::numerics::{err as K, Fail};
+            let f = if kind == E_SUM_STEP { Fail::new(K::STEP, a, b) } else { Fail::new(12, a, b) };
+            RunError { message: crate::eval_calc::describe(c.module, f, None), line, hint: None }
+        }
         E_RANGE => {
             let f = fermium_units::numfmt::format_number6;
             RunError { message: format!("this for loop has no definite number of steps: it goes from {} to {} (NaN \
@@ -467,6 +474,93 @@ pub extern "C" fn fm_list_powf(c: C, a: *const FmList, y: f64) -> *mut FmList {
 pub extern "C" fn fm_list_neg(c: C, a: *const FmList) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| -x).collect();
     locked(c, |c| c.new_list(v))
+}
+
+// ---------------------------------------------------------------- calculus (eval_calc.rs)
+/// A compiled scalar lambda: f(x, env).
+pub type ScalarFn = unsafe extern "C" fn(x: f64, env: *mut u8) -> f64;
+
+const QZERO_MSG: &str = "this integral came out as exactly 0 because the integrand was 0 at every point where it was \
+                         sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range \
+                         that fits it";
+
+fn err_flag<'a>(c: C<'a>) -> &'a std::sync::atomic::AtomicI32 {
+    unsafe { &*(c as *const std::sync::atomic::AtomicI32) }
+}
+
+fn fmt_opt(i: i64) -> Option<usize> {
+    if i >= 0 {
+        Some(i as usize)
+    } else {
+        None
+    }
+}
+
+/// ∫ f from a to b (eval_calc Integral): fermium-runtime's quad; once the integrand has stopped with an error
+/// it isn't called again (NaN), and that error is the one reported.
+pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol: f64, xname: f64, xfmt: i64,
+                          line: i32) -> f64 {
+    use std::sync::atomic::Ordering::SeqCst;
+    let flag = err_flag(c);
+    let r = fermium_runtime::numerics::quad::quad(
+        |x| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } },
+        a, b, 1e-10, atol, xname);
+    if flag.load(SeqCst) != 0 {
+        return f64::NAN;
+    }
+    let line = line.max(0) as u32;
+    locked(c, |c| match r {
+        Err(fl) => {
+            let e = RunError { message: crate::eval_calc::describe(c.module, fl, fmt_opt(xfmt)), line, hint: None };
+            c.fail(e);
+            f64::NAN
+        }
+        Ok(r) => {
+            if r.all_zero {
+                if atol < 0.0 {
+                    // eval_calc's QZERO += 1 (the quiet first try of a vector component, D110), through its
+                    // qzero_mark / qzero_check built-ins: mark returns the count and clears it, check sets it
+                    c.interp.line = line;
+                    let n = c.interp.builtin("qzero_mark", vec![]).map(|v| v.num()).unwrap_or(0.0);
+                    let _ = c.interp.builtin("qzero_check", vec![Value::Num(n + 1.0), Value::Num(f64::NAN)]);
+                } else {
+                    crate::eval_calc::warn_at(line, QZERO_MSG);
+                }
+            }
+            r.value
+        }
+    })
+}
+
+/// The x in [a, b] where f(x) = 0 (eval_calc Root); g = |lhs| + |rhs| for the rounding-noise warning, or null.
+pub extern "C" fn fm_root(c: C, f: ScalarFn, fenv: *mut u8, g: Option<ScalarFn>, genv: *mut u8, a: f64, b: f64,
+                          tfmt: i64, line: i32) -> f64 {
+    use std::sync::atomic::Ordering::SeqCst;
+    let flag = err_flag(c);
+    let call = |h: ScalarFn, env: *mut u8, x: f64| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { h(x, env) } };
+    let mut sc = |x: f64| call(g.unwrap(), genv, x);
+    let r = fermium_runtime::numerics::roots::root(|x| call(f, fenv, x), a, b, 200,
+                                                   if g.is_some() { Some(&mut sc as &mut dyn FnMut(f64) -> f64) } else { None });
+    if flag.load(SeqCst) != 0 {
+        return f64::NAN;
+    }
+    let line = line.max(0) as u32;
+    locked(c, |c| match r {
+        Err(fl) => {
+            let e = RunError { message: crate::eval_calc::describe(c.module, fl, fmt_opt(tfmt)), line, hint: None };
+            c.fail(e);
+            f64::NAN
+        }
+        Ok(r) => {
+            if let Some(x) = r.noise_warning {
+                crate::eval_calc::warn_at(line, &format!(
+                    "the two sides of this equation agree only to rounding error near {}, so the solution found there \
+                     may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper",
+                    crate::eval_calc::fmt_value(c.module, x, fmt_opt(tfmt))));
+            }
+            r.x
+        }
+    })
 }
 
 // ---------------------------------------------------------------- parallel for (D152)

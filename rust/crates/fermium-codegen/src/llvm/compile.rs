@@ -177,6 +177,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_tlist_at", Some(i), &[p, i], rt::fm_tlist_at as *const () as usize, false);
         self.declare("fm_tlist_copy", Some(p), &[p, p], rt::fm_tlist_copy as *const () as usize, false);
         self.declare("fm_par_run", None, &[p, p, p, i, f, f, p, i], rt::fm_par_run as *const () as usize, false);
+        self.declare("fm_quad", Some(f), &[p, p, p, f, f, f, f, i, i32t], rt::fm_quad as *const () as usize, false);
+        self.declare("fm_root", Some(f), &[p, p, p, p, p, f, f, i, i32t], rt::fm_root as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
@@ -1276,6 +1278,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 }
             }
             ExprKind::Builtin(name, args) => self.builtin(e, name, args)?,
+            ExprKind::Integral { .. } | ExprKind::Sum { .. } | ExprKind::Root { .. } => self.calculus(e)?,
             other => return Err(format!("{} isn't compiled yet", expr_name(other))),
         })
     }
@@ -1492,3 +1495,5 @@ fn expr_name(k: &ExprKind) -> &'static str {
 
 #[path = "par.rs"]
 mod par;
+#[path = "lam.rs"]
+mod lam;
