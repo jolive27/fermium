@@ -1055,7 +1055,7 @@ divergence needs it; then it goes in DIVERGENCES.md with the case ids).
 
 ## D266. The playground runs the Rust compiler as WebAssembly, through a C ABI without JS glue (B5.12)
 - **What:** `rust/crates/fermium-wasm` (a cdylib for `wasm32-unknown-unknown`, built with `--profile wasm`: release,
-fat LTO, stripped; 3.3 MB, 1.1 MB gzipped) runs parse → check → the tree-walking back end, as `fermium run
+fat LTO, stripped; 3.6 MB, 1.2 MB gzipped) runs parse → check → the tree-walking back end, as `fermium run
 --backend interp`. It exports `alloc`/`dealloc`/`put_file`/`run_program`/`panic_message`/`partial_stdout` over
 numbers and byte buffers; `run_program` returns length-prefixed JSON. `web/fermium.js` is the only JS that
 talks to it (shared by the worker and the Node tests); each run instantiates the compiled module afresh, so the
