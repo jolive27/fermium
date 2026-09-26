@@ -252,6 +252,29 @@ impl UFloat {
     }
 }
 
+/// Uncertain values with the given covariance matrix (row-major n×n): cov = V Λ Vᵀ, each eigenvector one new
+/// source (uncertain.correlated, for the parameters found by fit, D124). None for a covariance that isn't
+/// finite. The eigenvectors' signs and order can differ from NumPy's eigh; σ and every correlation don't.
+pub fn correlated(values: &[f64], cov: &[f64]) -> Option<Vec<UFloat>> {
+    let n = values.len();
+    if cov.len() != n * n || !cov.iter().all(|c| c.is_finite()) {
+        return None;
+    }
+    let (lam, vec) = super::linalg::jacobi_eigen(cov, n);
+    let ids: Vec<u64> = (0..n).map(|_| new_source()).collect();
+    Some((0..n)
+        .map(|i| {
+            let d = (0..n)
+                .filter_map(|k| {
+                    let c = vec[i * n + k] * lam[k].max(0.0).sqrt();
+                    if c != 0.0 { Some((ids[k], c)) } else { None }
+                })
+                .collect();
+            UFloat::new(values[i], d)
+        })
+        .collect())
+}
+
 /// The derivative of a one-argument function at x (uncertain.DERIV); None for the step functions (a plain
 /// result) and for names it doesn't know.
 pub fn deriv(name: &str, x: f64, digamma: impl Fn(f64) -> f64, gamma: impl Fn(f64) -> f64) -> Option<f64> {
