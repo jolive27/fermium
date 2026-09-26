@@ -230,6 +230,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         self.err(msg.to_string())
     }
 
+    /// A number where v1 needs a plain one (an index, a loop bound: Python's int()/float() of a UFloat raises).
+    #[inline]
+    pub(crate) fn plain(&self, v: &Value) -> Result<f64, RunError> {
+        match v {
+            Value::Num(x) => Ok(*x),
+            Value::Unc(_) | Value::UList(_) | Value::UVec(_) => self.unc_err(GENERIC),
+            v => Ok(v.num()),
+        }
+    }
+
     /// a op b where a or b holds uncertain numbers (e_IBin).
     pub(crate) fn unc_bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
         match (list_items(&a), list_items(&b)) {
@@ -596,7 +606,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             "slice" => {
                 let v = list_items(&args[0]).unwrap_or_default();
-                let (lo, hi) = (args[1].num(), args[2].num());
+                let (lo, hi) = (self.plain(&args[1])?, self.plain(&args[2])?);
                 if hi == lo - 1.0 {
                     return Ok(make_list(vec![]));
                 }

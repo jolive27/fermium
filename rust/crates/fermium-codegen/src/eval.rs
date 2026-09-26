@@ -345,7 +345,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             StmtKind::IndexAssign(sym, idx, value) => {
                 let lst = self.get(*sym, fr)?;
                 if let Value::UList(l) = &lst {
-                    let i = self.eval(idx, fr)?.num();
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
                     let n = l.borrow().len();
                     let k = self.elem_index(i, n)?;
                     let v = self.eval(value, fr)?;
@@ -355,7 +356,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let Value::List(l) = lst else {
                     return self.err("not yet supported by the Rust back end: setting an element of this value");
                 };
-                let i = self.eval(idx, fr)?.num();
+                let i = self.eval(idx, fr)?;
+                let i = self.plain(&i)?;
                 let n = l.borrow().len();
                 let k = self.elem_index(i, n)?;
                 let v = self.eval(value, fr)?;
@@ -411,10 +413,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::For { sym, lo, hi, step, body, par, .. } => {
                 // inclusive, computed as lo + i·st (so rounding never adds or drops the last value)
-                let lo = self.eval(lo, fr)?.num();
-                let hi = self.eval(hi, fr)?.num();
+                let lo = self.eval(lo, fr)?;
+                let lo = self.plain(&lo)?;
+                let hi = self.eval(hi, fr)?;
+                let hi = self.plain(&hi)?;
                 let st = match step {
-                    Some(e) => self.eval(e, fr)?.num(),
+                    Some(e) => {
+                        let v = self.eval(e, fr)?;
+                        self.plain(&v)?
+                    }
                     None => 1.0,
                 };
                 let n = self.for_count(lo, hi, st)?;
@@ -750,7 +757,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             },
             ExprKind::Index(l, i) => {
                 let lst = self.eval(l, fr)?;
-                let i = self.eval(i, fr)?.num();
+                let i = self.eval(i, fr)?;
+                let i = self.plain(&i)?;
                 match lst {
                     Value::List(l) => {
                         let n = l.borrow().len();

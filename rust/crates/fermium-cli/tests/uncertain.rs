@@ -78,6 +78,26 @@ fn sums_of_fit_parameters_print_like_v1() {
                format!("{HOOKE_REPORT}50.1 N/m\n100 N/m\n100 N/m\n51.11429 N/m\n1.10 N\n1.2 N/m\n3.2 m\n"));
 }
 
+/// Where v1's interpreter needs a plain number (Python's int()/float() of a UFloat: an index, a slice, a loop
+/// bound, the span of Σ) an uncertain value stops with the plain-number error; an integral or a root with an
+/// uncertain limit calls the function at an uncertain point (the kernel check). Expected outputs from v1.
+#[test]
+fn uncertain_values_where_plain_numbers_are_needed() {
+    let generic = "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the \
+                   uncertainty, or put the calculation in a  propagate montecarlo  block";
+    for (k, body) in ["print xs[i]", "print xs[i:3]", "xs[i] = 7", "for k from 1 to i\n    print k", "print v[i]",
+                      "print Σ(k^2 for k from 1 to i)", "print ys[i]"].iter().enumerate() {
+        let src = format!("xs = [1, 2, 3]\nys = [1, 2, 3] ± 0.1\nv = <1, 2, 3>\ni = 2.0 ± 0.1\n{body}\n");
+        assert_eq!(error_of(&format!("plain{k}"), &src), format!("prog.fm, line 5: {generic}"), "{body}");
+    }
+    let kernel = |what: &str| format!("prog.fm, line 2: {what} can't use uncertain values (±) yet; put it inside a  \
+                                       propagate montecarlo  block, or use value(x)");
+    assert_eq!(error_of("kint", "L = 0.5 ± 0.005\nprint ∫ x^2 dx from 0 to L\n"), kernel("an integral"));
+    assert_eq!(error_of("kroot", "a = 1.0 ± 0.1\nsolve x^2 = 2 for x from a to 3\nprint x\n"), kernel("solve … for x"));
+    // an integrand that errors over an infinite range stops at once
+    assert_eq!(error_of("kinf", "I = 2.0 ± 0.02\nprint ∫ I / (1 + z²) dz from -∞ to ∞\n"), kernel("an integral"));
+}
+
 #[test]
 fn fit_model_cannot_use_other_uncertain_values() {
     let src = "x = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06] m\nF = [1.49, 2.02, 2.49, 3.03, 3.47, 4.02] N\n\
