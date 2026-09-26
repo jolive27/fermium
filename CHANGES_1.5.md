@@ -35,3 +35,7 @@ What that changes:
 - `plot saved to` shows the full path of the picture, like `plot saved to /Users/ada/lab/gallery/pendulum.png`, so you can find it whichever folder you ran the program from. (It used to show the name relative to the program's folder.) The same for animations and for programs made with `fermium build`.
 - Axis labels use the column's name: `T [s]`, not `data.T [s]`. When you draw a fitted curve over your data, the y axis says `T [s]` and the legend names the curve.
 - `examples/01_pendulum.fm` draws the fitted curve over the measurements: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm`.
+
+## Research reproductions (D254, D255)
+
+- The research inputs that had been typed from memory are now checked against cited sources, and the citations sit next to the data. The Geiger–Marsden table was right. Two ²⁰⁸Pb level energies moved by 5–6 keV (rms 0.476 → 0.478 MeV). One Big Bang nucleosynthesis rate coefficient was wrong: fixing it moves ⁷Li/H from 5.10×10⁻¹⁰ to 4.36×10⁻¹⁰; helium, deuterium and ³He did not change.

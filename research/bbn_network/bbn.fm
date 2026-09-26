@@ -61,7 +61,12 @@ weak(s, T) =
 λ_pn(T) = weak(-1, T)
 
 # ---- nuclear reaction rates N_A<σv> ---------------------------------------------------------------------
-# Fits of Smith, Kawano & Malaney (1993) and Caughlan & Fowler (1988), as coded in Kawano's NUC123 (see README).
+# The fits of Smith, Kawano & Malaney 1993 (ApJS 85, 219) as coded in Kawano's NUC123, version 4.1 (Dec 1991),
+# subroutine rate2 (reactions 12, 16, 17, 20, 24, 26-31). Checked coefficient by coefficient on 2026-09-26 (spec
+# A8.3) against the NUC123 listing https://github.com/ckald/KAWANO-sterile/blob/master/nuc123.f (a copy of
+# Kawano's version 4.1); all agree except ³He(α,γ)⁷Be's T9 scaling, which had been typed from memory as CF88's
+# 0.0495 and is NUC123's 0.1071 (fixed). ⁷Li(p,α) is CF88's ⁷Li(p,α)⁴He plus CF88's ⁷Li(p,γ)⁸Be (→ 2α), as in
+# NUC123 (see README for the comparison with CF88).
 # They are fitted for T₉ ≤ 10; above that (T > 0.86 MeV) they are held at T₉ = 10: the light nuclei are then
 # in equilibrium (set by the reverse rates below, which use the true T) and the rates only need to be fast.
 T9(T) = min(T / (1e9 K * k_B), 10)
@@ -91,7 +96,7 @@ rate = 1 cm³/(mol s)
      + 5.212e8 rate * t^(-1/2) exp(-1.762 / t)) / N_A
 σv_h3a(T) =         # ³He(α,γ)⁷Be
     t = T9(T)
-    ta = t / (1 + 0.0495 t)
+    ta = t / (1 + 0.1071 t)           # NUC123 reaction 27 (t9f); the from-memory version had CF88's 0.0495
     (4.817e6 rate * t^(-2/3) exp(-14.964 / t^(1/3)) (1 + 0.0325 t^(1/3) - 1.04e-3 t^(2/3) - 2.37e-4 t - 8.11e-5 t^(4/3) - 4.69e-5 t^(5/3))
      + 5.938e6 rate * ta^(5/6) t^(-3/2) exp(-12.859 / ta^(1/3))) / N_A
 σv_ta(T) =          # t(α,γ)⁷Li

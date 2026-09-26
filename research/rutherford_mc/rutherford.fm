@@ -17,7 +17,12 @@ b_of(θ) = (d/2) / tan(θ / 2)              # b = (d/2) cot(θ/2)  (Fermium has 
 b_max = b_of(θ_min)
 print "b_max =", b_max in fm to 4 digits, "  (θ > 5°:  σ =", π b_max² in barn to 4 digits, ")"
 
-# the Geiger–Marsden 1913 angles (gold, Table II) and their counts; the MC also counts a 5° window around each
+# the Geiger–Marsden 1913 angles (gold, Table II) and their counts; the MC also counts a 5° window around each.
+# Source: H. Geiger & E. Marsden, Phil. Mag. (6) 25, 604–623 (1913), Table II "Variation of Scattering with
+# Angle (collected results)", column V (gold, number of scintillations N); checked 2026-09-26 (spec A8.3) against a
+# typeset transcription of the paper (http://fisica.ufpr.br/mossanek/etc/geiger_marsden.pdf): all 11 values
+# agree, and so does the paper's column VI (N sin⁴(φ/2): 28.8, 31.2, 29.0, 27.5, 29.1, 29.8, 30.8, 35.3, 35.0,
+# 39.6, 38.4). The table's lower half (5°–30°, a separate set of countings on another scale) is not used.
 φ_GM = [150°, 135°, 120°, 105°, 75°, 60°, 45°, 37.5°, 30°, 22.5°, 15°]
 N_GM = [33.1, 43.0, 51.9, 69.5, 211, 477, 1435, 3300, 7800, 27300, 132000]
 n_GM = zeros(len(φ_GM))

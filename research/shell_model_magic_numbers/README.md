@@ -72,29 +72,40 @@ stability line:
 
 **²⁰⁸Pb neutrons near the Fermi surface (N = 126).** Measured single-particle energies are
 E = −S_n(²⁰⁸Pb) − E_x(²⁰⁷Pb) for holes and E = −S_n(²⁰⁹Pb) + E_x(²⁰⁹Pb) for particles, with
-S_n(²⁰⁸Pb) = 7.368 MeV and S_n(²⁰⁹Pb) = 3.937 MeV (AME), and the excitation energies of the single-particle
-states in ²⁰⁷Pb and ²⁰⁹Pb (ENSDF). These are the values usually tabulated for ²⁰⁸Pb, e.g. in Ring & Schuck,
-*The Nuclear Many-Body Problem*, and in Vautherin & Brink, Phys. Rev. C **5**, 626 (1972). **They are typed
-from memory**, rounded to 10 keV; check them against ENSDF before quoting them.
+S_n(²⁰⁸Pb) = 7.368 MeV and S_n(²⁰⁹Pb) = 3.937 MeV, and the excitation energies of the single-particle states in
+²⁰⁷Pb and ²⁰⁹Pb. **Sources (checked 2026-09-26, spec A8.3):**
+- S_n(²⁰⁸Pb) = 7367.869(52) keV, S_n(²⁰⁹Pb) = 3937.373(1344) keV: AME2020, M. Wang, W.J. Huang, F.G. Kondev,
+  G. Audi and S. Naimi, *Chinese Phys. C* **45**, 030003 (2021), table `rct2_1.mas20.txt` from the IAEA AMDC
+  (https://www-nds.iaea.org/amdc/ame2020/rct2_1.mas20.txt).
+- Excitation energies from ENSDF (evaluators F.G. Kondev & S. Lalkovski for A = 207, J. Chen & F.G. Kondev for
+  A = 209), read through the IAEA LiveChart API (`https://nds.iaea.org/relnsd/v1/data?fields=levels&nuclides=207pb`
+  and `…=209pb`): ²⁰⁷Pb 5/2⁻ 569.698, 3/2⁻ 897.698, 13/2⁺ 1633.356, 7/2⁻ 2339.921, 9/2⁻ 3415.48 keV;
+  ²⁰⁹Pb 11/2⁺ 778.89, 15/2⁻ 1422.64, 5/2⁺ 1567.086, 1/2⁺ 2032.21, 7/2⁺ 2491, 3/2⁺ 2537.6 keV. Each level is the
+  lowest of its spin and parity, taken as the whole single-particle strength (the usual convention, e.g. Bohr &
+  Mottelson Vol. I; the real strength is somewhat fragmented, most for 1h9/2).
+- The first version of this page used values typed from memory, rounded to 10 keV. The check found two of them
+  off by 5–6 keV (4s1/2: −1.90 → −1.905 MeV, 2g7/2: −1.44 → −1.446 MeV) and the rest right; with the values
+  below, to 1 keV, the rms difference changes from 0.476 to 0.478 MeV. `tests/test_research.py` recomputes the
+  list from the numbers above.
 
 | level | Woods–Saxon (Fermium) | measured | difference |
 |---|---|---|---|
-| 1h9/2 | −10.86 MeV | −10.78 MeV | −0.08 |
-| 2f7/2 | −10.34 | −9.71 | −0.63 |
-| 1i13/2 | −8.51 | −9.00 | +0.49 |
-| 3p3/2 | −8.19 | −8.27 | +0.08 |
-| 2f5/2 | −8.04 | −7.94 | −0.10 |
-| 3p1/2 (last filled) | −7.289 | −7.37 | +0.08 |
-| 2g9/2 (first empty) | −3.753 | −3.94 | +0.19 |
-| 1i11/2 | −3.02 | −3.16 | +0.14 |
-| 1j15/2 | −1.81 | −2.51 | +0.70 |
-| 3d5/2 | −1.87 | −2.37 | +0.50 |
-| 4s1/2 | −1.26 | −1.90 | +0.64 |
-| 2g7/2 | −0.72 | −1.44 | +0.72 |
-| 3d3/2 | −0.65 | −1.40 | +0.75 |
+| 1h9/2 | −10.86 MeV | −10.783 MeV | −0.08 |
+| 2f7/2 | −10.34 | −9.708 | −0.64 |
+| 1i13/2 | −8.51 | −9.001 | +0.49 |
+| 3p3/2 | −8.19 | −8.266 | +0.07 |
+| 2f5/2 | −8.05 | −7.938 | −0.11 |
+| 3p1/2 (last filled) | −7.289 | −7.368 | +0.08 |
+| 2g9/2 (first empty) | −3.753 | −3.937 | +0.18 |
+| 1i11/2 | −3.02 | −3.158 | +0.14 |
+| 1j15/2 | −1.81 | −2.515 | +0.70 |
+| 3d5/2 | −1.87 | −2.370 | +0.50 |
+| 4s1/2 | −1.26 | −1.905 | +0.64 |
+| 2g7/2 | −0.72 | −1.446 | +0.72 |
+| 3d3/2 | −0.65 | −1.400 | +0.75 |
 
 - **The N = 126 gap:** 3.536 MeV (3p1/2 → 2g9/2), against 3.431 MeV measured (S_n(²⁰⁸Pb) − S_n(²⁰⁹Pb)).
-- **rms difference: 0.48 MeV** over the 13 levels. The hole states are within 0.1 MeV, except 2f7/2 and 1i13/2
+- **rms difference: 0.478 MeV** over the 13 levels (0.476 with the from-memory values). The hole states are within 0.1 MeV, except 2f7/2 and 1i13/2
   (±0.5–0.6 MeV). The level order is right, except that 3d5/2 and 1j15/2 (0.06 MeV apart in the calculation)
   are swapped. The particle states above 2g9/2 are 0.5–0.75 MeV too weakly bound. This is the known limit of a
   static potential with the bare nucleon mass: coupling to surface vibrations pulls the levels near the Fermi

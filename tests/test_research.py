@@ -356,7 +356,8 @@ def _bbn_model(weak_scale=1.0):
     def rates(T):                                   # N_A<σv> in cm³/(mol s) → <σv> in m³/s
         t = min(T / (k * 1e9), 10.0)
         t12, t13, t23, t32, t43, t53 = t ** .5, t ** (1 / 3), t ** (2 / 3), t ** 1.5, t ** (4 / 3), t ** (5 / 3)
-        a1, a2, a3, a4 = t / (1 + .0495 * t), t / (1 + .1378 * t), t / (1 + 13.076 * t), t / (1 + .759 * t)
+        # 0.1071: NUC123 reaction 27 (spec A8.3, D255; was 0.0495, CF88's scaling for a different fit)
+        a1, a2, a3, a4 = t / (1 + .1071 * t), t / (1 + .1378 * t), t / (1 + 13.076 * t), t / (1 + .759 * t)
         ex = np.exp
         r = [4.742e4 * (1 - .8504 * t12 + .4895 * t - .09623 * t32 + 8.471e-3 * t ** 2 - 2.80e-4 * t ** 2.5),
              2.65e3 / t23 * ex(-3.720 / t13) * (1 + .112 * t13 + 1.99 * t23 + 1.56 * t + .162 * t43 + .324 * t53),
@@ -595,6 +596,18 @@ def _ws_spectrum(N, Z, so):
     return sorted(out)
 
 
+def test_shell_model_measured_energies_follow_from_the_cited_data():
+    # spec A8.3 / D254: exp_E in shell.fm is −S_n − E_x (holes) and −S_n + E_x (particles) with the AME2020
+    # separation energies and the ENSDF excitation energies quoted in its comments (keV)
+    Sn208, Sn209 = 7367.8686, 3937.3726
+    holes = [3415.48, 2339.921, 1633.356, 897.698, 569.6982, 0.0]          # 1h9/2 2f7/2 1i13/2 3p3/2 2f5/2 3p1/2
+    parts = [0.0, 778.89, 1422.64, 1567.086, 2032.21, 2491.0, 2537.6]       # 2g9/2 1i11/2 1j15/2 3d5/2 4s1/2 2g7/2 3d3/2
+    want = [round((-Sn208 - e) / 1000, 3) for e in holes] + [round((-Sn209 + e) / 1000, 3) for e in parts]
+    src = open(os.path.join(RES, "shell_model_magic_numbers", "shell.fm"), encoding="utf-8").read()
+    got = [float(x) for x in re.search(r"exp_E = \[([^\]]*)\]", src).group(1).split(",")]
+    assert got == want
+
+
 def test_shell_model_levels_and_magic_numbers():
     """²⁰⁸Pb neutron levels vs solve_ivp shooting (1e-6); the gap scan along the stability line vs finite
     differences; the largest gaps are 2, 8, 20, 28, 50, 82, 126 with spin–orbit and 2, 8, 20, 40, 70 without."""
@@ -615,7 +628,8 @@ def test_shell_model_levels_and_magic_numbers():
             assert E == pytest.approx(_ws_shoot(126, 82, lr, jr, so, Er), rel=1e-6, abs=1e-7), (n, l, j2)
         assert [int(r[4]) for r in rows] == list(np.cumsum([d for *_, d in ref]))
     assert num(out, "shell gap (3p1/2 → 2g9/2):") == pytest.approx(3.536, abs=1e-3)
-    assert num(out, "rms difference over 13 levels:") == pytest.approx(0.476, abs=1e-3)
+    # 0.478 with the measured energies checked against AME2020 + ENSDF (spec A8.3, D254); 0.476 from memory
+    assert num(out, "rms difference over 13 levels:") == pytest.approx(0.478, abs=1e-3)
 
     # the scan: the gap at N in the nucleus (N, Z on the stability line), N stepping through level-filling numbers
     def z_stable(N):

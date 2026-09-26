@@ -33,23 +33,44 @@ AME2020 masses; spins g: n, p, ³H, ³He = 2, d = 3, ⁴He = 1, ⁷Li, ⁷Be = 4
 
 **Reaction rates** (N_A⟨σv⟩ in cm³ mol⁻¹ s⁻¹ as functions of T₉, in the forms coded in NUC123):
 
-| reaction | source of the fit |
-|---|---|
-| n ↔ p | Born integrals above, normalised to τ_n (Weinberg 1972; Dicus et al. 1982, PRD 26, 2694; Bernstein, Brown & Feinberg 1989, RMP 61, 25) |
-| p(n,γ)d | Smith, Kawano & Malaney 1993 (ApJS 85, 219), Table 2 |
-| d(p,γ)³He | Smith, Kawano & Malaney 1993 |
-| d(d,n)³He | Smith, Kawano & Malaney 1993 |
-| d(d,p)t | Smith, Kawano & Malaney 1993 |
-| ³He(n,p)t | Smith, Kawano & Malaney 1993 |
-| t(d,n)⁴He | Smith, Kawano & Malaney 1993 |
-| ³He(d,p)⁴He | Smith, Kawano & Malaney 1993 |
-| ³He(α,γ)⁷Be | Caughlan & Fowler 1988 (ADNDT 40, 283) |
-| t(α,γ)⁷Li | Caughlan & Fowler 1988 |
-| ⁷Be(n,p)⁷Li | Smith, Kawano & Malaney 1993 |
-| ⁷Li(p,α)⁴He | Caughlan & Fowler 1988 |
+| reaction | source of the fit | NUC123 reaction |
+|---|---|---|
+| n ↔ p | Born integrals above, normalised to τ_n (Weinberg 1972; Dicus et al. 1982, PRD 26, 2694; Bernstein, Brown & Feinberg 1989, RMP 61, 25) | |
+| p(n,γ)d | Smith, Kawano & Malaney 1993 (ApJS 85, 219) | 12 |
+| d(p,γ)³He | Smith, Kawano & Malaney 1993 | 20 |
+| d(d,n)³He | Smith, Kawano & Malaney 1993 | 28 |
+| d(d,p)t | Smith, Kawano & Malaney 1993 | 29 |
+| ³He(n,p)t | Smith, Kawano & Malaney 1993 | 16 |
+| t(d,n)⁴He | Smith, Kawano & Malaney 1993 | 30 |
+| ³He(d,p)⁴He | Smith, Kawano & Malaney 1993 | 31 |
+| ³He(α,γ)⁷Be | Smith, Kawano & Malaney 1993 (not CF88, as the first version of this table said) | 27 |
+| t(α,γ)⁷Li | Smith, Kawano & Malaney 1993 (not CF88, as the first version of this table said) | 26 |
+| ⁷Be(n,p)⁷Li | Smith, Kawano & Malaney 1993 | 17 |
+| ⁷Li(p,α)⁴He | Caughlan & Fowler 1988 (ADNDT 40, 283): ⁷Li(p,α)⁴He plus ⁷Li(p,γ)⁸Be (⁸Be → 2α) | 24 |
 
-The coefficients were typed in from those published forms (this was done offline, without the papers at hand to
-proof-read against). Two checks on them: every reverse coefficient recomputed here from detailed balance reproduces
+**Source check (spec A8.3, 2026-09-26).** The coefficients were first typed in from memory, offline. They have now
+been compared, number by number, with subroutine `rate2` of Kawano's NUC123 version 4.1 (December 1991), the code
+that implements the Smith, Kawano & Malaney fits, in the copy at
+https://github.com/ckald/KAWANO-sterile/blob/master/nuc123.f (a sterile-neutrino fork; its header and `rate2` are
+Kawano's version 4.1). Result:
+- **10 of the 11 nuclear rates agree in every coefficient.**
+- **³He(α,γ)⁷Be had one wrong number:** the second term's scaled temperature is T₉/(1 + 0.1071 T₉) in NUC123,
+  and had been typed as T₉/(1 + 0.0495 T₉), which is the scaling Caughlan & Fowler 1988 use in *their* (different,
+  one-term) fit of the same reaction. Fixed in `bbn.fm` and in the test's independent NumPy model; the effect on
+  the results is in the table below.
+- **Attribution:** the ³He(α,γ)⁷Be and t(α,γ)⁷Li forms are Smith, Kawano & Malaney's, not CF88's. CF88's own fits,
+  read from the transcription of the CF88 tables hosted by CIAE (http://www.nuclear.csdb.cn/data/CF88/analyt_rates.html,
+  a mirror of the former ORNL page), are 5.61×10⁶ T₉ₐ^{5/6} T₉^{−3/2} e^{−12.826/T₉ₐ^{1/3}} and
+  8.67×10⁵ T₉^{−2/3} e^{−8.080/T₉^{1/3}}(1 + …) respectively. The table above is corrected.
+- ⁷Li(p,α): NUC123's reaction 24 is CF88's ⁷Li(p,α)⁴He (first three terms, identical to the CIAE transcription)
+  plus CF88's ⁷Li(p,γ)⁸Be. In that second part the transcription prints +2.498 T₉^{2/3} where NUC123 has −2.498;
+  `bbn.fm` keeps NUC123's sign. The two signs change the total rate by less than 0.05 % between T₉ = 0.1 and 2, so
+  no printed digit depends on it.
+- Not reached: the Smith, Kawano & Malaney paper itself (the ADS scan returned an HTML page instead of the PDF, and
+  the scans have no text layer to check against) and Kawano's 1992 Fermilab report (the lss.fnal.gov PDF is a
+  6-page image scan). The check is therefore against the authors' code, not the printed tables.
+
+Two further checks on the rates: every reverse coefficient recomputed here from detailed balance reproduces
 the published NUC123 reverse factors (4.7×10⁹ T₉^{3/2} e^{−25.82/T₉} for d photodisintegration, 1.63×10¹⁰, 1.73,
 5.54, 4.64, …) to about 1 %; and the yields below land within a few per cent of modern codes for D, ³He and ⁷Li.
 The fits are made for T₉ ≤ 10; above that (T > 0.86 MeV) the program holds them at T₉ = 10. The nuclei are in
@@ -76,7 +97,7 @@ atol 10⁻¹⁶), and it recomputes every printed number with an independent Num
 | Y_p (⁴He mass fraction) | **0.242340** | 0.2423403 | 0.24709 | 0.2471 | 0.245 ± 0.003 |
 | D/H | **2.59588×10⁻⁵** | 2.595881×10⁻⁵ | 2.459×10⁻⁵ | 2.51×10⁻⁵ | (2.55 ± 0.03)×10⁻⁵ |
 | ³He/H (+ ³H) | **1.02875×10⁻⁵** | 1.028747×10⁻⁵ | 1.074×10⁻⁵ | ≈ 1.0×10⁻⁵ | ≲ (1.1 ± 0.2)×10⁻⁵ (Bania et al. 2002) |
-| ⁷Li/H (+ ⁷Be) | **5.10191×10⁻¹⁰** | 5.101924×10⁻¹⁰ | 5.623×10⁻¹⁰ | ≈ 4.7×10⁻¹⁰ | (1.6 ± 0.3)×10⁻¹⁰ (the "lithium problem") |
+| ⁷Li/H (+ ⁷Be) | **4.36404×10⁻¹⁰** (5.10191×10⁻¹⁰ before the A8.3 fix) | 4.364051×10⁻¹⁰ | 5.623×10⁻¹⁰ | ≈ 4.7×10⁻¹⁰ | (1.6 ± 0.3)×10⁻¹⁰ (the "lithium problem") |
 
 Fermium and SciPy agree to 3×10⁻⁶ or better on all four (the test requires 10⁻⁴), and baryon number
 Σ A_i Y_i is conserved to 7×10⁻¹⁶.
@@ -106,8 +127,12 @@ Fermium and SciPy agree to 3×10⁻⁶ or better on all four (the test requires 
   are older than today's data: the LUNA d(p,γ)³He measurement (Mossa et al. 2020, Nature 587, 210) destroys D faster. The slightly
   different η conversion and the missing weak corrections also play a part. It is still within 2 % of the
   observed D/H.
-- **³He/H** agrees with modern values to 4 %. **⁷Li/H** = 5.1×10⁻¹⁰ lies between Fields (≈ 4.7) and PRIMAT (5.6),
-  and is 3× the Spite-plateau value: the lithium problem is reproduced. Most ⁷Li comes from ⁷Be (made by
+- **³He/H** agrees with modern values to 4 %. **⁷Li/H** = 4.36×10⁻¹⁰ is 7 % below Fields (≈ 4.7) and 22 % below
+  PRIMAT (5.6), and 2.7× the Spite-plateau value: the lithium problem is reproduced. The gap to the modern codes
+  is not analysed here (the 1993 rate fits, especially ³He(α,γ)⁷Be, which makes most of the ⁷Li, are older than
+  the data those codes use; that is a likely cause, not a checked one). Before the
+  source check (above) the program had 5.10×10⁻¹⁰, which happened to sit between the two modern values: one
+  wrong coefficient in ³He(α,γ)⁷Be made it 17 % too high. Y_p, D/H and ³He/H did not change in any printed digit. Most ⁷Li comes from ⁷Be (made by
   ³He(α,γ)), which later captures an electron.
 - The network is the 12 reactions (n ↔ p and 11 nuclear) that Smith, Kawano & Malaney single out as the important
   ones for these yields. It leaves out ⁶Li, ⁷Be(n,α), ⁷Be(d,p)2α, ⁷Li(d,n)2α, heavier nuclei, and the ³H and ⁷Be

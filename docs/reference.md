@@ -719,7 +719,8 @@ plot data.T vs data.L to "pendulum.png"
   - `... to "file.png"` chooses the file name.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables. The same holds after the file name: `plot N vs t to "decay.png" title "Decay"`.
   - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
-  - Several series: `plot a vs t, b vs t`.
+  - Several series: `plot a vs t, b vs t`. A fitted curve over the data is a formula series: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm` (dots for the data, a line for the formula with the fitted g).
+  - **Labels** (DECISIONS D253): an axis is labelled with the plotted name and its unit, `T [s]`; a column of loaded data is named without the data set (`T`, not `data.T`). With several series, the y axis lists the named ones (`ys [s], zs [s]`) and leaves a formula next to them to the legend.
 
 ### Dimensional analysis: analyze
 
