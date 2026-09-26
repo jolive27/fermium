@@ -1,0 +1,6 @@
+2 m
+3 m
+line 1: can't add length [m] to energy [J]
+    E + 1 J
+    ^^^^^^^
+  hint: both sides of + and - must have the same units

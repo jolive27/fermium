@@ -207,7 +207,8 @@ pub enum StmtKind {
     Plot(usize, Vec<Expr>),
     Solve { sol: SymId, rhs: LambdaId, y0: Vec<Expr>, t0: Expr, t1: Expr, step: Option<Expr>, method: String,
             rtol: Option<Expr>, x: Box<SolveExtra> },
-    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId },
+    /// errs: the hidden variables that receive the standard errors, for err(x)
+    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId, errs: Vec<SymId> },
     Return(Option<Expr>),
     Break,
     Continue,
@@ -230,6 +231,8 @@ pub struct SolveExtra {
     /// text id of the independent variable's name, and the print format of its values (for errors)
     pub tname: usize,
     pub tfmt: usize,
+    /// a PDE's space variable name (text id), for the grid check's warning
+    pub xname: usize,
     /// the right side reads t itself (D40)
     pub tdep: bool,
     /// eigenvalue problems (method "eigen", D82): states, grid, 0 = matrix / 1 = shooting

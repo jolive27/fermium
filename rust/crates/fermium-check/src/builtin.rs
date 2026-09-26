@@ -68,7 +68,9 @@ impl Checker {
                 let s = self.var_ref(sol_sym, ctx, e)?;
                 let I::ExprKind::Var(sym) = s.kind else { unreachable!() };
                 let (comp, tdim) = (self.sols[view].comp, self.sols[view].tdim.clone());
-                return Ok(ir(I::ExprKind::SolList { sol: sym, comp, what: 1 }, Ty::List(tdim), line));
+                let mut r = ir(I::ExprKind::SolList { sol: sym, comp, what: 1 }, Ty::List(tdim), line);
+                r.hint = self.sols[view].thint.clone();
+                return Ok(r);
             }
         }
         let mut args: Vec<I::Expr> = vec![];

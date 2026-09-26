@@ -180,6 +180,8 @@ pub struct SymExtra {
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
     pub list_sf: Option<u32>,
+    /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
+    pub err_sym: Option<I::SymId>,
     /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
     pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }
@@ -199,6 +201,7 @@ pub struct CheckOptions {
     pub source_name: String,
 }
 
+#[derive(Clone)] // the REPL rolls a failed input back to a copy (D220)
 pub struct Checker {
     pub diags: Diagnostics,
     pub u: Unifier,
@@ -252,10 +255,12 @@ pub struct Checker {
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
-    /// calculus: derived functions made so far (calculus.rs)
-    pub calc: crate::calculus::CalcState,
     /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
     pub solve: crate::solve::SolveTables,
+    /// data sets, fits, plots and animations (data.rs)
+    pub data: crate::data::DataTables,
+    /// calculus: derived functions made so far (calculus.rs)
+    pub calc: crate::calculus::CalcState,
 }
 
 impl Checker {
@@ -297,8 +302,9 @@ impl Checker {
             par_stack: vec![],
             fmt_dims: vec![],
             nodes: HashMap::new(),
-            calc: Default::default(),
             solve: Default::default(),
+            data: Default::default(),
+            calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -516,6 +522,7 @@ impl Checker {
         let main = self.block(&prog.body, &mut ctx)?;
         self.check_uncalled()?;
         self.resolve_fmts();
+        self.resolve_data_tables();
         self.module.main = main;
         self.module.uses_uncertainty = self.uses_unc;
         Ok(std::mem::take(&mut self.module))
@@ -574,12 +581,15 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Solve(sv) => self.s_solve(s, sv, ctx),
             K::Propagate { samples, body } => self.s_propagate(s, samples.as_ref(), body, ctx),
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),
-            K::Solve(sv) => self.s_solve(s, sv, ctx),
+            K::Fit { .. } => self.s_fit(s, ctx),
+            K::Plot { .. } => self.s_plot(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
+            #[allow(unreachable_patterns)]
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }
@@ -590,7 +600,58 @@ impl Checker {
                  Some("run it with the Python implementation (legacy/) for now".into()))
     }
 
+    /// Check the bodies of functions that were never called, so their errors still show (Python check_uncalled).
     pub fn check_uncalled(&mut self) -> CResult<()> {
+        // Python walks the global names in the order they were bound: the order of definition
+        let mut todo: Vec<(u32, String, FuncInfoId)> = self.scopes[self.globals]
+            .names
+            .iter()
+            .filter_map(|(n, b)| match b {
+                Binding::Func(fi) => Some((self.funcs[*fi].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), *fi)),
+                _ => None,
+            })
+            .collect();
+        todo.sort();
+        for (_, _, b) in todo {
+            let f = &self.funcs[b];
+            if !f.instances.is_empty() || f.checked_generic || f.module.is_some() {
+                continue;
+            }
+            self.funcs[b].checked_generic = true;
+            let Some(fdef) = self.funcs[b].fdef.clone() else { continue };
+            let A::StmtKind::FuncDef { params, .. } = &fdef.kind else { continue };
+            if !self.funcs[b].one_liner() && params.is_empty() {
+                continue;
+            }
+            if !self.func_param_uses(b).is_empty() {
+                continue; // takes a function: checked per call instead (D43)
+            }
+            let node = crate::ast_ext::mk(A::ExprKind::Name { name: self.funcs[b].name.clone() }, fdef.span);
+            let node: &'static A::Expr = Box::leak(Box::new(node));
+            let saved_nat = self.nat.clone();
+            let fnat = self.funcs[b].nat.clone().unwrap_or_default();
+            self.set_system(fnat);
+            let args: Vec<Checked> =
+                params.iter().map(|_| Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))).collect();
+            let r = self.instantiate(b, args, node, false);
+            let r = match r {
+                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before") => Ok(()),
+                Err(e) if e.message.contains("needs a list") => {
+                    // total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some parameters
+                    // are numbers), it is checked at each call instead (D142)
+                    let args: Vec<Checked> = params
+                        .iter()
+                        .map(|_| Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0)))
+                        .collect();
+                    let _ = self.instantiate(b, args, node, false);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+                Ok(_) => Ok(()),
+            };
+            self.set_system(saved_nat);
+            r?;
+        }
         Ok(())
     }
 }

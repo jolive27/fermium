@@ -4,6 +4,7 @@
 pub use fermium_ir::{types, Dim, DIMLESS};
 
 pub mod analyze;
+pub mod api;
 pub mod arith;
 pub mod ast_ext;
 pub mod builtin;
@@ -15,6 +16,7 @@ pub mod checker;
 pub mod clist;
 pub mod convert;
 pub mod cplx;
+pub mod data;
 pub mod exprs;
 pub mod lists;
 pub mod modules;

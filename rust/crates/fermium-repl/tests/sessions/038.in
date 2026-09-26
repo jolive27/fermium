@@ -1,0 +1,6 @@
+k = 4 N/m
+m = 1 kg
+ω = √(k/m)
+print ω
+T = 2π/ω
+print T

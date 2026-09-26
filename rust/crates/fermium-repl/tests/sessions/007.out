@@ -1,0 +1,5 @@
+line 1: nope isn't defined
+    print nope
+          ^^^^
+  hint: give it a value on an earlier line, e.g.  nope = 2.5 m  (with its own unit)
+2

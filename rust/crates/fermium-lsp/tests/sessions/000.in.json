@@ -1,0 +1,241 @@
+[
+[
+"textDocument/didOpen",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"languageId": "fermium",
+"version": 1,
+"text": "L = 1.20 m\nT = 2.21 s\ng = 4π² L / T²\nd = 15 cm\nxs = [1 m, 2 m]\np(v) = (2 kg) v\nsolve x'' = -(9/s²) x with x(0) = 1 cm, x'(0) = 0 cm/s for t from 0 s to 5 s\ny = L + T\n"
+}
+},
+true
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 3,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 2,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 4,
+"character": 1
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 2,
+"character": 8
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 5,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 6,
+"character": 6
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 6,
+"character": 60
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 7,
+"character": 2
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 7,
+"character": 30
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 2
+},
+"contentChanges": [
+{
+"text": "L = 1.20 m\nT = 2.21 s\ng = 4π² L / T²\nd = 15 cm\nxs = [1 m, 2 m]\np(v) = (2 kg) v\nsolve x'' = -(9/s²) x with x(0) = 1 cm, x'(0) = 0 cm/s for t from 0 s to 5 s\ny = L + d\n"
+}
+]
+},
+true
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 7,
+"character": 5
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 3
+},
+"contentChanges": [
+{
+"text": "x = \\thet"
+}
+]
+},
+true
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 9
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 4
+},
+"contentChanges": [
+{
+"text": "x = \\^"
+}
+]
+},
+true
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 6
+}
+},
+false
+]
+]

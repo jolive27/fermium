@@ -1,0 +1,110 @@
+//! Links LLVM 18 statically (spec §B4: one pinned version, statically linked, so the `fermium` binary needs no
+//! libLLVM or anything else installed). llvm-sys is built with "no-llvm-linking"; this script asks
+//! llvm-config for the static libraries and links them, then LLVM's system libraries: statically where a static
+//! archive exists (zlib, zstd, terminfo, the C++ standard library on Linux), otherwise from the system (glibc's
+//! libm/librt/libdl, and on macOS libc++, libz and libncurses, which every Mac has). See rust/BUILD.md.
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn llvm_config() -> PathBuf {
+    for var in ["LLVM_SYS_180_PREFIX", "LLVM_PREFIX"] {
+        if let Ok(p) = std::env::var(var) {
+            let c = Path::new(&p).join("bin").join("llvm-config");
+            if c.exists() {
+                return c;
+            }
+        }
+    }
+    for c in ["llvm-config-18", "/usr/lib/llvm-18/bin/llvm-config", "/opt/homebrew/opt/llvm@18/bin/llvm-config",
+              "/usr/local/opt/llvm@18/bin/llvm-config", "llvm-config"] {
+        let ok = Command::new(c).arg("--version").output()
+            .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).starts_with("18.")).unwrap_or(false);
+        if ok {
+            return PathBuf::from(c);
+        }
+    }
+    panic!("llvm-config for LLVM 18 not found: set LLVM_SYS_180_PREFIX (see rust/BUILD.md)");
+}
+
+fn run(cfg: &Path, args: &[&str]) -> String {
+    let o = Command::new(cfg).args(args).output().expect("llvm-config failed");
+    assert!(o.status.success(), "llvm-config {args:?} failed");
+    String::from_utf8(o.stdout).unwrap().trim().to_string()
+}
+
+/// The directory holding a static archive `lib<name>.a`, if any.
+fn find_static(name: &str, dirs: &[String]) -> Option<String> {
+    dirs.iter().find(|d| Path::new(d).join(format!("lib{name}.a")).exists()).cloned()
+}
+
+fn main() {
+    println!("cargo:rerun-if-env-changed=LLVM_SYS_180_PREFIX");
+    println!("cargo:rerun-if-changed=build.rs");
+    if std::env::var("CARGO_FEATURE_LLVM").is_err() {
+        return;
+    }
+    let cfg = llvm_config();
+    let version = run(&cfg, &["--version"]);
+    assert!(version.starts_with("18."), "LLVM 18 is required, found {version} ({})", cfg.display());
+    let libdir = run(&cfg, &["--libdir"]);
+    println!("cargo:rustc-link-search=native={libdir}");
+    println!("cargo:rustc-env=FERMIUM_LLVM_VERSION={version}");
+    // the components the back end uses: the JIT, the new pass manager, the native targets
+    let targets = run(&cfg, &["--targets-built"]);
+    let mut args = vec!["--link-static", "--libs", "core", "executionengine", "mcjit", "orcjit", "native", "passes",
+                        "ipo", "bitwriter", "irreader", "linker", "asmparser", "target"];
+    if targets.contains("X86") {
+        args.push("x86");
+    }
+    if targets.contains("AArch64") {
+        args.push("aarch64");
+    }
+    for lib in run(&cfg, &args).split_whitespace() {
+        let name = lib.trim_start_matches("-l");
+        println!("cargo:rustc-link-lib=static={name}");
+    }
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let mut dirs: Vec<String> = vec![libdir.clone()];
+    if target.contains("linux") {
+        for d in ["/usr/lib/x86_64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/usr/lib64", "/usr/lib"] {
+            dirs.push(d.into());
+        }
+    } else if target.contains("apple") {
+        for d in ["/opt/homebrew/opt/zstd/lib", "/opt/homebrew/lib", "/usr/local/opt/zstd/lib", "/usr/local/lib"] {
+            dirs.push(d.into());
+        }
+    }
+    let sys = run(&cfg, &["--link-static", "--system-libs"]);
+    for lib in sys.split_whitespace() {
+        let name = lib.trim_start_matches("-l");
+        // libxml2 is only for LLVM's Windows manifest tool, which the back end doesn't link
+        if name == "xml2" || name.contains('/') || name.ends_with(".tbd") {
+            continue;
+        }
+        let always_system = ["rt", "dl", "m", "pthread", "c"];
+        let system_on_mac = ["z", "ncurses", "curses"];
+        if always_system.contains(&name) || (target.contains("apple") && system_on_mac.contains(&name)) {
+            println!("cargo:rustc-link-lib=dylib={name}");
+        } else if let Some(d) = find_static(name, &dirs) {
+            println!("cargo:rustc-link-search=native={d}");
+            println!("cargo:rustc-link-lib=static={name}");
+        } else {
+            println!("cargo:warning=no static lib{name}.a found: linking it dynamically");
+            println!("cargo:rustc-link-lib=dylib={name}");
+        }
+    }
+    // the C++ standard library LLVM is written against
+    if target.contains("apple") {
+        println!("cargo:rustc-link-lib=dylib=c++");
+    } else {
+        let cxx = std::env::var("CXX").unwrap_or_else(|_| "c++".into());
+        let path = Command::new(&cxx).arg("-print-file-name=libstdc++.a").output().ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+        if Path::new(&path).is_absolute() && Path::new(&path).exists() {
+            println!("cargo:rustc-link-search=native={}", Path::new(&path).parent().unwrap().display());
+            println!("cargo:rustc-link-lib=static=stdc++");
+        } else {
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
+    }
+}

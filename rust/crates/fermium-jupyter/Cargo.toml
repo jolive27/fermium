@@ -1,0 +1,13 @@
+[package]
+name = "fermium-jupyter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The Jupyter kernel written in Rust: the ZeroMQ wire protocol subset Jupyter needs (ZMTP 3.1, NULL mechanism,
+# ROUTER/PUB/REP over TCP) and HMAC-SHA256 signing are implemented here, so it needs no libzmq or other crate.
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }
+fermium-check = { path = "../fermium-check" }
+fermium-repl = { path = "../fermium-repl" }
+fermium-lsp = { path = "../fermium-lsp" }

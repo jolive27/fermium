@@ -8,17 +8,9 @@ use crate::checker::*;
 impl Checker {
     // ---- stmts / parallel
     // ---- vectors and matrices
-    /// Fields of ODE solutions and data tables (not ported yet).
-    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, _name: &str, _t: Checked, _ctx: &mut Ctx)
-                       -> CResult<Checked> {
-        Err(self.not_ported("a field", e.span))
-    }
 }
 
 impl Checker {
-    pub fn data_description(&self, _v: &I::Expr) -> String {
-        "data".into()
-    }
 }
 
 impl Checker {
@@ -28,10 +20,6 @@ impl Checker {
     }
     pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("calling Python", e.span))
-    }
-    /// zs[k] of a list of complex numbers (clist.index, D243).
-    pub fn clist_index(&mut self, _t: I::Expr, _idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing a list of complex numbers", e.span))
     }
 }
 
@@ -48,9 +36,4 @@ impl Checker {
 }
 
 impl Checker {
-    /// err(g) of a parameter found by fit: its standard-error variable (the fit module); None: not a fitted
-    /// parameter.
-    pub fn fit_err(&mut self, _e: &A::Expr, _a0: Option<&A::Expr>, _ctx: &mut Ctx) -> Option<CResult<I::Expr>> {
-        None
-    }
 }

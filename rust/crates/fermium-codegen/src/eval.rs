@@ -239,12 +239,14 @@ pub struct Interpreter<'m, P: Printer> {
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
     /// ODE / eigenvalue / PDE solutions and run-time warnings shown (eval_solve.rs)
     pub(crate) solve: crate::eval_solve::SolveState,
+    /// data sets made by load and table (eval_data.rs)
+    pub(crate) data: crate::eval_data::DataState,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
         Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
-                      solve: Default::default() }
+                      solve: Default::default(), data: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -704,6 +706,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Builtin(name, args) => {
+                if let Some(v) = self.sol_extreme(name, args, fr)? {
+                    return Ok(v); // max/min of a solution: v1's fm_sol_ext (eval_solve.rs)
+                }
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);

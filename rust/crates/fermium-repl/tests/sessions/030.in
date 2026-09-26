@@ -1,0 +1,3 @@
+z = 3 + 4i
+print abs(z)
+z

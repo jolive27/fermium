@@ -1,0 +1,6 @@
+ls
+ls -la
+python3 prog.py
+git status
+ls = 2
+ls

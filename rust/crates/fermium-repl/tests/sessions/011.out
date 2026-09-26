@@ -1,0 +1,9 @@
+Examples:
+    L = 1.20 m
+    T = 2.21 s
+    g = 4π² L / T²          (or ASCII: g = 4 pi^2 L / T^2)
+    print g in ft/s²
+    x(t) = 0.1 m cos(10 t / 1 s)
+    print d/dt x
+Commands:  :help   :quit   :vars
+Symbols:   type \name then Tab, e.g. \omega -> ω, \^2 -> ², \int -> ∫

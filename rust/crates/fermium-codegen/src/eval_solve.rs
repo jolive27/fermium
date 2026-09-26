@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use fermium_ir::{Expr, ExprKind, Lambda, Module, Stmt, StmtKind, SymId, Ty};
 use fermium_runtime::numerics::{self as nx, err as E, ode, Fail};
-use fermium_units::quantity::{format_value, PrintFmt};
+use fermium_units::quantity::format_quantity;
 use fermium_units::Unit;
 
 use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
@@ -18,40 +18,41 @@ pub(crate) struct SolData {
     pub sol: ode::Sol,
     pub rhs: Option<(usize, Frame)>,
     pub grid: Option<(f64, f64)>,
+    /// a PDE's grid check (Fermium 2, DIVERGENCES.md): the solution on half the grid, each component's range,
+    /// the names of x and t (text ids), and whether it has warned
+    pub check: Option<PdeCheck>,
+}
+
+pub(crate) struct PdeCheck {
+    coarse: ode::Sol,
+    ranges: Vec<f64>,
+    xname: usize,
+    tname: usize,
+    warned: std::cell::Cell<bool>,
 }
 
 /// Solutions made so far, and the run-time warnings already shown.
 #[derive(Default)]
 pub struct SolveState {
     pub(crate) sols: Vec<Rc<SolData>>,
-    pub(crate) warnings: Vec<String>,
 }
 
-/// v1's `fmt_value`: a number with a print format's units, else in SI.
+/// v1's `fmt_value` (eval_calc's).
 pub(crate) fn fmt_value(module: &Module, v: f64, fmt: usize) -> String {
-    match print_fmt(module, fmt, None) {
-        Some(f) => format_value(v, &f),
-        None => format!("{} (SI units)", fermium_units::format_number(v, 6, true)),
-    }
-}
-
-fn print_fmt(module: &Module, fmt: usize, sf: Option<i64>) -> Option<PrintFmt> {
-    let f = module.tables.fmts.get(fmt)?;
-    Some(PrintFmt {
-        rdim: f.dim,
-        hint: f.hint.as_ref().map(|h| Unit { name: h.name.clone(), dim: h.dim, factor: h.factor, offset: h.offset }),
-        sf,
-        direct: 0,
-        echo: true,
-    })
+    crate::eval_calc::fmt_value(module, v, Some(fmt))
 }
 
 /// Two values of one quantity with enough digits to tell them apart (D214).
 fn fmt_apart(module: &Module, a: f64, b: f64, fmt: usize) -> (String, String) {
     let mut out = (String::new(), String::new());
     for sf in [3, 4, 5, 6, 8, 10, 12, 15] {
-        out = match print_fmt(module, fmt, Some(sf)) {
-            Some(f) => (format_value(a, &f), format_value(b, &f)),
+        out = match module.tables.fmts.get(fmt) {
+            Some(f) => {
+                let hint = f.hint.as_ref().map(|h| Unit { name: h.name.clone(), dim: h.dim, factor: h.factor,
+                                                          offset: h.offset });
+                (format_quantity(a, &f.dim, hint.as_ref(), Some(sf), 0, true, true),
+                 format_quantity(b, &f.dim, hint.as_ref(), Some(sf), 0, true, true))
+            }
             None => (format!("{} (SI units)", fermium_units::format_number(a, sf, true)),
                      format!("{} (SI units)", fermium_units::format_number(b, sf, true))),
         };
@@ -165,25 +166,17 @@ fn referenced(module: &Module, es: &[Expr], out: &mut Vec<SymId>) {
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
-    /// A run-time warning (v1's rt.warn / warn_text): shown once per distinct text, on stderr.
-    pub(crate) fn rt_warn_text(&mut self, text: String) {
-        let text = if text.starts_with("warning: ") { text } else { format!("warning: {text}") };
-        if !self.solve.warnings.contains(&text) {
-            eprintln!("{text}");
-            self.solve.warnings.push(text);
-        }
-    }
-
+    /// v1's rt.warn for the solvers' kinds (eval_calc's warn_at), kind 7 once per solve.
     pub(crate) fn rt_warn(&mut self, kind: i64, a: f64, line: u32) {
-        let at = if line > 0 { format!("line {line}: ") } else { String::new() };
-        let text = format!("warning: {at}{}", warn_message(kind, a));
+        let msg = warn_message(kind, a);
         if kind == 7 {
-            let head = text.split(" is ").next().unwrap_or("").to_string();
-            if self.solve.warnings.iter().any(|w| w.starts_with(&head)) {
+            let at = if line > 0 { format!("line {line}: ") } else { String::new() };
+            let text = format!("warning: {at}{msg}");
+            if crate::eval_calc::warned_with_prefix(text.split(" is ").next().unwrap_or("")) {
                 return; // once per solve, not once per loop pass
             }
         }
-        self.rt_warn_text(text);
+        crate::eval_calc::warn_at(line, &msg);
     }
 
     fn fail_solve(&self, f: Fail, fmt: usize) -> RunError {
@@ -238,9 +231,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             StmtKind::Solve { method, .. } if method == "eigen" => self.solve_eigen(s, fr),
             StmtKind::Solve { method, .. } if method == "pde" => self.solve_pde(s, fr),
             StmtKind::Solve { .. } => self.solve_ode(s, fr),
-            StmtKind::Plot(..) => self.err("plot isn't supported by the Rust back end yet"),
-            StmtKind::Fit { .. } => self.err("fit isn't supported by the Rust back end yet"),
-            StmtKind::Animate { .. } => self.err("animate isn't supported by the Rust back end yet"),
+            StmtKind::Plot(..) => self.stmt_plot(s, fr),
+            StmtKind::Fit { .. } => self.stmt_fit(s, fr),
+            StmtKind::Animate { .. } => self.stmt_animate(s, fr),
             _ => Ok(()),
         }
     }
@@ -269,9 +262,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     fn snapshot(&self, lam: usize, fr: &Frame) -> Frame {
         let module = self.module;
         let mut refs = vec![];
-        referenced(module, &module.lambdas[lam].body, &mut refs);
-        let mut snap = Frame { vars: fr.vars.clone() };
-        for s in refs {
+        let l = &module.lambdas[lam];
+        referenced(module, &l.body, &mut refs);
+        // the lambda's own variables are set at each call (a stale copy would shadow them)
+        let own = |s: &SymId| l.params.contains(s) || l.state.contains(s) || l.locals.contains(s);
+        let mut snap = Frame { vars: fr.vars.iter().filter(|(k, _)| !own(k)).map(|(k, v)| (*k, v.clone())).collect() };
+        for s in refs.into_iter().filter(|s| !own(s)) {
             if !snap.vars.contains_key(&s) {
                 if let Some(v) = self.globals.get(&s) {
                     snap.vars.insert(s, v.clone());
@@ -355,7 +351,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             self.rt_warn(kind, a, s.line);
         }
         let snap = self.snapshot(*rhs, fr);
-        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None }, fr);
         Ok(())
     }
 
@@ -403,7 +399,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             let sub = |n: usize| -> String {
                 n.to_string().chars().map(|c| char::from_u32('₀' as u32 + c.to_digit(10).unwrap()).unwrap()).collect()
             };
-            self.rt_warn_text(format!("levels {n} and {} are nearly degenerate (ΔE/E = {}); their eigenfunctions ψ{}, ψ{} \
+            crate::eval_calc::warn_text(&format!("levels {n} and {} are nearly degenerate (ΔE/E = {}); their eigenfunctions ψ{}, ψ{} \
                                        can be any mixture of the two: use them only through combinations, or break the \
                                        symmetry", n + 1, fermium_units::format_number(rel, 2, true), sub(n), sub(n + 1)));
         }
@@ -423,7 +419,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             solv.push(xv, &row, &drow);
         }
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, check: None }, fr);
         Ok(())
     }
 
@@ -462,7 +458,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 out
             };
-            nx::pde::pde_solve(&mut f, xa, xb, t0, t1, opts)
+            nx::pde::pde_solve_checked(&mut f, xa, xb, t0, t1, opts)
         };
         if let Some(e) = err {
             return Err(e);
@@ -472,15 +468,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Ok(r) => r,
             Err(nx::pde::PdeFail(m)) => return self.err(m),
         };
-        for &(kind, est) in &r.warnings {
+        for &(kind, est) in &r.fine.warnings {
             self.rt_warn(kind, est, x.line);
         }
-        let dim = r.ncomp * (r.m + 1);
-        let mut solv = ode::Sol::new(dim);
-        solv.t = r.ts;
-        solv.y = r.ys;
-        solv.dy = r.dys;
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)) }, fr);
+        let check = r.coarse.as_ref().map(|c| PdeCheck { coarse: c.to_sol(), ranges: r.fine.ranges(), xname: x.xname,
+                                                          tname: x.tname, warned: std::cell::Cell::new(false) });
+        let solv = r.fine.to_sol();
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), check }, fr);
         Ok(())
     }
 
@@ -518,6 +512,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             _ => d.sol.eval(comp, t, use_dy, None),
         };
         r.map_err(|f| self.fail_solve(f, fmt))
+    }
+
+    /// max(x) / min(x) of a solution component: the largest step value refined by the quintic Hermite through
+    /// its neighbours (v1's fm_sol_ext), not just the largest stored value.
+    pub(crate) fn sol_extreme(&mut self, name: &str, args: &[Expr], fr: &mut Frame) -> Result<Option<Value>, RunError> {
+        if !matches!(name, "max_list" | "min_list") || args.len() != 1 {
+            return Ok(None);
+        }
+        let ExprKind::SolList { sol, comp, what: 0 } = &args[0].kind else { return Ok(None) };
+        let d = self.sol_data(*sol, fr)?;
+        let sg = if name == "max_list" { 1.0 } else { -1.0 };
+        Ok(Some(Value::Num(d.sol.extreme(*comp, sg))))
     }
 
     pub(crate) fn eval_solution(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
@@ -559,30 +565,26 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     let end = if xv < xa { xa } else { xb };
                     return Err(self.fail_solve(Fail::new(E::SOLRANGE, xv, end), *xfmt));
                 }
-                // cubic Lagrange interpolation in x through 4 grid points, Hermite in t at each (fm_pde_eval)
-                let m = *m as i64;
-                let h = (xb - xa) / m as f64;
-                let s = (xv - xa) / h;
-                let mut j = s.floor() as i64;
-                j = j.max(1);
-                j = j.min(m - 2);
-                let r = s - j as f64;
-                let r2 = r * r;
-                let (rm1, rm2, rp1) = (r - 1.0, r - 2.0, r + 1.0);
-                let wv = [((0.0 - r) * rm1) * rm2 / 6.0, (rp1 * rm1) * rm2 / 2.0, ((0.0 - rp1) * r) * rm2 / 2.0,
-                          (rp1 * r) * rm1 / 6.0];
-                let t3 = 3.0 * r2;
-                let wd = [(0.0 - ((t3 - 6.0 * r) + 2.0)) / (6.0 * h), ((t3 - 4.0 * r) - 1.0) / (2.0 * h),
-                          (0.0 - ((t3 - 2.0 * r) - 2.0)) / (2.0 * h), (t3 - 1.0) / (6.0 * h)];
-                let use_dy = *which == 2;
-                let base = *comp0 as i64 + (j - 1);
-                let mut acc = 0.0;
-                for k in 0..4 {
-                    let w = if *which == 1 { wd[k] } else { wv[k] };
-                    let val = self.sol_at(&d, (base + k as i64) as usize, tv, use_dy, *tfmt)?;
-                    acc += w * val;
+                self.line = e.line;
+                let v = nx::pde::pde_eval(&d.sol, xa, xb, *m, *comp0, xv, tv, *which)
+                    .map_err(|f| self.fail_solve(f, *tfmt))?;
+                if let (Some(ck), 0) = (&d.check, *which) {
+                    let c = comp0 / (m + 1);
+                    let est = nx::pde::grid_error(&d.sol, &ck.coarse, *m, xa, xb, c, ck.ranges[c], xv, tv);
+                    if est.is_some_and(|q| q > nx::pde::PDE_TOL) && !ck.warned.get() {
+                        ck.warned.set(true);
+                        let module = self.module;
+                        let msg = format!("the grid is too coarse for this PDE at {} = {}, {} = {}: the value there \
+                                           changes by {}% of the solution's range when the grid is made half as fine \
+                                           (a sharp front, a short wavelength, or the time right after a jump needs more \
+                                           grid points); raise  grid  (it is {m})",
+                                          text(module, ck.xname as f64), fmt_value(module, xv, *xfmt),
+                                          text(module, ck.tname as f64), fmt_value(module, tv, *tfmt),
+                                          fermium_units::format_number(3.0 * est.unwrap() * 100.0, 2, true));
+                        crate::eval_calc::warn_at(e.line, &msg);
+                    }
                 }
-                Ok(Value::Num(acc))
+                Ok(Value::Num(v))
             }
             ExprKind::OdeLinSolve { m, b, t, text, fmt } => {
                 let n = b.len();

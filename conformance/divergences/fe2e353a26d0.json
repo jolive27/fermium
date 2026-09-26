@@ -1,0 +1,12 @@
+{
+ "id": "fe2e353a26d0",
+ "section": "parallel for: the first failing iteration's error is reported",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 11 is out of range: the list has 10 elements (valid indexes are 1 to 10)",
+  "line": 4,
+  "hint": null
+ },
+ "exit": 1
+}

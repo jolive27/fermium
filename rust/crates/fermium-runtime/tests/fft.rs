@@ -1,4 +1,4 @@
-//! FFT and spectra against v1 (spectral.py over numpy.fft), fixtures/fft.txt.
+//! FFT and spectra against v1 (spectral.py over numpy.fft), fixtures/fft.txt: bit-identical.
 mod common;
 use common::*;
 use fermium_runtime::numerics::fft::spectrum;
@@ -6,6 +6,7 @@ use fermium_runtime::numerics::fft::spectrum;
 #[test]
 fn spectra_match_numpy() {
     let mut worst = 0.0f64;
+    let (mut exact, mut total) = (0usize, 0usize);
     let rows = load("fft.txt");
     assert!(rows.len() >= 180);
     for row in rows {
@@ -37,10 +38,18 @@ fn spectra_match_numpy() {
                 close(&format!("{} sum of squares", row.name), *g, *w, 1e-12, 0.0);
                 continue;
             }
+            total += 1;
+            if g == w {
+                exact += 1;
+            } else if std::env::var("FFT_DEBUG").is_ok() {
+                eprintln!("{} [{i}]: {g:e} vs {w:e}", row.name);
+            }
             let d = (g - w).abs() / scale;
             worst = worst.max(d);
             assert!(d < 1e-14, "{}: {g} vs {w}", row.name);
         }
     }
-    eprintln!("fft: worst difference / L2 norm of the output = {worst:.1e}");
+    eprintln!("fft: worst difference / L2 norm of the output = {worst:.1e}; {exact} of {total} values bit-identical");
+    // pocketfft ported operation for operation: every value is numpy's, to the last bit
+    assert_eq!(exact, total);
 }
