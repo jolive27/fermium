@@ -85,7 +85,7 @@ impl Checker {
     pub fn fmt(&mut self, v: &I::Expr) -> usize {
         let dim = crate::stmts::ty_dim(&v.ty).unwrap_or_else(fermium_ir::types::DExpr::dimless);
         let echo = !v.get_extra().is_some_and(|x| x.no_echo) && !self.natural();
-        let nat = if self.nat.is_empty() { None } else { Some(self.nat.clone()) };
+        let nat = self.fmt_nat();
         let (sf, direct) = if matches!(v.direct, 4 | 5) && matches!(v.ty, Ty::Num(_)) && v.sf.is_none() {
             // a loop variable over a written list (D242)
             let ls = v.get_extra().and_then(|x| x.list_sf);
@@ -102,7 +102,7 @@ impl Checker {
     pub fn fmt_components(&mut self, v: &I::Expr) -> Vec<usize> {
         let Ty::Vec { dims: Some(dims), .. } = &v.ty else { unreachable!() };
         let hints = self.mixed_hints(v, dims.len());
-        let nat = if self.nat.is_empty() { None } else { Some(self.nat.clone()) };
+        let nat = self.fmt_nat();
         let mut out = vec![];
         for (d, h) in dims.clone().into_iter().zip(hints) {
             self.module.tables.fmts.push(I::Fmt { dim: fermium_ir::DIMLESS, hint: h, sf: v.sf, direct: v.direct,
@@ -115,9 +115,14 @@ impl Checker {
 
     /// Resolve the dimensions of every print format once checking is done (unknowns default to plain numbers).
     pub fn resolve_fmts(&mut self) {
-        for (f, d) in self.module.tables.fmts.iter_mut().zip(&self.fmt_dims) {
+        let mut fmts = std::mem::take(&mut self.module.tables.fmts);
+        for (f, d) in fmts.iter_mut().zip(&self.fmt_dims) {
             f.dim = self.u.resolve(d);
+            if let Some(nat) = &f.nat {
+                f.hint = self.fmt_natural_hint(nat, &f.dim, f.hint.take()); // tables.py _natural_hint (D60)
+            }
         }
+        self.module.tables.fmts = fmts;
     }
 
     pub fn describe_function(&mut self, info: FuncInfoId) -> String {

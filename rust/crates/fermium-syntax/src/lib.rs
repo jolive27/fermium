@@ -38,9 +38,23 @@ pub fn parse_tokens(source: &str, known: &[String], diags: &mut Diagnostics)
                     -> Result<(Program, Vec<Token>), Diagnostic> {
     let toks = tokenize(source, diags)?;
     let mut p = parser::Parser::new(toks, std::mem::take(diags), known);
-    let r = p.parse_program();
+    let (r, mut p) = with_big_stack(move || {
+        let r = p.parse_program();
+        (r, p)
+    });
     *diags = std::mem::take(&mut p.diags);
     r.map(|prog| (prog, p.toks))
+}
+
+/// Run `f` on a thread with a large stack: the parser is a recursive descent, and Fermium 1.5 accepts programs
+/// nested as deeply as Python's raised recursion limit allows (driver.py sets 20000 frames).
+pub fn with_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    std::thread::Builder::new()
+        .stack_size(1 << 30)
+        .spawn(f)
+        .expect("a thread for the parser")
+        .join()
+        .unwrap_or_else(|e| std::panic::resume_unwind(e))
 }
 
 /// Fix mode (`fermium fmt --fix`, D235): the edits that rewrite unit/variable collisions, and the error the parse
@@ -53,8 +67,10 @@ pub fn parse_fix(source: &str) -> (Vec<Fix>, Option<Diagnostic>) {
     };
     let mut p = parser::Parser::new(toks, d, &[]);
     p.fix_mode = true;
-    let err = p.parse_program().err();
-    (p.fixes, err)
+    with_big_stack(move || {
+        let err = p.parse_program().err();
+        (p.fixes, err)
+    })
 }
 
 /// The oracle's text for a program (see rust/tools/parse_oracle.py): the tree and the tokens, or the error; then

@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# pure-Rust port of musl libm (rust-lang, MIT, no dependencies): erf, erfc, tgamma, lgamma, jn, yn,
+# which Rust std lacks. v1 called the C library for these; see NOTES.md.
+libm = "0.2"

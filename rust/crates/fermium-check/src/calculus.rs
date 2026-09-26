@@ -693,21 +693,6 @@ impl Checker {
         Ok(())
     }
 
-    /// D34/D112: a spaced '/' right after an integral's upper limit divides the whole integral; warn when the
-    /// divisor is a plain number (both readings then have consistent units).
-    pub fn warn_limit_division(&mut self, e: &A::Expr, b: &I::Expr) {
-        let A::ExprKind::BinOp { op, right, .. } = &e.kind else { return };
-        let Some(r) = &right.attrs.limit_div_of else { return };
-        if op != "/" || !matches!(b.ty, Ty::Num(_) | Ty::List(_)) || !self.dimless(b) {
-            return;
-        }
-        let tok = self.node(r.id).and_then(|n| n.attrs.div_info.as_ref()).and_then(|d| d.tok);
-        let Some((line, col)) = tok else { return };
-        self.warn("the ' / ' after the upper limit divides the whole integral, not the limit",
-                  A::Span { line, col, length: 1 },
-                  Some("to divide the limit, write it without spaces (to L/2) or in parentheses (to (L / 2))".into()));
-    }
-
     /// Σ(body for k from a to b step s) (#49, D51).
     pub fn e_sum(&mut self, e: &A::Expr, ctx: &mut Ctx) -> CResult<Checked> {
         let A::ExprKind::Sum { body: body_e, var, lo: lo_e, hi: hi_e, step } = &e.kind else { unreachable!() };
@@ -956,6 +941,16 @@ impl Checker {
             }
         }
         None
+    }
+
+    /// `g = d/dt (a t^2) where a = 3`: substitute, so the derivative can still be a function of t (e_Where).
+    pub fn where_deriv(&mut self, e: &A::Expr, value: &A::Expr, b: &[(String, A::Expr)], ctx: &mut Ctx)
+                       -> Option<CResult<Checked>> {
+        let A::ExprKind::Deriv { var, .. } = &value.kind else { return None };
+        if b.iter().any(|(n, v)| n == var || C::depends_on(v, var)) {
+            return None;
+        }
+        Some(self.expr_any(&C::inline_where(e), ctx))
     }
 
     /// C.stabilize: a numerically stable form of a derivative's body (A52).

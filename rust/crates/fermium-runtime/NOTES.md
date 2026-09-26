@@ -34,3 +34,21 @@ values on every other fixture case). `quad_v1` keeps v1's exact behaviour for co
   Accuracy: ~1e-11 relative for α = −0.6, ~2e-9 for α = −0.8 (the closer α is to −1, the more the
   extrapolation amplifies rounding).
 - Tests: `quad.rs` cases `bl3_06`, `bl3_08`.
+
+### Special functions: erf, erfc, gamma, lgamma, besselj, bessely
+
+- v1 called the C library (glibc on Linux, different libms elsewhere, so v1 itself was platform
+  dependent in the last bits). v2 uses the `libm` crate: a pure-Rust port of musl's libm (fdlibm
+  algorithms), maintained by rust-lang, MIT, no dependencies; it is the only external crate (Rust std has
+  no erf/gamma/Bessel functions). Measured: within 1e-15 relative of glibc (J, Y within 4.3e-16
+  absolute near their zeros); 441 of 463 test values bit-identical. The same on every platform.
+- Tests: `tests/special.rs`.
+
+### Implementation differences that are at the rounding level (not user-visible at printed precision)
+
+- Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
+- Fit: MINPACK lmder port with our QR; parameters agree with SciPy to 1e-9, standard errors to 2e-8.
+- Eigenvalues (matrix method): Sturm bisection + inverse iteration instead of LAPACK stebz/stein;
+  energies agree to 4e-12 relative.
+- FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
+- PDE: a tridiagonal LU instead of SuperLU; 3e-13.

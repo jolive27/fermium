@@ -6,7 +6,7 @@ mod run;
 use fermium_syntax::{sexpr, Diagnostics};
 
 fn usage() -> ExitCode {
-    eprintln!("usage: fermium run [--base-dir DIR] FILE.fm\n       fermium parse [--oracle|--tokens|--fix] FILE.fm");
+    eprintln!("usage: fermium run [--base-dir DIR] FILE.fm\n       fermium parse [--oracle|--tokens|--fix] FILE.fm\n       fermium fmt [--pretty|--ascii] [--fix] [-w] FILE.fm");
     ExitCode::from(2)
 }
 
@@ -84,6 +84,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("parse") => cmd_parse(&args[1..]),
+        Some("fmt") => ExitCode::from(fermium_fmt::cli::cmd_fmt(&args[1..])),
         Some("run") => {
             let mut file = None;
             let mut base = None;

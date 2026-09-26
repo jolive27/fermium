@@ -328,6 +328,16 @@ pub fn py_isalnum(c: char) -> bool {
     in_ranges(c, tables::PY_ALNUM)
 }
 
+/// Python's `str.isdigit()` for one character (superscripts count).
+pub fn py_isdigit(c: char) -> bool {
+    in_ranges(c, tables::PY_DIGIT)
+}
+
+/// Python's `s.isdigit()` for a string: not empty, every character a digit.
+pub fn py_isdigit_str(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(py_isdigit)
+}
+
 /// `unicodedata.name(ch, "unknown character").title()` for a character that isn't a letter.
 pub fn char_name_title(c: char) -> String {
     let x = c as u32;
