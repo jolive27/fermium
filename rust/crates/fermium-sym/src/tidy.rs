@@ -900,9 +900,9 @@ thread_local! {
 }
 
 /// sympy_best with the names SymPy took as positive symbols (they sort after the others).
-pub fn sympy_best_with(e: &A::Expr, positive: &[String]) -> A::Expr {
+pub fn sympy_best_with(e: &A::Expr, positive: &[String], heurisch: bool) -> A::Expr {
     POSITIVE.with(|p| *p.borrow_mut() = positive.to_vec());
-    let r = sympy_best(e);
+    let r = sympy_best_h(e, heurisch);
     POSITIVE.with(|p| p.borrow_mut().clear());
     r
 }
@@ -910,21 +910,60 @@ pub fn sympy_best_with(e: &A::Expr, positive: &[String]) -> A::Expr {
 /// v1's choice for an antiderivative: the shorter (as SymPy writes it) of SymPy's answer and its simplify();
 /// here the canonical form and its factored / together forms.
 pub fn sympy_best(e: &A::Expr) -> A::Expr {
+    sympy_best_h(e, true)
+}
+
+/// `heurisch`: SymPy's answer comes with its exponentials grouped (its heurisch method, used for exponentials
+/// of a linear argument), else fully expanded (manualintegrate).
+fn sympy_best_h(e: &A::Expr, heurisch: bool) -> A::Expr {
     let Some(t) = to_t(e) else { return e.clone() };
-    let plain = zero_sums(t.clone());
-    let mut best = (sympy_str(&plain).chars().count(), plain.clone());
-    let tg = together(t.clone());
-    for cand in [factor_terms(t.clone()), tg.clone(), factor_terms(tg), collect_funs(t)] {
-        let cand = signsimp(zero_sums(cand));
-        if key(&cand).contains("NaN") {
-            continue;
-        }
-        let n = sympy_str(&cand).chars().count();
+    let t = match expand(t.clone()) {
+        x if key(&x).contains("NaN") => t,
+        x => x,
+    };
+    // SymPy's answer comes expanded, with exponentials grouped (heurisch); simplify() puts it over a common
+    // denominator and takes out common factors. v1 kept the shorter, SymPy's answer on a tie.
+    let raw = zero_sums(if heurisch { collect_funs(t.clone()) } else { t.clone() });
+    let mut best = (sympy_str(&raw).chars().count(), raw);
+    let simp = signsimp(zero_sums(factor_terms(together(t))));
+    if !key(&simp).contains("NaN") {
+        let n = sympy_str(&simp).chars().count();
         if n < best.0 {
-            best = (n, cand);
+            best = (n, simp);
         }
     }
     simplify(&from_t(&best.1))
+}
+
+/// Products distributed over sums (not inside functions or powers): SymPy's integrate returns its answers in
+/// this expanded form.
+fn expand(t: T) -> T {
+    match t {
+        T::Add(ts) => add_all(ts.into_iter().map(expand).collect()),
+        T::Mul(c, fs) => {
+            let mut terms: Vec<T> = vec![T::Num(c)];
+            for f in fs {
+                let f = expand(f);
+                match f {
+                    T::Add(parts) => {
+                        let mut next = vec![];
+                        for a in &terms {
+                            for b in &parts {
+                                next.push(mul_all(vec![a.clone(), b.clone()]));
+                            }
+                        }
+                        terms = next;
+                        if terms.len() > 64 {
+                            return T::Num(f64::NAN);
+                        }
+                    }
+                    other => terms = terms.into_iter().map(|a| mul_all(vec![a, other.clone()])).collect(),
+                }
+            }
+            add_all(terms)
+        }
+        other => other,
+    }
 }
 
 /// Group the terms of a sum that share a function factor (SymPy's integrate returns x e^x − e^x − x²/2 as
@@ -1055,4 +1094,5 @@ fn sympy_str(t: &T) -> String {
 fn shorter(out: A::Expr, e: &A::Expr) -> A::Expr {
     if to_source(&out).chars().count() < to_source(e).chars().count() { out } else { e.clone() }
 }
+
 

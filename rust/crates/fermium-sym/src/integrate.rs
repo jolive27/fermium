@@ -44,7 +44,8 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
     // SymPy's canonical form and order, as v1 printed its results; v1 kept the shorter of SymPy's answer and its
     // simplify(), which the tidy candidates (factored, together) stand in for
     let pos: Vec<String> = positive.iter().filter(|p| p.as_str() != var).cloned().collect();
-    let r = crate::tidy::sympy_best_with(&simplify(&r), &pos);
+    let heurisch = e.walk().iter().any(|n| matches!(call_parts(n), Some(("exp", [u])) if linear(u, var).is_some()));
+    let r = crate::tidy::sympy_best_with(&simplify(&r), &pos, heurisch);
     if !antiderivative_ok(&r, &e, var, positive) {
         return Err(ferr0("Fermium's formula for this integral isn't right for every value of the constants in it, so \
                           Fermium won't use it", Some(HINT.into())));
