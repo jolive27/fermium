@@ -316,14 +316,14 @@ The same numbers as version 1, and the loop is less than half as long. Units are
 
 ## Bonus: a program you can hand to a friend
 
-`fermium build` turns a program into a stand-alone app that runs without Fermium installed. It needs a C compiler; on a Mac, install Apple's free command line tools once with `xcode-select --install`. Save the vector program above as `orbit.fm`, then:
+`fermium build` turns a program into a stand-alone app that runs without Fermium installed. On Linux it needs nothing else; on a Mac, install Apple's free command line tools once with `xcode-select --install`. Save the vector program above as `orbit.fm`, then:
 
 ```
 fermium build orbit.fm
 ./orbit
 ```
 
-`./orbit` (the `./` means "the program in this folder") prints the same result as `fermium run orbit.fm`. Programs that use `plot`, `load` or `fit` can be built too: run them from the folder that has the data files, and plots come out as `.svg` files (open them in a web browser).
+`./orbit` (the `./` means "the program in this folder") prints the same result as `fermium run orbit.fm`. Programs that use `plot`, `load` or `fit` can't be built yet: `fermium build` tells you so, and `fermium run` still runs them.
 
 ## Congratulations!
 

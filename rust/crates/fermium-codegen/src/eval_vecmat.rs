@@ -76,7 +76,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     fn flat_base(&mut self, idxs: &[(Expr, usize, usize)], fr: &mut Frame) -> Result<usize, RunError> {
         let mut base = 0usize;
         for (ie, size, stride) in idxs {
-            let idx = self.eval(ie, fr)?.num();
+            let idx = self.eval(ie, fr)?;
+            let idx = self.plain(&idx)?;
             let inside = idx >= 1.0 && idx <= *size as f64;
             let i = if inside { idx as i64 } else { 1 };
             if !inside || i as f64 != idx {

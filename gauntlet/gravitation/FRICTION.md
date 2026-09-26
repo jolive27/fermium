@@ -86,7 +86,7 @@ Problems: `21_restricted_three_body.fm` (rotating-frame vector ODE with Ω × r'
 Routh's criterion, Jacobi constant), `22_jupiter_slingshot.fm` (a hyperbolic flyby set up from its
 orbital elements and integrated in the inertial frame with a moving planet),
 `23_perturbed_precession.fm` (exact 1/r³ precession, the apsidal-angle integral with 1/√ blow-ups at
-both ends, the ODE, and a 1/r⁴ force). Tests: `tests/test_gauntlet2_gravitation.py`.
+both ends, the ODE, and a 1/r⁴ force). Tests: `legacy/tests/test_gauntlet2_gravitation.py`.
 
 ### G7. `2 V v_inf` is two volts (awkward; repeat of #10, see mechanics M10)
 

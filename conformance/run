@@ -15,7 +15,8 @@ How outputs are compared (D264, strict since red team round 9):
   - warnings (stderr): the same warnings (line and message), in the same order;
   - a program that should run must exit with code 0.
 The Rust binary runs on a copy of the program in an empty temporary directory, with an empty PATH, so it can't
-read the expected output or call the Python implementation.
+read the expected output or call the Python implementation. FERMIUM_PYTHON names the runner's own Python (with
+NumPy and SciPy), which the binary loads only for `use python` programs.
 """
 import argparse
 import glob
@@ -29,7 +30,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5, the oracle, lives in legacy/fermium since v2.0 (D269)
 
 SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
 NUM = re.compile(r"^[-+]?(\d+(\.\d*)?|\.\d+)(e[-+]?\d+)?(×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?$")
@@ -151,7 +152,7 @@ def run_legacy(path, case):
     from fermium.driver import run_source
     from fermium.errors import FermiumError
     src = open(path, encoding="utf-8").read()
-    base = os.path.join(ROOT, case["dir"]) if case["dir"] else None
+    base = case_dir(case["dir"]) if case["dir"] else None
     out, err = io.StringIO(), io.StringIO()
 
     def alarm(*_):
@@ -168,7 +169,21 @@ def run_legacy(path, case):
         return out.getvalue(), err.getvalue(), {"message": "timed out after 300 s", "line": None}
     finally:
         signal.alarm(0)
-    return out.getvalue().replace(ROOT, "<ROOT>"), err.getvalue().replace(ROOT, "<ROOT>"), e
+    out, err = out.getvalue(), err.getvalue()
+    if base:           # paths the program prints as if it ran in the case's folder (see case_dir)
+        real = os.path.normpath(os.path.join(ROOT, case["dir"]))
+        out, err = out.replace(base, real), err.replace(base, real)
+    return out.replace(ROOT, "<ROOT>"), err.replace(ROOT, "<ROOT>"), e
+
+
+def case_dir(rel):
+    """Where a case's folder is now. v1's test programs moved from tests/ to legacy/tests/ at the v2.0 cutover
+    (D269); the cases keep the old folder name (it is part of their id and of the paths they print), so programs
+    still run as if in tests/programs, reading the files from legacy/tests/programs."""
+    real = os.path.normpath(os.path.join(ROOT, rel))
+    if not os.path.isdir(real) and (rel == "tests" or rel.startswith("tests/")):
+        real = os.path.normpath(os.path.join(ROOT, "legacy", rel))
+    return real
 
 
 ERR_LINE = re.compile(r"^(?:.*?, )?line (\d+): (.*)$")
@@ -187,7 +202,7 @@ def run_binary(binary, path, case):
             # a copy of the program's folder, so plots and other files it writes never land in the repository:
             # the folder's own files, and any repository file the program names by a relative path (data/x.csv,
             # ../data/y.csv, lib/z.fm), copied into a mirror of the repository under tmp/root
-            src_dir = os.path.normpath(os.path.join(ROOT, case["dir"]))
+            src_dir = case_dir(case["dir"])
             mirror = os.path.join(tmp, "root")
             base = os.path.normpath(os.path.join(mirror, case["dir"]))
             os.makedirs(base, exist_ok=True)
@@ -198,15 +213,15 @@ def run_binary(binary, path, case):
             src_text = open(path, encoding="utf-8").read()
             for rel in re.findall(r'"([^"\n]+\.[A-Za-z0-9]+)"', src_text):
                 f = os.path.normpath(os.path.join(src_dir, rel))
-                if f.startswith(ROOT + os.sep) and os.path.isfile(f):
-                    dst = os.path.join(mirror, os.path.relpath(f, ROOT))
+                dst = os.path.normpath(os.path.join(base, rel))
+                if f.startswith(ROOT + os.sep) and os.path.isfile(f) and dst.startswith(mirror + os.sep):
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(f, dst)
         empty = os.path.join(tmp, "empty-path")
         os.mkdir(empty)
         try:
             p = subprocess.run([os.path.abspath(binary), "run", "--base-dir", base, prog], capture_output=True,
-                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8"})
+                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8", "FERMIUM_PYTHON": sys.executable})
         except subprocess.TimeoutExpired:
             return "", "", {"message": "timed out after 300 s", "line": None}, None
         except OSError as ex:
@@ -285,8 +300,15 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
     ap.add_argument("--min", type=int, default=None,
                     help="exit 0 if at least this many pass (CI's ratchet for the Rust implementation)")
+    ap.add_argument("--skip-file", help="a file of case ids (one per line, # comments) not run here; they are listed in "
+                                        "the report (CI: the oracle's BLAS-kernel-dependent cases on another CPU type)")
     a = ap.parse_args()
     files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
+    skipped = []
+    if a.skip_file:
+        ids = {ln.split("#")[0].strip() for ln in open(a.skip_file, encoding="utf-8")} - {""}
+        skipped = sorted(os.path.basename(f)[:-3] for f in files if os.path.basename(f)[:-3] in ids)
+        files = [f for f in files if os.path.basename(f)[:-3] not in ids]
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=a.j) as ex:
         results = list(ex.map(one, [(a.impl, a.bin, f) for f in files], chunksize=4))
@@ -303,6 +325,8 @@ def main():
                 f"output the divergence describes): **{passed + documented} of {total} "
                 f"({100.0 * (passed + documented) / max(total, 1):.1f} %) pass or are documented.**" if documented else ""),
              "",
+             *([f"**{len(skipped)} cases not run here** (--skip-file {os.path.relpath(a.skip_file, ROOT)}): "
+                + " ".join(skipped), ""] if skipped else []),
              "The suite (conformance/cases, see conformance/MANIFEST.md) was harvested from Fermium 1.5: every program the",
              "test suite runs, every example, rosetta, gauntlet and research program, the benchmarks, and John's Appendix 1",
              "programs. Comparison (D264): output exactly, except that a number with a decimal point or a power of ten",

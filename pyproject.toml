@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fermium"
 version = "0.1.0"
-description = "A programming language for physicists: units checked at compile time, calculus built in, compiled with LLVM."
-readme = "README.md"
+description = "Fermium 1.5, the deprecated Python implementation of Fermium (the language is now the Rust binary in rust/; see legacy/README.md)."
+readme = "legacy/README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 dependencies = [
@@ -29,11 +29,14 @@ full = []  # the documented install is `pip install -e ".[full]"` (D234); every 
 jupyter = ["jupyterlab"]
 dev = ["pytest", "pytest-cov", "pytest-xdist", "hypothesis", "ruff", "nbformat", "nbclient", "uncertainties", "pyyaml"]
 
+# Fermium 2 (the Rust binary) is `fermium`; this package installs Fermium 1.5 as `fermium-legacy` (and
+# `python3 -m fermium`), kept for the conformance oracle and the legacy test suite (DECISIONS D269).
 [project.scripts]
-fermium = "fermium.cli:entry"
+fermium-legacy = "fermium.cli:entry"
 
 [tool.setuptools]
 packages = ["fermium", "fermium.runtime", "fermium.jupyter", "fermium.selfhost"]
+package-dir = {"" = "legacy"}   # the v1 sources live in legacy/fermium; the import name stays `fermium`
 
 [tool.setuptools.package-data]
 "fermium.runtime" = ["*.c"]
@@ -47,4 +50,4 @@ line-length = 120
 select = ["E9", "F63", "F7", "F82", "F401", "F811", "F841"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["legacy/tests"]

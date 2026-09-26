@@ -16,7 +16,7 @@ import sys
 from dataclasses import fields
 from fractions import Fraction
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 sys.setrecursionlimit(20000)
 
 from fermium import ast as A                      # noqa: E402

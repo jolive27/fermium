@@ -1492,3 +1492,185 @@ against v1's 0.4 s.
 - #7 (sums rule on cancellations): open, next.
 - #8: DIVERGENCES.md is corrected (the REPL accepts ±, `fermium build` exists). CONFORMANCE.md will be regenerated after the next full run. The reference's `use python` line is true after #4.
 - #9 (compiled inner loops slower than v1): assigned to the LLVM agent, to re-measure on a quiet machine.
+
+## Round 11 (run 2, 2026-09-26 10:30 UTC): Rust v2 against v1, after the mixed-mode LLVM back end
+
+Independent reviewer. I started on a binary built from 64e088d. The branch moved to d393edb while I worked
+(mixed-mode LLVM, integrator forms, conformance regenerated), so I rebuilt from d393edb
+(`CARGO_TARGET_DIR=/tmp/claude-0/rt11-target FERMIUM_NO_AOTRT=1 cargo build --profile fast -p fermium-cli`) and
+re-ran everything. Every finding below holds at d393edb. Oracle: `python3 -m fermium run` from the same tree.
+Programs are in /tmp/claude-0/redteam11/p/ and outputs in /tmp/claude-0/redteam11/out/{v1,auto,interp,llvm}/.
+
+**What I ran.**
+- 361 new programs. Areas: units and conversions (including °C/°F offsets), natural, nuclear and astro units,
+  constants, sig figs, sums and cancellations, `to N digits`, derivatives, ∇, definite integrals, 60 indefinite
+  integrals (including the x² − a² families), Σ, ODEs (rk45, rk4, radau, bdf, until, backwards, complex, vector),
+  PDEs, bound states, FFT, RNG, parallel for, fit with and without ±, ± propagation (including correlated fit
+  parameters and det/inverse/solve_linear of uncertain matrices), vectors, matrices, complex numbers, lists,
+  stdlib and user modules, and 12 mixed-mode programs (plot/load/fit/list functions inside loops, with variables
+  set before and after).
+- About 55 of the 361 are error programs: unit mismatch, undefined names, bad index, wrong arity, missing
+  file/module/column, private name, bad slice, etc.
+- Each program ran with `--backend auto`, `--backend interp` and `--backend llvm`. I also ran the conformance
+  suite, the benchmarks and `doctor`, piped a REPL session, and read the docs.
+
+**Result.** The port is very faithful. 328 of 361 programs are byte for byte identical to v1. The 33 that differ:
+- 12: the documented decimal-place rule for sums (g02 g03 g05 g07 g10 g11 s01 s02 s04 s12 s13 u40). All are
+  right by the textbook rule.
+- 7: the documented indefinite-integral formula divergence, with equivalent formulas (i09 i25 j11 j12 j13 j18
+  j27).
+- 2: v1 bugs that Rust fixes. g25 is `∫ sec`. In j01, `∫ √x ln(x)` gives the right formula, where v1 refused
+  it with a "meijerg" error.
+- 5: the documented coverage divergence (j06 j07 j23 j28 g23). See #5.
+- 1: both implementations are wrong, on different sides of the pole (g27, #2).
+- 5: a Rust bug (g08 g09 g31 u03 mx11, #1).
+
+Other results:
+- **Back ends:** `interp` and `llvm` gave the same output as `auto` on every program, except where llvm
+  refused with exit 3 (47 programs: ±, and at 64e088d also data and vector-component programs). The one other
+  exception is r5.fm, a recursion 10⁶ deep plus a plot. It now works in auto/llvm (mixed mode) and runs out of
+  stack in interp, as rust/DIVERGENCES.md "The command-line tool" says.
+- **Panics:** none. I searched every output for "panicked" and "RUST_BACKTRACE".
+
+### 1. A difference of two °C or °F temperatures prints the wrong number (high). Status: open
+- The decimal-place rule takes each operand's last significant place from its absolute SI value. For
+  `20.0 °C`, that value is 293.15 K with 3 significant figures, so the place is 1 K instead of 0.1 K. The
+  difference is then rounded to whole kelvins.
+- This hits the most common measured subtraction in a teaching lab: ΔT from two thermometer readings.
+- Both back ends (and `interp`) print these:
+
+| Program | Rust | v1 | Right |
+|---|---|---|---|
+| `print 0.5 °C - 0.2 °C` | `0 K` | `0.30 K` | 0.3 K |
+| `print 25.5 °C - 20.0 °C` | `6 K` | `5.50 K` | 5.5 K |
+| `print (25.5 °C - 20.0 °C) in mK` | `6×10³ mK` | `5500 mK` | 5500 mK |
+| `print 98.6 °F - 32.0 °F` | `37 K` | `37.0 K` | 37.0 K |
+| `print 300.0 K - 20.0 °C` | `7 K` | `6.850 K` | 6.9 K |
+| `print 25.5 °C - 20.0 °C + 0.1 K` | `6 K` | `5.60 K` | 5.6 K |
+
+- In a calorimetry program (g09.fm), `T1 = 21.3 °C`, `T2 = 23.8 °C`, `print T2 - T1` prints `2 K`. The same
+  value stored first (`ΔT = T2 - T1`, `print ΔT`) prints `2.50 K`.
+- Variables work the same way: `T = 20.0 °C` raised by 1.5 K three times, then `print T - 20.0 °C`, prints `4 K`
+  where the answer is 4.5 K (mx11.fm).
+- Other units are fine: `1.0 hr - 30.0 min` → `0.5 hr`, `3.0 mi + 1.00 km` → `3.6 mi`, `1.5 km + 20.5 m` →
+  `1.5 km` are all right by the rule. So are uncertain temperatures: `(23.8 ± 0.2 °C) - (21.3 ± 0.2 °C)` →
+  `2.50 ± 0.28 K`.
+- **Cause:** `fermium-codegen/src/eval_calc.rs`, `sum_place` calls `last_place(v / k, s)` with v in absolute
+  kelvins.
+- **Fix:** take the place from the value in the unit it was written in. With the offset removed, the place of
+  `20.0 °C` is 0.1, and 0.1 °C is 0.1 K. Until then, keep v1's rule when any operand has an offset unit.
+- **Tests:** add conformance cases for °C − °C, °F − °F, K − °C and a stored-variable operand. The suite has no
+  printed difference of two offset temperatures, which is why the 4-case measurement in DIVERGENCES.md didn't
+  catch this.
+- **Repro:** p/g08.fm, g09.fm, g31.fm (last line), t01.fm, t03.fm, mx11.fm.
+
+### 2. Antiderivatives use ln(u), not ln|u|, so F is NaN on one side of every real pole (medium; both implementations). Status: open
+- `∫ 1/(9 - x²) dx` gives `-ln(-3 + x)/6 + ln(3 + x)/6` in both. So `F(1) - F(0)` is NaN on |x| < 3, the side
+  where 1/(a² − x²) is usually used (i04, g13).
+- `∫ 1/(1 - x²)` has `F(0.5)` = NaN (i22).
+- `∫ 1/(x - 5)` has `F(2) - F(1)` = NaN (g28).
+- `∫ 3/(x² - 5x + 6)` is NaN between the roots (g29).
+- `∫ 1/(2 - x)`: Rust gives `-ln(2 - x)`, which is NaN for x > 2. v1 gives `-ln(-2 + x)`, which is NaN for x < 2
+  (g27). This is the one output difference in this family, and neither is right on both sides.
+- Round 10 #3 was fixed by adopting v1's form (i03 now matches v1). That fixes x > a and leaves |x| < a broken
+  in both. The 12-point derivative check evidently passes because NaN samples are skipped.
+- **Fix:** use `ln(abs(u))` for a linear or quadratic u with real roots. The derivative is the same, and Fermium
+  already prints `abs`. At least make the check test both sides of every real root.
+
+### 3. `∫ 1/(x² - a²) dx` with a dimensional constant gives a function that can't be called (low–medium; both). Status: open
+- **Repro:** `a = 2 m`, `F = ∫ 1/(x² - a²) dx`, then `print F(3 m) - F(2.5 m)`. Both stop with
+  `ln needs a plain number, but got length [m]`, because the formula is `ln(x - a)/(2a) - ln(x + a)/(2a)` (i10).
+- The definite integral works.
+- **Fix:** combine the logs into `ln((x - a)/(x + a))/(2a)`, or divide each argument by a, when the constant has
+  units.
+
+### 4. The decimal-place rule for sums: where it applies is fragile (low). Status: open
+- The rule applies only to a sum that is the whole print item:
+  - `print 1.20 m + 2.0 m` → `3.2 m`;
+  - but `-(1.20 m + 2.0 m)` → `-3.20 m`, `(1.20 m + 2.0 m) in cm` → `320 cm`, `2 (1.20 m + 2.0 m)` → `6.40 m`,
+    `str(…)` → `3.20 m`, and `[1.20 m + 2.0 m, 1 m]` → `[3.20, 1.00] m` (g01, g31).
+- DIVERGENCES.md says the place is found "in the unit the result prints in", which suggests `in cm` is covered.
+- `100.0 °C - 0.5 K` still prints `99.50 °C`: the second half of round 10 #7 is still open. Meanwhile
+  `20.5 °C + 1.25 K` prints `21.8 °C`.
+- An exact whole operand turns the rule off: `1500 m + 2.0 m` → `1.5×10³ m`, and `100 m + 0.5 m` → `100 m`.
+  The added amount disappears (t02). v1 does the same, but the new rule could print 1502.0 m and 100.5 m.
+- **Fix:** apply the rule through negation, unit conversion and scaling by exact numbers. Otherwise document
+  exactly where it applies.
+
+### 5. Antiderivative coverage: textbook integrals v1 could do are refused, and some forms are redundant (low). Status: open
+- **Refused.** v1 gives a formula and Rust says "Fermium couldn't find a formula for this integral" for:
+  - `∫ x³ ln(x)² dx` (j06);
+  - `∫ x asin(x) dx` (j07);
+  - `∫ 1/(x² √(x² + 1)) dx` (j23);
+  - `∫ 1/cosh(x) dx` (j28);
+  - `∫ 1/(x √(x² - 1)) dx` (g23). v1 refuses this one too, with a different message.
+- DIVERGENCES.md describes the gaps as mixtures, products of several transcendental functions and symbolic
+  coefficients. These are single-function textbook cases: add rules, or name them in the doc.
+- **Redundant forms:**
+  - `∫ (x + 1)/(x² - 1) dx` → `ln(-1 + x)/2 + ln(-1 + x²)/2 - ln(1 + x)/2` (v1: `ln(-1 + x)`);
+  - `∫ x/(x² - 4x + 3)` → `ln(3 + x² - 4x)/2 - ln(-1 + x) + ln(-3 + x)`.
+  - They are equivalent, but not what a physicist would write. Cancel common factors before partial fractions.
+
+### 6. Speed of compiled inner loops against v1 (low; indicative only). Status: open (round 10 #9)
+- **Conditions:** load average 19–23, `fast` profile (release without LTO), TIME_INNER, 3 interleaved runs.
+- **Results:**
+
+| Benchmark | Rust | v1 |
+|---|---|---|
+| nbody | 0.27–0.31 s | 0.14–0.16 s |
+| spring_rk4 | 0.19–0.29 s | 0.068–0.081 s |
+| forces | 0.06–0.11 s | 0.035–0.054 s |
+| blackbody | 0.009–0.035 s | 0.0025–0.0028 s |
+
+- README and benchmarks/ make no speed claims for v2, so nothing is unfair today. Re-measure a release build on
+  a quiet machine before any v2 number is published.
+- **Round 10 #2 is fixed** by mixed mode. The 2×10⁷-iteration loop plus `plot` takes 0.12 s (was 3.9–5.1 s;
+  v1 1.0 s), and plus `load` 0.09 s. A ± program is still interpreted, but a 2×10⁶-iteration loop in one takes
+  0.70 s against v1's 11.1 s.
+
+### 7. Documentation (low). Status: open
+- **Lesson 0 (`bootcamp/lesson00_setup.md`, this branch)** tells beginners to download `fermium-macos-arm64` /
+  `fermium-linux-x86_64` from the Releases page. The repository has no releases yet (`list_releases` is empty),
+  and the binary calls itself `2.0.0-dev`. Until the first release, say it is coming and point to the Python
+  version (or building from source). Otherwise Step 2 is a dead end for a student.
+- **The conformance judge still ignores carets and columns** (the second half of round 10 #6). My 55 error
+  programs matched v1's carets byte for byte anyway.
+
+**Checked and fine:**
+- **CONFORMANCE.md reproduces exactly.** A fresh `conformance/run --impl rust` on d393edb gives 3334/3366 + 32
+  documented = 3366/3366, with the same per-area table and the same divergence list.
+- **Round 10 fixes verified:**
+  - #1: fit parameters carry correlated uncertainties. `k x0` → `1.004 ± 0.051 N`; `k (3 cm) + F0` with a
+    correlated slope and intercept → `1.510 ± 0.017 N`, the textbook σ at the mean x.
+  - #2 (mixed mode) is fixed.
+  - #3: matches v1 now; see #2 above for what remains.
+  - #4: `use python` by a bare file name works.
+  - #5: documented.
+  - #6: the warning caret is under the name.
+  - #7: `12.0 kg - 11.99 kg` → `0 kg`, `10.0 m - 9.95 m` → `0.1 m`.
+- **Uncertain matrices (B-U1)** match v1 and are right:
+  - `det([[1, 2], [3, 4]] L)` = `-2.880 ± 0.048 m²`;
+  - `det(I a)` = `4.00 ± 0.40`, and `det(M) - a²` = `0 ± 0`;
+  - independent a and b in diag(a, b) give det `6.00 ± 0.63` and `solve_linear` `0.333 ± 0.011` / `0.500 ± 0.050`;
+  - solving a stiffness matrix k·K₀ gives `0.0667 ± 0.0033 m`.
+- **Physics spot checks:**
+  - the 1 nm box ground state is 0.376 eV;
+  - Newton cooling after 30 min is 23.5 °C;
+  - radau and bdf stiff solves are right;
+  - PDE heat decay matches exp(−Dπ²t/L²) to 5 digits;
+  - the Kepler orbit closes to 1.0000 AU;
+  - FFT, seeded RNG, parallel for, the stdlib modules and natural-unit conversions (ħc, 1/m_e, GeV⁻² → pb) are
+    right.
+- **Error messages:** all the error programs have v1's message, line, caret and hint.
+  - That includes errors inside a function reported at the definition with "when calling f on line 3", errors
+    in solve blocks and in module imports.
+  - Runtime errors (index out of range, singular matrix, slices) have no caret or hint, as in v1.
+- **Doctor and REPL:** `doctor` is honest (build unavailable without AOTRT; Python optional). The REPL answers
+  Lesson 0's examples exactly (`2.30 m`, `1.61 km`, `1.60934 km`).
+
+**Round 11 status (10:45 UTC):**
+- #1 (temperature differences): fixed in the sums rule. A sum whose result is a temperature keeps v1's rule, so both back ends print `0.30 K` again.
+- #2, #3, #5 (ln|u|, dimensioned log argument, refused integrals): assigned to the calculus agent.
+- #4 (sums rule fragile): open; the `100.0 °C - 0.5 K` case is covered by the #1 fix.
+- #6 (speed): the LLVM agent re-measures on a quiet machine for PERF.md.
+- #7: the Releases page gets its first release at the B8 v2.0 tag. Comparing carets and columns in the runner is open.

@@ -74,7 +74,7 @@ levels of nested `solve`, latent heat, Clausius–Clapeyron by redoing the const
 `22_debye_einstein.fm` (the Debye integral against Einstein, the T³ and Dulong–Petit limits,
 C = 3R/2, the entropy as ∫C/T dT of an integral), `23_photon_carnot_stirling.fm` (the photon-gas
 adiabat as an ODE in V, a Carnot cycle leg by leg, Stirling with and without a regenerator).
-Tests: `tests/test_gauntlet2_thermodynamics.py`.
+Tests: `legacy/tests/test_gauntlet2_thermodynamics.py`.
 
 ### T7. The van der Waals `b` is the barn: `3 b`, `27 b²` (awkward, silent until later; see mechanics M10)
 

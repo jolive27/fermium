@@ -2,7 +2,7 @@
 
 Seven small physics programs, each written three times: in Fermium, in Julia and in Python. You can compare how each language reads.
 
-Every program on this page is a real file in [`examples/rosetta/`](../examples/rosetta/), and the test suite (`tests/test_examples.py`) checks three things:
+Every program on this page is a real file in [`examples/rosetta/`](../examples/rosetta/), and the test suite (`legacy/tests/test_examples.py`) checks three things:
 - all three versions run;
 - they print the same numbers (to 0.2%);
 - the code on this page is the same as the code in the files.
@@ -30,7 +30,7 @@ Julia users would normally solve ODEs with DifferentialEquations.jl. That packag
 | ODEs | `solve m x'' = -k x - b x' with …`. | DifferentialEquations.jl (here: hand-written RK4). | `solve_ivp`: you rewrite the equation as first-order and handle the state vector yourself. |
 | Printing | Significant figures and units chosen for you, or `to 5 digits`. | `@printf`. | f-strings. |
 | Vectors | `<3, 4> m/s`, `\|v\|`, `a · b`, `a × b`, unit-checked; ODEs can have vector unknowns. | `StaticArrays` or plain arrays of Unitful quantities. | NumPy arrays, no units. |
-| Standalone program | `fermium build prog.fm` (needs a C compiler). | PackageCompiler.jl. | PyInstaller or similar. |
+| Standalone program | `fermium build prog.fm` (the linker is built in; not yet for programs with `plot`, `fit` or `load`). | PackageCompiler.jl. | PyInstaller or similar. |
 
 Things we ran into while writing these (they are left in the code, with a comment):
 - **Julia, escape velocity:** `quadgk` refused an infinite upper limit with Unitful units, so the units have to be stripped for that one integral.

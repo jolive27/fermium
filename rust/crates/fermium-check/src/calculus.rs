@@ -18,6 +18,13 @@ use crate::builtins::is_builtin;
 use crate::checker::*;
 use crate::stmts::ty_dim;
 
+/// Phase C (v2.5) calculus, opt-in with the environment variable FERMIUM_C2=1 until the language change is adopted
+/// (spec §C2): derivatives of multi-line functions by automatic differentiation (fermium-sym ad.rs).
+pub fn c2_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("FERMIUM_C2").map(|v| !v.is_empty() && v != "0").unwrap_or(false))
+}
+
 /// Checker state for calculus (Python keeps it on FuncInfo.derived).
 #[derive(Clone, Debug, Default)]
 pub struct CalcState {
@@ -73,6 +80,11 @@ impl C::DiffContext for DC<'_> {
     fn user_function(&mut self, fname: &str) -> C::SymResult<Option<(Vec<String>, A::Expr)>> {
         if let Some((Binding::Func(b), _)) = self.ck.lookup(self.scope, fname) {
             if !self.ck.funcs[b].one_liner() {
+                if c2_enabled() {
+                    // differentiated by derived_info (automatic differentiation); the body isn't needed here
+                    let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
+                    return Ok(Some((params, C::build::num(0.0))));
+                }
                 return Err(C::build::ferr0(
                     format!("can't differentiate through {fname}: it's defined over several lines"),
                     Some(format!("symbolic derivatives need one-line functions: write {fname} on one line (with  \
@@ -123,7 +135,7 @@ impl Checker {
     fn new_func_info(&mut self, name: String, fdef: A::Stmt, scope: ScopeId) -> FuncInfoId {
         self.funcs.push(FuncInfo { name: name.clone(), fdef: Some(fdef), scope, instances: HashMap::new(),
                                    display_name: name, checked_generic: false, stable: false, nat: None, module: None,
-                                   anon_label: None, parent: None });
+                                   anon_label: None, parent: None, eval_body: None });
         self.funcs.len() - 1
     }
 
@@ -165,18 +177,31 @@ impl Checker {
             return Ok(d);
         }
         let dn = self.funcs[info].display_name.clone();
-        if !self.funcs[info].one_liner() {
+        let multi = !self.funcs[info].one_liner();
+        if multi && !c2_enabled() {
             return Err(self.err(format!("can only differentiate one-line functions like f(x) = ..., and {dn} is \
                                          defined over several lines"), node, None));
         }
         let fdef = self.funcs[info].fdef.clone().unwrap();
-        let (_, params, _) = fdef_parts(&fdef);
+        let (_, params, fbody) = fdef_parts(&fdef);
         let pname = params[i].name.clone();
-        let mut body = self.body_expr(info).unwrap();
+        let pnames: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+        // one-line: the symbolic derivative; several lines (spec §C2, opt-in): automatic differentiation
+        let mut body = if multi { C::build::num(0.0) } else { self.body_expr(info).unwrap() };
+        let mut block = match fbody {
+            A::FuncBody::Block(b) => b.clone(),
+            A::FuncBody::Expr(_) => vec![],
+        };
         let scope = self.funcs[info].scope;
         for _ in 0..order {
-            match self.diffctx_diff(&body, &pname, scope) {
-                Ok(b) => body = b,
+            let step = if multi {
+                let mut dc = DC { ck: self, scope };
+                C::ad_body(&dn, &pnames, &block, &pname, &mut dc).map(|b| block = b)
+            } else {
+                self.diffctx_diff(&body, &pname, scope).map(|b| body = b)
+            };
+            match step {
+                Ok(()) => {}
                 Err(mut ex) => {
                     if ex.line.is_none() && node.line != 0 {
                         ex.line = Some(node.line);
@@ -205,7 +230,13 @@ impl Checker {
             format!("∂{}{dn}/∂{pname}{}", sup(order), sup(order))
         };
         let nm = format!("{}{suffix}", self.funcs[info].name);
-        let fd = new_fdef(&nm, params.clone(), body, fdef.span);
+        let fd = if multi {
+            A::Stmt { kind: A::StmtKind::FuncDef { name: nm.clone(), params: params.clone(),
+                                                   body: A::FuncBody::Block(block), where_: vec![] },
+                      span: fdef.span }
+        } else {
+            new_fdef(&nm, params.clone(), body, fdef.span)
+        };
         let d = self.new_func_info(nm, fd, scope);
         let parent = match self.funcs[info].parent {
             None => (info, i, order as u32),
@@ -379,7 +410,8 @@ impl Checker {
         if let Some(&d) = self.calc.derived.get(&key) {
             return Ok(d);
         }
-        if !self.funcs[b].one_liner() {
+        let multi = !self.funcs[b].one_liner();
+        if multi && !(c2_enabled() && matches!(kind, "grad" | "lap")) {
             return Err(self.err(format!("{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and \
                                          {name} is defined over several lines"), span, None));
         }
@@ -400,7 +432,14 @@ impl Checker {
                                 }));
         }
         let scope = self.funcs[b].scope;
-        let body = self.body_expr(b).unwrap();
+        let body = if multi {
+            // several lines (spec §C2, opt-in): the partial derivatives are the functions ∂f/∂x made by automatic
+            // differentiation (derived_info), called at the coordinates
+            let f = C::build::name(&self.funcs[b].name);
+            C::build::call_e(f, allp.iter().map(|p| C::build::name(p)).collect())
+        } else {
+            self.body_expr(b).unwrap()
+        };
         let addall = |ts: Vec<A::Expr>| -> A::Expr {
             let mut out = ts[0].clone();
             for t in &ts[1..] {
@@ -912,6 +951,25 @@ impl Checker {
                 return Err(ex);
             }
         };
+        // evaluated with ln|u| (a plain-number argument when the constants have units): red team 11 #2, #3
+        let eval_body = {
+            let dimensioned = |c: &A::Expr| -> bool {
+                c.walk().iter().any(|n| match &n.kind {
+                    A::ExprKind::Quantity { .. } => true,
+                    A::ExprKind::Name { name } => match self.lookup(ctx.scope, name) {
+                        Some((Binding::Const(k), _)) => !k.unit.dim.is_dimensionless(),
+                        Some((Binding::Sym(s), _)) => ty_dim(&self.module.syms[s].ty).is_some_and(|d| {
+                            let d = self.u.norm(&d);
+                            !(d.is_concrete() && d.konst.is_dimensionless())
+                        }),
+                        _ => false,
+                    },
+                    _ => false,
+                })
+            };
+            let r = C::real_logs(&body, &integrand2, var, &dimensioned);
+            (C::key(&r) != C::key(&body)).then_some(r)
+        };
         let fd = new_fdef(&format!("∫d{var}"), vec![param(var)], body, e.span);
         let scope = if ctx.is_main { ctx.scope } else { self.globals };
         let fname = self.fresh_name("antideriv");
@@ -921,6 +979,7 @@ impl Checker {
         f.nat = nat;
         f.display_name = format!("∫d{var}");
         f.anon_label = Some(format!("∫ {} d{var}", C::to_source(integrand)));
+        f.eval_body = eval_body;
         Ok(self.func_ref(info))
     }
 

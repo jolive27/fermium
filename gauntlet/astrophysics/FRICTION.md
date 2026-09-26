@@ -56,7 +56,7 @@ Problems: `21_white_dwarfs.fm` (Lane–Emden n = 1.5 and 3, the n = 1.5 mass–r
 Chandrasekhar mass, and the full Fermi-gas structure equations for six central densities),
 `22_saha_ionization.fm` (half-ionisation in a stellar atmosphere and at recombination),
 `23_friedmann_age.fm` (flat ΛCDM age, lookback time, distances, onset of acceleration, and the age
-again from the Friedmann ODE). Tests: `tests/test_gauntlet2_astrophysics.py`.
+again from the Friedmann ODE). Tests: `legacy/tests/test_gauntlet2_astrophysics.py`.
 Severity: wrong answer / bug / awkward / cosmetic.
 
 ### Wrong answer

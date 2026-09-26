@@ -186,6 +186,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// Evaluate an ODE-kind lambda at (t, y) into out (the compiled lambda's calling convention).
     pub(crate) fn ode_call(&mut self, lam: &Lambda, t: f64, y: &[f64], out: &mut [f64], fr: &mut Frame)
                            -> Result<(), RunError> {
+        // repeated pure calls within this evaluation are computed once (eval_memo.rs, D270)
+        let saved = self.memo_begin();
+        let r = self.ode_call_inner(lam, t, y, out, fr);
+        self.memo_end(saved);
+        r
+    }
+
+    fn ode_call_inner(&mut self, lam: &Lambda, t: f64, y: &[f64], out: &mut [f64], fr: &mut Frame)
+                      -> Result<(), RunError> {
         let module = self.module;
         if let Some(&p) = lam.params.first() {
             fr.vars.insert(p, Value::Num(t));
@@ -217,8 +226,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for e in &lam.body {
             match self.eval(e, fr)? {
                 // interp.ode_rhs (D122)
-                Value::Unc(_) => return self.err("a differential equation (solve) can't use uncertain values (±) yet; \
-                                                  put the solve inside a  propagate montecarlo  block, or use value(x)"),
+                Value::Unc(_) | Value::UVec(_) | Value::UList(_) => {
+                    return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the \
+                                     solve inside a  propagate montecarlo  block, or use value(x)")
+                }
                 Value::Vec(v) => {
                     for x in v.iter() {
                         if j < out.len() {
@@ -239,10 +250,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub(crate) fn stmt_solve(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
+        use crate::eval_unc::kernel_line;
+        let line0 = self.line;
         match &s.kind {
-            StmtKind::Solve { method, .. } if method == "eigen" => self.solve_eigen(s, fr),
-            StmtKind::Solve { method, .. } if method == "pde" => self.solve_pde(s, fr),
-            StmtKind::Solve { .. } => self.solve_ode(s, fr),
+            StmtKind::Solve { method, .. } if method == "eigen" => kernel_line(self.solve_eigen(s, fr), line0),
+            StmtKind::Solve { method, .. } if method == "pde" => kernel_line(self.solve_pde(s, fr), line0),
+            StmtKind::Solve { .. } => kernel_line(self.solve_ode(s, fr), line0),
             StmtKind::Plot(..) => self.stmt_plot(s, fr),
             StmtKind::Fit { .. } => self.stmt_fit(s, fr),
             StmtKind::Animate { .. } => self.stmt_animate(s, fr),
@@ -250,16 +263,21 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn flat(&mut self, es: &[Expr], fr: &mut Frame) -> Result<Vec<f64>, RunError> {
+    fn flat(&mut self, es: &[Expr], line: u32, fr: &mut Frame) -> Result<Vec<f64>, RunError> {
         let mut y0 = vec![];
+        let mut unc = false;
         for e in es {
             match self.eval(e, fr)? {
                 Value::Vec(v) => y0.extend(v.iter()),
-                // interp.s_SSolve (D122)
-                Value::Unc(_) => return self.err("a starting value of solve can't be uncertain (±) yet; put the solve \
-                                                  inside a  propagate montecarlo  block, or use value(x)"),
+                Value::Unc(_) | Value::UVec(_) => unc = true,
                 v => y0.push(v.num()),
             }
+        }
+        if unc {
+            // interp.s_SSolve (D122): checked once they are all evaluated, on the solve's line
+            self.line = line;
+            return self.err("a starting value of solve can't be uncertain (±) yet; put the solve inside a  propagate \
+                             montecarlo  block, or use value(x)");
         }
         Ok(y0)
     }
@@ -292,9 +310,19 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     fn solve_ode(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
         let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
-        let y0 = self.flat(y0, fr)?;
-        let t0 = self.eval(t0, fr)?.num();
-        let t1 = self.eval(t1, fr)?.num();
+        let y0 = self.flat(y0, s.line, fr)?;
+        let (vt0, vt1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
+        let (t0, t1) = (vt0.num(), vt1.num());
+        if matches!(vt0, Value::Unc(_)) || matches!(vt1, Value::Unc(_)) {
+            // uncertain limits: v1's stepper calls the right side at the start (its own errors come first), then its
+            // steps make t, and so the state, uncertain; the right side then is (ode_rhs)
+            let lam = &module.lambdas[*rhs];
+            let mut out = vec![0.0; y0.len()];
+            self.ode_call(lam, t0, &y0, &mut out, fr)?;
+            self.line = s.line;
+            return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the solve inside \
+                             a  propagate montecarlo  block, or use value(x)");
+        }
         let h0 = match step {
             Some(e) => Some(self.eval(e, fr)?.num()),
             None => None,
@@ -526,6 +554,30 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         r.map_err(|f| self.fail_solve(f, fmt))
     }
 
+    /// A solution at a time that may be uncertain (v1's interpreter: Sol.eval's cubic Hermite on a UFloat t, so the
+    /// value's uncertainty is the interpolant's slope times t's); y'(t) at an uncertain t calls the right side with
+    /// uncertain values, which ode_rhs refuses.
+    fn sol_at_unc(&mut self, d: &SolData, comp: usize, t: &Value, use_dy: bool, fmt: usize) -> Result<Value, RunError> {
+        let Value::Unc(u) = t else { return Ok(Value::Num(self.sol_at(d, comp, t.num(), use_dy, fmt)?)) };
+        let line = self.line;
+        let x = self.sol_at(d, comp, u.v, use_dy, fmt)?; // the range check, on the nominal value
+        self.line = line;
+        if use_dy {
+            return self.err(if d.rhs.is_some() {
+                "a differential equation (solve) can't use uncertain values (±) yet; put the solve inside a  propagate \
+                 montecarlo  block, or use value(x)"
+            } else {
+                crate::eval_unc::GENERIC
+            });
+        }
+        if d.sol.n() <= 1 {
+            return Ok(Value::Num(x));
+        }
+        let slope = d.sol.eval(comp, u.v, true, None).map_err(|f| self.fail_solve(f, fmt))?;
+        let dd = fermium_runtime::numerics::uncertain::scale(&u.d, slope);
+        Ok(Value::Unc(Rc::new(fermium_runtime::numerics::uncertain::UFloat::new(x, dd))))
+    }
+
     /// max(x) / min(x) of a solution component: the largest step value refined by the quintic Hermite through
     /// its neighbours (v1's fm_sol_ext), not just the largest stored value.
     pub(crate) fn sol_extreme(&mut self, name: &str, args: &[Expr], fr: &mut Frame) -> Result<Option<Value>, RunError> {
@@ -553,6 +605,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         }
                         Ok(Value::List(Rc::new(RefCell::new(out))))
                     }
+                    Value::UList(l) => {
+                        let ts = l.borrow().clone();
+                        let mut out = Vec::with_capacity(ts.len());
+                        for t in &ts {
+                            out.push(self.sol_at_unc(&d, *comp, t, *use_dy, *tfmt)?);
+                        }
+                        Ok(crate::eval_unc::make_list(out))
+                    }
+                    v @ Value::Unc(_) => self.sol_at_unc(&d, *comp, &v, *use_dy, *tfmt),
                     v => Ok(Value::Num(self.sol_at(&d, *comp, v.num(), *use_dy, *tfmt)?)),
                 }
             }
@@ -601,12 +662,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::OdeLinSolve { m, b, t, text, fmt } => {
                 let n = b.len();
                 let mut a = vec![];
+                // an uncertain coefficient or right side needs a plain number (as in v1's interpreter)
                 for x in m {
-                    a.push(self.eval(x, fr)?.num());
+                    let v = self.eval(x, fr)?;
+                    a.push(self.plain(&v)?);
                 }
                 let mut bv = vec![];
                 for x in b {
-                    bv.push(self.eval(x, fr)?.num());
+                    let v = self.eval(x, fr)?;
+                    bv.push(self.plain(&v)?);
                 }
                 let (xs, piv) = solve_linear(&a, n, &bv);
                 if piv.iter().any(|p| *p == 0.0) {

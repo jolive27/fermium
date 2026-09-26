@@ -37,6 +37,8 @@ Phases in order, each gated:
 11. CI minutes are limited: Linux CI on pushes; macOS CI only on pull requests or manual dispatch at milestones; concurrency cancels old runs.
 
 ## Commands
-- `python3 -m pip install -e ".[full,dev]"` — install everything (`.[full]` is enough for users); exposes `fermium`.
-- `make check` — lint + the whole test suite (docs and bootcamp blocks, examples, gauntlet, research). Must pass before every commit.
+- `make install` (= `cargo install --locked --path rust/crates/fermium-cli`) — the Rust binary `fermium` (v2); see rust/BUILD.md (LLVM 18, lld).
+- `python3 -m pip install -e ".[full,dev]"` — the deprecated Python implementation (v1.5, in `legacy/`), exposed as `fermium-legacy`; the conformance oracle.
+- `make check` — ruff + the legacy suite, then `cargo build/test --profile fast` (+ pyapi, wasm) and the Rust conformance run against `conformance/RUST_FLOOR` (`FERMIUM_SKIP_RUST=1` skips the Rust part, saying so). Must pass before every commit.
 - `fermium run file.fm`, `fermium` (REPL), `fermium fmt --pretty|--ascii file.fm`, `fermium doctor`, `fermium build file.fm`.
+- `python3 conformance/run --impl rust --bin rust/target/fast/fermium [--area A] [--out F]` — the scoreboard (CONFORMANCE.md); `--impl legacy` must stay 100 %.

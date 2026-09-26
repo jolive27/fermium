@@ -1,0 +1,15 @@
+# ∇ and ∇² of a potential written over several lines
+k = 2 N m
+φ(x, y, z) =
+    r = √(x² + y² + z²)
+    k / r
+print ∇φ(1 m, 2 m, 2 m)
+print -k <1 m, 2 m, 2 m> / (3 m)³
+
+# a Yukawa potential: ∇²V = V/λ² away from the origin
+λ = 0.5 m
+V(x, y, z) =
+    r = √(x² + y² + z²)
+    V0 = 3 J
+    V0 exp(-r/λ) (1 m)/r
+print ∇²V(0.3 m, 0.4 m, 0 m), V(0.3 m, 0.4 m, 0 m)/λ²

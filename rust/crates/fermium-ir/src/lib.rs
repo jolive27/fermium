@@ -93,6 +93,14 @@ pub struct ExprExtra {
     pub text_id: Option<usize>,
     /// the display units of a vector whose components have different units, one each (Python MixedHint, D29)
     pub mixed: Option<Vec<Option<Hint>>>,
+    /// a variable holding a fitted parameter or its standard error (or set from one): its figures don't come from
+    /// a written value, so a printed sum with it keeps v1's figures rule, not the decimal-place rule (B-F1)
+    pub fit_sf: bool,
+}
+
+/// Does e use a variable whose figures come from a fit (ExprExtra::fit_sf)? Lambdas are not entered.
+pub fn uses_fit_sf(e: &Expr) -> bool {
+    e.get_extra().is_some_and(|x| x.fit_sf) || expr_children(e).into_iter().any(uses_fit_sf)
 }
 
 impl Expr {

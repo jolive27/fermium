@@ -189,7 +189,8 @@ impl Checker {
                            span: z };
         self.funcs.push(FuncInfo { name: format!("builtin.{name}"), fdef: Some(fd), scope: self.root,
                                    instances: HashMap::new(), display_name: name.into(), checked_generic: false,
-                                   stable: false, nat: None, module: None, anon_label: None, parent: None });
+                                   stable: false, nat: None, module: None, anon_label: None, parent: None,
+                                   eval_body: None });
         let id = self.funcs.len() - 1;
         self.builtin_infos.insert(name.to_string(), id);
         id
@@ -527,7 +528,10 @@ impl Checker {
             in_body = true;
             match body {
                 A::FuncBody::Expr(_) => {
-                    let b = self.body_expr(info).unwrap();
+                    let b = match &self.funcs[info].eval_body {
+                        Some(e) => e.clone(),
+                        None => self.body_expr(info).unwrap(),
+                    };
                     let b = if self.funcs[info].stable { self.stabilize(&b) } else { b };
                     let v = self.expr(&b, &mut fctx)?;
                     self.ret_types[fctx.ret_types].push(v.clone());

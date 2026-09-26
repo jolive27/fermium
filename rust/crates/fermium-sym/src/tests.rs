@@ -113,6 +113,21 @@ fn antiderivatives_print_like_v1() {
     // red team 10: the log form (defined for |x| > 1, as v1's), not atanh
     assert_eq!(integ("1/(x^2 - 1)", "x", &[]).unwrap(), "ln(-1 + x)/2 - ln(1 + x)/2");
     assert_eq!(integ("1/(4 - x^2)", "x", &[]).unwrap(), "-ln(-2 + x)/4 + ln(2 + x)/4");
+    // more of v1's printed forms (SymPy's answer or its simplify(), whichever SymPy writes shorter)
+    for (f, want) in [("x^2 exp(-x)", "(-2 - x² - 2x)·exp(-x)"), ("cos(x)^3", "-sin(x)³/3 + sin(x)"),
+                      ("sin(x)^3", "-cos(x) + cos(x)³/3"), ("1/sqrt(x^2 - 1)", "ln(x + √(-1 + x²))"),
+                      ("ln(x)^2", "x·(2 + ln(x)² - 2 ln(x))"), ("x^3 exp(x^2)", "(-1 + x²)·exp(x²)/2"),
+                      ("sin(2x) sin(3x)", "sin(x)/2 - sin(5x)/10"),
+                      // red team 11 #5: textbook integrals v1 did, and a common factor cancelled before partial
+                      // fractions
+                      ("x^3 ln(x)^2", "x⁴·(1 - 4 ln(x) + 8 ln(x)²)/32"),
+                      ("x asin(x)", "-asin(x)/4 + x² asin(x)/2 + x √(1 - x²)/4"),
+                      ("1/(x^2 sqrt(x^2 + 1))", "-√(1 + x²)/x"), ("x^2/sqrt(4 - x^2)", "2 asin(x/2) - x √(4 - x²)/2"),
+                      ("1/cosh(x)", "2 atan(tanh(x/2))"), ("1/sinh(x)", "ln(tanh(x/2))"),
+                      ("(x + 1)/(x^2 - 1)", "ln(-1 + x)"), ("x/(x^2 - 4 x + 3)", "-ln(-1 + x)/2 + 1.5 ln(-3 + x)"),
+                      ("x/(x^2 - 1)", "ln(-1 + x²)/2"), ("(x + 1)/(x^2 + 1)", "ln(1 + x²)/2 + atan(x)")] {
+        assert_eq!(integ(f, "x", &[]).unwrap(), want, "{f}");
+    }
 }
 
 #[test]
@@ -130,9 +145,102 @@ fn antiderivatives_are_right() {
 }
 
 #[test]
+fn integrals_of_products_of_sums() {
+    for (f, v) in [("x ln(x)", "x"), ("x * (ln(x) - 2)", "x"), ("x^2 * (ln(x) - 2)", "x"), ("(x - x^2) * (ln(x) - 2)", "x"), ("(x * 2) * (exp(2 x) - b)", "x"), ("sqrt(x) * x^2", "x"),
+                   ("x exp(x) - x", "x"), ("(ln(x) - sqrt(x)) * (1/x * 1/x)", "x"),
+                   ("x exp(x) * x exp(x)", "x"), ("ln(x)/x^3", "x"), ("cos(x) * x exp(x)", "x"),
+                   ("x^2 exp(-x) sin(3 x)", "x")] {
+        assert!(integ(f, v, &[]).is_ok(), "{f}: {:?}", integ(f, v, &[]));
+    }
+}
+
+#[test]
 fn non_elementary_integrals_are_refused() {
     let e = integ("exp(s) / s", "s", &[]).unwrap_err();
     assert_eq!(e, "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)");
     assert!(integ("sin(x)/x", "x", &[]).unwrap_err().contains("Si"));
+    assert!(integ("exp(2 x) x exp(x) - exp(2 x)/x", "x", &[]).unwrap_err().ends_with("Ei(2*x)"));
     assert_eq!(integ("exp(sin(x))", "x", &[]).unwrap_err(), "Fermium couldn't find a formula for this integral");
+}
+
+fn ad_of(src: &str, var: &str, order: usize) -> Result<String, String> {
+    let (p, _) = fermium_syntax::parse(src, &[]).expect("parses");
+    let A::StmtKind::FuncDef { name, params, body: A::FuncBody::Block(b), .. } = &p.body[0].kind else {
+        panic!("not a multi-line function")
+    };
+    let ps: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+    let mut b = b.clone();
+    for _ in 0..order {
+        b = ad_body(name, &ps, &b, var, &mut Plain).map_err(|d| d.message)?;
+    }
+    Ok(crate::ad::block_source(&b, 0))
+}
+
+#[test]
+fn autodiff_of_multi_line_functions() {
+    // spec §C2: forward mode as a source transformation; tangents are assigned before their variables
+    let src = "f(x) =\n    y = x^2\n    z = sin(y) + 3\n    return z y\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(),
+               "dy/dx = 2x\ny = x²\ndz/dx = dy/dx cos(y)\nz = sin(y) + 3\nreturn y dz/dx + z dy/dx\n");
+    // constants get no tangent; op-assignments, loops and branches; print is dropped
+    let src = "p(x) =\n    g = 9.81\n    s = 0\n    print s\n    for k from 1 to 4\n        s += k x\n    if x > 1\n        s *= 2\n    s\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(),
+               "ds/dx = 0\nfor k from 1 to 4\n    ds/dx = ds/dx + k\nif x > 1\n    \
+                ds/dx = 2ds/dx\nds/dx\n");
+    // the variable itself reassigned: its tangent starts at 1
+    let src = "f(x) =\n    x = sin(x)\n    x\n";
+    assert_eq!(ad_of(src, "x", 1).unwrap(), "dx/dx = 1\ndx/dx = dx/dx cos(x)\nx = sin(x)\ndx/dx\n");
+    // a second derivative differentiates the derivative's body again
+    let src = "f(x) =\n    y = x^3\n    y\n";
+    assert_eq!(ad_of(src, "x", 2).unwrap(), "ddy/dx/dx = 6x\nddy/dx/dx\n");
+    // refused: lists changed with values depending on x, solve
+    assert!(ad_of("f(x) =\n    xs = [1, 2]\n    xs[0] = x\n    xs[0]\n", "x", 1).unwrap_err().contains("list xs"));
+}
+
+/// F as evaluated (real_logs) at x, with the constants in `env`.
+fn eval_f(integrand: &str, x: f64, env: &[(&str, f64)], dimensioned: &dyn Fn(&A::Expr) -> bool) -> f64 {
+    let f = body(integrand);
+    let big_f = integrate(&f, "x", &[]).unwrap();
+    let ev = real_logs(&big_f, &f, "x", dimensioned);
+    let mut m: std::collections::HashMap<String, f64> = env.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+    m.insert("x".into(), x);
+    crate::numeval::eval(&ev, &m).unwrap()
+}
+
+#[test]
+fn antiderivatives_are_real_on_both_sides_of_a_pole() {
+    // red team 11 #2: ln|u| where the printed formula (v1's) has ln(u); F(b) − F(a) is the definite integral
+    let none = |_: &A::Expr| false;
+    let cases: [(&str, f64, f64, f64); 8] = [
+        ("1/(9 - x^2)", 0.0, 1.0, (1.0f64 / 3.0).atanh() / 3.0),        // |x| < 3
+        ("1/(9 - x^2)", 4.0, 5.0, (4.0f64.ln() - 7.0f64.ln()) / 6.0),
+        ("1/(1 - x^2)", 0.0, 0.5, 0.5f64.atanh()),
+        ("1/(x - 5)", 1.0, 2.0, (3.0f64 / 4.0).ln()),                     // x < 5
+        ("1/(x - 5)", 6.0, 7.0, 2.0f64.ln()),                             // x > 5
+        ("1/(2 - x)", 0.0, 1.0, 2.0f64.ln()),
+        ("1/(2 - x)", 3.0, 4.0, -(2.0f64.ln())),
+        ("3/(x^2 - 5 x + 6)", 2.2, 2.5, 3.0 * ((0.5f64 / 0.5).ln() - (0.8f64 / 0.2).ln())), // between the roots
+    ];
+    for (f, a, b, want) in cases {
+        let got = eval_f(f, b, &[], &none) - eval_f(f, a, &[], &none);
+        assert!((got - want).abs() < 1e-12 * (1.0 + want.abs()), "∫ {f} from {a} to {b}: {got} vs {want}");
+    }
+    // a logarithm that is in the integrand stays ln(u): ∫ ln(x) isn't real for x < 0
+    assert!(eval_f("ln(x)", -2.0, &[], &none).is_nan());
+    // with a dimensioned constant the argument is a ratio (red team 11 #3); the values are unchanged
+    let dims = |c: &A::Expr| c.walk().iter().any(|n| n.name() == Some("a"));
+    let f = body("1/(x^2 - a^2)");
+    let big_f = integrate(&f, "x", &[]).unwrap();
+    let ev = real_logs(&big_f, &f, "x", &dims);
+    for n in ev.walk() {
+        if let Some(("ln", [u])) = crate::build::call_parts(n) {
+            let s = key(u);
+            assert!(s.contains('/'), "ln argument not a ratio: {s}");
+        }
+    }
+    let d = eval_f("1/(x^2 - a^2)", 3.0, &[("a", 2.0)], &dims) - eval_f("1/(x^2 - a^2)", 2.5, &[("a", 2.0)], &dims);
+    let want = ((1.0f64 / 5.0).ln() - (0.5f64 / 4.5).ln()) / 4.0;
+    assert!((d - want).abs() < 1e-12, "{d} vs {want}");
+    let d = eval_f("1/(x - a)", 1.0, &[("a", 2.0)], &dims) - eval_f("1/(x - a)", 0.0, &[("a", 2.0)], &dims);
+    assert!((d - 0.5f64.ln()).abs() < 1e-12, "{d}");
 }

@@ -26,7 +26,7 @@ counts/N · π b_max²/ΔΩ is dσ/dΩ in barn/sr. The expected content of every
 N (b(θ₁)² − b(θ₂)²)/b_max². The 2×10⁷-iteration loop takes about 2 s. Run it from this folder with
 `fermium run rutherford.fm`.
 
-**Random numbers.** When this was written, `rand()` had no seed function. It now uses Fermium's seeded xoshiro256** generator (D80): a program that never calls `seed(n)` behaves as if it had called `seed(0)`, so every run prints the numbers below, in `fermium run`, `--interp` and `fermium build` alike. `tests/test_research.py` still checks with statistical bounds (5σ Poisson, a χ² with a 10⁻⁶ false-alarm rate), not exact values. The numbers were re-measured at 11:40 UTC with the seeded generator (red team round 7 #3); the first version of this page quoted an unseeded run.
+**Random numbers.** When this was written, `rand()` had no seed function. It now uses Fermium's seeded xoshiro256** generator (D80): a program that never calls `seed(n)` behaves as if it had called `seed(0)`, so every run prints the numbers below, in `fermium run`, `--interp` and `fermium build` alike. `legacy/tests/test_research.py` still checks with statistical bounds (5σ Poisson, a χ² with a 10⁻⁶ false-alarm rate), not exact values. The numbers were re-measured at 11:40 UTC with the seeded generator (red team round 7 #3); the first version of this page quoted an unseeded run.
 
 ## Results
 

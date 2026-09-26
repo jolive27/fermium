@@ -23,6 +23,17 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
     let mut ig = Integrator { x: var.to_string(), positive: positive.to_vec(), depth: 0, fresh: 0, budget: 400, subs: 0 };
     let e = simplify(integrand);
     let Some(r) = ig.integ(&e) else {
+        // the term of a sum that has no formula, for the special-function message
+        let mut bad = e.clone();
+        for (_, t) in sum_terms(&e, 1) {
+            let mut ig2 = Integrator { x: var.to_string(), positive: positive.to_vec(), depth: 0, fresh: 0, budget: 400,
+                                       subs: 0 };
+            if ig2.integ(&simplify(&t)).is_none() {
+                bad = simplify(&t);
+                break;
+            }
+        }
+        let e = bad;
         if let Some(f) = non_elementary(&e, var) {
             return Err(ferr0(format!("SymPy's formula for this integral uses the function {f}, which Fermium doesn't \
                                       have yet: {f}({})", sympy_str(&ig.nonelem_arg(&e).unwrap_or_else(|| name(var)))),
@@ -30,8 +41,11 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
         }
         return Err(ferr0("Fermium couldn't find a formula for this integral", Some(HINT.into())));
     };
-    // SymPy's canonical form and order, as v1 printed its results
-    let r = crate::tidy::sympy_form(&r).unwrap_or_else(|| simplify(&r));
+    // SymPy's canonical form and order, as v1 printed its results; v1 kept the shorter of SymPy's answer and its
+    // simplify(), which the tidy candidates (factored, together) stand in for
+    let pos: Vec<String> = positive.iter().filter(|p| p.as_str() != var).cloned().collect();
+    let heurisch = e.walk().iter().any(|n| matches!(call_parts(n), Some(("exp", [u])) if linear(u, var).is_some()));
+    let r = crate::tidy::sympy_best_with(&simplify(&r), &pos, heurisch);
     if !antiderivative_ok(&r, &e, var, positive) {
         return Err(ferr0("Fermium's formula for this integral isn't right for every value of the constants in it, so \
                           Fermium won't use it", Some(HINT.into())));
@@ -41,7 +55,7 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
 
 /// A formula in SymPy's spelling (for the message about a missing special function).
 fn sympy_str(e: &A::Expr) -> String {
-    key(e).replace('^', "**")
+    crate::tidy::sympy_text(e)
 }
 
 /// The special function a known non-elementary integral needs (Ei, Si, Ci, li, erfi), if it is one.
@@ -55,12 +69,23 @@ fn non_elementary(e: &A::Expr, x: &str) -> Option<&'static str> {
         for ((fb, fp), (gb, gp)) in [((&b0, p0), (&b1, p1)), ((&b1, p1), (&b0, p0))] {
             if fp == 1.0 && gp == -1.0 && lin(gb) {
                 for (f, name) in [("exp", "Ei"), ("sin", "Si"), ("cos", "Ci"), ("sinh", "Shi"), ("cosh", "Chi")] {
-                    if is_call(fb, f) && key(&call_parts(fb).unwrap().1[0]) == key(gb) {
-                        return Some(name);
+                    // f(c u)/u for a constant c: Ei(c u), Si(c u), …
+                    if is_call(fb, f) {
+                        let arg = &call_parts(fb).unwrap().1[0];
+                        let ratio = simplify(&div(arg.clone(), gb.clone()));
+                        if key(arg) == key(gb) || !depends_on(&ratio, x) {
+                            return Some(name);
+                        }
                     }
                 }
             }
         }
+    }
+    // ln(u) · exp(c u) (times a power of u): by parts leaves exp(c u)/u
+    if vf.iter().any(|f| matches!(call_parts(f), Some(("ln" | "log", [u])) if lin(u)))
+        && vf.iter().any(|f| matches!(call_parts(f), Some(("exp", [u])) if lin(u)))
+    {
+        return Some("Ei");
     }
     if vf.len() == 1 {
         let (b, p) = base_pow(vf[0]);
@@ -262,6 +287,7 @@ impl Integrator {
         let (c, fs) = factors(e);
         let (vf, kf): (Vec<A::Expr>, Vec<A::Expr>) = fs.into_iter().partition(|f| depends_on(f, &x));
         let konst = build_product(c, &kf);
+        let vf = merge_powers(vf);
         let vpart = build_product(1.0, &vf);
         let (_, vf) = factors(&vpart);
         let g = self.integ_product(&vf, &vpart)?;
@@ -287,10 +313,10 @@ impl Integrator {
         if let Some(r) = self.exp_trig(vf) {
             return Some(r);
         }
-        if let Some(r) = self.by_parts(vf) {
+        if let Some(r) = self.x_power_over_root(vf) {
             return Some(r);
         }
-        if let Some(r) = self.substitution(whole) {
+        if let Some(r) = self.by_parts(vf) {
             return Some(r);
         }
         // a polynomial written as a product (x (x + 1)²): expand and integrate term by term
@@ -309,12 +335,19 @@ impl Integrator {
                 return Some(out);
             }
         }
+        // P/Q whose numerator and denominator share a root: cancel it first (partial fractions do), rather than
+        // distributing ((x + 1)/(x² − 1) = 1/(x − 1): ln(x − 1) as v1, not three logarithms; red team 11 #5)
+        if vf.len() > 1 && self.rational_with_common_root(whole) {
+            if let Some(r) = self.partial_fractions(whole) {
+                return Some(r);
+            }
+        }
         // a sum times something: distribute
         if vf.len() > 1 {
             if let Some(i) = vf.iter().position(|f| matches!(op_of(f), Some("+") | Some("-"))) {
                 let others: Vec<A::Expr> = vf.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
                 let mut out: Option<A::Expr> = None;
-                for (s, t) in sum_terms(&vf[i], 1) {
+                for (s, t) in crate::simplify::terms(&vf[i]) {
                     let mut fs = others.clone();
                     fs.push(t);
                     let g = self.integ(&simplify(&build_product(s as f64, &fs)))?;
@@ -325,6 +358,9 @@ impl Integrator {
                 }
                 return out;
             }
+        }
+        if let Some(r) = self.substitution(whole) {
+            return Some(r);
         }
         self.partial_fractions(whole)
     }
@@ -390,7 +426,26 @@ impl Integrator {
             return None;
         }
         let pv = p.num_value();
-        if let Some((a, _)) = linear(b, &x) {
+        if let Some((a, c0)) = linear(b, &x) {
+            // (a x + b)ⁿ with whole n and numbers a, b: SymPy expands it and integrates term by term
+            if let (Some(n), Some(_), Some(bv)) = (pv, a.num_value(), c0.num_value()) {
+                if n >= 2.0 && n == n.trunc() && n <= 12.0 && bv != 0.0 && b.name() != Some(&x) {
+                    if let Some(c) = poly_coeffs(&pw(b.clone(), p.clone()), &x, 12) {
+                        let mut out: Option<A::Expr> = None;
+                        for (k, ck) in c.iter().enumerate() {
+                            if is_num_v(ck, 0.0) {
+                                continue;
+                            }
+                            let t = mul(div(ck.clone(), num(k as f64 + 1.0)), pwn(xn(), k as f64 + 1.0));
+                            out = Some(match out {
+                                None => t,
+                                Some(o) => add(o, t),
+                            });
+                        }
+                        return out;
+                    }
+                }
+            }
             if pv == Some(-1.0) {
                 return Some(div(call1("ln", b.clone()), a));
             }
@@ -414,6 +469,27 @@ impl Integrator {
         // sinⁿ, cosⁿ (n ≥ 3) by the reduction formulas; lnⁿ by parts
         if let Some(n) = pv.filter(|n| *n >= 3.0 && *n == n.trunc() && *n <= 12.0) {
             if let Some((fname @ ("sin" | "cos"), [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x).filter(|_| n % 2.0 == 1.0) {
+                    // odd n, as SymPy: sinⁿ u = (1 − cos² u)^m sin u, so ∫ = −Σ C(m,j) (−1)^j cos^(2j+1) u/(2j+1)
+                    let m = ((n - 1.0) / 2.0) as i64;
+                    let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
+                    let other = if fname == "sin" { c } else { s };
+                    let mut out: Option<A::Expr> = None;
+                    let mut binom = 1.0;
+                    for j in 0..=m {
+                        if j > 0 {
+                            binom = binom * (m - j + 1) as f64 / j as f64;
+                        }
+                        let coef = binom * if j % 2 == 0 { 1.0 } else { -1.0 } / (2 * j + 1) as f64;
+                        let coef = if fname == "sin" { -coef } else { coef };
+                        let t = mul(num(coef), pwn(other.clone(), (2 * j + 1) as f64));
+                        out = Some(match out {
+                            None => t,
+                            Some(o) => add(o, t),
+                        });
+                    }
+                    return Some(div(out?, a));
+                }
                 if let Some((a, _)) = linear(u, &x) {
                     // ∫ sinⁿ u = -sinⁿ⁻¹ u cos u / n + (n−1)/n ∫ sinⁿ⁻² u ; cos: +cosⁿ⁻¹ u sin u / n + …
                     let (s, c) = (call1("sin", u.clone()), call1("cos", u.clone()));
@@ -453,6 +529,16 @@ impl Integrator {
                         "tanh" => sub(u.clone(), call1("tanh", u)),
                         _ => return None,
                     };
+                    return Some(div(r, a));
+                }
+            }
+        }
+        if pv == Some(-1.0) {
+            // sech u = 2 atan(tanh(u/2))' (v1's SymPy form), csch u = ln(tanh(u/2))'
+            if let Some((fname @ ("cosh" | "sinh"), [u])) = call_parts(b) {
+                if let Some((a, _)) = linear(u, &x) {
+                    let t = call1("tanh", div(u.clone(), num(2.0)));
+                    let r = if fname == "cosh" { mul(num(2.0), call1("atan", t)) } else { call1("ln", t) };
                     return Some(div(r, a));
                 }
             }
@@ -519,7 +605,12 @@ impl Integrator {
                 let sk = self.sqrt_of(&k)?;
                 let q = div(u.clone(), sk.clone());
                 if pv == -0.5 {
-                    let g = if rs { call1("asinh", q) } else { call1("acosh", q) };
+                    // SymPy: asinh(u/k), and ln(u + √(u² − k²)) for the other sign
+                    let g = if rs {
+                        call1("asinh", q)
+                    } else {
+                        call1("ln", add(u.clone(), sqrt(sub(pwn(u.clone(), 2.0), k.clone()), 2)))
+                    };
                     return Some(div(g, sqa));
                 }
                 let root = sqrt(add(pwn(u.clone(), 2.0), r.clone()), 2);
@@ -562,7 +653,16 @@ impl Integrator {
                 continue;
             }
             let k1 = simplify(&div(m.clone(), mul(num(2.0), c[2].clone())));
-            let k2 = simplify(&sub(n, mul(k1.clone(), c[1].clone())));
+            let k2 = simplify(&sub(n.clone(), mul(k1.clone(), c[1].clone())));
+            if pv == -1.0 && !is_num_v(&k2, 0.0) {
+                // real roots: leave it to partial fractions, which cancel a common factor and give one ln per root
+                // ((x + 1)/(x² − 1) = 1/(x − 1): ln(x − 1), as v1; red team 11 #5)
+                if let Some(cv) = numeric_coeffs(&c) {
+                    if cv[1] * cv[1] - 4.0 * cv[2] * cv[0] >= 0.0 && numeric_coeffs(&[m.clone(), n.clone()]).is_some() {
+                        return None;
+                    }
+                }
+            }
             // ∫ Q' Q^p = ln Q (p = -1) or Q^(p+1)/(p+1)
             let first = if pv == -1.0 {
                 call1("ln", qb.clone())
@@ -575,6 +675,54 @@ impl Integrator {
                 out = add(out, mul(k2, second));
             }
             return Some(out);
+        }
+        None
+    }
+
+    /// ∫ xⁿ/√Q for Q = C + A x² and n = 2, −1, −2 (red team 11 #5): x√Q/(2A) − C/(2A) ∫ 1/√Q; atan(√Q/k)/k with
+    /// k = √(−C) (C < 0; the log form for C > 0); −√Q/(C x).
+    fn x_power_over_root(&mut self, vf: &[A::Expr]) -> Option<A::Expr> {
+        if vf.len() != 2 {
+            return None;
+        }
+        let x = self.x.clone();
+        for (xp, q) in [(&vf[0], &vf[1]), (&vf[1], &vf[0])] {
+            let (xb, n) = base_exp(xp);
+            if xb.name() != Some(x.as_str()) {
+                continue;
+            }
+            let Some(n) = n.num_value() else { continue };
+            let (qb, qp) = base_exp(q);
+            if qp.num_value() != Some(-0.5) {
+                continue;
+            }
+            let Some(c) = poly_coeffs(&qb, &x, 2) else { continue };
+            if c.len() != 3 || !is_num_v(&c[1], 0.0) {
+                continue;
+            }
+            let (c0, c2) = (c[0].clone(), c[2].clone());
+            let root = sqrt(qb.clone(), 2);
+            if n == 2.0 {
+                let rest = self.power_rule(&qb, &num(-0.5))?;
+                let two_a = mul(num(2.0), c2);
+                return Some(sub(div(mul(name(&x), root), two_a.clone()), mul(div(c0, two_a), rest)));
+            }
+            if n == -2.0 {
+                return Some(neg(div(root, mul(c0, name(&x)))));
+            }
+            if n == -1.0 && self.sign_of(&c2) == Some(true) {
+                return match self.sign_of(&c0)? {
+                    false => {
+                        let k = self.sqrt_of(&simplify(&neg(c0)))?;
+                        Some(div(call1("atan", div(root, k.clone())), k))
+                    }
+                    true => {
+                        let k = self.sqrt_of(&c0)?;
+                        let two_k = mul(num(2.0), k.clone());
+                        Some(div(sub(call1("ln", sub(root.clone(), k.clone())), call1("ln", add(root, k))), two_k))
+                    }
+                };
+            }
         }
         None
     }
@@ -631,12 +779,60 @@ impl Integrator {
             // ln(x), atan(x), asin(x) alone are in the call table
             return None;
         }
+        // P(x) exp(a x) sin(b x): tabular, with g = exp·sin (each ∫ is again exp·(sin, cos))
+        if vf.len() >= 3 {
+            let ie = vf.iter().position(|f| matches!(call_parts(f), Some(("exp", [u])) if linear(u, &x).is_some()));
+            let it = vf.iter().position(|f| matches!(call_parts(f), Some(("sin" | "cos", [u])) if linear(u, &x).is_some()));
+            if let (Some(ie), Some(it)) = (ie, it) {
+                let others: Vec<A::Expr> =
+                    vf.iter().enumerate().filter(|(j, _)| *j != ie && *j != it).map(|(_, f)| f.clone()).collect();
+                let p = simplify(&build_product(1.0, &others));
+                if poly_coeffs(&p, &x, 6).is_some() {
+                    let g = mul(vf[ie].clone(), vf[it].clone());
+                    let mut out: Option<A::Expr> = None;
+                    let (mut pk, mut gk, mut sign) = (p, g, 1.0);
+                    for _ in 0..8 {
+                        if is_num_v(&pk, 0.0) {
+                            break;
+                        }
+                        gk = simplify(&self.integ(&gk)?);
+                        let t = mul(num(sign), mul(pk.clone(), gk.clone()));
+                        out = Some(match out {
+                            None => t,
+                            Some(o) => add(o, t),
+                        });
+                        pk = simplify(&d(&pk, &x, &mut Plain).ok()?);
+                        sign = -sign;
+                    }
+                    return out;
+                }
+            }
+        }
         for i in 0..vf.len() {
             let g = &vf[i];
-            let Some((gname, [u])) = call_parts(g) else { continue };
+            // g = f(u), or lnⁿ(u) (∫ x³ ln² x: by parts again on ∫ x³ ln x, red team 11 #5)
+            let (gname, u): (String, A::Expr) = match call_parts(g) {
+                Some((n, [u])) => (n.to_string(), u.clone()),
+                _ => {
+                    let (gb, gp) = base_exp(g);
+                    match (call_parts(&gb), gp.num_value()) {
+                        (Some((n @ ("ln" | "log"), [u])), Some(k)) if (2.0..=6.0).contains(&k) && k == k.trunc() => {
+                            (n.to_string(), u.clone())
+                        }
+                        _ => continue,
+                    }
+                }
+            };
+            let (gname, u) = (gname.as_str(), &u);
             let others: Vec<A::Expr> = vf.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
             let p = simplify(&build_product(1.0, &others));
-            if poly_coeffs(&p, &x, 12).is_none() {
+            let is_poly = poly_coeffs(&p, &x, 12).is_some();
+            // x^p (any p ≠ −1) is fine for the logarithm and inverse functions: ∫ x^p ln x = x^(p+1) ln x/(p+1) − …
+            let x_power = others.len() == 1 && {
+                let (b, e) = base_exp(&others[0]);
+                b.name() == Some(x.as_str()) && !depends_on(&e, &x) && !is_num_v(&e, -1.0)
+            };
+            if !is_poly && !(x_power && matches!(gname, "ln" | "log" | "atan" | "asin" | "acos" | "asinh" | "atanh")) {
                 continue;
             }
             if linear(u, &x).is_none() {
@@ -714,9 +910,8 @@ impl Integrator {
         None
     }
 
-    /// P(x)/Q(x) with numeric coefficients: polynomial part plus partial fractions over real linear and quadratic
-    /// factors of Q.
-    fn partial_fractions(&mut self, e: &A::Expr) -> Option<A::Expr> {
+    /// The numeric coefficients of P and Q for e = P(x)/Q(x), Q not constant.
+    fn rational_parts(&self, e: &A::Expr) -> Option<(Vec<f64>, Vec<f64>)> {
         let x = self.x.clone();
         let (c, fs) = factors(e);
         let (mut nums, mut dens) = (vec![build_product(c, &[])], vec![]);
@@ -731,13 +926,25 @@ impl Integrator {
         if dens.is_empty() {
             return None;
         }
-        let pnum = simplify(&build_product(1.0, &nums));
-        let pden = simplify(&build_product(1.0, &dens));
-        let pc = numeric_coeffs(&poly_coeffs(&pnum, &x, 12)?)?;
-        let qc = numeric_coeffs(&poly_coeffs(&pden, &x, 12)?)?;
-        if qc.len() < 2 {
-            return None;
-        }
+        let pc = numeric_coeffs(&poly_coeffs(&simplify(&build_product(1.0, &nums)), &x, 12)?)?;
+        let qc = numeric_coeffs(&poly_coeffs(&simplify(&build_product(1.0, &dens)), &x, 12)?)?;
+        (qc.len() >= 2).then_some((pc, qc))
+    }
+
+    fn rational_with_common_root(&self, e: &A::Expr) -> bool {
+        let Some((pc, qc)) = self.rational_parts(e) else { return false };
+        let Some(roots) = poly_roots(&qc) else { return false };
+        let scale: f64 = pc.iter().map(|v| v.abs()).sum::<f64>().max(1e-300);
+        roots.iter().any(|&(re, im)| {
+            im.abs() <= 1e-9 * (1.0 + re.abs()) && peval(&pc, re).abs() <= 1e-9 * scale * (1.0 + re.abs()).powi(pc.len() as i32)
+        })
+    }
+
+    /// P(x)/Q(x) with numeric coefficients: polynomial part plus partial fractions over real linear and quadratic
+    /// factors of Q.
+    fn partial_fractions(&mut self, e: &A::Expr) -> Option<A::Expr> {
+        let x = self.x.clone();
+        let (pc, qc) = self.rational_parts(e)?;
         let (quot, rem) = poly_divmod(&pc, &qc);
         let mut out: Option<A::Expr> = None;
         let mut push = |t: A::Expr| {
@@ -837,6 +1044,15 @@ impl Integrator {
     }
 
     fn nonelem_arg(&self, e: &A::Expr) -> Option<A::Expr> {
+        // the argument of the exponential / trigonometric factor (Ei(2*x) for exp(2x)/x)
+        let (_, fs) = factors(e);
+        for f in &fs {
+            if let Some((fname, [u])) = call_parts(f) {
+                if matches!(fname, "exp" | "sin" | "cos" | "sinh" | "cosh") && depends_on(u, &self.x) {
+                    return Some(u.clone());
+                }
+            }
+        }
         let (_, fs) = factors(e);
         for f in fs {
             let (b, p) = base_pow(&f);
@@ -859,6 +1075,47 @@ fn over(g: A::Expr, a: A::Expr) -> A::Expr {
         return mul(neg(name("𝑖")), g);
     }
     div(g, a)
+}
+
+/// Factors with the same base combined, √ and nested powers included: √x · x² → x^(5/2).
+fn merge_powers(fs: Vec<A::Expr>) -> Vec<A::Expr> {
+    // exp(a) exp(b) = exp(a + b) and exp(a)ⁿ = exp(n a), as SymPy combines them
+    let fs: Vec<A::Expr> = fs
+        .into_iter()
+        .map(|f| {
+            let (b, e) = base_exp(&f);
+            match call_parts(&b) {
+                Some(("exp", [u])) if !is_num_v(&e, 1.0) && e.num_value().is_some() => {
+                    call1("exp", simplify(&mul(e, u.clone())))
+                }
+                _ => f,
+            }
+        })
+        .collect();
+    let (exps, others): (Vec<A::Expr>, Vec<A::Expr>) = fs.into_iter().partition(|f| is_call(f, "exp"));
+    let mut fs = others;
+    if exps.len() > 1 {
+        let mut arg = call_parts(&exps[0]).unwrap().1[0].clone();
+        for e in &exps[1..] {
+            arg = add(arg, call_parts(e).unwrap().1[0].clone());
+        }
+        fs.push(call1("exp", simplify(&arg)));
+    } else {
+        fs.extend(exps);
+    }
+    let mut out: Vec<(String, A::Expr, A::Expr)> = vec![];
+    for f in fs {
+        let (b, e) = base_exp(&f);
+        let k = key(&b);
+        match out.iter_mut().find(|x| x.0 == k) {
+            Some(x) => x.2 = simplify(&add(x.2.clone(), e)),
+            None => out.push((k, b, e)),
+        }
+    }
+    out.into_iter()
+        .filter(|(_, _, e)| !is_num_v(e, 0.0))
+        .map(|(_, b, e)| if is_num_v(&e, 1.0) { b } else { pw(b, e) })
+        .collect()
 }
 
 fn clean(v: f64) -> f64 {
@@ -1058,4 +1315,89 @@ fn antiderivative_ok(big_f: &A::Expr, f: &A::Expr, x: &str, positive: &[String])
         }
     }
     true
+}
+
+/// The antiderivative as it is evaluated (red team 11 #2, #3): each logarithm that came from ∫ u'/u is ln|u|, so
+/// F is real on both sides of a pole (`∫ 1/(9 - x²)` at |x| < 3, `∫ 1/(x - 5)` at x < 5); the printed formula stays
+/// v1's (SymPy's) ln(u), which differs only by a constant on each interval. A logarithm that is in the integrand
+/// itself (∫ ln x = x ln x − x) keeps ln(u): the integrand isn't real where u < 0. So that the logarithm's argument is
+/// a plain number when the constants have units (`a = 2 m`, `∫ 1/(x² - a²)`): two terms c ln u₁ − c ln u₂ become
+/// c ln|u₁/u₂|, and a lone ln u of a polynomial u whose constant term u(0) has units (by `dimensioned`) becomes
+/// ln|u/u(0)| (again a constant apart).
+pub fn real_logs(big_f: &A::Expr, integrand: &A::Expr, x: &str, dimensioned: &dyn Fn(&A::Expr) -> bool) -> A::Expr {
+    let integrand = crate::walk::inline_where(integrand);
+    let keep: Vec<String> = integrand
+        .walk()
+        .into_iter()
+        .filter_map(|n| match call_parts(n) {
+            Some(("ln" | "log", [u])) => Some(key(u)),
+            _ => None,
+        })
+        .collect();
+    let convertible = |u: &A::Expr| depends_on(u, x) && !keep.contains(&key(u));
+    // 1. c ln u₁ − c ln u₂ at the top level → c ln|u₁/u₂|
+    let ts = crate::simplify::terms(big_f);
+    struct LogTerm {
+        c: f64,
+        others: Vec<A::Expr>,
+        okey: String,
+        u: A::Expr,
+    }
+    let logs: Vec<Option<LogTerm>> = ts
+        .iter()
+        .map(|(sg, t)| {
+            let (c, fs) = factors(t);
+            let i = fs.iter().position(|f| matches!(call_parts(f), Some(("ln", [u])) if convertible(u)))?;
+            let Some((_, [u])) = call_parts(&fs[i]) else { return None };
+            let u = u.clone();
+            let others: Vec<A::Expr> = fs.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
+            if others.iter().any(|f| depends_on(f, x)) {
+                return None;
+            }
+            let mut ks: Vec<String> = others.iter().map(key).collect();
+            ks.sort();
+            Some(LogTerm { c: *sg as f64 * c, others, okey: ks.join("*"), u })
+        })
+        .collect();
+    let mut out: Vec<(i32, A::Expr)> = vec![];
+    let mut used = vec![false; ts.len()];
+    for i in 0..ts.len() {
+        if used[i] {
+            continue;
+        }
+        if let Some(a) = &logs[i] {
+            let partner = (i + 1..ts.len()).find(|&j| {
+                !used[j] && logs[j].as_ref().is_some_and(|b| b.okey == a.okey && (b.c + a.c).abs() <= 1e-12 * a.c.abs())
+            });
+            if let Some(j) = partner {
+                let bu = logs[j].as_ref().unwrap().u.clone();
+                used[j] = true;
+                let mut fs = a.others.clone();
+                fs.push(call1("ln", call1("abs", div(a.u.clone(), bu))));
+                out.push((1, build_product(a.c, &fs)));
+                continue;
+            }
+        }
+        out.push(ts[i].clone());
+    }
+    let f = crate::simplify::from_terms(&out);
+    // 2. every other ln(u) → ln|u|, divided by u(0) when that has units
+    fn go(e: &A::Expr, x: &str, conv: &dyn Fn(&A::Expr) -> bool, dimensioned: &dyn Fn(&A::Expr) -> bool) -> A::Expr {
+        let e = map_children(e, &mut |c| go(c, x, conv, dimensioned));
+        if let Some(("ln", [u])) = call_parts(&e) {
+            if call_parts(u).is_some_and(|(f, _)| f == "abs") || !conv(u) {
+                return e;
+            }
+            let mut arg = u.clone();
+            if let Some(cs) = poly_coeffs(u, x, 4) {
+                let c0 = &cs[0];
+                if !is_num_v(c0, 0.0) && dimensioned(c0) {
+                    arg = div(arg, c0.clone());
+                }
+            }
+            return call1("ln", call1("abs", arg));
+        }
+        e
+    }
+    go(&f, x, &convertible, dimensioned)
 }

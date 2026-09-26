@@ -89,7 +89,7 @@ F = 1.14, and once more from z = 2500. The program runs in 2.5 s. Run it from th
   steps and gives the same numbers. From z = 2500, where x_e sits on its Saha value and the two rates cancel
   almost exactly, RK45 stops with "the ODE solver needed too many steps … add using radau". Radau takes
   1184 steps, and x_e(200) and x_e(1100) agree with the z = 1600 start to all 8 printed digits.
-- Test: `tests/test_research.py` solves the same equations with SciPy's `solve_ivp(method="Radau")`
+- Test: `legacy/tests/test_research.py` solves the same equations with SciPy's `solve_ivp(method="Radau")`
   (rtol 10⁻¹¹). x_e(z) at every printed z, x_e(200), z(τ = 1), both visibility peaks, the half-maximum points,
   the F = 1.14 run and the z = 2500 start agree to 10⁻⁵ or better (z_* to 10⁻⁶).
 

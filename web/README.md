@@ -60,6 +60,6 @@ leaves behind can change the next, as with separate `fermium run` processes.
 ```
 node web/test/compare_native.js --bin rust/target/release/fermium   # every example: page vs fermium run
 conformance/run --impl rust --bin web/test/fermium-wasm --out /tmp/wasm.md   # the conformance suite on the module
-python3 -m pytest tests/test_playground.py                          # build, Node, and the page in headless Chromium
+python3 -m pytest legacy/tests/test_playground.py                          # build, Node, and the page in headless Chromium
 cargo test -p fermium-wasm                                          # the same `run`, natively (in rust/)
 ```

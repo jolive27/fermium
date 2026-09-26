@@ -251,6 +251,12 @@ impl Checker {
             if vm.is_some() && (ctx.loop_depth == 0 && ctx.branch == 0 || self.extra[s].mixed_hint.is_none()) {
                 self.extra[s].mixed_hint = vm; // a MixedHint as the new hint
             }
+            let fit = I::uses_fit_sf(&v);
+            if ctx.loop_depth == 0 && ctx.branch == 0 {
+                self.extra[s].fit_sf = fit;
+            } else {
+                self.extra[s].fit_sf |= fit;
+            }
             let ms = &mut self.module.syms[s];
             if ctx.loop_depth == 0 && ctx.branch == 0 {
                 // straight-line code: the variable now shows the new value's precision and unit
@@ -302,6 +308,7 @@ impl Checker {
             ms.hint = v.hint.clone();
             ms.direct = v.direct;
             self.extra[sym].tdelta = v.get_extra().is_some_and(|x| x.tdelta);
+            self.extra[sym].fit_sf = I::uses_fit_sf(&v);
             self.extra[sym].mixed_hint = crate::vecmat::mixed_of(&v);
         }
         self.extra[sym].assigned = true;
@@ -373,6 +380,7 @@ impl Checker {
             module: None,
             anon_label: None,
             parent: None,
+            eval_body: None,
         };
         self.funcs.push(info);
         let id = self.funcs.len() - 1;

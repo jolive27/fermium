@@ -244,7 +244,7 @@ CHEATSHEET:108 and TROUBLESHOOTING:254 (the spacing-dependent `/` rule, which A1
 
 ## Phase B: Rust differences from v1 found outside the conformance suite (open)
 
-- B-U1: `det`, `inverse`, `solve_linear` and `eigenvalues` of a matrix of uncertain values give the "needs a plain number" error in Rust, but v1's interpreter computes them (`det(M)` = -2.880 ± 0.048 m²). No conformance case covers this. Found by the uncertainty agent.
-- B-P1: when an error happens partway through a print (`print "a", xs[5]`), v1 prints the partial line `a` to stdout first; Rust prints nothing. General, not only for ±.
-- B-F1: in programs without ±, `print 2 k - k` for a fit parameter prints `50 N/m` in Rust but `50.1 N/m` in v1 (significant figures of a sum of fit parameters).
+- B-U1 (done, agent A 2a9571b: ported from linalg.py operation for operation, test linear_algebra_of_uncertain_matrices): `det`, `inverse`, `solve_linear` and `eigenvalues` of a matrix of uncertain values give the "needs a plain number" error in Rust, but v1's interpreter computes them (`det(M)` = -2.880 ± 0.048 m²). No conformance case covers this. Found by the uncertainty agent.
+- B-P1 (done: the items printed so far end the line, both back ends): when an error happens partway through a print (`print "a", xs[5]`), v1 prints the partial line `a` to stdout first; Rust prints nothing. General, not only for ±.
+- B-F1 (done, agent A 05b4e1a: sums of fit parameters use the max-sf rule, test sums_of_fit_parameters_print_like_v1): in programs without ±, `print 2 k - k` for a fit parameter prints `50 N/m` in Rust but `50.1 N/m` in v1 (significant figures of a sum of fit parameters).
 - B-R5: the tree-walker's recursion depth is about 5×10⁵; v1's compiled code goes past 10⁶ (red team 10 #5). A hot/cold split of eval/stmt gave 2.3× the depth but cost 13 % in speed, so it was reverted.

@@ -1094,3 +1094,54 @@ apt LLVM 18 path is only tested on ubuntu-latest); running the Rust steps inside
 - **What:** the Rust PDE solver factors each implicit step's tridiagonal matrix with a plain LU. v1 used SciPy's `splu`. Three conformance cases differ at the rounding level: two in the 14th–15th digit, and one noise-around-zero value. They are recorded as divergences (rust/DIVERGENCES.md, "PDE linear solves").
 - **Why:** both are exact to rounding; the differences are invisible at printed precision unless a program prints 14+ digits or a pure rounding-noise value. A bit-for-bit port would mean SuperLU's column elimination with its row and column pivot order, plus OpenBLAS's FMA arithmetic in the two blocks SuperLU hands to BLAS. That is several hours of work, a fragile dependence on library internals, and it would slow the solver.
 - **Alternatives:** port SuperLU and model OpenBLAS (rejected, as above); call a system SuperLU (rejected: spec §B6 wants no runtime dependencies).
+
+## D269. The B8 cutover: the Rust binary is `fermium`; Fermium 1.5 moves to legacy/ as `fermium-legacy`
+- **What:** the Python implementation moved with `git mv` to `legacy/fermium` (the package), `legacy/tests` (its
+  pytest suite, test programs and John's Appendix 1 programs) and `legacy/tools` (the 1.5 migration scripts).
+  `pyproject.toml` maps the package from `legacy/` (`package-dir = {"" = "legacy"}`), so
+  `pip install -e ".[full,dev]"` still installs it under the import name `fermium` (conformance/run --impl legacy,
+  conformance/harvest.py, rust/tools/*.py and the legacy tests keep working); its console script is renamed
+  `fermium-legacy` (`python3 -m fermium` still works) and its output is untouched, since the conformance goldens
+  come from it. `fermium` is the Rust binary: the release download (bootcamp Lesson 0) or `make install`
+  (`cargo install --locked --path rust/crates/fermium-cli`). Tests and scripts say which one they mean: the v1
+  tests run `fermium-legacy` or `python3 -m fermium`; benchmarks/run.py, the VS Code extension and the docs mean
+  the Rust binary. `make check` (check.sh) runs (a) ruff and the legacy pytest suite, (b) `cargo build` and
+  `cargo test` (profile fast; plus fermium-pyapi and fermium-wasm), (c) the whole conformance suite against
+  `rust/target/fast/fermium` with `--min conformance/RUST_FLOOR`, writing its report to a temporary file. Every
+  docs, bootcamp, examples, gauntlet and research program is harvested into the suite, so (c) is what checks them
+  against the Rust binary. `FERMIUM_SKIP_RUST=1` skips (b) and (c), and a missing cargo skips them; both print
+  that they were skipped. In CI the legacy jobs (`linux`, `macos`, named "legacy (Fermium 1.5, deprecated)") run
+  make check with `FERMIUM_SKIP_RUST=1`, because the `rust-linux` / `rust-macos` jobs already build, test and
+  score the binary; the macOS gate (pull requests and hand-started runs only) and the concurrency rule are
+  unchanged. Conformance cases keep their folder names `tests/programs[/john]` (a case's id hashes its folder,
+  and one case prints a path in it): `conformance/run` reads those folders from `legacy/tests/…` and
+  `conformance/harvest.py` writes `legacy/tests/…` back as `tests/…`, so ids and goldens don't change. The Rust
+  build already finds the standard library and the unit database under `legacy/fermium/` (build.rs).
+- **Why:** spec §B8 (Rust at 99.7 % with every other failure a documented divergence): the Rust binary becomes
+  *the* fermium, and legacy/ stays in CI for one more phase, deprecated. `git mv` keeps the history (`git log
+  --follow`). Keeping the import name means nothing that reads the oracle has to change, and a different console
+  script name means a machine can have both without one shadowing the other.
+- **Alternatives:** delete the Python implementation now (rejected: it is the conformance oracle, and the spec
+  keeps it one more phase); keep it at the top level and only rename the script (rejected: the layout would
+  still present it as the compiler); rename the package to `fermium_legacy` (rejected: every oracle reader,
+  the harvest and ~120 test files import `fermium`, and a rename risks changing v1's output, e.g. module names
+  in messages); re-harvest the suite with `legacy/tests/…` folders (rejected: new ids and one changed golden for
+  no behaviour change); run the Rust part of make check in the legacy CI job too (rejected: duplicates the
+  rust-linux job's 20+ minutes of build and conformance).
+
+## D270. The tree-walker remembers pure calls within one ODE right-hand side
+- **What:** while `ode_call` evaluates a `solve`'s equations once, a call to a function that only computes
+(numbers in, a number out; assignments to its own locals, if, loops, return, arithmetic, `where`, pure math
+built-ins, integrals and sums, calls of such functions) and that integrates or sums somewhere returns the number
+remembered from an identical earlier call in the same evaluation (`fermium-codegen/src/eval_memo.rs`). The cache
+is emptied for every evaluation and after any call of a function that may do more than compute; Monte Carlo
+propagation turns it off.
+- **Why:** research/bbn_network (conformance 6de08e3389a9) calls n_b(T), which integrates the e± plasma twice,
+from each of 42 rate terms: ~100 quadratures per evaluation where 5 are distinct. Under the tree-walker a step
+took 250 ms against v1's 5 ms (v1 compiles the right-hand side), and the program ran 25 minutes; with the cache
+it runs in about 200 s with exactly the same steps and numbers (a hit returns the bits the call would compute; a
+run-time warning is shown once per text anyway).
+- **Alternatives:** compile the right-hand side (the LLVM back end; the program has a plot, which the tree-walker
+had to run); common-subexpression elimination in the checker (changes the IR both back ends see); a cache kept
+for the whole solve (more hits in the Jacobian columns, but must prove no global can change between evaluations).
+

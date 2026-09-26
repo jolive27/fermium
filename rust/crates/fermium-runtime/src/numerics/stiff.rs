@@ -418,6 +418,9 @@ impl Radau {
         let mut lu_c = self.lu_complex.take();
         let mut current_jac = self.current_jac;
         let mut rejected = false;
+        let mut dbg_rej = 0u32;
+        let mut dbg_jac = 0u32;
+        let mut dbg_nc = 0u32;
         let (mut t_new, mut y_new, mut z, mut n_iter, mut rate, mut error_norm, mut safety);
         loop {
             if h_abs < min_step {
@@ -453,12 +456,14 @@ impl Radau {
                         break;
                     }
                     self.j = num_jac(f, t, &y, &fy, &self.atol, &mut self.jac_factor);
+                    dbg_jac += 1;
                     current_jac = true;
                     lu_r = None;
                     lu_c = None;
                 }
             }
             if !converged {
+                dbg_nc += 1;
                 h_abs *= 0.5;
                 lu_r = None;
                 lu_c = None;
@@ -489,6 +494,7 @@ impl Radau {
                 lu_r = None;
                 lu_c = None;
                 rejected = true;
+                dbg_rej += 1;
             } else {
                 break;
             }
@@ -509,6 +515,12 @@ impl Radau {
         } else {
             current_jac = false;
         }
+        if radau_log() {
+            eprintln!(
+                "RADAU {:e} {:e} {} {} {} {} {} {:e} {:e}",
+                t_new, h_abs, n_iter, dbg_rej, dbg_nc, dbg_jac, recompute_jac as u8, error_norm, rate.unwrap_or(f64::NAN)
+            );
+        }
         self.h_abs_old = Some(self.h_abs);
         self.error_norm_old = Some(error_norm);
         self.h_abs = h_abs * factor;
@@ -526,6 +538,13 @@ impl Radau {
         self.sol = Some(RadauDense { t_old: t, h: t_new - t, y_old: y, q });
         Ok(())
     }
+}
+
+/// FERMIUM_RADAU_LOG set: log each accepted Radau step to stderr (t, h, Newton iterations, rejections,
+/// Newton failures, Jacobians recomputed in the step, Jacobian recompute after it, error norm, rate)
+fn radau_log() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FERMIUM_RADAU_LOG").is_some())
 }
 
 /// numpy's nextafter(t, toward)

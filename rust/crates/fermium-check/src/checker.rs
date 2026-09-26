@@ -63,6 +63,9 @@ pub struct FuncInfo {
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
     pub parent: Option<(FuncInfoId, usize, u32)>,
+    /// evaluated instead of the printed body: an antiderivative's ln|u| where v1's printed formula has ln(u)
+    /// (fermium_sym::real_logs, red team 11 #2)
+    pub eval_body: Option<A::Expr>,
 }
 
 impl FuncInfo {
@@ -182,6 +185,8 @@ pub struct SymExtra {
     pub list_sf: Option<u32>,
     /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
     pub err_sym: Option<I::SymId>,
+    /// holds a fitted parameter or its standard error, or a value computed from one (I::ExprExtra::fit_sf)
+    pub fit_sf: bool,
     /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
     pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }

@@ -20,7 +20,7 @@ def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "rust", "target", "snippets")
     os.makedirs(out, exist_ok=True)
     seen = set()
-    for path in sorted(glob.glob(os.path.join(ROOT, "tests", "*.py"))):
+    for path in sorted(glob.glob(os.path.join(ROOT, "legacy", "tests", "*.py"))):
         try:
             with open(path, encoding="utf-8") as f:
                 tree = ast.parse(f.read())
