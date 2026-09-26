@@ -67,6 +67,20 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     }
     g.lm.verify().map_err(|e| format!("LLVM verifier: {}", e.to_string()))?;
     let tm = target_machine()?;
+    // this computer's CPU (the JIT's code runs only here): MCJIT's code generator follows these attributes
+    {
+        use inkwell::attributes::AttributeLoc;
+        let cpu = TargetMachine::get_host_cpu_name().to_string();
+        let features = TargetMachine::get_host_cpu_features().to_string();
+        let mut f = g.lm.get_first_function();
+        while let Some(fv) = f {
+            if fv.count_basic_blocks() > 0 {
+                fv.add_attribute(AttributeLoc::Function, cx.create_string_attribute("target-cpu", &cpu));
+                fv.add_attribute(AttributeLoc::Function, cx.create_string_attribute("target-features", &features));
+            }
+            f = fv.get_next_function();
+        }
+    }
     g.lm.set_triple(&tm.get_triple());
     g.lm.set_data_layout(&tm.get_target_data().get_data_layout());
     g.lm.run_passes("default<O2>", &tm, PassBuilderOptions::create()).map_err(|e| e.to_string())?;

@@ -46,7 +46,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
         Ty::Complex(_) => Kind::V(2),
         Ty::Void => Kind::Void,
         Ty::Sol(_) => Kind::H,
-        other => return Err(format!("values of type {} aren't compiled yet", other.kind())),
+        Ty::Data(_) | Ty::ComplexList(_) => Kind::Obj,
     })
 }
 
@@ -215,6 +215,11 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_print_msum", None, &[p, i, i, p, i], rt::fm_print_msum as *const () as usize, false);
         self.declare("fm_quad_sf_clear", None, &[p], rt::fm_quad_sf_clear as *const () as usize, false);
         self.declare("fm_print_num_capped", None, &[p, i, f], rt::fm_print_num_capped as *const () as usize, false);
+        self.declare("fm_interp", Some(i32t), &[p, i, p, p, i32t],
+                     crate::native::delegate::fm_interp as *const () as usize, false);
+        self.declare("fm_print_obj", None, &[p, i, i], crate::native::delegate::fm_print_obj as *const () as usize,
+                     false);
+        self.declare("fm_rng", Some(f), &[p, i32t, f, f, i32t], rt::fm_rng as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
@@ -256,7 +261,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         match k {
             Kind::F => self.f64t().into(),
             Kind::B => self.cx.bool_type().into(),
-            Kind::S | Kind::H => self.cx.i64_type().into(),
+            Kind::S | Kind::H | Kind::Obj => self.cx.i64_type().into(),
             Kind::L | Kind::TL => self.ptrt().into(),
             Kind::V(n) => self.f64t().array_type(n as u32).into(),
             Kind::Void => self.cx.i8_type().into(),
@@ -267,7 +272,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         Some(match k {
             Kind::F => self.nan().into(),
             Kind::B => self.cx.bool_type().const_zero().into(),
-            Kind::S | Kind::H => self.cx.i64_type().const_zero().into(),
+            Kind::S => self.cx.i64_type().const_zero().into(),
+            Kind::H | Kind::Obj => self.cx.i64_type().const_all_ones().into(),
             Kind::L => self.empty_g.as_pointer_value().into(),
             Kind::TL => self.ptrt().const_null().into(),
             Kind::V(n) => {
@@ -465,6 +471,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         match k {
             Kind::F => self.fconst(0.0).into(),
             Kind::L => self.empty_g.as_pointer_value().into(),
+            Kind::H | Kind::Obj => self.cx.i64_type().const_all_ones().into(),
             _ => self.llty(k).const_zero(),
         }
     }
@@ -874,10 +881,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let (a, z) = (self.fconst(*msg as f64), self.fconst(0.0));
                 self.guard(t, rt::E_ASSERT, a, z)?;
             }
-            StmtKind::Plot(..) => return Err("plot isn't compiled yet".into()),
+            StmtKind::Plot(..) | StmtKind::Fit { .. } | StmtKind::Animate { .. } => self.delegate_stmt(s)?,
             StmtKind::Solve { .. } => self.solve_stmt(s)?,
-            StmtKind::Fit { .. } => return Err("fit isn't compiled yet".into()),
-            StmtKind::Animate { .. } => return Err("animate isn't compiled yet".into()),
             StmtKind::Propagate { .. } => return Err("propagate isn't compiled yet".into()),
         }
         Ok(())
@@ -1148,7 +1153,13 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                     self.call("fm_print_tlist", &[ctx, v.v.unwrap()])?;
                 }
-                PrintItem::ComplexList(..) => return Err("lists of complex numbers aren't compiled yet".into()),
+                PrintItem::ComplexList(e, f) => {
+                    let v = self.expr(e)?;
+                    if v.k != Kind::Obj {
+                        return Err("print of a list of complex numbers that isn't one".into());
+                    }
+                    self.call("fm_print_obj", &[ctx, self.i64c(*f as i64).into(), v.v.unwrap()])?;
+                }
             }
         }
         self.call("fm_print_end", &[ctx])?;
@@ -1451,6 +1462,8 @@ impl<'c, 'm> Gen<'c, 'm> {
             ExprKind::Integral { .. } | ExprKind::Sum { .. } | ExprKind::Root { .. } => self.calculus(e)?,
             ExprKind::SolEval { .. } | ExprKind::SolList { .. } | ExprKind::PdeEval { .. }
             | ExprKind::OdeLinSolve { .. } => self.solution_expr(e)?,
+            ExprKind::Map { .. } | ExprKind::VecSet { .. } | ExprKind::VecIndex { .. } | ExprKind::Load(_)
+            | ExprKind::Table(_) | ExprKind::Column(..) => self.delegate_expr(e)?,
             other => return Err(format!("{} isn't compiled yet", expr_name(other))),
         })
     }
@@ -1588,6 +1601,24 @@ impl<'c, 'm> Gen<'c, 'm> {
                 return Ok(fv(self.intrinsic("llvm.minnum", &[a, hi])?));
             }
         }
+        // random numbers (all-number arguments): the tree-walker's generator, directly
+        let rng = match (name, vals.len()) {
+            ("rand", 0) => Some(0),
+            ("rand2", 2) if all_num => Some(1),
+            ("randn", 0) => Some(2),
+            ("randn2", 2) if all_num => Some(3),
+            _ => None,
+        };
+        if let Some(kind) = rng {
+            let (a, b) = if vals.len() == 2 { (self.to_f(vals[0])?, self.to_f(vals[1])?) } else { (self.nan(), self.nan()) };
+            let line = self.line_val()?;
+            let ctx: BasicValueEnum = self.ctx_ptr.into();
+            let r = self.fcall("fm_rng", &[ctx, self.i32c(kind).into(), a.into(), b.into(), line.into()])?;
+            if kind == 3 {
+                self.check_err()?;
+            }
+            return Ok(fv(r));
+        }
         if name == "len" && vals.len() == 1 {
             match vals[0].k {
                 Kind::L => {
@@ -1601,7 +1632,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         // anything else: the tree-walker's own implementation, through a callback
         let ret = kind_of(&e.ty)?;
         let kinds: Vec<Kind> = vals.iter().map(|v| v.k).collect();
-        if kinds.iter().any(|k| matches!(k, Kind::Void | Kind::H)) || ret == Kind::H {
+        if kinds.iter().any(|k| matches!(k, Kind::Void)) {
             return Err(format!("built-in {name} with an argument without a value"));
         }
         self.tables.builtins.push(BuiltinSite { name: name.to_string(), args: kinds, ret });
@@ -1619,7 +1650,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                     let p = self.spill(*v)?;
                     bl!(self.b.build_ptr_to_int(p, i64t, "p"))
                 }
-                Kind::Void | Kind::H => unreachable!(),
+                Kind::Void => unreachable!(),
+            Kind::H | Kind::Obj => v.v.unwrap().into_int_value(),
             };
             let sp = unsafe { bl!(self.b.build_gep(i64t.array_type(n), argp, &[self.i64c(0), self.i64c(i as i64)], "a")) };
             bl!(self.b.build_store(sp, slot));
@@ -1679,6 +1711,8 @@ fn expr_name(k: &ExprKind) -> &'static str {
     }
 }
 
+#[path = "deleg.rs"]
+mod deleg;
 #[path = "hoist.rs"]
 mod hoist;
 #[path = "par.rs"]

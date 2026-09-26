@@ -21,6 +21,8 @@ pub struct GenTables {
     pub mvec_fmts: Vec<Vec<usize>>,
     pub ode_sites: Vec<OdeSite>,
     pub msum_sites: Vec<MNode>,
+    /// constructs run by the tree-walker (never in an executable: build_object refuses them)
+    pub interp_sites: Vec<super::delegate::InterpSite>,
 }
 
 /// Everything an executable carries.
@@ -114,6 +116,7 @@ impl W {
                 self.u(n as u64)
             }
             Kind::H => self.u(6),
+            Kind::Obj => self.u(8),
             Kind::Void => self.u(7),
         }
     }
@@ -181,7 +184,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.i(f.sf.map(i64::from).unwrap_or(-1));
     }
     // the code generator's tables
-    let GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites } = t;
+    let GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites, interp_sites: _ } = t;
     w.u(texts.len() as u64);
     texts.iter().for_each(|s| w.s(s));
     w.u(builtins.len() as u64);
@@ -309,6 +312,7 @@ impl Rd<'_> {
             4 => Kind::TL,
             5 => Kind::V(self.n()?),
             6 => Kind::H,
+            8 => Kind::Obj,
             _ => Kind::Void,
         })
     }
