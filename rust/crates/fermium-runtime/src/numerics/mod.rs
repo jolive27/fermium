@@ -11,6 +11,7 @@ pub mod fft;
 pub mod fit;
 pub mod linalg;
 pub mod ode;
+pub mod pocketfft;
 pub mod quad;
 pub mod roots;
 pub mod stiff;
