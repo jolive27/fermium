@@ -192,7 +192,59 @@ or name ERR kind a b""")
     w.close()
 
 
-SECTIONS = {"quad": gen_quad, "ode": gen_ode}
+# --------------------------------------------------------------------------------------- stiff ODEs
+# v1's stiff_solve (fermium/runtime/stiff.py) over SciPy's Radau / BDF. Same cases in tests/stiff.rs.
+def _robertson(t, y):
+    return [-0.04 * y[0] + 1e4 * y[1] * y[2], 0.04 * y[0] - 1e4 * y[1] * y[2] - 3e7 * y[1] * y[1], 3e7 * y[1] * y[1]]
+
+
+def _vdp1000(t, y):
+    return [y[1], 1000.0 * (1 - y[0] * y[0]) * y[1] - y[0]]
+
+
+STIFF_CASES = [
+    # name, f, y0, t0, t1, rtol, event, atol
+    ("robertson", _robertson, [1.0, 0.0, 0.0], 0.0, 40.0, 1e-6, None, None),
+    ("robertson9", _robertson, [1.0, 0.0, 0.0], 0.0, 1e4, 1e-9, None, None),
+    ("vdp1000", _vdp1000, [2.0, 0.0], 0.0, 3000.0, 1e-6, None, None),
+    ("lin", lambda t, y: [-1e5 * (y[0] - cos(t))], [0.0], 0.0, 4.0, 1e-8, None, None),
+    ("chain", lambda t, y: [-50.0 * y[0], 50.0 * y[0] - 0.01 * y[1], 0.01 * y[1]], [1.0, 0.0, 0.0], 0.0, 5.0,
+     1e-7, None, None),
+    ("event", lambda t, y: [-1000.0 * (y[0] - 1.0)], [0.0], 0.0, 1.0, 1e-8, lambda t, y: [y[0] - 0.5], None),
+    ("back", lambda t, y: [20.0 * (y[0] - sin(t))], [0.0], 2.0, -1.0, 1e-8, None, None),
+    ("user_atol", lambda t, y: [-y[0], y[0] - 1e3 * y[1]], [1e-12, 0.0], 0.0, 10.0, 1e-6, None, [1e-20, 1e-20]),
+    ("blowup", lambda t, y: [y[0] * y[0]], [1.0], 0.0, 2.0, 1e-8, None, None),
+    ("no_event", lambda t, y: [-y[0]], [1.0], 0.0, 1.0, 1e-8, lambda t, y: [y[0] + 1.0], None),
+]
+
+
+def gen_stiff():
+    from fermium.runtime.stiff import stiff_solve, StiffFail
+    from fermium import interp as I
+    w = Writer("stiff.txt", """
+v1's stiff solvers (fermium.runtime.stiff.stiff_solve over SciPy Radau / BDF), per method.
+name/method n t_last y_last... [y(t_k) y'(t_k) comp 0 at t0 + FRACS*(t_last - t0)] max0 min0   or  name/method ERR kind a b""")
+    for method in ("radau", "bdf"):
+        for name, f, y0, t0, t1, rtol, ev, atol in STIFF_CASES:
+            key = f"{name}/{method}"
+            try:
+                ts, ys, dys = stiff_solve(f, y0, t0, t1, rtol, method, ev, -1.0, -1.0, atol)
+            except StiffFail as fl:
+                w.row(key, "ERR", str(fl.kind), fl.a, fl.b)
+                continue
+            sol = I.Sol(len(y0))
+            sol.t, sol.y, sol.dy = list(ts), list(ys), list(dys)
+            vals = [float(sol.n), sol.t[-1]] + sol.y[-sol.dim:]
+            tl = sol.t[-1]
+            for fr in FRACS:
+                tt = t0 + fr * (tl - t0)
+                vals += [sol.eval(0, tt, False), sol.eval(0, tt, True)]
+            vals += [I.Interpreter.sol_ext(sol, 0, 1.0), I.Interpreter.sol_ext(sol, 0, -1.0)]
+            w.row(key, *vals)
+    w.close()
+
+
+SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
