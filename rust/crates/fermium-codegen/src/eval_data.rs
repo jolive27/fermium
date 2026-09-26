@@ -110,6 +110,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 for it in items {
                     match self.eval(it, fr)? {
                         Value::List(l) => cols.push(l.borrow().clone()),
+                        // v1's runtime table takes float() of each value
+                        Value::UList(_) => return self.err(crate::eval_unc::GENERIC),
                         _ => cols.push(vec![]),
                     }
                 }
