@@ -51,14 +51,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
 }
 
 /// What compile hands to the run-time context (texts made at compile time, built-in call sites, formats).
-#[derive(Default)]
-pub struct Tables {
-    pub texts: Vec<Rc<str>>,
-    pub builtins: Vec<BuiltinSite>,
-    pub mvec_fmts: Vec<Vec<usize>>,
-    pub ode_sites: Vec<crate::llvm::solve_rt::OdeSite>,
-    pub msum_sites: Vec<rt::MNode>,
-}
+pub type Tables = crate::native::blob::GenTables;
 
 #[derive(Clone, Copy)]
 pub struct Val<'c> {
@@ -96,6 +89,9 @@ pub struct Gen<'c, 'm> {
     /// variables that live somewhere else in the function being compiled (a parallel for's body function)
     overrides: HashMap<SymId, (PointerValue<'c>, Kind)>,
     par_count: usize,
+    /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
+    /// not an address known now
+    aot: Option<GlobalValue<'c>>,
 }
 
 macro_rules! bl {
@@ -105,6 +101,15 @@ macro_rules! bl {
 }
 
 impl<'c, 'm> Gen<'c, 'm> {
+    /// For an executable: the context pointer is read from the global `fm_ctx` at each function's start.
+    pub fn new_aot(cx: &'c Context, m: &'m Module) -> Gen<'c, 'm> {
+        let mut g = Gen::new(cx, m, 0);
+        let gv = g.lm.add_global(g.ptrt(), None, "fm_ctx");
+        gv.set_linkage(Linkage::External);
+        g.aot = Some(gv);
+        g
+    }
+
     pub fn new(cx: &'c Context, m: &'m Module, ctx_addr: usize) -> Gen<'c, 'm> {
         let lm = cx.create_module("fermium");
         let i64t = cx.i64_type();
@@ -120,7 +125,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let mut g = Gen { cx, lm, b: cx.create_builder(), m, tables, ctx_ptr, line_g, stackbase_g, externs: HashMap::new(),
                           mappings: vec![], globals: HashMap::new(), funcs: vec![], fnv: None, entry_b: None,
                           locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None,
-                          overrides: HashMap::new(), par_count: 0 };
+                          overrides: HashMap::new(), par_count: 0, aot: None };
         g.declare_runtime();
         g
     }
@@ -629,6 +634,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.err_bb = Some(err);
         self.b.position_at_end(entry);
         self.known_line = None;
+        if let Some(g) = self.aot {
+            let p = bl_unwrap(self.b.build_load(self.ptrt(), g.as_pointer_value(), "ctx")).into_pointer_value();
+            self.ctx_ptr = p;
+        }
     }
 
     fn ret_default(&mut self) -> R<()> {
@@ -1577,6 +1586,10 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
         })
     }
+}
+
+fn bl_unwrap<T>(r: Result<T, inkwell::builder::BuilderError>) -> T {
+    r.expect("LLVM builder")
 }
 
 fn fv(x: FloatValue<'_>) -> Val<'_> {

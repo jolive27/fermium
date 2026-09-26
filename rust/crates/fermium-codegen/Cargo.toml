@@ -10,7 +10,11 @@ default = ["llvm"]
 # the LLVM back end (LLVM 18 through inkwell, linked statically by build.rs; see rust/BUILD.md)
 llvm = ["dep:inkwell"]
 
+[build-dependencies]
+cc = "1"
+
 [dependencies]
+num-rational = "0.4"
 fermium-ir = { path = "../fermium-ir" }
 fermium-units = { path = "../fermium-units" }
 fermium-runtime = { path = "../fermium-runtime" }

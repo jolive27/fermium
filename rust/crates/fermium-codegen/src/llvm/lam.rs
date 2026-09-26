@@ -24,6 +24,7 @@ pub(super) struct Saved<'c> {
     ret_kind: Kind,
     block: Option<BasicBlock<'c>>,
     known_line: Option<u32>,
+    ctx_ptr: PointerValue<'c>,
 }
 
 /// Every variable an expression uses (lambda bodies included), and every variable its where-bindings make.
@@ -65,6 +66,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             ret_kind: self.ret_kind,
             block: self.b.get_insert_block(),
             known_line: self.known_line,
+            ctx_ptr: self.ctx_ptr,
         }
     }
 
@@ -78,6 +80,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.ret_kind = s.ret_kind;
         self.b.position_at_end(s.block.unwrap());
         self.known_line = s.known_line;
+        self.ctx_ptr = s.ctx_ptr;
     }
 
     /// Is this variable one of the current function's own (a local, or living in an override)?

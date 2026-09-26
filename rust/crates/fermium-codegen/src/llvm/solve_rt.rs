@@ -96,6 +96,7 @@ fn stopped(c: C) -> bool {
 
 /// An ODE solve (eval_solve solve_ode); the handle of the solution, or -1 after an error.
 #[allow(clippy::too_many_arguments)]
+#[no_mangle]
 pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<OdeFn>, evenv: *mut u8, y0: *const f64,
                          n: i64, t0: f64, t1: f64, h0: f64, line: i32) -> i64 {
     let line = line.max(0) as u32;
@@ -169,6 +170,7 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
 }
 
 /// An eigenvalue problem (eval_solve solve_eigen): the right side at (x, [ψ, ψ', E]) gives ψ'' in out[1].
+#[no_mangle]
 pub extern "C" fn fm_eigen(c: C, site: i64, f: OdeFn, env: *mut u8, a: f64, b: f64, line: i32) -> i64 {
     let line = line.max(0) as u32;
     let s = unsafe { &(&(*c).ode_sites)[site as usize] };
@@ -236,6 +238,7 @@ pub extern "C" fn fm_eigen(c: C, site: i64, f: OdeFn, env: *mut u8, a: f64, b: f
 
 /// A PDE (eval_solve solve_pde): the right side at (x, [u, u_x, u_xx, …]) into 6 slots.
 #[allow(clippy::too_many_arguments)]
+#[no_mangle]
 pub extern "C" fn fm_pde(c: C, site: i64, f: OdeFn, env: *mut u8, t0: f64, t1: f64, step: f64, xa: f64, xb: f64,
                          line: i32) -> i64 {
     let line = line.max(0) as u32;
@@ -308,6 +311,7 @@ fn sol_at(c: C, h: i64, comp: usize, t: f64, use_dy: bool) -> Result<f64, Fail> 
     }
 }
 
+#[no_mangle]
 pub extern "C" fn fm_sol_eval(c: C, h: i64, comp: i64, t: f64, use_dy: i32, tfmt: i64, line: i32) -> f64 {
     let r = sol_at(c, h, comp as usize, t, use_dy != 0);
     if stopped(c) {
@@ -323,6 +327,7 @@ pub extern "C" fn fm_sol_eval(c: C, h: i64, comp: i64, t: f64, use_dy: i32, tfmt
 }
 
 /// The same at every time of a list (a list).
+#[no_mangle]
 pub extern "C" fn fm_sol_eval_list(c: C, h: i64, comp: i64, ts: *const FmList, use_dy: i32, tfmt: i64, line: i32)
                                    -> *mut FmList {
     let ts: Vec<f64> = unsafe { (*ts).as_slice().to_vec() };
@@ -338,6 +343,7 @@ pub extern "C" fn fm_sol_eval_list(c: C, h: i64, comp: i64, ts: *const FmList, u
 }
 
 /// All samples of a component (what 0), the times (1) or the derivatives (2).
+#[no_mangle]
 pub extern "C" fn fm_sol_list(c: C, h: i64, comp: i64, what: i64) -> *mut FmList {
     let s = unsafe { &(&(*c).sols)[h as usize].sol };
     let comp = comp as usize;
@@ -350,12 +356,14 @@ pub extern "C" fn fm_sol_list(c: C, h: i64, comp: i64, what: i64) -> *mut FmList
 }
 
 /// max(x) / min(x) of a solution component (v1's fm_sol_ext).
+#[no_mangle]
 pub extern "C" fn fm_sol_extreme(c: C, h: i64, comp: i64, sg: f64) -> f64 {
     unsafe { (&(*c).sols)[h as usize].sol.extreme(comp as usize, sg) }
 }
 
 /// u(x, t) of a PDE solution and its grid check (eval_solve PdeEval).
 #[allow(clippy::too_many_arguments)]
+#[no_mangle]
 pub extern "C" fn fm_pde_eval(c: C, h: i64, m: i64, comp0: i64, xv: f64, tv: f64, which: i64, xfmt: i64, tfmt: i64,
                               line: i32) -> f64 {
     let line = line.max(0) as u32;
@@ -396,6 +404,7 @@ pub extern "C" fn fm_pde_eval(c: C, h: i64, m: i64, comp0: i64, xv: f64, tv: f64
 }
 
 /// m·x = b for the highest derivatives of a coupled ODE (eval_solve OdeLinSolve): 1 if singular.
+#[no_mangle]
 pub extern "C" fn fm_odelin(n: i64, a: *const f64, b: *const f64, out: *mut f64) -> i32 {
     let n = n as usize;
     let a = unsafe { std::slice::from_raw_parts(a, n * n) };
@@ -408,6 +417,7 @@ pub extern "C" fn fm_odelin(n: i64, a: *const f64, b: *const f64, out: *mut f64)
 }
 
 /// A solver error at a line with a print format (describe_error).
+#[no_mangle]
 pub extern "C" fn fm_solve_error(c: C, kind: i64, a: f64, b: f64, fmt: i64, line: i32) {
     locked(c, |c| fail(c, Fail::new(kind, a, b), fmt as usize, line.max(0) as u32));
 }
