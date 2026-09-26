@@ -38,8 +38,9 @@ to notice:
   ports).
 - **Tools:** `fermium doctor` checks the one binary instead of Python packages; `fermium run` takes
   `--backend auto|llvm|interp`; `fermium build` links executables with the built-in lld (no C compiler on Linux;
-  the macOS path is not tested yet). `fermium build` can't yet build programs that use `plot`, `fit`, `load`
-  or other constructs `fermium run` hands to its interpreter: it says so, and `fermium run` runs them.
+  the macOS path is not tested yet). Executables can use `plot`, `fit`, `load` and the other constructs
+  `fermium run` hands to its interpreter: the executable carries the program and checks it again when it starts
+  (and refuses to run if it checks differently there, e.g. after a data file changed).
 - **Python interop:** `use python` loads libpython when a program asks for it. Calling Fermium from Python is
   the module `fermium2` (rust/crates/fermium-pyapi) with Fermium 1.5's API.
 - **Playground:** the browser page runs the Rust compiler as WebAssembly (3.6 MB instead of about 50 MB of
