@@ -8,5 +8,6 @@ license.workspace = true
 fermium-units = { path = "../fermium-units" }
 fermium-syntax = { path = "../fermium-syntax" }
 fermium-ir = { path = "../fermium-ir" }
+fermium-sym = { path = "../fermium-sym" }
 num-rational = "0.4"
 num-traits = "0.2"
