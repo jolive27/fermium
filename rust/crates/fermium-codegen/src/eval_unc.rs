@@ -30,6 +30,25 @@ pub fn is_unc(v: &Value) -> bool {
 pub const VEC_UNC: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain \
                            numbers one at a time, or use value(x) to drop the uncertainty";
 
+/// Is this one of the errors v1 raises as UncertainUse (not a kernel failure)? Those unwind through its
+/// kernels (interp.kernel's `finally` restores the line), so they report the line where the outermost kernel
+/// started: see kernel_line.
+pub fn is_unc_error(e: &RunError) -> bool {
+    let m = &e.message;
+    m.contains("uncertain value (±)") || m.contains("uncertain values (±)") || m.contains("can't be uncertain (±)")
+}
+
+/// A kernel's result (an integral, root, ODE, PDE or eigenvalue solve started on `line0`): an uncertain-value
+/// error from inside it reports line0, as v1's interpreter does.
+pub fn kernel_line<T>(r: Result<T, RunError>, line0: u32) -> Result<T, RunError> {
+    r.map_err(|mut e| {
+        if is_unc_error(&e) {
+            e.line = line0;
+        }
+        e
+    })
+}
+
 /// A vector's components as values (numbers or uncertain numbers).
 pub fn vec_items(v: &Value) -> Option<Vec<Value>> {
     match v {
@@ -228,6 +247,16 @@ fn py_max(a: Value, b: Value, bigger: bool) -> Value {
 impl<'m, P: Printer> Interpreter<'m, P> {
     fn unc_err<T>(&self, msg: &str) -> Result<T, RunError> {
         self.err(msg.to_string())
+    }
+
+    /// A number where v1 needs a plain one (an index, a loop bound: Python's int()/float() of a UFloat raises).
+    #[inline]
+    pub(crate) fn plain(&self, v: &Value) -> Result<f64, RunError> {
+        match v {
+            Value::Num(x) => Ok(*x),
+            Value::Unc(_) | Value::UList(_) | Value::UVec(_) => self.unc_err(GENERIC),
+            v => Ok(v.num()),
+        }
     }
 
     /// a op b where a or b holds uncertain numbers (e_IBin).
@@ -596,7 +625,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             "slice" => {
                 let v = list_items(&args[0]).unwrap_or_default();
-                let (lo, hi) = (args[1].num(), args[2].num());
+                let (lo, hi) = (self.plain(&args[1])?, self.plain(&args[2])?);
                 if hi == lo - 1.0 {
                     return Ok(make_list(vec![]));
                 }

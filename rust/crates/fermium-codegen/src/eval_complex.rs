@@ -160,6 +160,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     fn complex_kernel(&mut self, k: &str, args: &[Value]) -> Option<Result<Value, RunError>> {
+        if args.iter().any(crate::eval_unc::is_unc) {
+            return Some(self.unc_complex_kernel(k, args));
+        }
         let z = cval(&args[0]);
         let zc = z.unwrap_or((f64::NAN, f64::NAN));
         let arg_c = |i: usize| cval(&args[i]).unwrap_or((f64::NAN, f64::NAN));
@@ -199,6 +202,87 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "approx" => Value::Bool(k_approx(zc, arg_c(1), args[2].num(), args[3].num())),
             _ => return None,
         }))
+    }
+
+    /// run_kernel with PyCOps on (re, im) pairs holding uncertain parts (v1 runs such a program in its
+    /// interpreter): the arithmetic kernels propagate the uncertainties; the ones that call a math function on a
+    /// part (exp, hypot, atan2, ...) need plain numbers.
+    fn unc_complex_kernel(&mut self, k: &str, args: &[Value]) -> Result<Value, RunError> {
+        use crate::eval_unc::{make_vec, num_op, vec_items, GENERIC};
+        use crate::eval_unc_la::{abs, nom};
+        use fermium_ir::BinOp::{Add, Div, Mul, Sub};
+        type V = (Value, Value);
+        let pair = |v: &Value| -> Option<V> {
+            vec_items(v).filter(|x| x.len() == 2).map(|x| (x[0].clone(), x[1].clone()))
+        };
+        let op = |o, a: &Value, b: &Value| num_op(o, a, b);
+        let mul = |a: &V, b: &V| -> V {
+            (op(Sub, &op(Mul, &a.0, &b.0), &op(Mul, &a.1, &b.1)), op(Add, &op(Mul, &a.0, &b.1), &op(Mul, &a.1, &b.0)))
+        };
+        let div = |a: &V, b: &V| -> V {
+            let big = nom(&abs(&b.1)) < nom(&abs(&b.0));
+            let r1 = op(Div, &b.1, &b.0);
+            let d1 = op(Add, &b.0, &op(Mul, &b.1, &r1));
+            let x1 = op(Div, &op(Add, &a.0, &op(Mul, &a.1, &r1)), &d1);
+            let y1 = op(Div, &op(Sub, &a.1, &op(Mul, &a.0, &r1)), &d1);
+            let r2 = op(Div, &b.0, &b.1);
+            let d2 = op(Add, &op(Mul, &b.0, &r2), &b.1);
+            let x2 = op(Div, &op(Add, &op(Mul, &a.0, &r2), &a.1), &d2);
+            let y2 = op(Div, &op(Sub, &op(Mul, &a.1, &r2), &a.0), &d2);
+            if big { (x1, y1) } else { (x2, y2) }
+        };
+        let out = |z: V| make_vec(vec![z.0, z.1]);
+        let generic = || self.err(GENERIC);
+        let (Some(z), b) = (pair(&args[0]), args.get(1).and_then(pair)) else {
+            return match k {
+                // a real number: fabs is Python's abs, which UFloat has
+                "abs" => Ok(abs(&args[0])),
+                // polar(r, θ): only cos θ and sin θ need plain numbers
+                "polar" if !matches!(args[1], Value::Unc(_)) => {
+                    let th = args[1].num();
+                    Ok(out((op(Mul, &args[0], &Value::Num(th.cos())), op(Mul, &args[0], &Value::Num(th.sin())))))
+                }
+                _ => generic(),
+            };
+        };
+        match (k, b) {
+            ("mul", Some(b)) => Ok(out(mul(&z, &b))),
+            ("div", Some(b)) => Ok(out(div(&z, &b))),
+            ("conj", _) => {
+                let im = match &z.1 {
+                    Value::Unc(u) => Value::Unc(Rc::new(u.neg())),
+                    v => Value::Num(-v.num()),
+                };
+                Ok(out((z.0.clone(), im)))
+            }
+            ("eq", Some(b)) => Ok(Value::Bool(nom(&z.0) == nom(&b.0) && nom(&z.1) == nom(&b.1))),
+            ("ne", Some(b)) => Ok(Value::Bool(!(nom(&z.0) == nom(&b.0) && nom(&z.1) == nom(&b.1)))),
+            ("powi", _) => {
+                let n = args[1].num() as i64;
+                let mut m = n.unsigned_abs();
+                let mut result: Option<V> = None;
+                let mut base = z;
+                while m != 0 {
+                    if m & 1 == 1 {
+                        result = Some(match result {
+                            None => base.clone(),
+                            Some(r) => mul(&r, &base),
+                        });
+                    }
+                    m >>= 1;
+                    if m != 0 {
+                        base = mul(&base, &base);
+                    }
+                }
+                let one = (Value::Num(1.0), Value::Num(0.0));
+                Ok(out(match result {
+                    None => one,
+                    Some(r) if n < 0 => div(&one, &r),
+                    Some(r) => r,
+                }))
+            }
+            _ => generic(),
+        }
     }
 
     fn clist_builtin(&mut self, k: &str, args: &[Value]) -> Result<Value, RunError> {

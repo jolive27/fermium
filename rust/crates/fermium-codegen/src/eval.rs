@@ -347,7 +347,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             StmtKind::IndexAssign(sym, idx, value) => {
                 let lst = self.get(*sym, fr)?;
                 if let Value::UList(l) = &lst {
-                    let i = self.eval(idx, fr)?.num();
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
                     let n = l.borrow().len();
                     let k = self.elem_index(i, n)?;
                     let v = self.eval(value, fr)?;
@@ -357,7 +358,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let Value::List(l) = lst else {
                     return self.err("not yet supported by the Rust back end: setting an element of this value");
                 };
-                let i = self.eval(idx, fr)?.num();
+                let i = self.eval(idx, fr)?;
+                let i = self.plain(&i)?;
                 let n = l.borrow().len();
                 let k = self.elem_index(i, n)?;
                 let v = self.eval(value, fr)?;
@@ -413,10 +415,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::For { sym, lo, hi, step, body, par, .. } => {
                 // inclusive, computed as lo + i·st (so rounding never adds or drops the last value)
-                let lo = self.eval(lo, fr)?.num();
-                let hi = self.eval(hi, fr)?.num();
+                let lo = self.eval(lo, fr)?;
+                let lo = self.plain(&lo)?;
+                let hi = self.eval(hi, fr)?;
+                let hi = self.plain(&hi)?;
                 let st = match step {
-                    Some(e) => self.eval(e, fr)?.num(),
+                    Some(e) => {
+                        let v = self.eval(e, fr)?;
+                        self.plain(&v)?
+                    }
                     None => 1.0,
                 };
                 let n = self.for_count(lo, hi, st)?;
@@ -528,11 +535,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         _ => {}
                     }
                 }
-                PrintItem::Complex(e, f) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.complex(*f, v[0], v[1])
-                    }
-                }
+                PrintItem::Complex(e, f) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.complex(*f, v[0], v[1]),
+                    // format_complex takes math.hypot of the parts
+                    Value::UVec(_) => return self.err(crate::eval_unc::GENERIC),
+                    _ => {}
+                },
                 PrintItem::ComplexList(e, f) => {
                     if let Value::CList(l) = self.eval(e, fr)? {
                         let v = l.borrow().clone();
@@ -599,7 +607,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
-                if matches!(e.ty, Ty::Vec { .. } | Ty::Mat { .. })
+                // (a complex number is a pair too: cplx.py's (re, im) tuple)
+                if matches!(e.ty, Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_))
                     && (crate::eval_unc::is_unc(&va) || crate::eval_unc::is_unc(&vb))
                 {
                     return self.unc_vec_bin(*op, va, vb);
@@ -749,7 +758,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             },
             ExprKind::Index(l, i) => {
                 let lst = self.eval(l, fr)?;
-                let i = self.eval(i, fr)?.num();
+                let i = self.eval(i, fr)?;
+                let i = self.plain(&i)?;
                 match lst {
                     Value::List(l) => {
                         let n = l.borrow().len();
@@ -924,7 +934,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 return f(args).map_err(|m| RunError { message: m, line: self.line, hint: None });
             }
         }
-        if !name.starts_with("pm") && !name.starts_with("unc_") && args.iter().any(crate::eval_unc::is_unc) {
+        if !name.starts_with("pm") && !name.starts_with("unc_") && !name.starts_with("c.")
+            && args.iter().any(crate::eval_unc::is_unc)
+        {
             return self.unc_apply(name, args);
         }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,

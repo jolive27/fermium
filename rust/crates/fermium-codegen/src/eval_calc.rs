@@ -195,10 +195,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     /// lam(x) for a scalar lambda, evaluated in the enclosing frame (its captures are there).
     pub(crate) fn call_scalar_lambda(&mut self, lam: usize, x: f64, fr: &mut Frame) -> Result<f64, RunError> {
+        Ok(self.call_lambda_value(lam, Value::Num(x), fr)?.num())
+    }
+
+    /// lam(x) for a scalar lambda and any argument (an uncertain one, in v1's interpreter), with the kernel check.
+    pub(crate) fn call_lambda_value(&mut self, lam: usize, x: Value, fr: &mut Frame) -> Result<Value, RunError> {
         let m: &'m Module = self.module;
         let l = &m.lambdas[lam];
         let p = l.params[0];
-        let old = fr.vars.insert(p, Value::Num(x));
+        let old = fr.vars.insert(p, x);
         let r = self.eval(&l.body[0], fr);
         let r = match r {
             // a callback given to a numerical kernel must return plain numbers (interp.plain_fn, D122)
@@ -213,7 +218,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 fr.vars.remove(&p);
             }
         }
-        Ok(r?.num())
+        r
     }
 
     /// (value, last significant decimal place in the display unit, k = its SI factor) of a measured sum: the
@@ -261,10 +266,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub(crate) fn eval_calculus(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
+        let line0 = self.line;
+        let r = self.eval_calculus_in(e, fr);
+        match &e.kind {
+            ExprKind::Integral { .. } | ExprKind::Root { .. } => crate::eval_unc::kernel_line(r, line0),
+            _ => r,
+        }
+    }
+
+    fn eval_calculus_in(&mut self, e: &Expr, fr: &mut Frame) -> Result<Value, RunError> {
         match &e.kind {
             ExprKind::Integral { lam, lo, hi, xname, xfmt, soft, atol } => {
-                let a = self.eval(lo, fr)?.num();
-                let b = self.eval(hi, fr)?.num();
+                let (va, vb) = (self.eval(lo, fr)?, self.eval(hi, fr)?);
+                let unc_limits = matches!(va, Value::Unc(_)) || matches!(vb, Value::Unc(_));
+                if unc_limits {
+                    // v1's quad computes its nodes from uncertain limits, so the integrand meets an uncertain x: the
+                    // plain-number error, or (an integrand of x returns an uncertain value) the kernel's "an integral
+                    // can't use uncertain values"; one that doesn't use x stays plain (see below)
+                    let mid = self.unc_bin(fermium_ir::BinOp::Add, va.clone(), vb.clone())?;
+                    let mid = self.unc_bin(fermium_ir::BinOp::Mul, mid, Value::Num(0.5))?;
+                    self.call_lambda_value(*lam, mid, fr)?;
+                }
+                let (a, b) = (va.num(), vb.num());
                 let atol = if *soft {
                     -1.0
                 } else {
@@ -277,14 +300,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let mut error: Option<RunError> = None;
                 let r = quad::quad(
                     |x| {
+                        // after an error, zeros: the quadrature then ends at once (NaN can keep an infinite range
+                        // subdividing for minutes); its result is dropped for the error
                         if error.is_some() {
-                            return f64::NAN;
+                            return 0.0;
                         }
                         match self.call_scalar_lambda(*lam, x, fr) {
                             Ok(v) => v,
                             Err(ex) => {
                                 error = Some(ex);
-                                f64::NAN
+                                0.0
                             }
                         }
                     },
@@ -307,17 +332,35 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         warn_at(line, QZERO_MSG);
                     }
                 }
+                if unc_limits && a != b {
+                    // an integrand that doesn't use x, with uncertain limits: v1's quad arithmetic propagates them
+                    // through the nodes' spacing only (the integrand's values stay plain), so the result is
+                    // linear in b - a: d∫ = ∫/(b - a) (db - da)
+                    use fermium_ir::BinOp::{Mul, Sub};
+                    let k = crate::eval::fdiv(r.value, b - a);
+                    let span = self.unc_bin(Sub, vb, va)?;
+                    if let Value::Unc(u) = self.unc_bin(Mul, Value::Num(k), span)? {
+                        let d = u.d.clone();
+                        return Ok(Value::Unc(std::rc::Rc::new(fermium_runtime::numerics::uncertain::UFloat::new(r.value, d))));
+                    }
+                }
                 Ok(Value::Num(r.value))
             }
             ExprKind::Sum { lam, lo, hi, step } => {
-                let a = self.eval(lo, fr)?.num();
-                let b = self.eval(hi, fr)?.num();
-                let st = match step {
-                    Some(s) => self.eval(s, fr)?.num(),
-                    None => 1.0,
+                let va = self.eval(lo, fr)?;
+                let vb = self.eval(hi, fr)?;
+                let vst = match step {
+                    Some(s) => self.eval(s, fr)?,
+                    None => Value::Num(1.0),
                 };
+                let (a, b, st) = (va.num(), vb.num(), vst.num());
                 if st == 0.0 || st != st {
                     return Err(self.fail(Fail::new(K::STEP, st, 0.0), None));
+                }
+                // uncertain limits: interp.e_ISum takes math.floor of an uncertain span (a plain number is needed)
+                let span = crate::eval::fdiv(b - a, st);
+                if [&va, &vb, &vst].iter().any(|v| matches!(v, Value::Unc(_))) && span.is_finite() {
+                    return self.err(crate::eval_unc::GENERIC);
                 }
                 let mut cnt = ((b - a) / st + 1e-9).floor() + 1.0;
                 if cnt < 0.0 {
@@ -340,8 +383,21 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Ok(Value::Num(acc))
             }
             ExprKind::Root { lam, lo, hi, scale, tfmt } => {
-                let a = self.eval(lo, fr)?.num();
-                let b = self.eval(hi, fr)?.num();
+                let (va, vb) = (self.eval(lo, fr)?, self.eval(hi, fr)?);
+                // an uncertain bracket: v1's root finder calls the function at uncertain points (the kernel check)
+                let at = if matches!(va, Value::Unc(_)) {
+                    Some(va.clone())
+                } else if matches!(vb, Value::Unc(_)) && self.call_scalar_lambda(*lam, va.num(), fr)? != 0.0 {
+                    Some(vb.clone())
+                } else {
+                    None
+                };
+                if let Some(x) = at {
+                    self.call_lambda_value(*lam, x.clone(), fr)?;
+                    let name = &self.module.lambdas[*lam].name;
+                    return Err(crate::eval_unc::kernel_unc_error(name, &x, self.line));
+                }
+                let (a, b) = (va.num(), vb.num());
                 let line = self.line;
                 // the lambdas share the frame: evaluate through a RefCell so the scale closure can too
                 let error: RefCell<Option<RunError>> = RefCell::new(None);
