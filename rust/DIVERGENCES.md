@@ -70,8 +70,14 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   formula is written back; like v1, the tidied formula is used only when it is shorter.
 - The printed formulas match v1's for every ∇ and Leibniz program in the conformance suite (e.g.
   `-q x/(4π ε_0 (x² + y² + z²)^(3/2))`, `∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds`). SymPy's
-  `simplify` also tries trigonometric identities, factoring and `cancel`; for formulas that need those, v2
-  prints a longer but equivalent formula. Values are the same either way.
+  `simplify` also tries trigonometric identities, `cancel` and `together`; for formulas that need those, v2
+  prints a different, equivalent formula, sometimes longer (∇² of the Yukawa potential `A exp(-a r)/r`: v1
+  `A a² exp(-a r)/r`), sometimes shorter (∇·∇ of `G M / r` and ∇² of `x/r³`: v2 `0`, where v1 printed a long
+  expression SymPy couldn't reduce; ∂/∂x of `x/r³`: v2 `(y² + z² - 2x²)/r⁵`, v1 `1/r³ - 3x²/r⁵`). Of 16
+  textbook potentials (∇, ∇², ∇×, ∇· each), 11 print exactly as v1; about a third of random formulas print
+  differently; derivatives (`f'`, `d/dx`,
+  `∂/∂x`) don't go through this step and printed identically in 370 random formulas. Values are the same
+  either way.
 - Tests: `fermium-sym/src/tests.rs` (`tidy_like_sympy`); conformance cases `f6f6b826b670`, `71b03deee8c1`,
   `7c0c11b0d9a1`.
 

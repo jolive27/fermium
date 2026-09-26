@@ -30,7 +30,8 @@ pub fn integrate(integrand: &A::Expr, var: &str, positive: &[String]) -> SymResu
         }
         return Err(ferr0("Fermium couldn't find a formula for this integral", Some(HINT.into())));
     };
-    let r = simplify(&r);
+    // SymPy's canonical form and order, as v1 printed its results
+    let r = crate::tidy::sympy_form(&r).unwrap_or_else(|| simplify(&r));
     if !antiderivative_ok(&r, &e, var, positive) {
         return Err(ferr0("Fermium's formula for this integral isn't right for every value of the constants in it, so \
                           Fermium won't use it", Some(HINT.into())));
@@ -497,9 +498,16 @@ impl Integrator {
             };
             let sk = self.sqrt_of(&k)?;
             let q = div(u.clone(), sk.clone());
-            let g = if pos_r { call1("atan", q) } else { neg(call1("atanh", q)) };
             let _ = sa;
-            return Some(div(g, mul(a2.clone(), sk)));
+            if pos_r {
+                return Some(div(call1("atan", q), mul(a2.clone(), sk)));
+            }
+            // 1/(u² − k²) = (ln(u − k) − ln(u + k))/(2k): SymPy's form, defined for |u| > k like v1's (atanh
+            // would be NaN there)
+            let two_k = mul(num(2.0), sk.clone());
+            let g = sub(div(call1("ln", sub(u.clone(), sk.clone())), two_k.clone()),
+                        div(call1("ln", add(u, sk)), two_k));
+            return Some(div(g, a2.clone()));
         }
         if pv == -0.5 || pv == 0.5 {
             // √A √(u² + r) (A > 0) or √(-A) √(k - u²) (A < 0)
