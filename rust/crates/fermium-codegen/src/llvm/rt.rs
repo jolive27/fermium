@@ -179,6 +179,8 @@ pub struct Ctx<'m> {
     pub interp_sites: Vec<super::delegate::InterpSite>,
     /// values of kind Obj
     pub objs: Vec<Value>,
+    /// the module's nodes by position (executables' tree-walker constructs, native::delegate)
+    pub nodes: Vec<super::delegate::NodeRef>,
     /// printed measured sums (spec B2 decimal-place rule): the shape of each sum
     pub msum_sites: Vec<MNode>,
     /// the fewest figures the integrals since the last print can support (eval_calc's QUAD_SF, spec B2)
@@ -205,6 +207,7 @@ impl<'m> Ctx<'m> {
             sols: vec![],
             interp_sites: vec![],
             objs: vec![],
+            nodes: vec![],
             msum_sites: vec![],
             quad_sf: None,
             lock: Mutex::new(()),

@@ -26,6 +26,7 @@ pub(super) struct Saved<'c> {
     known_line: Option<u32>,
     ctx_ptr: PointerValue<'c>,
     hoisted: HashMap<SymId, (PointerValue<'c>, IntValue<'c>)>,
+    int_vars: HashMap<SymId, IntValue<'c>>,
 }
 
 /// Every variable an expression uses (lambda bodies included), and every variable its where-bindings make.
@@ -69,6 +70,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             known_line: self.known_line,
             ctx_ptr: self.ctx_ptr,
             hoisted: std::mem::take(&mut self.hoisted),
+            int_vars: std::mem::take(&mut self.int_vars),
         }
     }
 
@@ -84,6 +86,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.known_line = s.known_line;
         self.ctx_ptr = s.ctx_ptr;
         self.hoisted = s.hoisted;
+        self.int_vars = s.int_vars;
     }
 
     /// Is this variable one of the current function's own (a local, or living in an override)?

@@ -31,6 +31,18 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
     }
 }
 
+fn recheck(b: &blob::Blob) -> Result<fermium_ir::Module, String> {
+    let (prog, _) = fermium_syntax::parse(&b.source, &[]).map_err(|e| e.format(Some(&b.source), Some(&b.file_name)))?;
+    let here = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| ".".into());
+    let opts = fermium_check::CheckOptions { base_dir: here, repl: false, source_name: b.file_name.clone() };
+    let (m, _) = fermium_check::check(&prog, opts).map_err(|(e, _)| e.format(Some(&b.source), Some(&b.file_name)))?;
+    if blob::fingerprint(&m) != b.fingerprint {
+        return Err("this executable's program checks differently here than where it was built (a data file changed?); \
+                    build it again with  fermium build".into());
+    }
+    Ok(m)
+}
+
 fn run() -> i32 {
     let bytes = unsafe { std::slice::from_raw_parts(std::ptr::addr_of!(fm_blob), fm_blob_len as usize) };
     let b = match blob::read(bytes) {
@@ -40,10 +52,25 @@ fn run() -> i32 {
             return 1;
         }
     };
+    // a program with plots, fits, data (constructs the tree-walker runs) needs its IR: check the program again,
+    // here, with the folder the executable runs in as its folder (data files and plots are relative to it, as in
+    // v1's executables, D31)
+    let rechecked: Option<fermium_ir::Module> = if b.needs_ir() {
+        match recheck(&b) {
+            Ok(m) => Some(m),
+            Err(msg) => {
+                eprintln!("{msg}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+    let module = rechecked.as_ref().unwrap_or(&b.module);
     let stdout = std::io::stdout();
-    let mut printer = fermium_codegen::printer::StdPrinter::new(&b.module, std::io::BufWriter::new(stdout.lock()));
+    let mut printer = fermium_codegen::printer::StdPrinter::new(module, std::io::BufWriter::new(stdout.lock()));
     let r = {
-        let mut ctx = rt::Ctx::new(&b.module, &mut printer);
+        let mut ctx = rt::Ctx::new(module, &mut printer);
         ctx.set_tables(b.tables);
         ctx.run(|p| unsafe { fm_ctx = p }, fm_main)
     };

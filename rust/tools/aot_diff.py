@@ -45,6 +45,9 @@ def one(args):
         if b.returncode != 0:
             if "can't compile" in b.stderr or "doesn't support" in b.stderr:
                 return case["area"], case["id"], "unsupported", ""
+            if "can't find the file" in b.stderr and case["dir"]:
+                # the program reads files next to it (../data/…): the copy built here doesn't have them
+                return case["area"], case["id"], "not-run", ""
             # a program that stops at check time never reaches the back end
             if run.returncode == 1 and not run.stdout:
                 return case["area"], case["id"], "not-run", ""

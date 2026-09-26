@@ -92,6 +92,10 @@ pub struct Gen<'c, 'm> {
     par_count: usize,
     /// list variables whose header (data, length) was read before the current loops (hoist_lists)
     hoisted: HashMap<SymId, (PointerValue<'c>, IntValue<'c>)>,
+    /// integer loop variables in scope and their i64 values (int_loop)
+    int_vars: HashMap<SymId, IntValue<'c>>,
+    /// executables: node address → position (native::delegate::nodes), for the constructs the tree-walker runs
+    pub(super) node_ids: HashMap<usize, u32>,
     /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
     /// not an address known now
     aot: Option<GlobalValue<'c>>,
@@ -135,7 +139,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                           mappings: vec![], globals: HashMap::new(), funcs: vec![], fnv: None, entry_b: None,
                           locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None,
                           overrides: HashMap::new(), par_count: 0, aot: None,
-                          hoisted: HashMap::new() };
+                          hoisted: HashMap::new(), int_vars: HashMap::new(),
+                          node_ids: HashMap::new() };
         g.declare_runtime();
         g
     }
@@ -545,27 +550,16 @@ impl<'c, 'm> Gen<'c, 'm> {
     // ------------------------------------------------------------ IEEE helpers, exactly as eval.rs
     /// eval::fdiv: x/0 is ±∞, 0/0 and NaN/0 are NaN (f64::NAN), else a / b.
     fn fdiv(&mut self, a: FloatValue<'c>, b: FloatValue<'c>) -> R<FloatValue<'c>> {
-        let q = bl!(self.b.build_float_div(a, b, "q"));
-        let zero = self.fconst(0.0);
-        let bz = bl!(self.b.build_float_compare(FloatPredicate::OEQ, b, zero, "bz"));
-        let az = bl!(self.b.build_float_compare(FloatPredicate::UEQ, a, zero, "az")); // a == 0 or NaN
-        let inf = self.fconst(f64::INFINITY);
-        let one = self.fconst(1.0);
-        let sa = self.intrinsic("llvm.copysign", &[inf, a])?;
-        let sb = self.intrinsic("llvm.copysign", &[one, b])?;
-        let signed = bl!(self.b.build_float_mul(sa, sb, "inf"));
-        let nan = self.nan();
-        let special = bl!(self.b.build_select(az, nan, signed, "sp")).into_float_value();
-        Ok(bl!(self.b.build_select(bz, special, q, "fdiv")).into_float_value())
+        // eval::fdiv's special cases (x/0 = ±∞ with the signs' product, 0/0 and NaN/0 = NaN) are IEEE division's
+        // own results; the only difference is the sign bit of a NaN, which nothing in a Fermium program can observe
+        // (NaN prints as NaN, compares false, and every function of it is NaN)
+        Ok(bl!(self.b.build_float_div(a, b, "q")))
     }
 
     fn sqrt(&mut self, x: FloatValue<'c>) -> R<FloatValue<'c>> {
         self.intrinsic("llvm.sqrt", &[x])
     }
 
-    fn ge0(&mut self, x: FloatValue<'c>) -> R<IntValue<'c>> {
-        Ok(bl!(self.b.build_float_compare(FloatPredicate::OGE, x, self.fconst(0.0), "ge0")))
-    }
 
     /// eval::powc for a compile-time constant p.
     fn powc(&mut self, x: FloatValue<'c>, p: f64) -> R<FloatValue<'c>> {
@@ -580,13 +574,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         if p == 1.0 {
             return Ok(x);
         }
-        let nan = self.nan();
+        // eval::powc's special cases for x < 0 give NaN, which √ of a negative number gives by itself (up to the
+        // sign bit of the NaN, which nothing can observe); -0 and ±∞ come out the same
         if p == 0.5 {
-            let s = self.sqrt(x)?;
-            let ge = self.ge0(x)?;
-            let isnan = bl!(self.b.build_float_compare(FloatPredicate::UNO, x, x, "isnan"));
-            let neg = bl!(self.b.build_select(isnan, x, nan, "neg")).into_float_value();
-            return Ok(bl!(self.b.build_select(ge, s, neg, "sqrt")).into_float_value());
+            return self.sqrt(x);
         }
         if p == -1.0 {
             return self.fdiv(self.fconst(1.0), x);
@@ -601,18 +592,16 @@ impl<'c, 'm> Gen<'c, 'm> {
         }
         if p == -0.5 || p == 1.5 || p == -1.5 {
             let s = self.sqrt(x)?;
-            let r = if p == -0.5 {
-                self.fdiv(self.fconst(1.0), s)?
+            return if p == -0.5 {
+                self.fdiv(self.fconst(1.0), s)
             } else {
                 let xs = bl!(self.b.build_float_mul(x, s, "xs"));
                 if p == 1.5 {
-                    xs
+                    Ok(xs)
                 } else {
-                    self.fdiv(self.fconst(1.0), xs)?
+                    self.fdiv(self.fconst(1.0), xs)
                 }
             };
-            let ge = self.ge0(x)?;
-            return Ok(bl!(self.b.build_select(ge, r, nan, "powc")).into_float_value());
         }
         let pc = self.fconst(p);
         self.fcall("fm_powc", &[x.into(), pc.into()])
@@ -667,6 +656,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.locals.clear();
         self.overrides.clear();
         self.hoisted.clear();
+        self.int_vars.clear();
         self.loops.clear();
         self.ret_kind = ret;
         let err = self.cx.append_basic_block(fv, "err");
@@ -775,9 +765,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                         self.list_parts(l)?
                     }
                 };
-                let iv = self.expr(idx)?;
-                let i = self.to_f(iv)?;
-                let ep = self.elem_ptr(parts, i)?;
+                let k0 = self.index_of(idx, parts.1)?;
+                let ep = unsafe { bl!(self.b.build_gep(self.f64t(), parts.0, &[k0], "ep")) };
                 let vv = self.expr(value)?;
                 let v = self.to_f(vv)?;
                 self.st(ep, v, "elem")?;
@@ -891,13 +880,95 @@ impl<'c, 'm> Gen<'c, 'm> {
     /// `for sym from lo to hi step st`: inclusive, lo + i·st, as eval.rs (n = ⌊(hi − lo)/st + 1e-9⌋ + 1 when
     /// finite and ≥ 0, else no iterations; step 0 is an error).
     fn for_range(&mut self, sym: SymId, lo: &Expr, hi: &Expr, step: Option<&Expr>, body: &[Stmt]) -> R<()> {
+        // an integer loop (v1's int_loops, D150): a whole start and step keep the variable a whole number, known
+        // as an i64 too, so an index by it needs no conversion (its float value is the same number, exactly)
+        let int_form = self.int_loop(sym, lo, step, body)?;
         let (lo, st, count) = self.range_count(lo, hi, step)?;
+        if let Some((lo_i, st_i)) = int_form {
+            let r = self.counted_loop(count, body, |g, i| {
+                let im = bl!(g.b.build_int_mul(i, st_i, "ist"));
+                let iv = bl!(g.b.build_int_add(lo_i, im, "iv"));
+                g.int_vars.insert(sym, iv);
+                let x = bl!(g.b.build_signed_int_to_float(iv, g.f64t(), "x"));
+                g.store_var(sym, fv(x))
+            });
+            self.int_vars.remove(&sym);
+            return r;
+        }
         self.counted_loop(count, body, |g, i| {
             let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
             let x = bl!(g.b.build_float_mul(fi, st, "ist"));
             let x = bl!(g.b.build_float_add(lo, x, "x"));
             g.store_var(sym, fv(x))
         })
+    }
+
+    /// For a loop whose start is a whole number (a whole constant, or a sum of integer loop variables and
+    /// whole constants) and whose step is a whole constant, the start and step as i64 (compiled here: they have
+    /// no side effects); None otherwise, or if the body sets the variable.
+    fn int_loop(&mut self, sym: SymId, lo: &Expr, step: Option<&Expr>, body: &[Stmt])
+                -> R<Option<(IntValue<'c>, IntValue<'c>)>> {
+        let st = match step {
+            None => 1.0,
+            Some(e) => match e.kind {
+                ExprKind::Const(c) if c == c.trunc() && c != 0.0 && c.abs() < 2f64.powi(31) => c,
+                _ => return Ok(None),
+            },
+        };
+        let mut set = std::collections::HashSet::new();
+        par::assigned(self.m, body, &mut set);
+        if set.contains(&sym) {
+            return Ok(None);
+        }
+        Ok(self.int_expr(lo)?.map(|lo_i| (lo_i, self.i64c(st as i64))))
+    }
+
+    /// An expression that is a whole number of moderate size, as an i64: whole constants, integer loop
+    /// variables, and their sums and differences.
+    fn int_expr(&mut self, e: &Expr) -> R<Option<IntValue<'c>>> {
+        Ok(match &e.kind {
+            ExprKind::Const(c) if *c == c.trunc() && c.abs() < 2f64.powi(40) => Some(self.i64c(*c as i64)),
+            ExprKind::Var(s) => self.int_vars.get(s).copied(),
+            ExprKind::Bin(op @ (BinOp::Add | BinOp::Sub), a, b) if matches!(e.ty, Ty::Num(_)) => {
+                match (self.int_expr(a)?, self.int_expr(b)?) {
+                    (Some(x), Some(y)) => Some(if *op == BinOp::Add {
+                        bl!(self.b.build_int_add(x, y, "ia"))
+                    } else {
+                        bl!(self.b.build_int_sub(x, y, "is"))
+                    }),
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+    }
+
+    /// The 0-based position of an index expression in a list of length len, with the index check: an integer
+    /// loop variable needs no conversion.
+    fn index_of(&mut self, idx: &Expr, len: IntValue<'c>) -> R<IntValue<'c>> {
+        if let ExprKind::Var(s) = idx.kind {
+            if let Some(iv) = self.int_vars.get(&s).copied() {
+                self.set_line(idx.line)?;
+                let k0 = bl!(self.b.build_int_sub(iv, self.i64c(1), "k0"));
+                let inside = bl!(self.b.build_int_compare(IntPredicate::ULT, k0, len, "inside"));
+                let fail = self.new_bb("fail");
+                let cont = self.new_bb("ok");
+                let out = bl!(self.b.build_not(inside, "out"));
+                self.cold_br(out, fail, cont)?;
+                self.b.position_at_end(fail);
+                let i = bl!(self.b.build_signed_int_to_float(iv, self.f64t(), "i"));
+                let n = bl!(self.b.build_unsigned_int_to_float(len, self.f64t(), "n"));
+                let line = self.line_val()?;
+                let ctx = self.ctx_ptr;
+                self.call("fm_error", &[ctx.into(), self.i64c(rt::E_INDEX).into(), i.into(), n.into(), line.into()])?;
+                bl!(self.b.build_unconditional_branch(self.err_bb.unwrap()));
+                self.b.position_at_end(cont);
+                return Ok(k0);
+            }
+        }
+        let iv = self.expr(idx)?;
+        let i = self.to_f(iv)?;
+        self.index_check(i, len)
     }
 
     /// (lo, step, number of iterations) of `for … from lo to hi step st`, with its run-time errors.
@@ -1435,9 +1506,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let ExprKind::Var(s) = &l.kind else { return Err("an indexed list that isn't a variable".into()) };
                 let parts = self.hoisted[s];
                 self.set_line(l.line)?;
-                let iv = self.expr(i)?;
-                let i = self.to_f(iv)?;
-                let ep = self.elem_ptr(parts, i)?;
+                let k0 = self.index_of(i, parts.1)?;
+                let ep = unsafe { bl!(self.b.build_gep(self.f64t(), parts.0, &[k0], "ep")) };
                 fv(self.ld(self.f64t(), ep, "x", "elem")?.into_float_value())
             }
             ExprKind::Index(l, i) => {

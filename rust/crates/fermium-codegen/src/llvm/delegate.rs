@@ -3,7 +3,7 @@
 //! and the ones it sets copied back, so the rest of the program still runs compiled (red team round 10: one plot
 //! used to send a whole program to the tree-walker). The tree-walker instance is the context's, printing through
 //! the same printer, so what the program prints comes out in the same order.
-use fermium_ir::{Expr, Stmt, SymId};
+use fermium_ir::{expr_children, stmt_parts, Expr, Module, Stmt, SymId};
 
 use super::rt::{locked, Ctx, FmList, Kind, C};
 use crate::eval::{Frame, RunError, Value};
@@ -12,11 +12,68 @@ use crate::eval::{Frame, RunError, Value};
 /// variables it reads or sets (with their kinds, in the order of the env the compiled code passes), the ones it
 /// sets, and the kind of its value (expressions).
 pub struct InterpSite {
+    /// the node's address (the JIT, which runs with the module it compiled), or 0: then `node`
     pub ptr: usize,
+    /// the node's position in `nodes(module)` (an executable, which re-checks its program to get the IR back)
+    pub node: u32,
     pub is_stmt: bool,
     pub syms: Vec<(SymId, Kind)>,
     pub writes: Vec<SymId>,
     pub ret: Kind,
+}
+
+/// A statement or expression of a module.
+#[derive(Clone, Copy)]
+pub enum NodeRef {
+    S(*const Stmt),
+    E(*const Expr),
+}
+
+impl NodeRef {
+    pub fn addr(&self) -> usize {
+        match *self {
+            NodeRef::S(p) => p as usize,
+            NodeRef::E(p) => p as usize,
+        }
+    }
+}
+
+/// Every statement and expression of a module in a fixed order (main, the functions, the lambdas; each node
+/// before its parts): the same module checked twice gives the same list, so a position names a node.
+pub fn nodes(m: &Module) -> Vec<NodeRef> {
+    fn expr(e: &Expr, out: &mut Vec<NodeRef>) {
+        out.push(NodeRef::E(e));
+        for c in expr_children(e) {
+            expr(c, out);
+        }
+    }
+    fn stmt(s: &Stmt, out: &mut Vec<NodeRef>) {
+        out.push(NodeRef::S(s));
+        let (es, blocks) = stmt_parts(s);
+        for e in es {
+            expr(e, out);
+        }
+        for b in blocks {
+            for s in b {
+                stmt(s, out);
+            }
+        }
+    }
+    let mut out = vec![];
+    for s in &m.main {
+        stmt(s, &mut out);
+    }
+    for f in &m.funcs {
+        for s in &f.body {
+            stmt(s, &mut out);
+        }
+    }
+    for l in &m.lambdas {
+        for e in &l.body {
+            expr(e, &mut out);
+        }
+    }
+    out
 }
 
 /// The value in a variable slot of kind k, as the tree-walker's Value.
@@ -53,10 +110,21 @@ unsafe fn write_slot(c: &mut Ctx, k: Kind, p: *mut u8, v: Value) {
 #[no_mangle]
 pub extern "C" fn fm_interp(c: C, site: i64, env: *const *mut u8, out: *mut u64, line: i32) -> i32 {
     locked(c, |c| {
-        let (ptr, is_stmt, syms, writes, ret) = {
+        let (mut ptr, is_stmt, syms, writes, ret, node) = {
             let s = &c.interp_sites[site as usize];
-            (s.ptr, s.is_stmt, s.syms.clone(), s.writes.clone(), s.ret)
+            (s.ptr, s.is_stmt, s.syms.clone(), s.writes.clone(), s.ret, s.node)
         };
+        if ptr == 0 {
+            if c.nodes.is_empty() {
+                c.nodes = nodes(c.module);
+            }
+            ptr = c.nodes.get(node as usize).map(|n| n.addr()).unwrap_or(0);
+            if ptr == 0 {
+                c.fail(RunError { message: "internal error: this executable's program doesn't match it".into(),
+                                  line: 0, hint: None });
+                return 0;
+            }
+        }
         let mut fr = Frame::default();
         for (i, (sym, k)) in syms.iter().enumerate() {
             let v = unsafe { read_slot(c, *k, *env.add(i)) };
