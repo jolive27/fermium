@@ -39,6 +39,7 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 ## Next
 - Merge agents as they report; re-run `conformance/run --impl rust` → CONFORMANCE.md after each merge.
 - Round 9 follow-ups still open: harvest gaps (#4: notes/, FRICTION.md, REDTEAM repros, checker-only rejection tests), exclusion false positives (#5), odd-root denominators (#9), 64-bit exponent fractions (#10).
+- B2 v1 limitations still to fix natively (each with a DIVERGENCES.md entry and a test): an integral at rounding level printing too many figures (RT7-5: use the quadrature's error estimate when printing), PDE accuracy right after a jump (RT7-2), significant figures of sums (D95: the decimal-place rule needs run-time magnitudes). Memory: done (lists are reference-counted).
 - Then B5 milestones in order; LLVM back end (inkwell) behind the Backend trait; B6/B7.
 
 ## Blocked

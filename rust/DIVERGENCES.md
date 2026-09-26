@@ -99,3 +99,10 @@ platforms; the conformance goldens come from Linux.
 - A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
 - Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
   deflate (round trip), LZW (round trip), labels and number format.
+
+## Lists are freed (spec B2; OPEN_ITEMS BL-9, BL-18)
+
+v1's compiled code never freed lists (a documented trap: a long loop that builds lists grows without bound).
+In the Rust implementation a list is a reference-counted value (`Rc<RefCell<Vec<f64>>>` in the tree-walker),
+freed when the last variable holding it goes away; list aliasing semantics (D26: `ys = xs` shares the list) are
+unchanged, so no program prints anything different.
