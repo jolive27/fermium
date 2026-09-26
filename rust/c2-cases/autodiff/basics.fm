@@ -1,0 +1,20 @@
+# Derivatives of functions written over several lines (spec §C2, automatic differentiation)
+speed(h) =
+    g = 9.81 m/s²
+    return √(2*g*h)
+print speed'(10 m)
+print d/dh speed
+print speed''(10 m)
+
+# a one-line function that calls a multi-line one, and d/dx of a formula
+q(x) = 2 speed(x) + x/(1 s)
+print q'(10 m)
+print d/dh (speed(h)²) where h = 3 m
+
+# partial derivatives
+E(M, v) =
+    kinetic = ½ M v²
+    potential = M * 9.81 m/s² * 2 m
+    kinetic + potential
+print ∂/∂v E(2 kg, 3 m/s), ∂/∂M E(2 kg, 3 m/s)
+print ∂²/∂v² E(2 kg, 3 m/s)

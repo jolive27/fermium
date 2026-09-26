@@ -51,14 +51,40 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   (v1 printed SymPy's `ln(1 + sin(x))/2 - ln(-1 + sin(x))/2`, which is NaN for every real x, so v1's formula
   was wrong physics) and `∫ 1/(x³ + 1) dx` writes one atan argument unfactored. With symbolic constants the
   formula can still be written differently (an equivalent expression; the values agree).
-- **Coverage vs v1:** SymPy's Risch-based integrator finds more antiderivatives (for example
-  `∫ exp(sin(x)) cos(x)²…` style mixtures, products of several transcendental functions, rational functions
-  with symbolic coefficients of degree > 2 in the denominator). For those v2 stops with
-  "Fermium couldn't find a formula for this integral" and the hint "give limits (from a to b) to compute it
-  numerically" (v1: "SymPy couldn't find a formula …" with the same hint). Integrals that need a special
-  function Fermium doesn't have keep v1's message word for word, so programs and tests see the same error:
-  "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)" (also Si,
-  Ci, Shi, Chi, li, erfi).
+- **Values: ln|u| where the formula prints ln(u)** (red team 11 #2, #3). SymPy's (and so v1's) formulas write
+  ln(u), which is NaN on one side of every real pole: v1's `∫ 1/(9 - x²) dx` gave NaN for F(1) − F(0), the side
+  where 1/(a² − x²) is usually used, and `∫ 1/(x - 5) dx` NaN for x < 5. v2 prints the same formula but evaluates
+  each logarithm that came from ∫ u'/u as ln|u|, which has the same derivative and differs only by a constant on
+  each interval, so F(b) − F(a) is the definite integral on either side (a logarithm that appears in the integrand
+  itself, as in ∫ ln x, stays ln(u)). When the constants have units (`a = 2 m`, `∫ 1/(x² - a²) dx`), v1's F
+  couldn't be called at all ("ln needs a plain number, but got length"); v2 evaluates a lone ln of a polynomial
+  u as ln|u/u(0)| when u(0) has units, and c ln u₁ − c ln u₂ as c ln|u₁/u₂|, again only a constant apart. Where
+  v1 printed NaN, v2 prints the number; no conformance case changes. Tests: `fermium-sym` test
+  `antiderivatives_are_real_on_both_sides_of_a_pole` and `fermium-cli/tests/antiderivative_values.rs` (both back
+  ends, each pole from both sides).
+- **Coverage vs v1** (measured with `rust/tools/calculus_diff.py`, which runs the same programs through both
+  implementations):
+  - 45 textbook integrands (`calculus_diff.py textbook`): 43 print exactly v1's formula; the other two are
+    `sec(x)` (v1's formula is NaN for every real x) and `1/(x³ + 1)` (one atan argument not factored).
+  - 158 random integrands built from x, powers, sin, cos, exp, ln, √, 1/x, 1/(x² + k²) with +, −, ×
+    (`calculus_diff.py antiderivatives 2 80` and `3 80`): 127 give exactly v1's output (formula and value).
+    Of the rest, most are the same function written differently (SymPy's grouping or factoring of long sums);
+    in one v1 stopped with an internal "both branches of an if-expression" error and v2 gives the formula.
+  - Red team 11 #5's single-function textbook cases now work and print v1's formula: `∫ x³ ln(x)² dx`,
+    `∫ x asin(x) dx`, `∫ 1/(x² √(x² + 1)) dx`, `∫ x²/√(4 - x²) dx`, `∫ 1/cosh(x) dx` (`2 atan(tanh(x/2))`),
+    `∫ 1/sinh(x) dx`; and a common factor of numerator and denominator is cancelled before partial fractions
+    (`∫ (x + 1)/(x² - 1) dx` is `ln(-1 + x)`, `∫ x/(x² - 4x + 3) dx` is `-ln(-1 + x)/2 + 1.5 ln(-3 + x)`, as v1).
+    `∫ 1/(x √(x² - 1)) dx`, which v1 refused, is `atan(√(-1 + x²))` (right for x < −1 and x > 1).
+  - What only v1 (SymPy's Risch, meijerg and heurisch methods) finds: products whose antiderivative needs erfc
+    or Meijer G functions (`√x · exp(−k x)`), roots over quadratics (`√x/(x² + k²)`, complex logarithms),
+    partial fractions with symbolic coefficients (`1/(x (x² + k²))`), and some long products of
+    exponentials and trigonometric functions of different frequencies. For those v2 stops with
+    "Fermium couldn't find a formula for this integral" and the hint "give limits (from a to b) to compute it
+    numerically" (v1: "SymPy couldn't find a formula …" with the same hint when SymPy also failed).
+  - Integrals that need a special function Fermium doesn't have keep v1's message word for word, so programs
+    and tests see the same error: "SymPy's formula for this integral uses the function Ei, which Fermium
+    doesn't have yet: Ei(2*x)" (Ei, Si, Ci, Shi, Chi, li, erfi; also for such a term inside a sum). Rarer ones
+    that SymPy names (fresnels, EulerGamma, exp_polar forms) get the generic message.
 - Tests: `fermium-sym/src/tests.rs` (`antiderivatives_print_like_v1`, `antiderivatives_are_right`,
   `non_elementary_integrals_are_refused`); conformance cases in `integrals/` (e.g. `cd3a0d2250de`,
   `ccf49cc58559`, `71a54bb44659`, `a5b1891791c9`).

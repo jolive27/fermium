@@ -494,6 +494,37 @@ print ∂/∂x V
 
 - **Sums** written in one line with `Σ(… for k from a to b)` are differentiated term by term (§9), so `f'` and `∇²φ` of a Fourier series work.
 
+### Preview (Fermium 2.5): derivatives of functions written over several lines
+
+Opt-in in the Rust compiler with the environment variable `FERMIUM_C2=1` (spec §C2; without it, and in
+Fermium 1.5, differentiating a multi-line function is an error). The derivative is computed by automatic
+differentiation: exact to rounding, like the symbolic one, but through assignments, `if`/`else`, `for` and
+`while` loops.
+
+```text
+root(a) =
+    r = a
+    for i from 1 to 30
+        r = (r + a/r)/2      # Newton's iteration for √a
+    r
+print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
+
+φ(x, y, z) =
+    r = √(x² + y² + z²)
+    k / r
+print ∇φ(1 m, 2 m, 2 m)      # ∇ and ∇² work too
+```
+
+- **All the forms work:** `f'`, `f''`, `d/dx f`, `∂/∂v E`, `∇φ`, `∇²φ`, and one-line functions or formulas that call
+  a multi-line function (`q(x) = 2 root(x) + x`, then `q'`).
+- **How:** each local variable `y` that depends on the variable gets a derivative `dy/dx`, updated just before `y`
+  by the chain rule (forward mode, as a source transformation), so the derivative runs the same loop iterations and
+  takes the same branches. A branch gives a piecewise derivative (`if x > 0 …`); a loop counter counts as a constant.
+- **Not differentiated:** `print` inside the function (the derivative doesn't print), lists whose elements depend on
+  the variable, and `solve`, `plot`, `fit` or `propagate` inside the function: those are errors that name the
+  statement. `∇·` and `∇×` still need a one-line vector formula.
+- **Printing** such a derivative shows `f'(x): a function defined over several lines`.
+
 ### Vector calculus: ∇
 
 ```fermium
