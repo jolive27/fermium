@@ -2471,6 +2471,8 @@ class Parser:
         if not (self.at_op("/") and self.at_op_at(self.i + 1, "(") and self._bracket_all_units(self.i + 1)):
             return
         k = self._match(self.i + 1)
+        if k is None:
+            return                       # an unclosed bracket: the parser reports it
         names = [tk for tk in self.toks[self.i + 2:k] if tk.kind == "NAME"]
         yours = [tk for tk in names if tk.value in self.known]
         if not yours or len(yours) == len(names):

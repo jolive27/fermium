@@ -135,3 +135,9 @@ def test_21_list_compound_unit_starting_with_your_variable():
 def test_15_integral_hint_is_valid_code():
     e = error_of("print ∫ 3 m/s ds from 0 to 2")
     assert "3 [m/s]" in e.hint and "ds]" not in e.hint
+
+
+def test_unclosed_bracket_after_a_number_is_a_message_not_a_crash():
+    # found by the fuzz test on macOS CI: `1 / (1i ω C  ν` crashed in the reciprocal-unit check
+    e = error_of("C = 10 μF\nω = 2 rad/s\nZ = 1 / (1i ω C  ν\n")
+    assert "internal error" not in e.message
