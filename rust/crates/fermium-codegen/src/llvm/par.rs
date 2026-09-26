@@ -34,7 +34,7 @@ fn assigned_expr(m: &Module, e: &Expr, out: &mut HashSet<SymId>) {
 }
 
 /// Every variable a block (re)binds.
-fn assigned(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
+pub(super) fn assigned(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
     for s in body {
         match &s.kind {
             StmtKind::Assign(sym, _) | StmtKind::ForIn(sym, _, _) => {

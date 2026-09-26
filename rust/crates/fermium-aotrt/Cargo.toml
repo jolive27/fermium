@@ -15,3 +15,5 @@ doctest = false
 [dependencies]
 fermium-codegen = { path = "../fermium-codegen", default-features = false }
 fermium-syntax = { path = "../fermium-syntax" }
+fermium-check = { path = "../fermium-check" }
+fermium-ir = { path = "../fermium-ir" }

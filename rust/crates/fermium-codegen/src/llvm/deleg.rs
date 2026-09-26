@@ -177,10 +177,16 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     fn delegate(&mut self, ptr: usize, is_stmt: bool, w: Walk, writes: Vec<SymId>, ret: Kind) -> R<Val<'c>> {
-        if self.aot.is_some() {
-            return Err("parts of this program run in the tree-walker (plot, fit, data, …), which an executable \
-                        doesn't carry yet".into());
-        }
+        // an executable finds the node by its position in the module it re-checks at start (blob: needs_ir)
+        let (ptr, node) = if self.aot.is_some() {
+            if self.node_ids.is_empty() {
+                self.node_ids = crate::native::delegate::nodes(self.m).iter().enumerate()
+                    .map(|(i, n)| (n.addr(), i as u32)).collect();
+            }
+            (0, *self.node_ids.get(&ptr).ok_or("a construct the tree-walker runs that isn't in the module")?)
+        } else {
+            (ptr, 0)
+        };
         if let Some(why) = w.blocked {
             return Err(format!("{why} inside a construct the tree-walker runs"));
         }
@@ -200,7 +206,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             kinds.push(k);
         }
         let (env, _) = self.build_env(&syms)?;
-        self.tables.interp_sites.push(InterpSite { ptr, is_stmt, syms: syms.iter().copied().zip(kinds).collect(),
+        self.tables.interp_sites.push(InterpSite { ptr, node, is_stmt, syms: syms.iter().copied().zip(kinds).collect(),
                                                    writes, ret });
         let site = self.tables.interp_sites.len() as i64 - 1;
         let outty: BasicTypeEnum = match ret {
