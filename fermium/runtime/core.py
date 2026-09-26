@@ -90,7 +90,8 @@ def format_written(x, sf, exact_items=False):
     that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
     if exact_items and x == x and abs(x) < 1e7 and x == int(x):
         return str(int(x))              # a whole number as written ([1.2345, 2], not 2.0000; red team round 4 #14)
-    if x == x and abs(x) < math.inf and x != 0 and float(f"{x:.{max(sf, 1) - 1}e}") != x:
+    # "exactly" up to rounding in the last bits: 1.20 mm is 1.2000000000000002 after the trip through metres (D242)
+    if x == x and abs(x) < math.inf and x != 0 and abs(float(f"{x:.{max(sf, 1) - 1}e}") - x) > 1e-13 * abs(x):
         return format_number(x, 15, trim=True)
     return format_number(x, sf, trim=False)
 
@@ -103,6 +104,8 @@ def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
             s = str(int(x)) if abs(x) < 1e15 and x == int(x) else format_number(x, 15, trim=True)
         else:
             s = format_default(x, DEFAULT_SF, whole_ok)
+    elif direct in (4, 5):                  # a loop variable over a written list (D242)
+        s = format_written(x, sf, direct == 5)
     else:
         s = format_number(x, sf if direct else max(sf, 2), trim=False)
     name = u.name

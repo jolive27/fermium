@@ -76,6 +76,8 @@ Brackets are always units: `3 [m/s]`, `x [m]`, and in a function parameter, `f(x
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
 
+- **Fractions:** `½ ⅓ ⅔ ¼ ¾ ⅕ ⅖ ⅗ ⅘ ⅙ ⅚ ⅐ ⅛ ⅜ ⅝ ⅞ ⅑ ⅒` are exact numbers and mean exactly the bracket `(1/2)`, `(1/3)`, …: `print ½` shows `0.500`, `½ kg` is 0.5 kg, and `½ m v²` with your mass m is ½·m·v² (DECISIONS D241). `fermium fmt --pretty` writes `(1/2)` as `½` (not in an exponent like `x^(1/3)`, and not `(0.5)`, which is a measured 0.5 with one significant figure); `--ascii` writes it back as `(1/2)`.
+
 Every value is stored in SI base units. **Units cost nothing at run time:** they are checked by the compiler and then erased.
 
 ## 3. Variables and formulas
@@ -129,7 +131,8 @@ print to(g, km/hr^2)
 - Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Texts are joined with `+` (`"3p" + "1/2"`), and `str(x)` shows a number as text, as print would (`"E = " + str(E)`); text can't be used in other arithmetic (D216).
 - `x in unit` shows a value in another unit. The units must measure the same kind of quantity.
 - Numbers are printed with sensible significant figures: the fewest significant figures of the inputs, but at least 2.
-- Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...).
+- Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...), including common products: `J s` for h, `J m` for h c (DECISIONS D240). For eV nm or MeV fm, ask: `print h c in eV nm` shows `1240 eV nm`. A torque written in `N m` stays in N m; a force times a length computed by the program is shown in J (it can't tell a torque from work), so write `in N m` for a torque.
+- A loop over a written-out list prints each element the way the list prints (`for E in [0.50 eV, 0.75 eV, 1 eV]` shows `0.50 eV`, `0.75 eV`, `1 eV`; D242).
 
 ## 5. Functions
 

@@ -70,7 +70,7 @@ def test_sigfigs_drive_printing():
 def test_scientific_notation_prints():
     assert run("x = 6.67×10⁻¹¹\nprint x") == "6.67×10⁻¹¹"
     assert run("print 3.00×10⁸ m/s") == "3.00×10⁸ m/s"
-    assert run("print ½") == "0.5"
+    assert run("print ½") == "0.500"        # exact, like (1/2): the 3-figure default (D11, D241; was 0.5)
 
 
 def test_huge_exponent_is_clean_error():

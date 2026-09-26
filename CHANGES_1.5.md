@@ -25,6 +25,16 @@ What that changes:
 - `4/3 π r³` asks whether you mean (4/3)·π or 4/(3π): write `(4/3) π r³`.
 - `h / m_e v` still means h/(m_e v): implicit multiplication still binds tighter than `/` when a name follows.
 
+## Printing (D240–D242)
+
+- `print h c` shows `1.99×10⁻²⁵ J m` instead of `1.99×10⁻²⁵ N m²` (an energy times a length). `print h c in eV nm` still shows `1240 eV nm`, and `in MeV fm` works too.
+- A torque you write in `N m` stays in N m. A force times a length that the program computes is shown in J (Fermium can't tell a torque from work); write `in N m` if you want N m.
+- `½`, `⅓` and the other fraction characters now mean exactly `(1/2)`, `(1/3)`, …: `print ½` shows `0.500` (it showed `0.5`), `print ⅓` shows `0.333` (it showed 15 digits), and `½ kg` is 0.5 kg (it was an error). New characters: ⅖ ⅗ ⅘ ⅚ ⅐ ⅜ ⅝ ⅞ ⅑ ⅒.
+- `for E in [0.50 eV, 0.75 eV, 1 eV]` prints `0.50 eV` (it lost the zero and printed `0.5 eV`): each element prints the way the whole list prints.
+- `[1.20 mm, 1.30 mm]` style lists keep their written zeros even after a unit conversion.
+
 ## Tools
+
+- `fermium fmt --pretty` writes `(1/2)` as `½` (and `(3/4)` as `¾`, and so on); `--ascii` writes it back. It leaves `x^(1/3)`, calls like `f(1/2)`, and `(0.5)` alone (0.5 is a measured value with one significant figure, ½ is exact).
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.

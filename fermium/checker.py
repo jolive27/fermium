@@ -895,6 +895,13 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         return len(self.tables.texts) - 1
 
     def fmt(self, v):
+        if v.direct in (4, 5) and isinstance(v.ty, NumTy) and v.sf is None:
+            ls = getattr(v, "list_sf", None)      # a loop variable over a written list (D242)
+            self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": ls, "direct": v.direct if ls else True,
+                                     "echo": getattr(v, "echo", True) and not self.nat.natural})
+            if self.nat is not SI:
+                self.tables.fmts[-1]["nat"] = self.nat
+            return len(self.tables.fmts) - 1
         self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct,
                                  "echo": getattr(v, "echo", True) and not self.nat.natural})
         if self.nat is not SI:
@@ -1335,9 +1342,18 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             src = src.a                  # [0.50, 0.75] eV (D192): the written list inside the unit
         sfs = {getattr(it, "sf", None) for it in getattr(src, "items", [None])}
         sym.sf = sfs.pop() if len(sfs) == 1 else None
-        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11)
+        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11) ...
         items = getattr(src, "items", None)
         sym.direct = sym.sf is None and bool(items) and all(getattr(it, "direct", False) for it in items)
+        # ... or rather as the list prints them, when their precisions differ (D242): with the list's fewest
+        # significant figures where that shows the element exactly ([0.50, 0.75, 1]: 0.50, 0.75, 1).  Display
+        # only (list_sf, direct 5 or 4: with or without exact whole items): values computed from the loop
+        # variable keep the old rule.
+        written = _written(items) if sym.direct else False
+        known = [x for x in (getattr(it, "sf", None) for it in items or []) if x is not None]
+        if written and known:
+            sym.list_sf = min(known)
+            sym.direct = 5 if written == 3 else 4
         sym.assigned = True
         ctx.loop += 1
         reg = self._enter_region(ctx, "for", s.line)
@@ -1430,7 +1446,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         else:
             r = I.IConst(e.value, NumTy(DIMLESS))
         r.sf = e.sigfigs
-        r.direct = True
+        # a digit literal prints as written; ½ and ⅓ are exact numbers like (1/2), so they print 0.500 and 0.333
+        # (D11's 3-figure default), not 0.5 and 0.333333333333333 (D241)
+        r.direct = e.digit
         return r
 
     def e_Str(self, e, ctx):
@@ -1502,7 +1520,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.ty = ty
         r.hint = u
         r.sf = v.sf
-        r.direct = isinstance(e.value, A.Num)
+        r.direct = isinstance(e.value, A.Num) and e.value.digit      # ½ kg prints like (1/2) kg (D241)
         if u.affine and isinstance(e.value, A.Num):
             r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
             r.abs_at = e                             # where it is written (the warning points there, #9)
@@ -1676,6 +1694,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.sf = sym.sf
         r.hint = sym.hint
         r.direct = sym.direct
+        if sym.direct in (4, 5):
+            r.list_sf = sym.list_sf                 # a loop variable over a written list (D242)
         r.tdelta = getattr(sym, "tdelta", False)
         return r
 
@@ -3429,6 +3449,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if not self.U.unify(v.ty.dim, u.dim):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e)
             v.hint = u
+            if v.direct in (4, 5):
+                v.direct = True
             return v
         if name in ("row", "column"):
             return self.row_column(name, e, ctx)
