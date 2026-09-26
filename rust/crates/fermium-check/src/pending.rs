@@ -36,9 +36,4 @@ impl Checker {
 }
 
 impl Checker {
-    /// err(g) of a parameter found by fit: its standard-error variable (the fit module); None: not a fitted
-    /// parameter.
-    pub fn fit_err(&mut self, _e: &A::Expr, _a0: Option<&A::Expr>, _ctx: &mut Ctx) -> Option<CResult<I::Expr>> {
-        None
-    }
 }

@@ -96,18 +96,6 @@ impl Checker {
         Ok(r)
     }
 
-    /// err(x): the standard error of a fitted parameter, or of any uncertain value in a program that uses them.
-    pub fn err_call(&mut self, e: &A::Expr, args: &[A::Expr], ctx: &mut Ctx) -> CResult<Checked> {
-        let a0 = if args.len() == 1 { Some(&args[0]) } else { None };
-        if let Some(r) = self.fit_err(e, a0, ctx) {
-            return r.map(Checked::Val);
-        }
-        if a0.is_some() && self.uses_unc {
-            return self.builtin("uncertainty", e, ctx); // err(x) of any uncertain value (D121)
-        }
-        Err(self.err("err(x) gives the standard error of a parameter found by fit, like err(g) after fit T = 2π √(L/g) \
-                      to data", e.span, None))
-    }
 
     /// propagate montecarlo [N samples] + formulas (D123).
     pub fn s_propagate(&mut self, s: &A::Stmt, samples: Option<&A::Expr>, body: &[A::Stmt], ctx: &mut Ctx)

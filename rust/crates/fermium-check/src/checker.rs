@@ -589,6 +589,7 @@ impl Checker {
             K::Fit { .. } => self.s_fit(s, ctx),
             K::Plot { .. } => self.s_plot(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
+            #[allow(unreachable_patterns)]
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }

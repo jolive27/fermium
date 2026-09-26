@@ -101,6 +101,7 @@ impl Checker {
             K::VecCalc { .. } => return self.e_veccalc(e, ctx),
             K::Integral { .. } => return self.e_integral(e, ctx),
             K::Sum { .. } => return self.e_sum(e, ctx),
+            #[allow(unreachable_patterns)]
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))
