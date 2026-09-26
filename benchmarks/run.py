@@ -92,9 +92,13 @@ def fermium_cmd():
     override = os.environ.get("FERMIUM_CMD")
     if override:
         return override.split()
-    exe = shutil.which("fermium")
+    exe = shutil.which("fermium")          # Fermium 2, the Rust binary (Fermium 1.5: FERMIUM_CMD=fermium-legacy)
     if exe:
         return [exe]
+    for profile in ("release", "fast"):       # or a build in this checkout (rust/BUILD.md)
+        built = ROOT / "rust" / "target" / profile / "fermium"
+        if built.exists():
+            return [str(built)]
     return None
 
 

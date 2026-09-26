@@ -1,5 +1,5 @@
 // Fermium for VS Code.
-// - With the language server (`fermium lsp`, needs `pip install pygls`): errors are underlined as
+// - With the language server (`fermium lsp`, built into the fermium binary): errors are underlined as
 //   you type, hovering over a name shows its units, and \name completes to a symbol.
 // - Without it, \name completion still works (\theta -> θ, \hbar -> ħ, \int -> ∫, \^2 -> ²).
 const vscode = require('vscode');
@@ -25,7 +25,7 @@ function startLanguageServer(context) {
   client.start().catch((err) => {
     vscode.window.showWarningMessage(
       `The Fermium language server didn't start (${err && err.message}). ` +
-      "Check that 'fermium' is on your PATH and pygls is installed (pip install pygls), " +
+      "Check that 'fermium' is on your PATH (fermium doctor checks the installation), " +
       'or set fermium.languageServer.command.');
   });
   context.subscriptions.push({ dispose: () => client && client.stop() });

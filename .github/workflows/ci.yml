@@ -17,8 +17,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Fermium 2 (the Rust binary in rust/) is `fermium` since v2.0. Fermium 1.5 (Python, legacy/) is deprecated but
+# stays in CI for one more phase (spec §B8, DECISIONS D269): it is the conformance oracle.
 jobs:
+  # Fermium 1.5 (legacy, deprecated): make check without its Rust part (FERMIUM_SKIP_RUST=1: the rust-linux job
+  # builds and tests the Rust compiler and runs the conformance suite against it).
   linux:
+    name: legacy (Fermium 1.5, deprecated), Linux
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -26,15 +31,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install (fresh, as a tester would)
+      - name: Install Fermium 1.5 (legacy; the console script is fermium-legacy)
         run: python3 -m pip install -e ".[full,dev]"
-      - run: fermium doctor
+      - run: fermium-legacy doctor
       - name: Julia packages for the rosetta comparisons (if the runner has Julia)
         run: if command -v julia >/dev/null; then julia -e 'using Pkg; Pkg.add(["Unitful", "QuadGK"])'; fi
-      - name: make check
+      - name: make check (legacy part; the Rust part runs in rust-linux)
         run: make check
+        env:
+          FERMIUM_SKIP_RUST: "1"
 
   rust-linux:
+    name: Fermium 2 (Rust), Linux
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -87,9 +95,11 @@ jobs:
           path: conformance-*.md
 
   # macOS jobs (Python and Rust): only on pull requests and hand-started runs, never on plain pushes (macOS minutes
-  # count 10x on this private repo). The Python job runs make check, which runs every program the conformance suite
-  # was harvested from (tests, examples, rosetta, gauntlet, research), so the legacy conformance run is Linux only.
+  # count 10x on this private repo). The legacy job runs make check (its legacy part), which runs every program the
+  # conformance suite was harvested from (tests, examples, rosetta, gauntlet, research), so the legacy conformance
+  # run is Linux only.
   macos:
+    name: legacy (Fermium 1.5, deprecated), macOS
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.macos)
     runs-on: macos-14
     timeout-minutes: 45
@@ -98,16 +108,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install (fresh, as a tester would)
+      - name: Install Fermium 1.5 (legacy; the console script is fermium-legacy)
         run: python3 -m pip install -e ".[full,dev]"
-      - run: fermium doctor
-      - name: make check
+      - run: fermium-legacy doctor
+      - name: make check (legacy part; the Rust part runs in rust-macos)
         run: make check
+        env:
+          FERMIUM_SKIP_RUST: "1"
 
   # The Rust compiler on macOS arm64. A separate job with the same gate as `macos`, so the two run side by side
   # (the same minutes, half the wall time, and neither hits its timeout). It runs the whole conformance suite
   # (about 12 minutes on the runner's 3 cores), not a subset.
   rust-macos:
+    name: Fermium 2 (Rust), macOS
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.macos)
     runs-on: macos-14
     timeout-minutes: 90
