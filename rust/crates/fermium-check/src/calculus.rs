@@ -624,7 +624,15 @@ impl Checker {
         let (lam, mut lctx, _) = self.scalar_lambda("integrand", var, ld.clone(), ctx);
         let body = self.expr(integrand, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("an integral of a complex function", e.span)),
+            Ty::Complex(_) => {
+                // a complex integrand: one integral for each part (D93)
+                let (var, lo, hi) = (var.clone(), Some(lo_e.clone()), Some(hi_e.clone()));
+                let make = move |part: A::Expr| {
+                    mk(A::ExprKind::Integral { integrand: Box::new(part), var: var.clone(), lo: lo.clone(),
+                                               hi: hi.clone() }, e.span)
+                };
+                return self.component_integral(e, integrand, ctx, &make);
+            }
             Ty::Vec { n, .. } => {
                 let n = *n;
                 return self.vector_integral(e, n, ctx).map(Checked::Val);
@@ -740,7 +748,14 @@ impl Checker {
         self.module.syms[ks].sf = None; // a count is exact
         let body = self.expr(body_e, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("a sum of complex numbers", e.span)),
+            Ty::Complex(_) => {
+                let (var, lo, hi, step) = (var.clone(), lo_e.clone(), hi_e.clone(), step.clone());
+                let make = move |part: A::Expr| {
+                    mk(A::ExprKind::Sum { body: Box::new(part), var: var.clone(), lo: lo.clone(), hi: hi.clone(),
+                                          step: step.clone() }, e.span)
+                };
+                return self.component_integral(e, body_e, ctx, &make);
+            }
             Ty::Vec { n, .. } => {
                 let mut comps = vec![];
                 for k in 0..*n {
