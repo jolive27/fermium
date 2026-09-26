@@ -124,6 +124,9 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
     let stdout = std::io::stdout();
     let mut printer = fermium_codegen::printer::StdPrinter::new(&module, std::io::BufWriter::new(stdout.lock()));
     let r = run_module(&module, &mut printer, backend);
+    if matches!(r, Err(Stop::Error(_))) {
+        fermium_codegen::eval::Printer::flush_partial(&mut printer);
+    }
     drop(printer);
     if o.time {
         // v1 splits the last stage into codegen, LLVM+JIT and run; here the back end's time is one number

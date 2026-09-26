@@ -84,12 +84,15 @@ async function main() {
     fs.mkdirSync(path.dirname(path.join(tmp, p)), { recursive: true });
     fs.writeFileSync(path.join(tmp, p), text);
   }
-  const counts = { same: 0, digits: 0, differ: 0, errors: 0 };
+  const counts = { same: 0, digits: 0, differ: 0, errors: 0, python: 0 };
   const differ = [];
   for (const g of ex.groups) {
     for (const it of g.items) {
       const title = `${g.group} / ${it.title}`;
       if (o.only && !title.includes(o.only)) continue;
+      // `use python` can't run in the browser (no Python there, by design) and natively depends on the machine's
+      // Python packages: not compared, counted apart
+      if (/^\s*use python/m.test(it.code)) { counts.python++; continue; }
       const dir = path.join(tmp, it.dir);
       fs.mkdirSync(dir, { recursive: true });
       const file = path.join(dir, "program.fm");
@@ -126,7 +129,8 @@ async function main() {
   fs.rmSync(tmp, { recursive: true, force: true });
   const total = counts.same + counts.digits + counts.differ;
   console.log(`${total} examples: ${counts.same} identical, ${counts.digits} differ only in digits beyond the 12th or in the listed math-library cases, ` +
-              `${counts.differ} differ (wasm ${path.relative(ROOT, wasm)} vs ${o.bin}); ${counts.errors} end with an error`);
+              `${counts.differ} differ (wasm ${path.relative(ROOT, wasm)} vs ${o.bin}); ${counts.errors} end with an error; ` +
+              `${counts.python} use python (not compared: no Python in the browser)`);
   process.exitCode = counts.differ ? 1 : 0;
 }
 

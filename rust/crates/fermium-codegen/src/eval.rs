@@ -92,6 +92,9 @@ pub trait Printer {
     fn text(&mut self, s: &str);
     fn textlist(&mut self, v: &[Rc<str>]);
     fn end(&mut self);
+    /// After a run-time error in the middle of a print: end the line with the items printed so far, as v1 does
+    /// (`print "a", xs[5]` prints `a`); nothing when no item was printed.
+    fn flush_partial(&mut self) {}
 }
 
 // ---------------------------------------------------------------- IEEE-style arithmetic (interp.py helpers)
