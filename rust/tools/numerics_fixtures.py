@@ -341,7 +341,56 @@ name x warn(nan = none) brentq(nan = n/a)   or   name ERR kind a b""")
     w.close()
 
 
-SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots}
+# --------------------------------------------------------------------------------------- eigen
+# v1's eigen_solve (fermium/runtime/eigen.py over SciPy eigh_tridiagonal / solve_banded / brentq).
+# psi'' as a function of (x, psi, E); the same in tests/eigen.rs (by name).
+def _fwell(x):
+    return 0.0 if abs(x) < 1.0 else 50.0
+
+
+EIGEN_CASES = [
+    # name, psi''(x, p, E), a, b, N, grid
+    ("harmonic", lambda x, p, E: (x * x - 2.0 * E) * p, -10.0, 10.0, 4, 2000),
+    ("box", lambda x, p, E: -2.0 * E * p, 0.0, 1.0, 3, 1000),
+    ("finite_well", lambda x, p, E: 2.0 * (_fwell(x) - E) * p, -4.0, 4.0, 3, 2000),
+    ("coulomb", lambda x, p, E: (-2.0 / x - 2.0 * E) * p, 0.0, 60.0, 3, 4000),
+    ("double_well", lambda x, p, E: 2.0 * (10.0 * (x * x - 4.0) * (x * x - 4.0) - E) * p, -5.0, 5.0, 2, 2000),
+    ("tilted_double", lambda x, p, E: 2.0 * (10.0 * (x * x - 4.0) * (x * x - 4.0) + 1e-9 * x - E) * p, -5.0, 5.0, 2,
+     2000),
+    ("morse", lambda x, p, E: 2.0 * (8.0 * (1.0 - exp(-(x - 1.0))) * (1.0 - exp(-(x - 1.0))) - E) * p, 0.0, 12.0, 3,
+     3000),
+]
+EIGEN_SAMPLES = [0.13, 0.31, 0.5, 0.62, 0.87]
+
+
+def gen_eigen():
+    from fermium.runtime.eigen import eigen_solve, EigenFail
+    w = Writer("eigen.txt", """
+v1's eigenvalue problems (fermium.runtime.eigen.eigen_solve), per method (matrix, shooting).
+name/method N E1..EN [psi_k(x_i) psi_k'(x_i) at i = round(f*(len-1)) for f in EIGEN_SAMPLES, k = 1..N] nwarn warn_k warn_rel""")
+    for method in ("matrix", "shooting"):
+        for name, f2, a, b, N, grid in EIGEN_CASES:
+            key = f"{name}/{method}"
+            warns = []
+            try:
+                xs, ys, dys, E = eigen_solve(lambda x, y: [y[1], f2(x, y[0], y[2]), 0.0], a, b, N, grid, method,
+                                             warn=lambda k, rel: warns.append((k, rel)))
+            except EigenFail as fl:
+                w.row(key, "ERR", fl.message.replace(" ", "_"))
+                continue
+            ncol = 3 * N
+            vals = [float(N)] + E
+            for k in range(N):
+                for fr in EIGEN_SAMPLES:
+                    i = int(round(fr * (len(xs) - 1)))
+                    vals += [ys[i * ncol + 2 * k], ys[i * ncol + 2 * k + 1]]
+            vals += [float(len(warns))] + (list(warns[0]) if warns else [0.0, 0.0])
+            w.row(key, *vals)
+    w.close()
+
+
+SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
+            "eigen": gen_eigen}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
