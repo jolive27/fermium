@@ -45,6 +45,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
         Ty::Mat { r, c, .. } => Kind::V(r * c),
         Ty::Complex(_) => Kind::V(2),
         Ty::Void => Kind::Void,
+        Ty::Sol(_) => Kind::H,
         other => return Err(format!("values of type {} aren't compiled yet", other.kind())),
     })
 }
@@ -55,6 +56,7 @@ pub struct Tables {
     pub texts: Vec<Rc<str>>,
     pub builtins: Vec<BuiltinSite>,
     pub mvec_fmts: Vec<Vec<usize>>,
+    pub ode_sites: Vec<crate::llvm::solve_rt::OdeSite>,
 }
 
 #[derive(Clone, Copy)]
@@ -179,6 +181,21 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_par_run", None, &[p, p, p, i, f, f, p, i], rt::fm_par_run as *const () as usize, false);
         self.declare("fm_quad", Some(f), &[p, p, p, f, f, f, f, i, i32t], rt::fm_quad as *const () as usize, false);
         self.declare("fm_root", Some(f), &[p, p, p, p, p, f, f, i, i32t], rt::fm_root as *const () as usize, false);
+        {
+            use crate::llvm::solve_rt as s;
+            self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t], s::fm_ode as *const () as usize, false);
+            self.declare("fm_eigen", Some(i), &[p, i, p, p, f, f, i32t], s::fm_eigen as *const () as usize, false);
+            self.declare("fm_pde", Some(i), &[p, i, p, p, f, f, f, f, f, i32t], s::fm_pde as *const () as usize, false);
+            self.declare("fm_sol_eval", Some(f), &[p, i, i, f, i32t, i, i32t], s::fm_sol_eval as *const () as usize, false);
+            self.declare("fm_sol_eval_list", Some(p), &[p, i, i, p, i32t, i, i32t], s::fm_sol_eval_list as *const () as usize,
+                         false);
+            self.declare("fm_sol_list", Some(p), &[p, i, i, i], s::fm_sol_list as *const () as usize, false);
+            self.declare("fm_sol_extreme", Some(f), &[p, i, i, f], s::fm_sol_extreme as *const () as usize, false);
+            self.declare("fm_pde_eval", Some(f), &[p, i, i, i, f, f, i, i, i, i32t], s::fm_pde_eval as *const () as usize,
+                         false);
+            self.declare("fm_odelin", Some(i32t), &[i, p, p, p], s::fm_odelin as *const () as usize, false);
+            self.declare("fm_solve_error", None, &[p, i, f, f, i, i32t], s::fm_solve_error as *const () as usize, false);
+        }
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
@@ -220,7 +237,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         match k {
             Kind::F => self.f64t().into(),
             Kind::B => self.cx.bool_type().into(),
-            Kind::S => self.cx.i64_type().into(),
+            Kind::S | Kind::H => self.cx.i64_type().into(),
             Kind::L | Kind::TL => self.ptrt().into(),
             Kind::V(n) => self.f64t().array_type(n as u32).into(),
             Kind::Void => self.cx.i8_type().into(),
@@ -231,7 +248,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         Some(match k {
             Kind::F => self.nan().into(),
             Kind::B => self.cx.bool_type().const_zero().into(),
-            Kind::S => self.cx.i64_type().const_zero().into(),
+            Kind::S | Kind::H => self.cx.i64_type().const_zero().into(),
             Kind::L | Kind::TL => self.ptrt().const_null().into(),
             Kind::V(n) => {
                 let nan = self.nan();
@@ -297,17 +314,43 @@ impl<'c, 'm> Gen<'c, 'm> {
         Ok(bl!(eb.build_alloca(ty, name)))
     }
 
+    // ------------------------------------------------------------ type-based alias analysis
+    /// The TBAA access tag of one kind of memory: "var" (variable slots), "elem" (list elements), "hdr" (list
+    /// headers), "line" (fm.line), "flag" (the error flag), "env" (env arrays). They never overlap, so a store to
+    /// a list element doesn't make LLVM reload variables or list lengths (loops keep them in registers).
+    fn tbaa(&self, name: &str) -> inkwell::values::MetadataValue<'c> {
+        let i64t = self.cx.i64_type();
+        let root = self.cx.metadata_node(&[self.cx.metadata_string("fermium tbaa").into()]);
+        let ty = self.cx.metadata_node(&[self.cx.metadata_string(name).into(), root.into(), i64t.const_zero().into()]);
+        self.cx.metadata_node(&[ty.into(), ty.into(), i64t.const_zero().into()])
+    }
+
+
+    pub(super) fn ld(&self, ty: impl BasicType<'c>, p: PointerValue<'c>, name: &str, tag: &str) -> R<BasicValueEnum<'c>> {
+        let v = bl!(self.b.build_load(ty, p, name));
+        if let Some(i) = v.as_instruction_value() {
+            let _ = i.set_metadata(self.tbaa(tag), self.cx.get_kind_id("tbaa"));
+        }
+        Ok(v)
+    }
+
+    pub(super) fn st(&self, p: PointerValue<'c>, v: impl BasicValue<'c>, tag: &str) -> R<()> {
+        let i = bl!(self.b.build_store(p, v));
+        let _ = i.set_metadata(self.tbaa(tag), self.cx.get_kind_id("tbaa"));
+        Ok(())
+    }
+
     // ------------------------------------------------------------ lines and errors
     fn set_line(&mut self, line: u32) -> R<()> {
         if line != 0 && self.known_line != Some(line) {
-            bl!(self.b.build_store(self.line_g.as_pointer_value(), self.i32c(line as i64)));
+            self.st(self.line_g.as_pointer_value(), self.i32c(line as i64), "line")?;
             self.known_line = Some(line);
         }
         Ok(())
     }
 
     fn line_val(&mut self) -> R<IntValue<'c>> {
-        Ok(bl!(self.b.build_load(self.cx.i32_type(), self.line_g.as_pointer_value(), "line")).into_int_value())
+        Ok(self.ld(self.cx.i32_type(), self.line_g.as_pointer_value(), "line", "line")?.into_int_value())
     }
 
     /// Stop with a run-time error unless `ok`.
@@ -327,7 +370,7 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     /// After a call that may have stopped the program: return if the context's error flag is set.
     fn check_err(&mut self) -> R<()> {
-        let flag = bl!(self.b.build_load(self.cx.i32_type(), self.ctx_ptr, "err")).into_int_value();
+        let flag = self.ld(self.cx.i32_type(), self.ctx_ptr, "err", "flag")?.into_int_value();
         let bad = bl!(self.b.build_int_compare(IntPredicate::NE, flag, self.cx.i32_type().const_zero(), "bad"));
         let cont = self.new_bb("ok");
         self.cold_br(bad, self.err_bb.unwrap(), cont)?;
@@ -382,7 +425,7 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     fn load_var(&mut self, sym: SymId) -> R<Val<'c>> {
         let (p, k) = self.slot(sym)?;
-        let v = bl!(self.b.build_load(self.llty(k), p, &self.m.syms[sym].name));
+        let v = self.ld(self.llty(k), p, &self.m.syms[sym].name, "var")?;
         Ok(Val { k, v: Some(v) })
     }
 
@@ -390,7 +433,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let (p, k) = self.slot(sym)?;
         let v = self.coerce(v, k)?;
         if let Some(x) = v.v {
-            bl!(self.b.build_store(p, x));
+            self.st(p, x, "var")?;
         }
         Ok(())
     }
@@ -539,6 +582,11 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     // ------------------------------------------------------------ module
     pub fn compile_module(&mut self) -> R<()> {
+        // uncertain values (±, propagate montecarlo) run in the tree-walker, as v1 runs them in its interpreter
+        // (D122): every value may carry an uncertainty there, which the compiled code's f64 can't
+        if self.m.uses_uncertainty {
+            return Err("uncertain values (±) aren't compiled".into());
+        }
         let m = self.m;
         for (fid, f) in m.funcs.iter().enumerate() {
             let mut params: Vec<BasicMetadataTypeEnum> = vec![];
@@ -668,18 +716,18 @@ impl<'c, 'm> Gen<'c, 'm> {
                 if k != Kind::L {
                     return Err("index assignment to a non-list".into());
                 }
-                let l = bl!(self.b.build_load(self.ptrt(), p, "l")).into_pointer_value();
+                let l = self.ld(self.ptrt(), p, "l", "var")?.into_pointer_value();
                 let iv = self.expr(idx)?;
                 let i = self.to_f(iv)?;
                 let ep = self.list_elem_ptr(l, i)?;
                 let vv = self.expr(value)?;
                 let v = self.to_f(vv)?;
-                bl!(self.b.build_store(ep, v));
+                self.st(ep, v, "elem")?;
             }
             StmtKind::Push(sym, e) => {
                 let v = self.expr(e)?;
                 let (p, k) = self.slot(*sym)?;
-                let l = bl!(self.b.build_load(self.ptrt(), p, "l"));
+                let l = self.ld(self.ptrt(), p, "l", "var")?;
                 match (k, v.k) {
                     (Kind::L, Kind::F) => {
                         self.call("fm_list_push", &[l, v.v.unwrap()])?;
@@ -695,7 +743,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             StmtKind::Clear(sym) => {
                 let (p, k) = self.slot(*sym)?;
-                let l = bl!(self.b.build_load(self.ptrt(), p, "l"));
+                let l = self.ld(self.ptrt(), p, "l", "var")?;
                 match k {
                     Kind::L => self.call("fm_list_clear", &[l])?,
                     Kind::TL => self.call("fm_tlist_clear", &[l])?,
@@ -776,7 +824,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 self.guard(t, rt::E_ASSERT, a, z)?;
             }
             StmtKind::Plot(..) => return Err("plot isn't compiled yet".into()),
-            StmtKind::Solve { .. } => return Err("solve isn't compiled yet".into()),
+            StmtKind::Solve { .. } => self.solve_stmt(s)?,
             StmtKind::Fit { .. } => return Err("fit isn't compiled yet".into()),
             StmtKind::Animate { .. } => return Err("animate isn't compiled yet".into()),
             StmtKind::Propagate { .. } => return Err("propagate isn't compiled yet".into()),
@@ -874,7 +922,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let (data, len) = self.list_parts(cp)?;
                 self.counted_loop(len, body, |g, i| {
                     let ep = unsafe { bl!(g.b.build_gep(g.f64t(), data, &[i], "ep")) };
-                    let x = bl!(g.b.build_load(g.f64t(), ep, "x")).into_float_value();
+                    let x = g.ld(g.f64t(), ep, "x", "elem")?.into_float_value();
                     g.store_var(sym, fv(x))
                 })
             }
@@ -900,9 +948,9 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     fn list_parts(&mut self, l: PointerValue<'c>) -> R<(PointerValue<'c>, IntValue<'c>)> {
-        let data = bl!(self.b.build_load(self.ptrt(), l, "data")).into_pointer_value();
+        let data = self.ld(self.ptrt(), l, "data", "hdr")?.into_pointer_value();
         let lenp = unsafe { bl!(self.b.build_gep(self.cx.i8_type(), l, &[self.i64c(8)], "lenp")) };
-        let len = bl!(self.b.build_load(self.cx.i64_type(), lenp, "len")).into_int_value();
+        let len = self.ld(self.cx.i64_type(), lenp, "len", "hdr")?.into_int_value();
         Ok((data, len))
     }
 
@@ -915,16 +963,26 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     /// Check a 1-based index against a length (eval list_index); the 0-based position.
     fn index_check(&mut self, i: FloatValue<'c>, len: IntValue<'c>) -> R<IntValue<'c>> {
+        // valid iff 1 <= i <= n and i is whole (eval elem_index), computed on integers: k = the saturated
+        // conversion of i is exact only for a whole i (NaN gives 0), and 1 <= k <= n is one unsigned compare
+        let k = self.fptosi_sat(i)?;
+        let back = bl!(self.b.build_signed_int_to_float(k, self.f64t(), "back"));
+        let whole = bl!(self.b.build_float_compare(FloatPredicate::OEQ, back, i, "whole"));
+        let k0 = bl!(self.b.build_int_sub(k, self.i64c(1), "k0"));
+        let inside = bl!(self.b.build_int_compare(IntPredicate::ULT, k0, len, "inside"));
+        let ok = bl!(self.b.build_and(whole, inside, "ok"));
+        let fail = self.new_bb("fail");
+        let cont = self.new_bb("ok");
+        let notok = bl!(self.b.build_not(ok, "notok"));
+        self.cold_br(notok, fail, cont)?;
+        self.b.position_at_end(fail);
         let n = bl!(self.b.build_unsigned_int_to_float(len, self.f64t(), "n"));
-        let ge1 = bl!(self.b.build_float_compare(FloatPredicate::OGE, i, self.fconst(1.0), "ge1"));
-        let len_ok = bl!(self.b.build_float_compare(FloatPredicate::OLE, i, n, "len"));
-        let fl = self.intrinsic("llvm.floor", &[i])?;
-        let whole = bl!(self.b.build_float_compare(FloatPredicate::OEQ, fl, i, "whole"));
-        let ok = bl!(self.b.build_and(ge1, len_ok, "ok"));
-        let ok = bl!(self.b.build_and(ok, whole, "ok"));
-        self.guard(ok, rt::E_INDEX, i, n)?;
-        let k = bl!(self.b.build_float_to_unsigned_int(i, self.cx.i64_type(), "k"));
-        Ok(bl!(self.b.build_int_sub(k, self.i64c(1), "k0")))
+        let line = self.line_val()?;
+        let ctx = self.ctx_ptr;
+        self.call("fm_error", &[ctx.into(), self.i64c(rt::E_INDEX).into(), i.into(), n.into(), line.into()])?;
+        bl!(self.b.build_unconditional_branch(self.err_bb.unwrap()));
+        self.b.position_at_end(cont);
+        Ok(k0)
     }
 
     fn print(&mut self, items: &[PrintItem]) -> R<()> {
@@ -1203,7 +1261,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let cs = bl!(self.b.build_call(self.funcs[*f], &vals, "call"));
                 self.check_err()?;
                 // eval.rs call(): later errors in the caller are on its own line
-                bl!(self.b.build_store(self.line_g.as_pointer_value(), saved));
+                self.st(self.line_g.as_pointer_value(), saved, "line")?;
                 Val { k: rk, v: cs.try_as_basic_value().left() }
             }
             ExprKind::List(items) if matches!(e.ty, Ty::TextList) => {
@@ -1266,7 +1324,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 match lv.k {
                     Kind::L => {
                         let ep = self.list_elem_ptr(lv.v.unwrap().into_pointer_value(), i)?;
-                        fv(bl!(self.b.build_load(self.f64t(), ep, "x")).into_float_value())
+                        fv(self.ld(self.f64t(), ep, "x", "elem")?.into_float_value())
                     }
                     Kind::TL => {
                         let len = self.call("fm_tlist_len", &[lv.v.unwrap()])?.unwrap().into_int_value();
@@ -1279,6 +1337,8 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             ExprKind::Builtin(name, args) => self.builtin(e, name, args)?,
             ExprKind::Integral { .. } | ExprKind::Sum { .. } | ExprKind::Root { .. } => self.calculus(e)?,
+            ExprKind::SolEval { .. } | ExprKind::SolList { .. } | ExprKind::PdeEval { .. }
+            | ExprKind::OdeLinSolve { .. } => self.solution_expr(e)?,
             other => return Err(format!("{} isn't compiled yet", expr_name(other))),
         })
     }
@@ -1343,6 +1403,16 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     fn builtin(&mut self, e: &Expr, name: &str, args: &[Expr]) -> R<Val<'c>> {
+        // max / min of a solution component: refined between the steps (eval_solve sol_extreme), args unevaluated
+        if let ([a], "max_list" | "min_list") = (args, name) {
+            if let ExprKind::SolList { sol, comp, what: 0 } = &a.kind {
+                let v = self.load_var(*sol)?;
+                let sg = self.fconst(if name == "max_list" { 1.0 } else { -1.0 });
+                let ctx: BasicValueEnum = self.ctx_ptr.into();
+                return Ok(fv(self.fcall("fm_sol_extreme", &[ctx, v.v.unwrap(), self.i64c(*comp as i64).into(),
+                                                            sg.into()])?));
+            }
+        }
         let mut vals = Vec::with_capacity(args.len());
         for a in args {
             vals.push(self.expr(a)?);
@@ -1419,7 +1489,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         // anything else: the tree-walker's own implementation, through a callback
         let ret = kind_of(&e.ty)?;
         let kinds: Vec<Kind> = vals.iter().map(|v| v.k).collect();
-        if kinds.iter().any(|k| *k == Kind::Void) {
+        if kinds.iter().any(|k| matches!(k, Kind::Void | Kind::H)) || ret == Kind::H {
             return Err(format!("built-in {name} with an argument without a value"));
         }
         self.tables.builtins.push(BuiltinSite { name: name.to_string(), args: kinds, ret });
@@ -1437,7 +1507,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                     let p = self.spill(*v)?;
                     bl!(self.b.build_ptr_to_int(p, i64t, "p"))
                 }
-                Kind::Void => unreachable!(),
+                Kind::Void | Kind::H => unreachable!(),
             };
             let sp = unsafe { bl!(self.b.build_gep(i64t.array_type(n), argp, &[self.i64c(0), self.i64c(i as i64)], "a")) };
             bl!(self.b.build_store(sp, slot));
@@ -1497,3 +1567,5 @@ fn expr_name(k: &ExprKind) -> &'static str {
 mod par;
 #[path = "lam.rs"]
 mod lam;
+#[path = "ode.rs"]
+mod ode;

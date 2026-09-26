@@ -56,7 +56,8 @@ fn assigned(m: &Module, body: &[Stmt], out: &mut HashSet<SymId>) {
 }
 
 fn used_expr(m: &Module, e: &Expr, out: &mut HashSet<SymId>) {
-    if let ExprKind::Var(s) = e.kind {
+    if let ExprKind::Var(s) | ExprKind::SolEval { sol: s, .. } | ExprKind::SolList { sol: s, .. }
+    | ExprKind::PdeEval { sol: s, .. } = e.kind {
         out.insert(s);
     }
     if let Some(l) = lambda_of(e) {
@@ -125,7 +126,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             let (p, k) = self.slot(*s)?;
             env_kinds.push(k);
             let at = unsafe { bl!(self.b.build_gep(ptrt.array_type(nenv), env, &[self.i64c(0), self.i64c(i as i64)], "e")) };
-            bl!(self.b.build_store(at, p));
+            self.st(at, p, "env")?;
         }
         // the body function
         let nr = info.reductions.len();
@@ -196,7 +197,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let st = pf.get_nth_param(5).unwrap().into_float_value();
         for (i, (s, k)) in env_syms.iter().zip(env_kinds).enumerate() {
             let at = unsafe { bl!(self.b.build_gep(ptrt.array_type(nenv), env, &[self.i64c(0), self.i64c(i as i64)], "e")) };
-            let p = bl!(self.b.build_load(ptrt, at, "ep")).into_pointer_value();
+            let p = self.ld(ptrt, at, "ep", "env")?.into_pointer_value();
             self.overrides.insert(*s, (p, *k));
         }
         let mut own: Vec<SymId> = own.iter().copied().collect();
@@ -212,7 +213,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 Kind::F => self.fconst(0.0).as_basic_value_enum(),
                 _ => ty.const_zero(),
             };
-            bl!(self.b.build_store(p, zero));
+            self.st(p, zero, "var")?;
             self.overrides.insert(s, (p, k));
         }
         // iterations first..end

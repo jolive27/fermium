@@ -86,6 +86,8 @@ pub enum Kind {
     TL,
     /// n f64 (vectors, matrices row by row, complex numbers as re, im)
     V(usize),
+    /// a solution made by the compiled code (an index into `Ctx::sols`, i64)
+    H,
     Void,
 }
 
@@ -122,6 +124,8 @@ pub struct Ctx<'m> {
     pub interp: Interpreter<'m, NullPrinter>,
     pub builtins: Vec<BuiltinSite>,
     pub mvec_fmts: Vec<Vec<usize>>,
+    pub ode_sites: Vec<super::solve_rt::OdeSite>,
+    pub sols: Vec<super::solve_rt::CSol>,
     /// taken by callbacks that change shared state (parallel for runs iterations on several threads)
     lock: Mutex<()>,
 }
@@ -140,6 +144,8 @@ impl<'m> Ctx<'m> {
             interp: Interpreter::new(module, NullPrinter),
             builtins: vec![],
             mvec_fmts: vec![],
+            ode_sites: vec![],
+            sols: vec![],
             lock: Mutex::new(()),
         })
     }
@@ -161,7 +167,7 @@ impl<'m> Ctx<'m> {
         self.texts.len() as i64 - 1
     }
 
-    fn fail(&mut self, e: RunError) {
+    pub(super) fn fail(&mut self, e: RunError) {
         if self.error.is_none() {
             self.error = Some(e);
         }
@@ -196,7 +202,7 @@ impl<'m> Ctx<'m> {
                 None => Value::Void,
             },
             Kind::V(n) => Value::Vec(Rc::new(std::slice::from_raw_parts(slot as *const f64, n).to_vec())),
-            Kind::Void => Value::Void,
+            Kind::H | Kind::Void => Value::Void,
         }
     }
 
@@ -241,6 +247,7 @@ impl<'m> Ctx<'m> {
                     *o.add(i) = src.get(i).copied().unwrap_or(f64::NAN);
                 }
             }
+            Kind::H => *out = 0,
             Kind::Void => {}
         }
     }
@@ -276,11 +283,11 @@ impl Drop for Ctx<'_> {
     }
 }
 
-type C<'a> = *mut Ctx<'a>;
+pub(super) type C<'a> = *mut Ctx<'a>;
 
 /// Run `f` on the context holding its lock (callbacks that allocate or change shared state: parallel for runs
 /// iterations on several threads).
-fn locked<'a, R>(c: C<'a>, f: impl FnOnce(&mut Ctx<'a>) -> R) -> R {
+pub(super) fn locked<'a, R>(c: C<'a>, f: impl FnOnce(&mut Ctx<'a>) -> R) -> R {
     let lock: *const Mutex<()> = unsafe { &(*c).lock };
     let _g = unsafe { (*lock).lock().unwrap_or_else(|e| e.into_inner()) };
     f(unsafe { &mut *c })
@@ -385,6 +392,10 @@ pub extern "C" fn fm_print_end(c: C) {
 }
 
 // ---------------------------------------------------------------- lists
+/// A new list holding v (for other run-time modules).
+pub(super) fn fm_list_from(c: C, v: Vec<f64>) -> *mut FmList {
+    locked(c, |c| c.new_list(v))
+}
 pub extern "C" fn fm_list_new(c: C, cap: i64) -> *mut FmList {
     locked(c, |c| c.new_list(Vec::with_capacity(cap.max(0) as usize)))
 }
@@ -661,7 +672,17 @@ pub extern "C" fn fm_builtin(c: C, site: i64, args: *const u64, out: *mut u64, l
         let vals: Vec<Value> = kinds.iter().enumerate().map(|(i, k)| unsafe { c.to_value(*k, *args.add(i)) }).collect();
         c.interp.line = line.max(0) as u32;
         match c.interp.builtin(&name, vals) {
-            Ok(v) => unsafe { c.from_value(ret, v, out) },
+            Ok(v) if kind_matches(ret, &v) => unsafe { c.from_value(ret, v, out) },
+            Ok(v) => {
+                // never convert silently: the compiled code expected another kind of value
+                if !matches!(ret, Kind::V(_) | Kind::Void) {
+                    unsafe { *out = 0 };
+                }
+                let line = line.max(0) as u32;
+                c.fail(RunError { message: format!("internal error in the LLVM back end: the built-in {name} gave \
+                                                    {v:?} where a {ret:?} value was expected (run with --backend \
+                                                    interp)"), line, hint: None })
+            }
             Err(e) => {
                 if !matches!(ret, Kind::V(_) | Kind::Void) {
                     unsafe { *out = 0 };
@@ -670,6 +691,18 @@ pub extern "C" fn fm_builtin(c: C, site: i64, args: *const u64, out: *mut u64, l
             }
         }
     })
+}
+
+/// Does a built-in's result fit the kind the compiled code expects (as the tree-walker would go on using it)?
+fn kind_matches(k: Kind, v: &Value) -> bool {
+    match (k, v) {
+        (Kind::F, Value::Num(_) | Value::Bool(_) | Value::Void) => true,
+        (Kind::B, Value::Bool(_) | Value::Num(_)) => true,
+        (Kind::S, Value::Str(_)) | (Kind::L, Value::List(_)) | (Kind::TL, Value::TextList(_)) => true,
+        (Kind::V(n), Value::Vec(x)) => x.len() == n,
+        (Kind::Void, _) => true,
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------- math: the same Rust functions eval.rs uses
