@@ -86,7 +86,10 @@ fn uncertain_values_where_plain_numbers_are_needed() {
     let generic = "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the \
                    uncertainty, or put the calculation in a  propagate montecarlo  block";
     for (k, body) in ["print xs[i]", "print xs[i:3]", "xs[i] = 7", "for k from 1 to i\n    print k", "print v[i]",
-                      "print Σ(k^2 for k from 1 to i)", "print ys[i]"].iter().enumerate() {
+                      "print Σ(k^2 for k from 1 to i)", "print ys[i]", "d = table(a = xs, b = ys)"]
+        .iter()
+        .enumerate()
+    {
         let src = format!("xs = [1, 2, 3]\nys = [1, 2, 3] ± 0.1\nv = <1, 2, 3>\ni = 2.0 ± 0.1\n{body}\n");
         assert_eq!(error_of(&format!("plain{k}"), &src), format!("prog.fm, line 5: {generic}"), "{body}");
     }
