@@ -176,10 +176,14 @@ or a quantity found by cancellation). What differs, in the browser only:
 
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
-- Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
+- Radau/BDF: LAPACK's LU and OpenBLAS's products modelled with their rounding (`numerics/npblas.rs`), so
+  Radau's steps are v1's step for step. BDF's step-size factors use `error_norms ** (-1/k)`, which
+  NumPy evaluates with its vectorised pow (not libm's; it differs in the last bit about 5% of the time),
+  so a long BDF solve can drift from v1 at the rounding level.
 - Fit: MINPACK lmder port with our QR; parameters agree with SciPy to 1e-9, standard errors to 2e-8.
-- Eigenvalues (matrix method): Sturm bisection + inverse iteration instead of LAPACK stebz/stein;
-  energies agree to 4e-12 relative.
+- Eigenvalues (matrix method): LAPACK dstebz/dstein, dgbtf2/dgbtrs and the BLAS calls are transcribed,
+  so energies and eigenfunctions are v1's to the last bit, except after the near-degenerate-pair fix,
+  which uses a 2×2 eigenproblem instead of NumPy's SVD (last-digit differences in ψ).
 - FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
 - PDE: a tridiagonal LU instead of SuperLU; 3e-13.
 
