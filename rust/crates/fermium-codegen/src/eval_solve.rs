@@ -186,6 +186,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// Evaluate an ODE-kind lambda at (t, y) into out (the compiled lambda's calling convention).
     pub(crate) fn ode_call(&mut self, lam: &Lambda, t: f64, y: &[f64], out: &mut [f64], fr: &mut Frame)
                            -> Result<(), RunError> {
+        // repeated pure calls within this evaluation are computed once (eval_memo.rs, D268)
+        let saved = self.memo_begin();
+        let r = self.ode_call_inner(lam, t, y, out, fr);
+        self.memo_end(saved);
+        r
+    }
+
+    fn ode_call_inner(&mut self, lam: &Lambda, t: f64, y: &[f64], out: &mut [f64], fr: &mut Frame)
+                      -> Result<(), RunError> {
         let module = self.module;
         if let Some(&p) = lam.params.first() {
             fr.vars.insert(p, Value::Num(t));

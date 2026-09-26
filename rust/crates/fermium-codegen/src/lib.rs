@@ -7,6 +7,7 @@ mod eval_complex;
 mod eval_core;
 mod eval_data;
 mod eval_m3;
+mod eval_memo;
 mod eval_more;
 mod eval_par;
 mod eval_py;

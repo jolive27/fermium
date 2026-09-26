@@ -1089,3 +1089,20 @@ as the runner's.
 an install script (later: needs a public download URL); building Linux on an older image for an older glibc (the
 apt LLVM 18 path is only tested on ubuntu-latest); running the Rust steps inside the existing macOS job (over its
 45-minute timeout with make check).
+
+## D268. The tree-walker remembers pure calls within one ODE right-hand side
+- **What:** while `ode_call` evaluates a `solve`'s equations once, a call to a function that only computes
+(numbers in, a number out; assignments to its own locals, if, loops, return, arithmetic, `where`, pure math
+built-ins, integrals and sums, calls of such functions) and that integrates or sums somewhere returns the number
+remembered from an identical earlier call in the same evaluation (`fermium-codegen/src/eval_memo.rs`). The cache
+is emptied for every evaluation and after any call of a function that may do more than compute; Monte Carlo
+propagation turns it off.
+- **Why:** research/bbn_network (conformance 6de08e3389a9) calls n_b(T), which integrates the e± plasma twice,
+from each of 42 rate terms: ~100 quadratures per evaluation where 5 are distinct. Under the tree-walker a step
+took 250 ms against v1's 5 ms (v1 compiles the right-hand side), and the program ran 25 minutes; with the cache
+it runs in about 200 s with exactly the same steps and numbers (a hit returns the bits the call would compute; a
+run-time warning is shown once per text anyway).
+- **Alternatives:** compile the right-hand side (the LLVM back end; the program has a plot, which the tree-walker
+had to run); common-subexpression elimination in the checker (changes the IR both back ends see); a cache kept
+for the whole solve (more hits in the Jacobian columns, but must prove no global can change between evaluations).
+
