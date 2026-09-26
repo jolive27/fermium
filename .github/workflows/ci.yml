@@ -60,7 +60,7 @@ jobs:
           echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
       - name: Build and test the Rust compiler
         working-directory: rust
-        run: cargo build --profile fast && cargo test --profile fast && ldd target/fast/fermium
+        run: cargo build --profile fast && cargo test --profile fast && ldd target/fast/fermium && cargo test --profile fast -p fermium-pyapi -p fermium-wasm
       - name: Browser playground (the compiler as WebAssembly; every example must print what fermium run prints)
         run: |
           rustup target add wasm32-unknown-unknown

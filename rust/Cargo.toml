@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# the shared libraries (the Python API, the playground's module) are built on their own (cargo build -p ...):
+# built together with fermium-cli, feature unification would turn on fermium-codegen's LLVM back end in them, and
+# LLVM's static, non-PIC system libraries (terminfo) can't go into a shared library
+default-members = ["crates/fermium-aotrt", "crates/fermium-check", "crates/fermium-cli", "crates/fermium-codegen",
+                   "crates/fermium-fmt", "crates/fermium-ir", "crates/fermium-jupyter", "crates/fermium-lsp",
+                   "crates/fermium-repl", "crates/fermium-runtime", "crates/fermium-sym", "crates/fermium-syntax",
+                   "crates/fermium-units"]
 
 [workspace.package]
 version = "2.0.0-dev"
