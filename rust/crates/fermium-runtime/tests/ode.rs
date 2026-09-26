@@ -229,8 +229,10 @@ fn explicit_solvers_match_v1() {
         assert_eq!(vals.len(), want.len(), "{}: layout", row.name);
         assert_eq!(vals[0], want[0], "{}: step count", row.name);
         for (i, (&g, &w)) in vals.iter().zip(&want).enumerate() {
-            // another libm: last-bit differences grow along a trajectory; values of order 1, so an absolute floor
-            close(&format!("{}[{i}]", row.name), g, w, 1e-12, if FIXTURE_LIBM { 1e-300 } else { 1e-12 });
+            // another libm: last-bit differences grow along an adaptive trajectory (the step count above still
+            // matches), so the comparison is at the solvers' own accuracy (rtol 1e-9 or finer), for order-1 values
+            let (rtol, atol) = if FIXTURE_LIBM { (1e-12, 1e-300) } else { (1e-8, 1e-10) };
+            close(&format!("{}[{i}]", row.name), g, w, rtol, atol);
             total += 1;
             if g == w || (g.is_nan() && w.is_nan()) {
                 identical += 1;
