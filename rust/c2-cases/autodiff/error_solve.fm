@@ -1,0 +1,4 @@
+fall(h) =
+    solve y'' = -9.81 m/s² with y(0 s) = h, y'(0 s) = 0 m/s for t from 0 s to 1 s
+    y(1 s)
+print fall'(10 m)

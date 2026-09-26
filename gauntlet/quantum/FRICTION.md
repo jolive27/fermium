@@ -151,7 +151,7 @@ Severity scale: blocker / wrong answer / awkward / cosmetic.
 Problems: `21_finite_well.fm` (even/odd transcendental equations, state count, leakage),
 `22_quartic_oscillator.fm` (V = βx⁴ by shooting, WKB, a Gaussian variational bound and a 4×4
 oscillator-basis matrix), `23_hydrogen_radial.fm` (radial shooting for l = 0, 1 against −Ry/n²,
-and ⟨r⟩ for 1s and 2p). Tests: `tests/test_gauntlet2_quantum.py`.
+and ⟨r⟩ for 1s and 2p). Tests: `legacy/tests/test_gauntlet2_quantum.py`.
 Severity: wrong answer / bug / awkward / cosmetic.
 
 ### Wrong answer

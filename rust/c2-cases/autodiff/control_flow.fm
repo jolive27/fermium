@@ -1,0 +1,44 @@
+# if/else, for and while loops, reassigned parameters, helpers and print inside the function
+ramp(x) =
+    if x > 0 m
+        y = 3 x²/(1 m)
+    else
+        y = -x
+    y
+print ramp'(2 m), ramp'(-2 m)
+
+# Horner's rule: p(x) = x³ + 2x² + 3x + 4
+p(x) =
+    s = 0
+    for k from 1 to 4
+        s = s x + k
+    s
+print p'(2), p''(2)
+
+# Newton's iteration for √a: the derivative of the converged iteration is 1/(2√a)
+root(a) =
+    r = a
+    for i from 1 to 30
+        r = (r + a/r)/2
+    r
+print root'(4), root''(4)
+
+# a while loop that reassigns the parameter
+f(x) =
+    n = 0
+    while n < 3
+        x = sin(x)
+        n += 1
+    x
+print f'(0.5), cos(0.5) cos(sin(0.5)) cos(sin(sin(0.5)))
+
+# a local helper using a local variable, a loop over a list of numbers, a print (not repeated by g')
+g(x) =
+    print "g is called"
+    y = floor(x) + x³
+    s = 0
+    for c in [1, 2, 3]
+        s += c x
+    helper(u) = u² + y
+    y + helper(x) + s
+print g(2), g'(2)

@@ -12,14 +12,14 @@ Live errors and hover come from the Fermium language server (`fermium lsp`). Wit
 
 ## Install (from this folder)
 
-1. Install Fermium, including the language server's library:
-   `python3 -m pip install -e "../..[full]"` (check with `fermium doctor`).
+1. Install Fermium: the `fermium` binary has the language server built in (bootcamp/lesson00_setup.md, or
+   `make install` from a checkout; check with `fermium doctor`).
 2. In this folder, run `npm install`. This fetches `vscode-languageclient`.
 3. Copy or symlink this folder into your VS Code extensions directory:
    - macOS/Linux: `ln -s "$(pwd)" ~/.vscode/extensions/fermium`
    - Windows: copy the folder to `%USERPROFILE%\.vscode\extensions\fermium`
 4. Restart VS Code and open a `.fm` file.
 
-If `fermium` isn't on the PATH VS Code sees (for example, it lives in a virtual environment), set **Fermium › Language Server: Command** to its full path, such as `/path/to/venv/bin/fermium`. You can turn the server off with **Fermium › Language Server: Enable**.
+If `fermium` isn't on the PATH VS Code sees, set **Fermium › Language Server: Command** to its full path, such as `/Users/you/bin/fermium`. (Fermium 1.5, the deprecated Python version, has its server as `fermium-legacy lsp`, which needs pygls: set the command to `fermium-legacy`.) You can turn the server off with **Fermium › Language Server: Enable**.
 
 (Alternatively, `npx @vscode/vsce package` builds a `.vsix` you can install with "Install from VSIX…".)

@@ -72,7 +72,7 @@ Problems: `21_woods_saxon.fm` (neutron levels in a Woods–Saxon well with spin�
 `22_alpha_gamow.fm` (Gamow half-lives of nine α emitters from `data/alpha_emitters.csv`, Krane's
 closed form, a Geiger–Nuttall fit), `23_point_kinetics.fm` (six-group point kinetics after a
 10-cent step, the inhour equation, the one-group estimate).
-Tests: `tests/test_gauntlet2_nuclear.py`.
+Tests: `legacy/tests/test_gauntlet2_nuclear.py`.
 Severity: wrong answer / bug / awkward / cosmetic.
 
 ### Bug

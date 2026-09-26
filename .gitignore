@@ -8,7 +8,7 @@ htmlcov/
 build/
 dist/
 .ruff_cache/
-tests/programs/*.png
+legacy/tests/programs/*.png
 .claude/
 web/gen/
 web/pyodide/

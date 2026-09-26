@@ -1,8 +1,8 @@
 # Research reproductions
 
 Published physics results reproduced in Fermium. Each folder has the code, the plots, a README with the physics,
-and a comparison with the published numbers; `tests/test_research.py` checks every program against an independent
-computation.
+and a comparison with the published numbers; `legacy/tests/test_research.py` checks every program against an independent
+computation, and the conformance suite (`make check`) runs every program with the `fermium` binary.
 
 | # | Reproduction | Published comparison | Status |
 |---|---|---|---|

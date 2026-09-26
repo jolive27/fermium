@@ -36,8 +36,9 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+LEGACY = os.path.join(ROOT, "legacy")      # Fermium 1.5, which the output boxes come from (D269)
+if LEGACY not in sys.path:
+    sys.path.insert(0, LEGACY)
 
 PAT = re.compile(
     r"(?P<head>(?:<!-- run as (?P<name>[\w.\-]+) -->\n```\n|```fermium\n))(?P<code>(?:(?!```).)*?)```\n\n"

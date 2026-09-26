@@ -13,7 +13,7 @@ import os
 import sys
 import unicodedata
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 
 from fermium import units as U            # noqa: E402
 from fermium.constants import CONSTANTS   # noqa: E402

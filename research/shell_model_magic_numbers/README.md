@@ -85,7 +85,7 @@ S_n(²⁰⁸Pb) = 7.368 MeV and S_n(²⁰⁹Pb) = 3.937 MeV, and the excitation 
   Mottelson Vol. I; the real strength is somewhat fragmented, most for 1h9/2).
 - The first version of this page used values typed from memory, rounded to 10 keV. The check found two of them
   off by 5–6 keV (4s1/2: −1.90 → −1.905 MeV, 2g7/2: −1.44 → −1.446 MeV) and the rest right; with the values
-  below, to 1 keV, the rms difference changes from 0.476 to 0.478 MeV. `tests/test_research.py` recomputes the
+  below, to 1 keV, the rms difference changes from 0.476 to 0.478 MeV. `legacy/tests/test_research.py` recomputes the
   list from the numbers above.
 
 | level | Woods–Saxon (Fermium) | measured | difference |

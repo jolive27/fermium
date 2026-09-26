@@ -17,7 +17,7 @@ from fractions import Fraction
 from types import SimpleNamespace
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 
 from fermium import units as U                                   # noqa: E402
 from fermium import constants as K                               # noqa: E402

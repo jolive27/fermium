@@ -24,7 +24,7 @@ freshly purified uranium. Run it from this folder with `fermium run u238_chain.f
 ## Results
 
 Activity relative to U-238, from pure U-238 at t = 0 (Fermium; the closed-form Bateman solution computed with 60-digit
-arithmetic in `tests/test_research.py` agrees to all printed digits):
+arithmetic in `legacy/tests/test_research.py` agrees to all printed digits):
 
 | t | Th-234 | U-234 | Th-230 | Ra-226 | Rn-222 | Po-214 | Po-210 |
 |---|---|---|---|---|---|---|---|

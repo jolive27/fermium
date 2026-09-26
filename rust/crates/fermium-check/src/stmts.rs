@@ -380,6 +380,7 @@ impl Checker {
             module: None,
             anon_label: None,
             parent: None,
+            eval_body: None,
         };
         self.funcs.push(info);
         let id = self.funcs.len() - 1;
