@@ -70,6 +70,11 @@ impl Checker {
             K::Bool { value: b } => ir(I::ExprKind::Bool(*b), Ty::Bool, e.span.line),
             K::Quantity { value, unit, .. } => self.e_quantity(e, value, unit, ctx)?,
             K::Name { name: n } => return self.e_name(e, n, ctx),
+            K::Field { target, name } if self.module_of(target, ctx).is_some() => {
+                // mechanics.pendulum_period (D100)
+                let m = self.module_of(target, ctx).unwrap();
+                return self.module_member(m, e, name, ctx);
+            }
             K::BinOp { .. } => return self.e_binop(e, ctx),
             K::Neg { operand: x } => self.e_neg(e, x, ctx)?,
             K::Compare { .. } => self.e_compare(e, ctx)?,

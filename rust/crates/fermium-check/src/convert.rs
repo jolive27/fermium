@@ -164,7 +164,7 @@ impl Checker {
             if self.natural() {
                 hint = self.natural_convert_hint();
             }
-            return Err(self.err(format!("can't show {} in {} ({})", self.desc(&vd), u.name, units::dim_name(&u.dim)),
+            return Err(self.err(format!("can't show {} in {} ({})", self.desc(&vd), u.name, self.desc(&DExpr::of(u.dim))),
                                 e.span, Some(hint)));
         }
         let uh = hint_of(&u);

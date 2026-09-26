@@ -42,6 +42,11 @@ impl Value {
     }
 }
 
+/// Run-time line codes of module code (errors.py, D185): `(k << MODLINE_SHIFT) | line`, k − 1 the text id of the
+/// module's file name.
+pub const MODLINE_SHIFT: u32 = 20;
+pub const MODLINE_MAX: u32 = (1 << MODLINE_SHIFT) - 1;
+
 /// A run-time error in plain physics language (the program line it happened on).
 #[derive(Clone, Debug)]
 pub struct RunError {
@@ -206,13 +211,15 @@ pub struct Interpreter<'m, P: Printer> {
     pub printer: P,
     pub(crate) globals: HashMap<SymId, Value>,
     pub(crate) line: u32,
+    /// the program line that called into a module's code (errors inside it point there, D185)
+    pub(crate) call_line: u32,
     /// Builtins the runtime provides (special functions, numerics), looked up by name.
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, builtins: HashMap::new() }
+        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -222,7 +229,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn run(&mut self) -> Result<(), RunError> {
         let mut fr = Frame::default();
         let main = &self.module.main;
-        match self.block(main, &mut fr)? {
+        let r = self.block(main, &mut fr).map_err(|e| self.locate(e));
+        match r? {
             Flow::Normal | Flow::Return(_) => Ok(()),
             Flow::Break | Flow::Continue => Ok(()),
         }
@@ -638,10 +646,32 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             fr.vars.insert(*p, v);
         }
         let body = &func.body;
-        match self.block(body, &mut fr)? {
+        let caller_line = self.line;
+        if body.first().is_some_and(|s| s.line > MODLINE_MAX) && 0 < caller_line && caller_line <= MODLINE_MAX {
+            self.call_line = caller_line; // calling a module's function from the program (D185)
+        }
+        let r = match self.block(body, &mut fr)? {
             Flow::Return(v) => Ok(v),
             _ => Ok(Value::Void),
+        };
+        self.line = caller_line; // later errors in the caller are on its own line
+        r
+    }
+
+    /// A run-time error's program line: in a module's code, the line that called into it, and the message says
+    /// where in the module it happened (errors.py decode_line, D185).
+    fn locate(&self, mut e: RunError) -> RunError {
+        if e.line > MODLINE_MAX {
+            let (k, ml) = ((e.line >> MODLINE_SHIFT) as usize, e.line & MODLINE_MAX);
+            let texts = &self.module.tables.texts;
+            let name = if 0 < k && k <= texts.len() { texts[k - 1].as_str() } else { "a module" };
+            let suf = format!(" (in {name}, line {ml})");
+            if !e.message.ends_with(&suf) {
+                e.message += &suf;
+            }
+            e.line = self.call_line;
         }
+        e
     }
 
     pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {

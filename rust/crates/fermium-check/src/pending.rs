@@ -2,7 +2,6 @@
 //! ported (see the table in checker.rs), its stubs move out of this file into the module that owns them.
 use fermium_ir as I;
 use fermium_syntax::ast as A;
-use fermium_syntax::diag::Diagnostic;
 
 use crate::checker::*;
 
@@ -24,19 +23,6 @@ impl Checker {
     pub fn sol_names(&self, _sol: usize) -> Vec<String> {
         vec![]
     }
-    // ---- modules
-    pub fn module_as_value(&self, _m: usize, name: &str, e: &A::Expr) -> Diagnostic {
-        self.err(format!("{name} is a module, not a value"), e.span, None)
-    }
-    pub fn py_module_name(&self, _m: usize) -> String {
-        "?".into()
-    }
-    pub fn module_hint(&self, _name: &str, _ctx: &Ctx) -> Option<String> {
-        None
-    }
-}
-
-impl Checker {
 }
 
 impl Checker {
@@ -65,11 +51,6 @@ impl Checker {
     pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("evaluating an ODE solution", e.span))
     }
-    pub fn module_call(&mut self, _info: FuncInfoId, _args: Vec<Checked>, node: &A::Expr, _cache: bool)
-                       -> CResult<I::Expr> {
-        Err(self.not_ported("calling a module's function", node.span))
-    }
-    pub fn module_body_error(&mut self, _e: &mut Diagnostic, _info: FuncInfoId, _node: &A::Expr) {}
 }
 
 impl Checker {
@@ -88,8 +69,11 @@ impl Checker {
     // ---- stubs called by builtin.rs, owned by other modules
     /// The built-ins on vectors and matrices (abs, sign of a vector, trace, angle, norm, unit, hat, cross, vec, dot
     /// of vectors, transpose, det, inverse, solve_linear, eigenvalues, eigenvectors, zeros(r, c)).
-    pub fn vec_builtin(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported(&format!("{name} of vectors and matrices"), e.span))
+    pub fn vec_builtin(&mut self, name: &str, args: Vec<I::Expr>, e: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
+        match self.builtin_vecmat(name, args, e, ctx)? {
+            Some(r) => Ok(r),
+            None => Err(self.not_ported(&format!("{name} of vectors and matrices"), e.span)),
+        }
     }
     /// value(x), uncertainty(x), rel(x) of an uncertain value (D121).
     pub fn unc_part(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
