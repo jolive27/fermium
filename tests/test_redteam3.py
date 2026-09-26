@@ -272,7 +272,9 @@ def build_run(tmp_path, src):
 ])
 def test_1_h_after_a_unit_is_an_error_that_says_hr(src):
     e = error_of(src)
-    assert "Planck" in e.message + str(e.hint) and "hr" in e.message + str(e.hint)
+    # with your own h the message is about your h, not Planck's constant (red team 8 #17)
+    who = "your" if src.startswith("h = ") else "Planck"
+    assert who in e.message + str(e.hint) and "hr" in e.message + str(e.hint)
 
 
 def test_1_hint_names_the_number_and_how_to_divide():

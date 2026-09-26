@@ -247,9 +247,16 @@ def _ascii_token(toks, i, closers, diags):
 
 
 def fix_source(source: str, rounds: int = 20) -> tuple[str, int]:
+    """The fixed source and the number of edits (see fix_source_report)."""
+    new, n, _ = fix_source_report(source, rounds)
+    return new, n
+
+
+def fix_source_report(source: str, rounds: int = 20):
     """`fermium fmt --fix`: rewrite every unit/variable collision (the A1 rule, D235) as a bracketed unit that keeps
     what Fermium 1 did there: `x(0) = 0.1 m` next to a mass m becomes `0.1 [m]`, `20 m/s / g` becomes `20 [m/s] / g`
-    and `20 m/s/g` becomes `20 [m/s/g]`.  Returns the new source and the number of edits."""
+    and `20 m/s/g` becomes `20 [m/s/g]`.  A collision Fermium 1 already stopped on (`0.5 m v²` with a mass m) had
+    no meaning to keep, so it is left for you.  Returns (new source, number of edits, the error still left or None)."""
     from .lexer import tokenize, Lexer
     from .parser import Parser
     total = 0
@@ -264,13 +271,19 @@ def fix_source(source: str, rounds: int = 20) -> tuple[str, int]:
         except FermiumError as e:
             err = e
         if not p.fixes:
-            if err is not None:
+            if err is not None and total == 0:
                 raise err
-            return source, total
+            try:                           # what the fixed program still stops on, if anything
+                from .parser import parse as _parse
+                _parse(source, Diagnostics())
+                left = None
+            except FermiumError as e:
+                left = e
+            return source, total, left
         norm = Lexer(source).src
         text = source if len(norm) == len(source) else norm
         for a, b, rep in sorted(p.fixes, reverse=True):
             text = text[:a] + rep + text[b:]
         source = text
         total += len(p.fixes)
-    return source, total
+    return source, total, None

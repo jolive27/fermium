@@ -1063,3 +1063,37 @@ pass over the 11 research programs. Each finding has an `xfail(strict=True)` tes
 - `print |[3.0 m/s, 4.0 m/s]|` prints `[3.0, 4.0] m/s`: |…| of a list is element-wise, as `abs` is; a vector
   (`<3, 4> m/s`) gives 5 m/s. A physicist may write the list form expecting the length.
 - `recombination.fm` prints the warning "h (Planck's constant) is now your variable" on every run (it means h = H₀/100).
+
+## Round 8 (run 2, 2026-09-26 01:45 UTC): the v1.5 rules
+
+Independent reviewer on branch claude/v1.5 at 0c9dcdc: D235 (the unit rule), D236 (fraction coefficients), D237
+(messages), D250–D255 (plots, research inputs), Lessons 1/2/2b and the cheat sheet. 25 findings; fixes in D238,
+regression tests in tests/test_redteam8.py.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | `1 / 0.5 s`, `2π / 0.5 s`, `0.693 / 5730 yr` became times (D236) | silent wrong | fixed: coefficient only for whole-number fractions |
+| 2 | `1/2 [kg]` differed from `1/2 kg` | silent wrong | fixed |
+| 3 | `fmt --fix` wrote `1/2 [m] v²`, `2 [m] c²` (Fermium 1 had stopped there) | silent wrong | fixed: left and reported |
+| 4 | `3 m / 2 / s` became 1.5 m·s | silent wrong | fixed |
+| 5 | `10⁻² m` bypassed the rule | silent wrong | fixed: asks |
+| 6 | `<1, 0> m` bypassed the rule | silent wrong | fixed: asks |
+| 7 | a where-binding didn't see earlier bindings | silent wrong | fixed |
+| 8 | `*` bypassed sentence 3 | silent wrong | fixed: `*` never continues a unit |
+| 9 | `(m1 + m2) g` was grams when no g is defined | silent wrong | fixed: brackets needed after a bracket |
+| 10 | D236 depended on how the denominator is written; `1/2len √(F/μ)` | silent wrong | partly: π powers consistent; `1/2L` documented (write `1/(2L)`) |
+| 11 | `0.5 /s` divides by your own s | by design | documented in D238 |
+| 12 | `J/kg K` is J·K/kg | silent wrong (unchanged since v1) | warns now |
+| 13 | `fmt --fix` gave `2 [kg] m/s` | misleading | fixed: whole unit |
+| 14 | geometrized units got the natural-units hint | misleading | fixed |
+| 15 | integral hint suggested `3 [m/s ds]` | misleading | fixed |
+| 16 | conversion hints named odd products | misleading | fixed: named kinds first, none for plain numbers |
+| 17 | `km/h` with your own h spoke of Planck's constant | misleading | fixed |
+| 18 | `180/π deg` message | misleading | documented (write `(180/π) [deg]`) |
+| 19 | D237 hint claims; `tmep` lost its suggestion | misleading | fixed (and D237 text corrected) |
+| 20 | `√(-4 m²)` not caught | misleading | fixed |
+| 21 | hint dropped `²`; `[1, 2] m/s` with a mass; `N×m`; "c is speed" | nit | fixed (`×` ends a unit like `*`) |
+| 22 | cheat sheet solve with `x(0) = 0.1 m` next to `m` | doc | fixed |
+| 23 | BBN README ⁷Li sentence and old `2/π² T⁴` note | doc | fixed |
+| 24 | ²⁰⁸Pb table −8.05 vs printed −8.04 | doc | fixed |
+| 25 | Lesson 2 overstated the rule | doc | fixed by #5, #6, #9 |

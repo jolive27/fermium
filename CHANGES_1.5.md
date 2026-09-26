@@ -16,12 +16,16 @@ What that changes:
 - `k = 50 N/m` after a mass `m` asks (the later `m` is your variable): write `50 [N/m]`.
 - `36 km / h` is an error like `36 km/h` (h is Planck's constant; write `km/hr`).
 - `2 m c²` with a mass `m` asks (`c` continues a unit only after `/`, as in `938 MeV/c²`).
+- A unit continues through spaces, `/` and `·` (`2 N·m`), not through `*`: `5 N*m` multiplies by `m`.
+- After a bracket a name is a variable, so a unit there goes in brackets: `(51 - 33 (N - Z)/A) [MeV]`. (Fermium 1 read the unit if no variable had that name, so `(m1 + m2) g` silently meant grams.)
+- Powers of ten and vectors follow the rule too: `10⁻² m` and `<1, 0> m` ask when you have your own `m`.
+- `4186 J/kg K` warns that only `kg` is below the line; write `J/(kg K)`.
 - **To update an old program:** `fermium fmt --fix yourfile.fm` adds the brackets and keeps what the program meant before. Editors with the Fermium extension offer the same fix.
 
 ## A fraction of plain numbers is one coefficient (D236)
 
 - `73/24 x²` is (73/24)·x², `π²/12 t²` is (π²/12)·t², `1/2 x` is x/2.
-- **Deliberate change:** `1/2 kg` is now 0.5 kg. It used to be 0.5 per kilogram.
+- **Deliberate change:** `1/2 kg` is now 0.5 kg. It used to be 0.5 per kilogram. This applies only when both numbers are whole numbers, as in a written fraction: `1 / 0.5 s` is still 2 per second.
 - `4/3 π r³` asks whether you mean (4/3)·π or 4/(3π): write `(4/3) π r³`.
 - `h / m_e v` still means h/(m_e v): implicit multiplication still binds tighter than `/` when a name follows.
 

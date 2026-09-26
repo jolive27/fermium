@@ -62,12 +62,12 @@ c_light = 3.00×10⁸ m/s
 
 Brackets are always units: `3 [m/s]`, `x [m]`, and in a function parameter, `f(x [m]) = ...` (see §5). A name that doesn't come right after a number is always a variable: `m v` is m times v. **Spaces never change meaning.**
 
-- A unit continues through `/` (`m/s`), a space (`N m`), `*` or `·`. Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`. A variable can't be declared with a bracket: `x [m] = 3` is an error; write `x = 3 m`.
+- A unit continues through `/` (`m/s`), a space (`N m`) or `·` (`N·m`); an explicit `*` ends it (`5 N*m` with your own `m` is 5 N × m). Exponents are written `m²` or `m^2`, and `s⁻¹` or `s^-1`. A variable can't be declared with a bracket: `x [m] = 3` is an error; write `x = 3 m`.
 - **Dividing by your own variable:** with `g = 9.81 m/s²`, `20 m/s/g` and `20 m/s / g` are both errors that ask which you mean (g is also grams). Write `(20 m/s)/g` to divide by your g, or `20 [m/s/g]` for per gram. Likewise `(2.898e-3 m K)/T` divides by a temperature `T`.
 - **A spring next to a mass:** with a mass `m` defined first, `k = 50 N/m` asks too (the later `m` is your variable); write `k = 50 [N/m]`.
-- **An explicit `*`** before your variable multiplies: `1.2 fm * A^(1/3)` with your `A` is 1.2 fm × A^(1/3).
 - **c** (the speed of light, usable as a unit) continues a unit only after `/`: `938 MeV/c²` is a mass, `0.9 c` a speed, and `2 m c²` is 2 m times c² (so with your own mass `m` it asks).
-- **After a bracket:** `(1/2) m v²` is ½·m·v² with your m. A unit that isn't one of your names may follow a bracket: `(51 - 33 (N - Z)/A) MeV`. A list literal takes a unit like a number: `[1, 2, 3] m`; with your own `m` it asks (`[1, 2]*m` multiplies).
+- **After a bracket** a name is a variable: `(1/2) m v²` is ½·m·v² with your m. A unit after a bracket goes in brackets: `(51 - 33 (N - Z)/A) [MeV]`, `100 h [km/s/Mpc]`. A list, a vector and a power of ten take a unit like a number: `[1, 2, 3] m`, `<3, 4> m/s`, `10⁻² m`; with your own `m` they ask (`[1, 2]*m` multiplies).
+- **`J/kg K`** is J·K/kg (only the name right after `/` is below the line), with a warning; write `J/(kg K)`.
 - **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` are units whatever the spacing: `0.5 /s`, `8/m³`, `0.300 /(m s²)`. A name there that is your variable is divided by (`1/T` is one over your period `T`); a bracket that mixes your variables with units (`0.300 /(m s²)` with your `m`) asks. `36 km/h` is an error with or without spaces: in Fermium h is Planck's constant, not the hour (write `km/hr`).
 - **Fixing old programs:** `fermium fmt --fix file.fm` rewrites every collision as a bracketed unit that keeps what Fermium 1 did (`0.1 [m]`, `50 [N/m]`); the language server offers the same quick fix.
 - **A unit is not a value:** `rate = cm³/(mol s)` is an error, `cm³/(mol s) is a unit, not a value`, with the hint `for the quantity write  1 cm³/(mol s)` (DECISIONS D163). Write `rate = 1 cm³/(mol s)`.

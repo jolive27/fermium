@@ -436,7 +436,7 @@ print [[1, 1e-20], [0, 1]]
 
 @needs_cc
 def test_build_big_matrices(tmp_path):
-    src = CHAIN + TIGHT_BINDING + "w = <1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14> m\nprint w\n"
+    src = CHAIN + TIGHT_BINDING + "w = <1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14> [m]\nprint w\n"
     assert built(src, tmp_path) == run(src)
 
 

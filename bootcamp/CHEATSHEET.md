@@ -75,7 +75,7 @@ linspace(0 s, 1 s, 11)          # sum mean std min max sort reverse cumsum diff
 v = x'                          # derivative (also d/dt x, dx/dt); x'' or d²/dt² x second
 partial/partial x f             # ∂/∂x f
 integral F(x) dx from 0 m to 1 m    # ∫ ... dx; limits may be inf
-solve m x'' = -k x - b x'
+solve mass x'' = -k x - b x'
   with x(0) = 0.1 m, x'(0) = 0 m/s
   for t from 0 s to 5 s         # add "step 1 ms" for fixed-step RK4
 data = load "data/pendulum.csv" # header: L [m], T [s]  ->  data.L, data.T

@@ -1749,7 +1749,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             # a short name needs a closer match: `foo` is not a typo of floor (bootcamp B9)
             close = [k for k in cands if k.lower() == name.lower()] or \
                 [k for k in cands if _loose(k) == _loose(name)] or \
-                get_close_matches(name, cands, n=1, cutoff=0.7 if len(name) > 4 else 0.85)
+                [k for k in cands if len(k) == len(name) and sorted(k) == sorted(name) and k[0] == name[0]] or \
+                [k for k in get_close_matches(name, cands, n=3, cutoff=0.7)
+                 if len(name) > 4 or (abs(len(k) - len(name)) <= 1 and k[0] == name[0])][:1]
             if close:
                 hint = f"did you mean {close[0]}?"
         if hint is None and getattr(self, "_after_number", False):
@@ -2457,6 +2459,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
     @staticmethod
     def _negative_literal(n):
         """-1, -4.0, (-2): a negative number written as a literal, or None."""
+        if isinstance(n, A.Neg) and isinstance(n.operand, A.Quantity) and isinstance(n.operand.value, A.Num) and \
+                not n.operand.unit.text.strip().startswith(("°", "deg")):
+            n = A.Neg(n.operand.value)                   # `√(-4 m²)` (red team 8 #20)
         if isinstance(n, A.Neg) and isinstance(n.operand, A.Num):
             return -n.operand.value if n.operand.value != 0 else None
         if isinstance(n, A.Num) and n.value < 0:
@@ -2469,9 +2474,10 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if v is None:
             return
         if name in ("sqrt", "√"):
-            txt = "-" + A.num_text(arg.operand) if isinstance(arg, A.Neg) else A.num_text(arg)
-            raise self.err(f"√ of a negative number ({txt}) isn't a real number", e,
-                           hint=f"for the complex square root write  √({txt} + 0i)  (√(-1) is 𝑖)")
+            txt = C.to_source(arg) if isinstance(arg, A.Neg) else A.num_text(arg)
+            hint = f"for the complex square root write  √({txt} + 0i)  (√(-1) is 𝑖)" if isinstance(arg, A.Num) or \
+                (isinstance(arg, A.Neg) and isinstance(arg.operand, A.Num)) else "a square root needs a value ≥ 0"
+            raise self.err(f"√ of a negative number ({txt}) isn't a real number", e, hint=hint)
         if name in ("log", "ln", "log10", "log2"):
             raise self.err(f"{name} of a negative number isn't a real number", e,
                            hint="the logarithm needs a positive argument")
@@ -2554,6 +2560,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if self.nat.natural:
                 hint = (f"in {self.nat.name} units ({' = '.join(self.nat.consts)} = 1) a length or time is 1/energy "
                         f"and a mass is an energy; check the powers of energy")
+                if "G" in self.nat.consts:        # geometrized units: a mass is a length (red team 8 #14)
+                    hint = (f"in {self.nat.name} units ({' = '.join(self.nat.consts)} = 1) a mass, a length and a time "
+                            f"are all measured in the same unit; check the powers")
             raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e, hint=hint)
         if not self._warn_angle_in_hz(v, u, e):
             self._warn_omega_in_hz(e.value, v, u, e)

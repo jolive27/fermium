@@ -523,7 +523,7 @@ solve x'' = -x / 1 s^2
 ic.fm, line 1: missing initial condition: x'(start)
     solve x'' = -x / 1 s^2
     ^^^^^
-  hint: add them after 'with', e.g.  with x(0) = 0.1 m, x'(0) = 0 m/s
+  hint: add them after 'with', e.g.  with x(0) = 0.1 [m], x'(0) = 0 m/s
 ```
 
 An equation with x″ needs both `x(0)` and `x'(0)`.

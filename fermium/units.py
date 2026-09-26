@@ -576,10 +576,16 @@ _KINDS = [("energy", ["J", "eV", "MeV"]), ("length", ["m", "nm", "fm"]), ("time"
 
 def suggest_units(d: Dim):
     """(description, [2-3 unit spellings]) for a dimension, or None."""
+    if d.dimensionless:
+        return None
     kinds = [(k, [parse_unit_string(u) for u in us], us) for k, us in _KINDS]
     for k, parsed, us in kinds:
         if parsed[0].dim == d:
             return k, us[:3]
+    name = dim_name(d)
+    if " [" in name and not name.startswith("a quantity with units"):     # a named kind first: specific energy [J/kg] (red team 8 #16)
+        k, spec = name.split(" [", 1)
+        return k, [spec.rstrip("]")]
     for i, (ka, pa, ua) in enumerate(kinds):
         for kb, pb, ub in kinds[i:]:
             if pa[0].dim * pb[0].dim == d:

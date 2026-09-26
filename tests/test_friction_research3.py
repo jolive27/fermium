@@ -233,9 +233,13 @@ def test_91_built_executable_says_where(tmp_path):
 SEMF = "N = 20\nZ = 16\nA = N + Z\n"
 
 
-def test_92_a_unit_after_a_bracketed_expression():
-    out = both(SEMF + "a = (51 - 33 (N - Z)/A) MeV\nprint a in MeV to 6 digits\n"
-               "b = 2 (N - Z + 3) MeV\nprint b\nprint (1 + 1) MeV / (2 fm)\nv = (3 + 4) m/s\nprint v")
+def test_92_a_unit_after_a_bracketed_expression_needs_brackets():
+    # D215 read the unit after a bracket when no variable had its name; since red team 8 #9 (D238) a name that
+    # doesn't come right after a number is a variable, so the unit goes in brackets (fmt --fix writes them)
+    e = both_error(SEMF + "a = (51 - 33 (N - Z)/A) MeV")
+    assert "'MeV' after a bracket is read as a variable" in e.message and "[MeV]" in e.hint
+    out = both(SEMF + "a = (51 - 33 (N - Z)/A) [MeV]\nprint a in MeV to 6 digits\n"
+               "b = 2 (N - Z + 3) [MeV]\nprint b\nprint (1 + 1) [MeV] / (2 fm)\nv = (3 + 4) [m/s]\nprint v")
     a, b, c, d = out.splitlines()
     assert a == f"{51 - 33 * 4 / 36:.6g} MeV"
     assert b == "14 MeV"
@@ -244,11 +248,12 @@ def test_92_a_unit_after_a_bracketed_expression():
 
 
 def test_92_a_bracket_with_units_times_a_unit():
-    assert both("x = 3 m\nprint (x + 1 m) s in m s to 3 digits") == "4.00 m s"
+    assert both("x = 3 m\nprint (x + 1 m) * 1 s in m s to 3 digits") == "4.00 m s"     # (…) s asks since D238
 
 
 def test_92_after_a_product_that_starts_with_a_number():
-    assert both("h = 0.6736\nH0 = 100 h km/s/Mpc\nprint H0 in km/s/Mpc to 4 digits") == "67.36 km/(s Mpc)"
+    assert both("h = 0.6736\nH0 = 100 h [km/s/Mpc]\nprint H0 in km/s/Mpc to 4 digits") == "67.36 km/(s Mpc)"
+    assert "after your variable is read as a variable" in both_error("h = 0.6736\nH0 = 100 h km/s/Mpc").message
 
 
 def test_92_a_bracket_then_your_variable_is_your_variable():
@@ -287,7 +292,7 @@ def test_92_calls_are_not_brackets():
 
 
 def test_92_built_executable_matches(tmp_path):
-    src = SEMF + "a = (51 - 33 (N - Z)/A) MeV\nprint a in MeV to 6 digits\nprint 100 * 0.6736 km/s/Mpc"
+    src = SEMF + "a = (51 - 33 (N - Z)/A) [MeV]\nprint a in MeV to 6 digits\nprint 100 * 0.6736 km/s/Mpc"
     p = built(src, tmp_path)
     assert p.returncode == 0, p.stderr
     assert p.stdout.strip() == both(src)

@@ -96,14 +96,15 @@ def cmd_check(args):
 
 
 def cmd_fmt(args):
-    from .fmt import format_source, fix_source
+    from .fmt import format_source, fix_source_report
     from .errors import Diagnostics
     src = _read(args.file)
     name = os.path.basename(args.file)
     d = Diagnostics()
     try:
+        left = None
         if args.fix:
-            out, n = fix_source(src)
+            out, n, left = fix_source_report(src)
             what = f"fixed {n} unit/variable collision{'s' if n != 1 else ''}"
             if args.pretty or args.ascii:
                 out = format_source(out, "ascii" if args.ascii else "pretty", d)
@@ -116,6 +117,8 @@ def cmd_fmt(args):
         return 1
     for w in d.warnings:
         sys.stderr.write(w.format(src) + "\n")
+    if left is not None:
+        sys.stderr.write("left for you to decide (Fermium 1 stopped here too):\n" + left.format(out, name) + "\n")
     if args.write:
         with open(args.file, "w", encoding="utf-8") as fh:
             fh.write(out)

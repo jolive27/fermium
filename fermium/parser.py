@@ -53,7 +53,7 @@ KEYWORD_SPELLED = {"integral": "∫", "partial": "∂", "sqrt": "√", "cbrt": "
 UNIT_WORDS = {"g": "grams", "m": "metres", "s": "seconds", "L": "litres", "l": "litres", "V": "volts",
               "T": "tesla", "b": "barns", "A": "amperes", "K": "kelvin", "N": "newtons", "J": "joules",
               "W": "watts", "C": "coulombs", "F": "farads", "H": "henries", "Pa": "pascals", "u": "atomic mass units",
-              "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
+              "c": "the speed of light", "d": "days", "min": "minutes", "yr": "years", "h": "hours", "t": "tonnes", "au": "AU", "pc": "parsecs"}
 
 
 class Parser:
@@ -1248,14 +1248,19 @@ class Parser:
     def where_bindings(self):
         self.next()
         binds = []
-        while True:
-            nt = self.expect_name("a name after 'where'")
-            self.expect_op("=")
-            binds.append((nt.value, self.expr()))
-            if self.at_op(","):
-                self.next()
-                continue
-            break
+        saved = set(self.known)
+        try:
+            while True:
+                nt = self.expect_name("a name after 'where'")
+                self.expect_op("=")
+                binds.append((nt.value, self.expr()))
+                self.known.add(nt.value)      # `where g = 9.81 m/s², w = 2 g`: g is yours in w's value (red team 8 #7)
+                if self.at_op(","):
+                    self.next()
+                    continue
+                break
+        finally:
+            self.known = saved
         return binds
 
     def expr_full(self):
@@ -1593,13 +1598,17 @@ class Parser:
             path.append(n)
             n = n.left
         quantity = None
-        if isinstance(n, A.Quantity) and not n.bracket and not n.paren and isinstance(n.value, A.Num):
+        if isinstance(n, A.Quantity) and not n.paren and isinstance(n.value, A.Num):
+            # `1/2 kg` is 0.5 kg, but `1 / 0.5 s` is 2 per second and `0.693 / 5730 yr` a rate: a unit after the
+            # denominator makes a coefficient only when both are whole numbers, as in a written fraction
+            # (red team 8 #1, #2; the same with a bracketed unit: `1/2 [kg]`)
+            if not (self._whole_literal(left) and self._whole_literal(n.value)):
+                return None
             quantity, leaf = n, n.value
         else:
             leaf = n
         if not isinstance(leaf, (A.Num, A.BinOp, A.Sqrt, A.Name)) or not self._pure(leaf) or \
-                (isinstance(leaf, A.BinOp) and leaf.op != "^" and not leaf.paren) or \
-                (isinstance(leaf, A.Name) and not leaf.paren):
+                (isinstance(leaf, A.BinOp) and leaf.op != "^" and not leaf.paren):
             return None                              # `1/(2π) √(k/m)`: a bracketed pure number counts too
         if not path and quantity is None:
             return None                              # a plain a/b
@@ -1616,7 +1625,7 @@ class Parser:
         frac.paren = True
         frac.coefficient = True
         if quantity is not None:
-            nq = A.Quantity(frac, quantity.unit)
+            nq = A.Quantity(frac, quantity.unit, bracket=quantity.bracket)
             nq.line, nq.col, nq.length = frac.line, frac.col, quantity.length
             new_leaf = nq
         else:
@@ -1627,6 +1636,12 @@ class Parser:
         for b in path:                               # the product now starts where the numerator starts
             b.col = left.col if b.line == left.line else b.col
         return right
+
+    @staticmethod
+    def _whole_literal(n):
+        """A whole number written with digits only: `1`, `24`, not `0.5`, `2.2`, `1e3`."""
+        raw = getattr(n, "raw", None)
+        return isinstance(n, A.Num) and n.digit and not n.paren and raw is not None and raw.isdigit()
 
     def _src_of(self, n):
         """The source text of a node on one line (for messages)."""
@@ -1769,10 +1784,30 @@ class Parser:
             return None
         if tk.value in self.known or tk.value in self.named_anywhere():
             return None
+        if self.in_integrand and tk.raw.startswith("d") and len(tk.raw) > 1 and canonical_name(tk.raw[1:]) in self.known:
+            return None                  # `∫ (x + 1) ds`: the differential, not decimetres or deciseconds
+        j0 = self.i
         u = self.unit_expr(explicit=False)
         q = self.span(A.Quantity(e, u), t)
         q.times_unit = True
+        self._bracket_needed(j0, "a bracket")
         return q
+
+    def _bracket_needed(self, j0, after):
+        """A unit name that doesn't come right after a number is a variable (the A1 rule): `(51 - 33 (N-Z)/A) MeV`
+        and `100 h km/s/Mpc` need brackets, `(…) [MeV]`.  Fermium 1 read the unit there when no variable had the
+        name (D215), so fmt --fix writes the brackets (red team 8 #9: `(m1 + m2) g` meant grams)."""
+        first, last = self.toks[j0], self.toks[self.i - 1]
+        fix = self._bracket_fix(first, last)
+        if self.fix_mode:
+            self._add_fix(fix)
+            return
+        unit = self._unit_span_text(j0, self.i - 1)
+        extra = "; for standard gravity use g_n, or define g = 9.81 m/s²" if unit == "g" else ""
+        e = self.error(f"'{unit}' after {after} is read as a variable, and you haven't defined {first.raw}", tok=first,
+                       hint=f"for the unit write it in brackets: [{unit}]{extra}")
+        e.fix = [fix]
+        raise e
 
     @staticmethod
     def _number_first(e):
@@ -1826,6 +1861,7 @@ class Parser:
                 if len(u.factors) >= 2:
                     e = self.span(A.Quantity(e, u), t)
                     e.times_unit = True
+                    self._bracket_needed(j0, "your variable")
                 else:
                     for tk, rl in zip(self.toks[j0:j0 + 16], roles):
                         tk.role = rl
@@ -1908,6 +1944,9 @@ class Parser:
                     self.toks[k + 1].kind == "NAME" and self._unit_tok(self.toks[k + 1]):
                 k += 1
                 last = k
+            elif tk.kind == "NAME" and self.in_integrand and tk.raw.startswith("d") and len(tk.raw) > 1 and \
+                    canonical_name(tk.raw[1:]) in self.known:
+                break                        # the integral's `ds` is not part of the unit (red team 8 #15)
             elif tk.kind == "NAME" and self._unit_tok(tk) and tk.ws_before and \
                     not (k + 1 < len(self.toks) and self.toks[k + 1].kind == "OP" and self.toks[k + 1].value == "("
                          and not self.toks[k + 1].ws_before):
@@ -1923,6 +1962,12 @@ class Parser:
         from .units import lookup_unit, dim_name
         so_far_last = self.toks[self.i - 1]
         if self.fix_mode:
+            j = self.toks.index(nt) + 1
+            nx = self.toks[j] if j < len(self.toks) else None
+            if nx is not None and ((nx.kind == "OP" and nx.value == "/" and j + 1 < len(self.toks) and
+                                    self.toks[j + 1].kind == "NAME" and self._unit_tok(self.toks[j + 1])) or
+                                   nx.kind in ("SUP",)):
+                old_continues = True        # `2 kg m/s` with your m: Fermium 1 had no meaning here; the whole unit
             if old_continues:
                 self._fix_whole.append(start)
                 return True
@@ -1937,15 +1982,17 @@ class Parser:
         what = UNIT_WORDS.get(nt.value) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
         whose = self._whose(nt.value)
         op = self.tok.value if self.tok.kind == "OP" else " "
-        use = f"({num} {so_far})/{nt.raw}  to divide by {whose}" if op == "/" else \
-            f"({num} {so_far}) {nt.raw}  for {num} {so_far} × {whose}"
+        k = self.toks.index(nt)
+        ntext = self._unit_span_text(k, self.toks.index(self._factor_last(k)))       # `s²`, not `s` (red team 8 #21)
+        use = f"({num} {so_far})/{ntext}  to divide by {whose}" if op == "/" else \
+            f"({num} {so_far}) {ntext}  for {num} {so_far} × {whose}"
         e = self.error(f"'{num} {full}' is ambiguous: right after a number, {full} is one unit ({nt.raw} is {what} "
                        f"there), but {nt.raw} is also {whose}", tok=nt,
                        hint=f"write  {use}, or  {num} [{full}]  for the unit")
         e.fix = [self._bracket_fix(start, full_last) if old_continues else self._bracket_fix(start, so_far_last)]
         raise e
 
-    def _single_collision(self, q, start_tok, where=False):
+    def _single_collision(self, q, start_tok, where=False, num=None):
         """Sentence 2: `2 g`, `0.1 m`, `2 T` right after a number, when that single name is also your variable."""
         from .units import lookup_unit, dim_name
         f = q.unit.factors[0]
@@ -1953,9 +2000,19 @@ class Parser:
         last = self._factor_last(self.toks.index(first))
         fix = self._bracket_fix(first, last)
         if self.fix_mode:
-            self._add_fix(fix)
+            # Fermium 1 read a lone `0.1 m` as the unit (keep it: bracket it), but stopped on `0.5 m v²`, `2 m * c²`,
+            # `1/2 m v²`: there was no old meaning to keep, so fmt --fix leaves those for you (red team 8 #3)
+            j = self.toks.index(last) + 1
+            nx = self.toks[j] if j < len(self.toks) else None
+            k = self.toks.index(first) - 2
+            pv = self.toks[k] if k >= 0 else None
+            combined = nx is not None and (nx.kind in ("NUM", "NAME", "IMAG") or (nx.kind == "OP" and nx.value in (
+                "*", "/", "×", "(", "|")) or (nx.kind == "KW" and nx.value in ("sqrt", "cbrt", "integral"))) or \
+                (pv is not None and pv.kind == "OP" and pv.value in ("*", "/", "×"))
+            if not combined:
+                self._add_fix(fix)
             return
-        num = self._num_text(q)
+        num = num or self._num_text(q)
         ut = q.unit.text.strip() or f.name
         u = lookup_unit(f.name)
         what = UNIT_WORDS.get(f.name) or (dim_name(u.dim).split(" [")[0] if u is not None else "a unit")
@@ -2045,18 +2102,22 @@ class Parser:
                 raise self.error("two exponents in a row")
             r = self.span(A.BinOp("^", base, e), t)
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
-                    and self.tok.value not in self.known and not self._is_call_like():
+                    and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10⁸ m/s, like 10^8 m/s
                 r = self.span(A.Quantity(r, u), t)
+                if len(u.factors) == 1 and u.factors[0].name in self.known:
+                    self._single_collision(r, None, num=self._text(self.toks.index(t), self.toks.index(u_first(u, self.toks))))
             return r
         if self.at_op("^"):
             self.next()
             ex = self.exponent()
             r = self.span(A.BinOp("^", base, ex), t)
             if isinstance(base, A.Num) and base.digit and self.tok.kind == "NAME" and self._unit_tok(self.tok) \
-                    and self.tok.value not in self.known and not self._is_call_like():
+                    and not self._is_call_like():
                 u = self.unit_expr(explicit=False)      # 10^8 m/s
                 r = self.span(A.Quantity(r, u), t)
+                if len(u.factors) == 1 and u.factors[0].name in self.known:
+                    self._single_collision(r, None, num=self._text(self.toks.index(t), self.toks.index(u_first(u, self.toks))))
             return r
         return base
 
@@ -2214,8 +2275,11 @@ class Parser:
                     if len(u.factors) == 1 and u.factors[0].name in self.known:
                         self._single_collision(q, ustart)       # `0.1 m` with your m: which one? (A1, D235)
                     return q
-                self._check_mixed_reciprocal(t.raw)
-                if self._unit_reciprocal_follows() or self._bracketed_reciprocal_unit():
+                k = self.toks.index(t)
+                denominator = k > 0 and self.toks[k - 1].kind == "OP" and self.toks[k - 1].value == "/"
+                if not denominator:           # `3 m / 2 / s` is 1.5 m/s, not 2 per second below the line (red team 8 #4)
+                    self._check_mixed_reciprocal(t.raw)
+                if not denominator and (self._unit_reciprocal_follows() or self._bracketed_reciprocal_unit()):
                     u = self.unit_expr(explicit=True, reciprocal=True)
                     return self.span(A.Quantity(n, u), t)
             return n
@@ -2313,6 +2377,12 @@ class Parser:
                         self._unit_tok(self.tok) and self.tok.value not in self.known and not self._is_call_like():
                     # [[1, 2], [3, 4]] N/m  (a matrix, D29) and [1, 2, 3] m  (a list, D192)
                     u = self.unit_expr(explicit=False)
+                    lst = self.span(A.Quantity(lst, u), t)
+                elif items and self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like() and \
+                        ((self.peek().kind == "OP" and self.peek().value == "/" and self.peek(2).kind == "NAME" and
+                          self._unit_tok(self.peek(2))) or (self.peek().kind == "NAME" and self._unit_tok(self.peek())
+                                                             and self.peek().value not in self.known)):
+                    u = self.unit_expr(explicit=False)  # `[1, 2] m/s` with a mass m: the first name is a unit
                     lst = self.span(A.Quantity(lst, u), t)
                 elif items and self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
                     self._list_collision(t)       # [1, 2, 3] m with your m: a unit follows a list as a number (D235)
@@ -2475,6 +2545,8 @@ class Parser:
         if self.tok.kind == "NAME" and self._unit_tok(self.tok) and not self._is_call_like():
             u = self.unit_expr(explicit=False)
             v = self.span(A.Quantity(v, u), t)
+            if len(u.factors) == 1 and u.factors[0].name in self.known:
+                self._single_collision(v, None, num="<…>")      # `<1, 0> m` with your m (red team 8 #6)
         elif self._unit_reciprocal_follows():
             # `<0, 0> /s` and `<1, 2> 1/s`, as after a number (#55)
             u = self.unit_expr(explicit=True, reciprocal=True)
@@ -2860,11 +2932,11 @@ class Parser:
                 factor(-1)
             elif t.kind == "OP" and t.value == "/" and explicit and self.peek().kind == "NUM":
                 break
-            elif t.kind == "OP" and t.value == "*" and unit_name_here(1):
-                if not explicit and self.peek().value == "c":
-                    break                 # `2 kg * c²`: the constant c multiplies (D235)
+            elif t.kind == "OP" and t.value == "*" and unit_name_here(1) and (explicit or t.raw == "·"):
+                # `2 N·m`: the centred dot joins units, like a space; an explicit `*` ends the unit (D235)
                 if not explicit and self.peek().value in self.known:
-                    break                 # `1.2 fm * A^(1/3)`: an explicit * before your variable multiplies (D235)
+                    if not self._later_collision(start, self.peek(), old_continues=False):
+                        break
                 self.next()
                 factor(1)
                 juxt_join = True
@@ -2879,6 +2951,15 @@ class Parser:
                 if not explicit and t.value in self.known:
                     if not self._later_collision(start, t, old_continues=False):
                         break
+                k = self.i - 1
+                while k > 0 and (self.toks[k].kind == "SUP" or (self.toks[k].kind == "NUM" and
+                                                                 self.toks[k - 1].kind == "OP")):
+                    k -= 1                    # step back over an exponent: `W/m² K`
+                if self.toks[k - 1].kind == "OP" and self.toks[k - 1].value == "/" and self.toks[k].kind == "NAME":
+                    below = self._unit_span_text(k, self.i - 1)
+                    self.diags.warn(f"'{self._unit_span_text(self.toks.index(start), self.i - 1)} {t.raw}' has only "
+                                    f"{below} below the line: {t.raw} multiplies", tok=t,
+                                    hint=f"for {t.raw} below the line too, write /({below} {t.raw})")   # red team 8 #12
                 factor(1)
                 juxt_join = True
             else:
@@ -2962,8 +3043,10 @@ class Parser:
             raise self.error(f"'{unit}/h' isn't a unit: in Fermium h is Planck's constant, not the hour", tok=h,
                              hint=f"write {unit}/hr for {unit} per hour")
         who = "your h" if "h" in self.known else "Planck's constant"
-        e = self.error(f"'{num}{unit}/h': in Fermium h is Planck's constant, not the hour, so this would divide "
-                       f"by Planck's constant", tok=h,
+        msg = (f"'{num}{unit}/h': h is your variable here, and the hour is written hr" if "h" in self.known else
+               f"'{num}{unit}/h': in Fermium h is Planck's constant, not the hour, so this would divide by Planck's "
+               f"constant")
+        e = self.error(msg, tok=h,
                        hint=f"write {num}{unit}/hr for {unit} per hour, or  ({num}{unit})/h  to divide by {who}")
         if self.fix_mode and (t.ws_before or h.ws_before):      # v1 divided when a space was there
             self._add_fix(self._bracket_fix(start, self.toks[self.i - 1]))
@@ -3016,6 +3099,12 @@ class Parser:
                 raise self.error("expected a number after ^ in this unit", tok=a)
             return Fraction(a.value).limit_denominator(1000) * neg
         return Fraction(1)
+
+
+def u_first(u, toks):
+    """The token where the unit expression u starts."""
+    f = u.factors[0]
+    return next(tk for tk in toks if tk.line == f.line and tk.col == f.col)
 
 
 def parse(source: str, diags: Diagnostics | None = None, known=None) -> A.Program:

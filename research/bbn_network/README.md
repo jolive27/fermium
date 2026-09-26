@@ -72,7 +72,7 @@ Kawano's version 4.1). Result:
 
 Two further checks on the rates: every reverse coefficient recomputed here from detailed balance reproduces
 the published NUC123 reverse factors (4.7×10⁹ T₉^{3/2} e^{−25.82/T₉} for d photodisintegration, 1.63×10¹⁰, 1.73,
-5.54, 4.64, …) to about 1 %; and the yields below land within a few per cent of modern codes for D, ³He and ⁷Li.
+5.54, 4.64, …) to about 1 %; and the yields below land within a few per cent of modern codes for D and ³He; ⁷Li/H is 7 % below Fields 2020 and 22 % below PRIMAT (see below).
 The fits are made for T₉ ≤ 10; above that (T > 0.86 MeV) the program holds them at T₉ = 10. The nuclei are in
 equilibrium there, set by the reverse rates (which use the true T), so the forward rates only have to be fast.
 
@@ -171,9 +171,9 @@ Fermium and SciPy agree to 3×10⁻⁶ or better on all four (the test requires 
   right sign and multiplicity, to every equation it touches. A loop over a table of reactions isn't possible.
 - **Variable names that are units.** `Yb` (for ⁷Be) is the yottabarn: `7 Yb[end]` is an error ("'7 Yb' means 7 of
   the unit Yb"); the variables were renamed `Y7Be`, `Y7Li`, …. With a temperature `T`, `π²/15 T⁴` and `4/3 T` read
-  `15 T` and `3 T` as tesla. The errors say so clearly ("'15 T' was read as a unit"), but only after a
-  unit-mismatch message in powers of kg, A and s. And `2/π² T⁴` means 2/(π² T⁴) (Fermium warns). BBN formulas are
-  full of these coefficient-times-T products, so the program writes `(π²/15) T⁴` and `(2/π²) T⁴` throughout.
+  `15 T` and `3 T` as tesla. (Fermium 1 said so only after a unit mismatch; since 1.5 the collision itself is the
+  error, and a fraction of plain numbers is one coefficient, so `2/π² T⁴` is (2/π²)·T⁴: DECISIONS D235, D236.)
+  The program still writes `(π²/15) T⁴` and `(2/π²) T⁴` throughout, which is clear either way.
 - **A unit can't be given a name:** `rate = cm³/(mol s)` is an error ("cm is a unit; units go right after a
   number"); `rate = 1 cm³/(mol s)` works.
 - **Plots:** there is no y-range option, so the abundances are floored at 10⁻¹² by hand in a loop (without the

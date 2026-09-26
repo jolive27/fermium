@@ -340,7 +340,7 @@ def _check_solve(ck, s: A.Solve, ctx, force_complex):
     missing = [x + "'" * k + "(start)" for (x, k) in layout if (x, k) not in y0]
     if missing:
         raise ck.err(f"missing initial condition{'s' if len(missing) > 1 else ''}: {', '.join(missing)}", s,
-                     hint="add them after 'with', e.g.  with x(0) = 0.1 m, x'(0) = 0 m/s")
+                     hint="add them after 'with', e.g.  with x(0) = 0.1 [m], x'(0) = 0 m/s")
 
     # right-hand side lambda
     lam = I.ILambda("ode", ck.fresh_name("ode"))
