@@ -78,9 +78,6 @@ impl Checker {
     pub fn e_where(&mut self, e: &A::Expr, _v: &A::Expr, _b: &[(String, A::Expr)], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("where", e.span))
     }
-    pub fn e_call(&mut self, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
-        Err(self.not_ported("a call", e.span))
-    }
     pub fn e_list_lit(&mut self, e: &A::Expr, _items: &[A::Expr], _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("a list", e.span))
     }
@@ -90,11 +87,11 @@ impl Checker {
     pub fn e_digits(&mut self, e: &A::Expr, _v: &A::Expr, _d: u32, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("to N digits", e.span))
     }
-    pub fn e_sqrt(&mut self, e: &A::Expr, _x: &A::Expr, _root: u32, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("√", e.span))
+    pub fn cplx_builtin(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
+        Err(self.not_ported(&format!("{name} of a complex number"), e.span))
     }
-    pub fn e_abs(&mut self, e: &A::Expr, _x: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("|…|", e.span))
+    pub fn clist_call(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
+        Err(self.not_ported(&format!("{name} of a list of complex numbers"), e.span))
     }
 }
 
@@ -140,5 +137,48 @@ impl Checker {
     /// The units of a function for printing it (Python function_units): needs instantiate.
     pub fn function_units(&mut self, _info: FuncInfoId) -> String {
         String::new()
+    }
+}
+
+impl Checker {
+    // ---- calls: pieces owned by other modules
+    pub fn py_ref_of(&mut self, _target: &A::Expr, _ctx: &mut Ctx) -> Option<usize> {
+        None
+    }
+    pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
+        Err(self.not_ported("calling Python", e.span))
+    }
+    pub fn is_pde_name(&self, _name: &str, _ctx: &Ctx) -> bool {
+        false
+    }
+    pub fn pde_call(&mut self, _name: &str, e: &A::Expr, _ctx: &mut Ctx, _deriv: bool) -> CResult<Checked> {
+        Err(self.not_ported("a PDE solution", e.span))
+    }
+    pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
+        Err(self.not_ported("err(…)", e.span))
+    }
+    pub fn builtin(&mut self, name: &str, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
+        Err(self.not_ported(&format!("the built-in {name}"), e.span))
+    }
+    pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
+        Err(self.not_ported("evaluating an ODE solution", e.span))
+    }
+    pub fn module_call(&mut self, _info: FuncInfoId, _args: Vec<Checked>, node: &A::Expr, _cache: bool)
+                       -> CResult<I::Expr> {
+        Err(self.not_ported("calling a module's function", node.span))
+    }
+    pub fn module_body_error(&mut self, _e: &mut Diagnostic, _info: FuncInfoId, _node: &A::Expr) {}
+    pub fn nat_contains(&self, other: &str) -> bool {
+        other.is_empty() || other == self.nat
+    }
+    pub fn system_name(&self, sys: &str) -> String {
+        sys.to_string()
+    }
+    pub fn system_consts(&self, sys: &str) -> String {
+        sys.to_string()
+    }
+    /// C.stabilize: a numerically stable form of a derivative's body (calculus module).
+    pub fn stabilize(&self, e: &A::Expr) -> A::Expr {
+        e.clone()
     }
 }

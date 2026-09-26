@@ -202,7 +202,15 @@ pub struct Checker {
     pub local_funcs: Vec<LocalFunc>,
     pub module: I::Module,
     pub extra: Vec<SymExtra>,
-    pub ret_types: Vec<Vec<Ty>>,
+    pub ret_types: Vec<Vec<I::Expr>>,
+    /// checker facts about each IR function instance (index = FuncId)
+    pub func_extra: Vec<crate::calls::FuncExtra>,
+    /// FuncInfos made for built-ins passed as functions (simpson(sin, …), D43)
+    pub builtin_infos: HashMap<String, FuncInfoId>,
+    /// module functions being instantiated from inside their module (D101)
+    pub in_module_call: std::collections::HashSet<FuncInfoId>,
+    /// errors that already carry the "this happened when calling …" note
+    pub call_noted: std::collections::HashSet<String>,
     pub counter: usize,
     pub main_count: usize,
     /// names of top-level functions defined anywhere in the program, with their line (used-before-defined)
@@ -246,6 +254,10 @@ impl Checker {
             module: I::Module::default(),
             extra: vec![],
             ret_types: vec![],
+            func_extra: vec![],
+            builtin_infos: HashMap::new(),
+            in_module_call: Default::default(),
+            call_noted: Default::default(),
             counter: 0,
             main_count: 0,
             future_funcs: HashMap::new(),

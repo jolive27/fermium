@@ -170,3 +170,61 @@ pub fn children(e: &A::Expr) -> Vec<&A::Expr> {
     }
     v
 }
+
+/// Names used in an expression, not counting variables bound inside (ast.free_names).
+pub fn free_names(n: &A::Expr) -> Vec<String> {
+    use A::ExprKind as K;
+    match &n.kind {
+        K::Name(x) => vec![x.clone()],
+        K::Integral { integrand, var, lo, hi } => {
+            let mut out: Vec<String> = free_names(integrand).into_iter().filter(|x| x != var).collect();
+            for b in lo.iter().chain(hi.iter()) {
+                out.extend(free_names(b));
+            }
+            out
+        }
+        K::Sum { body, var, lo, hi, step } => {
+            let mut out: Vec<String> = free_names(body).into_iter().filter(|x| x != var).collect();
+            out.extend(free_names(lo));
+            out.extend(free_names(hi));
+            for b in step.iter() {
+                out.extend(free_names(b));
+            }
+            out
+        }
+        K::Where { value, bindings } => {
+            let bound: Vec<&String> = bindings.iter().map(|(b, _)| b).collect();
+            let mut out: Vec<String> = free_names(value).into_iter().filter(|x| !bound.contains(&x)).collect();
+            for (_, v) in bindings {
+                out.extend(free_names(v));
+            }
+            out
+        }
+        _ => children(n).into_iter().flat_map(free_names).collect(),
+    }
+}
+
+/// Every expression in a statement list, recursively (statements' own expressions and their blocks).
+pub fn all_exprs_in_stmts<'a>(stmts: &'a [A::Stmt], out: &mut Vec<&'a A::Expr>) {
+    for s in stmts {
+        for_each_stmt_expr_ref(s, out);
+        for b in stmt_blocks(s) {
+            all_exprs_in_stmts(b, out);
+        }
+    }
+}
+
+fn for_each_stmt_expr_ref<'a>(s: &'a A::Stmt, out: &mut Vec<&'a A::Expr>) {
+    let mut v: Vec<*const A::Expr> = vec![];
+    for_each_stmt_expr(s, &mut |e| v.push(e as *const A::Expr));
+    // SAFETY: the pointers refer into `s`, which lives for 'a
+    out.extend(v.into_iter().map(|p| unsafe { &*p }));
+}
+
+/// An expression and all its sub-expressions, depth first.
+pub fn descendants<'a>(e: &'a A::Expr, out: &mut Vec<&'a A::Expr>) {
+    out.push(e);
+    for c in children(e) {
+        descendants(c, out);
+    }
+}

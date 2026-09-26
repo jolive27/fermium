@@ -702,3 +702,140 @@ mod tests {
         assert_eq!(limit_denominator(-0.75, 10000), Some(Rational64::new(-3, 4)));
     }
 }
+
+/// A number as written in the source (`2.50e19`) for messages (ast.num_text); else formatted like `%g`.
+pub fn num_text(n: &A::Expr) -> String {
+    if let Some(r) = &n.attrs.raw {
+        if !r.is_empty() {
+            return r.clone();
+        }
+    }
+    match n.kind {
+        A::ExprKind::Num { value, .. } => py_g(value),
+        _ => crate::source::to_source(n),
+    }
+}
+
+/// Python's `f"{x:g}"`.
+pub fn py_g(x: f64) -> String {
+    if x.is_nan() {
+        return "nan".into();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 { "inf".into() } else { "-inf".into() };
+    }
+    if x == 0.0 {
+        return if x.is_sign_negative() { "-0".into() } else { "0".into() };
+    }
+    let exp = format!("{:.5e}", x);
+    let (m, e) = exp.split_once('e').unwrap();
+    let e: i32 = e.parse().unwrap();
+    if (-4..6).contains(&e) {
+        let decimals = (5 - e).max(0) as usize;
+        let s = format!("{:.*}", decimals, x);
+        let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.').to_string() } else { s };
+        s
+    } else {
+        let m = if m.contains('.') { m.trim_end_matches('0').trim_end_matches('.') } else { m };
+        format!("{m}e{}{:02}", if e < 0 { '-' } else { '+' }, e.abs())
+    }
+}
+
+impl Checker {
+    /// -1, -4.0, (-2): a negative number written as a literal, or None (Python _negative_literal).
+    fn negative_literal(n: &A::Expr) -> Option<f64> {
+        let mut n = n.clone();
+        if let A::ExprKind::Neg(q) = &n.kind {
+            if let A::ExprKind::Quantity { value, unit, .. } = &q.kind {
+                let t = unit.text.trim();
+                if matches!(value.kind, A::ExprKind::Num { .. }) && !(t.starts_with('°') || t.starts_with("deg")) {
+                    n = A::Expr::new(A::ExprKind::Neg(value.clone()), n.span); // `√(-4 m²)` (red team 8 #20)
+                }
+            }
+        }
+        match &n.kind {
+            A::ExprKind::Neg(q) => match q.kind {
+                A::ExprKind::Num { value, .. } if value != 0.0 => Some(-value),
+                _ => None,
+            },
+            A::ExprKind::Num { value, .. } if *value < 0.0 => Some(*value),
+            _ => None,
+        }
+    }
+
+    /// √(-1), log(-1), factorial(-1) written with a literal: a compile-time error instead of NaN (D237).
+    pub fn domain_check(&self, name: &str, arg: &A::Expr, e: &A::Expr) -> CResult<()> {
+        let Some(v) = Self::negative_literal(arg) else { return Ok(()) };
+        if name == "sqrt" || name == "√" {
+            let is_neg = matches!(arg.kind, A::ExprKind::Neg(_));
+            let txt = if is_neg { crate::source::to_source(arg) } else { num_text(arg) };
+            let simple = matches!(arg.kind, A::ExprKind::Num { .. })
+                || matches!(&arg.kind, A::ExprKind::Neg(q) if matches!(q.kind, A::ExprKind::Num { .. }));
+            let hint = if simple {
+                format!("for the complex square root write  √({txt} + 0i)  (√(-1) is 𝑖)")
+            } else {
+                "a square root needs a value ≥ 0".into()
+            };
+            return Err(self.err(format!("√ of a negative number ({txt}) isn't a real number"), e.span, Some(hint)));
+        }
+        if matches!(name, "log" | "ln" | "log10" | "log2") {
+            return Err(self.err(format!("{name} of a negative number isn't a real number"), e.span,
+                                Some("the logarithm needs a positive argument".into())));
+        }
+        if name == "factorial" && v == v.trunc() {
+            return Err(self.err(format!("factorial of a negative whole number ({}) isn't defined", v as i64), e.span,
+                                Some("factorial(n) needs n ≥ 0".into())));
+        }
+        Ok(())
+    }
+
+    pub fn e_sqrt(&mut self, e: &A::Expr, x: &A::Expr, root: u32, ctx: &mut Ctx) -> CResult<I::Expr> {
+        if root == 2 {
+            self.domain_check("sqrt", x, e)?;
+        }
+        let a = self.expr(x, ctx)?;
+        if matches!(a.ty, Ty::Complex(_)) {
+            if root != 2 {
+                return Err(self.err("∛ of a complex number isn't supported; write z^(1/3) for the principal root",
+                                    e.span, None));
+            }
+            return self.cplx_builtin("sqrt", vec![a], e);
+        }
+        self.need_numlike(&a, x, "the value under the root", false)?;
+        let d = ty_dim(&a.ty).unwrap().pow(Rational64::new(1, root as i64));
+        let ty = if matches!(a.ty, Ty::List(_)) { Ty::List(d) } else { Ty::Num(d) };
+        let sf = a.sf;
+        let mut r = ir(I::ExprKind::PowC(Box::new(a), if root == 2 { 0.5 } else { 1.0 / 3.0 }), ty, e.span.line);
+        r.sf = sf;
+        Ok(r)
+    }
+
+    pub fn e_abs(&mut self, e: &A::Expr, x: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
+        let a = self.expr(x, ctx)?;
+        if matches!(a.ty, Ty::ComplexList(_)) {
+            return self.clist_call("abs", vec![a], e);
+        }
+        if matches!(a.ty, Ty::Complex(_)) {
+            return self.cplx_builtin("abs", vec![a], e);
+        }
+        self.need_numlike(&a, x, "this value", true)?;
+        let line = e.span.line;
+        if matches!(a.ty, Ty::Vec { .. }) {
+            let d = self.shared_dim(&a, "|v|", e)?;
+            let (hint, sf) = (a.hint.clone(), a.sf);
+            let mut r = ir(I::ExprKind::Builtin("norm".into(), vec![a]), Ty::Num(d), line);
+            r.hint = hint;
+            r.sf = sf;
+            return Ok(r);
+        }
+        if matches!(a.ty, Ty::Mat { .. }) {
+            return Err(self.err("the value inside |...| must be a number, but it is a matrix", e.span,
+                                Some("for the determinant write det(M)".into())));
+        }
+        let (hint, sf, ty) = (a.hint.clone(), a.sf, a.ty.clone());
+        let mut r = ir(I::ExprKind::Builtin("abs".into(), vec![a]), ty, line);
+        r.hint = hint;
+        r.sf = sf;
+        Ok(r)
+    }
+}

@@ -722,7 +722,7 @@ impl Checker {
             Checked::Func { .. } => self.expr(value, ctx)?, // the usual message for a function used as a value
             Checked::Val(v) => v,
         };
-        self.ret_types[ctx.ret_types].push(v.ty.clone());
+        self.ret_types[ctx.ret_types].push(v.clone());
         Ok(vec![self.stmt_at(I::StmtKind::Return(Some(v)), s)])
     }
 
