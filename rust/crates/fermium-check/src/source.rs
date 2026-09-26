@@ -54,6 +54,10 @@ fn src(e: &A::Expr) -> (String, u8) {
                     (format!("{l} {} {r}", op), SUM)
                 }
                 "*" | "×" => {
+                    if op == "*" && matches!(left.kind, K::Num { .. })
+                        && matches!(&right.kind, K::Name { name } if name == "𝑖") && lp >= JUXT {
+                        return (format!("{l}i"), JUXT); // the imaginary literal 4i (D90)
+                    }
                     if lp >= JUXT && rp >= JUXT && !r.starts_with('-') {
                         let sep = if matches!(right.kind, K::Num { .. } | K::Quantity { .. }) { "·" } else { " " };
                         return (format!("{l}{sep}{r}"), JUXT);
