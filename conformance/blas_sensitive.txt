@@ -1,0 +1,24 @@
+# Cases whose v1 (oracle) output depends on the OpenBLAS kernel the CPU selects: rounding-noise values (eigen
+# orthogonality integrals, 14th-17th digits) and adaptive ODE step counts that follow from them. The goldens were
+# harvested with OpenBLAS's SkylakeX kernels (an AVX-512 Intel machine). CI pins OPENBLAS_CORETYPE=SkylakeX on
+# AVX-512 runners, and skips these cases in the legacy run on other CPUs (seen on CI run 102). The Rust
+# implementation doesn't use BLAS, so its results don't depend on the machine; these cases run there as usual.
+9f5fb2f78f2d
+02e450290630
+12f847f3c21e
+1db48bb9730f
+1fc80f4b748e
+326ed4c73ce2
+5656c185e7df
+8b62468279c8
+92190636e7d6
+a7d9f4045bc9
+e284332f7710
+ff3fd00324b7
+1954d43c8916
+21542a0d1762
+8065f56e9b26
+86b05ef5f3b2
+907f871860a4
+aa3fce1cb879
+15ba58fa1006
