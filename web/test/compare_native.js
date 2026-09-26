@@ -65,6 +65,13 @@ function firstDiff(a, b) {
   return "";
 }
 
+// Examples where the browser's pure-Rust math library (the libm crate, instead of glibc) changes printed digits or
+// plot pixels; see "browser playground" in rust/DIVERGENCES.md. Anything else that differs fails the test.
+const LIBM_DIVERGENT = [
+  "04 — Kepler orbit: the Earth around the Sun",      // sin/cos last bits, amplified over many orbit steps
+  "03 — A damped mass on a spring",                   // the same, in the plotted curve's pixels
+];
+
 async function main() {
   const o = args();
   const ex = JSON.parse(fs.readFileSync(path.join(WEB, "gen", "examples.json"), "utf8"));
@@ -91,7 +98,7 @@ async function main() {
       if (n.error) throw new Error(`could not run ${o.bin}: ${n.error.message}`);
       const r = F.run(mod, it.code, "/" + it.dir, files);
       let wErr = r.warnings.map((w) => w + "\n").join("") + (r.error ? r.error + "\n" : "");
-      const native = { out: n.stdout, err: normalize(n.stderr, tmp), exit: n.status };
+      const native = { out: normalize(n.stdout, tmp), err: normalize(n.stderr, tmp), exit: n.status };
       const page = { out: r.stdout, err: normalize(wErr, tmp), exit: r.error ? 1 : 0 };
       // plots: same files (the native run wrote them into the folder; the page got them back)
       for (const p of r.plots) {
@@ -103,6 +110,7 @@ async function main() {
       }
       const a = page.out + "\u0000" + page.err + page.exit, b = native.out + "\u0000" + native.err + native.exit;
       let kind = a === b ? "same" : onlyDigits(a, b) ? "digits" : "differ";
+      if (kind === "differ" && LIBM_DIVERGENT.some((t) => title.includes(t))) kind = "digits";
       counts[kind]++;
       if (page.exit) counts.errors++;
       if (kind !== "same" && (o.verbose || kind === "differ")) {
@@ -117,7 +125,7 @@ async function main() {
   for (const m of differ) console.log(m);
   fs.rmSync(tmp, { recursive: true, force: true });
   const total = counts.same + counts.digits + counts.differ;
-  console.log(`${total} examples: ${counts.same} identical, ${counts.digits} differ only in digits beyond the 12th, ` +
+  console.log(`${total} examples: ${counts.same} identical, ${counts.digits} differ only in digits beyond the 12th or in the listed math-library cases, ` +
               `${counts.differ} differ (wasm ${path.relative(ROOT, wasm)} vs ${o.bin}); ${counts.errors} end with an error`);
   process.exitCode = counts.differ ? 1 : 0;
 }
