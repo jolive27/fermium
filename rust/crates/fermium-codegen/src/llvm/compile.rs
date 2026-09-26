@@ -27,6 +27,7 @@ use fermium_ir::{BinOp, CmpOp, Expr, ExprKind, Module, PrintItem, Stmt, StmtKind
 
 use super::rt::{self, BuiltinSite, Kind};
 
+
 /// Bytes of stack a program may use before "called itself too many times" (it runs on a thread with a 512 MB
 /// stack, like v1: codegen_llvm.STACK_LIMIT).
 pub const STACK_LIMIT: u64 = 400 << 20;
@@ -88,6 +89,9 @@ pub struct Gen<'c, 'm> {
     loops: Vec<(BasicBlock<'c>, BasicBlock<'c>)>,
     ret_kind: Kind,
     known_line: Option<u32>,
+    /// variables that live somewhere else in the function being compiled (a parallel for's body function)
+    overrides: HashMap<SymId, (PointerValue<'c>, Kind)>,
+    par_count: usize,
 }
 
 macro_rules! bl {
@@ -111,7 +115,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         let tables = Tables { texts: m.tables.texts.iter().map(|s| Rc::from(s.as_str())).collect(), ..Default::default() };
         let mut g = Gen { cx, lm, b: cx.create_builder(), m, tables, ctx_ptr, line_g, stackbase_g, externs: HashMap::new(),
                           mappings: vec![], globals: HashMap::new(), funcs: vec![], fnv: None, entry_b: None,
-                          locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None };
+                          locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None,
+                          overrides: HashMap::new(), par_count: 0 };
         g.declare_runtime();
         g
     }
@@ -170,6 +175,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_tlist_len", Some(i), &[p], rt::fm_tlist_len as *const () as usize, false);
         self.declare("fm_tlist_at", Some(i), &[p, i], rt::fm_tlist_at as *const () as usize, false);
         self.declare("fm_tlist_copy", Some(p), &[p, p], rt::fm_tlist_copy as *const () as usize, false);
+        self.declare("fm_par_run", None, &[p, p, p, i, f, f, p, i], rt::fm_par_run as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_fpow", Some(f), &[f, f], rt::fm_fpow as *const () as usize, true);
         self.declare("fm_powc", Some(f), &[f, f], rt::fm_powc as *const () as usize, true);
@@ -325,6 +331,9 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     // ------------------------------------------------------------ variables
     fn slot(&mut self, sym: SymId) -> R<(PointerValue<'c>, Kind)> {
+        if let Some(x) = self.overrides.get(&sym) {
+            return Ok(*x);
+        }
         let s = &self.m.syms[sym];
         if s.storage == Storage::Arena {
             return Err("REPL arena variables aren't compiled".into());
@@ -555,6 +564,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         eb.position_at_end(entry);
         self.entry_b = Some(eb);
         self.locals.clear();
+        self.overrides.clear();
         self.loops.clear();
         self.ret_kind = ret;
         let err = self.cx.append_basic_block(fv, "err");
@@ -719,8 +729,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                 self.goto(exit);
             }
             StmtKind::For { sym, lo, hi, step, body, par, .. } => {
-                if par.is_some() {
-                    return Err("parallel for isn't compiled yet".into());
+                if let Some(info) = par {
+                    return self.parallel_for(*sym, lo, hi, step.as_ref(), body, info);
                 }
                 self.for_range(*sym, lo, hi, step.as_ref(), body)?;
             }
@@ -770,6 +780,18 @@ impl<'c, 'm> Gen<'c, 'm> {
     /// `for sym from lo to hi step st`: inclusive, lo + i·st, as eval.rs (n = ⌊(hi − lo)/st + 1e-9⌋ + 1 when
     /// finite and ≥ 0, else no iterations; step 0 is an error).
     fn for_range(&mut self, sym: SymId, lo: &Expr, hi: &Expr, step: Option<&Expr>, body: &[Stmt]) -> R<()> {
+        let (lo, st, count) = self.range_count(lo, hi, step)?;
+        self.counted_loop(count, body, |g, i| {
+            let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
+            let x = bl!(g.b.build_float_mul(fi, st, "ist"));
+            let x = bl!(g.b.build_float_add(lo, x, "x"));
+            g.store_var(sym, fv(x))
+        })
+    }
+
+    /// (lo, step, number of iterations) of `for … from lo to hi step st`, with its run-time errors.
+    fn range_count(&mut self, lo: &Expr, hi: &Expr, step: Option<&Expr>)
+                   -> R<(FloatValue<'c>, FloatValue<'c>, IntValue<'c>)> {
         let lov = self.expr(lo)?;
         let lo = self.to_f(lov)?;
         let hiv = self.expr(hi)?;
@@ -795,12 +817,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let ni = self.fptosi_sat(n)?;
         let ni = bl!(self.b.build_int_add(ni, self.i64c(1), "n1"));
         let count = bl!(self.b.build_select(okn, ni, self.i64c(0), "count")).into_int_value();
-        self.counted_loop(count, body, |g, i| {
-            let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
-            let x = bl!(g.b.build_float_mul(fi, st, "ist"));
-            let x = bl!(g.b.build_float_add(lo, x, "x"));
-            g.store_var(sym, fv(x))
-        })
+        Ok((lo, st, count))
     }
 
     fn fptosi_sat(&mut self, x: FloatValue<'c>) -> R<IntValue<'c>> {
@@ -1421,3 +1438,6 @@ fn expr_name(k: &ExprKind) -> &'static str {
         _ => "this expression",
     }
 }
+
+#[path = "par.rs"]
+mod par;

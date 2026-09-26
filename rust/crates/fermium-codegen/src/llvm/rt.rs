@@ -102,6 +102,7 @@ pub const E_INDEX: i64 = 1;
 pub const E_ASSERT: i64 = 4;
 pub const E_STEP0: i64 = 7;
 pub const E_DEEP: i64 = 10;
+pub const E_PAR_ALIAS: i64 = 40;
 
 /// What the compiled code runs against. `err` is first so the compiled code finds it at offset 0.
 #[repr(C)]
@@ -282,6 +283,13 @@ fn error(c: &mut Ctx, kind: i64, a: f64, b: f64, line: i32) {
             RunError { message: format!("{name} called itself too many times (the program ran out of stack) -- is a \
                                          base case missing, like  if n <= 0 then ...?"), line, hint: None }
         }
+        E_PAR_ALIAS => {
+            // eval_par.rs's message
+            let t = c.module.tables.texts.get(a as usize).cloned().unwrap_or_default();
+            RunError { message: format!("{t} are the same list (one was set from the other), so the iterations of \
+                                         this parallel for would write and read the same numbers at the same \
+                                         time; make a copy first, e.g.  ys = xs * 1"), line, hint: None }
+        }
         _ => RunError { message: "runtime error".into(), line, hint: None },
     };
     c.fail(e);
@@ -419,6 +427,66 @@ pub extern "C" fn fm_list_powc(c: C, a: *const FmList, p: f64) -> *mut FmList {
 pub extern "C" fn fm_list_neg(c: C, a: *const FmList) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| -x).collect();
     locked(c, |c| c.new_list(v))
+}
+
+// ---------------------------------------------------------------- parallel for (D152)
+/// The compiled body of a parallel for: runs iterations [first, end) and writes the block's sums to `part`.
+pub type ParBody = unsafe extern "C" fn(env: *mut u8, first: i64, end: i64, part: *mut f64, lo: f64, st: f64);
+
+/// Stack of each worker thread (v1: PAR_STACK).
+const PAR_STACK: usize = 64 << 20;
+
+/// Threads for parallel for: FERMIUM_THREADS, else every core.
+fn par_threads() -> usize {
+    std::env::var("FERMIUM_THREADS").ok().and_then(|s| s.trim().parse::<usize>().ok()).filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
+}
+
+/// Run the blocks of a parallel for with n iterations on several threads; block b's sums go to part[b·nr ..].
+/// If any iteration stops with an error, the loop is run again block by block on this thread, so the error
+/// reported is the first one in iteration order, as the tree-walker (which runs the blocks in order) reports it.
+pub extern "C" fn fm_par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st: f64, part: *mut f64, nr: i64) {
+    let blocks = fermium_ir::par_blocks(n.max(0) as usize);
+    let flag = unsafe { &*(c as *const std::sync::atomic::AtomicI32) };
+    let serial = |from: usize| {
+        for (b, &(a, e)) in blocks.iter().enumerate().skip(from) {
+            unsafe { f(env, a as i64, e as i64, part.add(b * nr as usize), lo, st) };
+            if flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+                return;
+            }
+        }
+    };
+    let threads = par_threads().min(blocks.len());
+    if threads <= 1 {
+        return serial(0);
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (envu, partu) = (env as usize, part as usize);
+    let spawned = std::thread::scope(|s| {
+        let mut spawned = 0;
+        for _ in 0..threads {
+            let (next, blocks) = (&next, &blocks);
+            spawned += std::thread::Builder::new().stack_size(PAR_STACK).spawn_scoped(s, move || loop {
+                let b = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if b >= blocks.len() || flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+                    break;
+                }
+                let (a, e) = blocks[b];
+                unsafe { f(envu as *mut u8, a as i64, e as i64, (partu as *mut f64).add(b * nr as usize), lo, st) };
+            }).is_ok() as usize;
+        }
+        spawned
+    });
+    if spawned == 0 {
+        return serial(0);
+    }
+    if flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+        locked(c, |c| {
+            c.err = 0;
+            c.error = None;
+        });
+        serial(0);
+    }
 }
 
 // ---------------------------------------------------------------- lists of texts
