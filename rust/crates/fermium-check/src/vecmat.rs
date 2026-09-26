@@ -1001,8 +1001,8 @@ impl Checker {
     }
 
     pub fn e_field(&mut self, e: &A::Expr, target: &A::Expr, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
-        if self.py_ref_of(target, ctx).is_some() {
-            return Err(self.not_ported("a Python value", e.span));
+        if let Some(pref) = self.py_ref_of(target, ctx) {
+            return self.python_value(pref, e, name); // np.pi (D140)
         }
         let t = self.expr_any(target, ctx)?;
         let Checked::Val(t) = t else {

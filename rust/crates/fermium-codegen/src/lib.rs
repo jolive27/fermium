@@ -9,6 +9,7 @@ mod eval_data;
 mod eval_m3;
 mod eval_more;
 mod eval_par;
+mod eval_py;
 mod eval_solve;
 mod eval_unc;
 mod eval_vecmat;

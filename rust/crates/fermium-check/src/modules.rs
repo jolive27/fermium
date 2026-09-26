@@ -79,6 +79,8 @@ pub struct ModState {
     pub err_noted: HashSet<String>,
     /// `use python` modules (name as imported)
     pub py: Vec<String>,
+    /// what each `use python` name stands for (same index as `py`)
+    pub py_refs: Vec<crate::pyinterop::PyModRef>,
     /// the last AST node id given to a module's nodes (ids are unique across the program and its modules)
     pub last_id: u32,
 }
@@ -1086,25 +1088,7 @@ impl Checker {
         None
     }
 
-    // ------------------------------------------------------------ use python (D140)
-    /// `use python numpy as np`: Python interop is loaded at run time and only when imported (spec §B5.14), the
-    /// last milestone; until then a program that uses it stops here with one clear error (rust/DIVERGENCES.md).
-    pub fn s_use_python(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        let kind = self.scopes[ctx.scope].kind;
-        if !ctx.is_main || ctx.lam.is_some() || ctx.branch != 0 || ctx.loop_depth != 0
-            || !(kind == "global" || kind == "module")
-        {
-            return Err(self.err("use python must be at the top level of the program (not inside a block or function)",
-                                s.span, None));
-        }
-        if self.mods.scope_module.contains_key(&ctx.scope) {
-            return Err(self.err("a Fermium module can't use Python yet; put the  use python  line in the program",
-                                s.span, None));
-        }
-        Err(self.err("use python needs Python interop, which this build doesn't have yet", s.span,
-                     Some("run it with the Python implementation (legacy/) for now".into())))
-    }
-
+    // ------------------------------------------------------------ use python (D140): pyinterop.rs
     pub fn py_module_name(&self, m: usize) -> String {
         self.mods.py.get(m).cloned().unwrap_or_else(|| "?".into())
     }

@@ -25,6 +25,7 @@ mod pending;
 pub mod pde;
 pub mod parallel;
 pub mod print;
+pub mod pyinterop;
 pub mod rng;
 pub mod solve;
 pub mod source;

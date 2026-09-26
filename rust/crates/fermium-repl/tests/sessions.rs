@@ -51,3 +51,21 @@ fn sessions_match_v1() {
     eprintln!("{pass} of {} sessions print exactly what v1 prints", names.len());
     assert!(bad.is_empty(), "{} sessions differ from v1:\n{}", bad.len(), bad.join("\n"));
 }
+
+#[test]
+fn the_repl_keeps_the_python_module() {
+    // v1 tests/test_python_interop.py::test_repl_keeps_the_python_module (skipped without python3 + NumPy)
+    let ok = std::process::Command::new("python3").args(["-c", "import numpy"]).output()
+        .map(|o| o.status.success()).unwrap_or(false);
+    if !ok {
+        eprintln!("skipped: python3 with numpy isn't available");
+        return;
+    }
+    let mut s = fermium_repl::Session::new(".");
+    let mut out: Vec<u8> = vec![];
+    for input in ["use python numpy as np\n", "x = np.sqrt(16)\n", "print x + np.sqrt(9)\n",
+                  "use python numpy as np:\n    hypot(a [m], b [m]) -> [m]\n", "print np.hypot(3 m, 4 m)\n"] {
+        s.execute(input, &mut out, None).unwrap_or_else(|e| panic!("{input}: {}", e.message));
+    }
+    assert_eq!(String::from_utf8(out).unwrap(), "7\n5 m\n");
+}
