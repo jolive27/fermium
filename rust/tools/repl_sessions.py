@@ -13,7 +13,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "rust", "crates", "fermium-repl", "tests", "sessions")
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 
 EXTRA = [
     # errors, the terminal-command hint, :vars, blocks, \name expansion
@@ -54,7 +54,7 @@ EXTRA = [
 
 
 def sessions():
-    tree = ast.parse(open(os.path.join(ROOT, "tests", "test_repl.py"), encoding="utf-8").read())
+    tree = ast.parse(open(os.path.join(ROOT, "legacy", "tests", "test_repl.py"), encoding="utf-8").read())
     seen = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, "id", None) in ("repl", "repl_lines"):

@@ -30,7 +30,7 @@ from concurrent.futures import ProcessPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5, the oracle, lives in legacy/fermium since v2.0 (D269)
 
 SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
 NUM = re.compile(r"^[-+]?(\d+(\.\d*)?|\.\d+)(e[-+]?\d+)?(×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?$")
@@ -152,7 +152,7 @@ def run_legacy(path, case):
     from fermium.driver import run_source
     from fermium.errors import FermiumError
     src = open(path, encoding="utf-8").read()
-    base = os.path.join(ROOT, case["dir"]) if case["dir"] else None
+    base = case_dir(case["dir"]) if case["dir"] else None
     out, err = io.StringIO(), io.StringIO()
 
     def alarm(*_):
@@ -169,7 +169,21 @@ def run_legacy(path, case):
         return out.getvalue(), err.getvalue(), {"message": "timed out after 300 s", "line": None}
     finally:
         signal.alarm(0)
-    return out.getvalue().replace(ROOT, "<ROOT>"), err.getvalue().replace(ROOT, "<ROOT>"), e
+    out, err = out.getvalue(), err.getvalue()
+    if base:           # paths the program prints as if it ran in the case's folder (see case_dir)
+        real = os.path.normpath(os.path.join(ROOT, case["dir"]))
+        out, err = out.replace(base, real), err.replace(base, real)
+    return out.replace(ROOT, "<ROOT>"), err.replace(ROOT, "<ROOT>"), e
+
+
+def case_dir(rel):
+    """Where a case's folder is now. v1's test programs moved from tests/ to legacy/tests/ at the v2.0 cutover
+    (D269); the cases keep the old folder name (it is part of their id and of the paths they print), so programs
+    still run as if in tests/programs, reading the files from legacy/tests/programs."""
+    real = os.path.normpath(os.path.join(ROOT, rel))
+    if not os.path.isdir(real) and (rel == "tests" or rel.startswith("tests/")):
+        real = os.path.normpath(os.path.join(ROOT, "legacy", rel))
+    return real
 
 
 ERR_LINE = re.compile(r"^(?:.*?, )?line (\d+): (.*)$")
@@ -188,7 +202,7 @@ def run_binary(binary, path, case):
             # a copy of the program's folder, so plots and other files it writes never land in the repository:
             # the folder's own files, and any repository file the program names by a relative path (data/x.csv,
             # ../data/y.csv, lib/z.fm), copied into a mirror of the repository under tmp/root
-            src_dir = os.path.normpath(os.path.join(ROOT, case["dir"]))
+            src_dir = case_dir(case["dir"])
             mirror = os.path.join(tmp, "root")
             base = os.path.normpath(os.path.join(mirror, case["dir"]))
             os.makedirs(base, exist_ok=True)
@@ -199,8 +213,8 @@ def run_binary(binary, path, case):
             src_text = open(path, encoding="utf-8").read()
             for rel in re.findall(r'"([^"\n]+\.[A-Za-z0-9]+)"', src_text):
                 f = os.path.normpath(os.path.join(src_dir, rel))
-                if f.startswith(ROOT + os.sep) and os.path.isfile(f):
-                    dst = os.path.join(mirror, os.path.relpath(f, ROOT))
+                dst = os.path.normpath(os.path.join(base, rel))
+                if f.startswith(ROOT + os.sep) and os.path.isfile(f) and dst.startswith(mirror + os.sep):
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(f, dst)
         empty = os.path.join(tmp, "empty-path")

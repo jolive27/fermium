@@ -17,7 +17,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 OUT = os.path.join(ROOT, "rust", "crates", "fermium-runtime", "tests", "fixtures")
 
 inf = math.inf

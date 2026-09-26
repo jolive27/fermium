@@ -1,7 +1,7 @@
 """Build the conformance suite (spec §B3) from the legacy (v1.5) implementation, the oracle.
 
 Sources:
-  1. every program the test suite runs in-process (tests/conftest.py records them when FERMIUM_HARVEST is set);
+  1. every program the test suite runs in-process (legacy/tests/conftest.py records them when FERMIUM_HARVEST is set);
   2. every .fm program in the repository: examples, rosetta, gauntlet, research, tests/programs (with John's
      Appendix 1 programs, mandatory), benchmarks.
 
@@ -26,7 +26,8 @@ import shutil
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5, the oracle, lives in legacy/fermium since v2.0 (D269)
+LEGACY_TESTS = os.path.join(ROOT, "legacy", "tests")
 HERE = os.path.join(ROOT, "conformance")
 CASES = os.path.join(HERE, "cases")
 
@@ -68,7 +69,15 @@ FENCE = re.compile(r"^```(fermium|fm|)[ \t]*\n(.*?)^```", re.M | re.S)
 FILE_REFS = re.compile(r"\bload\b|\bplot\b|\banimate\b|\bimport\b|\buse python\b|\bsave\b|\"[^\"]*\.(csv|txt|png|svg|gif|fm)\"")
 
 
+def relpath(path: str) -> str:
+    """A path relative to the repository, with v1's test programs under their pre-v2.0 name tests/ (they moved to
+    legacy/tests/ at the cutover, D269): the folder is part of a case's id and of the paths it prints."""
+    rel = os.path.relpath(path, ROOT)
+    return rel[len("legacy/"):] if rel == "legacy/tests" or rel.startswith("legacy/tests/") else rel
+
+
 def normalise(text: str, base: str | None) -> str:
+    text = text.replace(LEGACY_TESTS, os.path.join(ROOT, "tests"))
     text = text.replace(ROOT + os.sep, "<ROOT>/").replace(ROOT, "<ROOT>")
     return text
 
@@ -198,11 +207,11 @@ def main(harvest_dir: str | None):
     # have changed a setting first (monkeypatch), so the recorded output is only a way to find the programs
     records = rerun_clean(records)
     programs = []
-    for pat in ("examples/*.fm", "examples/rosetta/*.fm", "gauntlet/*/*.fm", "research/*/*.fm", "tests/programs/*.fm",
-                "tests/programs/john/*.fm", "benchmarks/fermium/*.fm"):
+    for pat in ("examples/*.fm", "examples/rosetta/*.fm", "gauntlet/*/*.fm", "research/*/*.fm",
+                "legacy/tests/programs/*.fm", "legacy/tests/programs/john/*.fm", "benchmarks/fermium/*.fm"):
         programs += sorted(glob.glob(os.path.join(ROOT, pat)))
     jobs = [(open(path, encoding="utf-8").read(), os.path.dirname(path), os.path.basename(path),
-             os.path.relpath(path, ROOT)) for path in programs]
+             relpath(path)) for path in programs]
     jobs += [(src, d, "<program>", origin) for src, d, origin in markdown_programs()]
     from concurrent.futures import ProcessPoolExecutor
     with ProcessPoolExecutor(max_workers=os.cpu_count() or 2) as ex:
@@ -229,7 +238,7 @@ def main(harvest_dir: str | None):
                 skipped["machine-dependent output"] += 1
                 continue
             drop += pre
-        rel = os.path.relpath(base, ROOT) if base else None
+        rel = relpath(base) if base else None
         key = hashlib.sha1((src + "\0" + (rel or "")).encode()).hexdigest()[:12]
         if key in seen:
             skipped["duplicate"] += 1

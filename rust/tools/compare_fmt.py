@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5 (the oracle) is in legacy/ since v2.0 (D269)
 sys.path.insert(0, os.path.join(ROOT, "rust", "tools"))
 MODES = [["--pretty"], ["--ascii"], ["--fix"], ["--fix", "--pretty"], ["--fix", "--ascii"]]
 
