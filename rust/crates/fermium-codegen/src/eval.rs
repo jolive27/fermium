@@ -148,13 +148,8 @@ pub fn powc(x: f64, p: f64) -> f64 {
 /// The one-argument math functions (interp.math1).
 pub fn math1(name: &str, x: f64) -> f64 {
     match name {
-        "round" => {
-            if x.is_finite() {
-                (x.abs() + 0.5).floor().copysign(x)
-            } else {
-                x
-            }
-        }
+        // llvm.round, as the compiled v1.5 path (the oracle) does it: half away from zero, exact for 0.49999999999999994
+        "round" => x.round(),
         "sign" => f64::from(i8::from(x > 0.0) - i8::from(x < 0.0)),
         "floor" => x.floor(),
         "ceil" => x.ceil(),
@@ -180,12 +175,18 @@ pub fn math1(name: &str, x: f64) -> f64 {
         "cot" => fdiv(1.0, x.tan()),
         "sec" => fdiv(1.0, x.cos()),
         "csc" => fdiv(1.0, x.sin()),
-        _ => f64::NAN, // erf, gamma, …: fermium-runtime's special functions (wired in by the runtime)
+        _ => f64::NAN,
     }
 }
 
+/// The one-argument functions `math1` computes itself (erf, gamma, … come from fermium-runtime).
+pub const MATH1: &[&str] = &[
+    "round", "sign", "floor", "ceil", "sin", "cos", "tan", "asin", "acos", "atan", "sinh", "cosh", "tanh", "asinh",
+    "acosh", "atanh", "exp", "ln", "log", "log10", "log2", "expm1", "log1p", "abs", "cot", "sec", "csc",
+];
+
 // ---------------------------------------------------------------- control flow
-enum Flow {
+pub(crate) enum Flow {
     Normal,
     Break,
     Continue,
@@ -195,15 +196,15 @@ enum Flow {
 /// Local variables of one call.
 #[derive(Default)]
 pub struct Frame {
-    vars: HashMap<SymId, Value>,
+    pub(crate) vars: HashMap<SymId, Value>,
 }
 
 /// Runs a checked module.
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
     pub printer: P,
-    globals: HashMap<SymId, Value>,
-    line: u32,
+    pub(crate) globals: HashMap<SymId, Value>,
+    pub(crate) line: u32,
     /// Builtins the runtime provides (special functions, numerics), looked up by name.
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
 }
@@ -213,7 +214,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         Interpreter { module, printer, globals: HashMap::new(), line: 0, builtins: HashMap::new() }
     }
 
-    fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
+    pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
         Err(RunError { message: message.into(), line: self.line, hint: None })
     }
 
@@ -226,7 +227,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn get(&self, sym: SymId, fr: &Frame) -> Result<Value, RunError> {
+    pub(crate) fn get(&self, sym: SymId, fr: &Frame) -> Result<Value, RunError> {
         if let Some(v) = fr.vars.get(&sym) {
             return Ok(v.clone());
         }
@@ -237,7 +238,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         self.err(format!("{name} is used before it has a value"))
     }
 
-    fn set(&mut self, sym: SymId, v: Value, fr: &mut Frame) {
+    pub(crate) fn set(&mut self, sym: SymId, v: Value, fr: &mut Frame) {
         if self.module.syms[sym].func.is_none() {
             self.globals.insert(sym, v);
         } else {
@@ -245,7 +246,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn block(&mut self, stmts: &[Stmt], fr: &mut Frame) -> Result<Flow, RunError> {
+    pub(crate) fn block(&mut self, stmts: &[Stmt], fr: &mut Frame) -> Result<Flow, RunError> {
         for s in stmts {
             match self.stmt(s, fr)? {
                 Flow::Normal => {}
@@ -255,7 +256,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         Ok(Flow::Normal)
     }
 
-    fn stmt(&mut self, s: &Stmt, fr: &mut Frame) -> Result<Flow, RunError> {
+    pub(crate) fn stmt(&mut self, s: &Stmt, fr: &mut Frame) -> Result<Flow, RunError> {
         if s.line != 0 {
             self.line = s.line;
         }
@@ -361,12 +362,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     return self.err(m);
                 }
             }
-            other => return self.err(format!("not yet supported by the Rust back end: {}", stmt_name(other))),
+            StmtKind::Plot(..) | StmtKind::Solve { .. } | StmtKind::Fit { .. } | StmtKind::Animate { .. } => {
+                self.stmt_solve(s, fr)?
+            }
+            StmtKind::Propagate { .. } => self.stmt_propagate(s, fr)?,
         }
         Ok(Flow::Normal)
     }
 
-    fn print(&mut self, items: &[PrintItem], fr: &mut Frame) -> Result<(), RunError> {
+    pub(crate) fn print(&mut self, items: &[PrintItem], fr: &mut Frame) -> Result<(), RunError> {
         for it in items {
             match it {
                 PrintItem::Num(e, f) => {
@@ -435,7 +439,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     /// A 1-based list index checked like v1 (`index 4 is out of range: the list has 3 elements …`).
-    fn list_index(&self, i: f64, n: usize) -> Result<usize, RunError> {
+    pub(crate) fn list_index(&self, i: f64, n: usize) -> Result<usize, RunError> {
         if i != i.floor() || !i.is_finite() {
             return self.err(format!("a list index must be a whole number, not {i}"));
         }
@@ -572,11 +576,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let vals = args.iter().map(|a| self.eval(a, fr)).collect::<Result<Vec<_>, _>>()?;
                 self.builtin(name, vals)?
             }
-            _ => return self.err("not yet supported by the Rust back end"),
+            _ => return self.eval_more(e, fr),
         })
     }
 
-    fn bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
+    pub(crate) fn bin(&self, op: BinOp, a: Value, b: Value) -> Result<Value, RunError> {
         let f = |x: f64, y: f64| match op {
             BinOp::Add => x + y,
             BinOp::Sub => x - y,
@@ -601,7 +605,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         })
     }
 
-    fn call(&mut self, f: usize, args: Vec<Value>) -> Result<Value, RunError> {
+    pub(crate) fn call(&mut self, f: usize, args: Vec<Value>) -> Result<Value, RunError> {
         let func = &self.module.funcs[f];
         let mut fr = Frame::default();
         for (p, v) in func.params.iter().zip(args) {
@@ -614,9 +618,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {
+    pub(crate) fn builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, RunError> {
         if let Some(f) = self.builtins.get(name) {
             return f(&args).map_err(|m| RunError { message: m, line: self.line, hint: None });
+        }
+        for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
+                     Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {
+            if let Some(r) = area(self, name, &args) {
+                return r;
+            }
         }
         let x = args.first().map(Value::num).unwrap_or(f64::NAN);
         Ok(match name {
@@ -631,21 +641,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             },
             "atan2" => Value::Num(x.atan2(args[1].num())),
             "hypot" => Value::Num(x.hypot(args[1].num())),
-            _ => Value::Num(math1(name, x)),
+            _ if MATH1.contains(&name) => Value::Num(math1(name, x)),
+            _ => return self.err(format!("the built-in {name} isn't supported by the Rust back end yet")),
         })
     }
 }
 
-fn stmt_name(s: &StmtKind) -> &'static str {
-    match s {
-        StmtKind::Plot(..) => "plot",
-        StmtKind::Solve { .. } => "solve",
-        StmtKind::Fit { .. } => "fit",
-        StmtKind::Animate { .. } => "animate",
-        StmtKind::Propagate { .. } => "propagate montecarlo",
-        _ => "this statement",
-    }
-}
 
 #[cfg(test)]
 mod tests {

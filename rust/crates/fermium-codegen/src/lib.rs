@@ -2,6 +2,15 @@
 //! interp.py, the reference); the LLVM back end (inkwell, LLVM 18, statically linked) implements the same trait
 //! and must print identically.
 pub mod eval;
+mod eval_calc;
+mod eval_complex;
+mod eval_core;
+mod eval_data;
+mod eval_m3;
+mod eval_more;
+mod eval_solve;
+mod eval_unc;
+mod eval_vecmat;
 pub mod printer;
 
 use fermium_ir::Module;
