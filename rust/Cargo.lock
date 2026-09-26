@@ -55,7 +55,11 @@ version = "0.1.0"
 
 [[package]]
 name = "fermium-sym"
-version = "0.1.0"
+version = "2.0.0-dev"
+dependencies = [
+ "fermium-syntax",
+ "fermium-units",
+]
 
 [[package]]
 name = "fermium-syntax"
