@@ -15,7 +15,8 @@ How outputs are compared (D264, strict since red team round 9):
   - warnings (stderr): the same warnings (line and message), in the same order;
   - a program that should run must exit with code 0.
 The Rust binary runs on a copy of the program in an empty temporary directory, with an empty PATH, so it can't
-read the expected output or call the Python implementation.
+read the expected output or call the Python implementation. FERMIUM_PYTHON names the runner's own Python (with
+NumPy and SciPy), which the binary loads only for `use python` programs.
 """
 import argparse
 import glob
@@ -206,7 +207,7 @@ def run_binary(binary, path, case):
         os.mkdir(empty)
         try:
             p = subprocess.run([os.path.abspath(binary), "run", "--base-dir", base, prog], capture_output=True,
-                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8"})
+                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8", "FERMIUM_PYTHON": sys.executable})
         except subprocess.TimeoutExpired:
             return "", "", {"message": "timed out after 300 s", "line": None}, None
         except OSError as ex:
