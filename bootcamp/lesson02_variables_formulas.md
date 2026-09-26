@@ -143,48 +143,76 @@ print t
 
 `t = t + 1.5 s` looks wrong in maths, but in programming it's perfectly normal: "take the current value of t, add 1.5 s, and store the result back in t". `t += 2 s` is a shortcut for the same thing. There are also `-=`, `*=` and `/=`.
 
-## ⚠️ Gotcha: the mass `m` and the metre `m`
+## When one of your names is also a unit
 
-Physicists love the letter `m` for mass. Fermium also uses `m` for metres. Remember Lesson 1: right after a number, a unit name is a unit, and if you also have a variable with that name, Fermium asks you to choose:
+Physicists love `m` for a mass and `g` for gravity, and Fermium also uses `m` for metres and `g` for grams. One short rule decides:
 
+> 1. Right after a number comes a unit: `3 m`, `9.81 m/s²`, `50 N/m`.
+> 2. If that unit is a single name that is also one of your variables (`2 g` with your own `g`), Fermium stops and asks which you mean: `2*g` for your variable, `2 [g]` for the unit.
+> 3. In a longer unit (`3 m/s`, `2 kg m²`) the first name is always a unit; a later name that is also your variable gets the same question.
+
+Anywhere else, a name is your variable, and spaces never change the meaning. Here is the question and its answer:
+
+<!-- run as gravity.fm -->
 ```
-m = 2 kg
-v = 3 m/s
-print 0.5 m v^2
+g = 9.81 m/s^2
+h = 20 m
+print 2 g h
 ```
 
 <!-- output -->
 ```
-line 3: '0.5 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m
-    print 0.5 m v^2
-              ^
-  hint: write  0.5*m  for 0.5 × your variable m, or  0.5 [m]  for the unit
+gravity.fm, line 3: '2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g
+    print 2 g h
+            ^
+  hint: write  2*g  for 2 × your variable g, or  2 [g]  for the unit
 ```
 
-Without this check, `0.5 m` would quietly mean half a metre, and the answer would come out in silly units. Three correct ways to write kinetic energy:
+```fermium
+g = 9.81 m/s^2
+h = 20 m
+print 2*g*h
+print 2 [g]
+```
+
+<!-- output -->
+```
+392 m²/s²
+2 g
+```
+
+And a later name in a unit, `20 m/s/g`: brackets say what you mean.
+
+```fermium
+g = 9.81 m/s^2
+print (20 m/s)/g
+```
+
+<!-- output -->
+```
+2.04 s
+```
+
+With a mass `m`, the kinetic energy reads just like the textbook, because no number comes right before `m`:
 
 ```fermium
 m = 2 kg
 v = 3 m/s
-print 0.5 * m * v^2
-print (1/2) m v^2
 print ½ m v^2
+print (1/2) m v^2
 ```
 
 <!-- output -->
 ```
-9.0 J
 9 J
 9 J
 ```
 
-`½` is a single character (Lesson 2b shows how to type it). Because it isn't a digit, the unit rule doesn't apply to it. Also note `v = 3 m/s` was fine: there `m/s` is clearly a unit.
+`½` is a single character (Lesson 2b shows how to type it); `(1/2)` is the same in plain ASCII. A fraction of plain numbers is one coefficient, so `1/2 mass v^2` works too.
 
-## ⚠️ Gotcha: `1/2 m v^2`
+**Gravity:** Fermium doesn't guess what `g` means. Put `g = 9.81 m/s^2` in your file (as above), or use the built-in standard gravity `g_n` (9.80665 m/s², also spelled `g_0`).
 
-Fermium reads implicit multiplication *before* division, the way physicists read `h c / λ k T` as (hc)/(λkT). So `1/2 mass v^2` means 1/(2 · mass · v²), which is not the kinetic energy, and Fermium warns about it. With a variable called `m`, `1/2 m v^2` doesn't even get that far: it is the `'2 m' is ambiguous` error from above. Write `(1/2) m v^2` or `½ m v^2`.
-
-Here's where that rule helps: the Planck distribution's exponent hc/(λk_BT) can be written exactly as on paper:
+Implicit multiplication happens *before* division, the way physicists read `h c / λ k T` as (hc)/(λkT). Here's where that rule helps: the Planck distribution's exponent hc/(λk_BT) can be written exactly as on paper:
 
 ```fermium
 T = 300 K
@@ -214,7 +242,7 @@ print p
 6 kg m/s
 ```
 
-The metre gotcha applies here too: `0.5 m v^2 where m = 2 kg` is the same error (`'0.5 m' is ambiguous: … but m is also the m from 'where'`). Use `½ m v^2`, `0.5 * m * v^2` or a longer name like `mass`.
+The names a `where` defines are your variables in the formula before it, so `½ m v^2 where m = 2 kg, v = 3 m/s` works as written.
 
 ## Comments
 
@@ -243,12 +271,13 @@ It takes 2.02 s to fall.
 - A variable keeps its units forever.
 - `x += 1 m` updates a variable.
 - `print "text", value` and `print x to 6 digits`. A variable can also hold text: `planet = "Mars"`.
-- **Gotchas:** with your own `m`, `0.5 m v^2` is an error (right after a number, `m` is the metre); `1/2 mass v^2` means 1/(2·mass·v²). Write `½ m v^2` or `0.5 * m * v^2`.
+- Right after a number comes a unit. If that unit is also one of your names (`2 g` with your own `g`), write `2*g` for your variable or `2 [g]` for the unit.
+- Gravity: `g = 9.81 m/s^2` in your file, or the built-in `g_n`.
 
 ## Exercises
 
 1. **Projectile range.** A ball is launched at v₀ = 20 m/s at 45° (write `45 deg`). Its range is R = v₀² sin(2θ)/g. Compute R. (`sin` is the sine function.)
-2. **Kinetic energy.** A 1500 kg car drives at 100 km/hr. Compute its kinetic energy in kJ, using a variable called `m` for the mass. Make sure you don't get a warning!
+2. **Kinetic energy.** A 1500 kg car drives at 100 km/hr. Compute its kinetic energy in kJ, using a variable called `m` for the mass.
 3. **Escape velocity.** Compute v = √(2GM/R) for the Earth using the constants `G`, `M_earth` and `R_earth`. Print it in km/s.
 4. **Swap.** Make two variables `a = 3 m` and `b = 5 m`, then swap their values so that `a` is 5 m and `b` is 3 m. (Hint: you'll need a third variable.)
 5. **Spot the bug.** This program was supposed to print the de Broglie wavelength of an electron moving at 1% of the speed of light. What's wrong? Fix it.

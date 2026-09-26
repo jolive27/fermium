@@ -89,7 +89,7 @@ speed = 3 m/s
 undefined.fm, line 1: speed isn't defined
     print speed
           ^^^^^
-  hint: give it a value first, e.g.  speed = 1.0 m
+  hint: give it a value on an earlier line, e.g.  speed = 2.5 m  (with its own unit)
 ```
 
 **Means:** you used a name that Fermium doesn't know (yet).
@@ -224,7 +224,7 @@ print 5 kg in N
 convert.fm, line 1: can't show mass [kg] in N (force [N])
     print 5 kg in N
           ^^^^^^^^^
-  hint: the units you convert to must measure the same kind of quantity
+  hint: 5 kg is mass; try  in kg  or  in u  or  in MeV/c²
 ```
 
 **Means:** `in` converts between units of the **same kind** (m to ft, J to eV), but a mass can't be shown in newtons.

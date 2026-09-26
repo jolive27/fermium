@@ -19,7 +19,7 @@ print R
 
 ## 2. Kinetic energy of a car
 
-Use `½` (or `0.5 * m`), not `0.5 m`, which would mean half a metre:
+Write it as on paper, with `½` (or `(1/2)`) before the mass. `0.5 m` would ask whether you mean half a metre (the unit rule):
 
 ```fermium
 m = 1500 kg

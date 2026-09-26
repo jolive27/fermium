@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 from .errors import FermiumError
@@ -112,6 +113,18 @@ def describe_vars(session):
     return "\n".join(lines) if lines else "(no variables yet)"
 
 
+SHELL_LINE = re.compile(r"^(fermium|python3?|pip3?|cd|ls|dir|cat|open|clear|git|brew|sudo|mkdir|rm|cp|mv)"
+                        r"(\s+[-\w./~\\\"\'=:]+)*$")
+
+
+def session_names(session):
+    """The names the session has defined (a variable called `cd` or `ls` is not a terminal command)."""
+    try:
+        return set(session.checker.globals.names)
+    except Exception:
+        return set()
+
+
 def main(stdin=None, stdout=None):
     from . import __version__
     from .driver import ReplSession
@@ -164,6 +177,12 @@ def main(stdin=None, stdout=None):
             continue
         if s == ":vars":
             out.write(describe_vars(session) + "\n")
+            continue
+        if SHELL_LINE.match(s) and not re.match(r"^\S+\s*[-+*/^]?=", s) and s.split()[0] not in session_names(session):
+            # `fm> fermium run ke.fm`: a terminal command typed at the Fermium prompt (spec A3.5)
+            out.write(f"'{s.split()[0]}' looks like a terminal command. This is the Fermium prompt; type :quit to go "
+                      f"back to the terminal first.\n")
+            out.flush()
             continue
         text = line + "\n"
         block = opens_block(line) or needs_more(text, session)

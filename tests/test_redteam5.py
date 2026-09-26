@@ -323,7 +323,7 @@ def test_19_lesson2_says_the_repl_allows_redefinition():
     out = repl("v = 3 m/s\nv = 5\nprint v\n")
     assert out.strip() == "5"
     text = _read("bootcamp/lesson02_variables_formulas.md")
-    section = text[text.index("## Variables keep their units"):text.index("## ⚠️ Gotcha: the mass")]
+    section = text[text.index("## Variables keep their units"):text.index("## When one of your names is also a unit")]
     assert "REPL" in section
 
 

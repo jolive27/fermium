@@ -560,3 +560,34 @@ SPELLED_UNITS = {
     "radians": "rad", "electronvolt": "eV", "electronvolts": "eV", "mph": "mi/hr", "kph": "km/hr",
     "lb": "lbf or lbm", "lbs": "lbf or lbm", "pound": "lbf or lbm", "pounds": "lbf or lbm",
 }
+
+
+# ---------------------------------------------------------------------------
+# Suggestions for a conversion to the wrong kind of unit (spec A3.3):
+# "h c is energy × length; try `in J m` or `in eV nm`".
+# ---------------------------------------------------------------------------
+_KINDS = [("energy", ["J", "eV", "MeV"]), ("length", ["m", "nm", "fm"]), ("time", ["s", "ns"]),
+          ("mass", ["kg", "u", "MeV/c²"]), ("force", ["N"]), ("momentum", ["kg m/s", "MeV/c"]),
+          ("speed", ["m/s", "km/s"]), ("acceleration", ["m/s²"]), ("density", ["kg/m³", "g/cm³"]), ("area", ["m²", "cm²"]), ("volume", ["m³", "L"]), ("charge", ["C"]),
+          ("temperature", ["K"]), ("power", ["W"]), ("pressure", ["Pa", "atm"]), ("frequency", ["Hz", "1/s"]),
+          ("current", ["A"]), ("voltage", ["V"]), ("magnetic field", ["T"]), ("electric field", ["V/m"]),
+          ("amount of substance", ["mol"])]
+
+
+def suggest_units(d: Dim):
+    """(description, [2-3 unit spellings]) for a dimension, or None."""
+    kinds = [(k, [parse_unit_string(u) for u in us], us) for k, us in _KINDS]
+    for k, parsed, us in kinds:
+        if parsed[0].dim == d:
+            return k, us[:3]
+    for i, (ka, pa, ua) in enumerate(kinds):
+        for kb, pb, ub in kinds[i:]:
+            if pa[0].dim * pb[0].dim == d:
+                pairs = [f"{ua[0]} {ub[0]}"] + ([f"{ua[1]} {ub[1]}"] if len(ua) > 1 and len(ub) > 1 else [])
+                return f"{ka} × {kb}", pairs
+    for ka, pa, ua in kinds:
+        for kb, pb, ub in kinds:
+            if ka != kb and pa[0].dim / pb[0].dim == d:
+                pairs = [f"{ua[0]}/{ub[0]}"] + ([f"{ua[1]}/{ub[1]}"] if len(ua) > 1 and len(ub) > 1 else [])
+                return f"{ka} / {kb}", pairs
+    return None

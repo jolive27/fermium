@@ -206,9 +206,32 @@ class Parser:
                 raise self.error("± needs a value on its left, like  L = 1.20 ± 0.01 m")
             if t.kind == "OP" and t.value == "=":
                 hint = "use == to compare two values; = stores a value in a variable"
+                chain = self._chained_assignment(t)
+                if chain is not None:
+                    raise chain
             if t.kind == "OP" and t.value in ("+", "-") and self.peek().kind == "OP" and self.peek().value == t.value:
                 hint = f"Fermium has no {t.value}{t.value}; write  x {t.value}= 1"
             raise self.error(f"didn't expect '{t.raw}' here", hint=hint)
+
+    NATURAL_CONSTANTS = {"ħ", "hbar", "c", "k_B", "kB", "G", "ε₀", "ε_0", "epsilon_0", "e", "μ₀", "μ_0"}
+
+    def _chained_assignment(self, t):
+        """`ħ = c = 1` (spec A3.1): setting constants to 1 is natural units; `a = b = 1` assigns one at a time."""
+        line = [tk for tk in self.toks if tk.line == t.line and tk.kind not in ("NEWLINE", "INDENT", "DEDENT", "EOF")]
+        names, j = [], 0
+        while j + 1 < len(line) and line[j].kind == "NAME" and line[j + 1].kind == "OP" and line[j + 1].value == "=":
+            names.append(line[j])
+            j += 2
+        if len(names) < 2 or t not in line[:j]:
+            return None
+        text = " = ".join(n.raw for n in names) + " = " + "".join(
+            (" " if tk.ws_before and k else "") + tk.raw for k, tk in enumerate(line[j:]))
+        if all(n.raw in self.NATURAL_CONSTANTS or n.value in self.NATURAL_CONSTANTS for n in names):
+            return self.error(f"'{text}' sets physical constants to 1: that's natural units", tok=t,
+                              hint=f"write  units natural({text})  (or just  units natural  for ħ = c = 1)")
+        return self.error(f"'{text}': Fermium gives one variable a value at a time", tok=t,
+                          hint="write each on its own line, like  " + "  and  ".join(
+                              f"{n.raw} = …" for n in names[:2]) + "  (== compares two values)")
 
     # ------------------------------------------------------------ statements
     def statement(self, end_line=True):

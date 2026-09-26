@@ -71,7 +71,6 @@ Brackets are always units: `3 [m/s]`, `x [m]`, and in a function parameter, `f(x
 - **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` are units whatever the spacing: `0.5 /s`, `8/m³`, `0.300 /(m s²)`. A name there that is your variable is divided by (`1/T` is one over your period `T`); a bracket that mixes your variables with units (`0.300 /(m s²)` with your `m`) asks. `36 km/h` is an error with or without spaces: in Fermium h is Planck's constant, not the hour (write `km/hr`).
 - **Fixing old programs:** `fermium fmt --fix file.fm` rewrites every collision as a bracketed unit that keeps what Fermium 1 did (`0.1 [m]`, `50 [N/m]`); the language server offers the same quick fix.
 - **A unit is not a value:** `rate = cm³/(mol s)` is an error, `cm³/(mol s) is a unit, not a value`, with the hint `for the quantity write  1 cm³/(mol s)` (DECISIONS D163). Write `rate = 1 cm³/(mol s)`.
-- **A unit per something:** right after a number, `/s`, `/m³` and `/(m s²)` (a space before `/`, none after) are units: `0 /s`, `8 /m³`, `0.300 /(m s²)`. If a name in them is also your variable (`8 /m³` with a mass `m`), that's an error: write `8 [1/m³]` for the unit, or `8/m³` (no spaces) to divide by your variable (D171).
 - **Per minute:** right after a number, `/ min` is the minute, so `15.3 / min` is 15.3 per minute. `min(a, b)` is still the function.
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).

@@ -211,61 +211,25 @@ print m_p * c^2 in MeV
 938 MeV
 ```
 
-## ⚠️ The big gotcha: a name right after a number is a unit
+## Units right after numbers, constants anywhere
 
-This is the one rule you must remember from this lesson:
-
-> **A unit name right after a number is always a unit.**
-
-That's what makes `3 m` mean "3 metres". But it has a surprising side effect. Suppose you want 2 × g × h and you write `2 g h`:
+A unit goes right after its number: `3 m`, `9.81 m/s^2`, `50 N/m`. Constants such as `h`, `G` and `m_e` are values, so you multiply by them like any number, with or without a `*`:
 
 ```fermium
-print 2 g h
+print 2 h
+print 6.0e24 kg * G / (6.4e6 m)^2
 ```
 
 <!-- output -->
 ```
-1.33×10⁻³⁶ kg² m²/s
+warning: line 1: 2 h means 2 × Planck's constant h; for hours write 2 hr
+    print 2 h
+          ^
+1.33×10⁻³³ J s
+9.8 m/s²
 ```
 
-Nonsense! Fermium read `2 g` as **2 grams**, and then multiplied by `h`, which is **Planck's constant**. The same thing happens with `3 m` (metres, not a mass `m`), `5 s` (seconds), `2 c` (the speed of light is also a unit!), `4 K`, `2 A`, `10 N`.
-
-The fix is easy: **put a `*` after the number**:
-
-```fermium
-g = 9.81 m/s^2
-h = 10 m
-print 2 * g * h
-print sqrt(2 * g * h)
-```
-
-<!-- output -->
-```
-196 m²/s²
-14.0 m/s
-```
-
-(Here `g` and `h` are *variables* that we made ourselves; that's the next lesson. 2gh is a speed squared, so it is shown in m²/s²; `print 2 * g * h in J/kg` would show the same value as an energy per kilogram.)
-
-What if you write `2 g` after making your own `g`? Right after a number, `g` could mean grams (the rule above) or your variable. When `2 g` is multiplied by something else, like `2 g * h` or `2 g h`, you almost certainly meant your variable, so Fermium won't guess: it stops and asks you to say which one you mean.
-
-```
-g = 9.81 m/s^2
-h = 10 m
-print 2 g * h
-```
-
-<!-- output -->
-```
-line 3: '2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g
-    print 2 g * h
-            ^
-  hint: write  2*g  for 2 × your variable g, or  2 [g]  for the unit
-```
-
-Write `2*g` (or `2·g`) to multiply by your variable, or `2 [g]` for 2 grams. Units in square brackets are always units. On its own (`x = 0.1 m`, or `from 0 m to 0.2 m`), a number with a unit is read as the unit, with a warning if you also have a variable of that name, because there you almost always mean the unit. Longer units such as `9.81 m/s^2` are never ambiguous.
-
-One more place this rule shows up: `c` (the speed of light) is also a unit, so `1 AU / c` is read as "1 AU-per-speed-of-light", a perfectly good unit of time. Fermium prints it with its value in SI units next to it:
+`c` is special in one pleasant way: it is also a unit, so a distance divided by `c` is a time, shown with its value in seconds:
 
 ```fermium
 print 1 AU / c
@@ -278,23 +242,7 @@ print 1 AU / c in min
 8.32 min
 ```
 
-Dividing by a variable you made yourself is friendlier. If you put a **space before the `/`**, Fermium divides by *your* variable:
-
-```fermium
-g = 9.81 m/s^2
-print 20 [m/s] / g
-print 20 [m/s/g]
-```
-
-<!-- output -->
-```
-2.04 s
-20 m/(s g)
-```
-
-The first line is 20 m/s divided by your `g`: a time, 2.04 s, just as you meant. In the second line there's no space, so `/g` carries on the unit: 20 metres per second per **gram**. The same goes for a temperature called `T`: `2.898e-3 m K / T` divides by your `T`, but `m K/T` (no space) would be kelvin per *tesla*. When in doubt, use parentheses: `(20 m/s) / g`.
-
-(The space only matters for names you've given a value yourself. `c` above is Fermium's own constant, so in `1 AU / c` it's still read as a unit.)
+In the next lesson you'll give names to your own values, like `g = 9.81 m/s^2`. Lesson 2 has the one short rule for when one of your names is also a unit name (like `g` for grams).
 
 ## Bonus: natural units (ħ = c = 1)
 
@@ -325,8 +273,7 @@ Units are still checked. A mass plus an energy is fine, but an energy plus a len
 - Adding things with different units is an error, caught before the program runs.
 - `in` converts: `print 100 km/hr in m/s`.
 - Constants like `c`, `h`, `G`, `m_e` are built in.
-- **Gotcha:** `2 g h` is 2 *grams* × Planck's constant. Write `2 * g * h`.
-- Dividing by your own variable: put a space before `/` (`20 m/s / g`), or use parentheses.
+- **Units follow numbers:** `3 m`, `9.81 m/s^2`. Constants like `h`, `G` and `c` multiply like numbers.
 - `e` is the elementary charge; the exponential function is `exp(x)`.
 
 ## Exercises
@@ -335,7 +282,7 @@ Units are still checked. A mass plus an energy is fine, but an energy plus a len
 2. **Speed limits.** A car drives at 70 mph. What's that in km/hr and in m/s?
 3. **Rest energies.** Print the neutron's rest energy `m_n c²` in MeV, and the difference between the neutron's and the proton's rest energies in MeV.
 4. **Spot the bug.** A friend computes the kinetic energy of a 2 kg mass at 3 m/s with `print 0.5 * 2 kg * 3 m/s^2`. What's wrong, and what does Fermium print? Fix it.
-5. **Photon energy.** A green photon has wavelength 530 nm. Its energy is E = hc/λ. Print it in joules and in eV. Careful with the gotcha: write `h * c / 530 nm`.
+5. **Photon energy.** A green photon has wavelength 530 nm. Its energy is E = hc/λ. Print it in joules and in eV: `h c / 530 nm` reads just like the formula.
 
 Solutions: [solutions/lesson01.md](solutions/lesson01.md)
 

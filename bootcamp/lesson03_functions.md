@@ -53,7 +53,7 @@ print KE(9.11e-31 kg, 1e6 m/s) in eV
 2.84 eV
 ```
 
-Inside `KE`, `m` is the parameter (a mass). The `½` avoids the metre gotcha from Lesson 2. In ASCII, write `KE(m, v) = 0.5 * m * v^2`.
+Inside `KE`, `m` is the parameter (a mass). No number comes right before `m`, so it is the mass, as on paper. In ASCII, write `KE(m, v) = (1/2) m v^2`.
 
 You can use `where` to give a function its own constants:
 

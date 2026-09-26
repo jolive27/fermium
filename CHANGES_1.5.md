@@ -25,6 +25,14 @@ What that changes:
 - `4/3 π r³` asks whether you mean (4/3)·π or 4/(3π): write `(4/3) π r³`.
 - `h / m_e v` still means h/(m_e v): implicit multiplication still binds tighter than `/` when a name follows.
 
+## Clearer error messages (D237)
+
+- `ħ = c = 1` now suggests `units natural(ħ = c = 1)`.
+- Using `g` without defining it says: *g isn't defined. For standard gravity use g_n (9.80665 m/s²), or define your own: g = 9.81 m/s².*
+- `print h c in J/m` says *h c is energy × length; try in J m or in eV nm*.
+- Typing a terminal command like `fermium run ke.fm` at the `fm>` prompt tells you to type `:quit` first.
+- `sqrt(-4)` written with a number is an error that suggests the complex square root `√(-4 + 0i)`.
+
 ## Tools
 
 - `fermium fmt` says on stderr that it formatted the file and didn't run it.

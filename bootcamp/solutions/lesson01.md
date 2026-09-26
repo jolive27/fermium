@@ -72,8 +72,8 @@ print 0.5 * 2 kg * (3 m/s)^2
 ## 5. Photon energy
 
 ```fermium
-print h * c / 530 nm
-print h * c / 530 nm in eV
+print h c / 530 nm
+print h c / 530 nm in eV
 ```
 
 <!-- output -->

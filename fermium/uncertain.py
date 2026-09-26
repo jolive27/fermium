@@ -69,6 +69,11 @@ class UFloat:
     def __int__(self):
         raise UncertainUse(GENERIC)
 
+    def __round__(self, n=None):
+        # reached when a vector or matrix holds uncertain values (printing rounds its components): not yet (C7)
+        raise UncertainUse("vectors and matrices of uncertain values (±) aren't supported yet; work with the "
+                           "uncertain numbers one at a time, or use value(x) to drop the uncertainty")
+
     def __hash__(self):
         return id(self)
 

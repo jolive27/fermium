@@ -117,6 +117,8 @@ if θ₀ ≤ 15 °
     print "small angle: the formula is accurate"
 ```
 
+**`fmt` doesn't run your program.** It only rewrites how the program *looks*, and the text it prints is your program, not its output. So you don't mistake one for the other, Fermium adds a note at the end: `formatted pendulum.fm (not run — use fermium run)`. To see the answers, use `fermium run pendulum.fm` as always.
+
 Notice what changed (`pi` → `π`, `sqrt` → `√`, `^2` → `²`, `theta_0` → `θ₀`, `<=` → `≤`, `deg` → `°`, `*` → `·`) and what didn't: comments and text in quotes stay as you wrote them, and so does the meaning. To actually change the file rather than just print the new version, add `-w` ("write"):
 
 ```
@@ -168,12 +170,12 @@ On a Mac, holding **Option** (⌥) while pressing a key types a special characte
 
 - Everything can be written in plain ASCII: `pi`, `theta`, `sqrt(x)`, `x^2`, `integral`, `<=`, `deg`.
 - Upgrade 1: `\theta` + Tab → θ in the REPL and VS Code.
-- Upgrade 2: `fermium fmt file.fm --pretty` converts a whole file to symbols (`--ascii` converts back; `-w` saves it).
+- Upgrade 2: `fermium fmt file.fm --pretty` converts a whole file to symbols (`--ascii` converts back; `-w` saves it). `fmt` changes how the program looks; `fermium run` runs it.
 - Upgrade 3: Option + P (π), Option + V (√), Option + B (∫), Option + D (∂), Option + Shift + = (±).
 
 ## Exercises
 
-1. **Translate to ASCII.** Rewrite `E = ½ m v² where m = 2 kg, v = 3 m/s` using only ASCII characters, and run it. (Remember the gotcha from Lesson 2!)
+1. **Translate to ASCII.** Rewrite `E = ½ m v² where m = 2 kg, v = 3 m/s` using only ASCII characters, and run it. (In ASCII, `½` is `(1/2)`.)
 2. **Translate to symbols.** Rewrite `omega_0 = sqrt(k / m) where k = 50 N/m, m = 0.5 kg` with symbols (ω₀, √), and print `omega_0 in rad/s`.
 3. **Use the formatter.** Save the ASCII program from exercise 1 as `ke.fm`, run `fermium fmt ke.fm --pretty`, then `fermium fmt ke.fm --pretty -w`, then `fermium fmt ke.fm --ascii`. Run the program after each step: the answer should never change.
 4. **Tab completion.** Start the REPL and use `\name` + Tab to type `print 2π √(1.0 m / 9.81 m/s²)`. Which physical quantity is this?

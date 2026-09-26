@@ -1705,6 +1705,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         return best
 
     def undefined(self, name, e, ctx):
+        if name == "g" and getattr(e, "unit_left", None) is None:      # spec A3.2
+            return self.err("g isn't defined. For standard gravity use g_n (9.80665 m/s²), or define your own: "
+                            "g = 9.81 m/s²", e, hint="put  g = 9.81 m/s²  near the top of your program")
         # collect known names for suggestions
         known = set()
         s = ctx.scope
@@ -1743,9 +1746,10 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             cands = [k for k in known if not k.startswith("__")] + sorted(KEYWORDS) + sorted(
                 BUILTINS - (set() if getattr(self, "_calling", False) else M3_FUNCS))  # speed ≠ seed (as a value)
             # `m_sun` is M_sun, not R_sun: a match up to case and underscores comes first (gauntlet #79)
+            # a short name needs a closer match: `foo` is not a typo of floor (bootcamp B9)
             close = [k for k in cands if k.lower() == name.lower()] or \
                 [k for k in cands if _loose(k) == _loose(name)] or \
-                get_close_matches(name, cands, n=1, cutoff=0.7)
+                get_close_matches(name, cands, n=1, cutoff=0.7 if len(name) > 4 else 0.85)
             if close:
                 hint = f"did you mean {close[0]}?"
         if hint is None and getattr(self, "_after_number", False):
@@ -1759,7 +1763,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                             hint="for the remainder of a division use mod(n, 2)")
         if name in BUILTINS:
             return self.err(f"{name} is a built-in function; call it with arguments like {name}(x)", e)
-        states = sorted((k for k in known if k.startswith(name + "_") and k[len(name) + 1:].isdigit()),
+        consts = all_constants()      # the constant g_0 is not a state of an eigenvalue problem (spec A3.2)
+        states = sorted((k for k in known if k.startswith(name + "_") and k[len(name) + 1:].isdigit()
+                         and k not in consts),
                         key=lambda k: int(k[len(name) + 1:]))
         if states:          # after an eigenvalue problem the states are ψ₁ … ψ_N (§20, red team 5 #12)
             sub = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
@@ -1770,7 +1776,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                             f"{', '.join(pretty[:3])}{' … ' + pretty[-1] if len(pretty) > 3 else ''}", e,
                             hint=f"use {pretty[0]} (ASCII: {ascii1}) for the lowest state, {pretty[0]}(x) for its "
                                  f"value at x")
-        return self.err(f"{name} isn't defined", e, hint=hint or f"give it a value first, e.g.  {name} = 1.0 m")
+        return self.err(f"{name} isn't defined", e,
+                        hint=hint or f"give it a value on an earlier line, e.g.  {name} = 2.5 m  (with its own unit)")
 
     # ------------------------------------------------------------ arithmetic
     def _leibniz(self, e, ctx):
@@ -2402,7 +2409,34 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
     def e_Not(self, e, ctx):
         return I.INot(self.cond(e.operand, ctx), BOOL)
 
+    @staticmethod
+    def _negative_literal(n):
+        """-1, -4.0, (-2): a negative number written as a literal, or None."""
+        if isinstance(n, A.Neg) and isinstance(n.operand, A.Num):
+            return -n.operand.value if n.operand.value != 0 else None
+        if isinstance(n, A.Num) and n.value < 0:
+            return n.value
+        return None
+
+    def _domain_check(self, name, arg, e):
+        """√(-1), log(-1), factorial(-1) written with a literal: a compile-time error instead of NaN (D237)."""
+        v = self._negative_literal(arg)
+        if v is None:
+            return
+        if name in ("sqrt", "√"):
+            txt = "-" + A.num_text(arg.operand) if isinstance(arg, A.Neg) else A.num_text(arg)
+            raise self.err(f"√ of a negative number ({txt}) isn't a real number", e,
+                           hint=f"for the complex square root write  √({txt} + 0i)  (√(-1) is 𝑖)")
+        if name in ("log", "ln", "log10", "log2"):
+            raise self.err(f"{name} of a negative number isn't a real number", e,
+                           hint="the logarithm needs a positive argument")
+        if name == "factorial" and v == int(v):
+            raise self.err(f"factorial of a negative whole number ({int(v)}) isn't defined", e,
+                           hint="factorial(n) needs n ≥ 0")
+
     def e_Sqrt(self, e, ctx):
+        if e.root == 2:
+            self._domain_check("sqrt", e.operand, e)
         a = self.expr(e.operand, ctx)
         if cplx.is_c(a):
             if e.root != 2:
@@ -2464,6 +2498,14 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                            hint="convert one component at a time, like s.x in cm")
         if not self.U.unify(v.ty.dim, u.dim):
             hint = "the units you convert to must measure the same kind of quantity"
+            from .units import suggest_units
+            sug = suggest_units(self.U.resolve(v.ty.dim))
+            if sug is not None:            # "h c is energy × length; try in J m or in eV nm" (spec A3.3)
+                what, units = sug
+                text = C.to_source(e.value)
+                text = text if len(text) <= 24 else "this"
+                tries = "  or  ".join(f"in {x}" for x in units)
+                hint = f"{text} is {what}; try  {tries}"
             if self.nat.natural:
                 hint = (f"in {self.nat.name} units ({' = '.join(self.nat.consts)} = 1) a length or time is 1/energy "
                         f"and a mass is an energy; check the powers of energy")
@@ -2999,6 +3041,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             return pde_call(self, ctx.scope.lookup(f.operand.name)[0], e, ctx, deriv=f)
         if isinstance(f, A.Name):
             b, _ = self.lookup(f.name, ctx, f)
+            if b is None and f.name in ("sqrt", "log", "ln", "log10", "log2", "factorial") and len(e.args) == 1:
+                self._domain_check(f.name, e.args[0], e)
             if b is None and f.name == "Σ":
                 return self.builtin("sum", e, ctx)         # Σ(xs) is sum(xs)
             if getattr(b, "is_pde", False):

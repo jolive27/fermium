@@ -103,10 +103,10 @@ seed(42)                        # reproducible rand(), randn(μ, σ)
 **Constants:** `c h hbar e k_B N_A G g_n m_e m_p m_n m_u epsilon_0 mu_0 sigma alpha a_0 b_W M_sun R_sun L_sun M_earth R_earth AU`
 **Units:** `m g s A K mol` + prefixes · `N J W Pa C V ohm Hz` · `min hr day yr` · `eV MeV fm u barn` · `AU ly pc Msun` · `inch ft mi mph lb` · `deg rad` · `degC`
 
-### ⚠️ Gotchas
-1. **A unit name right after a number is a unit.** If you also have a variable with that name, Fermium stops you: `2 g h` with your `g` is an error (`'2 g' is ambiguous`); `x = 2 g` alone is 2 grams, with a warning. Write `2 * g * h`, `½ m v^2`, `0.5 * m * v^2`.
-2. **`/` right after a unit (no space) continues the unit:** `50 N/m`, `3 m/s`. With a space before the `/`, one of *your* variables wins: `20 m/s / g` divides by your `g`. If in doubt, use parentheses: `(20 m/s) / g`.
-3. `1/2 mass v^2` means 1/(2·mass·v²), with a warning (with your own `m`, `1/2 m v^2` is the `'2 m' is ambiguous` error of gotcha 1). Write `½ m v^2` or `(1/2) m v^2`.
+### Good to know
+1. **The unit rule:** right after a number comes a unit (`3 m`, `9.81 m/s²`, `50 N/m`). If that unit is a single name that is also your variable (`2 g` with your own `g`), Fermium asks: `2*g` for your variable, `2 [g]` for the unit. In a longer unit the first name is always a unit; a later name that is your variable gets the same question (`(20 m/s)/g` divides by your `g`). Spaces never change the meaning. `fermium fmt --fix file.fm` adds the brackets for you.
+2. **Kinetic energy:** `½ m v^2` or `(1/2) m v^2`. A fraction of plain numbers is one coefficient (`1/2 mass v^2`, `73/24 x²`); for a sphere write `(4/3) π r^3`.
+3. **Gravity:** `g = 9.81 m/s^2` in your file, or the built-in `g_n`.
 4. `LT` is one name; `L T` is L × T. `ωt` is one name; write `ω t`.
 5. `e` is the elementary charge (so `e^2` is the charge squared): write `exp(x)`, not `e^x`. Angles are radians: `sin(30 deg)`.
 6. Lists start at 1. `hr` is hours (`h` is Planck's constant).
