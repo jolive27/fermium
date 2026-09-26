@@ -9,7 +9,7 @@
   "message": "can't find the file 'pendullum.csv'",
   "line": 1,
   "col": 8,
-  "hint": "looked in /home/user/fermium/bootcamp",
+  "hint": "looked in <ROOT>/bootcamp",
   "kind": "FermiumError"
  },
  "exit": 1,
