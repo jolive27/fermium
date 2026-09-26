@@ -1089,3 +1089,8 @@ as the runner's.
 an install script (later: needs a public download URL); building Linux on an older image for an older glibc (the
 apt LLVM 18 path is only tested on ubuntu-latest); running the Rust steps inside the existing macOS job (over its
 45-minute timeout with make check).
+
+## D268. PDE time steps: a tridiagonal LU, not a port of SuperLU and OpenBLAS (documented divergence)
+- **What:** the Rust PDE solver factors each implicit step's tridiagonal matrix with a plain LU. v1 used SciPy's `splu`. Three conformance cases differ at the rounding level: two in the 14th–15th digit, and one noise-around-zero value. They are recorded as divergences (rust/DIVERGENCES.md, "PDE linear solves").
+- **Why:** both are exact to rounding; the differences are invisible at printed precision unless a program prints 14+ digits or a pure rounding-noise value. A bit-for-bit port would mean SuperLU's column elimination with its row and column pivot order, plus OpenBLAS's FMA arithmetic in the two blocks SuperLU hands to BLAS. That is several hours of work, a fragile dependence on library internals, and it would slow the solver.
+- **Alternatives:** port SuperLU and model OpenBLAS (rejected, as above); call a system SuperLU (rejected: spec §B6 wants no runtime dependencies).

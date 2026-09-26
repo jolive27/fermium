@@ -236,6 +236,18 @@ of whichever thread stopped last, so the message depended on thread timing (e.g.
 for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
 iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
 
+## PDE linear solves: a tridiagonal LU instead of SuperLU (rounding level)
+
+v1 solves each implicit PDE time step with SciPy's `splu` (SuperLU, which hands two blocks of columns to OpenBLAS
+and pivots rows near a Dirichlet boundary, and columns near a Neumann one). The Rust implementation uses a plain
+tridiagonal LU. Both are exact to rounding, so results agree to about 14 significant figures; they can differ in the
+last printed digit at 14–15 digits, and a value that is pure rounding noise around zero differs completely.
+Cases 9a5a91491eb5 (`0.99999989150296`, v1 `…294`), c4bc3351e5c6 (`0.0848059422069`, v1 `…066`) and fbcb42df2f89
+(`1.03×10⁻³⁴ K`, v1 `-7.05×10⁻³⁴ K`, a difference between two equal temperatures). Reproducing them bit for bit
+would mean porting SuperLU's column elimination with its pivot order and modelling OpenBLAS's FMA arithmetic in
+those blocks: an investigation matched the factorization (with SuperLU's `a·(1/pivot)` division) and the solves
+outside the BLAS blocks, but not the pivoting cases. Decision D268.
+
 ## PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)
 
 - v1: the heat equation after a jump (`D = 1e-4 m²/s`, `u(x, 0 s) = 0 K`, `u(0 m, t) = 80 K`, `u(1 m, t) = 0 K`,
