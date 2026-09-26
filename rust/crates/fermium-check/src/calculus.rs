@@ -98,8 +98,20 @@ impl C::DiffContext for DC<'_> {
         matches!(self.ck.lookup(self.scope, fname), Some((Binding::Sol(_), _)))
     }
 
-    fn field_function(&mut self, _field: &A::Expr) -> Option<String> {
-        None // modules (importer.py) aren't ported yet
+    /// `mechanics.pendulum_period` in a formula being differentiated (red team round 2 #7): the module's function,
+    /// bound here under a private name (not exported, can't clash with a user name) so it and its derivatives can be
+    /// called from this scope like `from … import` names.
+    fn field_function(&mut self, field: &A::Expr) -> Option<String> {
+        let A::ExprKind::Field { target, name } = &field.kind else { return None };
+        let m = self.ck.module_of_in(target, self.scope)?;
+        if name.starts_with('_') {
+            return None;
+        }
+        let mscope = self.ck.mods.modules[m].scope;
+        let Some(Binding::Func(b)) = self.ck.scopes[mscope].names.get(name).cloned() else { return None };
+        let key = format!("_{}", crate::source::to_source(field));
+        self.ck.scopes[self.scope].names.entry(key.clone()).or_insert(Binding::Func(b));
+        Some(key)
     }
 }
 
