@@ -81,6 +81,12 @@ fn non_elementary(e: &A::Expr, x: &str) -> Option<&'static str> {
             }
         }
     }
+    // ln(u) · exp(c u) (times a power of u): by parts leaves exp(c u)/u
+    if vf.iter().any(|f| matches!(call_parts(f), Some(("ln" | "log", [u])) if lin(u)))
+        && vf.iter().any(|f| matches!(call_parts(f), Some(("exp", [u])) if lin(u)))
+    {
+        return Some("Ei");
+    }
     if vf.len() == 1 {
         let (b, p) = base_pow(vf[0]);
         if p == -1.0 && is_call(&b, "ln") && lin(&call_parts(&b).unwrap().1[0]) {
@@ -701,7 +707,13 @@ impl Integrator {
             let Some((gname, [u])) = call_parts(g) else { continue };
             let others: Vec<A::Expr> = vf.iter().enumerate().filter(|(j, _)| *j != i).map(|(_, f)| f.clone()).collect();
             let p = simplify(&build_product(1.0, &others));
-            if poly_coeffs(&p, &x, 12).is_none() {
+            let is_poly = poly_coeffs(&p, &x, 12).is_some();
+            // x^p (any p ≠ −1) is fine for the logarithm and inverse functions: ∫ x^p ln x = x^(p+1) ln x/(p+1) − …
+            let x_power = others.len() == 1 && {
+                let (b, e) = base_exp(&others[0]);
+                b.name() == Some(x.as_str()) && !depends_on(&e, &x) && !is_num_v(&e, -1.0)
+            };
+            if !is_poly && !(x_power && matches!(gname, "ln" | "log" | "atan" | "asin" | "acos" | "asinh" | "atanh")) {
                 continue;
             }
             if linear(u, &x).is_none() {
@@ -937,7 +949,19 @@ fn over(g: A::Expr, a: A::Expr) -> A::Expr {
 
 /// Factors with the same base combined, √ and nested powers included: √x · x² → x^(5/2).
 fn merge_powers(fs: Vec<A::Expr>) -> Vec<A::Expr> {
-    // exp(a) exp(b) = exp(a + b), as SymPy combines them
+    // exp(a) exp(b) = exp(a + b) and exp(a)ⁿ = exp(n a), as SymPy combines them
+    let fs: Vec<A::Expr> = fs
+        .into_iter()
+        .map(|f| {
+            let (b, e) = base_exp(&f);
+            match call_parts(&b) {
+                Some(("exp", [u])) if !is_num_v(&e, 1.0) && e.num_value().is_some() => {
+                    call1("exp", simplify(&mul(e, u.clone())))
+                }
+                _ => f,
+            }
+        })
+        .collect();
     let (exps, others): (Vec<A::Expr>, Vec<A::Expr>) = fs.into_iter().partition(|f| is_call(f, "exp"));
     let mut fs = others;
     if exps.len() > 1 {

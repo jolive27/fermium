@@ -139,7 +139,8 @@ fn antiderivatives_are_right() {
 #[test]
 fn integrals_of_products_of_sums() {
     for (f, v) in [("x ln(x)", "x"), ("x * (ln(x) - 2)", "x"), ("x^2 * (ln(x) - 2)", "x"), ("(x - x^2) * (ln(x) - 2)", "x"), ("(x * 2) * (exp(2 x) - b)", "x"), ("sqrt(x) * x^2", "x"),
-                   ("x exp(x) - x", "x")] {
+                   ("x exp(x) - x", "x"), ("(ln(x) - sqrt(x)) * (1/x * 1/x)", "x"),
+                   ("x exp(x) * x exp(x)", "x"), ("ln(x)/x^3", "x")] {
         assert!(integ(f, v, &[]).is_ok(), "{f}: {:?}", integ(f, v, &[]));
     }
 }
