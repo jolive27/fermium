@@ -257,7 +257,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     /// A list length computed from a number (FuncGen.list_count): NaN or more than 10⁹ is an error, negative 0.
-    fn list_count(&self, nf: f64) -> Result<usize, RunError> {
+    fn list_count_c(&self, nf: f64) -> Result<usize, RunError> {
         if nf.is_nan() || nf > 1e9 {
             return Err(self.fail_kind(Fail::new(err::SIZE, nf, 0.0)));
         }
@@ -273,7 +273,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         };
         match name {
             "frequencies" => {
-                let n = self.list_count(args[0].num())?;
+                let n = self.list_count_c(args[0].num())?;
                 let dt = args[1].num();
                 if n < 1 {
                     return Err(self.fail_kind(Fail::new(6, 0.0, 0.0)));

@@ -56,9 +56,9 @@ pub struct FuncInfo {
     /// a derivative: evaluate the stabilised body (A52)
     pub stable: bool,
     /// the unit system it was defined in (None: SI, callable anywhere; D60)
-    pub nat: Option<String>,
-    /// set by modules: the module it came from
-    pub module: Option<String>,
+    pub nat: Option<crate::systems::Sys>,
+    /// set by modules: the module it came from (index into Checker.mods.modules)
+    pub module: Option<usize>,
     /// printed instead of name(params) for an unnamed function: d/dt (3t²), ∫ x dx
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
@@ -161,8 +161,8 @@ impl Ctx {
 #[derive(Clone, Debug, Default)]
 pub struct SymExtra {
     pub assigned: bool,
-    /// the unit system it was made in (D60); "" = SI
-    pub nat: String,
+    /// the unit system it was made in (D60)
+    pub nat: crate::systems::Sys,
     /// holds a temperature difference (D181)
     pub tdelta: bool,
     pub par_private: bool,
@@ -217,8 +217,12 @@ pub struct Checker {
     pub main_count: usize,
     /// names of top-level functions defined anywhere in the program, with their line (used-before-defined)
     pub future_funcs: HashMap<String, u32>,
-    /// the unit system in force ("" = SI; `units natural(ħ = c = 1)`, D60)
-    pub nat: String,
+    /// the unit system in force (SI by default; `units natural(ħ = c = 1)`, D60)
+    pub nat: crate::systems::Sys,
+    /// unit-system bookkeeping (systems.rs)
+    pub sys: crate::systems::SysState,
+    /// modules imported in this compilation (modules.rs)
+    pub mods: crate::modules::ModState,
     pub positive_names: std::collections::HashSet<String>,
     pub used_consts: std::collections::HashSet<String>,
     pub warned: std::collections::HashSet<String>,
@@ -239,6 +243,8 @@ pub struct Checker {
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
+    /// calculus: derived functions made so far (calculus.rs)
+    pub calc: crate::calculus::CalcState,
 }
 
 impl Checker {
@@ -265,7 +271,9 @@ impl Checker {
             counter: 0,
             main_count: 0,
             future_funcs: HashMap::new(),
-            nat: String::new(),
+            nat: Default::default(),
+            sys: Default::default(),
+            mods: Default::default(),
             positive_names: Default::default(),
             used_consts: Default::default(),
             warned: Default::default(),
@@ -278,6 +286,7 @@ impl Checker {
             par_stack: vec![],
             fmt_dims: vec![],
             nodes: HashMap::new(),
+            calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -338,6 +347,9 @@ impl Checker {
     }
 
     pub fn desc(&self, d: &DExpr) -> String {
+        if self.nat.natural() {
+            return self.nat.describe(&self.u.resolve(d)); // U.namer inside a natural region (D60)
+        }
         units::dim_name(&self.u.resolve(d))
     }
 
@@ -391,8 +403,12 @@ impl Checker {
                 let sugg = match f.name.as_str() {
                     "h" => "h is Planck's constant, not the hour; for hours write hr".to_string(),
                     "t" => "for metric tons write tonne".to_string(),
-                    _ => "see the units list in docs/reference.md".to_string(),
+                    n => match fermium_units::spelled_unit(n) {
+                        Some(sym) => format!("Fermium writes units as symbols: {sym}"),
+                        None => crate::convert::unit_name_suggestion(n),
+                    },
                 };
+                let sugg = if sugg.is_empty() { "see the units list in docs/reference.md".to_string() } else { sugg };
                 let n = f.name.chars().count() as u32;
                 return Err(Diagnostic::error(format!("'{}' is not a unit Fermium knows", f.name), f.span.line,
                                              f.span.col, n, Some(sugg)));
@@ -410,15 +426,16 @@ impl Checker {
             });
         }
         let mut total = total.unwrap_or_else(Unit::one);
-        if !uexpr.text.is_empty() {
-            total.name = uexpr.text.clone();
+        let canon = crate::convert::canonical_unit_name(uexpr);
+        if !canon.is_empty() {
+            total.name = canon;
         }
         Ok(total)
     }
 
     /// The unit mapped into the system in force (natural units map it into powers of energy, D60).
     pub fn resolve_unit(&self, uexpr: &A::UnitExpr) -> CResult<Unit> {
-        self.resolve_unit_si(uexpr)
+        Ok(self.nat.canon_unit(&self.resolve_unit_si(uexpr)?))
     }
 
     // ============================================================ symbols
@@ -472,6 +489,10 @@ impl Checker {
         let mut ctx = ctx;
         self.nodes.clear();
         self.index_nodes(prog);
+        self.positive_names = if self.opts.repl { Default::default() } else { crate::calculus::positive_names(prog) };
+        self.note_top_units(prog);
+        let g = self.globals;
+        self.note_program(prog, g);
         self.future_funcs = prog
             .body
             .iter()
@@ -541,6 +562,10 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Analyze { .. } => self.s_analyze(s, ctx),
+            K::Import { .. } => self.s_import(s, ctx),
+            K::UsePython { .. } => self.s_use_python(s, ctx),
+            K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
     }

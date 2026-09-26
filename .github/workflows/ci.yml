@@ -34,6 +34,36 @@ jobs:
       - name: make check
         run: make check
 
+  rust-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: rust-linux-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Build and test the Rust compiler
+        working-directory: rust
+        run: cargo build --profile fast && cargo test --profile fast
+      - name: Install v1.5 (the oracle) for the conformance runner
+        run: python3 -m pip install -e ".[full,dev]"
+      - name: Conformance, legacy (must be 100%)
+        run: python3 conformance/run --impl legacy --out conformance-legacy.md
+      - name: Conformance, Rust (ratchet: never below conformance/RUST_FLOOR)
+        run: python3 conformance/run --impl rust --bin rust/target/fast/fermium --out conformance-rust.md --min "$(cat conformance/RUST_FLOOR)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conformance
+          path: conformance-*.md
+
   macos:
     if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.macos)
     runs-on: macos-14

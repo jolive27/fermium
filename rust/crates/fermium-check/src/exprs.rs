@@ -70,6 +70,11 @@ impl Checker {
             K::Bool { value: b } => ir(I::ExprKind::Bool(*b), Ty::Bool, e.span.line),
             K::Quantity { value, unit, .. } => self.e_quantity(e, value, unit, ctx)?,
             K::Name { name: n } => return self.e_name(e, n, ctx),
+            K::Field { target, name } if self.module_of(target, ctx).is_some() => {
+                // mechanics.pendulum_period (D100)
+                let m = self.module_of(target, ctx).unwrap();
+                return self.module_member(m, e, name, ctx);
+            }
             K::BinOp { .. } => return self.e_binop(e, ctx),
             K::Neg { operand: x } => self.e_neg(e, x, ctx)?,
             K::Compare { .. } => self.e_compare(e, ctx)?,
@@ -82,10 +87,17 @@ impl Checker {
             K::Abs { operand: x } => self.e_abs(e, x, ctx)?,
             K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
             K::Index { .. } => self.e_index(e, ctx)?,
+            K::Slice { .. } => self.e_slice(e)?,
+            K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
             K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
             K::Field { target, name } => return self.e_field(e, target, name, ctx),
+            K::Prime { target, order } => return self.e_prime(e, target, *order, ctx),
+            K::Deriv { .. } => return self.e_deriv(e, ctx),
+            K::VecCalc { .. } => return self.e_veccalc(e, ctx),
+            K::Integral { .. } => return self.e_integral(e, ctx),
+            K::Sum { .. } => return self.e_sum(e, ctx),
             _ => return Err(self.not_ported(expr_kind_name(&e.kind), e.span)),
         };
         Ok(Checked::Val(v))

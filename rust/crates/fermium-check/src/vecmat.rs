@@ -16,6 +16,7 @@ use fermium_syntax::ast as A;
 
 use crate::arith::minsf;
 use crate::checker::*;
+use crate::lists::Idx;
 use crate::stmts::{ty_dim, written_code};
 use crate::units::{self, Unit};
 
@@ -181,13 +182,6 @@ pub fn hint_power(u: &Option<I::Hint>, p: i64) -> Option<I::Hint> {
     }
     let pu = units::parse_unit_string(&name).ok()?;
     Some(crate::exprs::hint_of(&pu))
-}
-
-/// An index into a vector or matrix of known size: fixed (0-based) or known only at run time (1-based).
-#[derive(Clone, Debug)]
-pub enum Idx {
-    Fixed(i64),
-    Rt(I::Expr),
 }
 
 /// The AST nodes of a call's arguments (for errors that point at one); a |z| or √z node has one.
@@ -738,93 +732,9 @@ impl Checker {
     }
 
     // ============================================================ indexing
-    pub fn index_expr(&mut self, idx_ast: &A::Expr, target: &I::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
-        if matches!(idx_ast.kind, A::ExprKind::End) {
-            return Ok(builtin_ir("len", vec![target.clone()], dimless_num(), idx_ast.span.line));
-        }
-        let idx = self.with_end(idx_ast, target, ctx)?;
-        self.need_num(&idx, idx_ast, "a list index")?;
-        if let I::ExprKind::Const(v) = idx.kind {
-            if !v.is_finite() {
-                // xs[inf], xs[0/0] (A32)
-                let shown = if v.is_nan() { "NaN" } else if v > 0.0 { "∞" } else { "-∞" };
-                return Err(self.err(format!("a list index must be a whole number (1, 2, 3, ...), not {shown}"),
-                                    idx_ast.span, None));
-            }
-            if v != v.trunc() {
-                return Err(self.err(format!("a list index must be a whole number (1, 2, 3, ...), not {}",
-                                            crate::arith::py_g(v)), idx_ast.span, None));
-            }
-        }
-        let d = ty_dim(&idx.ty).unwrap();
-        if !self.u.unify(&d, &DExpr::dimless()) {
-            return Err(self.err(format!("a list index must be a plain number (1, 2, 3, ...), not {}", self.desc(&d)),
-                                idx_ast.span, None));
-        }
-        Ok(idx)
-    }
 
-    /// An index that uses `end`: a let of `end` = len(target) around it.
-    fn with_end(&mut self, idx_ast: &A::Expr, target: &I::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
-        if !idx_ast.walk().iter().any(|n| matches!(n.kind, A::ExprKind::End)) {
-            return self.expr(idx_ast, ctx);
-        }
-        let scope = self.new_scope(Some(ctx.scope), "block");
-        let mut c2 = ctx.child(scope);
-        let sym = self.new_sym("end", dimless_num(), &c2);
-        self.bind(scope, "end", Binding::Sym(sym));
-        let mut repl = idx_ast.clone();
-        repl.walk_mut(&mut |n: &mut A::Expr| {
-            if matches!(n.kind, A::ExprKind::End) {
-                n.kind = A::ExprKind::Name { name: "end".into() };
-                n.id = 0;
-            }
-        });
-        let body = self.expr(&repl, &mut c2)?;
-        let line = idx_ast.span.line;
-        let ty = body.ty.clone();
-        Ok(ir(I::ExprKind::Let(vec![(sym, builtin_ir("len", vec![target.clone()], dimless_num(), line))],
-                               Box::new(body)), ty, line))
-    }
 
-    /// An index into a vector or matrix of known size: fixed (0-based) when it is a fixed number, otherwise an IR
-    /// expression (1-based, checked at run time; #54).
-    pub fn fixed_or_runtime_index(&mut self, idx_ast: &A::Expr, size: usize, ctx: &mut Ctx) -> CResult<Idx> {
-        if matches!(idx_ast.kind, A::ExprKind::End) {
-            return Ok(Idx::Fixed(size as i64 - 1));
-        }
-        let n = konst(size as f64);
-        let mut idx = self.index_expr(idx_ast, &n, ctx)?;
-        if let I::ExprKind::Let(binds, value) = &idx.kind {
-            if matches!(value.kind, I::ExprKind::Const(_)) {
-                idx = (**value).clone();
-            } else {
-                // v[end - 1]: `end` is the size, known here
-                let binds = binds.iter().map(|(s, _)| (*s, n.clone())).collect();
-                let ty = idx.ty.clone();
-                idx = ir(I::ExprKind::Let(binds, value.clone()), ty, idx.line);
-            }
-        }
-        if let I::ExprKind::Const(v) = idx.kind {
-            return Ok(Idx::Fixed(v.trunc() as i64 - 1));
-        }
-        Ok(Idx::Rt(idx))
-    }
 
-    /// t's entries at flat base Σ (i − 1)·stride + offs; pieces: [(index, size, stride)].
-    pub fn runtime_index(&mut self, t: I::Expr, pieces: Vec<(Idx, usize, usize)>, offs: Vec<usize>, ty: Ty,
-                         node: &A::Expr) -> CResult<I::Expr> {
-        if is_mixed(&t.ty) {
-            return Err(self.err("this vector's components have different units, so pick one with a fixed number, \
-                                 like v[1]", node.span, None));
-        }
-        let idxs = self.checked_pieces(pieces, node)?;
-        let (hint, sf) = (t.hint.clone(), t.sf);
-        let mut r = ir(I::ExprKind::VecIndex { v: Box::new(t), idxs, offs }, ty, node.span.line);
-        r.hint = hint;
-        r.sf = sf;
-        Ok(r)
-    }
 
     fn checked_pieces(&self, pieces: Vec<(Idx, usize, usize)>, node: &A::Expr) -> CResult<Vec<(I::Expr, usize, usize)>> {
         let mut idxs = vec![];
@@ -837,7 +747,7 @@ impl Checker {
                     }
                     konst((k + 1) as f64)
                 }
-                Idx::Rt(e) => e,
+                Idx::Run(e) => e,
             };
             idxs.push((k, size, stride));
         }
@@ -893,7 +803,7 @@ impl Checker {
         let Ty::Mat { r, c, dim } = inner.ty.clone() else { return Ok(None) };
         let ri = self.fixed_or_runtime_index(inner_i, r, ctx)?;
         let ci = self.fixed_or_runtime_index(index, c, ctx)?;
-        if matches!(ri, Idx::Rt(_)) || matches!(ci, Idx::Rt(_)) {
+        if matches!(ri, Idx::Run(_)) || matches!(ci, Idx::Run(_)) {
             return self.runtime_index(inner, vec![(ri, r, c), (ci, c, 1)], vec![0], Ty::Num(dim), e).map(Some);
         }
         let i = self.mat_index(inner_i, r, "row", ctx)?;
@@ -917,7 +827,7 @@ impl Checker {
                                         index.span, None));
                 }
                 let ri = self.fixed_or_runtime_index(index, r, ctx)?;
-                if let Idx::Rt(_) = ri {
+                if let Idx::Run(_) = ri {
                     return self.runtime_index(t.clone(), vec![(ri, r, c)], (0..c).collect(), vec_ty(dim, c), e)
                         .map(Some);
                 }
@@ -1274,21 +1184,6 @@ impl Checker {
         Ok(None)
     }
 
-    /// `to N digits`.
-    pub fn e_digits(&mut self, e: &A::Expr, value: &A::Expr, digits: u32, ctx: &mut Ctx) -> CResult<I::Expr> {
-        let mut v = self.expr(value, ctx)?;
-        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_)
-                            | Ty::ComplexList(_)) {
-            return Err(self.err("'to N digits' only works on numbers", e.span, None));
-        }
-        if !(1..=17).contains(&digits) {
-            return Err(self.err("the number of digits must be between 1 and 17", e.span, None));
-        }
-        v.sf = Some(digits);
-        v.direct = 2; // asked for (2), not written as a literal: lists use exactly sf digits
-        v.extra().no_echo = true; // no "(= … SI)" echo for a value printed to chosen digits (friction #31)
-        Ok(v)
-    }
 }
 
 #[cfg(test)]

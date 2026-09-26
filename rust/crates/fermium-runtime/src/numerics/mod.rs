@@ -11,9 +11,12 @@ pub mod fft;
 pub mod fit;
 pub mod linalg;
 pub mod ode;
+pub mod pde;
 pub mod pocketfft;
 pub mod quad;
+pub mod rng;
 pub mod roots;
+pub mod special;
 pub mod stiff;
 
 /// A run-time failure with v1's error kind and its two numbers (see `describe_error` in

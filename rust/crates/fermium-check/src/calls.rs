@@ -483,6 +483,8 @@ impl Checker {
         let scope = self.new_scope(Some(fscope), "func");
         let mut fctx = Ctx { func: Owner::Func(inst), scope, is_main: false, lam: None, loop_depth: 0, branch: 0,
                              ret_types: self.new_ret_types(), regions: vec![], lam_parents: vec![] };
+        // Python checks the parameters before its try: their errors get no call note (D101: nor a module note)
+        let mut in_body = false;
         let result: CResult<()> = (|| {
             for (p, a) in params.iter().zip(&fargs) {
                 match a {
@@ -521,6 +523,7 @@ impl Checker {
                     Checked::Sol(_) => unreachable!(),
                 }
             }
+            in_body = true;
             match body {
                 A::FuncBody::Expr(_) => {
                     let b = self.body_expr(info).unwrap();
@@ -551,6 +554,9 @@ impl Checker {
         self.func_extra[inst].checking = false;
         if let Err(mut e) = result {
             self.funcs[info].instances.remove(&key);
+            if !in_body {
+                return Err(e);
+            }
             if e.line.is_none() {
                 e.line = Some(node.span.line).filter(|l| *l != 0);
                 e.col = Some(node.span.col).filter(|c| *c != 0);
