@@ -13,6 +13,7 @@ pub mod checker;
 pub mod convert;
 pub mod exprs;
 pub mod lists;
+pub mod modules;
 pub mod names;
 mod pending;
 pub mod parallel;

@@ -57,8 +57,8 @@ pub struct FuncInfo {
     pub stable: bool,
     /// the unit system it was defined in (None: SI, callable anywhere; D60)
     pub nat: Option<crate::systems::Sys>,
-    /// set by modules: the module it came from
-    pub module: Option<String>,
+    /// set by modules: the module it came from (index into Checker.mods.modules)
+    pub module: Option<usize>,
     /// printed instead of name(params) for an unnamed function: d/dt (3t²), ∫ x dx
     pub anon_label: Option<String>,
     /// a derivative: (the base function, the parameter index, the order)
@@ -219,6 +219,8 @@ pub struct Checker {
     pub nat: crate::systems::Sys,
     /// unit-system bookkeeping (systems.rs)
     pub sys: crate::systems::SysState,
+    /// modules imported in this compilation (modules.rs)
+    pub mods: crate::modules::ModState,
     pub positive_names: std::collections::HashSet<String>,
     pub used_consts: std::collections::HashSet<String>,
     pub warned: std::collections::HashSet<String>,
@@ -267,6 +269,7 @@ impl Checker {
             future_funcs: HashMap::new(),
             nat: Default::default(),
             sys: Default::default(),
+            mods: Default::default(),
             positive_names: Default::default(),
             used_consts: Default::default(),
             warned: Default::default(),
@@ -482,6 +485,8 @@ impl Checker {
         self.nodes.clear();
         self.index_nodes(prog);
         self.note_top_units(prog);
+        let g = self.globals;
+        self.note_program(prog, g);
         self.future_funcs = prog
             .body
             .iter()
@@ -552,6 +557,8 @@ impl Checker {
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
             K::Analyze { .. } => self.s_analyze(s, ctx),
+            K::Import { .. } => self.s_import(s, ctx),
+            K::UsePython { .. } => self.s_use_python(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }

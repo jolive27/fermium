@@ -3,7 +3,6 @@
 use fermium_ir as I;
 use fermium_ir::types::Ty;
 use fermium_syntax::ast as A;
-use fermium_syntax::diag::Diagnostic;
 
 use crate::checker::*;
 use crate::units::Unit;
@@ -33,16 +32,6 @@ impl Checker {
     }
     pub fn sol_names(&self, _sol: usize) -> Vec<String> {
         vec![]
-    }
-    // ---- modules
-    pub fn module_as_value(&self, _m: usize, name: &str, e: &A::Expr) -> Diagnostic {
-        self.err(format!("{name} is a module, not a value"), e.span, None)
-    }
-    pub fn py_module_name(&self, _m: usize) -> String {
-        "?".into()
-    }
-    pub fn module_hint(&self, _name: &str, _ctx: &Ctx) -> Option<String> {
-        None
     }
     // ---- expressions not ported yet
     pub fn cplx_builtin(&mut self, name: &str, _args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
@@ -116,11 +105,6 @@ impl Checker {
     pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("evaluating an ODE solution", e.span))
     }
-    pub fn module_call(&mut self, _info: FuncInfoId, _args: Vec<Checked>, node: &A::Expr, _cache: bool)
-                       -> CResult<I::Expr> {
-        Err(self.not_ported("calling a module's function", node.span))
-    }
-    pub fn module_body_error(&mut self, _e: &mut Diagnostic, _info: FuncInfoId, _node: &A::Expr) {}
     /// C.stabilize: a numerically stable form of a derivative's body (calculus module).
     pub fn stabilize(&self, e: &A::Expr) -> A::Expr {
         e.clone()
