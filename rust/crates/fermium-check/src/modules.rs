@@ -79,6 +79,8 @@ pub struct ModState {
     pub err_noted: HashSet<String>,
     /// `use python` modules (name as imported)
     pub py: Vec<String>,
+    /// the last AST node id given to a module's nodes (ids are unique across the program and its modules)
+    pub last_id: u32,
 }
 
 fn err_key(e: &Diagnostic) -> String {
@@ -840,12 +842,21 @@ impl Checker {
             }
         };
         let mut info = ModuleInfo { name: stem.to_string(), path: path.to_string(), scope: 0, display: display.clone() };
-        let (prog, pdiags) = match fermium_syntax::parse(&src, &[]) {
+        let after = self.nodes.keys().copied().max().unwrap_or(0).max(self.mods.last_id);
+        let (prog, pdiags, last) = match fermium_syntax::parse_module(&src, after) {
             Ok(x) => x,
             Err(e) => return Err(self.wrap(e, &info, s)),
         };
+        self.mods.last_id = last;
         // the checker keeps references into the module's AST for the rest of the compilation
         let prog: &'static A::Program = Box::leak(Box::new(prog));
+        let mut tops = vec![];
+        crate::walk::all_exprs_in_stmts(&prog.body, &mut tops);
+        for t in tops {
+            for n in t.walk() {
+                self.nodes.entry(n.id).or_insert(n as *const A::Expr);
+            }
+        }
         for st in &prog.body {
             let ok = match &st.kind {
                 A::StmtKind::FuncDef { .. } | A::StmtKind::Import { .. } => true,
