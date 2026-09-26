@@ -137,9 +137,18 @@ fn antiderivatives_are_right() {
 }
 
 #[test]
+fn integrals_of_products_of_sums() {
+    for (f, v) in [("x ln(x)", "x"), ("x * (ln(x) - 2)", "x"), ("x^2 * (ln(x) - 2)", "x"), ("(x - x^2) * (ln(x) - 2)", "x"), ("(x * 2) * (exp(2 x) - b)", "x"), ("sqrt(x) * x^2", "x"),
+                   ("x exp(x) - x", "x")] {
+        assert!(integ(f, v, &[]).is_ok(), "{f}: {:?}", integ(f, v, &[]));
+    }
+}
+
+#[test]
 fn non_elementary_integrals_are_refused() {
     let e = integ("exp(s) / s", "s", &[]).unwrap_err();
     assert_eq!(e, "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)");
     assert!(integ("sin(x)/x", "x", &[]).unwrap_err().contains("Si"));
+    assert!(integ("exp(2 x) x exp(x) - exp(2 x)/x", "x", &[]).unwrap_err().ends_with("Ei(2*x)"));
     assert_eq!(integ("exp(sin(x))", "x", &[]).unwrap_err(), "Fermium couldn't find a formula for this integral");
 }

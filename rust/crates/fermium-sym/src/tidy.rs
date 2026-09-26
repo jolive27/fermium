@@ -707,7 +707,8 @@ fn factor_terms(t: T) -> T {
                     .filter_map(|(k, b, e)| {
                         let (_, _, e2) = fx.iter().find(|f| f.0 == k)?;
                         let (a, c) = (qf(e), qf(*e2));
-                        if a * c <= 0.0 {
+                        // like SymPy's factor_terms: only whole powers are taken out
+                        if a * c <= 0.0 || !is_int(e) || !is_int(*e2) {
                             return None;
                         }
                         let m = if a > 0.0 { if a <= c { e } else { *e2 } } else if a >= c { e } else { *e2 };
@@ -913,7 +914,7 @@ pub fn sympy_best(e: &A::Expr) -> A::Expr {
     let plain = zero_sums(t.clone());
     let mut best = (sympy_str(&plain).chars().count(), plain.clone());
     let tg = together(t.clone());
-    for cand in [factor_terms(t), tg.clone(), factor_terms(tg)] {
+    for cand in [factor_terms(t.clone()), tg.clone(), factor_terms(tg), collect_funs(t)] {
         let cand = signsimp(zero_sums(cand));
         if key(&cand).contains("NaN") {
             continue;
@@ -924,6 +925,48 @@ pub fn sympy_best(e: &A::Expr) -> A::Expr {
         }
     }
     simplify(&from_t(&best.1))
+}
+
+/// Group the terms of a sum that share a function factor (SymPy's integrate returns x e^x − e^x − x²/2 as
+/// −x²/2 + (x − 1)·exp(x)).
+fn collect_funs(t: T) -> T {
+    let T::Add(ts) = t else { return t };
+    let fun_of = |x: &T| -> Vec<String> {
+        match x {
+            // exponentials only: SymPy's heurisch returns (x − 1)·exp(x), but keeps 2x sin(x) + 2 cos(x) − x² cos(x)
+            T::Mul(_, fs) => fs.iter().filter(|f| matches!(f, T::Fun(n, _) if n == "exp")).map(key).collect(),
+            T::Fun(n, _) if n == "exp" => vec![key(x)],
+            _ => vec![],
+        }
+    };
+    let mut counts: Vec<(String, usize)> = vec![];
+    for x in &ts {
+        for k in fun_of(x) {
+            match counts.iter_mut().find(|c| c.0 == k) {
+                Some(c) => c.1 += 1,
+                None => counts.push((k, 1)),
+            }
+        }
+    }
+    let Some((k, _)) = counts.into_iter().filter(|c| c.1 >= 2).max_by_key(|c| c.1) else { return T::Add(ts) };
+    let (with, without): (Vec<T>, Vec<T>) = ts.into_iter().partition(|x| fun_of(x).contains(&k));
+    let f = match &with[0] {
+        T::Mul(_, fs) => fs.iter().find(|g| key(g) == k).unwrap().clone(),
+        o => o.clone(),
+    };
+    let inv = T::Pow(Box::new(f.clone()), (-1, 1));
+    let inner = add_all(with.into_iter().map(|x| mul_all(vec![x, inv.clone()])).collect());
+    let mut items = without;
+    items.push(mul_all(vec![inner, f]));
+    add_all(items)
+}
+
+/// How SymPy's str() writes a formula (for messages that quote SymPy, like "Ei(2*x)").
+pub fn sympy_text(e: &A::Expr) -> String {
+    match to_t(e) {
+        Some(t) => sympy_str(&t),
+        None => crate::source::key(e),
+    }
 }
 
 /// Roughly how SymPy's str() writes a term (for v1's length comparisons).
