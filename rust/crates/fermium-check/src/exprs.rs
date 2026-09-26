@@ -371,6 +371,9 @@ impl Checker {
         if self.extra[sym].tdelta {
             r.extra().tdelta = true;
         }
+        if self.extra[sym].fit_sf {
+            r.extra().fit_sf = true;
+        }
         if let Some(m) = &self.extra[sym].mixed_hint {
             r.extra().mixed = Some(m.clone());
         }

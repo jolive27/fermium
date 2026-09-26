@@ -66,6 +66,18 @@ fn fit_parameters_are_plain_without_uncertainties() {
     assert!(o.starts_with(&format!("{HOOKE_REPORT}0 N/m\n")), "{o}");
 }
 
+/// A fitted parameter's figures don't come from a written value, so a printed sum with one keeps v1's rule (the
+/// most precise operand's figures), not the decimal-place rule (B-F1); also through a variable set from it.
+/// Expected outputs from `python3 -m fermium run`, except the last: written values still follow the decimal-place
+/// rule (spec B2; v1 printed 3.20 m).
+#[test]
+fn sums_of_fit_parameters_print_like_v1() {
+    let src = format!("{HOOKE}print 2 k - k\nprint k + k\na = k\nprint a + a\nprint k + 1.000000 N/m\n\
+                       print F₀ + 0.1 N\nprint err(k) + err(k)\nprint 1.20 m + 2.0 m\n");
+    assert_eq!(stdout_of("fitsum", &src),
+               format!("{HOOKE_REPORT}50.1 N/m\n100 N/m\n100 N/m\n51.11429 N/m\n1.10 N\n1.2 N/m\n3.2 m\n"));
+}
+
 #[test]
 fn fit_model_cannot_use_other_uncertain_values() {
     let src = "x = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06] m\nF = [1.49, 2.02, 2.49, 3.03, 3.47, 4.02] N\n\

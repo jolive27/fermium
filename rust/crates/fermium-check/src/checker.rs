@@ -182,6 +182,8 @@ pub struct SymExtra {
     pub list_sf: Option<u32>,
     /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
     pub err_sym: Option<I::SymId>,
+    /// holds a fitted parameter or its standard error, or a value computed from one (I::ExprExtra::fit_sf)
+    pub fit_sf: bool,
     /// the display units of a mixed vector, one per component (Python sets a MixedHint as sym.hint)
     pub mixed_hint: Option<Vec<Option<fermium_ir::Hint>>>,
 }

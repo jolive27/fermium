@@ -439,6 +439,7 @@ impl Checker {
             self.extra[sym].assigned = true;
             self.module.syms[sym].sf = Some(3);
             self.module.syms[sym].direct = 0;
+            self.extra[sym].fit_sf = true;
             let d = self.u.norm(&pdims[k]);
             if d.is_concrete() {
                 // show it in the data's unit if a column has the same dimension (τ in min)
@@ -470,6 +471,7 @@ impl Checker {
                 }
             };
             self.extra[es].assigned = true;
+            self.extra[es].fit_sf = true;
             let h = self.module.syms[sym].hint.clone();
             let ms = &mut self.module.syms[es];
             ms.hint = h;
