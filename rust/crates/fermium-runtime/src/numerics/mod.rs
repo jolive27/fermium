@@ -9,6 +9,7 @@ pub mod dense;
 pub mod fit;
 pub mod ode;
 pub mod quad;
+pub mod roots;
 pub mod stiff;
 
 /// A run-time failure with v1's error kind and its two numbers (see `describe_error` in

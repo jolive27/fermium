@@ -299,7 +299,49 @@ name:x ...   name:y ...   name:guess g...(nan = none)   name k params... errors.
     w.close()
 
 
-SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit}
+# --------------------------------------------------------------------------------------- roots
+# v1's algebraic solve (fermium.interp.root, mirror of fm_root) and SciPy's brentq. Same functions in
+# tests/roots.rs (by name): (f, scale or None, a, b).
+from math import tan  # noqa: E402
+
+ROOT_CASES = [
+    ("cos_x", lambda x: cos(x) - x, lambda x: abs(cos(x)) + abs(x), 0.0, 2.0),
+    ("first_of_many", lambda x: sin(x), None, 0.5, 20.0),
+    ("cubic", lambda x: x * x * x - 2 * x - 5, None, 0.0, 3.0),
+    ("kepler_E", lambda x: x - 0.9 * sin(x) - 1.3, None, 0.0, 3.0),
+    ("at_start", lambda x: x - 1.0, None, 1.0, 2.0),
+    ("on_scan_point", lambda x: x - 0.5, None, 0.0, 1.0),
+    ("planck_peak", lambda x: 3 * (1 - exp(-x)) - x, None, 0.5, 10.0),
+    ("tiny_scale", lambda x: x - 3.3e-19, None, 0.0, 1e-18),
+    ("noise", lambda x: (1e16 + x) - 1e16 - 0.5, lambda x: abs(1e16 + x) + 1e16 + 0.5, 0.0, 3.0),
+    ("no_root", lambda x: x * x + 1, None, -1.0, 1.0),
+    ("pole", lambda x: tan(x), None, 1.0, 2.0),
+    ("backwards", lambda x: exp(x) - 2.0, None, 3.0, 0.0),
+]
+
+
+def gen_roots():
+    from fermium.interp import root, _Fail
+    from scipy.optimize import brentq
+    w = Writer("roots.txt", """
+v1's solve (fermium.interp.root: first root after a, Illinois) and scipy brentq (defaults).
+name x warn(nan = none) brentq(nan = n/a)   or   name ERR kind a b""")
+    for name, f, scale, a, b in ROOT_CASES:
+        warns = []
+        try:
+            x = root(f, a, b, scale=scale, warn=lambda v: warns.append(v))
+        except _Fail as fl:
+            w.row(name, "ERR", str(fl.kind), fl.a, fl.b)
+            continue
+        try:
+            bq = brentq(f, a, b) if f(a) * f(b) < 0 else math.nan
+        except (ValueError, RuntimeError):
+            bq = math.nan
+        w.row(name, x, warns[0] if warns else math.nan, bq)
+    w.close()
+
+
+SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
