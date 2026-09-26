@@ -22,7 +22,7 @@ pub(crate) fn warn_text(text: &str) {
     let text = if text.starts_with("warning: ") { text.to_string() } else { format!("warning: {text}") };
     WARNED.with(|w| {
         if w.borrow_mut().insert(text.clone()) {
-            eprintln!("{text}");
+            fermium_runtime::vfs::stderr_line(&text); // stderr (the playground collects it)
         }
     });
 }

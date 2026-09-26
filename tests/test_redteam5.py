@@ -5,7 +5,6 @@ Each test states the correct behaviour and is marked xfail(strict=True) until it
 the fix agent flips a test by deleting its xfail mark.  Each test names its finding number.
 """
 import io
-import json
 import os
 import re
 import subprocess
@@ -107,25 +106,14 @@ def test_3_jupyter_shows_run_time_warnings(kernel):
     assert "too coarse" in text          # `fermium run` and the REPL show it; the notebook doesn't
 
 
-PG = """
-import sys, json
-for m in ("llvmlite", "llvmlite.ir", "llvmlite.binding"):
-    sys.modules[m] = None
-sys.path[:0] = [ROOT, WEB]
-import playground
-r = json.loads(playground.run("print integral exp(-x^2) dx from -1e6 to 1e6", BASE))
-print(json.dumps(r))
-"""
-
-
 def test_3_playground_shows_run_time_warnings(tmp_path):
-    code = f"ROOT = {ROOT!r}\nWEB = {os.path.join(ROOT, 'web')!r}\nBASE = {str(tmp_path)!r}\n" + PG
-    p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
-    assert p.returncode == 0, p.stderr
-    r = json.loads(p.stdout.strip().split("\n")[-1])
-    assert r["stdout"] == "0\n"
-    # today the warning goes to the worker's stderr (the browser console), not to the page
-    assert "exactly 0" in json.dumps(r, ensure_ascii=False)
+    # the playground runs the WebAssembly build of the Rust compiler since B5.12 (web/, tests/test_playground.py,
+    # which also checks the warning reaches the page in a real browser)
+    from test_playground import run_wasm
+    out, err, code = run_wasm(tmp_path, "solve y'' = -(10/(1 s))^2 y with y(0) = 1 cm, y'(0) = 0 m/s "
+                                        "for t from 0 s to 10 s step 0.1 s\nprint y(10 s)\n")
+    assert (out, code) == ("0.252 cm\n", 0)
+    assert "too coarse" in err
 
 
 # ---- #4: d/dt x(2 s) and ∂/∂x f(1, 2) are silently 0 -------------------------------------------------------

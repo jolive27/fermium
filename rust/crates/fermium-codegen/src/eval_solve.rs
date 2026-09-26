@@ -169,7 +169,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn rt_warn_text(&mut self, text: String) {
         let text = if text.starts_with("warning: ") { text } else { format!("warning: {text}") };
         if !self.solve.warnings.contains(&text) {
-            eprintln!("{text}");
+            fermium_runtime::vfs::stderr_line(&text); // stderr (the playground collects it)
             self.solve.warnings.push(text);
         }
     }

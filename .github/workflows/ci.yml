@@ -61,6 +61,11 @@ jobs:
       - name: Build and test the Rust compiler
         working-directory: rust
         run: cargo build --profile fast && cargo test --profile fast && ldd target/fast/fermium
+      - name: Browser playground (the compiler as WebAssembly; every example must print what fermium run prints)
+        run: |
+          rustup target add wasm32-unknown-unknown
+          python3 web/build.py
+          node web/test/compare_native.js --bin rust/target/fast/fermium
       - name: Install v1.5 (the oracle) for the conformance runner
         run: python3 -m pip install -e ".[full,dev]"
       - name: Conformance, legacy (must be 100%)

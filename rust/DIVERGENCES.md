@@ -127,6 +127,27 @@ link compiler-builtins' cbrt), checked bit for bit on 200 000 random doubles. be
 are ports of v1's own algorithms (bit-identical). Like v1, the last bits of the libm functions can differ between
 platforms; the conformance goldens come from Linux.
 
+## The browser playground (fermium-wasm): playground only, not `fermium run`
+
+The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
+prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+
+- **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
+  gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on
+  non-Unix targets (`eval_core.rs`, `cmath`), and Rust's `sin`, `exp`, `powf`, … come from the pure-Rust libm
+  (musl's algorithms) instead of glibc. So a number printed to 16–17 digits can differ in its last digits from
+  Linux; at the default 3 significant figures, or `to 12 digits`, nothing changes in practice.
+- **Recursion depth:** no threads, so no 512 MB program thread: programs run on the browser's call stack
+  (about 450 levels of a simple recursive function in Chromium's worker, about 800 in Node). Deeper recursion
+  stops with "this program recurses or nests too deeply for the browser playground" (the v1 Pyodide page said the
+  same). The evaluator's own recursion check (`STACK_LIMIT`) is set for the module's 32 MB shadow stack.
+- **Files:** `load` reads from an in-memory file system holding the bootcamp's and examples' data files; plots are
+  written there and handed to the page. `import` of your own `.fm` files isn't possible (the standard library
+  works: it is embedded).
+- **`clock()`** is `performance.now()`.
+- Errors and warnings are shown without the file name (`line 5: …`), as v1's playground showed them.
+
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
 - Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
