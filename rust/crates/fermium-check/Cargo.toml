@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+fermium-units = { path = "../fermium-units" }
 fermium-syntax = { path = "../fermium-syntax" }
 fermium-ir = { path = "../fermium-ir" }
 num-rational = "0.4"

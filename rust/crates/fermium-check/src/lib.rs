@@ -1,6 +1,21 @@
 //! fermium-check: names, types, dimensions and diagnostics (spec §B4). A port of `fermium/checker.py`,
 //! `fermium/types.py` and friends from Fermium 1.5, producing the typed IR of fermium-ir.
+//! See `checker.rs` for how the Python class is split into modules.
 pub use fermium_ir::{types, Dim, DIMLESS};
+
+pub mod arith;
+pub mod builtins;
+pub mod checker;
+pub mod exprs;
+pub mod names;
+mod pending;
+pub mod print;
+pub mod source;
+pub mod stmts;
+pub mod units;
+pub mod walk;
+
+pub use checker::{check, CheckOptions, Checker};
 
 #[cfg(test)]
 mod tests {

@@ -72,6 +72,33 @@ pub struct Expr {
     /// 0: computed; 1..: came from a literal (the Python checker's `direct` codes, D11/D242).
     pub direct: u8,
     pub line: u32,
+    /// Checker-only facts the Python checker sets as attributes on IR nodes (display and warnings).
+    pub x: Option<Box<ExprExtra>>,
+}
+
+/// Rarely-set facts about an expression (Python: attributes set on IR nodes by the checker).
+#[derive(Clone, Debug, Default)]
+pub struct ExprExtra {
+    /// a loop variable over a written list prints with the list's fewest figures (D242)
+    pub list_sf: Option<u32>,
+    /// `10 °C` written out: (value as written, the unit), and where (line, col) — for warnings (#9)
+    pub abs_literal: Option<(f64, Hint)>,
+    pub abs_at: Option<(u32, u32)>,
+    /// false: don't echo the unit as written (natural units, D60)
+    pub no_echo: bool,
+    /// holds a temperature difference (D181)
+    pub tdelta: bool,
+    /// text-table id of a string literal
+    pub text_id: Option<usize>,
+}
+
+impl Expr {
+    pub fn extra(&mut self) -> &mut ExprExtra {
+        self.x.get_or_insert_with(Default::default)
+    }
+    pub fn get_extra(&self) -> Option<&ExprExtra> {
+        self.x.as_deref()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -202,6 +229,8 @@ pub struct Lambda {
     pub name: String,
     pub params: Vec<SymId>,
     pub captures: Vec<SymId>,
+    /// variables made inside it (a where-binding in an integrand, …)
+    pub locals: Vec<SymId>,
     pub body: Vec<Expr>,
     pub state: Vec<SymId>,
     pub col_syms: Vec<SymId>,
