@@ -70,8 +70,14 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   formula is written back; like v1, the tidied formula is used only when it is shorter.
 - The printed formulas match v1's for every ∇ and Leibniz program in the conformance suite (e.g.
   `-q x/(4π ε_0 (x² + y² + z²)^(3/2))`, `∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds`). SymPy's
-  `simplify` also tries trigonometric identities, factoring and `cancel`; for formulas that need those, v2
-  prints a longer but equivalent formula. Values are the same either way.
+  `simplify` also tries trigonometric identities, `cancel` and `together`; for formulas that need those, v2
+  prints a different, equivalent formula, sometimes longer (∇² of the Yukawa potential `A exp(-a r)/r`: v1
+  `A a² exp(-a r)/r`), sometimes shorter (∇·∇ of `G M / r` and ∇² of `x/r³`: v2 `0`, where v1 printed a long
+  expression SymPy couldn't reduce; ∂/∂x of `x/r³`: v2 `(y² + z² - 2x²)/r⁵`, v1 `1/r³ - 3x²/r⁵`). Of 16
+  textbook potentials (∇, ∇², ∇×, ∇· each), 11 print exactly as v1; about a third of random formulas print
+  differently; derivatives (`f'`, `d/dx`,
+  `∂/∂x`) don't go through this step and printed identically in 370 random formulas. Values are the same
+  either way.
 - Tests: `fermium-sym/src/tests.rs` (`tidy_like_sympy`); conformance cases `f6f6b826b670`, `71b03deee8c1`,
   `7c0c11b0d9a1`.
 
@@ -118,7 +124,7 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   with `to N digits`; a value stored in a variable first prints as before.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
   conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
-  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c (recorded divergences).
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 (recorded divergences).
 
 ## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
 
@@ -132,11 +138,13 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
   variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
   same.
-- Measured on the whole conformance suite before adopting it: 3 cases change (the three above), no others.
+- Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
+  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`, v1
+  `-6.78×10⁻¹⁵ μJ`).
   An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
   worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`sums_keep_the_coarsest_decimal_place`); conformance cases
-  89747a9eb10a 664786f7f30f 09fe8fafb686 (recorded divergences).
+  89747a9eb10a 664786f7f30f 09fe8fafb686 47680448a9da (recorded divergences).
 
 ## Special functions and cbrt: the C library, as v1's compiled code
 
@@ -174,11 +182,19 @@ or a quantity found by cancellation). What differs, in the browser only:
 
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
-- Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
+- Radau/BDF: LAPACK's LU and OpenBLAS's products modelled with their rounding (`numerics/npblas.rs`), so
+  Radau's steps are v1's step for step. BDF's step-size factors use `error_norms ** (-1/k)`, which
+  NumPy evaluates with its vectorised pow (not libm's; it differs in the last bit about 5% of the time),
+  so a long BDF solve can drift from v1 at the rounding level; it shows only when the results are printed to
+  16–17 digits (case 1954d43c8916).
 - Fit: MINPACK lmder port with our QR; parameters agree with SciPy to 1e-9, standard errors to 2e-8.
-- Eigenvalues (matrix method): Sturm bisection + inverse iteration instead of LAPACK stebz/stein;
-  energies agree to 4e-12 relative.
-- FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
+- Eigenvalues (matrix method): LAPACK dstebz/dstein, dgbtf2/dgbtrs and the BLAS calls are transcribed,
+  so energies and eigenfunctions are v1's to the last bit, except after the near-degenerate-pair fix,
+  which uses a 2×2 eigenproblem instead of NumPy's SVD (last-digit differences in ψ). Orthogonality integrals
+  such as ∫ψ₁ψ₂ are rounding noise (about 10⁻¹⁷) in both implementations and differ there (cases 1fc80f4b748e,
+  92190636e7d6, 02e450290630; recorded under the rounding-level integrals section, which prints them with one
+  figure).
+- FFT: a literal port of pocketfft (numpy.fft's library): bit-identical to NumPy on every fixture value.
 - PDE: a tridiagonal LU instead of SuperLU; 3e-13.
 
 ## Plots: native SVG/PNG/GIF instead of matplotlib (spec B6)
@@ -246,14 +262,19 @@ arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argume
 - `fermium doctor` (spec §B7): Fermium 2 is one self-contained program, so doctor no longer checks Python,
   llvmlite, NumPy, SciPy, SymPy, matplotlib, pygls, ipykernel or a C compiler. It reports the version (and
   where the program is), the LLVM version built into it, the platform, that nothing else is needed, that the
-  REPL, language server and Jupyter kernel are built in, that `fermium build` isn't there yet, and it still
-  compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
+  REPL, language server and Jupyter kernel are built in, that `fermium build` links executables with the
+  built-in lld, and it still compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
 - `fermium run` also takes `--backend auto|llvm|interp` and `--base-dir DIR` (the conformance runner uses
   them); `--interp` is `--backend interp`. Its help and usage list them.
 - `fermium run --time` prints `time: parse … ms, check … ms, run … ms (codegen, JIT and running)`: the back end
   is one number (v1 split it into codegen, LLVM+JIT and run).
-- `fermium build` (milestone B5.10, not done yet) says so and exits with 1; its help says "not yet in this
-  version" instead of "needs a C compiler".
+- `fermium build` (milestone B5.10) needs no C compiler: the object file is linked by the lld built into the
+  binary against an embedded run time (rust/BUILD.md). Linux only for now; the macOS path is written but not
+  yet tested (it needs the Command Line Tools' SDK for libSystem).
+- Recursion depth: the compiled code stops at 400 MB of stack, as v1's does (well past a million calls of a
+  small function). A program the tree-walker runs (one with ±, or a construct the LLVM back end doesn't
+  compile yet) has 1.9 GB but bigger frames: a one-line recursive function stops at about 500 000 calls deep
+  (v1's compiled code goes past 10⁶). Red team 10 #5; making the tree-walker's frames smaller is open.
 - `fermium --version` prints `fermium 2.0.0-dev (Rust)`.
 
 ## The REPL (fermium-repl)
@@ -273,7 +294,8 @@ session of tests/test_repl.py plus 30 more) print exactly what v1 prints
   past the terminal width are redrawn less neatly than readline does.
 - Inputs run on the tree-walker (the LLVM back end doesn't compile arena variables yet), so an input's
   output is the same as `fermium run --backend interp` would print.
-- `±` is refused by the checker as in `fermium run` (v1's REPL refused it with its own message).
+- `±` works in the REPL (inputs run on the tree-walker, which has uncertain values): v1's REPL refused it with
+  its own message. An improvement, noted by red team 10 #8.
 
 ## The language server (fermium-lsp)
 

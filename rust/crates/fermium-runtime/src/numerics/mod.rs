@@ -10,6 +10,7 @@ pub mod eigen;
 pub mod fft;
 pub mod fit;
 pub mod linalg;
+pub mod npblas;
 pub mod ode;
 pub mod pde;
 pub mod pocketfft;

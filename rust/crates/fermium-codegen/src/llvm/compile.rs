@@ -1345,7 +1345,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                     return Err("a call with the wrong number of arguments".into());
                 }
                 let rk = kind_of(&func.ret_ty)?;
-                let into_module = func.body.first().is_some_and(|s| s.line > crate::eval::MODLINE_MAX);
+                let into_module = crate::eval::func_in_module(func);
                 let saved = match self.known_line {
                     Some(l) => self.i32c(l as i64),
                     None => self.line_val()?,
