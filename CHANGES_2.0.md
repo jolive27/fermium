@@ -13,7 +13,7 @@ Design details are in `DECISIONS.md` (the Rust implementation from D264 onwards;
   ([bootcamp Lesson 0](bootcamp/lesson00_setup.md) walks through it), and run `fermium doctor`.
 - From a checkout: `make install` (`cargo install --locked --path rust/crates/fermium-cli`); building needs Rust
   and the LLVM 18 development files ([rust/BUILD.md](rust/BUILD.md)).
-- `fermium --version` prints `fermium 2.0.0-dev (Rust)` until the release is tagged.
+- `fermium --version` prints `fermium 2.0.0 (Rust)`.
 
 ## Compatibility
 
