@@ -421,8 +421,39 @@ name:A a...  name:B b...  name:M m... (SPD)  then  name:det d  name:solve x...  
     w.close()
 
 
+# --------------------------------------------------------------------------------------- fft
+# v1's spectrum (fermium/runtime/spectral.py over numpy.fft). Inputs by formula (same in tests/fft.rs):
+# x_j = sin(0.37 j + 0.1) + 0.5 cos(0.013 j j), y_j = cos(1.1 j) * 0.5
+FFT_SIZES = [1, 2, 3, 4, 5, 7, 8, 12, 16, 30, 97, 100, 128, 210, 256, 1000, 1024, 1031, 2003, 4096]
+
+
+def gen_fft():
+    from fermium.runtime.spectral import spectrum
+    w = Writer("fft.txt", """
+v1's spectrum() over numpy.fft: per size n and kind, all outputs (n <= 128) or 16 evenly spaced samples + the sum of squares.
+n:kind values...""")
+    for n in FFT_SIZES:
+        x = [sin(0.37 * j + 0.1) + 0.5 * cos(0.013 * j * j) for j in range(n)]
+        y = [cos(1.1 * j) * 0.5 for j in range(n)]
+        z = [v for pair in zip(x, y) for v in pair]
+        for kind in range(9):
+            if kind == 4:
+                out = spectrum(4, x, y)
+            elif kind in (6, 7):
+                out = spectrum(kind, z)
+            else:
+                out = spectrum(kind, x, dt=0.01)
+            if len(out) > 256:
+                idx = [int(round(i * (len(out) - 1) / 15)) for i in range(16)]
+                vals = [out[i] for i in idx] + [sum(v * v for v in out)]
+            else:
+                vals = list(out)
+            w.row(f"{n}:{kind}", *vals)
+    w.close()
+
+
 SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit, "roots": gen_roots,
-            "eigen": gen_eigen, "linalg": gen_linalg}
+            "eigen": gen_eigen, "linalg": gen_linalg, "fft": gen_fft}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
