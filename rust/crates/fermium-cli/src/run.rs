@@ -55,6 +55,7 @@ impl Default for RunOptions {
 
 pub fn run_file(file: &str, o: RunOptions) -> ExitCode {
     let file = file.to_string();
+    fermium_repl::stop_on_ctrl_c();
     fermium_codegen::eval::STACK_LIMIT.store(400 << 20, std::sync::atomic::Ordering::Relaxed);
     let h = std::thread::Builder::new().stack_size(STACK).spawn(move || run_file_here(&file, &o));
     match h {
@@ -154,6 +155,8 @@ fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::ev
         }
         None => {}
     };
+    // uncertain values (±, propagate montecarlo) run in the tree-walker, as v1 runs them in its interpreter (D122)
+    let backend = if backend == BackendChoice::Auto && module.uses_uncertainty { BackendChoice::Interp } else { backend };
     if backend == BackendChoice::Interp {
         say("interp");
     }

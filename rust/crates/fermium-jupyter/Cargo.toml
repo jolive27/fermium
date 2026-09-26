@@ -11,3 +11,5 @@ fermium-syntax = { path = "../fermium-syntax" }
 fermium-check = { path = "../fermium-check" }
 fermium-repl = { path = "../fermium-repl" }
 fermium-lsp = { path = "../fermium-lsp" }
+fermium-codegen = { path = "../fermium-codegen" }
+libc = "0.2"
