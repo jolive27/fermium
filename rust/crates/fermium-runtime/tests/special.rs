@@ -62,7 +62,8 @@ fn special_functions_match_v1() {
             st.2 = st.2.max(d);
             // v1's own algorithms (I, K, ellip) must be bit-identical; libm ones within a few ulp
             let tol = match f {
-                "besseli" | "besselk" | "ellip" => 0.0,
+                "besseli" | "besselk" | "ellip" if FIXTURE_LIBM => 0.0,
+                "besseli" | "besselk" | "ellip" => 1e-15, // another libm under v1's algorithms
                 "gamma" | "lgamma" => 1e-14,
                 "besselj" | "bessely" => 2e-15,
                 _ => 4e-16,

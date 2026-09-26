@@ -68,3 +68,8 @@ pub fn close(what: &str, got: f64, want: f64, rtol: f64, atol: f64) {
     let d = (got - want).abs();
     assert!(d <= atol || d <= rtol * want.abs().max(got.abs()), "{what}: got {got:e}, want {want:e} (rel {:e})", rel(got, want));
 }
+
+/// Whether this platform's libm is the one the fixtures were generated with (glibc on Linux). There the
+/// bit-identity assertions hold; with another libm (Apple's) results that go through sin, cos, exp, log... may
+/// differ in their last bits, and the tests compare within a few ulp instead.
+pub const FIXTURE_LIBM: bool = cfg!(all(target_os = "linux", target_env = "gnu"));

@@ -229,7 +229,8 @@ fn explicit_solvers_match_v1() {
         assert_eq!(vals.len(), want.len(), "{}: layout", row.name);
         assert_eq!(vals[0], want[0], "{}: step count", row.name);
         for (i, (&g, &w)) in vals.iter().zip(&want).enumerate() {
-            close(&format!("{}[{i}]", row.name), g, w, 1e-12, 1e-300);
+            // another libm: last-bit differences grow along a trajectory; values of order 1, so an absolute floor
+            close(&format!("{}[{i}]", row.name), g, w, 1e-12, if FIXTURE_LIBM { 1e-300 } else { 1e-12 });
             total += 1;
             if g == w || (g.is_nan() && w.is_nan()) {
                 identical += 1;

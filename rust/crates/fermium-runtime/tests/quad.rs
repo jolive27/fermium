@@ -86,7 +86,11 @@ fn quad_b2_keeps_v1_results_and_fixes_its_failures() {
             assert_eq!(got.expect_err(&row.name).kind, row.fields[1].parse::<i64>().unwrap(), "{}", row.name);
         } else {
             let g = got.unwrap_or_else(|e| panic!("{}: {e}", row.name));
-            assert_eq!(g.value, row.f(0), "{}: B2 changed a result v1 got right", row.name);
+            if FIXTURE_LIBM {
+                assert_eq!(g.value, row.f(0), "{}: B2 changed a result v1 got right", row.name);
+            } else {
+                close(&format!("{}: B2 changed a result v1 got right", row.name), g.value, row.f(0), 1e-14, 0.0);
+            }
         }
     }
 }
