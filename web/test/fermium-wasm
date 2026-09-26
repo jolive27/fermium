@@ -1,0 +1,5 @@
+#!/bin/sh
+# `fermium run` on the playground's WebAssembly module (see run_wasm.js), for conformance/run --bin.
+# The conformance runner empties PATH, so node is looked for in the usual places too.
+PATH="$PATH:/opt/node22/bin:/usr/local/bin:/usr/bin:/bin"
+exec node "${0%/*}/run_wasm.js" "$@"

@@ -175,7 +175,7 @@ fn base_name(p: &str) -> &str {
 
 /// v1's `read_csv_header`: the column names and unit texts of a CSV file's first line.
 pub fn read_csv_header(full: &str) -> Result<Vec<HeaderCol>, String> {
-    let text = std::fs::read_to_string(full).map_err(|e| format!("can't read {full}: {e}"))?;
+    let text = crate::vfs::read_to_string(full).map_err(|e| format!("can't read {full}: {e}"))?;
     let rows = parse_csv(&text);
     let header = rows.first().ok_or_else(|| format!("the file {} is empty", base_name(full)))?;
     Ok(header
@@ -199,7 +199,7 @@ pub fn read_csv_header(full: &str) -> Result<Vec<HeaderCol>, String> {
 /// v1's `Runtime.load`: read the numbers under the header, each column converted to SI.
 /// `full` is the file to read, `shown` the path as written (for messages).
 pub fn load(full: &str, shown: &str, cols: &[ColUnit]) -> Result<Dataset, String> {
-    let text = match std::fs::read_to_string(full) {
+    let text = match crate::vfs::read_to_string(full) {
         Ok(t) => t,
         Err(_) => {
             let dir = std::path::Path::new(full)

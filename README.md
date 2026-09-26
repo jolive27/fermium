@@ -166,14 +166,15 @@ Friction items logged: 96; fixed in the language: 86.
 
 ## Browser playground
 
-`web/` is a static site that runs Fermium in the browser with [Pyodide](https://pyodide.org): an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It uses the reference interpreter (`fermium run --interp`), because llvmlite doesn't exist in the browser, so it is slower than the desktop compiler; its output matches `fermium run`.
+`web/` is a static site that runs Fermium in the browser: an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It runs the Rust compiler built to WebAssembly (a 3.3 MB module, `rust/crates/fermium-wasm`) with its interpreter, so it is slower than the desktop `fermium run`; its output matches `fermium run`.
 
 ```
-python3 web/build.py                  # examples, symbols and a wheel of fermium -> web/gen/
+rustup target add wasm32-unknown-unknown
+python3 web/build.py                  # fermium.wasm, examples and symbols -> web/gen/
 python3 -m http.server -d web 8000    # then open http://localhost:8000/
 ```
 
-Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` downloads it (about 45 MB) into `web/pyodide/`, and the page then works offline. `web/gen/` and `web/pyodide/` are build outputs and are not committed.
+`web/gen/` is a build output and is not committed. [web/README.md](web/README.md) has the details and the tests.
 
 ## Documentation
 - [Language reference](docs/reference.md)

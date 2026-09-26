@@ -1,40 +1,36 @@
 #!/usr/bin/env python3
 """Build the files the browser playground (web/index.html) loads, from the repository:
 
+    web/gen/fermium.wasm    Fermium itself: the Rust compiler's tree-walking back end compiled to WebAssembly
+                            (rust/crates/fermium-wasm, `cargo build --profile wasm --target wasm32-unknown-unknown`)
     web/gen/examples.json   every ```fermium block of the bootcamp lessons, the examples/*.fm programs,
                             and the CSV data files they read
     web/gen/symbols.json    the \\name -> symbol table (fermium/symbols.py LATEX) for Tab completion
-    web/gen/fermium-*.whl   a pure-Python wheel of the fermium package (written directly, see build_wheel),
-                            unpacked into Pyodide's site-packages by web/worker.js
-    web/gen/manifest.json   the wheel's file name
+    web/gen/manifest.json   the module's file name, size and version
 
-    python3 web/build.py                 # the above (a few seconds)
-    python3 web/build.py --local-pyodide # also download Pyodide itself into web/pyodide/, so the page
-                                         # (and tests/test_playground.py) needs no CDN
+    python3 web/build.py                   # the above (the first wasm build takes a few minutes)
+    python3 web/build.py --wasm FILE.wasm  # use a module built elsewhere
+    python3 web/build.py --no-wasm         # only the JSON files (keeps a web/gen/fermium.wasm already there)
 
-Then serve it:  python3 -m http.server -d web 8000   and open http://localhost:8000/
+Needs: Rust with the wasm32-unknown-unknown target (`rustup target add wasm32-unknown-unknown`). Nothing else:
+no wasm-bindgen, no npm. Then serve it:  python3 -m http.server -d web 8000   and open http://localhost:8000/
 """
 import argparse
+import ast
 import glob
-import io
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
-import tarfile
-import urllib.request
 
 WEB = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(WEB)
 GEN = os.path.join(WEB, "gen")
-PYODIDE_VERSION = "0.29.5"
-PYODIDE_CDN = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
-# numpy is always loaded; matplotlib for plots, scipy for fits, sympy for integrals without limits
-PYODIDE_PACKAGES = ["numpy", "matplotlib", "scipy", "sympy"]
-LOCAL_MARKER = "fermium-local.json"     # in web/pyodide/, written when the local copy is complete
-
-sys.path.insert(0, ROOT)
+RUST = os.path.join(ROOT, "rust")
+TARGET = "wasm32-unknown-unknown"
+PROFILE = "wasm"          # rust/Cargo.toml [profile.wasm]: release + fat LTO + stripped
 
 WELCOME = """\
 # Welcome to the Fermium playground!
@@ -112,138 +108,71 @@ def collect_examples():
     return {"groups": groups, "data": data}
 
 
-def build_wheel():
-    """Write a pure-Python wheel of the fermium package with zipfile.
-
-    `pip wheel . --no-deps` does the same job, but it needs a working setuptools/wheel pair (Debian's
-    system setuptools breaks it) or network access for build isolation; the wheel format for a pure
-    package is just a zip with a .dist-info folder, so writing it directly is simpler and always works.
-    The wheel is valid: `pip install web/gen/fermium-*.whl` accepts it."""
-    import base64
-    import hashlib
-    import zipfile
-    for old in glob.glob(os.path.join(GEN, "fermium-*.whl")):
-        os.remove(old)
-    pyproject = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
-    version = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.M).group(1)
-    summary = re.search(r'^description\s*=\s*"([^"]*)"', pyproject, re.M).group(1)
-    dist = f"fermium-{version}.dist-info"
-    name = f"fermium-{version}-py3-none-any.whl"
-    files = []
-    pkg = os.path.join(ROOT, "fermium")
-    for d, dirs, fs in os.walk(pkg):
-        dirs[:] = sorted(x for x in dirs if x != "__pycache__")
-        for f in sorted(fs):
-            if f.endswith((".py", ".c", ".fm")):          # .fm: the standard library (M7)
-                full = os.path.join(d, f)
-                files.append((os.path.relpath(full, ROOT).replace(os.sep, "/"), open(full, "rb").read()))
-    files.append((f"{dist}/METADATA", (f"Metadata-Version: 2.1\nName: fermium\nVersion: {version}\n"
-                                        f"Summary: {summary}\nRequires-Python: >=3.10\n").encode()))
-    files.append((f"{dist}/WHEEL", b"Wheel-Version: 1.0\nGenerator: fermium web/build.py\n"
-                                   b"Root-Is-Purelib: true\nTag: py3-none-any\n"))
-    files.append((f"{dist}/entry_points.txt", b"[console_scripts]\nfermium = fermium.cli:entry\n"))
-    files.append((f"{dist}/top_level.txt", b"fermium\n"))
-    record = []
-    for path, data in files:
-        digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
-        record.append(f"{path},sha256={digest},{len(data)}")
-    record.append(f"{dist}/RECORD,,")
-    files.append((f"{dist}/RECORD", ("\n".join(record) + "\n").encode()))
-    with zipfile.ZipFile(os.path.join(GEN, name), "w", zipfile.ZIP_DEFLATED) as z:
-        for path, data in files:
-            info = zipfile.ZipInfo(path, date_time=(2020, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o644 << 16
-            z.writestr(info, data)
-    return name
+def load_symbols():
+    """The LATEX table of fermium/symbols.py (legacy/fermium/ after the cutover), read without importing it."""
+    for rel in ("fermium/symbols.py", "legacy/fermium/symbols.py"):
+        path = os.path.join(ROOT, rel)
+        if os.path.exists(path):
+            tree = ast.parse(open(path, encoding="utf-8").read())
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "LATEX" for t in node.targets):
+                    return ast.literal_eval(node.value)
+    raise SystemExit("fermium/symbols.py (the \\name table) not found")
 
 
-def _sha256(path):
-    import hashlib
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def rust_version():
+    m = re.search(r'^version\s*=\s*"([^"]+)"', open(os.path.join(RUST, "Cargo.toml"), encoding="utf-8").read(), re.M)
+    return m.group(1) if m else "?"
 
 
-def _download(url, dest, sha256):
-    if os.path.exists(dest) and _sha256(dest) == sha256:
-        return
-    tmp = dest + ".part"
-    with urllib.request.urlopen(url, timeout=120) as r, open(tmp, "wb") as fh:
-        shutil.copyfileobj(r, fh)
-    if _sha256(tmp) != sha256:
-        os.remove(tmp)
-        raise SystemExit(f"checksum mismatch for {url}")
-    os.replace(tmp, dest)
-
-
-def local_pyodide():
-    """Download the Pyodide core (npm package) and the wheels of the packages the playground uses
-    into web/pyodide/ (about 50 MB); web/worker.js prefers it over the CDN when it is there."""
-    dest = os.path.join(WEB, "pyodide")
-    marker = os.path.join(dest, LOCAL_MARKER)
-    if os.path.exists(marker) and json.load(open(marker)).get("version") == PYODIDE_VERSION:
-        return
-    if os.path.exists(marker):           # another Pyodide version: start again
-        shutil.rmtree(dest)
-    os.makedirs(dest, exist_ok=True)
-    if not os.path.exists(os.path.join(dest, "pyodide-lock.json")):
-        url = f"https://registry.npmjs.org/pyodide/-/pyodide-{PYODIDE_VERSION}.tgz"
-        print(f"downloading {url}")
-        with urllib.request.urlopen(url, timeout=120) as r:
-            blob = r.read()
-        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
-            for m in tf.getmembers():
-                if m.isfile() and m.name.startswith("package/"):
-                    name = m.name[len("package/"):]
-                    if "/" in name:
-                        continue
-                    with open(os.path.join(dest, name), "wb") as fh:
-                        fh.write(tf.extractfile(m).read())
-    lock = json.load(open(os.path.join(dest, "pyodide-lock.json"), encoding="utf-8"))["packages"]
-    need = set()
-
-    def add(n):
-        if n not in need:
-            need.add(n)
-            for d in lock[n]["depends"]:
-                add(d)
-    for p in PYODIDE_PACKAGES:
-        add(p)
-    for n in sorted(need):
-        f = lock[n]["file_name"]
-        print(f"  {f}")
-        _download(PYODIDE_CDN + f, os.path.join(dest, f), lock[n]["sha256"])
-    with open(marker, "w") as fh:        # written last: the page only uses a complete copy
-        json.dump({"version": PYODIDE_VERSION, "packages": sorted(need)}, fh)
-    print(f"local Pyodide {PYODIDE_VERSION} in {os.path.relpath(dest, ROOT)}/ ({len(need)} packages)")
+def build_wasm():
+    """cargo build the fermium-wasm crate for the browser; the path of the module, or None (with the reason
+    printed) when Rust or its wasm32 target isn't installed."""
+    cargo = shutil.which("cargo") or os.path.expanduser("~/.cargo/bin/cargo")
+    if not os.path.exists(cargo):
+        print("build.py: cargo not found: can't build fermium.wasm (install Rust: https://rustup.rs)", file=sys.stderr)
+        return None
+    rustup = shutil.which("rustup")
+    if rustup:
+        installed = subprocess.run([rustup, "target", "list", "--installed"], capture_output=True, text=True).stdout
+        if TARGET not in installed.split():
+            print(f"build.py: the {TARGET} target isn't installed: rustup target add {TARGET}", file=sys.stderr)
+            return None
+    cmd = [cargo, "build", "--profile", PROFILE, "--target", TARGET, "-p", "fermium-wasm"]
+    print("  " + " ".join(["cargo"] + cmd[1:]), "(in rust/)")
+    p = subprocess.run(cmd, cwd=RUST)
+    if p.returncode != 0:
+        raise SystemExit("build.py: building fermium.wasm failed")
+    target_dir = os.environ.get("CARGO_TARGET_DIR") or os.path.join(RUST, "target")
+    return os.path.join(target_dir, TARGET, PROFILE, "fermium_wasm.wasm")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--local-pyodide", action="store_true", help="also download Pyodide into web/pyodide/")
-    ap.add_argument("--no-wheel", action="store_true", help="skip building the wheel")
+    ap.add_argument("--wasm", metavar="FILE", help="use this fermium.wasm instead of building it")
+    ap.add_argument("--no-wasm", action="store_true", help="don't build fermium.wasm")
     args = ap.parse_args(argv)
-    from fermium.symbols import LATEX
     os.makedirs(GEN, exist_ok=True)
+    for old in glob.glob(os.path.join(GEN, "fermium-*.whl")):      # the Pyodide playground's wheel (v1.5)
+        os.remove(old)
     ex = collect_examples()
+    symbols = load_symbols()
     with open(os.path.join(GEN, "examples.json"), "w", encoding="utf-8") as fh:
         json.dump(ex, fh, ensure_ascii=False, indent=1)
     with open(os.path.join(GEN, "symbols.json"), "w", encoding="utf-8") as fh:
-        json.dump(LATEX, fh, ensure_ascii=False, indent=1)
-    manifest = {"pyodide_version": PYODIDE_VERSION, "pyodide_cdn": PYODIDE_CDN}
-    if not args.no_wheel:
-        manifest["wheel"] = build_wheel()
-    elif os.path.exists(os.path.join(GEN, "manifest.json")):
-        manifest["wheel"] = json.load(open(os.path.join(GEN, "manifest.json"))).get("wheel")
+        json.dump(symbols, fh, ensure_ascii=False, indent=1)
+    dest = os.path.join(GEN, "fermium.wasm")
+    src = args.wasm if args.wasm else (None if args.no_wasm else build_wasm())
+    if src:
+        shutil.copyfile(src, dest)
+    manifest = {"wasm": "fermium.wasm", "version": rust_version()}
+    if os.path.exists(dest):
+        manifest["wasm_bytes"] = os.path.getsize(dest)
     with open(os.path.join(GEN, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=1)
     n = sum(len(g["items"]) for g in ex["groups"])
-    print(f"web/gen: {n} examples, {len(LATEX)} symbols" + (f", {manifest['wheel']}" if manifest.get("wheel") else ""))
-    if args.local_pyodide:
-        local_pyodide()
+    size = f", fermium.wasm {manifest['wasm_bytes'] / 1e6:.1f} MB" if "wasm_bytes" in manifest else ", no fermium.wasm"
+    print(f"web/gen: {n} examples, {len(symbols)} symbols{size}")
 
 
 if __name__ == "__main__":

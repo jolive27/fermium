@@ -1141,7 +1141,7 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
 - **Jupyter kernel:** `fermium jupyter install` registers a Fermium kernel (ipykernel comes with `python3 -m pip install -e ".[full]"`). Each cell runs like a REPL input: variables carry over, plots are shown inline, warnings (also the run-time ones, like a too-coarse step) appear under the cell, and Tab completes `\name` symbols, names and a module's members (`mechanics.` → `spring_period`). A cell that fails leaves nothing behind. See `examples/notebook.ipynb`.
 - **Language server:** `fermium lsp` speaks the Language Server Protocol (pygls comes with `python3 -m pip install -e ".[full]"`): live error and warning underlines, hover that shows a name's units (also `mechanics.pendulum_period`), and completion of `\name`, names and module members. `fermium doctor` says whether pygls and ipykernel are installed, and prints the one install command if anything is missing.
 - **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion, and uses `fermium lsp` for hover and live errors when pygls is installed.
-- **Browser playground:** `web/` runs Fermium in the browser with Pyodide (no install; the README's *Browser playground* section says how to build and serve it). It uses the reference interpreter, so it is slower, but it prints the same output and warnings as `fermium run`.
+- **Browser playground:** `web/` runs Fermium in the browser (no install; the README's *Browser playground* section says how to build and serve it). It runs the compiler built to WebAssembly with its interpreter, so it is slower, but it prints the same output and warnings as `fermium run`.
 
 ## 18. Grammar summary
 
