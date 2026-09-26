@@ -26,6 +26,9 @@ pub enum Value {
     Unc(Rc<fermium_runtime::numerics::uncertain::UFloat>),
     /// A list holding uncertain numbers (and plain ones, as `Num`).
     UList(Rc<RefCell<Vec<Value>>>),
+    /// A vector or matrix with uncertain components (v1's tuple of UFloat values): elementwise arithmetic,
+    /// components, vdot and cross work; printing it stops with VEC_UNC (eval_unc.rs).
+    UVec(Rc<Vec<Value>>),
     /// All the samples of a number at once, inside `propagate montecarlo` (v1's NumPy arrays, D123).
     Arr(Rc<Vec<f64>>),
     Void,
@@ -470,7 +473,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn print(&mut self, items: &[PrintItem], fr: &mut Frame) -> Result<(), RunError> {
         for it in items {
             match it {
-                PrintItem::Num(e, f) if crate::eval_calc::measured_sum(e) => {
+                // v1 runs a program that uses ± in its interpreter, whose print_num has no decimal-place rule
+                PrintItem::Num(e, f) if !self.module.uses_uncertainty && crate::eval_calc::measured_sum(e) => {
                     let (x, sf) = self.sum_sf(e, *f, fr)?;
                     match sf {
                         Some(n) => self.printer.num_sf(*f, x, n),
@@ -498,23 +502,25 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         self.printer.list(*f, &v)
                     }
                 }
-                PrintItem::Vec(e, f) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.vec(*f, &v)
-                    }
-                }
-                PrintItem::MixedVec(e, fs) => {
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.mixed_vec(fs, &v)
-                    }
-                }
+                PrintItem::Vec(e, f) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.vec(*f, &v),
+                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    _ => {}
+                },
+                PrintItem::MixedVec(e, fs) => match self.eval(e, fr)? {
+                    Value::Vec(v) => self.printer.mixed_vec(fs, &v),
+                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    _ => {}
+                },
                 PrintItem::Mat(e, f) => {
                     let (r, c) = match &e.ty {
                         Ty::Mat { r, c, .. } => (*r, *c),
                         _ => (0, 0),
                     };
-                    if let Value::Vec(v) = self.eval(e, fr)? {
-                        self.printer.mat(*f, &v, r, c)
+                    match self.eval(e, fr)? {
+                        Value::Vec(v) => self.printer.mat(*f, &v, r, c),
+                        Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                        _ => {}
                     }
                 }
                 PrintItem::Complex(e, f) => {
@@ -588,6 +594,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
+                if matches!(e.ty, Ty::Vec { .. } | Ty::Mat { .. })
+                    && (crate::eval_unc::is_unc(&va) || crate::eval_unc::is_unc(&vb))
+                {
+                    return self.unc_vec_bin(*op, va, vb);
+                }
                 self.bin(*op, va, vb)?
             }
             ExprKind::PowC(a, p) => match self.eval(a, fr)? {
@@ -610,7 +621,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             ExprKind::Neg(a) => match self.eval(a, fr)? {
-                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_)) => self.unc_neg(v)?,
+                v @ (Value::Unc(_) | Value::UList(_) | Value::Arr(_) | Value::UVec(_)) => self.unc_neg(v)?,
                 Value::Num(x) => Value::Num(-x),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| -x).collect()))),
                 Value::Vec(v) => Value::Vec(Rc::new(v.iter().map(|x| -x).collect())),
@@ -723,6 +734,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::VecElem(v, k) => match self.eval(v, fr)? {
                 Value::Vec(v) => Value::Num(v[*k]),
+                Value::UVec(v) => v[*k].clone(),
                 _ => Value::Num(f64::NAN),
             },
             ExprKind::Index(l, i) => {

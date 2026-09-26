@@ -159,6 +159,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     fr.vars.insert(*sym, Value::Num(ds.cols[*c][row]));
                 }
                 match self.eval(&lam.body[0], fr) {
+                    Ok(Value::Unc(_)) => {
+                        failure = Some(RunError {
+                            message: "a fit model can't use uncertain values (±) other than the parameters being \
+                                      fitted; write value(x) in the model".into(),
+                            line: self.line,
+                            hint: None,
+                        });
+                        out.fill(f64::NAN);
+                        return;
+                    }
                     Ok(v) => out[row] = v.num(),
                     Err(ex) => {
                         failure = Some(ex);
@@ -193,8 +203,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for l in &out.lines {
             self.print_line(l);
         }
-        for (i, sym) in params.iter().enumerate() {
-            self.set(*sym, Value::Num(out.result.params[i]), fr);
+        let k = params.len();
+        let vals: Vec<Value> = if module.uses_uncertainty {
+            // the fitted parameters carry their standard errors and correlations (s_SFit, D124)
+            use fermium_runtime::numerics::uncertain::{correlated, UFloat};
+            let ps = &out.result.params[..k];
+            let ok = out.errors_or_nan[..k].iter().all(|e| e.is_finite());
+            let us = match &out.result.cov {
+                Some(cov) if ok => correlated(ps, cov),
+                _ => None,
+            };
+            match us {
+                Some(us) => us.into_iter().map(|u| Value::Unc(Rc::new(u))).collect(),
+                None => ps.iter().zip(&out.errors_or_nan).map(|(v, e)| {
+                    if e.is_finite() { Value::Unc(Rc::new(UFloat::measured(*v, *e))) } else { Value::Num(*v) }
+                }).collect(),
+            }
+        } else {
+            out.result.params[..k].iter().map(|v| Value::Num(*v)).collect()
+        };
+        for (sym, v) in params.iter().zip(vals) {
+            self.set(*sym, v, fr);
         }
         for (i, sym) in errs.iter().enumerate() {
             self.set(*sym, Value::Num(out.errors_or_nan[i]), fr);
