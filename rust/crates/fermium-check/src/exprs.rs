@@ -86,11 +86,18 @@ impl Checker {
             K::Sqrt { operand, root } => self.e_sqrt(e, operand, *root as u32, ctx)?,
             K::Abs { operand: x } => self.e_abs(e, x, ctx)?,
             K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
+            // r[end] of an ODE solution (solve.rs)
+            K::Index { target, index: Some(index) } if self.is_sol_expr(target, ctx) => {
+                self.sol_index(e, target, index, ctx)?
+            }
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Slice { .. } => self.e_slice(e)?,
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
+            // x.t, x.values, r.x, x' and r[end] of an ODE solution (solve.rs); other uses belong to other modules
+            K::Field { target, name } if self.is_sol_expr(target, ctx) => return self.sol_field(e, target, name, ctx),
+            K::Prime { target, order } if self.is_prime_mine(target, *order, ctx) => return self.sol_prime(e, target, *order, ctx),
             K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
             K::Field { target, name } => return self.e_field(e, target, name, ctx),
             K::Prime { target, order } => return self.e_prime(e, target, *order, ctx),
@@ -253,6 +260,7 @@ impl Checker {
                                            name, define {name} at the top level"))))
             }
             Binding::Module(m) => Err(self.module_as_value(m, name, e)),
+            Binding::Pde(p) => Err(self.pde_as_value(p, name, e)),
             Binding::PyModule(m) => {
                 let module = self.py_module_name(m);
                 Err(self.err(format!("{name} is the Python module {module}, not a value; call its functions, like \

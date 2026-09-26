@@ -143,10 +143,8 @@ impl Checker {
             Checked::Sol(view) => {
                 let v = self.sols[view].clone();
                 let p = Rational64::from_integer(order);
-                let nv = SolView { sol_sym: v.sol_sym, comp: v.comp + order as usize * v.stride, top: v.top,
-                                   dim: v.dim.div(&v.tdim.pow(p)), tdim: v.tdim.clone(), tname: v.tname.clone(),
-                                   name: format!("{}{}", v.name, "'".repeat(order as usize)), n: v.n,
-                                   stride: v.stride };
+                let nv = SolView { comp: v.comp + order as usize * v.stride, dim: v.dim.div(&v.tdim.pow(p)),
+                                   name: format!("{}{}", v.name, "'".repeat(order as usize)), ..v.clone() };
                 self.sols.push(nv);
                 Ok(Checked::Sol(self.sols.len() - 1))
             }

@@ -755,6 +755,7 @@ impl Checker {
     }
 
     pub fn need_numlike(&self, v: &I::Expr, node: &A::Expr, what: &str, allow_vec: bool) -> CResult<()> {
+        // (a complex number is a 2-vector here, as ComplexTy is a VecTy in Python)
         if allow_vec && matches!(v.ty, Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_)) {
             return Ok(());
         }

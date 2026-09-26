@@ -83,6 +83,13 @@ pub struct SolView {
     pub name: String,
     pub n: usize,
     pub stride: usize,
+    /// a complex unknown: two slots per derivative (D93)
+    pub cplx: bool,
+    /// display units: of this derivative, of each derivative order, of the time; significant figures
+    pub hint: Option<I::Hint>,
+    pub hints: Vec<Option<I::Hint>>,
+    pub thint: Option<I::Hint>,
+    pub sf: Option<u32>,
 }
 
 /// A one-line helper defined inside a function (D194), expanded at each call.
@@ -106,6 +113,8 @@ pub enum Binding {
     Module(usize),
     /// `use python numpy as np` (pyinterop.py PyModRef)
     PyModule(usize),
+    /// the unknown of a PDE after its solve (m3solve.py PdeView); index into Checker::solve.pdes
+    Pde(usize),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -245,6 +254,8 @@ pub struct Checker {
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
     /// calculus: derived functions made so far (calculus.rs)
     pub calc: crate::calculus::CalcState,
+    /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
+    pub solve: crate::solve::SolveTables,
 }
 
 impl Checker {
@@ -287,6 +298,7 @@ impl Checker {
             fmt_dims: vec![],
             nodes: HashMap::new(),
             calc: Default::default(),
+            solve: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -565,6 +577,7 @@ impl Checker {
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),
+            K::Solve(sv) => self.s_solve(s, sv, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
             _ => Err(self.not_ported(stmt_kind_name(&s.kind), s.span)),
         }
