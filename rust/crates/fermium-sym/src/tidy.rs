@@ -144,6 +144,14 @@ fn mul_all(items: Vec<T>) -> T {
     if coef == 1.0 && fs.len() == 1 {
         return fs.into_iter().next().unwrap();
     }
+    if coef == -1.0 && fs.len() > 1 && fs.iter().filter(|f| matches!(f, T::Add(_))).count() == 1 {
+        // -(x² + y²)/σ²: the sign goes into the sum, (-x² - y²)/σ²
+        let mut fs = fs;
+        let i = fs.iter().position(|f| matches!(f, T::Add(_))).unwrap();
+        let T::Add(ts) = fs.remove(i) else { unreachable!() };
+        fs.push(add_all(ts.into_iter().map(|t| mul_all(vec![T::Num(-1.0), t])).collect()));
+        return T::Mul(1.0, fs);
+    }
     if fs.len() == 1 && matches!(fs[0], T::Add(_)) {
         // SymPy's Mul(number, sum) distributes: 2 (x + z) is 2x + 2z
         let T::Add(ts) = fs.into_iter().next().unwrap() else { unreachable!() };
@@ -356,6 +364,9 @@ fn cancels(t: &T) -> bool {
     let mut sums: Vec<(String, T)> = vec![];
     let Some(mut p) = poly_of(t, &mut sums) else { return false };
     let scale0 = p.values().fold(0.0f64, |a, c| a.max(c.abs()));
+    if p.values().all(|c| c.abs() <= 1e-12 * scale0) {
+        return true; // it cancels term by term once expanded
+    }
     for _round in 0..4 {
         let present: Vec<(String, T)> =
             sums.iter().filter(|(k, _)| p.keys().any(|m| m.iter().any(|x| &x.0 == k))).cloned().collect();
@@ -393,6 +404,93 @@ fn cancels(t: &T) -> bool {
     }
     let scale = p.values().fold(scale0, |a, c| a.max(c.abs()));
     scale > 0.0 && p.values().all(|c| c.abs() <= 1e-12 * scale)
+}
+
+/// A sum that is c·B^k for one of the sums B it contains, once over a common denominator: GMm·(2√Q − 3x²/√Q −
+/// 3y²/√Q) with Q = x² + y² is −GMm·√Q (∇² of a 1/r potential in the plane).
+fn proportional_sum(t: &T) -> Option<T> {
+    let mut sums: Vec<(String, T)> = vec![];
+    let p = poly_of(t, &mut sums)?;
+    if sums.is_empty() {
+        return None;
+    }
+    // shift every sum base to its lowest power, expanding what is left
+    let mut mins: Vec<(String, T, Q)> = vec![];
+    for (k, b) in &sums {
+        let min = p.keys()
+            .map(|m| m.iter().find(|x| &x.0 == k).map(|x| x.1).unwrap_or((0, 1)))
+            .fold((0, 1), |a, e| if qf(e) < qf(a) { e } else { a });
+        mins.push((k.clone(), b.clone(), min));
+    }
+    let mut n = Poly::new();
+    for (m, c) in &p {
+        let mut term = Poly::new();
+        let rest: Vec<(String, Q)> = m.iter().filter(|x| !sums.iter().any(|s| s.0 == x.0)).cloned().collect();
+        term.insert(rest, *c);
+        for (k, b, min) in &mins {
+            let e = qadd(m.iter().find(|x| &x.0 == k).map(|x| x.1).unwrap_or((0, 1)), (-min.0, min.1));
+            if !is_int(e) || e.0 < 0 || e.0 > 8 {
+                return None;
+            }
+            let bp = poly_of(b, &mut vec![])?;
+            for _ in 0..e.0 {
+                term = poly_mul(&term, &bp);
+            }
+        }
+        for (mm, cc) in term {
+            *n.entry(mm).or_insert(0.0) += cc;
+        }
+    }
+    let scale = n.values().fold(0.0f64, |a, c| a.max(c.abs()));
+    n.retain(|_, c| c.abs() > 1e-12 * scale);
+    if n.is_empty() {
+        return None;
+    }
+    for (k, b, _) in &mins {
+        let bp = poly_of(b, &mut vec![])?;
+        let mut pj = bp.clone();
+        for j in 1..=3i64 {
+            if pj.len() == n.len() && pj.keys().all(|m| n.contains_key(m)) {
+                let (m0, c0) = pj.iter().next().unwrap();
+                let ratio = n[m0] / c0;
+                if pj.iter().all(|(m, c)| (n[m] - ratio * c).abs() <= 1e-12 * scale) {
+                    let mut items = vec![T::Num(ratio)];
+                    for (k2, b2, min2) in &mins {
+                        let e = if k2 == k { qadd(*min2, (j, 1)) } else { *min2 };
+                        items.push(pow_q(b2.clone(), e)?);
+                    }
+                    return Some(mul_all(items));
+                }
+            }
+            pj = poly_mul(&pj, &bp);
+        }
+        let _ = k;
+    }
+    None
+}
+
+/// Replace every sum that cancels exactly by 0 (a product containing one is then 0).
+fn zero_sums(t: T) -> T {
+    match t {
+        T::Add(ts) => {
+            let t = add_all(ts.into_iter().map(zero_sums).collect());
+            if cancels(&t) {
+                return T::Num(0.0);
+            }
+            proportional_sum(&t).unwrap_or(t)
+        }
+        T::Mul(c, fs) => {
+            let mut items = vec![T::Num(c)];
+            items.extend(fs.into_iter().map(zero_sums));
+            mul_all(items)
+        }
+        T::Pow(b, e) => {
+            let b = zero_sums(*b);
+            pow_q(b.clone(), e).unwrap_or(T::Pow(Box::new(b), e))
+        }
+        T::Fun(f, a) => T::Fun(f, a.into_iter().map(zero_sums).collect()),
+        other => other,
+    }
 }
 
 // ---------------------------------------------------------------- signs (SymPy's signsimp)
@@ -483,6 +581,83 @@ fn signsimp(t: T) -> T {
     }
 }
 
+/// Put a sum with fractions over a common denominator of plain atoms (SymPy's together, for the simple case):
+/// 1 + y²/x² → (x² + y²)/x².
+fn together(t: T) -> T {
+    match t {
+        T::Add(ts) => {
+            let ts: Vec<T> = ts.into_iter().map(together).collect();
+            // the most negative power of each non-sum atom over the terms
+            let mut dens: Vec<(String, T, Q)> = vec![];
+            for x in &ts {
+                let fs: Vec<T> = match x {
+                    T::Mul(_, fs) => fs.clone(),
+                    o => vec![o.clone()],
+                };
+                for f in fs {
+                    if let T::Pow(b, e) = f {
+                        if qf(e) < 0.0 && !matches!(*b, T::Add(_)) {
+                            let k = key(&b);
+                            match dens.iter_mut().find(|d| d.0 == k) {
+                                Some(d) => {
+                                    if qf(e) < qf(d.2) {
+                                        d.2 = e;
+                                    }
+                                }
+                                None => dens.push((k, *b, e)),
+                            }
+                        }
+                    }
+                }
+            }
+            if dens.is_empty() || ts.len() < 2 {
+                return add_all(ts);
+            }
+            let mut num_terms = vec![];
+            for x in ts {
+                let mut items = vec![x];
+                for (_, b, e) in &dens {
+                    match pow_q(b.clone(), (-e.0, e.1)) {
+                        Some(p) => items.push(p),
+                        None => return T::Num(f64::NAN),
+                    }
+                }
+                num_terms.push(mul_all(items));
+            }
+            let mut items = vec![add_all(num_terms)];
+            for (_, b, e) in dens {
+                items.push(T::Pow(Box::new(b), e));
+            }
+            mul_all(items)
+        }
+        T::Mul(c, fs) => {
+            let mut items = vec![T::Num(c)];
+            items.extend(fs.into_iter().map(together));
+            mul_all(items)
+        }
+        T::Pow(b, e) => pow_q(together(*b), e).unwrap_or(T::Num(f64::NAN)),
+        T::Fun(f, a) => T::Fun(f, a.into_iter().map(together).collect()),
+        other => other,
+    }
+}
+
+/// 4x² + 4y² − 4σ² → 4·(x² + y² − σ²): the whole-number content of a sum (kept unevaluated, like SymPy's
+/// factor_terms does with _keep_coeff).
+fn numeric_content(t: T) -> T {
+    let T::Add(ts) = &t else { return t };
+    let cs: Vec<f64> = ts.iter().map(|x| split_term(x.clone()).0).collect();
+    if cs.iter().any(|c| *c != c.trunc() || c.abs() > 1e15) {
+        return t;
+    }
+    let g = cs.iter().fold(0i64, |g, c| gcd(g, *c as i64));
+    if g <= 1 {
+        return t;
+    }
+    let T::Add(ts) = t else { unreachable!() };
+    let rest = add_all(ts.into_iter().map(|x| mul_all(vec![T::Num(1.0 / g as f64), x])).collect());
+    T::Mul(g as f64, vec![rest])
+}
+
 /// Take the factors every term of a sum shares out of it (SymPy's factor_terms): -y² cos(x y) - x² cos(x y)
 /// → (-x² - y²)·cos(x y).
 fn factor_terms(t: T) -> T {
@@ -519,7 +694,7 @@ fn factor_terms(t: T) -> T {
                     .collect();
             }
             if common.is_empty() {
-                return add_all(ts);
+                return numeric_content(add_all(ts));
             }
             let inv: Vec<T> = common.iter().filter_map(|(_, b, e)| pow_q(b.clone(), (-e.0, e.1))).collect();
             if inv.len() != common.len() {
@@ -531,7 +706,13 @@ fn factor_terms(t: T) -> T {
                 mul_all(items)
             }).collect();
             let mut items: Vec<T> = common.into_iter().map(|(_, b, e)| pow_q(b, e).unwrap()).collect();
-            items.push(add_all(rest));
+            match numeric_content(add_all(rest)) {
+                T::Mul(g, fs) if fs.len() == 1 && matches!(fs[0], T::Add(_)) => {
+                    items.push(T::Num(g));
+                    items.extend(fs);
+                }
+                other => items.push(other),
+            }
             mul_all(items)
         }
         T::Mul(c, fs) => {
@@ -654,11 +835,23 @@ fn from_t(t: &T) -> A::Expr {
 /// calculus.sympy_tidy: a shorter equivalent formula, or `e` itself.
 pub fn tidy(e: &A::Expr) -> A::Expr {
     let Some(t) = to_t(e) else { return e.clone() };
-    let t = if cancels(&t) { T::Num(0.0) } else { factor_terms(t) };
-    if key(&t).contains("NaN") {
-        return e.clone();
+    let t = zero_sums(t);
+    if matches!(t, T::Num(v) if v == 0.0) {
+        return shorter(simplify(&from_t(&T::Num(0.0))), e);
     }
-    let t = signsimp(t);
-    let out = simplify(&from_t(&t));
+    // the plain canonical form, and the one with fractions put together; the shortest wins (like simplify)
+    let mut best = e.clone();
+    for cand in [zero_sums(factor_terms(t.clone())), zero_sums(factor_terms(together(t)))] {
+        if key(&cand).contains("NaN") {
+            continue;
+        }
+        let out = simplify(&from_t(&signsimp(cand)));
+        best = shorter(out, &best);
+    }
+    best
+}
+
+fn shorter(out: A::Expr, e: &A::Expr) -> A::Expr {
     if to_source(&out).chars().count() < to_source(e).chars().count() { out } else { e.clone() }
 }
+

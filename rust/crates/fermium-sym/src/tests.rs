@@ -81,6 +81,22 @@ fn tidy_like_sympy() {
     assert_eq!(to_source(&tidy(&lap)), "0", "{}", to_source(&lap));
 }
 
+#[test]
+fn tidy_nested_cancellation() {
+    let e = body("A y z·(√(x² + y² + z²)·(1/(x² + y² + z²) + a·(a + 1/√(x² + y² + z²))) + √(x² + y² + z²)·(-1/(x² + y² + z²) + a·(-a - 1/√(x² + y² + z²))))·exp(-a √(x² + y² + z²))/(x² + y² + z²)²");
+    assert_eq!(to_source(&tidy(&e)), "0");
+    let e = body("G M m·(2 √(x² + y²) - 3x²/√(x² + y²) - 3y²/√(x² + y²))/(x² + y²)²");
+    assert_eq!(to_source(&tidy(&e)), "-G M m/(x² + y²)^(3/2)");
+    let f = body("-G M m / √(x² + y²)");
+    let mut ts = vec![];
+    for p in ["x", "y", "z"] {
+        let d1 = diff(&f, p, &mut Plain).unwrap();
+        ts.push(diff(&d1, p, &mut Plain).unwrap());
+    }
+    let lap = simplify(&crate::build::add(crate::build::add(ts[0].clone(), ts[1].clone()), ts[2].clone()));
+    assert_eq!(to_source(&tidy(&lap)), "-G M m/(x² + y²)^(3/2)", "{:?}", lap);
+}
+
 fn integ(s: &str, var: &str, positive: &[&str]) -> Result<String, String> {
     let p: Vec<String> = positive.iter().map(|x| x.to_string()).collect();
     integrate(&body(s), var, &p).map(|e| to_source(&e)).map_err(|d| d.message)
