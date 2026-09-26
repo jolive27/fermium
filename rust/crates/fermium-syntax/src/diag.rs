@@ -35,7 +35,8 @@ impl Diagnostic {
 
     /// The message with its location, the source line, a caret, and the hint (like `FermiumError.format`).
     pub fn format(&self, source: Option<&str>, filename: Option<&str>) -> String {
-        let where_ = match (filename, self.line) {
+        let line = self.line.filter(|l| *l != 0);
+        let where_ = match (filename, line) {
             (Some(f), Some(l)) => format!("{f}, line {l}"),
             (None, Some(l)) => format!("line {l}"),
             _ => String::new(),
@@ -43,7 +44,7 @@ impl Diagnostic {
         let prefix = if self.severity == Severity::Warning { "warning: " } else { "" };
         let head = if where_.is_empty() { self.message.clone() } else { format!("{where_}: {}", self.message) };
         let mut out = vec![format!("{prefix}{head}")];
-        if let (Some(src), Some(line)) = (source, self.line) {
+        if let (Some(src), Some(line)) = (source, line) {
             let lines: Vec<&str> = src.split('\n').collect();
             if line >= 1 && (line as usize) <= lines.len() {
                 let text = lines[line as usize - 1];
@@ -51,7 +52,7 @@ impl Diagnostic {
                 if let Some(col) = self.col {
                     if col >= 1 {
                         let width = text.chars().count() as i64 - col as i64 + 1;
-                        let n = (self.length as i64).min(width.max(1)).max(1) as usize;
+                        let n = (self.length.max(1) as i64).min(width.max(1)).max(0) as usize;
                         out.push(format!("    {}{}", " ".repeat(col as usize - 1), "^".repeat(n)));
                     }
                 }
@@ -64,18 +65,31 @@ impl Diagnostic {
     }
 }
 
-/// Warnings collected while compiling, in the order they were found.
+/// Warnings collected while compiling, in the order they were found (errors.Diagnostics): a warning with the same
+/// message at the same place is given once.
 #[derive(Clone, Debug, Default)]
 pub struct Diagnostics {
     pub warnings: Vec<Diagnostic>,
+    seen: std::collections::HashSet<(String, Option<u32>, Option<u32>)>,
 }
 
 impl Diagnostics {
-    /// Add a warning, once per (message, line, column) as in the Python Diagnostics.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn warn(&mut self, d: Diagnostic) {
-        if self.warnings.iter().any(|w| w.message == d.message && w.line == d.line && w.col == d.col) {
+        let key = (d.message.clone(), d.line, d.col);
+        if self.seen.contains(&key) {
             return;
         }
+        self.seen.insert(key);
         self.warnings.push(Diagnostic { severity: Severity::Warning, ..d });
+    }
+
+    /// `warn(message, line=…, col=…, length=…, hint=…)`.
+    pub fn warn_at(&mut self, message: impl Into<String>, line: u32, col: u32, length: u32, hint: Option<String>) {
+        self.warn(Diagnostic { message: message.into(), line: Some(line), col: Some(col), length, hint,
+                               severity: Severity::Warning, fix: vec![] });
     }
 }
