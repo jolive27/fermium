@@ -50,6 +50,10 @@ fn spectra_match_numpy() {
         }
     }
     eprintln!("fft: worst difference / L2 norm of the output = {worst:.1e}; {exact} of {total} values bit-identical");
-    // pocketfft ported operation for operation: every value is numpy's, to the last bit
-    assert_eq!(exact, total);
+    // pocketfft ported operation for operation: every value is numpy's, to the last bit, where the libm is the
+    // fixtures' (glibc; the twiddles and this test's inputs use sin/cos). Elsewhere (Apple's libm) the last bits
+    // differ and the 1e-14 check above is the test.
+    if cfg!(all(target_os = "linux", target_env = "gnu")) {
+        assert_eq!(exact, total);
+    }
 }
