@@ -278,7 +278,8 @@ impl Checker {
                 if !self.opts.repl && self.used_consts.contains(name) {
                     // redefining a constant the program already used as the constant (gauntlet friction #34)
                     self.warn(format!("{name} is the built-in {}; from here on, {name} means your value", b.desc),
-                              span, Some(format!("pick another name if you still need the constant {name}")));
+                              A::Span { length: 1, ..span },
+                              Some(format!("pick another name if you still need the constant {name}")));
                 } else if let (false, Some(what), Ty::Num(d)) = (self.opts.repl, well_known, &v.ty) {
                     let key = format!("const:{name}");
                     if self.u.is_concrete(d) && !self.warned.contains(&key) {
@@ -287,7 +288,7 @@ impl Checker {
                             // `h = 0.6736` (the Hubble h): say so once, at the assignment (D213)
                             self.warned.insert(key);
                             self.warn(format!("{name} ({what}) is now your variable: from here on, {name} means \
-                                               your value"), span,
+                                               your value"), A::Span { length: 1, ..span },
                                       Some(format!("that's fine if you don't need {what} below; otherwise pick \
                                                     another name, like {name}_0 or {name}2")));
                         }

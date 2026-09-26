@@ -9,7 +9,7 @@
   "message": "can't find the file 'data/ba137m_decay.csv'",
   "line": 1,
   "col": 8,
-  "hint": "looked in /home/user/fermium/dev-notes/notes/data",
+  "hint": "looked in <ROOT>/dev-notes/notes/data",
   "kind": "FermiumError"
  },
  "exit": 1,

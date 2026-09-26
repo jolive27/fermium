@@ -172,14 +172,25 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::VecIndex { v, idxs, offs } => {
                 let v = self.eval(v, fr)?;
                 let base = self.flat_base(idxs, fr)?;
+                if let Value::UVec(src) = &v {
+                    let xs: Vec<Value> = offs.iter().map(|o| src[base + o].clone()).collect();
+                    return Ok(if xs.len() == 1 { xs[0].clone() } else { crate::eval_unc::make_vec(xs) });
+                }
                 let src = vals(&v);
                 let xs: Vec<f64> = offs.iter().map(|o| src[base + o]).collect();
                 Ok(if xs.len() == 1 { Value::Num(xs[0]) } else { vecv(xs) })
             }
             ExprKind::VecSet { v, idxs, value } => {
                 let v = self.eval(v, fr)?;
-                let x = self.eval(value, fr)?.num();
+                let x = self.eval(value, fr)?;
                 let base = self.flat_base(idxs, fr)?;
+                if matches!(v, Value::UVec(_)) || matches!(x, Value::Unc(_)) {
+                    // v[:base] + (x,) + v[base + 1:]
+                    let mut out = crate::eval_unc::vec_items(&v).unwrap_or_default();
+                    out[base] = x;
+                    return Ok(crate::eval_unc::make_vec(out));
+                }
+                let x = x.num();
                 let mut out = vals(&v).to_vec();
                 out[base] = x;
                 Ok(vecv(out))

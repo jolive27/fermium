@@ -340,9 +340,12 @@ impl Radau {
         let (n, k, t, y) = (self.n, &self.k, self.t, &self.y);
         let m_real = k.mu_real / h;
         let m_complex = C64::new(k.mu_complex.re / h, k.mu_complex.im / h);
+        // M.dot(X) for the 3×3 TI and T and X of shape (3, n): a dgemm (FMA chains), but for n = 1 X is a column
+        // and NumPy calls dgemv 'T' instead, which sums in another order (qdotp)
+        let m3 = |a: [f64; 3], x: [f64; 3]| if n == 1 { nb::qdotp(&a, &x) } else { nb::chain3(a, x) };
         // W = TI.dot(Z0)
         let mut w: [Vec<f64>; 3] =
-            std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.ti[r], [z0[0][j], z0[1][j], z0[2][j]])).collect());
+            std::array::from_fn(|r| (0..n).map(|j| m3(k.ti[r], [z0[0][j], z0[1][j], z0[2][j]])).collect());
         let mut z = z0.clone();
         let ch = [h * k.c[0], h * k.c[1], h * k.c[2]];
         let mut dw_norm_old: Option<f64> = None;
@@ -387,7 +390,7 @@ impl Radau {
                     w[r][j] += dw[r][j];
                 }
             }
-            z = std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.t[r], [w[0][j], w[1][j], w[2][j]])).collect());
+            z = std::array::from_fn(|r| (0..n).map(|j| m3(k.t[r], [w[0][j], w[1][j], w[2][j]])).collect());
             if dw_norm == 0.0 || rate.map(|rt| rt / (1.0 - rt) * dw_norm < self.newton_tol).unwrap_or(false) {
                 converged = true;
                 break;

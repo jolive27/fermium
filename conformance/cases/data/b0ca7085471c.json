@@ -9,7 +9,7 @@
   "message": "can't find the file 'pend.csv'",
   "line": 1,
   "col": 5,
-  "hint": "looked in /home/user/fermium/dev-notes/notes",
+  "hint": "looked in <ROOT>/dev-notes/notes",
   "kind": "FermiumError"
  },
  "exit": 1,

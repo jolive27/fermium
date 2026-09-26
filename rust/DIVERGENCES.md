@@ -122,9 +122,14 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   after the B2 extrapolations it is pessimistic: `∫ 1/√|x − 0.3| dx` still prints 12 correct digits). It
   applies to an integral printed directly, alone or scaled by a constant (`2 ∫ …`, a unit conversion), including
   with `to N digits`; a value stored in a variable first prints as before.
+- Orthogonality integrals of eigenfunctions are the typical case: ∫ψ₁ψ₂ is 2.31×10⁻¹⁷ (rounding noise, printed
+  `2×10⁻¹⁷`), and for the particle in a box 1.8025345105×10⁻¹¹ (the grid's non-orthogonality) with ∫|ψ₁ψ₂| ≈ 1
+  leaves a summation error near 10⁻¹⁶, so `to 10 digits` prints `1.803×10⁻¹¹`. The Rust quadrature returns v1's
+  value bit for bit in both (printed with a variable, `I = ∫ …; print I to 17 digits`, they agree to the last
+  digit); only the figures shown differ.
 - Tests: `fermium-codegen/src/eval_calc.rs` (`rounding_level_integrals_keep_only_their_meaningful_figures`);
   conformance cases 173e2d6f8f97 3605dc185659 67451d15fe04 9bef8c6f60d5 a1b56d5b320c a504c61d2cbc
-  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 (recorded divergences).
+  ca02b7679e45 e7ffc7d1ff73 eaf1d936eb6c 02e450290630 326ed4c73ce2 8b62468279c8 (recorded divergences).
 
 ## Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)
 
@@ -135,11 +140,12 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   from written values; whole literals like `1` or `300` are exact, so `1 - r` keeps v1's rule): at run time each
   operand's last significant decimal place is found in the unit the result prints in, the sum keeps the
   coarsest one, and that sets its figures (at least one): `293.6 K` (293.65 is 293.6499… in binary),
-  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. `to N digits` always wins, and a sum stored in a
+  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. A cancellation smaller than that place is rounded to
+  it (red team 10 #7): `12.0 kg - 11.99 kg` prints `0 kg` (v1 `0.01 kg`), `10.0 m - 9.95 m` prints `0.1 m`. `to N digits` always wins, and a sum stored in a
   variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
   same.
 - Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
-  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`, v1
+  a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`; since the cancellation rounding of red team 10 #7, `0 μJ`; v1
   `-6.78×10⁻¹⁵ μJ`).
   An earlier version without the exact-literal and `to N digits` exceptions changed 28 cases, many for the
   worse (`1 - r^(1-γ) = 0.56`), and was not adopted.
@@ -229,6 +235,18 @@ When a run-time error happens in several iterations of a `parallel for`, v1's co
 of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
 for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
 iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
+
+## PDE linear solves: a tridiagonal LU instead of SuperLU (rounding level)
+
+v1 solves each implicit PDE time step with SciPy's `splu` (SuperLU, which hands two blocks of columns to OpenBLAS
+and pivots rows near a Dirichlet boundary, and columns near a Neumann one). The Rust implementation uses a plain
+tridiagonal LU. Both are exact to rounding, so results agree to about 14 significant figures; they can differ in the
+last printed digit at 14–15 digits, and a value that is pure rounding noise around zero differs completely.
+Cases 9a5a91491eb5 (`0.99999989150296`, v1 `…294`), c4bc3351e5c6 (`0.0848059422069`, v1 `…066`) and fbcb42df2f89
+(`1.03×10⁻³⁴ K`, v1 `-7.05×10⁻³⁴ K`, a difference between two equal temperatures). Reproducing them bit for bit
+would mean porting SuperLU's column elimination with its pivot order and modelling OpenBLAS's FMA arithmetic in
+those blocks: an investigation matched the factorization (with SuperLU's `a·(1/pivot)` division) and the solves
+outside the BLAS blocks, but not the pivoting cases. Decision D268.
 
 ## PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)
 
