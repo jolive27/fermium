@@ -6,8 +6,8 @@
 //! It must print exactly what the tree-walker prints. A module with a construct it can't compile yet is
 //! rejected up front (`supports`), before anything runs, and the CLI runs the tree-walker instead.
 pub mod compile;
-pub mod rt;
-pub mod solve_rt;
+pub mod link;
+pub use crate::native::{blob, rt, solve_rt};
 
 use std::sync::Once;
 
@@ -74,12 +74,7 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
         eprintln!("{}", g.lm.print_to_string().to_string());
     }
     let t1 = std::time::Instant::now();
-    let tables = std::mem::take(&mut g.tables);
-    ctx.texts = tables.texts;
-    ctx.builtins = tables.builtins;
-    ctx.mvec_fmts = tables.mvec_fmts;
-    ctx.ode_sites = tables.ode_sites;
-    ctx.msum_sites = tables.msum_sites;
+    ctx.set_tables(std::mem::take(&mut g.tables));
     let ee = g.lm.create_jit_execution_engine(OptimizationLevel::Default).map_err(|e| e.to_string())?;
     // (the optimizer has removed the declarations of callbacks the program doesn't use)
     for (name, a) in &g.mappings {
@@ -98,6 +93,37 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
         Some(e) => Err(ctx.locate(e)),
         None => Ok(()),
     })
+}
+
+/// Compile a module for an executable (`fermium build`): an object file (for this computer's target) that
+/// defines `fm_main`, `fm_blob` and `fm_blob_len`, and reads the context from `fm_ctx`; the run time
+/// (fermium-aotrt) provides the rest. Err(reason) when the back end can't compile the module.
+pub fn build_object(module: &Module, source: &str, file_name: &str) -> Result<Vec<u8>, String> {
+    use inkwell::targets::FileType;
+    init();
+    let cx = Context::create();
+    let mut g = compile::Gen::new_aot(&cx, module);
+    g.compile_module()?;
+    let data = blob::write(module, &g.tables, source, file_name);
+    let arr = cx.const_string(&data, false);
+    let gb = g.lm.add_global(arr.get_type(), None, "fm_blob");
+    gb.set_initializer(&arr);
+    gb.set_constant(true);
+    let gl = g.lm.add_global(cx.i64_type(), None, "fm_blob_len");
+    gl.set_initializer(&cx.i64_type().const_int(data.len() as u64, false));
+    gl.set_constant(true);
+    g.lm.verify().map_err(|e| format!("LLVM verifier: {}", e.to_string()))?;
+    let triple = TargetMachine::get_default_triple();
+    let target = Target::from_triple(&triple).map_err(|e| e.to_string())?;
+    // the generic CPU of the target: an executable may run on another computer than the one it was built on
+    let tm = target.create_target_machine(&triple, "", "", OptimizationLevel::Default, RelocMode::PIC,
+                                          CodeModel::Default)
+        .ok_or_else(|| "no LLVM target machine for this computer".to_string())?;
+    g.lm.set_triple(&triple);
+    g.lm.set_data_layout(&tm.get_target_data().get_data_layout());
+    g.lm.run_passes("default<O2>", &tm, PassBuilderOptions::create()).map_err(|e| e.to_string())?;
+    let buf = tm.write_to_memory_buffer(&g.lm, FileType::Object).map_err(|e| e.to_string())?;
+    Ok(buf.as_slice().to_vec())
 }
 
 /// The LLVM back end behind the `Backend` trait.

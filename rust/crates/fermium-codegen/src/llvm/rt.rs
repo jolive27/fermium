@@ -156,6 +156,27 @@ impl<'m> Ctx<'m> {
         })
     }
 
+    /// The code generator's tables (texts it made, built-in and solve sites, …).
+    pub fn set_tables(&mut self, t: super::blob::GenTables) {
+        let super::blob::GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites } = t;
+        self.texts = texts;
+        self.builtins = builtins;
+        self.mvec_fmts = mvec_fmts;
+        self.ode_sites = ode_sites;
+        self.msum_sites = msum_sites;
+    }
+
+    /// Run compiled code: `set_ctx` gets this context's address (the code reads it), then `main` runs; the
+    /// run-time error it stopped with, if any, at its program line (D185).
+    pub fn run(&mut self, set_ctx: impl FnOnce(*mut u8), main: unsafe extern "C" fn()) -> Result<(), RunError> {
+        set_ctx(self as *mut Ctx as *mut u8);
+        unsafe { main() };
+        match self.error.take() {
+            Some(e) => Err(self.locate(e)),
+            None => Ok(()),
+        }
+    }
+
     fn printer(&mut self) -> &mut (dyn Printer + 'm) {
         unsafe { &mut *self.printer }
     }
@@ -300,6 +321,7 @@ pub(super) fn locked<'a, R>(c: C<'a>, f: impl FnOnce(&mut Ctx<'a>) -> R) -> R {
 }
 
 // ---------------------------------------------------------------- errors
+#[no_mangle]
 pub extern "C" fn fm_error(c: C, kind: i64, a: f64, b: f64, line: i32) {
     locked(c, |c| error(c, kind, a, b, line))
 }
@@ -351,17 +373,21 @@ fn error(c: &mut Ctx, kind: i64, a: f64, b: f64, line: i32) {
 }
 
 // ---------------------------------------------------------------- printing
+#[no_mangle]
 pub extern "C" fn fm_print_num(c: C, fmt: i64, v: f64) {
     unsafe { (*c).printer().num(fmt as usize, v) }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_bool(c: C, b: i32) {
     unsafe { (*c).printer().boolean(b != 0) }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_text(c: C, id: i64) {
     let c = unsafe { &mut *c };
     let t = c.texts[id as usize].clone();
     c.printer().text(&t)
 }
+#[no_mangle]
 pub extern "C" fn fm_print_list(c: C, fmt: i64, l: *const FmList) {
     let c = unsafe { &mut *c };
     if let Some(l) = unsafe { l.as_ref() } {
@@ -369,6 +395,7 @@ pub extern "C" fn fm_print_list(c: C, fmt: i64, l: *const FmList) {
         c.printer().list(fmt as usize, v)
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_tlist(c: C, l: *const FmTList) {
     let c = unsafe { &mut *c };
     if let Some(l) = unsafe { l.as_ref() } {
@@ -376,23 +403,28 @@ pub extern "C" fn fm_print_tlist(c: C, l: *const FmTList) {
         c.printer().textlist(&v)
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_vec(c: C, fmt: i64, p: *const f64, n: i64) {
     let v = unsafe { std::slice::from_raw_parts(p, n as usize) };
     unsafe { (*c).printer().vec(fmt as usize, v) }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_mvec(c: C, site: i64, p: *const f64, n: i64) {
     let c = unsafe { &mut *c };
     let v = unsafe { std::slice::from_raw_parts(p, n as usize) };
     let fmts = c.mvec_fmts[site as usize].clone();
     c.printer().mixed_vec(&fmts, v)
 }
+#[no_mangle]
 pub extern "C" fn fm_print_mat(c: C, fmt: i64, p: *const f64, r: i64, cols: i64) {
     let v = unsafe { std::slice::from_raw_parts(p, (r * cols) as usize) };
     unsafe { (*c).printer().mat(fmt as usize, v, r as usize, cols as usize) }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_complex(c: C, fmt: i64, re: f64, im: f64) {
     unsafe { (*c).printer().complex(fmt as usize, re, im) }
 }
+#[no_mangle]
 pub extern "C" fn fm_print_end(c: C) {
     unsafe { (*c).printer().end() }
 }
@@ -430,6 +462,7 @@ fn msum_combine(n: &MNode, vals: &[f64], at: &mut usize, k: f64) -> (f64, Option
 }
 
 /// Print a measured sum (its operands' values in DFS order) by the decimal-place rule (eval_calc sum_sf).
+#[no_mangle]
 pub extern "C" fn fm_print_msum(c: C, fmt: i64, site: i64, vals: *const f64, n: i64) {
     let c = unsafe { &mut *c };
     let vals = unsafe { std::slice::from_raw_parts(vals, n as usize) };
@@ -451,11 +484,13 @@ pub extern "C" fn fm_print_msum(c: C, fmt: i64, site: i64, vals: *const f64, n: 
 }
 
 /// Before printing an integral-shaped value: forget the integrals evaluated earlier (take_quad_sf).
+#[no_mangle]
 pub extern "C" fn fm_quad_sf_clear(c: C) {
     unsafe { (*c).quad_sf = None }
 }
 
 /// Print an integral-shaped value, capped at the figures its integrals support (eval.rs print, spec B2).
+#[no_mangle]
 pub extern "C" fn fm_print_num_capped(c: C, fmt: i64, v: f64) {
     let c = unsafe { &mut *c };
     match c.quad_sf.take() {
@@ -468,14 +503,17 @@ pub extern "C" fn fm_print_num_capped(c: C, fmt: i64, v: f64) {
 pub(super) fn fm_list_from(c: C, v: Vec<f64>) -> *mut FmList {
     locked(c, |c| c.new_list(v))
 }
+#[no_mangle]
 pub extern "C" fn fm_list_new(c: C, cap: i64) -> *mut FmList {
     locked(c, |c| c.new_list(Vec::with_capacity(cap.max(0) as usize)))
 }
+#[no_mangle]
 pub extern "C" fn fm_list_push(l: *mut FmList, x: f64) {
     if let Some(l) = unsafe { l.as_mut() } {
         unsafe { l.with_vec(|v| v.push(x)) }
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_list_extend(l: *mut FmList, o: *const FmList) {
     if l.is_null() || o.is_null() {
         return;
@@ -484,11 +522,13 @@ pub extern "C" fn fm_list_extend(l: *mut FmList, o: *const FmList) {
     let ys: Vec<f64> = unsafe { (*o).as_slice().to_vec() };
     unsafe { (*l).with_vec(|v| v.extend(ys)) }
 }
+#[no_mangle]
 pub extern "C" fn fm_list_clear(l: *mut FmList) {
     if let Some(l) = unsafe { l.as_mut() } {
         unsafe { l.with_vec(|v| v.clear()) }
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_list_copy(c: C, l: *const FmList) -> *mut FmList {
     let v = match unsafe { l.as_ref() } {
         Some(l) => unsafe { l.as_slice().to_vec() },
@@ -517,6 +557,7 @@ fn apply(op: BinOp, x: f64, y: f64) -> f64 {
 }
 
 /// list ∘ list, element by element (the tree-walker's `bin`, whose message a length mismatch gets).
+#[no_mangle]
 pub extern "C" fn fm_list_binll(c: C, op: i32, a: *const FmList, b: *const FmList, line: i32) -> *mut FmList {
     locked(c, |c| list_binll(c, op, a, b, line))
 }
@@ -539,21 +580,25 @@ fn list_binll(c: &mut Ctx, op: i32, a: *const FmList, b: *const FmList, line: i3
     c.new_list(v)
 }
 /// list ∘ number (swap: number ∘ list).
+#[no_mangle]
 pub extern "C" fn fm_list_binls(c: C, op: i32, a: *const FmList, y: f64, swap: i32) -> *mut FmList {
     let op = op_of(op);
     let x = unsafe { (*a).as_slice() };
     let v = if swap != 0 { x.iter().map(|p| apply(op, y, *p)).collect() } else { x.iter().map(|p| apply(op, *p, y)).collect() };
     locked(c, |c| c.new_list(v))
 }
+#[no_mangle]
 pub extern "C" fn fm_list_powc(c: C, a: *const FmList, p: f64) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| eval::powc(*x, p)).collect();
     locked(c, |c| c.new_list(v))
 }
 /// list ** y (eval.rs Pow on a list: powf element by element)
+#[no_mangle]
 pub extern "C" fn fm_list_powf(c: C, a: *const FmList, y: f64) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| x.powf(y)).collect();
     locked(c, |c| c.new_list(v))
 }
+#[no_mangle]
 pub extern "C" fn fm_list_neg(c: C, a: *const FmList) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| -x).collect();
     locked(c, |c| c.new_list(v))
@@ -581,6 +626,7 @@ fn fmt_opt(i: i64) -> Option<usize> {
 
 /// ∫ f from a to b (eval_calc Integral): fermium-runtime's quad; once the integrand has stopped with an error
 /// it isn't called again (NaN), and that error is the one reported.
+#[no_mangle]
 pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol: f64, xname: f64, xfmt: i64,
                           line: i32) -> f64 {
     use std::sync::atomic::Ordering::SeqCst;
@@ -620,6 +666,7 @@ pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol:
 }
 
 /// The x in [a, b] where f(x) = 0 (eval_calc Root); g = |lhs| + |rhs| for the rounding-noise warning, or null.
+#[no_mangle]
 pub extern "C" fn fm_root(c: C, f: ScalarFn, fenv: *mut u8, g: Option<ScalarFn>, genv: *mut u8, a: f64, b: f64,
                           tfmt: i64, line: i32) -> f64 {
     use std::sync::atomic::Ordering::SeqCst;
@@ -666,6 +713,7 @@ fn par_threads() -> usize {
 /// Run the blocks of a parallel for with n iterations on several threads; block b's sums go to part[b·nr ..].
 /// If any iteration stops with an error, the loop is run again block by block on this thread, so the error
 /// reported is the first one in iteration order, as the tree-walker (which runs the blocks in order) reports it.
+#[no_mangle]
 pub extern "C" fn fm_par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st: f64, part: *mut f64, nr: i64) {
     let blocks = fermium_ir::par_blocks(n.max(0) as usize);
     let flag = unsafe { &*(c as *const std::sync::atomic::AtomicI32) };
@@ -711,26 +759,32 @@ pub extern "C" fn fm_par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st
 }
 
 // ---------------------------------------------------------------- lists of texts
+#[no_mangle]
 pub extern "C" fn fm_tlist_push(l: *mut FmTList, id: i64) {
     if let Some(l) = unsafe { l.as_mut() } {
         l.0.push(id)
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_tlist_new(c: C) -> *mut FmTList {
     locked(c, |c| c.new_tlist(vec![]))
 }
+#[no_mangle]
 pub extern "C" fn fm_tlist_clear(l: *mut FmTList) {
     if let Some(l) = unsafe { l.as_mut() } {
         l.0.clear()
     }
 }
+#[no_mangle]
 pub extern "C" fn fm_tlist_len(l: *const FmTList) -> i64 {
     unsafe { l.as_ref() }.map(|l| l.0.len() as i64).unwrap_or(0)
 }
 /// The text id at a 0-based position (the compiled code has checked the index).
+#[no_mangle]
 pub extern "C" fn fm_tlist_at(l: *const FmTList, k: i64) -> i64 {
     unsafe { (&(*l).0)[k as usize] }
 }
+#[no_mangle]
 pub extern "C" fn fm_tlist_copy(c: C, l: *const FmTList) -> *mut FmTList {
     let v = unsafe { l.as_ref() }.map(|l| l.0.clone()).unwrap_or_default();
     locked(c, |c| c.new_tlist(v))
@@ -739,6 +793,7 @@ pub extern "C" fn fm_tlist_copy(c: C, l: *const FmTList) -> *mut FmTList {
 // ---------------------------------------------------------------- built-ins run by the tree-walker's code
 /// Call built-in `site` with `args` (one slot each: f64 bits, 0/1, text id, list pointer, or a pointer to n f64);
 /// the result goes to `out` (n f64 for a vector).
+#[no_mangle]
 pub extern "C" fn fm_builtin(c: C, site: i64, args: *const u64, out: *mut u64, line: i32) {
     locked(c, |c| {
         let (name, kinds, ret) = {
@@ -784,7 +839,7 @@ fn kind_matches(k: Kind, v: &Value) -> bool {
 // ---------------------------------------------------------------- math: the same Rust functions eval.rs uses
 macro_rules! math1 {
     ($($name:ident => $f:expr;)*) => {
-        $(pub extern "C" fn $name(x: f64) -> f64 { let f: fn(f64) -> f64 = $f; f(x) })*
+        $(#[no_mangle] pub extern "C" fn $name(x: f64) -> f64 { let f: fn(f64) -> f64 = $f; f(x) })*
         /// (IR name of a built-in, the shim's symbol name, its address)
         pub fn math1_shims() -> Vec<(&'static str, &'static str, usize)> {
             vec![$((&stringify!($name)[3..], stringify!($name), $name as *const () as usize)),*]
@@ -821,15 +876,19 @@ math1! {
     fm_csc => |x| eval::fdiv(1.0, x.sin());
 }
 
+#[no_mangle]
 pub extern "C" fn fm_powf(a: f64, b: f64) -> f64 {
     a.powf(b)
 }
+#[no_mangle]
 pub extern "C" fn fm_powc(x: f64, p: f64) -> f64 {
     eval::powc(x, p)
 }
+#[no_mangle]
 pub extern "C" fn fm_atan2(y: f64, x: f64) -> f64 {
     y.atan2(x)
 }
+#[no_mangle]
 pub extern "C" fn fm_hypot(x: f64, y: f64) -> f64 {
     x.hypot(y)
 }

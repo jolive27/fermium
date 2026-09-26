@@ -25,6 +25,13 @@ lto = "fat"
 codegen-units = 1
 strip = true
 
+# the run time of executables made by `fermium build` (fermium-aotrt), built by fermium-cli's build.rs in a
+# folder of its own
+[profile.aotrt]
+inherits = "release"
+lto = false
+codegen-units = 16
+
 # for iterating: release speed without LTO (cargo build --profile fast → target/fast/fermium)
 [profile.fast]
 inherits = "release"

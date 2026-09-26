@@ -1,7 +1,9 @@
 # Building Fermium 2 (Rust)
 
 Users need nothing: `fermium` is one binary. **Building** it needs Rust (stable), the LLVM 18 development
-files (static libraries and `llvm-config`) and, on Linux, `lld`.
+files (static libraries and `llvm-config`), lld 18's static libraries and headers (liblld-18-dev: lld is linked
+into fermium for `fermium build`), a C++ compiler (for the small lld shim), and, on Linux, `lld` (the linker
+cargo uses) and the C library's start-up files (libc6-dev, libgcc-13-dev: embedded for `fermium build`).
 
 ```sh
 cd rust
@@ -38,23 +40,47 @@ link heavy, and GNU ld is several times slower. Keep debug info off for the same
 wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
 sudo add-apt-repository -y "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main"
 sudo apt-get update
-sudo apt-get install -y llvm-18-dev libpolly-18-dev lld-18 zlib1g-dev libzstd-dev libncurses-dev
+sudo apt-get install -y llvm-18-dev libpolly-18-dev lld-18 liblld-18-dev zlib1g-dev libzstd-dev libncurses-dev
 echo "LLVM_SYS_180_PREFIX=/usr/lib/llvm-18" >> "$GITHUB_ENV"
 ```
 
-(Ubuntu 24.04's own `llvm-18-dev` package works too: `sudo apt-get install llvm-18-dev lld-18 libzstd-dev`.)
+(Ubuntu 24.04's own packages work too: `sudo apt-get install llvm-18-dev lld-18 liblld-18-dev libzstd-dev`.)
 `llvm-18-dev` ships the static `libLLVM*.a` archives. `libpolly-18-dev` is needed because LLVM 18's
 `llvm-config --link-static` may list Polly on apt.llvm.org builds.
 
 ### macOS (CI: `macos-14`, arm64)
 
 ```sh
-brew install llvm@18 zstd
+brew install llvm@18 lld@18 zstd
 echo "LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)" >> "$GITHUB_ENV"
 ```
 
 Homebrew's `llvm@18` ships static libraries (`lib/libLLVM*.a`); `build.rs` links `libzstd.a` from Homebrew's
 `zstd` statically, so the binary runs on a Mac without Homebrew. The system linker is used (no lld needed).
+
+## `fermium build`: executables linked with the built-in lld (spec B5.10)
+
+`fermium build prog.fm [-o prog]` compiles the program with the LLVM back end into an object file
+(`llvm::build_object`: generic CPU, position independent; the code reads its run-time context from the global
+`fm_ctx`, and the object carries `fm_blob`: the module's tables, the code generator's tables and the source, see
+`fermium-codegen/src/llvm/blob.rs`), then links it with **lld, linked into the fermium binary**
+(`src/llvm/lld_shim.cpp` calls `lld::elf::link` / `lld::macho::link`; `build.rs` compiles it and gives lld's
+driver empty initializers for the LLVM targets not linked in) against:
+
+- the run time of executables, `crates/fermium-aotrt` (a static library: the same `native::rt` callbacks, printer
+  and numerics as the JIT, and the C `main`). `crates/fermium-cli/build.rs` builds it with a nested
+  `cargo build -p fermium-aotrt --profile aotrt` in its own target folder (so it is compiled without LLVM) and
+  embeds it; `FERMIUM_NO_AOTRT=1` skips that for a faster build (`fermium build` then says it's unavailable);
+- Linux: the C start-up files of the build machine's glibc (Scrt1.o, crti.o, crtn.o, crtbeginS.o, crtendS.o,
+  libc_nonshared.a, found with `cc -print-file-name`), embedded too, and the shared libraries every glibc system
+  has (libc.so.6, libm.so.6, libgcc_s.so.1), found on the computer the program is built on. The executable is a
+  PIE that needs only those (`ldd prog`). No C compiler or system linker is used.
+- macOS arm64 (**not yet tested on a Mac**): `ld64.lld` against libSystem from the SDK of Apple's Command Line
+  Tools (`xcode-select --install`): libSystem's stubs (`libSystem.tbd`) exist on disk only there, so without
+  the Command Line Tools `fermium build` stops and says so; `fermium run` needs nothing.
+
+`python3 rust/tools/aot_diff.py --bin rust/target/fast/fermium -j 2 [--limit N]` builds the conformance programs
+the LLVM back end compiles and requires each executable to print what `fermium run` prints.
 
 ## Choosing the back end
 
