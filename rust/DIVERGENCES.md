@@ -179,12 +179,16 @@ or a quantity found by cancellation). What differs, in the browser only:
 - Radau/BDF: LAPACK's LU and OpenBLAS's products modelled with their rounding (`numerics/npblas.rs`), so
   Radau's steps are v1's step for step. BDF's step-size factors use `error_norms ** (-1/k)`, which
   NumPy evaluates with its vectorised pow (not libm's; it differs in the last bit about 5% of the time),
-  so a long BDF solve can drift from v1 at the rounding level.
+  so a long BDF solve can drift from v1 at the rounding level; it shows only when the results are printed to
+  16–17 digits (case 1954d43c8916).
 - Fit: MINPACK lmder port with our QR; parameters agree with SciPy to 1e-9, standard errors to 2e-8.
 - Eigenvalues (matrix method): LAPACK dstebz/dstein, dgbtf2/dgbtrs and the BLAS calls are transcribed,
   so energies and eigenfunctions are v1's to the last bit, except after the near-degenerate-pair fix,
-  which uses a 2×2 eigenproblem instead of NumPy's SVD (last-digit differences in ψ).
-- FFT: our mixed-radix/Bluestein instead of pocketfft; 6e-16 of the L2 norm.
+  which uses a 2×2 eigenproblem instead of NumPy's SVD (last-digit differences in ψ). Orthogonality integrals
+  such as ∫ψ₁ψ₂ are rounding noise (about 10⁻¹⁷) in both implementations and differ there (cases 1fc80f4b748e,
+  92190636e7d6, 02e450290630; recorded under the rounding-level integrals section, which prints them with one
+  figure).
+- FFT: a literal port of pocketfft (numpy.fft's library): bit-identical to NumPy on every fixture value.
 - PDE: a tridiagonal LU instead of SuperLU; 3e-13.
 
 ## Plots: native SVG/PNG/GIF instead of matplotlib (spec B6)
