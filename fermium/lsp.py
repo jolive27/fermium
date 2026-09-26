@@ -22,7 +22,7 @@ from .lexer import KEYWORDS
 from .parser import parse
 from .symbols import LATEX
 from . import ir as I
-from .types import BoolTy, ComplexTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
+from .types import BoolTy, ComplexListTy, ComplexTy, ListTy, MatTy, NumTy, SolTy, StrTy, TextListTy, VecTy
 from .units import lookup_unit, preferred_unit
 
 WORD = re.compile(r"[A-Za-z_\u0370-\u03ff\u1f00-\u1fffħ][A-Za-z0-9_\u0370-\u03ff\u1f00-\u1fffħ₀-₉]*")
@@ -138,6 +138,9 @@ def _type_text(ck: Checker, ty, hint=None):
         return f"a {ty.r}×{ty.c} matrix of " + _type_text(ck, NumTy(ty.dim), hint).replace("a plain number", "plain numbers")
     if isinstance(ty, TextListTy):
         return "a list of text"
+    if isinstance(ty, ComplexListTy):
+        return "a list of complex numbers of " + _type_text(ck, NumTy(ty.dim), hint).replace(
+            "a plain number (no units)", "plain numbers")
     if isinstance(ty, StrTy):
         return "text"
     if isinstance(ty, BoolTy):

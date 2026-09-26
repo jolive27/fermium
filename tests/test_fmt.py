@@ -195,6 +195,67 @@ def test_format_error_is_fermium_error():
         format_source("x = (", "pretty")
 
 
+# ============================================================ (1/2) -> ½ (spec A4.2, D241)
+@pytest.mark.parametrize("src,expected", [
+    ("E = (1/2) m v^2", "E = ½ m v²"),
+    ("print (1/3), (2/3), (1/4), (3/4), (1/8)", "print ⅓, ⅔, ¼, ¾, ⅛"),
+    ("print (1/5) + (2/5) + (3/5) + (4/5) + (1/6) + (5/6)", "print ⅕ + ⅖ + ⅗ + ⅘ + ⅙ + ⅚"),
+    ("print (1/7) + (1/9) + (1/10) + (3/8) + (5/8) + (7/8)", "print ⅐ + ⅑ + ⅒ + ⅜ + ⅝ + ⅞"),
+    ("print ( 1 / 2 )", "print ½"),
+    ("print (3/4) kg", "print ¾ kg"),
+    ("print sqrt(1/2)", "print √½"),
+    ("print (1/2)^2", "print ½²"),
+    ("print 2 (1/2)", "print 2 ½"),
+    ("y = x^(1/3)", "y = x^(1/3)"),          # an exponent stays as written
+    ("y = x^-(1/2)", "y = x^-(1/2)"),
+    ("print f(1/2)", "print f(1/2)"),        # a call
+    ("print xs[1](1/2)", "print xs[1](1/2)"),
+    ("print 2(1/2)", "print 2(1/2)"),        # 2½ would be the mixed number 2.5
+    ("print (2/4), (1/12), (01/2)", "print (2/4), (1/12), (01/2)"),     # no glyph, or not the plain spelling
+    ("print (0.5) kg", "print (0.5) kg"),    # 0.5 has 1 significant figure; ½ is exact (D241)
+])
+def test_pretty_fractions(src, expected):
+    assert pretty(src) == expected
+
+
+@pytest.mark.parametrize("src,expected", [
+    ("print ⅓ + ⅛ + ⅞ + ⅒", "print (1/3) + (1/8) + (7/8) + (1/10)"),
+    ("print √½", "print sqrt(1/2)"),
+    ("x = 2\nprint x½", "x = 2\nprint x (1/2)"),       # not the call x(1/2)
+])
+def test_ascii_fractions(src, expected):
+    assert ascii_(src) == expected
+
+
+@pytest.mark.parametrize("src", [
+    "m = 2.0 kg\nv = 3.0 m/s\nprint (1/2) m v^2",
+    "print (1/2)\nprint (1/3)\nx = (2/3)\nprint x",
+    "print (1/2) kg, (3/4) m",                 # a unit after the bracket, and after ½
+    "m = 2 kg\nprint (1/2) m",                  # ... but your variable stays your variable
+    "print sqrt(1/2), (1/2)^2, 2 (1/2), a/(1/2) where a = 3",
+    "print [(1/2), (1/4), 1]",
+    "k = 50 N/m\nprint (1/2) k (20 cm)^2",
+    "x = 3\nprint (1/2)x, (1/2)(x + 1)",
+])
+def test_pretty_fractions_keep_meaning_and_output(src, tmp_path):
+    p = pretty(src)
+    assert p != src
+    assert ast_of(p) == ast_of(src)
+    out = output_of(src, str(tmp_path))
+    assert "ERROR" not in out, out
+    assert output_of(p, str(tmp_path)) == out
+    a = ascii_(p)
+    assert ast_of(a) == ast_of(src) and output_of(a, str(tmp_path)) == out
+
+
+def test_one_half_prints_like_a_bracketed_fraction():
+    # ½ is exact: it prints with the 3-figure default like (1/2), not as the 1-figure literal 0.5 (D11, D241)
+    assert run("print ½") == run("print (1/2)") == "0.500"
+    assert run("print ⅓") == "0.333"
+    assert run("print ½ kg") == run("print (1/2) kg") == "0.500 kg"
+    assert run("print (0.5)") == "0.5"          # which is why fmt leaves (0.5) alone
+
+
 # ============================================================ round trips over a corpus
 PRETTY_CORPUS = [
     "L = 1.20 m\nT = 2.21 s\ng = 4π² L / T²\nprint g\nprint g in ft/s²",

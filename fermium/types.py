@@ -253,6 +253,20 @@ class ComplexTy(VecTy):
         return f"Complex[{self.dim}]"
 
 
+class ComplexListTy(Ty):
+    """A list of complex numbers sharing one unit, like the result of fft(xs) (D243; fermium/clist.py)."""
+    kind = "clist"
+
+    def __init__(self, dim):
+        self.dim = DExpr.of(dim)
+
+    def key(self):
+        return NumTy(self.dim).key() + ("clist",)
+
+    def __repr__(self):
+        return f"List[Complex[{self.dim}]]"
+
+
 class TextListTy(Ty):
     """A list of text values, like ["H-1", "He-4"] (stored as text ids)."""
     kind = "textlist"
@@ -312,5 +326,9 @@ def type_desc(t: Ty, U: Unifier) -> str:
         return f"a {t.r}×{t.c} matrix of {U.describe(t.dim)}"
     if isinstance(t, TextListTy):
         return "a list of text"
+    if isinstance(t, ComplexListTy):
+        if U.resolve(t.dim).dimensionless:
+            return "a list of complex numbers"
+        return f"a list of complex numbers of {U.describe(t.dim)}"
     return {"bool": "true/false value", "str": "text", "sol": "ODE solution", "data": "data table",
             "void": "nothing"}.get(t.kind, t.kind)

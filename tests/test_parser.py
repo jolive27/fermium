@@ -132,8 +132,13 @@ def test_unit_after_digit_literal():
 
 def test_half_m_v_squared_is_variable_m():
     assert run("m = 2 kg\nv = 3 m/s\nprint ½ m v²") == "9 J"
-    e = expr_of("½ m v²")
-    assert not any(isinstance(n, A.Quantity) for n in A.walk(e))
+    # with your m, `½ m` is your m; ½ reads exactly like the bracket (1/2) (D241): without any m in the
+    # program, `½ m` would be half a metre, as `(1/2) m` is
+    prog = parse("m = 2 kg\nv = 3 m/s\n__y = ½ m v²", Diagnostics())
+    assert not any(isinstance(n, A.Quantity) for n in A.walk(prog.body[2].value))
+    def has_q(src):
+        return any(isinstance(n, A.Quantity) for n in A.walk(expr_of(src)))
+    assert has_q("½ m v²") == has_q("(1/2) m v²")
 
 
 def test_bracket_unit_after_number():

@@ -103,7 +103,8 @@ def format_written(x, sf, exact_items=False):
     that shows it exactly ([0.10, 0.20]), else as written ([0, 0.5, 1, 1.5], not 1.5 rounded to 2)."""
     if exact_items and x == x and abs(x) < 1e7 and x == int(x):
         return str(int(x))              # a whole number as written ([1.2345, 2], not 2.0000; red team round 4 #14)
-    if x == x and abs(x) < math.inf and x != 0 and float(f"{x:.{max(sf, 1) - 1}e}") != x:
+    # "exactly" up to rounding in the last bits: 1.20 mm is 1.2000000000000002 after the trip through metres (D242)
+    if x == x and abs(x) < math.inf and x != 0 and abs(float(f"{x:.{max(sf, 1) - 1}e}") - x) > 1e-13 * abs(x):
         return format_number(x, 15, trim=True)
     return format_number(x, sf, trim=False)
 
@@ -116,6 +117,8 @@ def format_quantity(v, dim, hint, sf, direct, echo=True, whole_ok=True):
             s = str(int(x)) if abs(x) < 1e15 and x == int(x) else format_number(x, 15, trim=True)
         else:
             s = format_default(x, DEFAULT_SF, whole_ok)
+    elif direct in (4, 5):                  # a loop variable over a written list (D242)
+        s = format_written(x, sf, direct == 5)
     else:
         s = format_number(x, sf if direct else max(sf, 2), trim=False)
     name = u.name
@@ -244,6 +247,14 @@ class Runtime:
             f = rt.tables.fmts[fid]
             rt.line.append(format_complex(re_, im_, f["rdim"], f["hint"], f["sf"], f["direct"]))
 
+        def print_clist(fid, p, n):
+            """A list of complex numbers, (re, im) interleaved: [3 + 0i, -1 + 1i] V (D243)."""
+            from ..clist import format_clist
+            f = rt.tables.fmts[fid]
+            idx = list(range(5)) + list(range(n - 3, n)) if n > 12 else range(n)
+            rt.line.append(format_clist([(p[2 * i], p[2 * i + 1]) for i in idx], f["rdim"], f["hint"], f["sf"],
+                                        f["direct"], n))
+
         def print_textlist(p, n):
             rt.line.append("[" + ", ".join(rt.tables.texts[int(p[i])] for i in range(n)) + "]")
 
@@ -337,7 +348,8 @@ class Runtime:
         def fft(kind, a, b, n, dt, out):
             try:
                 from .spectral import spectrum
-                vals = spectrum(kind, a[:n], b[:n] if b else None, dt)
+                m = 2 * n if kind in (6, 7) else n       # a complex input list holds 2n doubles (D243)
+                vals = spectrum(kind, a[:m], b[:n] if b else None, dt)
                 for i, v in enumerate(vals):
                     out[i] = v
                 return 0
@@ -369,7 +381,7 @@ class Runtime:
         # the plain Python versions, used by the reference interpreter (fermium/interp.py)
         self.py = {"print_num": print_num, "print_list": print_list, "print_vec": print_vec,
                    "print_mvec": print_mvec, "print_mat": print_mat, "print_cplx": print_cplx,
-                   "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
+                   "print_clist": print_clist, "print_bool": print_bool, "print_textlist": print_textlist, "print_text": print_text, "print_end": print_end,
                    "plot_series": plot_series, "plot_done": plot_done}
         self.callbacks = {
             "fm_print_num": CB(None, c_int64, c_double)(print_num),
@@ -379,6 +391,7 @@ class Runtime:
             "fm_print_mvec": CB(None, c_int64, DPTR, c_int64)(print_mvec),
             "fm_print_mat": CB(None, c_int64, DPTR, c_int64, c_int64)(print_mat),
             "fm_print_cplx": CB(None, c_int64, c_double, c_double)(print_cplx),
+            "fm_print_clist": CB(None, c_int64, DPTR, c_int64)(print_clist),
             "fm_print_textlist": CB(None, DPTR, c_int64)(print_textlist),
             "fm_print_text": CB(None, c_int64)(print_text),
             "fm_text_concat": CB(c_int64, c_int64, c_int64)(text_concat),

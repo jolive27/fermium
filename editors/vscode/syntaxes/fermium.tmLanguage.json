@@ -30,7 +30,7 @@
       "match": "(\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+|×10[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+)?)\\s*((?:[A-Za-zΩμµÅ°☉%][A-Za-zΩμµÅ°☉%_]*(?:[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\\^-?\\d+)?)(?:\\s*[/·*]\\s*[A-Za-zΩμµÅ°☉%][A-Za-zΩμµÅ°☉%_]*(?:[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+|\\^-?\\d+)?)*)",
       "captures": { "1": { "name": "constant.numeric.fermium" }, "2": { "name": "support.type.unit.fermium" } }
     },
-    "number": { "name": "constant.numeric.fermium", "match": "\\b\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|[½⅓⅔¼¾⅕⅙⅛]" },
+    "number": { "name": "constant.numeric.fermium", "match": "\\b\\d+(?:\\.\\d*)?(?:[eE][+-]?\\d+)?|[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒]" },
     "bracketunit": { "name": "support.type.unit.fermium", "match": "\\s\\[[^\\],]*\\]" },
     "function-def": {
       "match": "^\\s*([\\p{L}_][\\p{L}\\p{N}_]*)(?=\\([^)]*\\)\\s*=(?!=))",

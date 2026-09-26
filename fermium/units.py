@@ -285,6 +285,7 @@ _PREFERRED_SPECS = [
     "J/T", "C/m²", "C/m³", "1/m", "1/m²", "1/m³", "kg/m²", "J/m³", "N/m²",
     "S/m",          # a conductivity, not F/(m s) (gauntlet #80, D196); a speed squared is m²/s², not J/kg
     "J/(m³ K⁴)",    # the radiation constant a = 4σ/c, not kg/(m s² K⁴) (gauntlet T12, #59)
+    "J m",          # h c, ħ c and k_e q²: an energy times a length, not N m² (spec A4.1, D240)
 ]
 _PREFERRED = None
 

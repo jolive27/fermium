@@ -25,7 +25,7 @@ from fractions import Fraction
 
 from . import ast as A
 from .errors import FermiumError, Diagnostics
-from .lexer import Token, tokenize, canonical_name
+from .lexer import Token, tokenize, canonical_name, VULGAR
 from .units import is_unit_name
 
 
@@ -1779,7 +1779,8 @@ class Parser:
         `(a + b) m` keeps its old meaning, your variable: tested programs write `(…) m`, `(…) u`, `(…) g`,
         `(4/3) T` for their own m, u, g, T (D215)."""
         tk = self.tok
-        if not (e.paren and not isinstance(e, A.Uncertain) and tk.kind == "NAME" and self._unit_tok(tk) and
+        vulgar = isinstance(e, A.Num) and not e.digit and getattr(e, "raw", "") in VULGAR   # ½ kg is (1/2) kg
+        if not ((e.paren or vulgar) and not isinstance(e, A.Uncertain) and tk.kind == "NAME" and self._unit_tok(tk) and
                 tk.value not in self.no_juxt_names and not _is_constant(tk.value) and not self._is_call_like()):
             return None
         if tk.value in self.known or tk.value in self.named_anywhere():
@@ -1790,7 +1791,8 @@ class Parser:
         u = self.unit_expr(explicit=False)
         q = self.span(A.Quantity(e, u), t)
         q.times_unit = True
-        self._bracket_needed(j0, "a bracket")
+        if not self._pure(e):            # `(3/4) kg`, `½ kg`: a bracketed plain number is a number (D238)
+            self._bracket_needed(j0, "a bracket")
         return q
 
     def _bracket_needed(self, j0, after):

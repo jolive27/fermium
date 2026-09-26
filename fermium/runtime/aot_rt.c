@@ -19,7 +19,8 @@
 typedef struct {
     double factor, offset;
     int sf;       /* significant figures, -1 = exact */
-    int direct;   /* 1: value written directly as a literal (3: a written list with exact whole items); 2: `to N digits` */
+    int direct;   /* 1: value written directly as a literal (3: a written list with exact whole items); 2: `to N digits`;
+                     4/5: a loop variable over a written list, printed as the list prints it (5: exact whole items, D242) */
     const char *unit;
 } fm_fmt;
 
@@ -113,7 +114,7 @@ static void fmt_written(double x, int sf, int exact_items, char *out, size_t cap
     char t[64];
     snprintf(t, sizeof t, "%.*e", sf > 1 ? sf - 1 : 0, x);
     if (exact_items && isfinite(x) && fabs(x) < 1e7 && x == trunc(x)) { snprintf(out, cap, "%lld", (long long)x); return; }
-    if (isfinite(x) && x != 0 && strtod(t, NULL) != x) fmt_num(x, 15, 1, out, cap);
+    if (isfinite(x) && x != 0 && fabs(strtod(t, NULL) - x) > 1e-13 * fabs(x)) fmt_num(x, 15, 1, out, cap);
     else fmt_num(x, sf, 0, out, cap);
 }
 
@@ -145,6 +146,7 @@ static void fmt_value_w(const fm_fmt *f, double v, int sig_default, int whole_ok
         else if (f->direct) fmt_num(x, sig_default, 1, out, cap);
         else fmt_default(x, whole_ok, out, cap);
     }
+    else if (f->direct == 4 || f->direct == 5) fmt_written(x, f->sf, f->direct == 5, out, cap);   /* D242 */
     else fmt_num(x, f->direct ? f->sf : (f->sf > 2 ? f->sf : 2), 0, out, cap);
 }
 
@@ -221,6 +223,43 @@ void fm_print_cplx(int64_t fid, double re, double im) {
     else if (attached(f->unit)) snprintf(all, sizeof all, "(%s)%s", body, f->unit);
     else snprintf(all, sizeof all, "(%s) %s", body, f->unit);
     emit(all);
+}
+
+/* a list of complex numbers, (re, im) interleaved: [3 + 0i, -1 + 1i] V; mirrors fermium.clist.format_clist
+   (D243): per element noise as in fm_print_cplx, one number style for the shown elements, 5 … 3 above 12 */
+void fm_print_clist(int64_t fid, double *p, int64_t n) {
+    const fm_fmt *f = &fm_fmts[fid];
+    static char out[1 << 15];
+    char bx[128], by[128], body[300];
+    int64_t idx[16], m = 0;
+    for (int64_t i = 0; i < n; i++) {
+        if (n > 12 && i == 5) i = n - 3;
+        idx[m++] = i;
+    }
+    double xs[16], ys[16];
+    int whole = 1;
+    for (int64_t j = 0; j < m; j++) {
+        double x = p[2 * idx[j]] / f->factor, y = p[2 * idx[j] + 1] / f->factor, size = hypot(x, y);
+        if (isfinite(size) && size > 0) {
+            if (fabs(x) < 1e-14 * size) x = 0;
+            if (fabs(y) < 1e-14 * size) y = 0;
+        }
+        xs[j] = x; ys[j] = y;
+        if (!is_whole(x) || !is_whole(y)) whole = 0;
+    }
+    strcpy(out, "[");
+    for (int64_t j = 0; j < m; j++) {
+        if (n > 12 && j == 5) strcat(out, "…, ");
+        fmt_part(f, xs[j], whole, bx, sizeof bx);
+        fmt_part(f, fabs(ys[j]), whole, by, sizeof by);
+        snprintf(body, sizeof body, "%s %s %si", bx, ys[j] < 0 ? "-" : "+", ys[j] == ys[j] ? by : "NaN");
+        strcat(out, body);
+        if (j + 1 < m) strcat(out, ", ");
+    }
+    strcat(out, "]");
+    if (f->unit[0] && strcmp(f->unit, "1")) { strcat(out, " "); strcat(out, f->unit); }
+    if (n > 12) { char c[48]; snprintf(c, sizeof c, "  (%lld values)", (long long)n); strcat(out, c); }
+    emit(out);
 }
 
 /* a computed vector's or matrix's entries below 1e-14 of its largest are rounding noise: printed as 0
@@ -597,6 +636,17 @@ static void fft_any(double *re, double *im, int64_t n, int inverse) {
 
 int64_t fm_fft(int64_t kind, double *a, double *b, int64_t n, double dt, double *out) {
     double *re = malloc((size_t)n * 8), *im = malloc((size_t)n * 8);
+    if (kind >= 5) {    /* fft/ifft with complex results, (re, im) interleaved (spectral.py, D243) */
+        int cin = kind == 6 || kind == 7, inv = kind == 6 || kind == 8;
+        for (int64_t i = 0; i < n; i++) { re[i] = cin ? a[2 * i] : a[i]; im[i] = cin ? a[2 * i + 1] : 0.0; }
+        fft_any(re, im, n, inv);
+        for (int64_t i = 0; i < n; i++) {
+            out[2 * i] = inv ? re[i] / (double)n : re[i];
+            out[2 * i + 1] = inv ? im[i] / (double)n : im[i];
+        }
+        free(re); free(im);
+        return 0;
+    }
     for (int64_t i = 0; i < n; i++) { re[i] = a[i]; im[i] = (kind == 4 && b) ? b[i] : 0.0; }
     fft_any(re, im, n, kind == 4);
     if (kind == 0 || kind == 1) {

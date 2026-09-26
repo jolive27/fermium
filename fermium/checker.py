@@ -14,7 +14,7 @@ from fractions import Fraction
 
 from . import ast as A
 from . import calculus as C
-from . import cplx
+from . import clist, cplx
 from . import ir as I
 from .constants import all_constants
 from .natural import SI, make_system, canonical_const_name
@@ -22,7 +22,7 @@ from .errors import FermiumError, Diagnostics
 from .importer import ImportMixin, ModuleRef
 from .pyinterop import PythonMixin, PyModRef
 from .types import (DExpr, Unifier, NumTy, ListTy, BoolTy, StrTy, SolTy, DataTy, VecTy, MatTy, TextListTy, BOOL, STR,
-                    VOID, Ty, ComplexTy,
+                    VOID, Ty, ComplexTy, ComplexListTy,
                     type_desc)
 from .linalg import transpose_index
 from .linalg_big import MAX_DIM
@@ -42,7 +42,7 @@ BUILTINS = MATH1 | SAME1 | LIST_FUNCS | {
 } | SPECIAL2 | SPECIAL1
 UNC_FUNCS = {"value", "uncertainty", "rel"}         # parts of an uncertain value (D121)
 BUILTINS |= UNC_FUNCS
-M3_FUNCS = {"randn", "seed", "sample", "fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum",
+M3_FUNCS = {"randn", "seed", "sample", "fft", "fft_re", "fft_im", "ifft", "amplitude_spectrum", "power_spectrum",
             "frequencies", "argmax", "argmin"}          # seeded random numbers (D80); FFT built-ins join below (D81)
 BUILTINS |= M3_FUNCS
 BUILTINS.update(cplx.COMPLEX_FUNCS)       # re, im, conj, arg, complex, polar, cis (D90)
@@ -874,6 +874,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 items.append(("mat", v, self.fmt(v)))
             elif isinstance(v.ty, TextListTy):
                 items.append(("textlist", v, None))
+            elif isinstance(v.ty, ComplexListTy):
+                items.append(("clist", v, self.fmt(v)))
             elif isinstance(v.ty, BoolTy):
                 items.append(("bool", v, None))
             elif isinstance(v.ty, StrTy):
@@ -895,6 +897,13 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         return len(self.tables.texts) - 1
 
     def fmt(self, v):
+        if v.direct in (4, 5) and isinstance(v.ty, NumTy) and v.sf is None:
+            ls = getattr(v, "list_sf", None)      # a loop variable over a written list (D242)
+            self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": ls, "direct": v.direct if ls else True,
+                                     "echo": getattr(v, "echo", True) and not self.nat.natural})
+            if self.nat is not SI:
+                self.tables.fmts[-1]["nat"] = self.nat
+            return len(self.tables.fmts) - 1
         self.tables.fmts.append({"dim": v.ty.dim, "hint": v.hint, "sf": v.sf, "direct": v.direct,
                                  "echo": getattr(v, "echo", True) and not self.nat.natural})
         if self.nat is not SI:
@@ -1324,6 +1333,19 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             ctx.loop -= 1
             self._after_loop(sym, s.line)
             return I.SForIn(sym, lst, body)
+        if isinstance(lst.ty, ComplexListTy):         # for z in fft(xs): each z a complex number (D243)
+            sym = self.loop_var(s.var, ComplexTy(lst.ty.dim), ctx, s)
+            sym.hint, sym.sf, sym.direct = lst.hint, None, False
+            sym.assigned = True
+            ctx.loop += 1
+            reg = self._enter_region(ctx, "for", s.line)
+            try:
+                body = self.block(s.body, ctx)
+            finally:
+                self._exit_region(ctx, reg)
+            ctx.loop -= 1
+            self._after_loop(sym, s.line)
+            return I.SForIn(sym, lst, body)
         if not isinstance(lst.ty, ListTy):
             raise self.err(f"can't loop over {type_desc(lst.ty, self.U)}; 'for x in ...' needs a list", s.iterable,
                            hint="to count, write  for i from 1 to 10")
@@ -1335,9 +1357,18 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             src = src.a                  # [0.50, 0.75] eV (D192): the written list inside the unit
         sfs = {getattr(it, "sf", None) for it in getattr(src, "items", [None])}
         sym.sf = sfs.pop() if len(sfs) == 1 else None
-        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11)
+        # the elements of a written-out list print as written ([0, 1, 1.5]: 1.5, not 1.50; D11) ...
         items = getattr(src, "items", None)
         sym.direct = sym.sf is None and bool(items) and all(getattr(it, "direct", False) for it in items)
+        # ... or rather as the list prints them, when their precisions differ (D242): with the list's fewest
+        # significant figures where that shows the element exactly ([0.50, 0.75, 1]: 0.50, 0.75, 1).  Display
+        # only (list_sf, direct 5 or 4: with or without exact whole items): values computed from the loop
+        # variable keep the old rule.
+        written = _written(items) if sym.direct else False
+        known = [x for x in (getattr(it, "sf", None) for it in items or []) if x is not None]
+        if written and known:
+            sym.list_sf = min(known)
+            sym.direct = 5 if written == 3 else 4
         sym.assigned = True
         ctx.loop += 1
         reg = self._enter_region(ctx, "for", s.line)
@@ -1430,7 +1461,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         else:
             r = I.IConst(e.value, NumTy(DIMLESS))
         r.sf = e.sigfigs
-        r.direct = True
+        # a digit literal prints as written; ½ and ⅓ are exact numbers like (1/2), so they print 0.500 and 0.333
+        # (D11's 3-figure default), not 0.5 and 0.333333333333333 (D241)
+        r.direct = e.digit
         return r
 
     def e_Str(self, e, ctx):
@@ -1502,7 +1535,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.ty = ty
         r.hint = u
         r.sf = v.sf
-        r.direct = isinstance(e.value, A.Num)
+        r.direct = isinstance(e.value, A.Num) and e.value.digit      # ½ kg prints like (1/2) kg (D241)
         if u.affine and isinstance(e.value, A.Num):
             r.abs_literal = (e.value.value, u)       # `10 °C` written out: see _warn_absolute_in_product
             r.abs_at = e                             # where it is written (the warning points there, #9)
@@ -1676,6 +1709,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         r.sf = sym.sf
         r.hint = sym.hint
         r.direct = sym.direct
+        if sym.direct in (4, 5):
+            r.list_sf = sym.list_sf                 # a loop variable over a written list (D242)
         r.tdelta = getattr(sym, "tdelta", False)
         return r
 
@@ -2501,6 +2536,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def e_Abs(self, e, ctx):
         a = self.expr(e.operand, ctx)
+        if clist.is_cl(a):
+            return clist.call(self, "abs", [a], A.Call(A.Name("abs"), [e.operand]).at(e))
         if cplx.is_c(a):
             return cplx.builtin(self, "abs", [a], A.Call(A.Name("abs"), [e.operand]).at(e))
         self.need_numlike(a, e.operand, allow_vec=True)
@@ -2542,8 +2579,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         if exported is not None:
             return exported
         v = self.expr(e.value, ctx)
-        self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
+        if not clist.is_cl(v):          # fft(xs) in mV: a list of complex numbers converts as a whole (D243)
+            self.need_numlike(v, e.value, "the value to convert", allow_vec=True)
         u = self.resolve_unit(e.unit)
+        if clist.is_cl(v) and u.affine:
+            raise self.err(f"can't show complex numbers in {u.name}", e, hint="use K")
         if isinstance(v.ty, VecTy) and v.ty.mixed:
             raise self.err(f"can't show a vector with different units per component in {u.name}", e,
                            hint="convert one component at a time, like s.x in cm")
@@ -2714,7 +2754,7 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
 
     def e_Digits(self, e, ctx):
         v = self.expr(e.value, ctx)
-        if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy)):
+        if not isinstance(v.ty, (NumTy, ListTy, VecTy, MatTy, ComplexListTy)):
             raise self.err("'to N digits' only works on numbers", e)
         if e.digits < 1 or e.digits > 17:
             raise self.err("the number of digits must be between 1 and 17", e)
@@ -2864,6 +2904,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 return I.ISolList(v.sol_sym and self.var_ref(v.sol_sym, ctx, e), v.comp, "t", ListTy(v.tdim))
             if e.name in ("values", "v"):
                 return self.sol_values(v, e)
+        if clist.is_cl(t) and e.name in ("re", "im"):
+            return clist.call(self, e.name, [t], A.Call(A.Name(e.name), [e.target]).at(e))
         if cplx.is_c(t) or (isinstance(t, I.Expr) and isinstance(t.ty, NumTy) and e.name in ("re", "im")):
             if e.name not in ("re", "im"):
                 raise self.err(f"a complex number's parts are .re and .im (not .{e.name})", e,
@@ -3070,6 +3112,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             t = self.sol_values(t.view, e)
         if isinstance(t, I.Expr) and isinstance(t.ty, TextListTy):
             return I.IIndex(t, self.index_expr(e.index, t, ctx), STR, e.line)
+        if clist.is_cl(t):
+            return clist.index(self, t, self.index_expr(e.index, t, ctx), e)
         if isinstance(t, FuncRef) or not isinstance(t.ty, ListTy):
             raise self.err("only lists can be indexed with [...]", e.target,
                            hint="to call a function use parentheses: f(x)")
@@ -3527,6 +3571,8 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
             if not self.U.unify(v.ty.dim, u.dim):
                 raise self.err(f"can't show {self.desc(v.ty.dim)} in {u.name} ({self.desc(u.dim)})", e)
             v.hint = u
+            if v.direct in (4, 5):
+                v.direct = True
             return v
         if name in ("row", "column"):
             return self.row_column(name, e, ctx)
@@ -3559,6 +3605,9 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
                 raise self.err(f"str(x) turns a single number into text, not {type_desc(v.ty, self.U)}", e.args[0])
             fid = self.fmt(v)
             return I.IBuiltin("text_num", [I.IConst(float(fid), NumTy(DIMLESS)), v], STR)
+        if name == "fft" or (name == "ifft" and n == 1) or any(clist.is_cl(a) for a in args) or \
+                (name == "complex" and n == 2 and any(isinstance(a.ty, ListTy) for a in args)):
+            return clist.call(self, name, args, e)          # lists of complex numbers (D243)
         if name in cplx.COMPLEX_FUNCS or any(cplx.is_c(a) for a in args):
             return cplx.builtin(self, name, args, e)
 
@@ -3940,6 +3989,11 @@ class Checker(ImportMixin, PythonMixin, C.DiffContext):
         want = {"ifft": 2, "power_spectrum": 2, "frequencies": 2}.get(name, 1)
         if n != want:
             raise self.err(f"{name} takes {want} argument{'s' if want > 1 else ''}: {usage}", e)
+        if name in ("fft_re", "fft_im", "ifft"):        # from before complex numbers (D81); one more version (D243)
+            new = {"fft_re": "re(fft(xs))", "fft_im": "im(fft(xs))", "ifft": "ifft(complex(re, im))"}[name]
+            self.diags.warn(f"{usage} is deprecated and will be removed after Fermium 1.5: write {new}", line=e.line,
+                            col=e.col, hint="fft(xs) gives the transform as a list of complex numbers; "
+                                            "ifft(X) transforms one back")
 
         def need_list(i):
             if not isinstance(args[i].ty, ListTy):

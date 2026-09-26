@@ -75,6 +75,8 @@ Brackets are always units: `3 [m/s]`, `x [m]`, and in a function parameter, `f(x
 
 Numbers: `3`, `3.0`, `1.5e-3`, `6.67×10⁻¹¹`, `½`. Numbers written with a decimal point carry **significant figures**, which Fermium uses when printing (`1.20` has 3).
 
+- **Fractions:** `½ ⅓ ⅔ ¼ ¾ ⅕ ⅖ ⅗ ⅘ ⅙ ⅚ ⅐ ⅛ ⅜ ⅝ ⅞ ⅑ ⅒` are exact numbers and mean exactly the bracket `(1/2)`, `(1/3)`, …: `print ½` shows `0.500`, `½ kg` is 0.5 kg, and `½ m v²` with your mass m is ½·m·v² (DECISIONS D241). `fermium fmt --pretty` writes `(1/2)` as `½` (not in an exponent like `x^(1/3)`, and not `(0.5)`, which is a measured 0.5 with one significant figure); `--ascii` writes it back as `(1/2)`.
+
 Every value is stored in SI base units. **Units cost nothing at run time:** they are checked by the compiler and then erased.
 
 ## 3. Variables and formulas
@@ -128,7 +130,8 @@ print to(g, km/hr^2)
 - Text can be stored in a variable and printed: `name = "Mars"`, `print "planet:", name`. Texts are joined with `+` (`"3p" + "1/2"`), and `str(x)` shows a number as text, as print would (`"E = " + str(E)`); text can't be used in other arithmetic (D216).
 - `x in unit` shows a value in another unit. The units must measure the same kind of quantity.
 - Numbers are printed with sensible significant figures: the fewest significant figures of the inputs, but at least 2.
-- Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...).
+- Units are shown in the unit you wrote. When there isn't one, Fermium picks a standard SI unit (N, J, W, Pa, ...), including common products: `J s` for h, `J m` for h c (DECISIONS D240). For eV nm or MeV fm, ask: `print h c in eV nm` shows `1240 eV nm`. A torque written in `N m` stays in N m; a force times a length computed by the program is shown in J (it can't tell a torque from work), so write `in N m` for a torque.
+- A loop over a written-out list prints each element the way the list prints (`for E in [0.50 eV, 0.75 eV, 1 eV]` shows `0.50 eV`, `0.75 eV`, `1 eV`; D242).
 
 ## 5. Functions
 
@@ -439,6 +442,7 @@ print (230 + 0i) [V] / Z                # the current, in A
 - **Arithmetic:** `+ - * /` between complex and real numbers; `z^n` for a whole number n (repeated multiplication), `z^p` for another fixed number p (the principal value, units to the power p), and `z^w`, `2^(1i)` with a complex or variable exponent (plain numbers only). `exp ln log sqrt sin cos tan sinh cosh tanh` take complex plain numbers (`sqrt` keeps units to the power ½; √z also works); these are the principal branches (the cut of `ln` and `sqrt` is the negative real axis).
 - **Parts:** `abs(z)` or `|z|` and `re(z)`, `im(z)` (also `z.re`, `z.im`) keep the units; `arg(z)` is the angle from −π to π; `conj(z)` is the complex conjugate.
 - **Comparisons:** `==`, `!=` and `≈` work; `<`, `>`, `<=`, `>=` are an error (complex numbers aren't ordered; compare `|z|` or `re(z)`).
+- **Lists:** `fft(xs)` gives a list of complex numbers; what works on one is listed under Fourier transforms (§20). Other lists, vectors and matrices hold real numbers.
 - **A variable keeps its kind:** `z = 0` then `z += 1i` is an error; start with `z = 0i`.
 
 ```fermium
@@ -1000,7 +1004,7 @@ Every symbol has an ASCII spelling that means exactly the same thing.
 | `to(x, unit)` | same as `x in unit` |
 | `factorial(n)` | |
 | `rand() rand(a, b) randn() randn(μ, σ) seed(n) sample(expr, N)` | seeded random numbers and Monte Carlo (§20) |
-| `fft_re(xs) fft_im(xs) ifft(re, im) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20) |
+| `fft(xs) ifft(X) amplitude_spectrum(xs) power_spectrum(xs, dt) frequencies(xs, dt)` | Fourier transforms (§20); `fft_re`, `fft_im`, `ifft(re, im)` are deprecated |
 | `argmax(xs) argmin(xs)` | the position (1-based) of the largest / smallest element |
 | `clock()` | the time in seconds, from an arbitrary starting point; subtract two readings to time part of a program |
 | `value(x) uncertainty(x) rel(x)` | the parts of an uncertain value `x = 1.20 ± 0.01 m` (§21); `rel` is σ/\|x\| |
@@ -1213,7 +1217,7 @@ print mean(Ts), "±", std(Ts)
 
 ### Fourier transforms
 
-Lists hold real numbers (lists of complex numbers aren't supported yet, D91), so a transform comes as its real and imaginary parts, or directly as a spectrum with units:
+`fft(xs)` gives the transform as a list of complex numbers; for the usual questions ("which frequency, how strong?") the spectrum functions answer directly, with units:
 
 ```fermium
 dt = 1 ms                                  # sampling interval
@@ -1231,20 +1235,24 @@ print "strongest:", f[k], "with amplitude", A[k]
 P = power_spectrum(xs, dt)                 # power spectral density, in V²/Hz
 print "Parseval:", sum(P) (f[2] - f[1]), "=", mean(xs * xs)
 
-back = ifft(fft_re(xs), fft_im(xs))        # the inverse transform gives back the signal
+X = fft(xs)                                # the transform: a list of complex numbers, in V
+print len(X), abs(X[51]) / n               # |X| at 50 Hz is n × 3 V / 2
+back = re(ifft(X))                         # the inverse transform gives back the signal
 print back[10], xs[10]
 ```
 
 | Function | Gives | Units |
 |---|---|---|
-| `fft_re(xs)`, `fft_im(xs)` | real and imaginary parts of X_k = Σⱼ xⱼ e^(−2πi jk/n), k = 0 … n − 1 (NumPy's `fft`, not normalised) | those of xs |
-| `ifft(re, im)` | the real part of the inverse transform, (1/n) Σₖ Xₖ e^(2πi jk/n) | those of re and im |
+| `fft(xs)` | X_k = Σⱼ xⱼ e^(−2πi jk/n), k = 0 … n − 1 (NumPy's `fft`, not normalised), as a list of complex numbers; xs may be real or complex | those of xs |
+| `ifft(X)` | the inverse transform, (1/n) Σₖ Xₖ e^(2πi jk/n), as a list of complex numbers (`re(ifft(X))` for a real signal) | those of X |
 | `amplitude_spectrum(xs)` | one-sided amplitudes for k = 0 … n/2: \|Xₖ\|/n, doubled except at 0 Hz and at the Nyquist frequency | those of xs |
 | `power_spectrum(xs, dt)` | one-sided power spectral density \|Xₖ\|² dt/n (doubled likewise); Σ P Δf = mean(x²) | xs² × time (V²/Hz) |
 | `frequencies(xs, dt)` or `frequencies(n, dt)` | the frequencies of those n/2 + 1 bins, k/(n dt) (NumPy's `rfftfreq`) | 1/time (Hz) |
 
 - Any length works (not only powers of two). A frequency between two bins shows up in the nearest bins, spread out ("leakage"); a longer signal gives finer bins, Δf = 1/(n dt).
 - `fermium run` and the interpreter use NumPy's FFT; `fermium build` executables use a built-in C FFT (radix 2, and Bluestein's algorithm for other lengths), which agrees to rounding.
+- **A list of complex numbers** (what `fft` gives; DECISIONS D243) prints like `[10 + 0i, -2 + 2i, -2 + 0i, -2 - 2i] V`. It works with `X[k]` (a complex number, §7), `X[end]`, `len(X)`, `for z in X`, `print` (also `in mV` and `to 4 digits`), and element by element with `re`, `im`, `abs` (or `|X|`), `arg` and `conj` (also `X.re`, `X.im`). `complex(re, im)` with two lists of the same length builds one. Other list operations (`sum`, `X + Y`, `plot`) aren't supported on it yet: work with `re(X)`, `abs(X)` or single elements.
+- **Deprecated** (they still work in 1.5, with a warning, and go after it): `fft_re(xs)` → `re(fft(xs))`, `fft_im(xs)` → `im(fft(xs))`, `ifft(re, im)` → `ifft(complex(re, im))`. They were written before Fermium had complex numbers (D81).
 
 ### Bound states: solve … lowest N
 

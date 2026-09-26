@@ -77,8 +77,9 @@ def test_8_explicit_star_multiplies():
 def test_9_after_a_bracket():
     e = error_of("m1 = 1 kg\nm2 = 2 kg\nF = (m1 + m2) g")
     assert "after a bracket is read as a variable" in e.message and "g_n" in e.hint
-    assert run("print (2 + 3) [MeV]") == "5 MeV"
-    assert fix_source("x = (2 + 3) MeV\n")[0] == "x = (2 + 3) [MeV]\n"
+    assert run("N = 2\nprint (N + 3) [MeV]") == "5 MeV"
+    assert fix_source("N = 2\nx = (N + 3) MeV\n")[0] == "N = 2\nx = (N + 3) [MeV]\n"
+    assert run("print (3/4) kg") == "0.750 kg" and run("print ½ kg") == "0.500 kg"      # plain numbers
 
 
 def test_9_integral_differential_after_a_bracket():

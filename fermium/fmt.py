@@ -6,7 +6,7 @@ unchanged, so only spellings change -- never meaning.  Round-trips are tested.
 from __future__ import annotations
 
 from .errors import Diagnostics, FermiumError
-from .lexer import GREEK, GREEK_TO_ASCII, SUPERS, VULGAR_ASCII
+from .lexer import GREEK, GREEK_TO_ASCII, SUPERS, VULGAR_ASCII, VULGAR_OF
 from .parser import parse_tokens
 from .units import UNIT_PRETTY, UNIT_ASCII, lookup_unit
 
@@ -104,6 +104,14 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
         if i in skip:
             i += 1
             continue
+        if mode == "pretty":
+            glyph = _vulgar_at(toks, i)
+            if glyph is not None:             # (1/2) -> ½: the same exact number (D241)
+                out.append(glyph)
+                pos = toks[i + 4].end
+                last_changed = True
+                i += 5
+                continue
         text = t.raw
         if mode == "pretty" and i >= 1 and toks[i - 1].kind == "OP" and toks[i - 1].raw == "." and not t.ws_before:
             text = t.raw            # np.sqrt, sp.gamma: a Python name after '.' keeps its spelling (D140)
@@ -128,6 +136,35 @@ def format_source(source: str, mode: str, diags: Diagnostics | None = None) -> s
         i += 1
     out.append(norm[pos:])
     return "".join(out)
+
+
+def _vulgar_at(toks, i):
+    """The glyph for `(a/b)` starting at token i (`(1/2)` -> ½, `(3/4)` -> ¾), or None where the glyph could read
+    differently: a call or index `f(1/2)`, an exponent `x^(1/3)` (kept as written), and `2(1/2)` (2½ is a mixed
+    number).  ½ means exactly what (1/2) means: an exact number, and a unit name after it that isn't one of your
+    variables is a unit, as after a bracket (D241)."""
+    if i + 4 >= len(toks):
+        return None
+    lp, a, sl, b, rp = toks[i:i + 5]
+    if not (lp.kind == "OP" and lp.raw == "(" and a.kind == "NUM" and a.raw.isdigit() and sl.kind == "OP" and
+            sl.raw == "/" and b.kind == "NUM" and b.raw.isdigit() and rp.kind == "OP" and rp.raw == ")"):
+        return None
+    glyph = VULGAR_OF.get((int(a.raw), int(b.raw)))
+    if glyph is None or a.raw != str(int(a.raw)) or b.raw != str(int(b.raw)):
+        return None
+    prev = toks[i - 1] if i >= 1 else None
+    if prev is not None:
+        if prev.kind == "OP" and prev.raw in ("^", "**", "."):
+            return None
+        if prev.kind == "OP" and prev.raw == "-" and i >= 2 and toks[i - 2].kind == "OP" and toks[i - 2].raw == "^":
+            return None
+        if not lp.ws_before and (prev.kind in ("NAME", "NUM", "IMAG", "PRIME", "SUP", "STR") or
+                                 prev.kind == "OP" and prev.raw in (")", "]", "}", "|")):
+            return None
+    nxt = toks[i + 5] if i + 5 < len(toks) else None
+    if nxt is not None and not nxt.ws_before and nxt.kind in ("NUM", "IMAG"):
+        return None
+    return glyph
 
 
 def _pretty_token(toks, i, skip):
@@ -217,6 +254,8 @@ def _ascii_token(toks, i, closers, diags):
             nxt = toks[i + 1]
             if nxt.kind == "OP" and nxt.raw == "(" and t.extra.get("operand_paren"):
                 return word
+            if nxt.kind == "NUM" and nxt.raw in VULGAR_ASCII and end == i + 1:
+                return word                     # √½ -> sqrt(1/2)
             if end is not None:
                 closers[end] = closers.get(end, "") + ")"
                 return word + "("
@@ -236,6 +275,11 @@ def _ascii_token(toks, i, closers, diags):
     if t.kind == "NUM":
         raw = t.raw
         if raw in VULGAR_ASCII:
+            prev = toks[i - 1] if i >= 1 else None
+            if prev is not None and not t.ws_before and (
+                    prev.kind in ("NAME", "NUM", "IMAG", "PRIME", "SUP") or
+                    prev.kind == "OP" and prev.raw in (")", "]", "}")):
+                return " " + VULGAR_ASCII[raw]  # x½ -> x (1/2), not the call x(1/2)
             return VULGAR_ASCII[raw]
         if "×10" in raw:
             mant, _, ex = raw.partition("×10")

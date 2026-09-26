@@ -15,7 +15,7 @@ from llvmlite import ir
 from .numerics import quintic_hermite, odd_root_numerator, XGK, WGK, WG
 from . import ir as I
 from .errors import MODLINE_MAX
-from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy
+from .types import NumTy, BoolTy, ListTy, SolTy, DataTy, StrTy, VecTy, MatTy, TextListTy, ComplexListTy
 from . import linalg, linalg_big
 from . import special
 
@@ -83,7 +83,7 @@ def lltype(ty):
         return ir.VectorType(F64, ty.n)
     if isinstance(ty, BoolTy):
         return I1
-    if isinstance(ty, (ListTy, TextListTy)):
+    if isinstance(ty, (ListTy, TextListTy, ComplexListTy)):
         return LIST
     if isinstance(ty, SolTy):
         return SOLP
@@ -2338,6 +2338,10 @@ class FuncGen:
         lst = self.expr(s.lst)
         data = self.ldata(lst)
         n = self.llen(lst)
+        cl = isinstance(s.lst.ty, ComplexListTy)
+        if cl:
+            from . import clist
+            n = clist.ll_len(self, lst)
         iv = self.alloca(I64)
         b.store(i64(0), iv)
         cond = fn.append_basic_block("fi.c")
@@ -2348,7 +2352,10 @@ class FuncGen:
         b.position_at_end(cond)
         b.cbranch(b.icmp_signed("<", b.load(iv), n), body, end)
         b.position_at_end(body)
-        el = b.load(b.gep(data, [b.load(iv)]))
+        if cl:
+            el = clist.ll_elem(self, lst, b.load(iv))
+        else:
+            el = b.load(b.gep(data, [b.load(iv)]))
         self.store(s.sym, b.fptosi(el, I64) if isinstance(s.sym.ty, StrTy) else el)
         self.loops.append((inc, end))
         self.emit_body(s.body)
@@ -2404,6 +2411,11 @@ class FuncGen:
             elif kind == "textlist":
                 lst = self.expr(payload)
                 b.call(ex["fm_print_textlist"], [self.ldata(lst), self.llen(lst)])
+            elif kind == "clist":                        # (re, im) interleaved; n complex elements (D243)
+                from . import clist
+                lst = self.expr(payload)
+                f = self.mg.extern("fm_print_clist", VOID, [I64, F64P, I64])
+                b.call(f, [i64(fid), self.ldata(lst), clist.ll_len(self, lst)])
             elif kind == "textvar":
                 b.call(ex["fm_print_text"], [self.expr(payload)])
         b.call(ex["fm_print_end"], [])
@@ -3180,6 +3192,9 @@ class FuncGen:
             return b.call(self.mg.externs["fm_text_concat"], args)
         if name == "text_num":            # str(x) (D216)
             return b.call(self.mg.externs["fm_text_num"], [i64(int(e.args[0].value)), args[1]])
+        if name.startswith("cl.") or (name == "len" and isinstance(e.args[0].ty, ComplexListTy)):
+            from . import clist                          # lists of complex numbers (D243)
+            return clist.ll_builtin(self, name, e, args)
         if name in codegen_m3.M3_BUILTINS:
             return codegen_m3.builtin(self, name, e, args)
         if name.startswith("c."):                       # complex numbers (D90): fermium/cplx.py

@@ -167,8 +167,9 @@ def test_after_a_list_a_unit_follows_as_after_a_number():
 
 def test_after_a_bracket_a_unit_needs_brackets():
     # a name that doesn't come right after a number is a variable (red team 8 #9, D238)
-    assert "after a bracket is read as a variable" in error_of("print (2 + 3) MeV").message
-    assert run("print (2 + 3) [MeV]") == "5 MeV"
+    assert "after a bracket is read as a variable" in error_of("N = 2\nprint (N + 3) MeV").message
+    assert run("N = 2\nprint (N + 3) [MeV]") == "5 MeV"
+    assert run("print (2 + 3) MeV") == "5 MeV"          # a bracket of plain numbers is a number
     assert run("print [1, 2] m") == "[1, 2] m"             # a list takes a unit as a number does (D192)
     e = error_of("m1 = 1 kg\nm2 = 2 kg\nF = (m1 + m2) g")
     assert "g_n" in e.hint
