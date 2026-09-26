@@ -58,19 +58,166 @@ fn new_list(v: Vec<f64>) -> Value {
 
 fn one_math(name: &str, x: f64) -> f64 {
     match name {
-        "asinh" => libm_asinh(x),
-        "acosh" => x.acosh(),
-        "atanh" => x.atanh(),
-        "erf" => special::erf(x),
-        "erfc" => special::erfc(x),
-        "gamma" => special::gamma(x),
-        "lgamma" => special::lgamma(x),
+        "asinh" => cmath::asinh(x),
+        "acosh" => cmath::acosh(x),
+        "atanh" => cmath::atanh(x),
+        "erf" => cmath::erf(x),
+        "erfc" => cmath::erfc(x),
+        "gamma" => cmath::tgamma(x),
+        "lgamma" => cmath::lgamma(x),
         _ => math1(name, x),
     }
 }
 
-fn libm_asinh(x: f64) -> f64 {
-    x.asinh()
+/// The C library's math functions that v1's compiled code calls (MATH_LIBM, cbrt, jn, yn), so results agree to
+/// the last bit: Rust's own asinh/acosh/atanh and cbrt (compiler-builtins), and the pure-Rust ports in
+/// fermium-runtime, can differ by an ulp, which shows when a value is printed to 16 digits. Elsewhere:
+/// fermium-runtime's ports.
+#[cfg(unix)]
+pub mod cmath {
+    #[link(name = "m")]
+    extern "C" {
+        #[link_name = "cbrt"]
+        fn c_cbrt(x: f64) -> f64;
+        #[link_name = "asinh"]
+        fn c_asinh(x: f64) -> f64;
+        #[link_name = "acosh"]
+        fn c_acosh(x: f64) -> f64;
+        #[link_name = "atanh"]
+        fn c_atanh(x: f64) -> f64;
+        #[link_name = "erf"]
+        fn c_erf(x: f64) -> f64;
+        #[link_name = "erfc"]
+        fn c_erfc(x: f64) -> f64;
+        #[link_name = "tgamma"]
+        fn c_tgamma(x: f64) -> f64;
+        #[link_name = "lgamma"]
+        fn c_lgamma(x: f64) -> f64;
+        #[link_name = "jn"]
+        fn c_jn(n: i32, x: f64) -> f64;
+        #[link_name = "yn"]
+        fn c_yn(n: i32, x: f64) -> f64;
+    }
+    // SAFETY (all of them): pure C math functions of plain numbers
+    /// The C library's cbrt. Rust's std links compiler-builtins' cbrt ahead of libm's, so glibc's algorithm
+    /// (sysdeps/ieee754/dbl-64/s_cbrt.c) is ported instead: bit for bit the same on 200 000 random doubles.
+    pub fn cbrt(x: f64) -> f64 {
+        let _ = c_cbrt;
+        super::glibc_cbrt(x)
+    }
+    pub fn asinh(x: f64) -> f64 {
+        unsafe { c_asinh(x) }
+    }
+    pub fn acosh(x: f64) -> f64 {
+        unsafe { c_acosh(x) }
+    }
+    pub fn atanh(x: f64) -> f64 {
+        unsafe { c_atanh(x) }
+    }
+    pub fn erf(x: f64) -> f64 {
+        unsafe { c_erf(x) }
+    }
+    pub fn erfc(x: f64) -> f64 {
+        unsafe { c_erfc(x) }
+    }
+    pub fn tgamma(x: f64) -> f64 {
+        unsafe { c_tgamma(x) }
+    }
+    pub fn lgamma(x: f64) -> f64 {
+        unsafe { c_lgamma(x) }
+    }
+    /// besselj: NaN for an order that isn't a whole number below 2³¹ (special.ll_jn_yn)
+    pub fn jn(n: f64, x: f64) -> f64 {
+        if !fermium_runtime::numerics::special::order_ok(n) {
+            return f64::NAN;
+        }
+        unsafe { c_jn(n as i32, x) }
+    }
+    pub fn yn(n: f64, x: f64) -> f64 {
+        if !fermium_runtime::numerics::special::order_ok(n) {
+            return f64::NAN;
+        }
+        unsafe { c_yn(n as i32, x) }
+    }
+}
+
+/// glibc's cbrt (sysdeps/ieee754/dbl-64/s_cbrt.c): a polynomial first guess, one Halley step, the exponent
+/// split by 3.
+pub fn glibc_cbrt(x: f64) -> f64 {
+    const CBRT2: f64 = 1.2599210498948731648;
+    const SQR_CBRT2: f64 = 1.5874010519681994748;
+    const FACTOR: [f64; 5] = [1.0 / SQR_CBRT2, 1.0 / CBRT2, 1.0, CBRT2, SQR_CBRT2];
+    if x == 0.0 || !x.is_finite() {
+        return x + x;
+    }
+    let (xm, xe) = frexp(x.abs());
+    let u = 0.354895765043919860
+        + ((1.50819193781584896
+            + ((-2.11499494167371287
+                + ((2.44693122563534430
+                    + ((-1.83469277483613086 + (0.784932344976639262 - 0.145263899385486377 * xm) * xm) * xm))
+                    * xm))
+                * xm))
+            * xm);
+    let t2 = u * u * u;
+    let ym = u * (t2 + 2.0 * xm) / (2.0 * t2 + xm) * FACTOR[(2 + xe % 3) as usize];
+    ldexp(if x > 0.0 { ym } else { -ym }, xe / 3)
+}
+
+/// C's frexp for a finite, non-zero x: (m, e) with x = m·2^e and 0.5 ≤ |m| < 1.
+fn frexp(x: f64) -> (f64, i32) {
+    let (x, extra) = if x.abs() < f64::MIN_POSITIVE { (x * 2f64.powi(54), -54) } else { (x, 0) };
+    let bits = x.to_bits();
+    let e = ((bits >> 52) & 0x7ff) as i32;
+    let m = f64::from_bits((bits & !(0x7ffu64 << 52)) | (1022u64 << 52));
+    (m, e - 1022 + extra)
+}
+
+/// C's ldexp: x·2^e rounded once.
+fn ldexp(x: f64, e: i32) -> f64 {
+    if e < -1000 {
+        // an exact first step keeps the only rounding in the last multiplication
+        return x * 2f64.powi(-1000) * 2f64.powi(e + 1000);
+    }
+    if e > 1000 {
+        return x * 2f64.powi(1000) * 2f64.powi(e - 1000);
+    }
+    x * 2f64.powi(e)
+}
+
+#[cfg(not(unix))]
+pub mod cmath {
+    use fermium_runtime::numerics::special;
+    pub fn cbrt(x: f64) -> f64 {
+        super::glibc_cbrt(x)
+    }
+    pub fn asinh(x: f64) -> f64 {
+        x.asinh()
+    }
+    pub fn acosh(x: f64) -> f64 {
+        x.acosh()
+    }
+    pub fn atanh(x: f64) -> f64 {
+        x.atanh()
+    }
+    pub fn erf(x: f64) -> f64 {
+        special::erf(x)
+    }
+    pub fn erfc(x: f64) -> f64 {
+        special::erfc(x)
+    }
+    pub fn tgamma(x: f64) -> f64 {
+        special::gamma(x)
+    }
+    pub fn lgamma(x: f64) -> f64 {
+        special::lgamma(x)
+    }
+    pub fn jn(n: f64, x: f64) -> f64 {
+        special::besselj(n, x)
+    }
+    pub fn yn(n: f64, x: f64) -> f64 {
+        special::bessely(n, x)
+    }
 }
 
 /// The seconds since the program started (time.perf_counter in v1: any fixed origin).
@@ -124,8 +271,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "besselj" | "bessely" | "besseli" | "besselk" => (|| {
                 let (n, x) = (self.num_arg(&args[0])?, self.num_arg(&args[1])?);
                 Ok(Value::Num(match name {
-                    "besselj" => special::besselj(n, x),
-                    "bessely" => special::bessely(n, x),
+                    "besselj" => cmath::jn(n, x),
+                    "bessely" => cmath::yn(n, x),
                     "besseli" => special::besseli(n, x),
                     _ => special::besselk(n, x),
                 }))
@@ -157,7 +304,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let (x, lo, hi) = (self.num_arg(&args[0])?, self.num_arg(&args[1])?, self.num_arg(&args[2])?);
                 Ok(Value::Num(x.max(lo).min(hi)))
             })(),
-            "factorial" => self.num_arg(&args[0]).map(|x| Value::Num(special::factorial(x))),
+            "factorial" => self.num_arg(&args[0]).map(|x| Value::Num(cmath::tgamma(x + 1.0))),
             "clock" => Ok(Value::Num(clock())),
             "len" => match &args[0] {
                 Value::List(l) => Ok(Value::Num(l.borrow().len() as f64)),

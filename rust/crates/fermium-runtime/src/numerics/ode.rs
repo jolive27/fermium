@@ -663,13 +663,29 @@ fn stiff_test(state: &mut [i64; 2], count: u64, h: f64, k6: &[f64], k7: &[f64], 
 /// Adaptive Dormand–Prince 5(4) from t0 to t1 (either direction): v1's `dp45` (`fm_dp45`).
 /// A stiffness warning (kind 2, a = step count) is added to `Sol::warnings`.
 pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
-    mut f: F,
+    f: F,
     y0: &[f64],
     t0: f64,
     t1: f64,
     ev: Option<EventFn<'_>>,
     opts: OdeOpts<'_>,
 ) -> Result<Sol, Fail> {
+    let mut sol = Sol::new(y0.len());
+    dp45_into(f, y0, t0, t1, ev, opts, &mut sol)?;
+    Ok(sol)
+}
+
+/// `dp45` into a solution the caller owns, so the warnings raised before a failure (a stiffness warning, then
+/// "too many steps") are still there when it returns an error, as v1 shows them.
+pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
+    mut f: F,
+    y0: &[f64],
+    t0: f64,
+    t1: f64,
+    ev: Option<EventFn<'_>>,
+    opts: OdeOpts<'_>,
+    sol: &mut Sol,
+) -> Result<(), Fail> {
     let f = &mut f;
     let n = y0.len();
     let rtol = opts.rtol;
@@ -677,7 +693,6 @@ pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
     let atol: &[f64] = opts.atol.unwrap_or(&zeros);
     let tname = opts.tname;
     let mut y = y0.to_vec();
-    let mut sol = Sol::new(n);
     let span = t1 - t0;
     if !(span != 0.0) {
         return Err(Fail::new(err::ODE_RANGE, t0, tname));
@@ -758,8 +773,8 @@ pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
             }
             if let Some(e) = event.as_mut() {
                 let (k0, k6) = (k[0].clone(), k[6].clone());
-                if e.check(f, &mut sol, t, &y, &k0, tn, &ynew, &k6, Some(&k)) {
-                    return Ok(sol);
+                if e.check(f, sol, t, &y, &k0, tn, &ynew, &k6, Some(&k)) {
+                    return Ok(());
                 }
             }
             t = tn;
@@ -808,7 +823,7 @@ pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
     if event.is_some() {
         return Err(Fail::new(err::NO_EVENT, t1, opts.evtext));
     }
-    Ok(sol)
+    Ok(())
 }
 
 #[cfg(test)]

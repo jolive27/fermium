@@ -141,7 +141,7 @@ pub fn powc(x: f64, p: f64) -> f64 {
         return if x >= 0.0 { fdiv(1.0, x * x.sqrt()) } else { f64::NAN };
     }
     if (p - 1.0 / 3.0).abs() < 1e-15 {
-        return x.cbrt();
+        return crate::eval_core::cmath::cbrt(x);
     }
     if let Some(n) = odd_root_numerator(p) {
         // x^(n/q), q odd: the real root, also for x < 0 (like cbrt)
@@ -205,6 +205,15 @@ pub struct Frame {
     pub(crate) vars: HashMap<SymId, Value>,
 }
 
+thread_local! {
+    /// The stack address where the program started (Interpreter::run), for the recursion check.
+    static STACK_BASE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// The bytes of stack a program may use before runaway recursion stops it. The default suits a main thread's
+/// 8 MB stack; a driver that runs the program on a thread with a big stack raises it (v1: 400 MB of 512 MB).
+pub static STACK_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(6 << 20);
+
 /// Runs a checked module.
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
@@ -215,11 +224,14 @@ pub struct Interpreter<'m, P: Printer> {
     pub(crate) call_line: u32,
     /// Builtins the runtime provides (special functions, numerics), looked up by name.
     pub builtins: HashMap<String, Box<dyn Fn(&[Value]) -> Result<Value, String>>>,
+    /// ODE / eigenvalue / PDE solutions and run-time warnings shown (eval_solve.rs)
+    pub(crate) solve: crate::eval_solve::SolveState,
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new() }
+        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
+                      solve: Default::default() }
     }
 
     pub(crate) fn err<T>(&self, message: impl Into<String>) -> Result<T, RunError> {
@@ -227,6 +239,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     pub fn run(&mut self) -> Result<(), RunError> {
+        let here = 0u8;
+        STACK_BASE.with(|b| b.set(&here as *const u8 as usize));
         let mut fr = Frame::default();
         let main = &self.module.main;
         let r = self.block(main, &mut fr).map_err(|e| self.locate(e));
@@ -297,12 +311,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         l.borrow_mut().extend(ys)
                     }
                     (Value::TextList(l), Value::Str(t)) => l.borrow_mut().push(t),
-                    _ => {}
+                    (Value::CList(l), Value::Vec(z)) if z.len() == 2 => l.borrow_mut().push((z[0], z[1])),
+                    _ => return self.err("not yet supported by the Rust back end: pushing this value"),
                 }
             }
             StmtKind::Clear(sym) => {
-                if let Value::List(l) = self.get(*sym, fr)? {
-                    l.borrow_mut().clear();
+                match self.get(*sym, fr)? {
+                    Value::List(l) => l.borrow_mut().clear(),
+                    Value::TextList(l) => l.borrow_mut().clear(),
+                    Value::CList(l) => l.borrow_mut().clear(),
+                    _ => return self.err("not yet supported by the Rust back end: clearing this value"),
                 }
             }
             StmtKind::If(c, then, other) => {
@@ -641,6 +659,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 
     pub(crate) fn call(&mut self, f: usize, args: Vec<Value>) -> Result<Value, RunError> {
         let func = &self.module.funcs[f];
+        // runaway recursion: stop with the compiled path's error before the stack overflows (stack_check)
+        let here = 0u8;
+        let sp = &here as *const u8 as usize;
+        let base = STACK_BASE.with(|b| b.get());
+        if base != 0 && base.saturating_sub(sp) > STACK_LIMIT.load(std::sync::atomic::Ordering::Relaxed) {
+            let name = if func.display.is_empty() { "a function" } else { func.display.as_str() };
+            return Err(RunError { message: format!("{name} called itself too many times (the program ran out of \
+                                                    stack) -- is a base case missing, like  if n <= 0 then ...?"),
+                                  line: if func.def_line != 0 { func.def_line } else { self.line }, hint: None });
+        }
         let mut fr = Frame::default();
         for (p, v) in func.params.iter().zip(args) {
             fr.vars.insert(*p, v);

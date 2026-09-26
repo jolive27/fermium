@@ -16,13 +16,6 @@ impl Checker {
                        -> CResult<Checked> {
         Err(self.not_ported("a field", e.span))
     }
-    // ---- solutions
-    pub fn sol_values(&mut self, _view: SolViewId, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("the values of an ODE solution", e.span))
-    }
-    pub fn sol_names(&self, _sol: usize) -> Vec<String> {
-        vec![]
-    }
 }
 
 impl Checker {
@@ -39,25 +32,8 @@ impl Checker {
     pub fn python_call(&mut self, _pref: usize, e: &A::Expr, _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("calling Python", e.span))
     }
-    pub fn is_pde_name(&self, _name: &str, _ctx: &Ctx) -> bool {
-        false
-    }
-    pub fn pde_call(&mut self, _name: &str, e: &A::Expr, _ctx: &mut Ctx, _deriv: bool) -> CResult<Checked> {
-        Err(self.not_ported("a PDE solution", e.span))
-    }
     pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("err(…)", e.span))
-    }
-    pub fn sol_eval(&mut self, _view: SolViewId, e: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("evaluating an ODE solution", e.span))
-    }
-}
-
-impl Checker {
-    // ---- stubs called by lists.rs, owned by other modules
-    /// r[k] of a vector ODE solution: a vector (A19; solutions module).
-    pub fn sol_index(&mut self, _view: SolViewId, e: &A::Expr, _index: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing a vector ODE solution", e.span))
     }
 }
 

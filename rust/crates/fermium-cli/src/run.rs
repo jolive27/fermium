@@ -4,7 +4,22 @@ use std::process::ExitCode;
 
 use fermium_syntax::diag::Diagnostic;
 
+/// Runs the program on a thread with a 512 MB stack, of which it may use 400 MB (as v1's driver does), so deep
+/// recursion works and runaway recursion stops with an error instead of a crash.
 pub fn run_file(file: &str, base_dir: Option<&str>) -> ExitCode {
+    let (f2, b2) = (file.to_string(), base_dir.map(str::to_string));
+    fermium_codegen::eval::STACK_LIMIT.store(400 << 20, std::sync::atomic::Ordering::Relaxed);
+    let t = std::thread::Builder::new().stack_size(512 << 20).spawn(move || run_file_here(&f2, b2.as_deref()));
+    match t {
+        Ok(h) => h.join().unwrap_or(ExitCode::from(101)),
+        Err(_) => {
+            fermium_codegen::eval::STACK_LIMIT.store(6 << 20, std::sync::atomic::Ordering::Relaxed);
+            run_file_here(file, base_dir)
+        }
+    }
+}
+
+fn run_file_here(file: &str, base_dir: Option<&str>) -> ExitCode {
     let src = match std::fs::read_to_string(file) {
         Ok(s) => s,
         Err(_) => {
