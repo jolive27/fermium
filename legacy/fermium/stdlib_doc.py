@@ -4,7 +4,7 @@
 
 Each function's documentation is the comment right above it; its signature (with the parameters' units)
 comes from the source, and the units of its result are found by the checker, calling it with arguments
-in those units.  tests/test_stdlib.py checks that docs/stdlib.md is up to date.
+in those units.  legacy/tests/test_stdlib.py checks that docs/stdlib.md is up to date.
 """
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def render() -> str:
            "Each function checks the units of its arguments (the units in brackets; any unit of the same kind "
            "works, like `km/hr` for `[m/s]`), and its result has the units shown after the arrow. Parameters "
            "without brackets take any units. Every function is tested against a closed form or SciPy in "
-           "`tests/test_stdlib.py`.", "",
+           "`legacy/tests/test_stdlib.py`.", "",
            "This page is generated from the modules' source (`fermium/stdlib/*.fm`) by "
            "`python3 -m fermium.stdlib_doc > docs/stdlib.md`.", ""]
     mods = stdlib_modules()
