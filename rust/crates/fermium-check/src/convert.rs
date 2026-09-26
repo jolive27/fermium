@@ -275,7 +275,7 @@ impl Checker {
     /// `x to N digits`.
     pub fn e_digits(&mut self, e: &A::Expr, value: &A::Expr, digits: u32, ctx: &mut Ctx) -> CResult<I::Expr> {
         let mut v = self.expr(value, ctx)?;
-        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::ComplexList(_)) {
+        if !matches!(v.ty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_) | Ty::ComplexList(_)) {
             return Err(self.err("'to N digits' only works on numbers", e.span, None));
         }
         if !(1..=17).contains(&digits) {

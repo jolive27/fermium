@@ -391,6 +391,22 @@ impl Checker {
                         }
                         keyparts.push(format!("{}{:?}", v.ty.kind(), n.konst.0));
                     }
+                    // v1 keyed vectors and matrices by kind alone, so f(<3, 4> m) then f(<1, 2, 2> s) reused the
+                    // first instance (a crash in v1's compiled code; a wrong unit here): key them by shape and units
+                    Ty::Vec { .. } | Ty::Mat { .. } => {
+                        let mut k = format!("{}{:?}", v.ty.kind(), match &v.ty {
+                            Ty::Mat { r, c, .. } => (*r, *c),
+                            _ => (crate::vecmat::vec_n(&v.ty), 0),
+                        });
+                        for d in crate::vecmat::comp_dims(&v.ty).iter().take(if matches!(v.ty, Ty::Mat { .. }) { 1 } else { usize::MAX }) {
+                            let n = self.u.norm(d);
+                            if !n.is_concrete() {
+                                concrete = false;
+                            }
+                            k += &format!(",{:?}", n.konst.0);
+                        }
+                        keyparts.push(k);
+                    }
                     t => keyparts.push(t.kind().to_string()),
                 },
                 Checked::Sol(_) => keyparts.push("sol".into()),
@@ -455,7 +471,8 @@ impl Checker {
         let placeholder = DExpr::fresh();
         let inst_name = self.fresh_name(&self.funcs[info].name.clone());
         self.module.funcs.push(I::Func { name: inst_name, params: vec![], ret_ty: Ty::Num(placeholder.clone()),
-                                         body: vec![], locals: vec![], sf: None });
+                                         body: vec![], locals: vec![], sf: None, display: display.clone(),
+                                         def_line: fdef.span.line });
         let inst = self.module.funcs.len() - 1;
         self.func_extra.resize(inst + 1, FuncExtra::default());
         self.func_extra[inst] = FuncExtra { display: display.clone(), ret_placeholder: Some(placeholder.clone()),
@@ -514,7 +531,7 @@ impl Checker {
                     let b = if self.funcs[info].stable { self.stabilize(&b) } else { b };
                     let v = self.expr(&b, &mut fctx)?;
                     self.ret_types[fctx.ret_types].push(v.clone());
-                    self.module.funcs[inst].body = vec![I::Stmt { kind: I::StmtKind::Return(Some(v)), line: fdef.span.line }];
+                    self.module.funcs[inst].body = vec![I::Stmt { kind: I::StmtKind::Return(Some(v)), line: 0 }];
                 }
                 A::FuncBody::Block(stmts) => {
                     let mut stmts = stmts.clone();

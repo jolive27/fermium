@@ -266,6 +266,10 @@ pub struct Func {
     pub body: Vec<Stmt>,
     pub locals: Vec<SymId>,
     pub sf: Option<u32>,
+    /// the function's name as the user wrote it, and the line of its definition (for run-time errors: runaway
+    /// recursion is reported there, as the compiled path's stack check does)
+    pub display: String,
+    pub def_line: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

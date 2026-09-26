@@ -222,7 +222,7 @@ impl Checker {
             Checked::Val(v) if matches!(v.ty, Ty::List(_)) => v,
             other => {
                 let what = match &other {
-                    Checked::Val(v) if matches!(v.ty, Ty::Vec { .. } | Ty::Mat { .. }) => "a vector",
+                    Checked::Val(v) if matches!(v.ty, Ty::Vec { .. } | Ty::Mat { .. } | Ty::Complex(_)) => "a vector",
                     _ => "this",
                 };
                 return Err(self.err(format!("only lists can be sliced with [a:b], and {what} isn't a list"),

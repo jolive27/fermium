@@ -124,7 +124,7 @@ pub struct Parser {
     pub fix_whole: Vec<usize>,
     pub stmt_done: bool,
     pub chain_count: u32,
-    next_id: u32,
+    pub(crate) next_id: u32,
     /// Nesting depth of the recursive descent: deeper than MAX_DEPTH is an error, not a stack overflow.
     pub depth: u32,
 }

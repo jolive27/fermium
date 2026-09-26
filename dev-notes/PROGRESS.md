@@ -30,6 +30,8 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 04:10–04:40 UTC: **B4/B5 foundations**: units crate merged (51 247 parity checks with v1 printing and units, D11 exact); lexer + parser merged (**3187/3187 programs parse exactly like v1**, errors and warnings included); numerics merged (quadrature with B2 sentinels, RK4/DP45, Radau/BDF, LM fit, roots, eigen); checker core written (scopes, statements, names, arithmetic, calls, printing formats; area stubs honest); evaluator + printer; **`fermium run` works end to end in Rust**.
 - 04:35 UTC: red team round 9 (conformance + early Rust): the runner was far too lenient (a fake scored 99.9 %). Fixed: strict comparison (D264), isolated runs, self-test with fakes. **First honest Rust score: 751/3037 (24.7 %)** (CONFORMANCE.md).
 
+- 04:45–05:20 UTC: merged agent A (core expressions, `in`, `to N digits`, lists, all built-ins), B (vectors, matrices, complex, FFT), C (calculus: fermium-sym, derivatives, integrals, Σ), E (unit systems, analyze, modules + stdlib), numerics (special functions, FFT, RNG, PDE, linalg, native SVG/PNG/GIF plots, CSV data, fit reports), syntax (`fermium fmt` in Rust: 22386/22393 runs agree; the 7 misses are a file Python's fmt crashes on), `parallel for` (me). **Rust conformance 2244/3037 (73.9 %)** before the solve merge; 100 % in analyze, appendix1, control-flow, lists, natural-units, vectors-matrices. CI: Rust job with a conformance ratchet (conformance/RUST_FLOOR).
+
 ## In progress
 - Agents (worktrees): A core expressions + built-ins; B vectors/matrices/complex/FFT; C calculus + fermium-sym; D ODE/eigen/PDE solve; numerics (special functions, FFT, RNG, PDE next); syntax (corpus widening, then fermium fmt).
 - Me: merging, integration, remaining checker areas (unit systems, analyze, modules, uncertainty, RNG, parallel, data/plot/fit), red-team follow-ups.
@@ -37,6 +39,7 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 ## Next
 - Merge agents as they report; re-run `conformance/run --impl rust` → CONFORMANCE.md after each merge.
 - Round 9 follow-ups still open: harvest gaps (#4: notes/, FRICTION.md, REDTEAM repros, checker-only rejection tests), exclusion false positives (#5), odd-root denominators (#9), 64-bit exponent fractions (#10).
+- B2 v1 limitations still to fix natively (each with a DIVERGENCES.md entry and a test): an integral at rounding level printing too many figures (RT7-5: use the quadrature's error estimate when printing), PDE accuracy right after a jump (RT7-2), significant figures of sums (D95: the decimal-place rule needs run-time magnitudes). Memory: done (lists are reference-counted).
 - Then B5 milestones in order; LLVM back end (inkwell) behind the Backend trait; B6/B7.
 
 ## Blocked
@@ -51,3 +54,4 @@ _The first run's log is `dev-notes/PROGRESS_v1.md`._
 - 2026-09-26 03:40 UTC — v1.5 frozen (CI green on both platforms); starting Phase B.
 - 2026-09-26 04:10 UTC — Phase B: conformance suite ready (legacy 100%); Rust workspace up; three porting agents running.
 - 2026-09-26 04:40 UTC — Rust `fermium run` works end to end; strict conformance runner; Rust at 24.7 %; four porting agents + numerics + syntax running.
+- 2026-09-26 05:20 UTC — Rust at 73.9 % (before the ODE/eigen/PDE merge); agents A–E + LLVM back end running; harvest being widened (notes, red-team, docs blocks).

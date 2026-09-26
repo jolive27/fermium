@@ -26,3 +26,8 @@ venv/
 .idea/
 *.swp
 target/
+
+# plots written when the conformance harvest runs the notes' code blocks
+dev-notes/notes/*.png
+dev-notes/notes/*.svg
+dev-notes/notes/*.gif

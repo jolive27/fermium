@@ -19,7 +19,6 @@ impl Checker {
         }
         Err(self.not_ported("a field", e.span))
     }
-    // ---- solutions
 }
 
 impl Checker {
@@ -38,14 +37,6 @@ impl Checker {
     }
     pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("err(…)", e.span))
-    }
-}
-
-impl Checker {
-    // ---- stubs called by lists.rs, owned by other modules
-    /// zs[k] of a list of complex numbers (clist.index, D243).
-    pub fn clist_index(&mut self, _t: I::Expr, _idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing a list of complex numbers", e.span))
     }
 }
 

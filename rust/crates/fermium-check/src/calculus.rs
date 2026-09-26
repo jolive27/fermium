@@ -98,8 +98,20 @@ impl C::DiffContext for DC<'_> {
         matches!(self.ck.lookup(self.scope, fname), Some((Binding::Sol(_), _)))
     }
 
-    fn field_function(&mut self, _field: &A::Expr) -> Option<String> {
-        None // modules (importer.py) aren't ported yet
+    /// `mechanics.pendulum_period` in a formula being differentiated (red team round 2 #7): the module's function,
+    /// bound here under a private name (not exported, can't clash with a user name) so it and its derivatives can be
+    /// called from this scope like `from … import` names.
+    fn field_function(&mut self, field: &A::Expr) -> Option<String> {
+        let A::ExprKind::Field { target, name } = &field.kind else { return None };
+        let m = self.ck.module_of_in(target, self.scope)?;
+        if name.starts_with('_') {
+            return None;
+        }
+        let mscope = self.ck.mods.modules[m].scope;
+        let Some(Binding::Func(b)) = self.ck.scopes[mscope].names.get(name).cloned() else { return None };
+        let key = format!("_{}", crate::source::to_source(field));
+        self.ck.scopes[self.scope].names.entry(key.clone()).or_insert(Binding::Func(b));
+        Some(key)
     }
 }
 
@@ -605,7 +617,13 @@ impl Checker {
         let (lam, mut lctx, _) = self.scalar_lambda("integrand", var, ld.clone(), ctx);
         let body = self.expr(integrand, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("an integral of a complex function", e.span)),
+            Ty::Complex(_) => {
+                // a complex integrand: one integral for each part (D93)
+                return self.component_integral(integrand, ctx, &|part| {
+                    mk(A::ExprKind::Integral { integrand: Box::new(part), var: var.clone(), lo: Some(lo_e.clone()),
+                                               hi: Some(hi_e.clone()) }, e.span)
+                });
+            }
             Ty::Vec { n, .. } => {
                 let n = *n;
                 return self.vector_integral(e, n, ctx).map(Checked::Val);
@@ -721,7 +739,12 @@ impl Checker {
         self.module.syms[ks].sf = None; // a count is exact
         let body = self.expr(body_e, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("a sum of complex numbers", e.span)),
+            Ty::Complex(_) => {
+                return self.component_integral(body_e, ctx, &|part| {
+                    mk(A::ExprKind::Sum { body: Box::new(part), var: var.clone(), lo: lo_e.clone(), hi: hi_e.clone(),
+                                          step: step.clone() }, e.span)
+                });
+            }
             Ty::Vec { n, .. } => {
                 let mut comps = vec![];
                 for k in 0..*n {
@@ -741,6 +764,25 @@ impl Checker {
         self.module.lambdas[lam].body = vec![body];
         let mut r = ir(I::ExprKind::Sum { lam, lo: Box::new(lo), hi: Box::new(hi), step: Some(Box::new(st)) },
                        Ty::Num(bd), e.span.line);
+        r.hint = hint;
+        r.sf = sf;
+        Ok(Checked::Val(r))
+    }
+
+    /// ∫ f dx for a complex integrand: ∫ re(f) dx + i ∫ im(f) dx (D93; Python cplx.component_integral).
+    fn component_integral(&mut self, f: &A::Expr, ctx: &mut Ctx, make: &dyn Fn(A::Expr) -> A::Expr)
+                          -> CResult<Checked> {
+        let mut parts = vec![];
+        for part in ["re", "im"] {
+            let fld = mk(A::ExprKind::Field { target: Box::new(f.clone()), name: part.into() }, f.span);
+            parts.push(self.expr(&make(fld), ctx)?);
+        }
+        let (d0, d1) = (ty_dim(&parts[0].ty).unwrap(), ty_dim(&parts[1].ty).unwrap());
+        self.u.unify(&d0, &d1);
+        let hint = parts[0].hint.clone();
+        let sf = minsf(&[&parts[0], &parts[1]]);
+        let line = parts[0].line;
+        let mut r = ir(I::ExprKind::Vec(parts), Ty::Complex(d0), line);
         r.hint = hint;
         r.sf = sf;
         Ok(Checked::Val(r))

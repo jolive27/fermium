@@ -1040,3 +1040,15 @@ message match. `tests/test_conformance_suite.py` now checks that such fakes fail
 - **Alternatives:** keep a loose default and a strict mode (rejected: the scoreboard must be honest by default);
 compare numbers by value with a relative tolerance in the numerics areas only (kept for later if a documented
 divergence needs it; then it goes in DIVERGENCES.md with the case ids).
+
+## D265. Documented divergences are checked, not just listed
+- **What:** a deliberate difference from v1 (spec B2: v1 limitations fixed natively; or v1 behaviour that isn't
+  deterministic) is a section of `rust/DIVERGENCES.md` plus, for each affected conformance case,
+  `conformance/divergences/<id>.json` holding what the Rust implementation prints instead (written by
+  `conformance/add_divergence.py` after reading the output). `conformance/run` counts such a case as a
+  *documented divergence* only while the Rust output matches that file exactly; CONFORMANCE.md shows passes and
+  documented divergences separately. The B8 gate ("100 %, or every failure is a documented divergence") reads
+  the sum.
+- **Why:** a divergence that is only listed could hide a later regression in the same case (the integral that
+  gave the true value starts giving something else). Checking the recorded output keeps the scoreboard honest.
+- **Not divergences:** features that aren't ported yet (e.g. `use python` until B5.14) stay failures.

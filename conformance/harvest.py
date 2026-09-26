@@ -61,7 +61,10 @@ def area_of(src: str, err) -> str:
     return "units-and-printing"
 
 
-NONDETERMINISTIC = re.compile(r"\bclock\(\)|\bTIME\b|\btime:\s", re.M)
+NONDETERMINISTIC = re.compile(r"\bclock\(\)")
+MD_SOURCES = ("dev-notes/notes/*.md", "dev-notes/*.md", "gauntlet/**/*.md", "docs/**/*.md", "bootcamp/**/*.md",
+              "README.md", "research/**/*.md", "examples/**/*.md")
+FENCE = re.compile(r"^```(fermium|fm|)[ \t]*\n(.*?)^```", re.M | re.S)
 FILE_REFS = re.compile(r"\bload\b|\bplot\b|\banimate\b|\bimport\b|\buse python\b|\bsave\b|\"[^\"]*\.(csv|txt|png|svg|gif|fm)\"")
 
 
@@ -92,6 +95,68 @@ def _clean_one(r):
     return dict(r, stdout=out, stderr=err, error=e)
 
 
+def strip_comments(src):
+    return "\n".join(ln.split("#", 1)[0] for ln in src.splitlines())
+
+
+def machine_dependent_prefixes(r):
+    """A program that reads the clock: run it again; the lines that differ are machine-dependent. Returns the
+    prefixes (text before the first digit) that drop them, or None if the runs differ otherwise."""
+    base = r["base_dir"] if r["base_dir"] and os.path.isdir(r["base_dir"]) else None
+    try:
+        out2, _, e2 = legacy_run(r["src"], base)
+    except Exception:
+        return None
+    a, b = r["stdout"].splitlines(), out2.splitlines()
+    if len(a) != len(b) or (e2 is None) != (r["error"] is None):
+        return None
+    prefixes = []
+    for x, y in zip(a, b):
+        if x != y:
+            m = re.match(r"^\D*", x)
+            pre = m.group(0) if m else ""
+            if len(pre) < 3:
+                return None
+            prefixes.append(pre)
+    return prefixes
+
+
+def markdown_programs():
+    """Fermium programs in fenced blocks of the notes, red-team reports, friction logs and docs (spec §B3).
+    A block counts if it parses as Fermium (plain ``` fences hold shell commands and output too)."""
+    from fermium.errors import Diagnostics, FermiumError
+    from fermium.parser import parse
+    out, seen = [], set()
+    for pat in MD_SOURCES:
+        for path in sorted(glob.glob(os.path.join(ROOT, pat), recursive=True)):
+            if "/.claude/" in path or "/node_modules/" in path:
+                continue
+            text = open(path, encoding="utf-8").read()
+            for k, m in enumerate(FENCE.finditer(text)):
+                src = m.group(2)
+                if not src.strip() or src in seen:
+                    continue
+                seen.add(src)
+                if m.group(1) == "":
+                    try:
+                        parse(src, Diagnostics())
+                    except FermiumError:
+                        continue
+                    except Exception:
+                        continue
+                out.append((src, os.path.dirname(path), f"{os.path.relpath(path, ROOT)}#{k + 1}"))
+    return out
+
+
+def _run_file_job(job):
+    src, d, name, origin = job
+    try:
+        out, err, e = legacy_run(src, d, name)
+    except Exception:
+        return None
+    return {"src": src, "base_dir": d, "stdout": out, "stderr": err, "error": e, "origin": origin}
+
+
 def rerun_clean(records):
     from concurrent.futures import ProcessPoolExecutor
     uniq = {}
@@ -117,16 +182,16 @@ def main(harvest_dir: str | None):
     for pat in ("examples/*.fm", "examples/rosetta/*.fm", "gauntlet/*/*.fm", "research/*/*.fm", "tests/programs/*.fm",
                 "tests/programs/john/*.fm", "benchmarks/fermium/*.fm"):
         programs += sorted(glob.glob(os.path.join(ROOT, pat)))
-    for path in programs:
-        src = open(path, encoding="utf-8").read()
-        d = os.path.dirname(path)
-        try:
-            out, err, e = legacy_run(src, d, os.path.basename(path))
-        except Exception:
-            skipped["crashed in legacy"] += 1
-            continue
-        records.append({"src": src, "base_dir": d, "stdout": out, "stderr": err, "error": e,
-                        "origin": os.path.relpath(path, ROOT)})
+    jobs = [(open(path, encoding="utf-8").read(), os.path.dirname(path), os.path.basename(path),
+             os.path.relpath(path, ROOT)) for path in programs]
+    jobs += [(src, d, "<program>", origin) for src, d, origin in markdown_programs()]
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(max_workers=os.cpu_count() or 2) as ex:
+        for rec in ex.map(_run_file_job, jobs, chunksize=2):
+            if rec is None:
+                skipped["crashed in legacy"] += 1
+            else:
+                records.append(rec)
     if os.path.isdir(CASES):
         shutil.rmtree(CASES)
     seen, counts, john = set(), {}, 0
@@ -138,10 +203,13 @@ def main(harvest_dir: str | None):
                 skipped["temporary directory with files"] += 1
                 continue
             base = None
-        if NONDETERMINISTIC.search(src) or NONDETERMINISTIC.search(r["stdout"]) and "benchmarks" in r["origin"]:
-            if "benchmarks" not in r["origin"]:
+        drop = ["TIME"] if "benchmarks" in r["origin"] else []
+        if NONDETERMINISTIC.search(strip_comments(src)) and "benchmarks" not in r["origin"]:
+            pre = machine_dependent_prefixes(r)
+            if pre is None:
                 skipped["machine-dependent output"] += 1
                 continue
+            drop += pre
         rel = os.path.relpath(base, ROOT) if base else None
         key = hashlib.sha1((src + "\0" + (rel or "")).encode()).hexdigest()[:12]
         if key in seen:
@@ -151,12 +219,12 @@ def main(harvest_dir: str | None):
         area = "appendix1" if "tests/programs/john" in r["origin"] else area_of(src, r["error"])
         john += area == "appendix1"
         stdout = normalise(r["stdout"], base)
-        if "benchmarks" in r["origin"]:        # timings vary: keep the physics, drop the TIME lines
-            stdout = "".join(ln for ln in stdout.splitlines(True) if not ln.startswith("TIME"))
+        if drop:        # timings vary: keep the physics, drop the timing lines
+            stdout = "".join(ln for ln in stdout.splitlines(True) if not ln.startswith(tuple(drop)))
         e = r["error"]
         case = {"id": key, "area": area, "origin": r["origin"], "dir": rel, "stdout": stdout,
                 "stderr": normalise(r["stderr"], base), "error": e, "exit": 1 if e else 0,
-                "drop_prefixes": ["TIME"] if "benchmarks" in r["origin"] else []}
+                "drop_prefixes": drop}
         os.makedirs(os.path.join(CASES, area), exist_ok=True)
         with open(os.path.join(CASES, area, key + ".fm"), "w", encoding="utf-8") as fh:
             fh.write(src)

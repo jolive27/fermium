@@ -46,6 +46,21 @@ pub fn parse_tokens(source: &str, known: &[String], diags: &mut Diagnostics)
     r.map(|prog| (prog, p.toks))
 }
 
+/// Parse a module's source (D100) with node ids after `after_id`, so they never collide with the importing
+/// program's (the checker finds nodes by id). Returns the tree, the warnings and the last id used.
+pub fn parse_module(source: &str, after_id: u32) -> Result<(Program, Diagnostics, u32), Diagnostic> {
+    let mut diags = Diagnostics::new();
+    let toks = tokenize(source, &mut diags)?;
+    let mut p = parser::Parser::new(toks, diags, &[]);
+    p.next_id = after_id;
+    let (r, mut p) = with_big_stack(move || {
+        let r = p.parse_program();
+        (r, p)
+    });
+    let d = std::mem::take(&mut p.diags);
+    r.map(|prog| (prog, d, p.next_id))
+}
+
 /// Run `f` on a thread with a large stack: the parser is a recursive descent, and Fermium 1.5 accepts programs
 /// nested as deeply as Python's raised recursion limit allows (driver.py sets 20000 frames).
 pub fn with_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {

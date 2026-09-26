@@ -857,12 +857,9 @@ impl Checker {
                     }
                 }
             }
-            Ty::ComplexList(d) => {
+            Ty::ComplexList(_) => {
                 let idx = self.index_expr(index, t, ctx)?;
-                let mut r = builtin_ir("cl.get", vec![t.clone(), idx], Ty::Complex(d), e.span.line);
-                r.hint = t.hint.clone();
-                r.sf = None;
-                Ok(Some(r))
+                self.clist_index(t.clone(), idx, e).map(Some)
             }
             _ => Ok(None),
         }
