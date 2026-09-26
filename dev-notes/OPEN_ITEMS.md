@@ -241,3 +241,10 @@ CHEATSHEET:108 and TROUBLESHOOTING:254 (the spacing-dependent `/` rule, which A1
 | A4-RT4 | `20.0 °C in K` → `293 K` (offset conversions keep significant figures, not decimal places) | by design (D11) | a decimal-places rule for offsets would be new |
 | A4-FFT-V2 | the reference FFT example prints Parseval's sum in kg² m⁴/(s⁶ A²), not V² | fix in B | display-unit choice for squared units |
 | A5-D39 | the "not yet: `until` on the range line" note in D39 is stale (it works) | closed | |
+
+## Phase B: Rust differences from v1 found outside the conformance suite (open)
+
+- B-U1: `det`, `inverse`, `solve_linear` and `eigenvalues` of a matrix of uncertain values give the "needs a plain number" error in Rust, but v1's interpreter computes them (`det(M)` = -2.880 ± 0.048 m²). No conformance case covers this. Found by the uncertainty agent.
+- B-P1: when an error happens partway through a print (`print "a", xs[5]`), v1 prints the partial line `a` to stdout first; Rust prints nothing. General, not only for ±.
+- B-F1: in programs without ±, `print 2 k - k` for a fit parameter prints `50 N/m` in Rust but `50.1 N/m` in v1 (significant figures of a sum of fit parameters).
+- B-R5: the tree-walker's recursion depth is about 5×10⁵; v1's compiled code goes past 10⁶ (red team 10 #5). A hot/cold split of eval/stmt gave 2.3× the depth but cost 13 % in speed, so it was reverted.
