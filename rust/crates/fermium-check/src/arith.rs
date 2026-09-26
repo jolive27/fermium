@@ -588,88 +588,10 @@ pub fn const_value(x: &I::Expr) -> Option<f64> {
     }
 }
 
-/// Python Fraction(x).limit_denominator(10000).
+/// Python Fraction(x).limit_denominator(max_den), as a Rational64 (None if it doesn't fit: red team 9 #10).
 pub fn limit_denominator(x: f64, max_den: i64) -> Option<Rational64> {
-    if !x.is_finite() {
-        return None;
-    }
-    // the exact value of the float as a fraction p/q (q a power of two), then Python's algorithm
-    let (mant, exp, sign) = integer_decode(x);
-    let (mut p, mut q): (i128, i128);
-    if exp >= 0 {
-        if exp > 60 {
-            return None;
-        }
-        p = (mant as i128) << exp;
-        q = 1;
-    } else {
-        let e = -exp;
-        if e > 120 {
-            return Some(Rational64::zero());
-        }
-        p = mant as i128;
-        q = 1i128 << e;
-        let g = gcd(p, q);
-        p /= g;
-        q /= g;
-    }
-    p *= sign as i128;
-    let md = max_den as i128;
-    if q <= md {
-        return Some(Rational64::new(p as i64, q as i64));
-    }
-    let (n0, d0) = (p, q);
-    let (mut p0, mut q0, mut p1, mut q1) = (0i128, 1i128, 1i128, 0i128);
-    let (mut n, mut d) = (n0, d0);
-    loop {
-        let a = n.div_euclid(d);
-        let q2 = q0 + a * q1;
-        if q2 > md {
-            break;
-        }
-        (p0, q0, p1, q1) = (p1, q1, p0 + a * p1, q2);
-        (n, d) = (d, n - a * d);
-        if d == 0 {
-            break;
-        }
-    }
-    let k = (md - q0) / q1;
-    let (b1n, b1d) = (p0 + k * p1, q0 + k * q1);
-    let (b2n, b2d) = (p1, q1);
-    // pick the closer bound to n0/d0 (ties: the second, as in Python)
-    let dist = |an: i128, ad: i128| ((an * d0 - n0 * ad).abs(), ad * d0);
-    let (x1, y1) = dist(b2n, b2d);
-    let (x2, y2) = dist(b1n, b1d);
-    if x1 * y2 <= x2 * y1 {
-        Some(Rational64::new(b2n as i64, b2d as i64))
-    } else {
-        Some(Rational64::new(b1n as i64, b1d as i64))
-    }
-}
-
-fn gcd(a: i128, b: i128) -> i128 {
-    let (mut a, mut b) = (a.abs(), b.abs());
-    while b != 0 {
-        (a, b) = (b, a % b);
-    }
-    a.max(1)
-}
-
-fn integer_decode(x: f64) -> (u64, i32, i64) {
-    let bits = x.to_bits();
-    let sign = if bits >> 63 == 0 { 1 } else { -1 };
-    let exponent = ((bits >> 52) & 0x7ff) as i32;
-    let mantissa = if exponent == 0 { (bits & 0xfffffffffffff) << 1 } else { (bits & 0xfffffffffffff) | 0x10000000000000 };
-    if mantissa == 0 {
-        return (0, 0, sign);
-    }
-    let mut m = mantissa;
-    let mut e = exponent - 1075;
-    while m & 1 == 0 {
-        m >>= 1;
-        e += 1;
-    }
-    (m, e, sign)
+    let (p, q) = fermium_ir::pyfrac::limit_denominator(x, max_den)?;
+    Some(Rational64::new(i64::try_from(p).ok()?, i64::try_from(q).ok()?))
 }
 
 /// Evaluate a compile-time constant exponent (Python const_value): a Fraction or None.

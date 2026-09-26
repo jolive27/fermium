@@ -7,6 +7,7 @@
 //! sees a unit. Variables, functions and lambdas are indices into the module's tables, which suits both the
 //! evaluator and the LLVM back end.
 pub mod dim;
+pub mod pyfrac;
 pub mod types;
 
 pub use dim::{Dim, DIMLESS};

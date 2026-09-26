@@ -90,14 +90,16 @@ pub fn fpow(a: f64, b: f64) -> f64 {
 }
 
 /// The numerator n of p = n/q with q odd (so x^p is real for x < 0), as `odd_root_numerator` does.
+/// numerics.odd_root_numerator: for p = n/q with q odd (Fraction(p).limit_denominator(99)), n; else None.
 pub fn odd_root_numerator(p: f64) -> Option<i64> {
-    for q in [3i64, 5, 7, 9, 11, 13, 15] {
-        let n = p * q as f64;
-        if (n - n.round()).abs() < 1e-12 && n.round() != 0.0 {
-            return Some(n.round() as i64);
-        }
+    if !p.is_finite() || p == p.trunc() {
+        return None;
     }
-    None
+    let (n, q) = fermium_ir::pyfrac::limit_denominator(p, 99)?;
+    if q % 2 == 0 || (n as f64 / q as f64 - p).abs() > 1e-12 * 1f64.max(p.abs()) {
+        return None;
+    }
+    i64::try_from(n).ok()
 }
 
 /// x ** p for a compile-time constant p, exactly as `interp.powc` (and the compiled code) does it.
