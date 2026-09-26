@@ -1,14 +1,281 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+//! fermium-ir: the typed intermediate representation, the boundary between the checker and the back ends
+//! (spec §B4). A port of `fermium/ir.py` and `fermium/types.py` from Fermium 1.5.
+//!
+//! The checker turns the AST into this IR. Every expression has a type, plus display-only facts: significant
+//! figures (`sf`, None = exact), the unit the user wrote (`hint`, used when printing) and whether the value came
+//! straight from a literal (`direct`). Units are gone here: every number is in SI base units, so a back end never
+//! sees a unit. Variables, functions and lambdas are indices into the module's tables, which suits both the
+//! evaluator and the LLVM back end.
+pub mod dim;
+pub mod types;
+
+pub use dim::{Dim, DIMLESS};
+pub use types::{DExpr, DimVar, Ty, Unifier};
+
+/// A unit remembered for display: its name, SI factor and offset (°C), and dimension.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Hint {
+    pub name: String,
+    pub factor: f64,
+    pub offset: f64,
+    pub dim: Dim,
+}
+
+pub type SymId = usize;
+pub type FuncId = usize;
+pub type LambdaId = usize;
+
+/// Where a variable lives: a function's local, module-level, or a REPL arena slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Storage {
+    Local,
+    Global,
+    Arena,
+}
+
+#[derive(Clone, Debug)]
+pub struct Sym {
+    pub name: String,
+    pub ty: Ty,
+    pub storage: Storage,
+    pub func: Option<FuncId>,
+    pub sf: Option<u32>,
+    pub hint: Option<Hint>,
+    pub direct: u8,
+    pub slot: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmpOp {
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
+#[derive(Clone, Debug)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub ty: Ty,
+    pub sf: Option<u32>,
+    pub hint: Option<Hint>,
+    /// 0: computed; 1..: came from a literal (the Python checker's `direct` codes, D11/D242).
+    pub direct: u8,
+    pub line: u32,
+}
+
+#[derive(Clone, Debug)]
+pub enum ExprKind {
+    Const(f64),
+    Bool(bool),
+    Str(String),
+    Var(SymId),
+    /// + - * / on numbers, or element by element on lists (broadcasting a scalar).
+    Bin(BinOp, Box<Expr>, Box<Expr>),
+    /// a ** p with p a compile-time constant.
+    PowC(Box<Expr>, f64),
+    Pow(Box<Expr>, Box<Expr>),
+    Neg(Box<Expr>),
+    Cmp(CmpOp, Box<Expr>, Box<Expr>),
+    /// `a ≈ b` (D260): rtol, atol (absolute tolerance or None).
+    Approx { a: Box<Expr>, b: Box<Expr>, rtol: f64, atol: Option<Box<Expr>> },
+    Logic { and: bool, a: Box<Expr>, b: Box<Expr> },
+    Not(Box<Expr>),
+    Call(FuncId, Vec<Expr>),
+    /// A scalar function applied element by element over list arguments (D191).
+    Map { func: FuncId, args: Vec<Expr>, list_pos: Vec<usize> },
+    Builtin(String, Vec<Expr>),
+    List(Vec<Expr>),
+    Vec(Vec<Expr>),
+    VecElem(Box<Expr>, usize),
+    /// A copy of a vector or matrix with one entry replaced (D195).
+    VecSet { v: Box<Expr>, idxs: Vec<(Expr, usize, usize)>, value: Box<Expr> },
+    /// Entries picked by run-time indexes: idxs (index, size, stride), offsets of the result.
+    VecIndex { v: Box<Expr>, idxs: Vec<(Expr, usize, usize)>, offs: Vec<usize> },
+    Index(Box<Expr>, Box<Expr>),
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// `value where name = e, …`.
+    Let(Vec<(SymId, Expr)>, Box<Expr>),
+    Integral { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr> },
+    /// Σ(body for k from lo to hi step st) (D51).
+    Sum { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr>, step: Option<Box<Expr>> },
+    /// The x in [lo, hi] where lam(x) = 0 (D32).
+    Root { lam: LambdaId, lo: Box<Expr>, hi: Box<Expr> },
+    /// A solution component (or its derivative) at time t.
+    SolEval { sol: SymId, comp: usize, t: Box<Expr>, use_dy: bool },
+    /// All samples of a solution component (what = 0) or its times (what = 1) as a list.
+    SolList { sol: SymId, comp: usize, what: u8 },
+    Load(usize),
+    Table(Vec<Expr>),
+    Column(Box<Expr>, usize),
+    /// u(x, t) of a PDE solution (D83).
+    PdeEval { sol: SymId, xa: f64, xb: f64, m: usize, comp0: usize, x: Box<Expr>, t: Box<Expr>, which: u8 },
+    /// ± and the parts of an uncertain value (D120–D124).
+    Uncertain(Box<Expr>, Box<Expr>),
+}
+
+/// One item of a print statement.
+#[derive(Clone, Debug)]
+pub enum PrintItem {
+    Num(Expr, usize),
+    List(Expr, usize),
+    Complex(Expr, usize),
+    Vec(Expr, usize),
+    /// A vector whose components have different units: one format per component.
+    MixedVec(Expr, Vec<usize>),
+    Mat(Expr, usize),
+    ComplexList(Expr, usize),
+    TextList(Expr),
+    Bool(Expr),
+    /// A constant text (index into the text table).
+    Text(usize),
+    TextVar(Expr),
+    Data(Expr, usize),
+}
+
+#[derive(Clone, Debug)]
+pub struct Stmt {
+    pub kind: StmtKind,
+    pub line: u32,
+}
+
+#[derive(Clone, Debug)]
+pub enum StmtKind {
+    Assign(SymId, Expr),
+    IndexAssign(SymId, Expr, Expr),
+    Push(SymId, Expr),
+    Clear(SymId),
+    If(Expr, Vec<Stmt>, Vec<Stmt>),
+    While(Expr, Vec<Stmt>),
+    /// for sym from lo to hi step st (inclusive, lo + i·st); parallel: blocks as in par_blocks (D152).
+    For { sym: SymId, lo: Expr, hi: Expr, step: Option<Expr>, body: Vec<Stmt>, parallel: bool },
+    ForIn(SymId, Expr, Vec<Stmt>),
+    Print(Vec<PrintItem>),
+    Plot(usize, Vec<Expr>),
+    Solve { sol: SymId, rhs: LambdaId, y0: Vec<Expr>, t0: Expr, t1: Expr, step: Option<Expr>, method: String,
+            rtol: Option<Expr> },
+    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId },
+    Return(Option<Expr>),
+    Break,
+    Continue,
+    Expr(Expr),
+    Assert(Expr, usize),
+    Animate { anim_id: usize, sol: SymId, xa: f64, xb: f64 },
+    Propagate { n: Option<Expr>, body: Vec<Stmt>, outs: Vec<SymId> },
+}
+
+/// A monomorphic instance of a user function.
+#[derive(Clone, Debug)]
+pub struct Func {
+    pub name: String,
+    pub params: Vec<SymId>,
+    pub ret_ty: Ty,
+    pub body: Vec<Stmt>,
+    pub locals: Vec<SymId>,
+    pub sf: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LambdaKind {
+    /// f(x): integrands, sums, roots, plot samplers.
+    Scalar,
+    /// f(t, y) → dy for an ODE.
+    Ode,
+    /// f(params, columns) → residuals for a fit.
+    Model,
+}
+
+/// A nested function; `captures` are locals of the enclosing function passed through its environment.
+#[derive(Clone, Debug)]
+pub struct Lambda {
+    pub kind: LambdaKind,
+    pub name: String,
+    pub params: Vec<SymId>,
+    pub captures: Vec<SymId>,
+    pub body: Vec<Expr>,
+    pub state: Vec<SymId>,
+    pub col_syms: Vec<SymId>,
+    pub param_syms: Vec<SymId>,
+}
+
+/// How a printed number is shown (the Python checker's `tables.fmts` entries).
+#[derive(Clone, Debug)]
+pub struct Fmt {
+    pub dim: Dim,
+    pub hint: Option<Hint>,
+    pub sf: Option<u32>,
+    pub direct: u8,
+    pub echo: bool,
+    /// The natural-unit system the value was computed in, if not SI (D60).
+    pub nat: Option<String>,
+}
+
+/// Runtime tables shared by the back ends (printing, plots, data, fits).
+#[derive(Clone, Debug, Default)]
+pub struct Tables {
+    pub fmts: Vec<Fmt>,
+    pub texts: Vec<String>,
+    pub plots: Vec<serde_like::Json>,
+    pub loads: Vec<serde_like::Json>,
+    pub fits: Vec<serde_like::Json>,
+}
+
+/// A checked program: main, the function instances, lambdas, symbols and tables.
+#[derive(Clone, Debug, Default)]
+pub struct Module {
+    pub main: Vec<Stmt>,
+    pub funcs: Vec<Func>,
+    pub lambdas: Vec<Lambda>,
+    pub syms: Vec<Sym>,
+    pub tables: Tables,
+    pub uses_uncertainty: bool,
+}
+
+/// The blocks [start, end) of a parallel for with n iterations: the same for any number of threads, so sums
+/// are added in the same order on every machine (D152).
+pub fn par_blocks(n: usize) -> Vec<(usize, usize)> {
+    const PAR_BLOCKS: usize = 256;
+    let nb = n.min(PAR_BLOCKS);
+    if nb == 0 {
+        return vec![];
+    }
+    let (q, r) = (n / nb, n % nb);
+    let start: Vec<usize> = (0..=nb).map(|k| k * q + k.min(r)).collect();
+    (0..nb).map(|k| (start[k], start[k + 1])).collect()
+}
+
+/// A small JSON-like value for the runtime tables (plots, loads, fits) without a serde dependency.
+pub mod serde_like {
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum Json {
+        Null,
+        Bool(bool),
+        Num(f64),
+        Str(String),
+        List(Vec<Json>),
+        Obj(Vec<(String, Json)>),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn parallel_blocks_match_python() {
+        // ir.par_blocks(10) == [(0,1),(1,2),…]; par_blocks(1000) has 256 blocks of 3 or 4
+        assert_eq!(super::par_blocks(3), vec![(0, 1), (1, 2), (2, 3)]);
+        let b = super::par_blocks(1000);
+        assert_eq!(b.len(), 256);
+        assert_eq!(b[0], (0, 4));
+        assert_eq!(b.last().unwrap().1, 1000);
     }
 }
