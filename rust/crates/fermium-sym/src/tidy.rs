@@ -799,7 +799,11 @@ fn compare(a: &T, b: &T) -> Ordering {
             (Some(a), Some(b)) if a.1 != 1 || b.1 != 1 => a.cmp(&b),
             _ => x.total_cmp(y),
         },
-        (T::Sym(x), T::Sym(y)) => x.cmp(y),
+        // a positive symbol has more assumptions, so a longer _hashable_content: it sorts after the real ones
+        (T::Sym(x), T::Sym(y)) => POSITIVE.with(|p| {
+            let p = p.borrow();
+            (p.contains(x), x).cmp(&(p.contains(y), y))
+        }),
         _ => {
             let (aa, ab) = (args(a), args(b));
             if aa.len() != ab.len() {
@@ -887,6 +891,19 @@ pub fn tidy(e: &A::Expr) -> A::Expr {
         best = shorter(out, &best);
     }
     best
+}
+
+thread_local! {
+    /// the names SymPy saw as positive symbols (an indefinite integral's positive constants, D37)
+    static POSITIVE: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// sympy_best with the names SymPy took as positive symbols (they sort after the others).
+pub fn sympy_best_with(e: &A::Expr, positive: &[String]) -> A::Expr {
+    POSITIVE.with(|p| *p.borrow_mut() = positive.to_vec());
+    let r = sympy_best(e);
+    POSITIVE.with(|p| p.borrow_mut().clear());
+    r
 }
 
 /// v1's choice for an antiderivative: the shorter (as SymPy writes it) of SymPy's answer and its simplify();
