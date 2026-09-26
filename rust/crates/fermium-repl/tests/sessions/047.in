@@ -1,0 +1,3 @@
+T = 20 °C
+print T
+T in K

@@ -338,7 +338,6 @@ impl Checker {
         self.fmt(&tf)
     }
 
-
     // ============================================================ solve
     pub fn s_solve(&mut self, s: &A::Stmt, sv: &A::Solve, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         if sv.lowest.is_some() {
@@ -951,7 +950,7 @@ impl Checker {
                     let sym = if u.name != "" && u.name != "1" { format!(" {}", u.name) } else { String::new() };
                     let shown = format!("{}{sym}", crate::units::format_number(scale / u.factor, Some(3)));
                     self.warn(format!("this absolute tolerance is {times} the largest starting value in its units ({shown}), \
-                                       so the error control is effectively off and the result may be far off"), *span,
+                                       so the error control is effectively off and the result may be far off"), A::Span { length: 1, ..*span },
                               Some("an absolute tolerance is the size of error you accept; make it much smaller than the \
                                     values, e.g. 10⁻⁶ of them (check the unit: mm, not km?)".into()));
                 }
@@ -1083,45 +1082,9 @@ impl Checker {
         Ok((self.module.lambdas.len() - 1, tid))
     }
 
-
     // ============================================================ solutions as values (checker.py)
-    /// Is this expression an ODE solution (a name bound to one, or its prime / component)? Looked up without
-    /// checking it, to route fields, primes and indexing here.
-    pub fn is_sol_expr(&self, e: &A::Expr, ctx: &Ctx) -> bool {
-        match &e.kind {
-            K::Name { name } => matches!(self.lookup(ctx.scope, name), Some((Binding::Sol(_), _))),
-            K::Prime { target, .. } => self.is_sol_expr(target, ctx),
-            K::Field { target, name } => {
-                matches!(name.as_str(), "x" | "y" | "z" | "re" | "im") && self.is_sol_expr(target, ctx)
-            }
-            _ => false,
-        }
-    }
-
-    /// Is this prime handled here: a state variable of an ODE right side (x' inside the equation), or the
-    /// derivative of a solution?
-    pub fn is_prime_mine(&self, target: &A::Expr, order: i64, ctx: &Ctx) -> bool {
-        if let K::Name { name } = &target.kind {
-            let key = format!("{name}{}", primes(order as usize));
-            if let Some((Binding::Sym(_), _)) = self.lookup(ctx.scope, &key) {
-                return true;
-            }
-        }
-        self.is_sol_expr(target, ctx)
-    }
-
-    /// x' of a solution, or a state variable inside an ODE right side (Python e_Prime, first part).
-    pub fn sol_prime(&mut self, e: &A::Expr, target: &A::Expr, order: i64, ctx: &mut Ctx) -> CResult<Checked> {
-        if let K::Name { name } = &target.kind {
-            let key = format!("{name}{}", primes(order as usize));
-            if let Some((Binding::Sym(b), _)) = self.lookup(ctx.scope, &key) {
-                return self.var_ref(b, ctx, e).map(Checked::Val);
-            }
-        }
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else {
-            return Err(self.err("' (prime) means a derivative; it only works on functions and ODE solutions", e.span,
-                                Some("to differentiate a formula write d/dt (formula)".into())));
-        };
+    /// x' of a solution (Python e_Prime, the SolRef part; called from calculus.rs e_prime).
+    pub fn sol_prime_of(&mut self, vid: SolViewId, order: i64) -> Checked {
         let v = self.sols[vid].clone();
         let order_u = order as usize;
         let tp = DExpr::of(DIMLESS).mul(&v.tdim.pow(Rational64::from_integer(order)));
@@ -1131,12 +1094,11 @@ impl Checker {
                            n: v.n, stride: v.stride, cplx: v.cplx, hint: v.hints.get(total).cloned().flatten(),
                            hints: v.hints.clone(), thint: v.thint.clone(), sf: v.sf };
         self.sols.push(nv);
-        Ok(Checked::Sol(self.sols.len() - 1))
+        Checked::Sol(self.sols.len() - 1)
     }
 
     /// r.x, z.re, x.t / x.times, x.values of a solution (Python e_Field, the SolRef part).
-    pub fn sol_field(&mut self, e: &A::Expr, target: &A::Expr, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else { unreachable!() };
+    pub fn sol_field(&mut self, e: &A::Expr, vid: SolViewId, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
         let v = self.sols[vid].clone();
         if (matches!(name, "x" | "y" | "z") && v.n > 1 && !v.cplx) || (matches!(name, "re" | "im") && v.cplx) {
             let k = match name {
@@ -1193,11 +1155,7 @@ impl Checker {
     }
 
     /// r[end], x[3] of a solution: an element of its values (Python e_Index, the SolRef part).
-    pub fn sol_index(&mut self, e: &A::Expr, target: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
-        if matches!(index.kind, K::Slice { .. }) {
-            return Err(self.not_ported("a slice of an ODE solution", e.span));
-        }
-        let Checked::Sol(vid) = self.expr_any(target, ctx)? else { unreachable!() };
+    pub fn sol_index(&mut self, vid: SolViewId, e: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
         let v = self.sols[vid].clone();
         let line = e.span.line;
         let index_of = |c: &mut Checker, vals: &I::Expr, ctx: &mut Ctx| -> CResult<I::Expr> {
@@ -1319,6 +1277,32 @@ fn set_sing_fmt(body: &mut [I::Expr], fmt: usize) {
                     *f = fmt;
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use fermium_syntax::ast as A;
+
+    fn parse_expr(s: &str) -> A::Expr {
+        let (prog, _) = fermium_syntax::parse(&format!("zz = {s}\n"), &[]).unwrap();
+        match &prog.body[0].kind {
+            A::StmtKind::Assign { value, .. } => value.clone(),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn isolated_right_sides_match_python() {
+        // python3 -c "from fermium import calculus as C ...; C.to_source(C.isolate(l, r, x''), pretty=False)"
+        let cases = [("-ħ²/(2*m) * ψ''  + V(x) ψ", "E ψ", "ψ", "-(psi V(x) - E psi)/(-hbar^2/(2*m))"),
+                     ("-ħ^2 / (2 m_e) * ψ'' + V0 ψ", "E ψ", "ψ", "-(V0 psi - E psi)/(-hbar^2/(2 m_e))"),
+                     ("m x''", "-k x - b x' + F0 cos(ω t)", "x", "(-k x - b x' + F0 cos(omega t))/m")];
+        for (l, r, x, want) in cases {
+            let t = fermium_sym::build::prime(fermium_sym::build::name(x), 2);
+            let got = fermium_sym::isolate(&parse_expr(l), &parse_expr(r), &t).unwrap();
+            assert_eq!(fermium_sym::to_source_p(&got, false), want);
         }
     }
 }

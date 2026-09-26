@@ -1,0 +1,4 @@
+print "hello"
+"text"
+print true
+1 < 2

@@ -201,6 +201,7 @@ pub struct CheckOptions {
     pub source_name: String,
 }
 
+#[derive(Clone)] // the REPL rolls a failed input back to a copy (D220)
 pub struct Checker {
     pub diags: Diagnostics,
     pub u: Unifier,
@@ -254,12 +255,12 @@ pub struct Checker {
     pub fmt_dims: Vec<DExpr>,
     /// the parallel for loops being checked (M5, D152): (owner, private symbols)
     pub par_stack: Vec<(Owner, Vec<I::SymId>)>,
-    /// calculus: derived functions made so far (calculus.rs)
-    pub calc: crate::calculus::CalcState,
     /// solutions of ODEs, eigenvalue problems and PDEs (solve.rs)
     pub solve: crate::solve::SolveTables,
     /// data sets, fits, plots and animations (data.rs)
     pub data: crate::data::DataTables,
+    /// calculus: derived functions made so far (calculus.rs)
+    pub calc: crate::calculus::CalcState,
 }
 
 impl Checker {
@@ -301,9 +302,9 @@ impl Checker {
             par_stack: vec![],
             fmt_dims: vec![],
             nodes: HashMap::new(),
-            calc: Default::default(),
             solve: Default::default(),
             data: Default::default(),
+            calc: Default::default(),
         };
         c.root = c.new_scope(None, "root");
         for k in units::constants() {
@@ -580,10 +581,10 @@ impl Checker {
             K::Continue => self.s_continue(s, ctx),
             K::Assert { cond, message } => self.s_assert(s, cond, message.as_deref(), ctx),
             K::IndexAssign { .. } => self.s_index_assign(s, ctx),
+            K::Solve(sv) => self.s_solve(s, sv, ctx),
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),
-            K::Solve(sv) => self.s_solve(s, sv, ctx),
             K::Fit { .. } => self.s_fit(s, ctx),
             K::Plot { .. } => self.s_plot(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),

@@ -17,6 +17,14 @@ codegen-units = 16
 [profile.dev]
 opt-level = 1
 
+# the browser playground's module (web/build.py: cargo build --profile wasm --target wasm32-unknown-unknown
+# -p fermium-wasm): whole-program LTO and no symbol names, for a smaller download
+[profile.wasm]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = true
+
 # for iterating: release speed without LTO (cargo build --profile fast → target/fast/fermium)
 [profile.fast]
 inherits = "release"

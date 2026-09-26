@@ -13,6 +13,7 @@ mod eval_solve;
 mod eval_unc;
 mod eval_vecmat;
 pub mod printer;
+pub mod session;
 #[cfg(feature = "llvm")]
 pub mod llvm;
 

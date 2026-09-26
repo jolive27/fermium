@@ -1,0 +1,3 @@
+x(t) = 0.1 m cos(10 t / 1 s)
+v = d/dt x
+print v(0 s)

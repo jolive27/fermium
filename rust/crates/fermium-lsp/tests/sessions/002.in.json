@@ -1,0 +1,177 @@
+[
+[
+"textDocument/didOpen",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"languageId": "fermium",
+"version": 1,
+"text": "c_w = 4186 J/(kg K)\nQ = c_w * 1 kg * 10 degC\nE = h * 1 Hz\ny = 3 km\nz = 2𝑖 + 3\nw = z + 1 m\n"
+}
+},
+true
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 2,
+"character": 4
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 3,
+"character": 7
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 3,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 1,
+"character": 17
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 7
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 2
+},
+"contentChanges": [
+{
+"range": {
+"start": {
+"line": 5,
+"character": 8
+},
+"end": {
+"line": 5,
+"character": 11
+}
+},
+"text": "1"
+}
+]
+},
+true
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 5,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 3,
+"character": 1
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 3
+},
+"contentChanges": [
+{
+"range": {
+"start": {
+"line": 6,
+"character": 0
+},
+"end": {
+"line": 6,
+"character": 0
+}
+},
+"text": "whi"
+}
+]
+},
+true
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 6,
+"character": 3
+}
+},
+false
+],
+[
+"textDocument/didSave",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+}
+},
+true
+]
+]

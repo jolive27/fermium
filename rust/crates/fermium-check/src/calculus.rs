@@ -152,14 +152,7 @@ impl Checker {
                 let d = self.derived_info(info, 0, order, e.span)?;
                 Ok(self.func_ref(d))
             }
-            Checked::Sol(view) => {
-                let v = self.sols[view].clone();
-                let p = Rational64::from_integer(order);
-                let nv = SolView { comp: v.comp + order as usize * v.stride, dim: v.dim.div(&v.tdim.pow(p)),
-                                   name: format!("{}{}", v.name, "'".repeat(order as usize)), ..v.clone() };
-                self.sols.push(nv);
-                Ok(Checked::Sol(self.sols.len() - 1))
-            }
+            Checked::Sol(view) => Ok(self.sol_prime_of(view, order)), // solve.rs
             Checked::Val(_) => Err(self.err("' (prime) means a derivative; it only works on functions and ODE solutions",
                                             e.span, Some("to differentiate a formula write d/dt (formula)".into()))),
         }

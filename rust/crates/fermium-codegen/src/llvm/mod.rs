@@ -92,7 +92,7 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
                   (t2 - t1).as_secs_f64() * 1e3, t2.elapsed().as_secs_f64() * 1e3);
     }
     Ok(match ctx.error.take() {
-        Some(e) => Err(e),
+        Some(e) => Err(ctx.locate(e)),
         None => Ok(()),
     })
 }

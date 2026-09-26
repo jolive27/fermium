@@ -1,0 +1,120 @@
+[
+[
+"textDocument/didOpen",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"languageId": "fermium",
+"version": 1,
+"text": "import mechanics\nv = [1, 2, 3] m/s\nf(x) = 3 x² / 1 s\nk = mechanics.\nq = (1 +\n"
+}
+},
+true
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 1,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 2,
+"character": 0
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 0,
+"character": 9
+}
+},
+false
+],
+[
+"textDocument/completion",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 3,
+"character": 14
+}
+},
+false
+],
+[
+"textDocument/didChange",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm",
+"version": 2
+},
+"contentChanges": [
+{
+"text": "import mechanics\nT = mechanics.pendulum_period(1 m)\nprint T\n"
+}
+]
+},
+true
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 1,
+"character": 16
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 1,
+"character": 5
+}
+},
+false
+],
+[
+"textDocument/hover",
+{
+"textDocument": {
+"uri": "file:///tmp/fermium-lsp-test/a.fm"
+},
+"position": {
+"line": 1,
+"character": 0
+}
+},
+false
+]
+]

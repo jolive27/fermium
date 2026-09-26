@@ -1,0 +1,16 @@
+line 1: '2 g' is ambiguous: right after a number, g is a unit (grams), but g is also your variable g
+    v = √(2 g h)
+            ^
+  hint: write  2*g  for 2 × your variable g, or  2 [g]  for the unit
+line 1: v isn't defined
+    v
+    ^
+  hint: give it a value on an earlier line, e.g.  v = 2.5 m  (with its own unit)
+line 1: 'km/h' isn't a unit: in Fermium h is Planck's constant, not the hour
+    v in km/h
+            ^
+  hint: write km/hr for km per hour
+line 1: v isn't defined
+    print v to 2 digits
+          ^
+  hint: give it a value on an earlier line, e.g.  v = 2.5 m  (with its own unit)

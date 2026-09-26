@@ -221,9 +221,22 @@ pub mod cmath {
 }
 
 /// The seconds since the program started (time.perf_counter in v1: any fixed origin).
+#[cfg(not(target_arch = "wasm32"))]
 fn clock() -> f64 {
     static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
     START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
+}
+
+/// The browser playground (fermium-wasm): std::time::Instant doesn't exist on wasm32-unknown-unknown; the page
+/// provides performance.now() in milliseconds as the import `env.fermium_now_ms`.
+#[cfg(target_arch = "wasm32")]
+fn clock() -> f64 {
+    #[link(wasm_import_module = "env")]
+    extern "C" {
+        fn fermium_now_ms() -> f64;
+    }
+    // SAFETY: a JS function of no arguments returning a number
+    unsafe { fermium_now_ms() / 1000.0 }
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {

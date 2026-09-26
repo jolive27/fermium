@@ -1,0 +1,12 @@
+line 1: unexpected character '$' (Dollar Sign)
+    $$$
+    ^
+  hint: remove it, or check the cheat sheet for the symbols Fermium understands
+line 1: didn't expect ')' here
+    )
+    ^
+line 1: unexpected '='
+    x = = 2
+        ^
+  hint: use == to compare two values
+3

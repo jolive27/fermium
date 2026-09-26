@@ -86,10 +86,6 @@ impl Checker {
             K::Sqrt { operand, root } => self.e_sqrt(e, operand, *root as u32, ctx)?,
             K::Abs { operand: x } => self.e_abs(e, x, ctx)?,
             K::ListLit { items } => self.e_list_lit(e, items, ctx)?,
-            // r[end] of an ODE solution (solve.rs)
-            K::Index { target, index: Some(index) } if self.is_sol_expr(target, ctx) => {
-                self.sol_index(e, target, index, ctx)?
-            }
             K::Index { .. } => self.e_index(e, ctx)?,
             K::Slice { .. } => self.e_slice(e)?,
             K::End => self.e_end(e)?,
@@ -97,9 +93,6 @@ impl Checker {
             K::Load { path } => self.e_load(e, path)?,
             K::Table { names, items } => self.e_table(e, names, items, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
-            // x.t, x.values, r.x, x' and r[end] of an ODE solution (solve.rs); other uses belong to other modules
-            K::Field { target, name } if self.is_sol_expr(target, ctx) => return self.sol_field(e, target, name, ctx),
-            K::Prime { target, order } if self.is_prime_mine(target, *order, ctx) => return self.sol_prime(e, target, *order, ctx),
             K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
             K::Field { target, name } => return self.e_field(e, target, name, ctx),
             K::Prime { target, order } => return self.e_prime(e, target, *order, ctx),
@@ -194,6 +187,7 @@ impl Checker {
                 let ex = r.extra();
                 ex.abs_literal = Some((x, hint_of(&u)));
                 ex.abs_at = Some((e.span.line, e.span.col));
+                self.abs_at_len.insert((e.span.line, e.span.col), e.span.length);
             }
         }
         Ok(r)

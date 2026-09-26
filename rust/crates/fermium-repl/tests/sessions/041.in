@@ -1,0 +1,2 @@
+units natural(ħ = c = 1)
+print 1 GeV

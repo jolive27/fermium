@@ -1052,3 +1052,21 @@ divergence needs it; then it goes in DIVERGENCES.md with the case ids).
 - **Why:** a divergence that is only listed could hide a later regression in the same case (the integral that
   gave the true value starts giving something else). Checking the recorded output keeps the scoreboard honest.
 - **Not divergences:** features that aren't ported yet (e.g. `use python` until B5.14) stay failures.
+
+## D266. The playground runs the Rust compiler as WebAssembly, through a C ABI without JS glue (B5.12)
+- **What:** `rust/crates/fermium-wasm` (a cdylib for `wasm32-unknown-unknown`, built with `--profile wasm`: release,
+fat LTO, stripped; 3.3 MB, 1.1 MB gzipped) runs parse → check → the tree-walking back end, as `fermium run
+--backend interp`. It exports `alloc`/`dealloc`/`put_file`/`run_program`/`panic_message`/`partial_stdout` over
+numbers and byte buffers; `run_program` returns length-prefixed JSON. `web/fermium.js` is the only JS that
+talks to it (shared by the worker and the Node tests); each run instantiates the compiled module afresh, so the
+runtime's per-process state (warnings shown once, RNG, the recursion check's base) behaves as in separate `fermium
+run` processes. Files go through `fermium_runtime::vfs` (the file system natively, an in-memory map on wasm32), and
+run-time warnings through `vfs::stderr_line` (captured by the driver). Shared crates change only behind
+`cfg(target_arch = "wasm32")` (no threads for the parser's big stack, `clock()` from the page) plus the two
+routings through `vfs`, which are identical natively.
+- **Why:** one implementation everywhere (the page prints what `fermium run` prints; `web/test/compare_native.js`
+checks every example in CI); a 3 MB download instead of Pyodide's ~50 MB; no Python/SciPy/SymPy loading on demand.
+- **Alternatives:** wasm-bindgen (generated JS glue and a CLI tool pinned to the crate's version: more build-time
+parts for six functions); `wasm32-wasip1` with a WASI shim for files and stderr (a JS shim or a dependency either
+way, and std's WASI file layer for three files); keeping one instance across runs (needs every thread-local reset;
+a trap in the middle of a run leaves Rust state inconsistent); the LLVM back end (LLVM doesn't run in the browser).

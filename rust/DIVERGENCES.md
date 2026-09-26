@@ -127,6 +127,27 @@ link compiler-builtins' cbrt), checked bit for bit on 200 000 random doubles. be
 are ports of v1's own algorithms (bit-identical). Like v1, the last bits of the libm functions can differ between
 platforms; the conformance goldens come from Linux.
 
+## The browser playground (fermium-wasm): playground only, not `fermium run`
+
+The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
+prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+
+- **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
+  gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on
+  non-Unix targets (`eval_core.rs`, `cmath`), and Rust's `sin`, `exp`, `powf`, … come from the pure-Rust libm
+  (musl's algorithms) instead of glibc. So a number printed to 16–17 digits can differ in its last digits from
+  Linux; at the default 3 significant figures, or `to 12 digits`, nothing changes in practice.
+- **Recursion depth:** no threads, so no 512 MB program thread: programs run on the browser's call stack
+  (about 450 levels of a simple recursive function in Chromium's worker, about 800 in Node). Deeper recursion
+  stops with "this program recurses or nests too deeply for the browser playground" (the v1 Pyodide page said the
+  same). The evaluator's own recursion check (`STACK_LIMIT`) is set for the module's 32 MB shadow stack.
+- **Files:** `load` reads from an in-memory file system holding the bootcamp's and examples' data files; plots are
+  written there and handed to the page. `import` of your own `.fm` files isn't possible (the standard library
+  works: it is embedded).
+- **`clock()`** is `performance.now()`.
+- Errors and warnings are shown without the file name (`line 5: …`), as v1's playground showed them.
+
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
 - Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
@@ -168,6 +189,82 @@ When a run-time error happens in several iterations of a `parallel for`, v1's co
 of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
 for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
 iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
+
+## PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)
+
+- v1: the heat equation after a jump (`D = 1e-4 m²/s`, `u(x, 0 s) = 0 K`, `u(0 m, t) = 80 K`, `u(1 m, t) = 0 K`,
+  grid 400) prints `u(0.5 mm, 0.002 s)` = 55.0 K and `u(1 mm, 0.01 s)` = 42.2 K where 80 K erfc(x / (2√(D t)))
+  gives 34.3 K and 38.4 K, with no warning. v1 controls the time step (D130) but not the grid: before the
+  diffusion length √(D t) spans a few grid cells, the value between the boundary and the first nodes is an
+  interpolation.
+- v2: the values are the same, but a first-order PDE whose Dirichlet boundary value differs from its initial value
+  at t0 (the D206 jump) is solved a second time on a grid half as fine, with the same time steps. `u(x, t)` compares
+  the two there, and where they differ by more than 3·10⁻³ of the solution's range (a fine-grid error of 10⁻³ of the
+  range for the second-order scheme, the tolerance of the time-step control), it warns once per solve:
+
+      warning: line 5: the grid is too coarse for this PDE at x = 0.000500 m, t = 0.00200 s: the value there changes
+      by 14% of the solution's range when the grid is made half as fine (a sharp front, a short wavelength, or the
+      time right after a jump needs more grid points); raise  grid  (it is 400)
+
+  The check costs about one more march on half the grid. PDEs without a jump (wave packets, smooth initial values)
+  are not checked, and ∂u/∂x, ∂u/∂t are not checked.
+- Tests: `pde.rs` `heat_step_very_early_time_is_accurate_or_warned` (the four points of red team round 7 #2 against
+  erfc: each is within 2·10⁻³ of the range or flagged; t = 50 s is accurate and not flagged; no check without a jump).
+- Affected cases (a warning v1 didn't give): 36c9c5b55398 (the red team's 55.004 K), 6781a0d7f2f0 (34.239 K where
+  erfc gives 34.34 K: off by 1.3·10⁻³ of the range, over the tolerance).
+
+## The command-line tool: doctor, --help, --time, build (fermium-cli)
+
+The subcommands, argument errors, help texts, messages and exit codes are v1's (`fermium/cli.py`), compared
+with `python3 -m fermium …` for `check` (ok, error, warnings, parse error, missing file, a folder, extra
+arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argument. The differences:
+
+- `fermium doctor` (spec §B7): Fermium 2 is one self-contained program, so doctor no longer checks Python,
+  llvmlite, NumPy, SciPy, SymPy, matplotlib, pygls, ipykernel or a C compiler. It reports the version (and
+  where the program is), the LLVM version built into it, the platform, that nothing else is needed, that the
+  REPL, language server and Jupyter kernel are built in, that `fermium build` isn't there yet, and it still
+  compiles and runs the test program (`g = 9.70 m/s²`). Same ✓/✗ layout and the same closing lines.
+- `fermium run` also takes `--backend auto|llvm|interp` and `--base-dir DIR` (the conformance runner uses
+  them); `--interp` is `--backend interp`. Its help and usage list them.
+- `fermium run --time` prints `time: parse … ms, check … ms, run … ms (codegen, JIT and running)`: the back end
+  is one number (v1 split it into codegen, LLVM+JIT and run).
+- `fermium build` (milestone B5.10, not done yet) says so and exits with 1; its help says "not yet in this
+  version" instead of "needs a C compiler".
+- `fermium --version` prints `fermium 2.0.0-dev (Rust)`.
+
+## The REPL (fermium-repl)
+
+The prompt loop is repl.py's, line for line: the banner, `fm> ` and `... `, blocks (a blank line ends one at a
+terminal; indentation, `else`/`elif` and unfinished input continue one from a pipe), `:help`, `:vars`,
+`:quit`, the terminal-command hint, `\name` expansion on Enter, errors in the one-line form with a caret, and a
+failed input leaving no names behind (D220: the checker is rolled back to a copy). 53 scripted sessions (every
+session of tests/test_repl.py plus 30 more) print exactly what v1 prints
+(`cargo test -p fermium-repl`, fixtures from rust/tools/repl_sessions.py). Differences:
+
+- Line editing and history are a small editor of Fermium's own over the terminal (termios through the libc
+  crate) instead of GNU readline/libedit: arrows, Home/End, Ctrl-A/E/K/U/W/L, Up/Down history saved in
+  `~/.fermium_history` (v1's file; a libedit file from macOS is read too), at most 1000 entries kept.
+  Tab completes `\name` (a unique match is replaced, a common prefix is extended, several matches are listed
+  as `\varphi φ`); Tab on a blank line indents by four spaces (readline did nothing). Long lines that wrap
+  past the terminal width are redrawn less neatly than readline does.
+- Inputs run on the tree-walker (the LLVM back end doesn't compile arena variables yet), so an input's
+  output is the same as `fermium run --backend interp` would print.
+- `±` is refused by the checker as in `fermium run` (v1's REPL refused it with its own message).
+
+## The language server (fermium-lsp)
+
+`fermium lsp` is lsp.py's server without pygls: the same diagnostics (errors and warnings, UTF-16 ranges, the
+hint on a second line), hover (variables with their units, functions with the units of their result, ODE
+solutions, modules, constants, units, keywords; everything above an error still hovers), completion (`\name`
+symbols, names in scope with their hover as detail, a module's members after `name.`, keywords) and the A1
+quick fix (the edit of `fermium fmt --fix`). Four scripted sessions (the two of tests/test_lsp.py plus
+warnings, astral characters, incremental edits, a parse error and modules) get exactly v1's replies
+(`cargo test -p fermium-lsp`, fixtures from rust/tools/lsp_session.py). Differences:
+
+- The initialize reply lists only the capabilities the server has (pygls lists more), with
+  `textDocumentSync` incremental as pygls's default.
+- After `shutdown` then `exit` the process exits with 0, as the protocol says (pygls exits with 1).
+- A file:// URI with %-escapes (a folder name with spaces) is decoded before imports are looked up there.
 
 ## Function instances are keyed by the shape and units of vector and matrix arguments
 

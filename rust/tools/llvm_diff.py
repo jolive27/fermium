@@ -61,6 +61,11 @@ def one(args):
     if not os.path.exists(mark):
         return case["area"], case["id"], "not-run", "", None
     oi, ei, erri, ci = RUN.run_binary(wi, path, case)
+    # lines that read the clock (the case's drop_prefixes, e.g. TIME_INNER) differ from run to run
+    drop = tuple(case.get("drop_prefixes") or ())
+    if drop:
+        ol = "".join(ln for ln in ol.splitlines(True) if not ln.startswith(drop))
+        oi = "".join(ln for ln in oi.splitlines(True) if not ln.startswith(drop))
     same = (ol, el, errl, cl) == (oi, ei, erri, ci)
     if same:
         return case["area"], case["id"], "agree", "", None

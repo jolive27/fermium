@@ -9,5 +9,6 @@ fermium-units = { path = "../fermium-units" }
 fermium-syntax = { path = "../fermium-syntax" }
 fermium-ir = { path = "../fermium-ir" }
 fermium-sym = { path = "../fermium-sym" }
+fermium-runtime = { path = "../fermium-runtime" }
 num-rational = "0.4"
 num-traits = "0.2"

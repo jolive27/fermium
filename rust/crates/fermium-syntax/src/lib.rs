@@ -10,6 +10,7 @@ pub mod lexer;
 pub mod parser;
 pub mod pyfmt;
 pub mod sexpr;
+pub mod symbols;
 #[rustfmt::skip]
 pub mod tables;
 pub mod unitrule;
@@ -63,6 +64,7 @@ pub fn parse_module(source: &str, after_id: u32) -> Result<(Program, Diagnostics
 
 /// Run `f` on a thread with a large stack: the parser is a recursive descent, and Fermium 1.5 accepts programs
 /// nested as deeply as Python's raised recursion limit allows (driver.py sets 20000 frames).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn with_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
     std::thread::Builder::new()
         .stack_size(1 << 30)
@@ -70,6 +72,12 @@ pub fn with_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static)
         .expect("a thread for the parser")
         .join()
         .unwrap_or_else(|e| std::panic::resume_unwind(e))
+}
+
+/// The browser playground (wasm32) has no threads: parse on the caller's stack (fermium-wasm sets a large one).
+#[cfg(target_arch = "wasm32")]
+pub fn with_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    f()
 }
 
 /// Fix mode (`fermium fmt --fix`, D235): the edits that rewrite unit/variable collisions, and the error the parse

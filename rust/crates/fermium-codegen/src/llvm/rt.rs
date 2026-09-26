@@ -101,12 +101,18 @@ pub const E_PENDING: i64 = -1;
 pub const E_INDEX: i64 = 1;
 pub const E_ASSERT: i64 = 4;
 pub const E_STEP0: i64 = 7;
+pub const E_RANGE: i64 = 12;
 pub const E_DEEP: i64 = 10;
+pub const E_PAR_ALIAS: i64 = 40;
+pub const E_SUM_STEP: i64 = 1007;
+pub const E_SUM_RANGE: i64 = 1012;
 
 /// What the compiled code runs against. `err` is first so the compiled code finds it at offset 0.
 #[repr(C)]
 pub struct Ctx<'m> {
     pub err: i32,
+    /// the program line that called into a module's code (D185), set by the compiled code (offset 4)
+    pub call_line: u32,
     pub module: &'m Module,
     printer: *mut (dyn Printer + 'm),
     pub error: Option<RunError>,
@@ -124,6 +130,7 @@ impl<'m> Ctx<'m> {
     pub fn new(module: &'m Module, printer: &mut (dyn Printer + 'm)) -> Box<Ctx<'m>> {
         Box::new(Ctx {
             err: 0,
+            call_line: 0,
             module,
             printer: printer as *mut _,
             error: None,
@@ -239,6 +246,25 @@ impl<'m> Ctx<'m> {
     }
 }
 
+impl Ctx<'_> {
+    /// A run-time error's program line: in a module's code, the line that called into it, and the message says
+    /// where in the module it happened (eval.rs locate, errors.py decode_line, D185).
+    pub fn locate(&self, mut e: RunError) -> RunError {
+        use crate::eval::{MODLINE_MAX, MODLINE_SHIFT};
+        if e.line > MODLINE_MAX {
+            let (k, ml) = ((e.line >> MODLINE_SHIFT) as usize, e.line & MODLINE_MAX);
+            let texts = &self.module.tables.texts;
+            let name = if 0 < k && k <= texts.len() { texts[k - 1].as_str() } else { "a module" };
+            let suf = format!(" (in {name}, line {ml})");
+            if !e.message.ends_with(&suf) {
+                e.message += &suf;
+            }
+            e.line = self.call_line;
+        }
+        e
+    }
+}
+
 impl Drop for Ctx<'_> {
     fn drop(&mut self) {
         for &p in &self.lists {
@@ -276,11 +302,35 @@ fn error(c: &mut Ctx, kind: i64, a: f64, b: f64, line: i32) {
         E_ASSERT => {
             RunError { message: c.module.tables.texts.get(a as usize).cloned().unwrap_or_default(), line, hint: None }
         }
-        E_STEP0 => RunError { message: "the step of this for loop is 0, so it would never end".into(), line, hint: None },
+        // the tree-walker's for_count
+        E_STEP0 => match c.interp.for_count(a, b, 0.0) {
+            Err(e) => e,
+            Ok(_) => RunError { message: "the step must be non-zero".into(), line, hint: None },
+        },
+        E_SUM_STEP | E_SUM_RANGE => {
+            use fermium_runtime::numerics::{err as K, Fail};
+            let f = if kind == E_SUM_STEP { Fail::new(K::STEP, a, b) } else { Fail::new(12, a, b) };
+            RunError { message: crate::eval_calc::describe(c.module, f, None), line, hint: None }
+        }
+        E_RANGE => {
+            let f = fermium_units::numfmt::format_number6;
+            RunError { message: format!("this for loop has no definite number of steps: it goes from {} to {} (NaN \
+                                         in the start, end or step)", f(a), f(b)), line, hint: None }
+        }
         E_DEEP => {
-            let name = c.module.funcs.get(a as usize).map(|f| f.name.clone()).unwrap_or_else(|| "a function".into());
+            // eval.rs call(): the function's name as written, at the line of its definition
+            let f = c.module.funcs.get(a as usize);
+            let name = f.map(|f| f.display.clone()).filter(|d| !d.is_empty()).unwrap_or_else(|| "a function".into());
+            let line = f.map(|f| f.def_line).filter(|&l| l != 0).unwrap_or(line);
             RunError { message: format!("{name} called itself too many times (the program ran out of stack) -- is a \
                                          base case missing, like  if n <= 0 then ...?"), line, hint: None }
+        }
+        E_PAR_ALIAS => {
+            // eval_par.rs's message
+            let t = c.module.tables.texts.get(a as usize).cloned().unwrap_or_default();
+            RunError { message: format!("{t} are the same list (one was set from the other), so the iterations of \
+                                         this parallel for would write and read the same numbers at the same \
+                                         time; make a copy first, e.g.  ys = xs * 1"), line, hint: None }
         }
         _ => RunError { message: "runtime error".into(), line, hint: None },
     };
@@ -416,15 +466,175 @@ pub extern "C" fn fm_list_powc(c: C, a: *const FmList, p: f64) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| eval::powc(*x, p)).collect();
     locked(c, |c| c.new_list(v))
 }
+/// list ** y (eval.rs Pow on a list: powf element by element)
+pub extern "C" fn fm_list_powf(c: C, a: *const FmList, y: f64) -> *mut FmList {
+    let v = unsafe { (*a).as_slice() }.iter().map(|x| x.powf(y)).collect();
+    locked(c, |c| c.new_list(v))
+}
 pub extern "C" fn fm_list_neg(c: C, a: *const FmList) -> *mut FmList {
     let v = unsafe { (*a).as_slice() }.iter().map(|x| -x).collect();
     locked(c, |c| c.new_list(v))
+}
+
+// ---------------------------------------------------------------- calculus (eval_calc.rs)
+/// A compiled scalar lambda: f(x, env).
+pub type ScalarFn = unsafe extern "C" fn(x: f64, env: *mut u8) -> f64;
+
+const QZERO_MSG: &str = "this integral came out as exactly 0 because the integrand was 0 at every point where it was \
+                         sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range \
+                         that fits it";
+
+fn err_flag<'a>(c: C<'a>) -> &'a std::sync::atomic::AtomicI32 {
+    unsafe { &*(c as *const std::sync::atomic::AtomicI32) }
+}
+
+fn fmt_opt(i: i64) -> Option<usize> {
+    if i >= 0 {
+        Some(i as usize)
+    } else {
+        None
+    }
+}
+
+/// ∫ f from a to b (eval_calc Integral): fermium-runtime's quad; once the integrand has stopped with an error
+/// it isn't called again (NaN), and that error is the one reported.
+pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol: f64, xname: f64, xfmt: i64,
+                          line: i32) -> f64 {
+    use std::sync::atomic::Ordering::SeqCst;
+    let flag = err_flag(c);
+    let r = fermium_runtime::numerics::quad::quad(
+        |x| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } },
+        a, b, 1e-10, atol, xname);
+    if flag.load(SeqCst) != 0 {
+        return f64::NAN;
+    }
+    let line = line.max(0) as u32;
+    locked(c, |c| match r {
+        Err(fl) => {
+            let e = RunError { message: crate::eval_calc::describe(c.module, fl, fmt_opt(xfmt)), line, hint: None };
+            c.fail(e);
+            f64::NAN
+        }
+        Ok(r) => {
+            if r.all_zero {
+                if atol < 0.0 {
+                    // eval_calc's QZERO += 1 (the quiet first try of a vector component, D110), through its
+                    // qzero_mark / qzero_check built-ins: mark returns the count and clears it, check sets it
+                    c.interp.line = line;
+                    let n = c.interp.builtin("qzero_mark", vec![]).map(|v| v.num()).unwrap_or(0.0);
+                    let _ = c.interp.builtin("qzero_check", vec![Value::Num(n + 1.0), Value::Num(f64::NAN)]);
+                } else {
+                    crate::eval_calc::warn_at(line, QZERO_MSG);
+                }
+            }
+            r.value
+        }
+    })
+}
+
+/// The x in [a, b] where f(x) = 0 (eval_calc Root); g = |lhs| + |rhs| for the rounding-noise warning, or null.
+pub extern "C" fn fm_root(c: C, f: ScalarFn, fenv: *mut u8, g: Option<ScalarFn>, genv: *mut u8, a: f64, b: f64,
+                          tfmt: i64, line: i32) -> f64 {
+    use std::sync::atomic::Ordering::SeqCst;
+    let flag = err_flag(c);
+    let call = |h: ScalarFn, env: *mut u8, x: f64| if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { h(x, env) } };
+    let mut sc = |x: f64| call(g.unwrap(), genv, x);
+    let r = fermium_runtime::numerics::roots::root(|x| call(f, fenv, x), a, b, 200,
+                                                   if g.is_some() { Some(&mut sc as &mut dyn FnMut(f64) -> f64) } else { None });
+    if flag.load(SeqCst) != 0 {
+        return f64::NAN;
+    }
+    let line = line.max(0) as u32;
+    locked(c, |c| match r {
+        Err(fl) => {
+            let e = RunError { message: crate::eval_calc::describe(c.module, fl, fmt_opt(tfmt)), line, hint: None };
+            c.fail(e);
+            f64::NAN
+        }
+        Ok(r) => {
+            if let Some(x) = r.noise_warning {
+                crate::eval_calc::warn_at(line, &format!(
+                    "the two sides of this equation agree only to rounding error near {}, so the solution found there \
+                     may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper",
+                    crate::eval_calc::fmt_value(c.module, x, fmt_opt(tfmt))));
+            }
+            r.x
+        }
+    })
+}
+
+// ---------------------------------------------------------------- parallel for (D152)
+/// The compiled body of a parallel for: runs iterations [first, end) and writes the block's sums to `part`.
+pub type ParBody = unsafe extern "C" fn(env: *mut u8, first: i64, end: i64, part: *mut f64, lo: f64, st: f64);
+
+/// Stack of each worker thread (v1: PAR_STACK).
+const PAR_STACK: usize = 64 << 20;
+
+/// Threads for parallel for: FERMIUM_THREADS, else every core.
+fn par_threads() -> usize {
+    std::env::var("FERMIUM_THREADS").ok().and_then(|s| s.trim().parse::<usize>().ok()).filter(|&n| n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
+}
+
+/// Run the blocks of a parallel for with n iterations on several threads; block b's sums go to part[b·nr ..].
+/// If any iteration stops with an error, the loop is run again block by block on this thread, so the error
+/// reported is the first one in iteration order, as the tree-walker (which runs the blocks in order) reports it.
+pub extern "C" fn fm_par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st: f64, part: *mut f64, nr: i64) {
+    let blocks = fermium_ir::par_blocks(n.max(0) as usize);
+    let flag = unsafe { &*(c as *const std::sync::atomic::AtomicI32) };
+    let serial = |from: usize| {
+        for (b, &(a, e)) in blocks.iter().enumerate().skip(from) {
+            unsafe { f(env, a as i64, e as i64, part.add(b * nr as usize), lo, st) };
+            if flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+                return;
+            }
+        }
+    };
+    let threads = par_threads().min(blocks.len());
+    if threads <= 1 {
+        return serial(0);
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let (envu, partu) = (env as usize, part as usize);
+    let spawned = std::thread::scope(|s| {
+        let mut spawned = 0;
+        for _ in 0..threads {
+            let (next, blocks) = (&next, &blocks);
+            spawned += std::thread::Builder::new().stack_size(PAR_STACK).spawn_scoped(s, move || loop {
+                let b = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if b >= blocks.len() || flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+                    break;
+                }
+                let (a, e) = blocks[b];
+                unsafe { f(envu as *mut u8, a as i64, e as i64, (partu as *mut f64).add(b * nr as usize), lo, st) };
+            }).is_ok() as usize;
+        }
+        spawned
+    });
+    if spawned == 0 {
+        return serial(0);
+    }
+    if flag.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+        locked(c, |c| {
+            c.err = 0;
+            c.error = None;
+        });
+        serial(0);
+    }
 }
 
 // ---------------------------------------------------------------- lists of texts
 pub extern "C" fn fm_tlist_push(l: *mut FmTList, id: i64) {
     if let Some(l) = unsafe { l.as_mut() } {
         l.0.push(id)
+    }
+}
+pub extern "C" fn fm_tlist_new(c: C) -> *mut FmTList {
+    locked(c, |c| c.new_tlist(vec![]))
+}
+pub extern "C" fn fm_tlist_clear(l: *mut FmTList) {
+    if let Some(l) = unsafe { l.as_mut() } {
+        l.0.clear()
     }
 }
 pub extern "C" fn fm_tlist_len(l: *const FmTList) -> i64 {
@@ -483,9 +693,13 @@ math1! {
     fm_sinh => |x| x.sinh();
     fm_cosh => |x| x.cosh();
     fm_tanh => |x| x.tanh();
-    fm_asinh => |x| x.asinh();
-    fm_acosh => |x| x.acosh();
-    fm_atanh => |x| x.atanh();
+    fm_asinh => crate::eval_core::cmath::asinh;
+    fm_acosh => crate::eval_core::cmath::acosh;
+    fm_atanh => crate::eval_core::cmath::atanh;
+    fm_erf => crate::eval_core::cmath::erf;
+    fm_erfc => crate::eval_core::cmath::erfc;
+    fm_gamma => crate::eval_core::cmath::tgamma;
+    fm_lgamma => crate::eval_core::cmath::lgamma;
     fm_exp => |x| x.exp();
     fm_ln => |x| x.ln();
     fm_log => |x| x.ln();
@@ -498,8 +712,8 @@ math1! {
     fm_csc => |x| eval::fdiv(1.0, x.sin());
 }
 
-pub extern "C" fn fm_fpow(a: f64, b: f64) -> f64 {
-    eval::fpow(a, b)
+pub extern "C" fn fm_powf(a: f64, b: f64) -> f64 {
+    a.powf(b)
 }
 pub extern "C" fn fm_powc(x: f64, p: f64) -> f64 {
     eval::powc(x, p)
@@ -514,11 +728,14 @@ pub extern "C" fn fm_hypot(x: f64, y: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn math_shims_agree_with_math1() {
+    fn math_shims_agree_with_the_tree_walker() {
+        static M: std::sync::LazyLock<fermium_ir::Module> = std::sync::LazyLock::new(Default::default);
         for (name, _, addr) in super::math1_shims() {
             let f: extern "C" fn(f64) -> f64 = unsafe { std::mem::transmute(addr) };
             for x in [0.3, -0.7, 2.5, 1e-9] {
-                let (a, b) = (f(x), crate::eval::math1(name, x));
+                let mut it = crate::eval::Interpreter::new(&M, super::NullPrinter);
+                let b = it.builtin(name, vec![crate::eval::Value::Num(x)]).unwrap().num();
+                let a = f(x);
                 assert!(a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()), "{name}({x})");
             }
         }

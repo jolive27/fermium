@@ -192,7 +192,7 @@ impl Checker {
                                       units when you use them".into())));
         }
         let full = join(&self.opts.base_dir, path);
-        if !std::path::Path::new(&full).exists() {
+        if fermium_runtime::vfs::read(&full).is_err() {
             let dir = std::path::Path::new(&full).parent().map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
             let dir = if dir.is_empty() { "." } else { &dir };
             return Err(self.err(format!("can't find the file '{path}'"), e.span,
@@ -239,8 +239,11 @@ impl Checker {
     }
 
     /// data.T: a column of a data set (the data branch of Python e_Field); other fields of other things are errors.
-    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, name: &str, t: Checked, _ctx: &mut Ctx)
+    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, name: &str, t: Checked, ctx: &mut Ctx)
                        -> CResult<Checked> {
+        if let Checked::Sol(view) = t {
+            return self.sol_field(e, view, name, ctx); // solve.rs
+        }
         if let Checked::Val(v) = &t {
             if let Some(info) = self.data_info(&v.ty) {
                 for (i, (cn, u)) in info.columns.iter().enumerate() {
@@ -943,10 +946,10 @@ impl Checker {
     }
 }
 
-/// fermium-runtime's header reader, without making fermium-check depend on the runtime crate: the same rules
-/// (Python csv + read_csv_header): the first record, each field trimmed, `name [unit]`.
+/// The CSV header (Python csv + read_csv_header): the first record, each field trimmed, `name [unit]`; read through
+/// fermium-runtime's vfs, so it works in the browser playground too.
 fn fermium_runtime_header(full: &str) -> Result<Vec<HeaderColC>, String> {
-    let text = match std::fs::read(full) {
+    let text = match fermium_runtime::vfs::read(full) {
         Ok(b) => String::from_utf8_lossy(&b).into_owned(),
         Err(e) => return Err(format!("can't read {full}: {e}")),
     };
