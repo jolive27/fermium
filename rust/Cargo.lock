@@ -25,6 +25,7 @@ version = "2.0.0-dev"
 dependencies = [
  "fermium-check",
  "fermium-codegen",
+ "fermium-fmt",
  "fermium-syntax",
 ]
 
@@ -39,6 +40,9 @@ dependencies = [
 [[package]]
 name = "fermium-fmt"
 version = "0.1.0"
+dependencies = [
+ "fermium-syntax",
+]
 
 [[package]]
 name = "fermium-ir"

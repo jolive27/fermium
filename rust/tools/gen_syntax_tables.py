@@ -76,6 +76,7 @@ if "--names" in sys.argv:
     sys.exit(0)
 emit_ranges("PY_ALPHA", ranges(str.isalpha))
 emit_ranges("PY_ALNUM", ranges(str.isalnum))
+emit_ranges("PY_DIGIT", ranges(str.isdigit))
 
 print("/// Unit names of fermium/units.py: (name, takes SI prefixes, what it measures for the A1 messages).")
 print("pub static UNITS: &[(&str, bool, &str)] = &[")
