@@ -73,6 +73,22 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
   `non_elementary_integrals_are_refused`); conformance cases in `integrals/` (e.g. `cd3a0d2250de`,
   `ccf49cc58559`, `71a54bb44659`, `a5b1891791c9`).
 
+## Display of ∇ results and of Leibniz-rule integrands: native tidying instead of SymPy's simplify
+
+- **v1** printed the result of ∇f, ∇·F, ∇×F, ∇²f and the ∂/∂x integrand of a derivative under the integral sign
+  (D36) through `sympy_tidy`: SymPy's `simplify`, kept only when shorter.
+- **v2** (`fermium-sym/src/tidy.rs`) does the part of that which these formulas need: SymPy's automatic
+  canonical form (equal bases combined, whole powers of products distributed, like terms collected), exact
+  cancellation of a sum over a common denominator (∇²(1/r) = 0), SymPy's sign convention for sums
+  (`signsimp`: `λ·(s - x)` rather than `-λ·(x - s)`), and SymPy's argument order (Basic.compare) when the
+  formula is written back; like v1, the tidied formula is used only when it is shorter.
+- The printed formulas match v1's for every ∇ and Leibniz program in the conformance suite (e.g.
+  `-q x/(4π ε_0 (x² + y² + z²)^(3/2))`, `∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds`). SymPy's
+  `simplify` also tries trigonometric identities, factoring and `cancel`; for formulas that need those, v2
+  prints a longer but equivalent formula. Values are the same either way.
+- Tests: `fermium-sym/src/tests.rs` (`tidy_like_sympy`); conformance cases `f6f6b826b670`, `71b03deee8c1`,
+  `7c0c11b0d9a1`.
+
 ## Quadrature: narrow peaks and half peaks (spec B2; OPEN_ITEMS RT1-1, BL-1, BL-2, L-3)
 
 - v1: `∫ exp(-((x - 1)/1e-6)^2) dx from 0 to ∞` gave 8.86×10⁻⁷ (half the true 1.77×10⁻⁶), no warning;

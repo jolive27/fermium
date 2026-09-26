@@ -63,6 +63,24 @@ fn factor_common_and_source() {
     assert_eq!(to_source(&body("x^(2/3) + 0.5 x + 1e20 y + 4i + 2 g")), "x^(2/3) + 0.5x + 1×10²⁰y + 4i + 2 g");
 }
 
+#[test]
+fn tidy_like_sympy() {
+    let f = body("q / (4π ε_0 √(x² + y² + z²))");
+    let gx = diff(&f, "x", &mut Plain).unwrap();
+    assert_eq!(to_source(&tidy(&gx)), "-q x/(4π ε_0 (x² + y² + z²)^(3/2))");
+    let v = body("λ / (4π ε_0 √((x - s)^2 + y^2 + z^2))");
+    let dv = simplify(&d(&v, "x", &mut Plain).unwrap());
+    assert_eq!(to_source(&tidy(&dv)), "λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2))");
+    let r = body("1/√(x² + y² + z²)");
+    let mut ts = vec![];
+    for p in ["x", "y", "z"] {
+        let d1 = diff(&r, p, &mut Plain).unwrap();
+        ts.push(diff(&d1, p, &mut Plain).unwrap());
+    }
+    let lap = simplify(&crate::build::add(crate::build::add(ts[0].clone(), ts[1].clone()), ts[2].clone()));
+    assert_eq!(to_source(&tidy(&lap)), "0", "{}", to_source(&lap));
+}
+
 fn integ(s: &str, var: &str, positive: &[&str]) -> Result<String, String> {
     let p: Vec<String> = positive.iter().map(|x| x.to_string()).collect();
     integrate(&body(s), var, &p).map(|e| to_source(&e)).map_err(|d| d.message)
