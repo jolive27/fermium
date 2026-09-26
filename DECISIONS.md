@@ -1182,3 +1182,8 @@ blackbody. Every change keeps the printed results bit for bit (llvm_diff, full c
 `exp`, and ~0.3 s more compile time for the 15 inlined copies; rejected); `default<O3>` (no measurable gain on
 the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` experiment switch); fast-math flags
 (they change results: never).
+
+## D274. v2.0 is tagged locally and marked by the branch claude/v2.0-freeze; the release binaries wait for the owner
+- **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
+- **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
+- **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
