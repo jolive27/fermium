@@ -474,7 +474,7 @@ fn quadcore<F: FnMut(f64) -> f64>(
         panels.push(ig.panel(x0, x1));
     }
     // B2 sentinel values g(u) at panel ends, keyed by the bits of u
-    let mut ends: std::collections::HashMap<u64, f64> = std::collections::HashMap::new();
+    let mut ends = Ends::default();
     loop {
         let mut total = 0.0;
         let mut toterr = 0.0;
@@ -590,12 +590,34 @@ fn exclude_run(panels: &mut [Panel], wl: f64, wh: f64, tiny_x: &dyn Fn(f64, f64)
     true
 }
 
+/// A hasher for the bit patterns of u (the sentinel cache): SipHash, the default, cost more than a cheap
+/// integrand. (Only lookups: the order of the map is never used.)
+#[derive(Default)]
+struct BitsHasher(u64);
+
+impl std::hash::Hasher for BitsHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        let h = (self.0 ^ x ^ (x >> 32)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        self.0 = h ^ (h >> 29);
+    }
+}
+
+type Ends = std::collections::HashMap<u64, f64, std::hash::BuildHasherDefault<BitsHasher>>;
+
 /// B2 panel-end sentinels: check the panels not yet checked; true if one missed a feature at an
 /// end (its error has then been raised so the loop refines it).
 fn sentinels<F: FnMut(f64) -> f64>(
     ig: &mut Integrand<'_, F>,
     panels: &mut [Panel],
-    ends: &mut std::collections::HashMap<u64, f64>,
+    ends: &mut Ends,
     goal: f64,
 ) -> bool {
     let mut fired = false;

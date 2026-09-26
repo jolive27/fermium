@@ -720,12 +720,15 @@ pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol:
                           line: i32) -> f64 {
     use std::sync::atomic::Ordering::SeqCst;
     let flag = err_flag(c);
+    let mut evals = 0u64;
     let r = fermium_runtime::numerics::quad::quad(
         |x| {
-            QUAD_EVALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            evals += 1;
             if flag.load(SeqCst) != 0 { f64::NAN } else { unsafe { f(x, env) } }
         },
         a, b, 1e-10, atol, xname);
+    // (counted here, added once: an atomic add per evaluation cost more than the integrand)
+    QUAD_EVALS.fetch_add(evals, std::sync::atomic::Ordering::Relaxed);
     if flag.load(SeqCst) != 0 {
         return f64::NAN;
     }

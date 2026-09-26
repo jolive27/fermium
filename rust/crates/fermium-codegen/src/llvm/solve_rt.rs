@@ -52,7 +52,8 @@ pub struct PdeCheck {
 pub struct CSol {
     /// the index of the tree-walker's copy of it (for plots and the other constructs the tree-walker runs)
     pub interp_h: usize,
-    pub sol: ode::Sol,
+    /// shared with the tree-walker's copy (no second copy of a million-step solution)
+    pub(crate) sol: std::rc::Rc<crate::eval_solve::SolData>,
     pub rhs: Option<(OdeFn, Snapshot)>,
     pub grid: Option<(f64, f64)>,
     pub check: Option<PdeCheck>,
@@ -150,6 +151,14 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
     if stopped(c) {
         return -1;
     }
+    finish_ode(c, site, f, env, r, early, line)
+}
+
+/// The end of an ODE solve: its warnings (or its error), then the solution, kept with a snapshot of the right
+/// side's env (for x'(t)) and mirrored for the tree-walker.
+fn finish_ode(c: C, site: i64, f: OdeFn, env: *mut u8, r: Result<ode::Sol, Fail>, early: Vec<(i64, f64)>,
+              line: u32) -> i64 {
+    let s = unsafe { &(&(*c).ode_sites)[site as usize] };
     let (tfmt, kinds) = (s.tfmt, s.env_kinds.clone());
     locked(c, |c| {
         for &(kind, a) in &early {
@@ -166,10 +175,113 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
             c.interp.rt_warn(kind, a, line);
         }
         let snap = unsafe { snapshot(env as *const *mut u8, &kinds) };
-        let interp_h = mirror(c, &solv, None);
-        c.sols.push(CSol { interp_h, sol: solv, rhs: Some((f, snap)), grid: None, check: None });
+        let (interp_h, sol) = mirror(c, solv, None);
+        c.sols.push(CSol { interp_h, sol, rhs: Some((f, snap)), grid: None, check: None });
         c.sols.len() as i64 - 1
     })
+}
+
+/// The right side as fermium-runtime's solvers call it (after an error: NaN, and the solve stops).
+fn rhs_of<'a>(c: C<'a>, f: OdeFn, env: *mut u8) -> impl FnMut(f64, &[f64], &mut [f64]) + 'a {
+    move |t: f64, y: &[f64], out: &mut [f64]| {
+        if stopped(c) {
+            out.fill(f64::NAN);
+            return;
+        }
+        unsafe { f(t, y.as_ptr(), out.as_mut_ptr(), out.len() as i64, env) };
+        if stopped(c) {
+            out.fill(f64::NAN);
+        }
+    }
+}
+
+/// Where the compiled fixed-step RK4 loop writes (fm_rk4_begin): the solution's arrays, reserved for every step.
+#[repr(C)]
+pub struct Rk4Plan {
+    pub t: *mut f64,
+    pub y: *mut f64,
+    pub dy: *mut f64,
+    pub h: f64,
+    pub steps: i64,
+    /// the solution being filled (boxed: a right side may call a function that solves another equation)
+    pub sol: *mut ode::Sol,
+}
+
+/// A fixed-step RK4 solve (method rk4, no `until`) whose steps the compiled code takes itself, with the right side
+/// inlined (v1 did the same): the checks and the first derivative of ode::rk4_plain, then the arrays reserved for
+/// its steps + 1 samples. k1 gets f(t0, y0). 0, or -1 after an error.
+#[allow(clippy::too_many_arguments)]
+#[no_mangle]
+pub extern "C" fn fm_rk4_begin(c: C, site: i64, f: OdeFn, env: *mut u8, y0: *const f64, n: i64, t0: f64, t1: f64,
+                               h0: f64, line: i32, k1: *mut f64, plan: *mut Rk4Plan) -> i32 {
+    let line = line.max(0) as u32;
+    let s = unsafe { &(&(*c).ode_sites)[site as usize] };
+    let n = n as usize;
+    let y0 = unsafe { std::slice::from_raw_parts(y0, n) };
+    let tname = s.tname as f64;
+    // ode::rk4_plain's checks, in its order
+    let span = t1 - t0;
+    let pre = if !(span != 0.0) {
+        Err(Fail::new(E::ODE_RANGE, t0, tname))
+    } else {
+        let ratio = (span / h0).abs();
+        if ratio != ratio || ratio <= 0.0 || ratio > 1e12 {
+            Err(Fail::new(E::STEP, h0, span))
+        } else {
+            Ok(((ratio - 1e-9).ceil() as u64).max(1))
+        }
+    };
+    let steps = match pre {
+        Ok(st) => st,
+        Err(fl) => return if finish_ode(c, site, f, env, Err(fl), vec![], line) < 0 { -1 } else { 0 },
+    };
+    let h = span / steps as f64;
+    let mut rhs = rhs_of(c, f, env);
+    let mut k0 = vec![0.0; n];
+    rhs(t0, y0, &mut k0);
+    if stopped(c) {
+        return -1;
+    }
+    if !k0.iter().all(|x| x - x == 0.0) {
+        finish_ode(c, site, f, env, Err(Fail::new(E::ODE_NAN, t0, tname)), vec![], line);
+        return -1;
+    }
+    unsafe { std::ptr::copy_nonoverlapping(k0.as_ptr(), k1, n) };
+    let total = steps as usize + 1;
+    let mut sol = ode::Sol::new(n);
+    sol.t.reserve_exact(total);
+    sol.y.reserve_exact(total * n);
+    sol.dy.reserve_exact(total * n);
+    unsafe {
+        let (t, y, dy) = (sol.t.as_mut_ptr(), sol.y.as_mut_ptr(), sol.dy.as_mut_ptr());
+        *plan = Rk4Plan { t, y, dy, h, steps: steps as i64, sol: Box::into_raw(Box::new(sol)) };
+    }
+    0
+}
+
+/// The end of a compiled RK4 solve whose loop filled every sample (sol and steps: fm_rk4_begin's plan): ode::rk4's error estimate and warning, then
+/// fm_ode's end. The handle of the solution, or -1 after an error.
+#[no_mangle]
+pub extern "C" fn fm_rk4_end(c: C, site: i64, f: OdeFn, env: *mut u8, sol: *mut ode::Sol, steps: i64,
+                             line: i32) -> i64 {
+    let line = line.max(0) as u32;
+    let mut sol = unsafe { *Box::from_raw(sol) };
+    // the compiled loop wrote all steps + 1 samples into the arrays fm_rk4_begin reserved for them
+    let total = steps as usize + 1;
+    unsafe {
+        sol.t.set_len(total);
+        sol.y.set_len(total * sol.dim);
+        sol.dy.set_len(total * sol.dim);
+    }
+    let mut rhs = rhs_of(c, f, env);
+    let est = ode::rk4_error(&mut rhs, &sol);
+    if est > ode::RK4_WARN {
+        sol.warnings.push((ode::warn::RK4_COARSE, est));
+    }
+    if stopped(c) {
+        return -1;
+    }
+    finish_ode(c, site, f, env, Ok(sol), vec![], line)
 }
 
 /// An eigenvalue problem (eval_solve solve_eigen): the right side at (x, [ψ, ψ', E]) gives ψ'' in out[1].
@@ -234,8 +346,8 @@ pub extern "C" fn fm_eigen(c: C, site: i64, f: OdeFn, env: *mut u8, a: f64, b: f
             }
             solv.push(xv, &row, &drow);
         }
-        let interp_h = mirror(c, &solv, None);
-        c.sols.push(CSol { interp_h, sol: solv, rhs: None, grid: None, check: None });
+        let (interp_h, sol) = mirror(c, solv, None);
+        c.sols.push(CSol { interp_h, sol, rhs: None, grid: None, check: None });
         c.sols.len() as i64 - 1
     })
 }
@@ -284,18 +396,18 @@ pub extern "C" fn fm_pde(c: C, site: i64, f: OdeFn, env: *mut u8, t0: f64, t1: f
         let check = r.coarse.as_ref().map(|co| PdeCheck { coarse: co.to_sol(), ranges: r.fine.ranges(), xname, tname,
                                                            warned: std::cell::Cell::new(false) });
         let solv = r.fine.to_sol();
-        let interp_h = mirror(c, &solv, Some((xa, xb)));
-        c.sols.push(CSol { interp_h, sol: solv, rhs: None, grid: Some((xa, xb)), check });
+        let (interp_h, sol) = mirror(c, solv, Some((xa, xb)));
+        c.sols.push(CSol { interp_h, sol, rhs: None, grid: Some((xa, xb)), check });
         c.sols.len() as i64 - 1
     })
 }
 
 /// The tree-walker's copy of a solution (plots and the other constructs it runs read it; they don't ask for
 /// x'(t) or a PDE's grid check, which only the compiled code answers).
-fn mirror(c: &mut Ctx, sol: &ode::Sol, grid: Option<(f64, f64)>) -> usize {
-    c.interp.solve.sols.push(std::rc::Rc::new(crate::eval_solve::SolData { sol: sol.clone(), rhs: None, grid,
-                                                                          check: None }));
-    c.interp.solve.sols.len() - 1
+fn mirror(c: &mut Ctx, sol: ode::Sol, grid: Option<(f64, f64)>) -> (usize, std::rc::Rc<crate::eval_solve::SolData>) {
+    let d = std::rc::Rc::new(crate::eval_solve::SolData { sol, rhs: None, grid, check: None });
+    c.interp.solve.sols.push(d.clone());
+    (c.interp.solve.sols.len() - 1, d)
 }
 
 fn tname_of(module: &Module, i: f64) -> String {
@@ -319,9 +431,9 @@ fn sol_at(c: C, h: i64, comp: usize, t: f64, use_dy: bool) -> Result<f64, Fail> 
                     out.fill(f64::NAN);
                 }
             };
-            d.sol.eval(comp, t, true, Some(&mut rhs))
+            d.sol.sol.eval(comp, t, true, Some(&mut rhs))
         }
-        _ => d.sol.eval(comp, t, use_dy, None),
+        _ => d.sol.sol.eval(comp, t, use_dy, None),
     }
 }
 
@@ -359,7 +471,7 @@ pub extern "C" fn fm_sol_eval_list(c: C, h: i64, comp: i64, ts: *const FmList, u
 /// All samples of a component (what 0), the times (1) or the derivatives (2).
 #[no_mangle]
 pub extern "C" fn fm_sol_list(c: C, h: i64, comp: i64, what: i64) -> *mut FmList {
-    let s = unsafe { &(&(*c).sols)[h as usize].sol };
+    let s = unsafe { &(&(*c).sols)[h as usize].sol.sol };
     let comp = comp as usize;
     let out: Vec<f64> = match what {
         1 => s.t.clone(),
@@ -372,7 +484,7 @@ pub extern "C" fn fm_sol_list(c: C, h: i64, comp: i64, what: i64) -> *mut FmList
 /// max(x) / min(x) of a solution component (v1's fm_sol_ext).
 #[no_mangle]
 pub extern "C" fn fm_sol_extreme(c: C, h: i64, comp: i64, sg: f64) -> f64 {
-    unsafe { (&(*c).sols)[h as usize].sol.extreme(comp as usize, sg) }
+    unsafe { (&(*c).sols)[h as usize].sol.sol.extreme(comp as usize, sg) }
 }
 
 /// u(x, t) of a PDE solution and its grid check (eval_solve PdeEval).
@@ -390,7 +502,7 @@ pub extern "C" fn fm_pde_eval(c: C, h: i64, m: i64, comp0: i64, xv: f64, tv: f64
         locked(c, |c| fail(c, Fail::new(E::SOLRANGE, xv, end), xfmt as usize, line));
         return f64::NAN;
     }
-    let v = match nx::pde::pde_eval(&d.sol, xa, xb, m, comp0, xv, tv, which as u8) {
+    let v = match nx::pde::pde_eval(&d.sol.sol, xa, xb, m, comp0, xv, tv, which as u8) {
         Ok(v) => v,
         Err(fl) => {
             locked(c, |c| fail(c, fl, tfmt as usize, line));
@@ -399,7 +511,7 @@ pub extern "C" fn fm_pde_eval(c: C, h: i64, m: i64, comp0: i64, xv: f64, tv: f64
     };
     if let (Some(ck), 0) = (&d.check, which) {
         let cc = comp0 / (m + 1);
-        let est = nx::pde::grid_error(&d.sol, &ck.coarse, m, xa, xb, cc, ck.ranges[cc], xv, tv);
+        let est = nx::pde::grid_error(&d.sol.sol, &ck.coarse, m, xa, xb, cc, ck.ranges[cc], xv, tv);
         if est.is_some_and(|q| q > nx::pde::PDE_TOL) && !ck.warned.get() {
             ck.warned.set(true);
             let module = unsafe { (*c).module };

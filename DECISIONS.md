@@ -1155,3 +1155,30 @@ for the whole solve (more hits in the Jacobian columns, but must prove no global
 - **What:** the B8 gate's criteria are met: 3366/3366 pass or are documented divergences, CI is green on Linux and macOS (PR #3, run 127), the cutover is done, and docs/architecture.md is written. What remains is the B8.3 benchmark re-run and the tag. Phase C items start in agent worktrees now, based on claude/v2-rust. They are merged into `claude/v2.5` (branched from the v2.0 tag) only after the tag, each through tests and the full conformance suite.
 - **Why:** the end time is fixed. Waiting two idle hours for a benchmark run would waste time the plan needs, and the gate's purpose (don't grow the language on a compiler that doesn't yet match v1) is already served.
 - **Alternatives:** start Phase C only after the tag (strict ordering, but idle time); merge Phase C work into claude/v2-rust (rejected: v2.0 must be the v1-compatible cut).
+
+## D273. The LLVM back end's inner loops: facts found at compile time instead of per-iteration checks
+- **What:** (1) *Module constants* (`llvm/consts.rs`): a module variable set exactly once, at the top of the main
+block before any user function is called, to a value known then, is that constant wherever the compiled code
+reads it (`m = 1 kg`, `N = 1000000`); a list bound once to a list of known length and used only by indexing, `len`
+and `for … in` keeps that length (`len(mass)` is 5). The slots are still written, so the tree-walker's constructs
+see the same values. The main block is compiled before the functions so they see these constants too.
+(2) *Integer trip counts* for `for i from a to b` with whole a, b and step ±1 (the same number as the
+floating-point formula below 2⁵³), integer comparisons of integer loop variables, and integer loop variables in
+`parallel for` bodies. (3) *Versioned loops* (`hoist.rs versioned_loop`): a small straight-line loop body
+(no inner loop, call, integrand or solve) whose indexes are integer loop variables is compiled twice; one test
+before the loop checks every such index for the first and last value, then the copy without the checks runs,
+else the checked copy (so a program that fails still fails with the same message and line). (4) *Owned lists*: a
+list that is bound once to a new list and only ever indexed gets a TBAA type of its own, so a store into `vx`
+doesn't make LLVM reload `x` or `mass` (v1's lists were separate globals, which gave LLVM the same fact).
+(5) *Compiled fixed-step RK4* (`ode.rs rk4_inline`): a `solve … step h` without `until` takes its steps in the
+module with the right side called directly (inlined) and the state in registers, `ode::rk4_plain` operation for
+operation; fermium-runtime does the checks, the first derivative, the error estimate and the solution object
+(fm_rk4_begin / fm_rk4_end; the solution under construction is boxed in the loop's plan, so a right side that
+itself solves an equation is safe). (6) The quadrature's sentinel cache uses a cheap hasher instead of SipHash.
+- **Why:** PERF.md showed v2's compiled inner loops 1.2–2.4× slower than v1's on nbody, spring_rk4, forces and
+blackbody. Every change keeps the printed results bit for bit (llvm_diff, full conformance).
+- **Alternatives:** a Gauss–Kronrod panel compiled into the module with the integrand inlined, as v1 did
+(tried: only ~15% fewer instructions per integral on blackbody, the rest being the adaptive bookkeeping and
+`exp`, and ~0.3 s more compile time for the 15 inlined copies; rejected); `default<O3>` (no measurable gain on
+the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` experiment switch); fast-math flags
+(they change results: never).

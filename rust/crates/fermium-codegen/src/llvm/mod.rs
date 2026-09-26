@@ -101,13 +101,19 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     }
     g.lm.set_triple(&tm.get_triple());
     g.lm.set_data_layout(&tm.get_target_data().get_data_layout());
-    g.lm.run_passes("default<O2>", &tm, PassBuilderOptions::create()).map_err(|e| e.to_string())?;
+    let pipeline = std::env::var("FERMIUM_LLVM_PASSES").unwrap_or_else(|_| "default<O2>".into());
+    let po = PassBuilderOptions::create();
+    if std::env::var_os("FERMIUM_LLVM_NOVEC").is_some() {
+        po.set_loop_vectorization(false);
+    }
+    g.lm.run_passes(&pipeline, &tm, po).map_err(|e| e.to_string())?;
     if std::env::var_os("FERMIUM_DUMP_LLVM_OPT").is_some() {
         eprintln!("{}", g.lm.print_to_string().to_string());
     }
     let t1 = std::time::Instant::now();
     ctx.set_tables(std::mem::take(&mut g.tables));
-    let ee = g.lm.create_jit_execution_engine(OptimizationLevel::Default).map_err(|e| e.to_string())?;
+    let cg = if std::env::var_os("FERMIUM_LLVM_CG3").is_some() { OptimizationLevel::Aggressive } else { OptimizationLevel::Default };
+    let ee = g.lm.create_jit_execution_engine(cg).map_err(|e| e.to_string())?;
     // (the optimizer has removed the declarations of callbacks the program doesn't use)
     for (name, a) in &g.mappings {
         if let Some(f) = g.lm.get_function(name) {

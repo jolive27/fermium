@@ -96,6 +96,14 @@ pub struct Gen<'c, 'm> {
     int_vars: HashMap<SymId, IntValue<'c>>,
     /// executables: node address → position (native::delegate::nodes), for the constructs the tree-walker runs
     pub(super) node_ids: HashMap<usize, u32>,
+    /// module variables whose value is known (consts)
+    consts: HashMap<SymId, FloatValue<'c>>,
+    /// module lists whose length never changes and is known (consts)
+    fixed: HashMap<SymId, u64>,
+    /// (list, integer loop variable) index checks proven before the loop (hoist::versioned_loop)
+    proven: std::collections::HashSet<(SymId, SymId)>,
+    /// lists whose elements have a TBAA type of their own (consts::owned_lists)
+    owned: std::collections::HashSet<SymId>,
     /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
     /// not an address known now
     aot: Option<GlobalValue<'c>>,
@@ -140,7 +148,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                           locals: HashMap::new(), err_bb: None, loops: vec![], ret_kind: Kind::Void, known_line: None,
                           overrides: HashMap::new(), par_count: 0, aot: None,
                           hoisted: HashMap::new(), int_vars: HashMap::new(),
-                          node_ids: HashMap::new() };
+                          node_ids: HashMap::new(), consts: HashMap::new(), fixed: HashMap::new(),
+                          proven: std::collections::HashSet::new(), owned: std::collections::HashSet::new() };
         g.declare_runtime();
         g
     }
@@ -205,6 +214,9 @@ impl<'c, 'm> Gen<'c, 'm> {
         {
             use crate::llvm::solve_rt as s;
             self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t], s::fm_ode as *const () as usize, false);
+            self.declare("fm_rk4_begin", Some(i32t), &[p, i, p, p, p, i, f, f, f, i32t, p, p],
+                         s::fm_rk4_begin as *const () as usize, false);
+            self.declare("fm_rk4_end", Some(i), &[p, i, p, p, p, i, i32t], s::fm_rk4_end as *const () as usize, false);
             self.declare("fm_eigen", Some(i), &[p, i, p, p, f, f, i32t], s::fm_eigen as *const () as usize, false);
             self.declare("fm_pde", Some(i), &[p, i, p, p, f, f, f, f, f, i32t], s::fm_pde as *const () as usize, false);
             self.declare("fm_sol_eval", Some(f), &[p, i, i, f, i32t, i, i32t], s::fm_sol_eval as *const () as usize, false);
@@ -357,6 +369,34 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
 
+    /// The TBAA tag of a list's elements: "elem", or for a list that owns its numbers (consts::owned_lists) a
+    /// type of its own under "elem" (so it may alias an "elem" access, never another owned list's).
+    fn elem_tag(&self, list: SymId) -> inkwell::values::MetadataValue<'c> {
+        if !self.owned.contains(&list) {
+            return self.tbaa("elem");
+        }
+        let i64t = self.cx.i64_type();
+        let root = self.cx.metadata_node(&[self.cx.metadata_string("fermium tbaa").into()]);
+        let elem = self.cx.metadata_node(&[self.cx.metadata_string("elem").into(), root.into(), i64t.const_zero().into()]);
+        let name = format!("elem.{}", list);
+        let ty = self.cx.metadata_node(&[self.cx.metadata_string(&name).into(), elem.into(), i64t.const_zero().into()]);
+        self.cx.metadata_node(&[ty.into(), ty.into(), i64t.const_zero().into()])
+    }
+
+    fn ld_elem(&self, p: PointerValue<'c>, list: SymId) -> R<FloatValue<'c>> {
+        let v = bl!(self.b.build_load(self.f64t(), p, "x"));
+        if let Some(i) = v.as_instruction_value() {
+            let _ = i.set_metadata(self.elem_tag(list), self.cx.get_kind_id("tbaa"));
+        }
+        Ok(v.into_float_value())
+    }
+
+    fn st_elem(&self, p: PointerValue<'c>, v: FloatValue<'c>, list: SymId) -> R<()> {
+        let i = bl!(self.b.build_store(p, v));
+        let _ = i.set_metadata(self.elem_tag(list), self.cx.get_kind_id("tbaa"));
+        Ok(())
+    }
+
     pub(super) fn ld(&self, ty: impl BasicType<'c>, p: PointerValue<'c>, name: &str, tag: &str) -> R<BasicValueEnum<'c>> {
         let v = bl!(self.b.build_load(ty, p, name));
         if let Some(i) = v.as_instruction_value() {
@@ -449,6 +489,9 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     fn load_var(&mut self, sym: SymId) -> R<Val<'c>> {
+        if let Some(&c) = self.consts.get(&sym) {
+            return Ok(fv(c));
+        }
         let (p, k) = self.slot(sym)?;
         if k == Kind::L {
             return Ok(Val { k, v: Some(self.ld_list(p)?.into()) });
@@ -641,10 +684,13 @@ impl<'c, 'm> Gen<'c, 'm> {
             let fv = self.lm.add_function(&format!("f{}.{}", fid, f.name), ft, Some(Linkage::Internal));
             self.funcs.push(fv);
         }
+        self.owned = consts::owned_lists(m);
+        // main first: the module constants it finds (consts) are known in the functions too
+        self.compile_main()?;
         for fid in 0..m.funcs.len() {
             self.compile_func(fid)?;
         }
-        self.compile_main()
+        Ok(())
     }
 
     fn begin_fn(&mut self, fv: FunctionValue<'c>, ret: Kind) {
@@ -728,7 +774,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let sp = self.frame_addr()?;
         bl!(self.b.build_store(self.stackbase_g.as_pointer_value(), sp));
         let main = &self.m.main;
-        self.block(main)?;
+        self.main_block(main)?;
         self.finish_fn()
     }
 
@@ -765,11 +811,11 @@ impl<'c, 'm> Gen<'c, 'm> {
                         self.list_parts(l)?
                     }
                 };
-                let k0 = self.index_of(idx, parts.1)?;
+                let k0 = self.index_of(self.hoisted.contains_key(sym).then_some(*sym), idx, parts.1)?;
                 let ep = unsafe { bl!(self.b.build_gep(self.f64t(), parts.0, &[k0], "ep")) };
                 let vv = self.expr(value)?;
                 let v = self.to_f(vv)?;
-                self.st(ep, v, "elem")?;
+                self.st_elem(ep, v, *sym)?;
             }
             StmtKind::Push(sym, e) => {
                 let v = self.expr(e)?;
@@ -883,18 +929,36 @@ impl<'c, 'm> Gen<'c, 'm> {
         // an integer loop (v1's int_loops, D150): a whole start and step keep the variable a whole number, known
         // as an i64 too, so an index by it needs no conversion (its float value is the same number, exactly)
         let int_form = self.int_loop(sym, lo, step, body)?;
-        let (lo, st, count) = self.range_count(lo, hi, step)?;
         if let Some((lo_i, st_i)) = int_form {
-            let r = self.counted_loop(count, body, |g, i| {
-                let im = bl!(g.b.build_int_mul(i, st_i, "ist"));
-                let iv = bl!(g.b.build_int_add(lo_i, im, "iv"));
-                g.int_vars.insert(sym, iv);
-                let x = bl!(g.b.build_signed_int_to_float(iv, g.f64t(), "x"));
-                g.store_var(sym, fv(x))
-            });
+            // a whole end and a step of ±1: the count in integers, max(0, ±(hi − lo) + 1), the same number as
+            // range_count's for these (all below 2⁵³: exact in floating point, no NaN, no step 0)
+            let unit = match step.map(|e| &e.kind) {
+                None => Some(1),
+                Some(ExprKind::Const(c)) if c.abs() == 1.0 => Some(*c as i64),
+                _ => None,
+            };
+            let count = match (unit, self.int_expr(hi)?) {
+                (Some(u), Some(hi_i)) => {
+                    let d = if u > 0 {
+                        bl!(self.b.build_int_sub(hi_i, lo_i, "d"))
+                    } else {
+                        bl!(self.b.build_int_sub(lo_i, hi_i, "d"))
+                    };
+                    let n = bl!(self.b.build_int_add(d, self.i64c(1), "n1"));
+                    let neg = bl!(self.b.build_int_compare(IntPredicate::SLT, n, self.i64c(0), "neg"));
+                    bl!(self.b.build_select(neg, self.i64c(0), n, "n0")).into_int_value()
+                }
+                _ => self.range_count(lo, hi, step)?.2,
+            };
+            let hoisted = self.hoist_lists(body)?;
+            let r = self.versioned_loop(sym, lo_i, st_i, count, body);
+            for s in hoisted {
+                self.hoisted.remove(&s);
+            }
             self.int_vars.remove(&sym);
             return r;
         }
+        let (lo, st, count) = self.range_count(lo, hi, step)?;
         self.counted_loop(count, body, |g, i| {
             let fi = bl!(g.b.build_signed_int_to_float(i, g.f64t(), "fi"));
             let x = bl!(g.b.build_float_mul(fi, st, "ist"));
@@ -928,7 +992,11 @@ impl<'c, 'm> Gen<'c, 'm> {
     fn int_expr(&mut self, e: &Expr) -> R<Option<IntValue<'c>>> {
         Ok(match &e.kind {
             ExprKind::Const(c) if *c == c.trunc() && c.abs() < 2f64.powi(40) => Some(self.i64c(*c as i64)),
-            ExprKind::Var(s) => self.int_vars.get(s).copied(),
+            ExprKind::Var(s) => match (self.int_vars.get(s), self.consts.get(s).and_then(|c| c.get_constant())) {
+                (Some(v), _) => Some(*v),
+                (None, Some((c, _))) if c == c.trunc() && c.abs() < 2f64.powi(40) => Some(self.i64c(c as i64)),
+                _ => None,
+            },
             ExprKind::Bin(op @ (BinOp::Add | BinOp::Sub), a, b) if matches!(e.ty, Ty::Num(_)) => {
                 match (self.int_expr(a)?, self.int_expr(b)?) {
                     (Some(x), Some(y)) => Some(if *op == BinOp::Add {
@@ -945,11 +1013,15 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     /// The 0-based position of an index expression in a list of length len, with the index check: an integer
     /// loop variable needs no conversion.
-    fn index_of(&mut self, idx: &Expr, len: IntValue<'c>) -> R<IntValue<'c>> {
+    fn index_of(&mut self, list: Option<SymId>, idx: &Expr, len: IntValue<'c>) -> R<IntValue<'c>> {
         if let ExprKind::Var(s) = idx.kind {
             if let Some(iv) = self.int_vars.get(&s).copied() {
                 self.set_line(idx.line)?;
                 let k0 = bl!(self.b.build_int_sub(iv, self.i64c(1), "k0"));
+                if list.is_some_and(|l| self.proven.contains(&(l, s))) {
+                    // checked before the loop for every value the variable takes (versioned_loop)
+                    return Ok(k0);
+                }
                 let inside = bl!(self.b.build_int_compare(IntPredicate::ULT, k0, len, "inside"));
                 let fail = self.new_bb("fail");
                 let cont = self.new_bb("ok");
@@ -1314,6 +1386,18 @@ impl<'c, 'm> Gen<'c, 'm> {
                 }
             }
             ExprKind::Cmp(op, a, b) => {
+                // whole numbers of moderate size (integer loop variables): compared as integers, the same answer
+                if let (Some(x), Some(y)) = (self.int_expr(a)?, self.int_expr(b)?) {
+                    let pred = match op {
+                        CmpOp::Eq => IntPredicate::EQ,
+                        CmpOp::Ne => IntPredicate::NE,
+                        CmpOp::Lt => IntPredicate::SLT,
+                        CmpOp::Gt => IntPredicate::SGT,
+                        CmpOp::Le => IntPredicate::SLE,
+                        CmpOp::Ge => IntPredicate::SGE,
+                    };
+                    return Ok(bv(bl!(self.b.build_int_compare(pred, x, y, "icmp"))));
+                }
                 let va = self.expr(a)?;
                 let vb = self.expr(b)?;
                 if !matches!(va.k, Kind::F | Kind::B) || !matches!(vb.k, Kind::F | Kind::B) {
@@ -1506,9 +1590,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let ExprKind::Var(s) = &l.kind else { return Err("an indexed list that isn't a variable".into()) };
                 let parts = self.hoisted[s];
                 self.set_line(l.line)?;
-                let k0 = self.index_of(i, parts.1)?;
+                let k0 = self.index_of(Some(*s), i, parts.1)?;
                 let ep = unsafe { bl!(self.b.build_gep(self.f64t(), parts.0, &[k0], "ep")) };
-                fv(self.ld(self.f64t(), ep, "x", "elem")?.into_float_value())
+                fv(self.ld_elem(ep, *s)?)
             }
             ExprKind::Index(l, i) => {
                 let lv = self.expr(l)?;
@@ -1598,6 +1682,14 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 
     fn builtin(&mut self, e: &Expr, name: &str, args: &[Expr]) -> R<Val<'c>> {
+        if let (true, [a]) = (name == "len", args) {
+            if let Some(&k) = matches!(a.kind, ExprKind::Var(_)).then(|| match a.kind {
+                ExprKind::Var(s) => self.fixed.get(&s),
+                _ => None,
+            }).flatten() {
+                return Ok(fv(self.fconst(k as f64)));
+            }
+        }
         // max / min of a solution component: refined between the steps (eval_solve sol_extreme), args unevaluated
         if let ([a], "max_list" | "min_list") = (args, name) {
             if let ExprKind::SolList { sol, comp, what: 0 } = &a.kind {
@@ -1792,3 +1884,5 @@ mod par;
 mod lam;
 #[path = "ode.rs"]
 mod ode;
+#[path = "consts.rs"]
+mod consts;

@@ -3,7 +3,7 @@
 (the Python implementation, `python3 -m fermium.cli run`) and Julia, for rust/crates/fermium-codegen/PERF.md.
 
   python3 rust/tools/llvm_bench.py [--bin rust/target/release/fermium] [-r 5] [--no-v1] [--no-julia]
-                                   [--no-interp] [NAME ...]
+                                   [--no-interp] [--before OLD_BIN] [NAME ...]
 
 The implementations run interleaved (A B C D, A B C D, ...), so a change in the machine's load hits them alike;
 one untimed warm-up round first. Per program and implementation: the median wall time of the whole process
@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--no-julia", action="store_true")
     ap.add_argument("--no-interp", action="store_true")
     ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--before", help="another fermium binary (e.g. an older build), timed as a row of its own")
     ap.add_argument("names", nargs="*")
     a = ap.parse_args()
     names = a.names or sorted(f[:-3] for f in os.listdir(os.path.join(BENCH, "fermium")) if f.endswith(".fm"))
@@ -73,6 +74,8 @@ def main():
     for n in names:
         fm = os.path.join("benchmarks", "fermium", n + ".fm")
         impls = [("Fermium 2, LLVM JIT", [a.bin, "run", "--backend", "llvm", fm], fenv)]
+        if a.before:
+            impls.append(("Fermium 2 before, LLVM JIT", [a.before, "run", "--backend", "llvm", fm], fenv))
         if not a.no_interp:
             impls.append(("Fermium 2, tree-walker", [a.bin, "run", "--backend", "interp", fm], fenv))
         if not a.no_v1:
