@@ -996,7 +996,18 @@ fn collect_funs(t: T) -> T {
     let inv = T::Pow(Box::new(f.clone()), (-1, 1));
     let inner = add_all(with.into_iter().map(|x| mul_all(vec![x, inv.clone()])).collect());
     let mut items = without;
-    items.push(mul_all(vec![inner, f]));
+    // heurisch keeps whole coefficients in the sum and a fraction outside: (2x − 1)·exp(2x)/4
+    let lcm = match &inner {
+        T::Add(ts) => ts.iter().try_fold(1i64, |l, x| rational(split_term(x.clone()).0).map(|r| l / gcd(l, r.1) * r.1)),
+        _ => None,
+    };
+    match lcm {
+        Some(l) if l > 1 && l < 1_000_000 => {
+            let scaled = mul_all(vec![T::Num(l as f64), inner]);
+            items.push(T::Mul(1.0 / l as f64, vec![scaled, f]));
+        }
+        _ => items.push(mul_all(vec![inner, f])),
+    }
     add_all(items)
 }
 
