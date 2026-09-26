@@ -244,7 +244,62 @@ name/method n t_last y_last... [y(t_k) y'(t_k) comp 0 at t0 + FRACS*(t_last - t0
     w.close()
 
 
-SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff}
+# --------------------------------------------------------------------------------------- fit
+# v1's least_squares_fit (fermium/runtime/fitting.py over SciPy least_squares 'lm'). The data are
+# written into the fixture; the models are in tests/fit.rs (by name).
+def _noise(i, amp):
+    return amp * sin(12.9898 * i + 78.233 * sin(0.5 * i))
+
+
+def _fit_data():
+    import numpy as np
+    cases = []
+    x = np.array([0.5 * i for i in range(20)])
+    cases.append(("line", lambda p, x: p[0] * x + p[1], x, 2.5 * x - 1.0 + np.array([_noise(i, 0.3) for i in range(20)]),
+                  [None, None]))
+    t = np.array([0.2 * i for i in range(30)])
+    yd = 3.0 * np.exp(-t / 1.7) + np.array([_noise(i, 0.02) for i in range(30)])
+    cases.append(("decay_scan", lambda p, x: p[0] * np.exp(-x / p[1]), t, yd, [None, None]))
+    cases.append(("decay_guess", lambda p, x: p[0] * np.exp(-x / p[1]), t, yd, [2.0, 1.0]))
+    xg = np.array([-3.0 + 0.25 * i for i in range(25)])
+    yg = 4.0 * np.exp(-(xg - 0.4) ** 2 / (2 * 0.7 ** 2)) + 0.5 + np.array([_noise(i, 0.05) for i in range(25)])
+    cases.append(("gauss", lambda p, x: p[0] * np.exp(-(x - p[1]) * (x - p[1]) / (2 * p[2] * p[2])) + p[3], xg, yg,
+                  [None, 0.0, 1.0, None]))
+    xp = np.array([1.0 + 0.5 * i for i in range(15)])
+    ypw = 0.8 * xp ** 1.5 * (1 + np.array([_noise(i, 0.01) for i in range(15)]))
+    cases.append(("power", lambda p, x: p[0] * x ** p[1], xp, ypw, [None, None]))
+    ts = np.array([2e-7 * i for i in range(25)])
+    ysi = 1.6e-19 * np.exp(-ts / 1.3e-6) * (1 + np.array([_noise(i, 0.01) for i in range(25)]))
+    cases.append(("si_scale", lambda p, x: p[0] * np.exp(-x / p[1]), ts, ysi, [None, None]))
+    xd = np.array([1.0 * i for i in range(8)])
+    cases.append(("degenerate", lambda p, x: p[0] * p[1] * x, xd, 2.0 * xd + np.array([_noise(i, 0.1) for i in range(8)]),
+                  [1.0, 1.0]))
+    to = np.array([0.1 * i for i in range(60)])
+    yo = 2.0 * np.exp(-to / 3.0) * np.cos(4.0 * to) + np.array([_noise(i, 0.03) for i in range(60)])
+    cases.append(("damped", lambda p, x: p[0] * np.exp(-x / p[1]) * np.cos(p[2] * x), to, yo, [1.5, 2.0, 3.9]))
+    xe = np.array([1.0, 2.0, 3.0, 4.0])
+    cases.append(("exact", lambda p, x: p[0] * x + p[1], xe, 3.0 * xe + 2.0, [None, None]))
+    xk = np.array([1.0, 2.0])
+    cases.append(("n_eq_k", lambda p, x: p[0] * x + p[1], xk, np.array([1.0, 4.0]), [None, None]))
+    return cases
+
+
+def gen_fit():
+    import numpy as np
+    from fermium.runtime.fitting import least_squares_fit
+    w = Writer("fit.txt", """
+v1's fit: least_squares_fit (SciPy least_squares 'lm', x_scale |p0|) + covariance (fermium/runtime/fitting.py).
+name:x ...   name:y ...   name:guess g...(nan = none)   name k params... errors...(nan = none) rms""")
+    for name, model, x, y, guess in _fit_data():
+        w.row(name + ":x", *list(x))
+        w.row(name + ":y", *list(y))
+        w.row(name + ":guess", *[math.nan if g is None else g for g in guess])
+        best, errs, rms = least_squares_fit(lambda p: model(p, x) - y, np.zeros(len(x)), guess)
+        w.row(name, float(len(guess)), *best, *[math.nan if e is None else e for e in errs], rms)
+    w.close()
+
+
+SECTIONS = {"quad": gen_quad, "ode": gen_ode, "stiff": gen_stiff, "fit": gen_fit}
 
 if __name__ == "__main__":
     todo = sys.argv[1:] or list(SECTIONS)
