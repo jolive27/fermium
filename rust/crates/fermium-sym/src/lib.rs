@@ -22,9 +22,11 @@
 pub mod build;
 pub mod diff;
 pub mod integrate;
+pub mod numeval;
 pub mod ode;
 pub mod simplify;
 pub mod source;
+pub mod tidy;
 pub mod walk;
 
 pub use build::SymResult;
