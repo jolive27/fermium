@@ -91,6 +91,8 @@ impl Checker {
             K::Uncertain { value, err } => self.e_uncertain(e, value, err, ctx)?,
             K::End => self.e_end(e)?,
             K::Convert { value, unit } => self.e_convert(e, value, unit, ctx)?,
+            K::Load { path } => self.e_load(e, path)?,
+            K::Table { names, items } => self.e_table(e, names, items, ctx)?,
             K::Digits { value, digits } => self.e_digits(e, value, *digits as u32, ctx)?,
             K::VecLit { items } => self.e_vec_lit(e, items, ctx)?,
             K::Field { target, name } => return self.e_field(e, target, name, ctx),

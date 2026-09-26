@@ -265,3 +265,12 @@ warnings, astral characters, incremental edits, a parse error and modules) get e
   `textDocumentSync` incremental as pygls's default.
 - After `shutdown` then `exit` the process exits with 0, as the protocol says (pygls exits with 1).
 - A file:// URI with %-escapes (a folder name with spaces) is decoded before imports are looked up there.
+
+## Function instances are keyed by the shape and units of vector and matrix arguments
+
+v1 made one instance of a user function per argument type, but it keyed a vector or matrix argument by its
+kind alone. So `f(v) = |v|` called first with `<3, 4> m` and then with `<1, 2, 2> s` reused the first instance:
+v1's compiled code stopped with an internal error (`TypeError: Type of #1 arg mismatch: <2 x double> !=
+<3 x double>`), and a straight port printed `3 m` for the second call. The Rust checker keys these arguments by
+their length (or rows and columns) and by the dimension of each component, so each call gets its own instance
+(`5 m 3 s`). No conformance case is affected (v1 crashed on every such program).

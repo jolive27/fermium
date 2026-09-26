@@ -563,7 +563,7 @@ impl Checker {
     }
 
     // ------------------------------------------------------------ integrals
-    fn scalar_lambda(&mut self, base: &str, var: &str, dim: DExpr, ctx: &Ctx) -> (I::LambdaId, Ctx, I::SymId) {
+    pub(crate) fn scalar_lambda(&mut self, base: &str, var: &str, dim: DExpr, ctx: &Ctx) -> (I::LambdaId, Ctx, I::SymId) {
         let lname = self.fresh_name(base);
         self.module.lambdas.push(I::Lambda { kind: I::LambdaKind::Scalar, name: lname, params: vec![], captures: vec![],
                                              locals: vec![], body: vec![], state: vec![], col_syms: vec![],

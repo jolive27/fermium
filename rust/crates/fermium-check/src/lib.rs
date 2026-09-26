@@ -16,6 +16,7 @@ pub mod checker;
 pub mod clist;
 pub mod convert;
 pub mod cplx;
+pub mod data;
 pub mod exprs;
 pub mod lists;
 pub mod modules;

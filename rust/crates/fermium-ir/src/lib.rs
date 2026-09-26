@@ -207,7 +207,8 @@ pub enum StmtKind {
     Plot(usize, Vec<Expr>),
     Solve { sol: SymId, rhs: LambdaId, y0: Vec<Expr>, t0: Expr, t1: Expr, step: Option<Expr>, method: String,
             rtol: Option<Expr>, x: Box<SolveExtra> },
-    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId },
+    /// errs: the hidden variables that receive the standard errors, for err(x)
+    Fit { fit_id: usize, data: Expr, params: Vec<SymId>, guesses: Vec<Expr>, model: LambdaId, errs: Vec<SymId> },
     Return(Option<Expr>),
     Break,
     Continue,

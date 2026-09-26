@@ -8,20 +8,9 @@ use crate::checker::*;
 impl Checker {
     // ---- stmts / parallel
     // ---- vectors and matrices
-    /// Fields of ODE solutions and data tables (not ported yet).
-    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, name: &str, t: Checked, ctx: &mut Ctx)
-                       -> CResult<Checked> {
-        if let Checked::Sol(view) = t {
-            return self.sol_field(e, view, name, ctx); // solve.rs
-        }
-        Err(self.not_ported("a field", e.span))
-    }
 }
 
 impl Checker {
-    pub fn data_description(&self, _v: &I::Expr) -> String {
-        "data".into()
-    }
 }
 
 impl Checker {
