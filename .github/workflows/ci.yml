@@ -34,6 +34,32 @@ jobs:
       - name: make check
         run: make check
 
+  macos:
+        description: "Also run on macOS (arm64)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (fresh, as a tester would)
+        run: python3 -m pip install -e ".[full,dev]"
+      - run: fermium doctor
+      - name: Julia packages for the rosetta comparisons (if the runner has Julia)
+        run: if command -v julia >/dev/null; then julia -e 'using Pkg; Pkg.add(["Unitful", "QuadGK"])'; fi
+      - name: make check
+        run: make check
+
   rust-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 45
