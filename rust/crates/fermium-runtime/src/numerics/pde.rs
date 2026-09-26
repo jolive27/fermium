@@ -74,6 +74,8 @@ pub struct PdeResult {
     pub ncomp: usize,
     pub m: usize,
     pub warnings: Vec<(i64, f64)>,
+    /// a Dirichlet boundary value differs from the initial value at that end (D206): the grid check applies
+    pub jump: bool,
 }
 
 type Probe<'a> = dyn FnMut(f64, &[f64; 6]) -> [f64; 6] + 'a;
@@ -786,12 +788,154 @@ pub fn pde_solve(probe: &mut Probe<'_>, xa: f64, xb: f64, t0: f64, t1: f64, opts
         ncomp,
         m,
         warnings,
+        jump,
     })
+}
+
+// ------------------------------------------------------------------ the grid check (Fermium 2, not in v1)
+//
+// v1 controls the time step of a PDE but not the grid: right after a jump (a boundary value that differs from
+// the initial value), before the diffusion length √(D t) spans a few grid cells, u(x, t) between the boundary and
+// the first nodes is an interpolation and can be 60 % off with no warning (OPEN_ITEMS RT7-2, spec B2). Fermium 2
+// solves such a first-order equation a second time on a grid half as fine, with the same time steps, and u(x, t)
+// compares the two there: for the second-order scheme the fine grid's error would be about |fine − coarse| / 3
+// (near an unresolved jump it is larger). Where that is over PDE_TOL of the solution's range, the evaluator warns
+// (rust/DIVERGENCES.md). Values are unchanged.
+
+impl PdeResult {
+    /// The snapshots as a stored solution (t, rows of u, rows of ∂u/∂t), as v1's SolStruct holds them.
+    pub fn to_sol(&self) -> super::ode::Sol {
+        let mut s = super::ode::Sol::new(self.ncomp * (self.m + 1));
+        s.t = self.ts.clone();
+        s.y = self.ys.clone();
+        s.dy = self.dys.clone();
+        s
+    }
+
+    /// The range of each component over all snapshots and grid points (max − min, or max |u| if flat).
+    pub fn ranges(&self) -> Vec<f64> {
+        let w = self.m + 1;
+        let dim = self.ncomp * w;
+        (0..self.ncomp)
+            .map(|c| {
+                let vals = (0..self.ts.len()).flat_map(|i| self.ys[i * dim + c * w..i * dim + (c + 1) * w].iter().copied());
+                let (mut lo, mut hi, mut big) = (f64::INFINITY, f64::NEG_INFINITY, 0.0f64);
+                for v in vals {
+                    lo = lo.min(v);
+                    hi = hi.max(v);
+                    big = big.max(v.abs());
+                }
+                if hi - lo > 0.0 { hi - lo } else { big }
+            })
+            .collect()
+    }
+}
+
+/// u(x, t) (which 0), ∂u/∂x (1) or ∂u/∂t (2) of one component of a PDE solution: cubic Lagrange interpolation
+/// in x through the 4 grid points around x, the solution's Hermite interpolation in t at each (v1's
+/// fm_pde_eval, operation for operation). x must be inside [xa, xb] (the caller checks).
+#[allow(clippy::too_many_arguments)]
+pub fn pde_eval(sol: &super::ode::Sol, xa: f64, xb: f64, m: usize, comp0: usize, x: f64, t: f64, which: u8)
+                -> Result<f64, super::Fail> {
+    let m = m as i64;
+    let h = (xb - xa) / m as f64;
+    let s = (x - xa) / h;
+    let mut j = s.floor() as i64;
+    j = j.max(1);
+    j = j.min(m - 2);
+    let r = s - j as f64;
+    let r2 = r * r;
+    let (rm1, rm2, rp1) = (r - 1.0, r - 2.0, r + 1.0);
+    let wv = [((0.0 - r) * rm1) * rm2 / 6.0, (rp1 * rm1) * rm2 / 2.0, ((0.0 - rp1) * r) * rm2 / 2.0, (rp1 * r) * rm1 / 6.0];
+    let t3 = 3.0 * r2;
+    let wd = [(0.0 - ((t3 - 6.0 * r) + 2.0)) / (6.0 * h), ((t3 - 4.0 * r) - 1.0) / (2.0 * h),
+              (0.0 - ((t3 - 2.0 * r) - 2.0)) / (2.0 * h), (t3 - 1.0) / (6.0 * h)];
+    let base = comp0 as i64 + (j - 1);
+    let mut acc = 0.0;
+    for k in 0..4 {
+        let w = if which == 1 { wd[k] } else { wv[k] };
+        let val = sol.eval((base + k as i64) as usize, t, which == 2, None)?;
+        acc += w * val;
+    }
+    Ok(acc)
+}
+
+/// A PDE solution and, for the grid check, the same equation on a grid half as fine with the same time steps.
+#[derive(Debug, Clone)]
+pub struct CheckedPde {
+    pub fine: PdeResult,
+    pub coarse: Option<PdeResult>,
+}
+
+/// `pde_solve`, plus the check solution on half the grid (first-order equations with an even grid of 8 or more
+/// intervals; None when the check doesn't apply or the snapshots don't line up).
+pub fn pde_solve_checked(probe: &mut Probe<'_>, xa: f64, xb: f64, t0: f64, t1: f64, opts: PdeOpts)
+                         -> Result<CheckedPde, PdeFail> {
+    let fine = pde_solve(probe, xa, xb, t0, t1, opts)?;
+    let mut coarse = None;
+    if fine.jump && opts.order == 1 && opts.grid % 2 == 0 && opts.grid >= 8 && fine.ts.len() >= 2 {
+        // the first recorded step is step 1, so the fine solve's step is ts[1] − t0
+        let n = ((t1 - t0) / (fine.ts[1] - fine.ts[0])).round().max(1.0);
+        let o = PdeOpts { grid: opts.grid / 2, step: Some((t1 - t0) / n), ..opts };
+        if let Ok(c) = pde_solve(probe, xa, xb, t0, t1, o) {
+            let aligned = c.ts.len() == fine.ts.len()
+                && c.ts.iter().zip(&fine.ts).all(|(a, b)| (a - b).abs() <= 1e-9 * (t1 - t0).abs());
+            if aligned {
+                coarse = Some(c);
+            }
+        }
+    }
+    Ok(CheckedPde { fine, coarse })
+}
+
+/// The grid check at (x, t) for component c: the estimated error of the fine solution's u there, relative to the
+/// component's range (|fine − coarse| / 3 / range), or None without a check solution.
+pub fn grid_error(fine: &super::ode::Sol, coarse: &super::ode::Sol, m: usize, xa: f64, xb: f64, c: usize, range: f64,
+                  x: f64, t: f64) -> Option<f64> {
+    if m < 8 || range <= 0.0 {
+        return None;
+    }
+    let f = pde_eval(fine, xa, xb, m, c * (m + 1), x, t, 0).ok()?;
+    let mc = m / 2;
+    let g = pde_eval(coarse, xa, xb, mc, c * (mc + 1), x, t, 0).ok()?;
+    Some((f - g).abs() / 3.0 / range)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn heat_step_very_early_time_is_accurate_or_warned() {
+        // red team round 7 #2 (OPEN_ITEMS RT7-2): D = 1e-4 m²/s, u(x, 0) = 0 K, u(0, t) = 80 K, u(1 m, t) = 0 K.
+        // v1 prints 55.0 K and 42.2 K where 80 K erfc(x / (2√(D t))) is 34.34 K and 38.36 K, with no warning.
+        let d = 1e-4;
+        let mut probe = |_x: f64, a: &[f64; 6]| [d * a[2], 0.0, 0.0, 0.0, 80.0, 0.0];
+        let r = pde_solve_checked(&mut probe, 0.0, 1.0, 0.0, 100.0, PdeOpts::default()).unwrap();
+        let (fine, coarse) = (r.fine.to_sol(), r.coarse.as_ref().expect("check solution").to_sol());
+        let range = r.fine.ranges()[0];
+        let m = r.fine.m;
+        // 80 K erfc(x / (2√(D t))) from Python's math.erfc
+        for (x, t, exact) in [(0.5e-3, 0.002, 34.33562403522794), (0.25e-3, 0.0025, 57.89388878654105),
+                              (0.5e-3, 0.01, 57.89388878654105), (1e-3, 0.01, 38.36000977495628),
+                              (0.1, 50.0, 25.38484062903312)] {
+            let u = pde_eval(&fine, 0.0, 1.0, m, 0, x, t, 0).unwrap();
+            let est = grid_error(&fine, &coarse, m, 0.0, 1.0, 0, range, x, t).unwrap();
+            let wrong = (u - exact).abs() / range;
+            // either accurate to the tolerance, or the check says so (and its estimate is not far below the error)
+            assert!(wrong <= 2.0 * PDE_TOL || est > PDE_TOL, "u({x}, {t}) = {u} vs {exact}: error {wrong}, estimate {est}");
+        }
+        // later, once the solution has spread over many cells, it is accurate and not flagged
+        let (x, t) = (0.1, 50.0);
+        let u = pde_eval(&fine, 0.0, 1.0, m, 0, x, t, 0).unwrap();
+        assert!((u - 25.38484062903312).abs() < 1e-3 * range);
+        assert!(grid_error(&fine, &coarse, m, 0.0, 1.0, 0, range, x, t).unwrap() < PDE_TOL);
+        // no jump (the boundary values match the initial value): no check solution
+        let pi = std::f64::consts::PI;
+        let mut smooth = |x: f64, a: &[f64; 6]| [a[2], (pi * x).sin(), 0.0, 0.0, 0.0, 0.0];
+        let r = pde_solve_checked(&mut smooth, 0.0, 1.0, 0.0, 0.1, PdeOpts { grid: 100, ..Default::default() }).unwrap();
+        assert!(r.coarse.is_none() && !r.fine.jump);
+    }
 
     #[test]
     fn heat_decay_of_a_sine() {

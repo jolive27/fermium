@@ -189,3 +189,26 @@ When a run-time error happens in several iterations of a `parallel for`, v1's co
 of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
 for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
 iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
+
+## PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)
+
+- v1: the heat equation after a jump (`D = 1e-4 m²/s`, `u(x, 0 s) = 0 K`, `u(0 m, t) = 80 K`, `u(1 m, t) = 0 K`,
+  grid 400) prints `u(0.5 mm, 0.002 s)` = 55.0 K and `u(1 mm, 0.01 s)` = 42.2 K where 80 K erfc(x / (2√(D t)))
+  gives 34.3 K and 38.4 K, with no warning. v1 controls the time step (D130) but not the grid: before the
+  diffusion length √(D t) spans a few grid cells, the value between the boundary and the first nodes is an
+  interpolation.
+- v2: the values are the same, but a first-order PDE whose Dirichlet boundary value differs from its initial value
+  at t0 (the D206 jump) is solved a second time on a grid half as fine, with the same time steps. `u(x, t)` compares
+  the two there, and where they differ by more than 3·10⁻³ of the solution's range (a fine-grid error of 10⁻³ of the
+  range for the second-order scheme, the tolerance of the time-step control), it warns once per solve:
+
+      warning: line 5: the grid is too coarse for this PDE at x = 0.000500 m, t = 0.00200 s: the value there changes
+      by 14% of the solution's range when the grid is made half as fine (a sharp front, a short wavelength, or the
+      time right after a jump needs more grid points); raise  grid  (it is 400)
+
+  The check costs about one more march on half the grid. PDEs without a jump (wave packets, smooth initial values)
+  are not checked, and ∂u/∂x, ∂u/∂t are not checked.
+- Tests: `pde.rs` `heat_step_very_early_time_is_accurate_or_warned` (the four points of red team round 7 #2 against
+  erfc: each is within 2·10⁻³ of the range or flagged; t = 50 s is accurate and not flagged; no check without a jump).
+- Affected cases (a warning v1 didn't give): 36c9c5b55398 (the red team's 55.004 K), 6781a0d7f2f0 (34.239 K where
+  erfc gives 34.34 K: off by 1.3·10⁻³ of the range, over the tolerance).

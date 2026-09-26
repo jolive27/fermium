@@ -27,6 +27,11 @@ pub(crate) fn warn_text(text: &str) {
     });
 }
 
+/// Has a warning starting with this text been shown (Runtime.warn's once-per-solve rule for kind 7)?
+pub(crate) fn warned_with_prefix(prefix: &str) -> bool {
+    WARNED.with(|w| w.borrow().iter().any(|t| t.starts_with(prefix)))
+}
+
 /// A run-time warning at a program line (Runtime.warn): "warning: line N: …".
 pub(crate) fn warn_at(line: u32, msg: &str) {
     if line > 0 {
