@@ -1359,7 +1359,8 @@ Other checks:
   Rust takes 3.9 s and v1 takes 0.77 s. Without the plot line, Rust takes 0.14 s.
 - `research/rutherford_mc`, whose 2×10⁷-sample loop ends in one plot, takes 92–106 s in Rust against 3.2–4.3 s in
   v1 (under load, but consistently about 25× slower).
-- `research/bbn_network` (radau, with plots) took more than 600 s in Rust against 45 s in v1: the run timed out.
+- `research/bbn_network` (radau, with plots) did not finish in 900 s on 5ade949 (600 s on cfea465) against 45 s in
+  v1: both runs timed out.
 - `research/hydrogen_levels` took 15 s against 2.3 s.
 - The suite's 4 time-outs are the same programs. Three of them are filed under "uncertainty" only because a
   string contains ± ("35 ± 8.4 expected").
@@ -1480,3 +1481,14 @@ against v1's 0.4 s.
   - analyze, stdlib imports, import by path, private names, bad CSVs, missing modules;
   - all the error cases I tried.
 - `fermium doctor` is honest: it says `fermium build` isn't in this version (B5.10 is still open).
+
+**Round 10 status (08:50 UTC):**
+- #1 (fit uncertainty lost with ±): assigned to the uncertainty agent.
+- #2 (one uncompiled construct sends the whole program to the tree-walker): assigned to the LLVM agent as its priority (compile plot/load in LLVM, or a mixed mode).
+- #3 (atanh antiderivative NaN for |x| > a): assigned to the calculus agent.
+- #4: fixed. The program folder is absolute even for a bare file name; test `a_bare_file_name_finds_the_module_beside_it`.
+- #5: partly fixed. The tree-walker now has 1.9 GB of stack, about 5×10⁵ calls deep instead of 3×10⁵; the rest is documented in rust/DIVERGENCES.md. Smaller frames are open.
+- #6 (warning caret): assigned to agent A; the runner comparing columns is open.
+- #7 (sums rule on cancellations): open, next.
+- #8: DIVERGENCES.md is corrected (the REPL accepts ±, `fermium build` exists). CONFORMANCE.md will be regenerated after the next full run. The reference's `use python` line is true after #4.
+- #9 (compiled inner loops slower than v1): assigned to the LLVM agent, to re-measure on a quiet machine.
