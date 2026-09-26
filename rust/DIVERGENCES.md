@@ -143,11 +143,13 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
 - v2 applies the textbook rule when a printed sum's operands all carry measured precision (significant figures
   from written values; whole literals like `1` or `300` are exact, so `1 - r` keeps v1's rule): at run time each
   operand's last significant decimal place is found in the unit the result prints in, the sum keeps the
-  coarsest one, and that sets its figures (at least one): `293.6 K` (293.65 is 293.6499… in binary),
-  `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`, `0.3`. A cancellation smaller than that place is rounded to
-  it (red team 10 #7): `12.0 kg - 11.99 kg` prints `0 kg` (v1 `0.01 kg`), `10.0 m - 9.95 m` prints `0.1 m`. `to N digits` always wins, and a sum stored in a
-  variable first prints as before. The LLVM back end leaves such a print to the tree-walker, so both print the
-  same.
+  coarsest one, and that sets its figures (at least one): `940.5 MeV` for `938.272 MeV + 2.2 MeV`, `3.2 m`,
+  `0.3`. A cancellation smaller than that place is rounded to it (red team 10 #7): `12.0 kg - 11.99 kg` prints
+  `0 kg` (v1 `0.01 kg`), `10.0 m - 9.95 m` prints `0.1 m`. `to N digits` always wins, and a sum stored in a
+  variable first prints as before. Both back ends apply the rule (the LLVM one through `fm_print_msum`).
+- A sum whose result is a temperature keeps v1's rule (red team 11 #1): operands written in °C or °F have
+  decimal places that can't be read off their values in kelvin (`20.0 °C` is 293.15 K), and the IR doesn't keep
+  the written unit, so `293.15 K + 0.5 K` prints v1's `293.65 K` and `0.5 °C - 0.2 °C` prints `0.30 K`.
 - Measured on the whole conformance suite before adopting it: 4 cases change, no others: the three above, and
   a first-law check `W − (Q_h + Q_c)` whose rounding-noise result now shows one figure (`-7×10⁻¹⁵ μJ`; since the cancellation rounding of red team 10 #7, `0 μJ`; v1
   `-6.78×10⁻¹⁵ μJ`).
