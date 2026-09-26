@@ -1,7 +1,6 @@
 //! Hooks for the interactive tools (the REPL and the Jupyter kernel, fermium-repl): run one input after
 //! another with the main program's variables and ODE solutions kept between inputs (v1's ReplSession keeps them
 //! in an arena of globals), and print a module's LLVM IR (`fermium run --emit-llvm`).
-use std::collections::HashMap;
 
 use fermium_ir::{Module, SymId};
 
@@ -12,7 +11,7 @@ use crate::eval::{Interpreter, Printer, RunError, Value};
 /// by symbol id.
 #[derive(Default)]
 pub struct ReplState {
-    globals: HashMap<SymId, Value>,
+    globals: crate::eval::SymMap<Value>,
     solve: crate::eval_solve::SolveState,
 }
 

@@ -11,7 +11,8 @@
 //! rounding-level differences that can occasionally tip a step decision; see NUMERICS.md for the
 //! measured agreement.
 
-use super::dense::{Lu, C64};
+use super::dense::C64;
+use super::npblas::{self as nb, ComplexLu, RealLu};
 use super::ode::{illinois, step_small_kind, EventFn, OdeOpts, Sol};
 use super::{err, pymax, pymin, Fail};
 
@@ -28,9 +29,9 @@ pub enum StiffMethod {
 
 type Rhs<'a> = dyn FnMut(f64, &[f64], &mut [f64]) + 'a;
 
+/// SciPy's norm (np.linalg.norm(x) / √n), with NumPy's dot product rounding (npblas.rs).
 fn norm(x: &[f64]) -> f64 {
-    let s: f64 = x.iter().map(|v| v * v).sum();
-    s.sqrt() / (x.len() as f64).powf(0.5)
+    super::npblas::norm(x)
 }
 
 fn call(f: &mut Rhs<'_>, t: f64, y: &[f64]) -> Vec<f64> {
@@ -221,14 +222,18 @@ struct RadauDense {
 }
 
 impl RadauDense {
+    /// At one time (np.dot(Q, p) with p a vector).
     fn eval(&self, t: f64) -> Vec<f64> {
         let x = (t - self.t_old) / self.h;
         let p = [x, x * x, x * x * x];
-        self.y_old
-            .iter()
-            .zip(&self.q)
-            .map(|(&y0, q)| (q[0] * p[0] + q[1] * p[1] + q[2] * p[2]) + y0)
-            .collect()
+        self.y_old.iter().zip(&self.q).map(|(&y0, q)| nb::qdotp(q, &p) + y0).collect()
+    }
+
+    /// At several times at once (np.dot(Q, p) with p a matrix: a dgemm), as the step's prediction calls it.
+    fn eval_many(&self, t: f64) -> Vec<f64> {
+        let x = (t - self.t_old) / self.h;
+        let p = [x, x * x, x * x * x];
+        self.y_old.iter().zip(&self.q).map(|(&y0, q)| nb::chain3(*q, p) + y0).collect()
     }
 }
 
@@ -249,13 +254,14 @@ struct Radau {
     jac_factor: Option<Vec<f64>>,
     j: Vec<f64>,
     current_jac: bool,
-    lu_real: Option<Lu<f64>>,
-    lu_complex: Option<Lu<C64>>,
+    lu_real: Option<RealLu>,
+    lu_complex: Option<ComplexLu>,
     sol: Option<RadauDense>,
     t_old: Option<f64>,
 }
 
 fn predict_factor(h_abs: f64, h_abs_old: Option<f64>, error_norm: f64, error_norm_old: Option<f64>) -> f64 {
+    if std::env::var("FM_TRACE").is_ok() { eprintln!("  predict h_abs={h_abs:e} error_norm={error_norm:?}"); }
     let multiplier = match (error_norm_old, h_abs_old) {
         (Some(eno), Some(hao)) if error_norm != 0.0 => h_abs / hao * (eno / error_norm).powf(0.25),
         _ => 1.0,
@@ -301,14 +307,15 @@ impl Radau {
         })
     }
 
-    fn lu_real(&self, h: f64) -> Result<Lu<f64>, StepErr> {
+    fn lu_real(&self, h: f64) -> Result<RealLu, StepErr> {
         let n = self.n;
         let m = self.k.mu_real / h;
-        let a: Vec<f64> = (0..n * n).map(|ij| if ij / n == ij % n { m - self.j[ij] } else { -self.j[ij] }).collect();
-        Lu::new(a, n).ok_or(StepErr::NonFinite)
+        // MU_REAL / h * I - J
+        let a: Vec<f64> = (0..n * n).map(|ij| if ij / n == ij % n { m - self.j[ij] } else { 0.0 - self.j[ij] }).collect();
+        RealLu::new(&a, n).ok_or(StepErr::NonFinite)
     }
 
-    fn lu_complex(&self, h: f64) -> Result<Lu<C64>, StepErr> {
+    fn lu_complex(&self, h: f64) -> Result<ComplexLu, StepErr> {
         let n = self.n;
         let m = C64::new(self.k.mu_complex.re / h, self.k.mu_complex.im / h);
         let a: Vec<C64> = (0..n * n)
@@ -317,7 +324,7 @@ impl Radau {
                 if ij / n == ij % n { m - jv } else { C64::default() - jv }
             })
             .collect();
-        Lu::new(a, n).ok_or(StepErr::NonFinite)
+        ComplexLu::new(&a, n).ok_or(StepErr::NonFinite)
     }
 
     /// SciPy's `solve_collocation_system`: (converged, n_iter, Z, rate)
@@ -328,21 +335,21 @@ impl Radau {
         h: f64,
         z0: &[Vec<f64>; 3],
         scale: &[f64],
-        lu_r: &Lu<f64>,
-        lu_c: &Lu<C64>,
+        lu_r: &RealLu,
+        lu_c: &ComplexLu,
     ) -> (bool, usize, [Vec<f64>; 3], Option<f64>) {
         let (n, k, t, y) = (self.n, &self.k, self.t, &self.y);
         let m_real = k.mu_real / h;
         let m_complex = C64::new(k.mu_complex.re / h, k.mu_complex.im / h);
+        // W = TI.dot(Z0)
         let mut w: [Vec<f64>; 3] =
-            std::array::from_fn(|r| (0..n).map(|j| k.ti[r][0] * z0[0][j] + k.ti[r][1] * z0[1][j] + k.ti[r][2] * z0[2][j]).collect());
+            std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.ti[r], [z0[0][j], z0[1][j], z0[2][j]])).collect());
         let mut z = z0.clone();
         let ch = [h * k.c[0], h * k.c[1], h * k.c[2]];
         let mut dw_norm_old: Option<f64> = None;
         let mut converged = false;
         let mut rate: Option<f64> = None;
         let mut iters = 0;
-        let ti_c = [C64::new(k.ti[1][0], k.ti[2][0]), C64::new(k.ti[1][1], k.ti[2][1]), C64::new(k.ti[1][2], k.ti[2][2])];
         for it in 0..RADAU_NEWTON_MAXITER {
             iters = it + 1;
             let mut fs: [Vec<f64>; 3] = std::array::from_fn(|_| vec![0.0; n]);
@@ -353,13 +360,14 @@ impl Radau {
             if fs.iter().any(|r| r.iter().any(|v| !v.is_finite())) {
                 break;
             }
-            let mut f_real: Vec<f64> = (0..n)
-                .map(|j| (fs[0][j] * k.ti[0][0] + fs[1][j] * k.ti[0][1] + fs[2][j] * k.ti[0][2]) - m_real * w[0][j])
-                .collect();
+            // f_real = F.T.dot(TI_REAL) - M_real * W[0]; f_complex = F.T.dot(TI_COMPLEX) - M_complex * (W[1] + 1j W[2])
+            let mut f_real: Vec<f64> =
+                (0..n).map(|j| nb::gemv_t3([fs[0][j], fs[1][j], fs[2][j]], &k.ti[0], n, j) - m_real * w[0][j]).collect();
             let mut f_complex: Vec<C64> = (0..n)
                 .map(|j| {
-                    let s = C64::new(fs[0][j], 0.0) * ti_c[0] + C64::new(fs[1][j], 0.0) * ti_c[1] + C64::new(fs[2][j], 0.0) * ti_c[2];
-                    s - m_complex * C64::new(w[1][j], w[2][j])
+                    let col = [fs[0][j], fs[1][j], fs[2][j]];
+                    let s = C64::new(nb::cgemv_t3(col, &k.ti[1], n, j), nb::cgemv_t3(col, &k.ti[2], n, j));
+                    s - nb::cmul(m_complex, C64::new(w[1][j], w[2][j]))
                 })
                 .collect();
             lu_r.solve(&mut f_real);
@@ -380,7 +388,7 @@ impl Radau {
                     w[r][j] += dw[r][j];
                 }
             }
-            z = std::array::from_fn(|r| (0..n).map(|j| k.t[r][0] * w[0][j] + k.t[r][1] * w[1][j] + k.t[r][2] * w[2][j]).collect());
+            z = std::array::from_fn(|r| (0..n).map(|j| nb::chain3(k.t[r], [w[0][j], w[1][j], w[2][j]])).collect());
             if dw_norm == 0.0 || rate.map(|rt| rt / (1.0 - rt) * dw_norm < self.newton_tol).unwrap_or(false) {
                 converged = true;
                 break;
@@ -423,7 +431,7 @@ impl Radau {
             let z0: [Vec<f64>; 3] = match &self.sol {
                 None => std::array::from_fn(|_| vec![0.0; n]),
                 Some(s) => std::array::from_fn(|i| {
-                    let v = s.eval(t + h * self.k.c[i]);
+                    let v = s.eval_many(t + h * self.k.c[i]);
                     (0..n).map(|j| v[j] - y[j]).collect()
                 }),
             };
@@ -459,7 +467,7 @@ impl Radau {
             rate = rt;
             z = zz;
             y_new = (0..n).map(|j| y[j] + z[2][j]).collect::<Vec<f64>>();
-            let ze: Vec<f64> = (0..n).map(|j| (z[0][j] * self.k.e[0] + z[1][j] * self.k.e[1] + z[2][j] * self.k.e[2]) / h).collect();
+            let ze: Vec<f64> = (0..n).map(|j| nb::gemv_t3([z[0][j], z[1][j], z[2][j]], &self.k.e, n, j) / h).collect();
             let lr = lu_r.as_ref().unwrap();
             let mut error: Vec<f64> = (0..n).map(|j| fy[j] + ze[j]).collect();
             lr.solve(&mut error);
@@ -511,9 +519,10 @@ impl Radau {
         self.t_old = Some(t);
         let p = &self.k.p;
         let q: Vec<[f64; 3]> = (0..n)
-            .map(|j| std::array::from_fn(|c| z[0][j] * p[0][c] + z[1][j] * p[1][c] + z[2][j] * p[2][c]))
+            .map(|j| std::array::from_fn(|c| nb::chain3([z[0][j], z[1][j], z[2][j]], [p[0][c], p[1][c], p[2][c]])))
             .collect();
         self.sol = Some(RadauDense { t_old: t, h: t_new - t, y_old: y, q });
+        if std::env::var("FM_TRACE").is_ok() { eprintln!("step t={:?} h_abs={:?}", self.t, self.h_abs); }
         Ok(())
     }
 }
@@ -565,25 +574,22 @@ fn change_d(d: &mut [Vec<f64>], order: usize, factor: f64) {
     let r = compute_r(order, factor);
     let u = compute_r(order, 1.0);
     let m = order + 1;
+    // RU = R.dot(U)
     let mut ru = vec![vec![0.0; m]; m];
     for i in 0..m {
         for j in 0..m {
-            let mut s = 0.0;
-            for k in 0..m {
-                s += r[i][k] * u[k][j];
-            }
-            ru[i][j] = s;
+            let col: Vec<f64> = (0..m).map(|k| u[k][j]).collect();
+            ru[i][j] = nb::gemm_entry(&r[i], &col);
         }
     }
+    // D[:m] = np.dot(RU.T, D[:m]): a dgemm, or for one unknown a dgemv (RU.T.dot(d) = entries of A.T.dot(v))
     let n = d[0].len();
     let old: Vec<Vec<f64>> = d[..m].to_vec();
     for i in 0..m {
+        let a: Vec<f64> = (0..m).map(|k| ru[k][i]).collect();
         for c in 0..n {
-            let mut s = 0.0;
-            for k in 0..m {
-                s += ru[k][i] * old[k][c];
-            }
-            d[i][c] = s;
+            let b: Vec<f64> = (0..m).map(|k| old[k][c]).collect();
+            d[i][c] = if n == 1 { nb::gemv_t(&a, &b, m, i) } else { nb::gemm_entry(&a, &b) };
         }
     }
 }
@@ -605,13 +611,11 @@ impl BdfDense {
             acc *= (t - self.t_shift[i]) / self.denom[i];
             p[i] = acc;
         }
+        // np.dot(D[1:].T, p) + D[0]
         (0..n)
             .map(|c| {
-                let mut s = 0.0;
-                for i in 0..self.order {
-                    s += self.d[i + 1][c] * p[i];
-                }
-                s + self.d[0][c]
+                let a: Vec<f64> = (0..self.order).map(|i| self.d[i + 1][c]).collect();
+                nb::gemv_t(&a, &p, n, c) + self.d[0][c]
             })
             .collect()
     }
@@ -629,7 +633,7 @@ struct Bdf {
     newton_tol: f64,
     jac_factor: Option<Vec<f64>>,
     j: Vec<f64>,
-    lu: Option<Lu<f64>>,
+    lu: Option<RealLu>,
     gamma: [f64; 6],
     alpha: [f64; 6],
     error_const: [f64; 6],
@@ -730,13 +734,11 @@ impl Bdf {
                 }
             }
             scale = (0..n).map(|c| atol[c] + rtol * y_predict[c].abs()).collect::<Vec<f64>>();
+            // psi = np.dot(D[1: order + 1].T, gamma[1: order + 1]) / alpha[order]
             let psi: Vec<f64> = (0..n)
                 .map(|c| {
-                    let mut s = 0.0;
-                    for i in 1..=order {
-                        s += self.d[i][c] * self.gamma[i];
-                    }
-                    s / self.alpha[order]
+                    let a: Vec<f64> = (1..=order).map(|i| self.d[i][c]).collect();
+                    nb::gemv_t(&a, &self.gamma[1..=order], n, c) / self.alpha[order]
                 })
                 .collect();
             let mut converged = false;
@@ -745,8 +747,8 @@ impl Bdf {
             while !converged {
                 if lu.is_none() {
                     let a: Vec<f64> =
-                        (0..n * n).map(|ij| if ij / n == ij % n { 1.0 - cc * self.j[ij] } else { -(cc * self.j[ij]) }).collect();
-                    lu = Some(Lu::new(a, n).ok_or(StepErr::NonFinite)?);
+                        (0..n * n).map(|ij| if ij / n == ij % n { 1.0 - cc * self.j[ij] } else { 0.0 - cc * self.j[ij] }).collect();
+                    lu = Some(RealLu::new(&a, n).ok_or(StepErr::NonFinite)?);
                 }
                 let out = solve_bdf_system(f, t_new, &y_predict, cc, &psi, lu.as_ref().unwrap(), &scale, self.newton_tol);
                 converged = out.0;
@@ -802,6 +804,7 @@ impl Bdf {
                 self.d[i][c] += v;
             }
         }
+        if std::env::var("FM_TRACE").is_ok() { eprintln!("T {:?}", self.t); }
         if self.n_equal_steps < order + 1 {
             return Ok(());
         }
@@ -856,7 +859,7 @@ fn solve_bdf_system(
     y_predict: &[f64],
     c: f64,
     psi: &[f64],
-    lu: &Lu<f64>,
+    lu: &RealLu,
     scale: &[f64],
     tol: f64,
 ) -> (bool, usize, Vec<f64>, Vec<f64>) {

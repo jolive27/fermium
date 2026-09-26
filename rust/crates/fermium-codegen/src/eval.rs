@@ -199,10 +199,32 @@ pub(crate) enum Flow {
     Return(Value),
 }
 
+/// A fast hasher for symbol ids (small integers): the variables are looked up at every use, and SipHash was a
+/// third of an ODE right side's time.
+#[derive(Default, Clone, Copy)]
+pub struct SymHasher(u64);
+
+impl std::hash::Hasher for SymHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0.rotate_left(5) ^ u64::from(*b)).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+        }
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.0 = (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+/// A map keyed by symbol id.
+pub type SymMap<V> = HashMap<SymId, V, std::hash::BuildHasherDefault<SymHasher>>;
+
 /// Local variables of one call.
 #[derive(Default)]
 pub struct Frame {
-    pub(crate) vars: HashMap<SymId, Value>,
+    pub(crate) vars: SymMap<Value>,
 }
 
 thread_local! {
@@ -218,7 +240,7 @@ pub static STACK_LIMIT: std::sync::atomic::AtomicUsize = std::sync::atomic::Atom
 pub struct Interpreter<'m, P: Printer> {
     pub module: &'m Module,
     pub printer: P,
-    pub(crate) globals: HashMap<SymId, Value>,
+    pub(crate) globals: SymMap<Value>,
     pub(crate) line: u32,
     /// the program line that called into a module's code (errors inside it point there, D185)
     pub(crate) call_line: u32,
@@ -230,7 +252,7 @@ pub struct Interpreter<'m, P: Printer> {
 
 impl<'m, P: Printer> Interpreter<'m, P> {
     pub fn new(module: &'m Module, printer: P) -> Self {
-        Interpreter { module, printer, globals: HashMap::new(), line: 0, call_line: 0, builtins: HashMap::new(),
+        Interpreter { module, printer, globals: SymMap::default(), line: 0, call_line: 0, builtins: HashMap::new(),
                       solve: Default::default() }
     }
 
