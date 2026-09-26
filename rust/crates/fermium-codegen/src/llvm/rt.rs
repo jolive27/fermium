@@ -126,6 +126,10 @@ pub struct Ctx<'m> {
     pub mvec_fmts: Vec<Vec<usize>>,
     pub ode_sites: Vec<super::solve_rt::OdeSite>,
     pub sols: Vec<super::solve_rt::CSol>,
+    /// printed measured sums (spec B2 decimal-place rule): the shape of each sum
+    pub msum_sites: Vec<MNode>,
+    /// the fewest figures the integrals since the last print can support (eval_calc's QUAD_SF, spec B2)
+    pub quad_sf: Option<u32>,
     /// taken by callbacks that change shared state (parallel for runs iterations on several threads)
     lock: Mutex<()>,
 }
@@ -146,6 +150,8 @@ impl<'m> Ctx<'m> {
             mvec_fmts: vec![],
             ode_sites: vec![],
             sols: vec![],
+            msum_sites: vec![],
+            quad_sf: None,
             lock: Mutex::new(()),
         })
     }
@@ -392,6 +398,72 @@ pub extern "C" fn fm_print_end(c: C) {
 }
 
 // ---------------------------------------------------------------- lists
+/// The shape of a printed measured sum: + / − over operands with their significant figures (eval_calc sum_place).
+#[derive(Clone, Debug)]
+pub enum MNode {
+    Leaf(Option<u32>),
+    Op(bool, Box<MNode>, Box<MNode>),
+}
+
+/// The last significant decimal place of x with sf figures (eval_calc last_place).
+fn last_place(x: f64, sf: u32) -> Option<i32> {
+    (x != 0.0 && x.is_finite()).then(|| x.abs().log10().floor() as i32 - sf as i32 + 1)
+}
+
+fn msum_combine(n: &MNode, vals: &[f64], at: &mut usize, k: f64) -> (f64, Option<i32>) {
+    match n {
+        MNode::Leaf(sf) => {
+            let v = vals[*at];
+            *at += 1;
+            (v, sf.and_then(|s| last_place(v / k, s)))
+        }
+        MNode::Op(add, a, b) => {
+            let (va, pa) = msum_combine(a, vals, at, k);
+            let (vb, pb) = msum_combine(b, vals, at, k);
+            let v = if *add { va + vb } else { va - vb };
+            (v, match (pa, pb) {
+                (Some(x), Some(y)) => Some(x.max(y)),
+                _ => None,
+            })
+        }
+    }
+}
+
+/// Print a measured sum (its operands' values in DFS order) by the decimal-place rule (eval_calc sum_sf).
+pub extern "C" fn fm_print_msum(c: C, fmt: i64, site: i64, vals: *const f64, n: i64) {
+    let c = unsafe { &mut *c };
+    let vals = unsafe { std::slice::from_raw_parts(vals, n as usize) };
+    let fmt = fmt as usize;
+    let k = match c.module.tables.fmts.get(fmt) {
+        Some(f) => {
+            let hint = f.hint.as_ref().map(|h| fermium_units::Unit { name: h.name.clone(), dim: h.dim,
+                                                                       factor: h.factor, offset: h.offset });
+            fermium_units::display_unit(&f.dim, hint.as_ref()).factor
+        }
+        None => 1.0,
+    };
+    let node = c.msum_sites[site as usize].clone();
+    let (v, p) = msum_combine(&node, vals, &mut 0, k);
+    match p.and_then(|p| crate::eval_calc::decimal_rule_sf(v / k, p)) {
+        Some(sf) => c.printer().num_sf(fmt, v, sf),
+        None => c.printer().num(fmt, v),
+    }
+}
+
+/// Before printing an integral-shaped value: forget the integrals evaluated earlier (take_quad_sf).
+pub extern "C" fn fm_quad_sf_clear(c: C) {
+    unsafe { (*c).quad_sf = None }
+}
+
+/// Print an integral-shaped value, capped at the figures its integrals support (eval.rs print, spec B2).
+pub extern "C" fn fm_print_num_capped(c: C, fmt: i64, v: f64) {
+    let c = unsafe { &mut *c };
+    match c.quad_sf.take() {
+        Some(n) => c.printer().num_capped(fmt as usize, v, n),
+        None => c.printer().num(fmt as usize, v),
+    }
+}
+
 /// A new list holding v (for other run-time modules).
 pub(super) fn fm_list_from(c: C, v: Vec<f64>) -> *mut FmList {
     locked(c, |c| c.new_list(v))
@@ -527,6 +599,10 @@ pub extern "C" fn fm_quad(c: C, f: ScalarFn, env: *mut u8, a: f64, b: f64, atol:
             f64::NAN
         }
         Ok(r) => {
+            // eval_calc note_quad_sf
+            if let Some(n) = crate::eval_calc::meaningful_sf(r.value, r.error, r.abs_sum) {
+                c.quad_sf = Some(c.quad_sf.map_or(n, |m| m.min(n)));
+            }
             if r.all_zero {
                 if atol < 0.0 {
                     // eval_calc's QZERO += 1 (the quiet first try of a vector component, D110), through its

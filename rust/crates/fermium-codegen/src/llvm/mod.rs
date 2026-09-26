@@ -79,6 +79,7 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     ctx.builtins = tables.builtins;
     ctx.mvec_fmts = tables.mvec_fmts;
     ctx.ode_sites = tables.ode_sites;
+    ctx.msum_sites = tables.msum_sites;
     let ee = g.lm.create_jit_execution_engine(OptimizationLevel::Default).map_err(|e| e.to_string())?;
     // (the optimizer has removed the declarations of callbacks the program doesn't use)
     for (name, a) in &g.mappings {

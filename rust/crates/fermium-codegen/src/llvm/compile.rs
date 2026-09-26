@@ -57,6 +57,7 @@ pub struct Tables {
     pub builtins: Vec<BuiltinSite>,
     pub mvec_fmts: Vec<Vec<usize>>,
     pub ode_sites: Vec<crate::llvm::solve_rt::OdeSite>,
+    pub msum_sites: Vec<rt::MNode>,
 }
 
 #[derive(Clone, Copy)]
@@ -196,6 +197,9 @@ impl<'c, 'm> Gen<'c, 'm> {
             self.declare("fm_odelin", Some(i32t), &[i, p, p, p], s::fm_odelin as *const () as usize, false);
             self.declare("fm_solve_error", None, &[p, i, f, f, i, i32t], s::fm_solve_error as *const () as usize, false);
         }
+        self.declare("fm_print_msum", None, &[p, i, i, p, i], rt::fm_print_msum as *const () as usize, false);
+        self.declare("fm_quad_sf_clear", None, &[p], rt::fm_quad_sf_clear as *const () as usize, false);
+        self.declare("fm_print_num_capped", None, &[p, i, f], rt::fm_print_num_capped as *const () as usize, false);
         self.declare("fm_builtin", None, &[p, i, p, p, i32t], rt::fm_builtin as *const () as usize, false);
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
@@ -989,11 +993,29 @@ impl<'c, 'm> Gen<'c, 'm> {
         let ctx: BasicValueEnum = self.ctx_ptr.into();
         for it in items {
             match it {
-                PrintItem::Num(e, f) => {
-                    if crate::eval_calc::measured_sum(e) {
-                        // printed by the decimal-place rule at run time (eval_calc::sum_sf): the tree-walker's
-                        return Err("a measured sum printed by the decimal-place rule".into());
+                PrintItem::Num(e, f) if crate::eval_calc::measured_sum(e) => {
+                    // the decimal-place rule (spec B2, eval_calc sum_sf): the operands here, the rule at run time
+                    let mut vals = vec![];
+                    let node = self.msum_operands(e, &mut vals)?;
+                    self.tables.msum_sites.push(node);
+                    let site = self.tables.msum_sites.len() as i64 - 1;
+                    let arr = self.f64t().array_type(vals.len().max(1) as u32);
+                    let p = self.alloca(arr.into(), "msum")?;
+                    for (i, v) in vals.iter().enumerate() {
+                        let at = unsafe { bl!(self.b.build_gep(arr, p, &[self.i64c(0), self.i64c(i as i64)], "m")) };
+                        bl!(self.b.build_store(at, *v));
                     }
+                    self.call("fm_print_msum", &[ctx, self.i64c(*f as i64).into(), self.i64c(site).into(), p.into(),
+                                                 self.i64c(vals.len() as i64).into()])?;
+                }
+                PrintItem::Num(e, f) if crate::eval_calc::integral_shaped(e) => {
+                    // capped at the figures its integrals support (eval.rs print, take_quad_sf)
+                    self.call("fm_quad_sf_clear", &[ctx])?;
+                    let v = self.expr(e)?;
+                    let x = self.to_f(v)?;
+                    self.call("fm_print_num_capped", &[ctx, self.i64c(*f as i64).into(), x.into()])?;
+                }
+                PrintItem::Num(e, f) => {
                     let v = self.expr(e)?;
                     let x = self.to_f(v)?;
                     self.call("fm_print_num", &[ctx, self.i64c(*f as i64).into(), x.into()])?;
@@ -1068,6 +1090,20 @@ impl<'c, 'm> Gen<'c, 'm> {
         }
         self.call("fm_print_end", &[ctx])?;
         Ok(())
+    }
+
+    /// The operands of a printed measured sum, compiled left to right (eval_calc sum_place evaluates only them).
+    fn msum_operands(&mut self, e: &Expr, vals: &mut Vec<FloatValue<'c>>) -> R<rt::MNode> {
+        if let ExprKind::Bin(op @ (BinOp::Add | BinOp::Sub), a, b) = &e.kind {
+            if matches!(e.ty, Ty::Num(_)) {
+                let na = self.msum_operands(a, vals)?;
+                let nb = self.msum_operands(b, vals)?;
+                return Ok(rt::MNode::Op(*op == BinOp::Add, Box::new(na), Box::new(nb)));
+            }
+        }
+        let v = self.expr(e)?;
+        vals.push(self.to_f(v)?);
+        Ok(rt::MNode::Leaf(e.sf))
     }
 
     // ------------------------------------------------------------ expressions
