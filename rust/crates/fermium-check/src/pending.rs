@@ -59,10 +59,6 @@ impl Checker {
     pub fn sol_index(&mut self, _view: SolViewId, e: &A::Expr, _index: &A::Expr, _ctx: &mut Ctx) -> CResult<I::Expr> {
         Err(self.not_ported("indexing a vector ODE solution", e.span))
     }
-    /// zs[k] of a list of complex numbers (clist.index, D243).
-    pub fn clist_index(&mut self, _t: I::Expr, _idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing a list of complex numbers", e.span))
-    }
 }
 
 impl Checker {

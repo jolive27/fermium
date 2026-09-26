@@ -348,4 +348,23 @@ impl Checker {
         r.direct = direct;
         Ok(r)
     }
+
+    /// ∫ f dx (or Σ) of a complex f: ∫ re(f) dx + i ∫ im(f) dx (D93); `make(part)` builds the AST of the integral
+    /// (or sum) of one part.
+    pub fn component_integral(&mut self, e: &A::Expr, body: &A::Expr, ctx: &mut Ctx,
+                              make: &dyn Fn(A::Expr) -> A::Expr) -> CResult<Checked> {
+        let mut parts = vec![];
+        for name in ["re", "im"] {
+            let f = crate::ast_ext::mk(A::ExprKind::Field { target: Box::new(body.clone()), name: name.into() }, e.span);
+            parts.push(self.expr(&make(f), ctx)?);
+        }
+        let (d0, d1) = (dim(&parts[0]), dim(&parts[1]));
+        self.u.unify(&d0, &d1);
+        let hint = parts[0].hint.clone();
+        let sf = minsf(&parts.iter().collect::<Vec<_>>());
+        let mut r = ir(I::ExprKind::Vec(parts), Ty::Complex(d0), e.span.line);
+        r.hint = hint;
+        r.sf = sf;
+        Ok(Checked::Val(r))
+    }
 }
