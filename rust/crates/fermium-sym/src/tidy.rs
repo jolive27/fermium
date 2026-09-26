@@ -144,6 +144,11 @@ fn mul_all(items: Vec<T>) -> T {
     if coef == 1.0 && fs.len() == 1 {
         return fs.into_iter().next().unwrap();
     }
+    if fs.len() == 1 && matches!(fs[0], T::Add(_)) {
+        // SymPy's Mul(number, sum) distributes: 2 (x + z) is 2x + 2z
+        let T::Add(ts) = fs.into_iter().next().unwrap() else { unreachable!() };
+        return add_all(ts.into_iter().map(|t| mul_all(vec![T::Num(coef), t])).collect());
+    }
     T::Mul(coef, fs)
 }
 
@@ -453,12 +458,14 @@ fn signsimp(t: T) -> T {
             let mut c = c;
             let mut out = vec![];
             for f in fs {
+                // an odd power of a sum is flipped only to take a minus sign off the coefficient
                 match signsimp(f) {
-                    T::Add(ts) if could_extract_minus(&ts) => {
+                    T::Add(ts) if c < 0.0 && could_extract_minus(&ts) => {
                         c = -c;
                         out.push(flip_add(ts));
                     }
-                    T::Pow(b, e) if is_int(e) && matches!(&*b, T::Add(ts) if could_extract_minus(ts)) => {
+                    T::Pow(b, e) if is_int(e) && (e.0 % 2 == 0 || c < 0.0)
+                        && matches!(&*b, T::Add(ts) if could_extract_minus(ts)) => {
                         let T::Add(ts) = *b else { unreachable!() };
                         if e.0 % 2 != 0 {
                             c = -c;
@@ -472,6 +479,68 @@ fn signsimp(t: T) -> T {
             items.extend(out);
             mul_all(items)
         }
+        other => other,
+    }
+}
+
+/// Take the factors every term of a sum shares out of it (SymPy's factor_terms): -y² cos(x y) - x² cos(x y)
+/// → (-x² - y²)·cos(x y).
+fn factor_terms(t: T) -> T {
+    match t {
+        T::Add(ts) => {
+            let ts: Vec<T> = ts.into_iter().map(factor_terms).collect();
+            let facs = |x: &T| -> Vec<(String, T, Q)> {
+                let fs: Vec<T> = match x {
+                    T::Mul(_, fs) => fs.clone(),
+                    T::Num(_) => vec![],
+                    o => vec![o.clone()],
+                };
+                fs.into_iter()
+                    .map(|f| match f {
+                        T::Pow(b, e) => (key(&b), *b, e),
+                        o => (key(&o), o, (1, 1)),
+                    })
+                    .collect()
+            };
+            let mut common = facs(&ts[0]);
+            for x in &ts[1..] {
+                let fx = facs(x);
+                common = common
+                    .into_iter()
+                    .filter_map(|(k, b, e)| {
+                        let (_, _, e2) = fx.iter().find(|f| f.0 == k)?;
+                        let (a, c) = (qf(e), qf(*e2));
+                        if a * c <= 0.0 {
+                            return None;
+                        }
+                        let m = if a > 0.0 { if a <= c { e } else { *e2 } } else if a >= c { e } else { *e2 };
+                        Some((k, b, m))
+                    })
+                    .collect();
+            }
+            if common.is_empty() {
+                return add_all(ts);
+            }
+            let inv: Vec<T> = common.iter().filter_map(|(_, b, e)| pow_q(b.clone(), (-e.0, e.1))).collect();
+            if inv.len() != common.len() {
+                return add_all(ts);
+            }
+            let rest: Vec<T> = ts.into_iter().map(|x| {
+                let mut items = vec![x];
+                items.extend(inv.iter().cloned());
+                mul_all(items)
+            }).collect();
+            let mut items: Vec<T> = common.into_iter().map(|(_, b, e)| pow_q(b, e).unwrap()).collect();
+            items.push(add_all(rest));
+            mul_all(items)
+        }
+        T::Mul(c, fs) => {
+            let mut items = vec![T::Num(c)];
+            items.extend(fs.into_iter().map(factor_terms));
+            mul_all(items)
+        }
+        T::Pow(b, e) => pow_q(factor_terms(*b), e).unwrap_or(T::Num(f64::NAN)),
+        T::Fun(f, a) => T::Fun(f, a.into_iter().map(factor_terms).collect()),
         other => other,
     }
 }
@@ -585,7 +654,10 @@ fn from_t(t: &T) -> A::Expr {
 /// calculus.sympy_tidy: a shorter equivalent formula, or `e` itself.
 pub fn tidy(e: &A::Expr) -> A::Expr {
     let Some(t) = to_t(e) else { return e.clone() };
-    let t = if cancels(&t) { T::Num(0.0) } else { t };
+    let t = if cancels(&t) { T::Num(0.0) } else { factor_terms(t) };
+    if key(&t).contains("NaN") {
+        return e.clone();
+    }
     let t = signsimp(t);
     let out = simplify(&from_t(&t));
     if to_source(&out).chars().count() < to_source(e).chars().count() { out } else { e.clone() }
