@@ -321,8 +321,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let n = l.borrow().len();
                 let k = self.elem_index(i, n)?;
                 let v = self.eval(value, fr)?;
-                if crate::eval_unc::is_unc(&v) {
-                    return self.err(crate::eval_unc::GENERIC);
+                if let Value::Unc(_) = v {
+                    // the list now holds an uncertain number (v1's lists hold any number)
+                    let mut items: Vec<Value> = l.borrow().iter().map(|x| Value::Num(*x)).collect();
+                    items[k] = v;
+                    self.set(*sym, Value::UList(Rc::new(RefCell::new(items))), fr);
+                    return Ok(Flow::Normal);
                 }
                 l.borrow_mut()[k] = v.num();
             }
@@ -337,6 +341,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     (Value::TextList(l), Value::Str(t)) => l.borrow_mut().push(t),
                     (Value::CList(l), Value::Vec(z)) if z.len() == 2 => l.borrow_mut().push((z[0], z[1])),
                     (Value::UList(l), v @ (Value::Num(_) | Value::Unc(_))) => l.borrow_mut().push(v),
+                    (Value::List(l), v @ Value::Unc(_)) => {
+                        let mut items: Vec<Value> = l.borrow().iter().map(|x| Value::Num(*x)).collect();
+                        items.push(v);
+                        self.set(*sym, Value::UList(Rc::new(RefCell::new(items))), fr);
+                    }
                     _ => return self.err("not yet supported by the Rust back end: pushing this value"),
                 }
             }
