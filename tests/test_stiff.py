@@ -255,16 +255,3 @@ def test_too_many_steps_message_suggests_radau():
     from fermium.runtime.core import Runtime
     msg = Runtime(out=io.StringIO()).describe_error(3, 15302.7, -1)
     assert "using radau" in msg
-
-
-def test_playground_loads_scipy_for_radau():
-    import os
-    import sys
-    web = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
-    sys.path.insert(0, web)
-    try:
-        import playground
-    finally:
-        sys.path.remove(web)
-    assert "scipy" in playground.packages_needed("solve x' = -x with x(0) = 1 for t from 0 to 1 using radau")
-    assert "scipy" not in playground.packages_needed("solve x' = -x with x(0) = 1 for t from 0 to 1")

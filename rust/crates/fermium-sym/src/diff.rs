@@ -79,10 +79,9 @@ pub fn diff(e: &A::Expr, var: &str, ctx: &mut dyn DiffContext) -> SymResult<A::E
     Ok(factor_common(&simplify(&d(&inline_where(e), var, ctx)?)))
 }
 
-/// Symbolic tidying of a result (Python `sympy_tidy`, which asks SymPy for a shorter equivalent formula).
-/// Without SymPy the formula is kept as it is: the value is the same either way (see rust/DIVERGENCES.md).
+/// A shorter equivalent formula for display (Python `sympy_tidy`); see tidy.rs.
 pub fn tidy(e: &A::Expr) -> A::Expr {
-    e.clone()
+    crate::tidy::tidy(e)
 }
 
 /// The raw derivative, unsimplified (Python `_d`).

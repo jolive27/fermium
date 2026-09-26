@@ -184,12 +184,7 @@ fn absolute(path: &str) -> String {
 }
 
 fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
-    if let Some(d) = Path::new(path).parent() {
-        if !d.as_os_str().is_empty() {
-            std::fs::create_dir_all(d).map_err(|e| format!("can't write {path}: {e}"))?;
-        }
-    }
-    std::fs::write(path, bytes).map_err(|e| format!("can't write {path}: {e}"))
+    crate::vfs::write(path, bytes).map_err(|e| format!("can't write {path}: {e}"))
 }
 
 /// Draw and save a plot. Ok: v1's line "plot saved to <absolute path>"; Err: the reason, for v1's

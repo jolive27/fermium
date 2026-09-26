@@ -1,4 +1,5 @@
-// Fermium playground page: editor, examples, \name completion, and a Web Worker running Pyodide.
+// Fermium playground page: editor, examples, \name completion, and a Web Worker running Fermium's
+// WebAssembly module (worker.js, fermium.js).
 "use strict";
 
 const $ = (id) => document.getElementById(id);
@@ -45,18 +46,17 @@ function loadDraft() {
 function startWorker() {
   if (worker) worker.terminate();
   worker = new Worker("worker.js");
-  setState("loading", "starting Python…");
+  setState("loading", "starting Fermium…");
   worker.onmessage = (ev) => {
     const m = ev.data;
     if (m.type === "status") {
       statusEl.textContent = m.text;
     } else if (m.type === "ready") {
-      setState("ready", `ready · Pyodide ${m.version}${m.source === "local" ? " (local)" : ""}`);
-      document.body.dataset.pyodide = m.source;
+      setState("ready", `ready · Fermium ${m.version} (WebAssembly)`);
     } else if (m.type === "fatal") {
       setState("fatal", "could not start");
       output.textContent = "";
-      block("error", "The playground could not start Python in this browser:\n" + m.text);
+      block("error", "The playground could not start Fermium in this browser:\n" + m.text);
     } else if (m.type === "result" && m.id === runId) {
       showResult(m);
     }
@@ -65,7 +65,7 @@ function startWorker() {
     setState("fatal", "could not start");
     block("error", "The playground's worker failed: " + (ev.message || "unknown error"));
   };
-  worker.postMessage({ type: "init", pyodide: params.get("pyodide") || "auto", manifest, data: examples.data });
+  worker.postMessage({ type: "init", manifest, data: examples.data });
 }
 
 function run() {
@@ -79,7 +79,7 @@ function run() {
 
 function stop() {
   block("error", "stopped");
-  startWorker();       // the only way to interrupt Python in a worker: throw it away and start again
+  startWorker();       // the only way to interrupt WebAssembly in a worker: throw it away and start again
 }
 
 function showResult(r) {
@@ -90,7 +90,7 @@ function showResult(r) {
   for (const p of r.plots || []) {
     const fig = document.createElement("figure");
     const img = document.createElement("img");
-    img.src = "data:image/png;base64," + p.png;
+    img.src = `data:${p.mime || "image/png"};base64,${p.base64}`;
     img.alt = "plot " + p.name;
     const cap = document.createElement("figcaption");
     cap.textContent = p.name;
@@ -236,6 +236,12 @@ async function getJSON(path) {
     setState("fatal", "not built");
     block("error", "The playground files are missing (" + e.message + ").\n" +
       "Build them first:  python3 web/build.py\nthen serve:        python3 -m http.server -d web 8000");
+    return;
+  }
+  if (!manifest.wasm) {
+    setState("fatal", "not built");
+    block("error", "gen/fermium.wasm is missing.\nBuild it first:  python3 web/build.py   (needs Rust and " +
+      "rustup target add wasm32-unknown-unknown)");
     return;
   }
   fillExamples();

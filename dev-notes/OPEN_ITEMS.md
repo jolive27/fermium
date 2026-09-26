@@ -44,15 +44,15 @@ without their notes being updated; those are the **closed** rows.
 
 | ID | Description | Reproduces now? | Class | Notes |
 |---|---|---|---|---|
-| BL-1 | A narrow peak exactly at a subdivision point gives half the integral | yes: `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` gives `0.0886` (true value 0.177), no warning | B | B2: quadrature half-peak |
-| BL-2 | A narrow peak in a huge finite range gives 0 (A3 leftover) | yes: `∫ exp(-x²) dx from -1e6 to 1e6` gives `0`, with the D110 warning | B | B2: narrow peaks |
-| BL-3 | A strong singularity away from 0 is rejected (A56 leftover) | yes: `abs(x - 0.3)^(-0.6)` and `^(-0.8)` stop with "the integrand is infinite at x = 0.300" | B | B2: ε-algorithm |
+| BL-1 | A narrow peak exactly at a subdivision point gives half the integral | yes: `∫ exp(-(x-1000)^2*100) dx from 0 to 2000` gives `0.0886` (true value 0.177), no warning | B | B2: quadrature half-peak. **Fixed in v2** (Rust: panel-end sentinels; rust/DIVERGENCES.md) |
+| BL-2 | A narrow peak in a huge finite range gives 0 (A3 leftover) | yes: `∫ exp(-x²) dx from -1e6 to 1e6` gives `0`, with the D110 warning | B | B2: narrow peaks. **Fixed in v2** (rust/DIVERGENCES.md) |
+| BL-3 | A strong singularity away from 0 is rejected (A56 leftover) | yes: `abs(x - 0.3)^(-0.6)` and `^(-0.8)` stop with "the integrand is infinite at x = 0.300" | B | B2: ε-algorithm. **Fixed in v2** (split at the singular point + Aitken extrapolation; rust/DIVERGENCES.md) |
 | BL-4 | `sqrt(-1)` gives NaN and `factorial(-1)` gives ∞ silently | yes: `NaN`, `∞` (and `1/0` gives `∞`) | A3 | Decide and test. Julia raises DomainError for `sqrt(-1.0)` and `factorial(-1)` and returns Inf for `1/0`. Same item as bootcamp B10 |
 | BL-5 | Re-run the benchmarks (the adaptive spring disagreed with Julia) | no: benchmarks/RESULTS.md shows spring_adaptive ✓ after the red team round 1 #3 fix (not re-run here) | closed | |
 | BL-6 | Raise test coverage toward 95% | not measured (last measurement 90%, per MORNING_REPORT) | B | B3's conformance suite is the measure from here on |
 | BL-7 | Better symbolic simplification | partly: `f''` gives `(4x² - 2)·exp(-x²)` and `N'` is tidy; the derivative of a constant loses its units (BC-B23) | C/D | C2: better symbolic simplification |
 | BL-8 | DP45 dense output should use the method's 4th-order interpolant | no: `codegen_llvm.py:1077` uses Hermite plus DOPRI5's 4th-order term | closed | |
-| BL-9 | Garbage collection or reference counting for lists | yes (documented in §19) | B | B2: memory never freed (and C1) |
+| BL-9 | Garbage collection or reference counting for lists | yes (documented in §19) | B | B2: memory never freed (and C1). **Fixed in v2** (lists reference-counted) |
 | BL-10 | Matrices with units; lists of vectors | partly: `[[1, 2], [3, 4]] m` works; `[<1, 2> m, <3, 4> m]` gives "a list element must be a number, but it is a 2-vector" | C/D | C1 |
 | BL-11 | Uncertainties: native code, REPL/Jupyter, weighted fits, uncertain vectors | yes: `∫ L dx` is refused cleanly; see NEW-1 for vectors | C/D | C7 |
 | BL-12 | Browser playground | no: `web/` exists (D29) | closed | |
@@ -61,7 +61,7 @@ without their notes being updated; those are the **closed** rows.
 | BL-15 | `solve` with a parameter sweep | not implemented (not tested) | C/D | C2 |
 | BL-16 | `stdlib/` as the spec lays it out, or record the deviation | recorded in D103 (`fermium/stdlib/*.fm`) | design | An **empty, untracked** top-level `stdlib/` folder exists in the checkout; remove it under A9 hygiene |
 | BL-17 | Known trap: `2 g h` means 2 grams times h | no longer silent: with your own g it is the error "'2 g' is ambiguous … write 2*g … or 2 [g]" | A1 | The trap disappears once A1's rule is taught; the BACKLOG text is stale |
-| BL-18 | Known trap: lists are never freed | yes (same as BL-9) | B | B2 |
+| BL-18 | Known trap: lists are never freed | yes (same as BL-9) | B | B2. **Fixed in v2** |
 
 ## gauntlet/FRICTION.md (the 9 rows not marked fixed, plus the leftovers of fixed rows #33, #48 and #94)
 
@@ -85,7 +85,7 @@ without their notes being updated; those are the **closed** rows.
 
 | ID | Description | Reproduces now? | Class | Notes |
 |---|---|---|---|---|
-| RT1-1 | A narrow peak far from the start of an infinite range is missed | **yes, silently**: `∫ exp(-((x - 1)/1e-6)^2) dx from 0 to ∞` gives `8.86×10⁻⁷` (true 1.77×10⁻⁶, half), no warning | B | B2: narrow peaks. Worse than §19 says (half, not missed) |
+| RT1-1 | A narrow peak far from the start of an infinite range is missed | **yes, silently**: `∫ exp(-((x - 1)/1e-6)^2) dx from 0 to ∞` gives `8.86×10⁻⁷` (true 1.77×10⁻⁶, half), no warning | B | B2: narrow peaks. Worse than §19 says (half, not missed). **Fixed in v2** |
 | RT1-7 | Differences over-claim figures (D95 "not changed") | yes: `1.00 m - 0.999 m` gives `0.00100 m` | B | B2: sig figs of sums |
 | RT2-n1 | FFT in `fermium build` differs from NumPy by 10⁻¹⁶ | not re-run | design | Rounding level |
 | RT2-n2 | A 1 fm decay integrated over 1 m gives 0 | yes (same as BL-2) | B | B2 |
@@ -97,7 +97,7 @@ without their notes being updated; those are the **closed** rows.
 | RT4-n3 | `np.sin(x [deg])` passes degrees to a function that takes radians | not re-run | design | The user's declaration is wrong |
 | RT5-nit | `3𝑖 V`: a unit can't follow an imaginary literal | yes: "V isn't defined", with the hint `3i * 1 V or 3i [V]` | design | Won't fix; the hint gives the fix |
 | RT6-n | README comment `# 3.52006 cm` vs the printed `3.52 cm` | no: README:77 now reads `3.52 cm (to 6 digits: 3.52006 cm)` | closed | |
-| RT7-2 | Heat equation after a jump: very early times are 60 % wrong, silently | yes: `55.0 K`, `42.2 K` (erfc gives 34.3 K and 38.4 K) | B | B2: PDE after a jump (strict xfail) |
+| RT7-2 | Heat equation after a jump: very early times are 60 % wrong, silently | yes: `55.0 K`, `42.2 K` (erfc gives 34.3 K and 38.4 K) | B | B2: PDE after a jump (strict xfail). **v2 warns** (grid-halving check after a jump; values unchanged; rust/DIVERGENCES.md) |
 | RT7-5 | An integral at rounding level prints 3 figures, 1 of them right | yes: `7.93×10⁻⁹` (exact 8×10⁻⁹) | B | B2 (strict xfail) |
 | RT7-n1 | ⟨H⟩ of the quadruple well: an error on a converged integral | not re-run (needs the red team's program) | B | B2: quadrature error estimate |
 | RT7-n2 | `\|[3.0 m/s, 4.0 m/s]\|` is element-wise | yes: `[3.0, 4.0] m/s`; `\|<3, 4> m/s\|` gives `5 m/s` | design | `abs` of a list is element-wise; a vector uses `<…>` |

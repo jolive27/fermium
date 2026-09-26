@@ -34,6 +34,61 @@ v1 reads `fermium.toml` with Python's `tomllib`. The Rust reader accepts what v1
 (`… isn't a valid fermium.toml (line N: …)`) instead of `tomllib`'s. No conformance case has a malformed
 `fermium.toml`.
 
+## Indefinite integrals: native rules instead of SymPy (spec §B6)
+
+- **v1** sent `∫ f dx` without limits to SymPy (`calculus.integrate_symbolic`), checked the answer at random
+  points (`_antiderivative_ok`) and printed SymPy's formula.
+- **v2** finds the antiderivative natively (`fermium-sym/src/integrate.rs`), with no Python:
+  - linearity; constant factors; the power rule for x and for a linear base (`(a x + b)^p`, `1/(a x + b)` → ln);
+    `c^u`;
+  - a table for functions of a linear argument: sin, cos, tan, cot, sec, csc, exp, sinh, cosh, tanh, ln/log,
+    log10, log2, sqrt, cbrt, asin, acos, atan, asinh, atanh, erf, sign, |u| (as `if u <= 0 then … else …`,
+    SymPy's Piecewise); squares of the trigonometric and hyperbolic functions; `1/cos²`, `1/sin²`, …;
+  - quadratics by completing the square: `1/Q`, `1/√Q`, `√Q` (atan, atanh, asinh, acosh, asin, and the
+    `u √Q` forms), and `(m x + n) Q^p` for p = −1, ±½; `exp(−a x² + …)` → erf;
+  - substitution `∫ F(u) u' dx` for u the argument of a function, a power's base, a root or a denominator;
+  - integration by parts: a polynomial times exp, sin, cos, sinh or cosh of a linear argument (tabular), and
+    times ln, atan, asin, acos, asinh, atanh;
+  - `e^(ax) sin(bx)`, `e^(ax) cos(bx)`;
+  - rational functions with numeric coefficients: polynomial division and partial fractions over the real
+    linear (also repeated) and quadratic factors of the denominator;
+  - positivity as in v1 (D37): built-in constants > 0, program variables only ever given positive literal
+    values, and literal quantities with a positive number; a square root of `b²` is `b` for a positive b and
+    `|b|` otherwise (v1's "evens" trick).
+- Every formula is verified like v1 did: its derivative (by fermium-sym) is compared with the integrand at 12
+  pseudo-random points; a formula that fails is refused ("Fermium's formula for this integral isn't right for
+  every value of the constants in it …").
+- **The printed formulas** match v1's for the programs in the conformance suite (`x³/3`, `x²/2`, `asinh(s/a)`,
+  `-𝑖 exp(𝑖 x)`, `if x <= 0 then -x²/2 else x²/2`); for other integrands the formula may be written
+  differently from SymPy's (an equivalent expression; the values agree).
+- **Coverage vs v1:** SymPy's Risch-based integrator finds more antiderivatives (for example
+  `∫ exp(sin(x)) cos(x)²…` style mixtures, products of several transcendental functions, rational functions
+  with symbolic coefficients of degree > 2 in the denominator). For those v2 stops with
+  "Fermium couldn't find a formula for this integral" and the hint "give limits (from a to b) to compute it
+  numerically" (v1: "SymPy couldn't find a formula …" with the same hint). Integrals that need a special
+  function Fermium doesn't have keep v1's message word for word, so programs and tests see the same error:
+  "SymPy's formula for this integral uses the function Ei, which Fermium doesn't have yet: Ei(s)" (also Si,
+  Ci, Shi, Chi, li, erfi).
+- Tests: `fermium-sym/src/tests.rs` (`antiderivatives_print_like_v1`, `antiderivatives_are_right`,
+  `non_elementary_integrals_are_refused`); conformance cases in `integrals/` (e.g. `cd3a0d2250de`,
+  `ccf49cc58559`, `71a54bb44659`, `a5b1891791c9`).
+
+## Display of ∇ results and of Leibniz-rule integrands: native tidying instead of SymPy's simplify
+
+- **v1** printed the result of ∇f, ∇·F, ∇×F, ∇²f and the ∂/∂x integrand of a derivative under the integral sign
+  (D36) through `sympy_tidy`: SymPy's `simplify`, kept only when shorter.
+- **v2** (`fermium-sym/src/tidy.rs`) does the part of that which these formulas need: SymPy's automatic
+  canonical form (equal bases combined, whole powers of products distributed, like terms collected), exact
+  cancellation of a sum over a common denominator (∇²(1/r) = 0), SymPy's sign convention for sums
+  (`signsimp`: `λ·(s - x)` rather than `-λ·(x - s)`), and SymPy's argument order (Basic.compare) when the
+  formula is written back; like v1, the tidied formula is used only when it is shorter.
+- The printed formulas match v1's for every ∇ and Leibniz program in the conformance suite (e.g.
+  `-q x/(4π ε_0 (x² + y² + z²)^(3/2))`, `∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds`). SymPy's
+  `simplify` also tries trigonometric identities, factoring and `cancel`; for formulas that need those, v2
+  prints a longer but equivalent formula. Values are the same either way.
+- Tests: `fermium-sym/src/tests.rs` (`tidy_like_sympy`); conformance cases `f6f6b826b670`, `71b03deee8c1`,
+  `7c0c11b0d9a1`.
+
 ## Quadrature: narrow peaks and half peaks (spec B2; OPEN_ITEMS RT1-1, BL-1, BL-2, L-3)
 
 - v1: `∫ exp(-((x - 1)/1e-6)^2) dx from 0 to ∞` gave 8.86×10⁻⁷ (half the true 1.77×10⁻⁶), no warning;
@@ -72,6 +127,27 @@ link compiler-builtins' cbrt), checked bit for bit on 200 000 random doubles. be
 are ports of v1's own algorithms (bit-identical). Like v1, the last bits of the libm functions can differ between
 platforms; the conformance goldens come from Linux.
 
+## The browser playground (fermium-wasm): playground only, not `fermium run`
+
+The playground (`web/`, spec B5.12) runs the same parser, checker and tree-walking back end, compiled to
+`wasm32-unknown-unknown` (`crates/fermium-wasm`). Every example of the page prints exactly what `fermium run`
+prints (`web/test/compare_native.js`, run by CI). What differs, in the browser only:
+
+- **Math functions:** there is no C library in the browser. The functions v1 took from the C library (erf, erfc,
+  gamma, lgamma, besselj/bessely, asinh/acosh/atanh) already fall back to fermium-runtime's pure-Rust ports on
+  non-Unix targets (`eval_core.rs`, `cmath`), and Rust's `sin`, `exp`, `powf`, … come from the pure-Rust libm
+  (musl's algorithms) instead of glibc. So a number printed to 16–17 digits can differ in its last digits from
+  Linux; at the default 3 significant figures, or `to 12 digits`, nothing changes in practice.
+- **Recursion depth:** no threads, so no 512 MB program thread: programs run on the browser's call stack
+  (about 450 levels of a simple recursive function in Chromium's worker, about 800 in Node). Deeper recursion
+  stops with "this program recurses or nests too deeply for the browser playground" (the v1 Pyodide page said the
+  same). The evaluator's own recursion check (`STACK_LIMIT`) is set for the module's 32 MB shadow stack.
+- **Files:** `load` reads from an in-memory file system holding the bootcamp's and examples' data files; plots are
+  written there and handed to the page. `import` of your own `.fm` files isn't possible (the standard library
+  works: it is embedded).
+- **`clock()`** is `performance.now()`.
+- Errors and warnings are shown without the file name (`line 5: …`), as v1's playground showed them.
+
 ## Implementation differences that are at the rounding level (not user-visible at printed precision)
 
 - Radau/BDF: our LU and sums instead of LAPACK/BLAS; step sequences identical in 15 of 16 test solves.
@@ -99,6 +175,43 @@ platforms; the conformance goldens come from Linux.
 - A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
 - Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
   deflate (round trip), LZW (round trip), labels and number format.
+
+## Lists are freed (spec B2; OPEN_ITEMS BL-9, BL-18)
+
+v1's compiled code never freed lists (a documented trap: a long loop that builds lists grows without bound).
+In the Rust implementation a list is a reference-counted value (`Rc<RefCell<Vec<f64>>>` in the tree-walker),
+freed when the last variable holding it goes away; list aliasing semantics (D26: `ys = xs` shares the list) are
+unchanged, so no program prints anything different.
+
+## parallel for: the first failing iteration's error is reported
+
+When a run-time error happens in several iterations of a `parallel for`, v1's compiled code reported the error
+of whichever thread stopped last, so the message depended on thread timing (e.g. "index 12 is out of range"
+for a loop where iterations 11 and 12 both fail). The Rust implementation reports the error of the first failing
+iteration in block order, the same on every run and machine. Case: fe2e353a26d0.
+
+## PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)
+
+- v1: the heat equation after a jump (`D = 1e-4 m²/s`, `u(x, 0 s) = 0 K`, `u(0 m, t) = 80 K`, `u(1 m, t) = 0 K`,
+  grid 400) prints `u(0.5 mm, 0.002 s)` = 55.0 K and `u(1 mm, 0.01 s)` = 42.2 K where 80 K erfc(x / (2√(D t)))
+  gives 34.3 K and 38.4 K, with no warning. v1 controls the time step (D130) but not the grid: before the
+  diffusion length √(D t) spans a few grid cells, the value between the boundary and the first nodes is an
+  interpolation.
+- v2: the values are the same, but a first-order PDE whose Dirichlet boundary value differs from its initial value
+  at t0 (the D206 jump) is solved a second time on a grid half as fine, with the same time steps. `u(x, t)` compares
+  the two there, and where they differ by more than 3·10⁻³ of the solution's range (a fine-grid error of 10⁻³ of the
+  range for the second-order scheme, the tolerance of the time-step control), it warns once per solve:
+
+      warning: line 5: the grid is too coarse for this PDE at x = 0.000500 m, t = 0.00200 s: the value there changes
+      by 14% of the solution's range when the grid is made half as fine (a sharp front, a short wavelength, or the
+      time right after a jump needs more grid points); raise  grid  (it is 400)
+
+  The check costs about one more march on half the grid. PDEs without a jump (wave packets, smooth initial values)
+  are not checked, and ∂u/∂x, ∂u/∂t are not checked.
+- Tests: `pde.rs` `heat_step_very_early_time_is_accurate_or_warned` (the four points of red team round 7 #2 against
+  erfc: each is within 2·10⁻³ of the range or flagged; t = 50 s is accurate and not flagged; no check without a jump).
+- Affected cases (a warning v1 didn't give): 36c9c5b55398 (the red team's 55.004 K), 6781a0d7f2f0 (34.239 K where
+  erfc gives 34.34 K: off by 1.3·10⁻³ of the range, over the tolerance).
 
 ## The command-line tool: doctor, --help, --time, build (fermium-cli)
 

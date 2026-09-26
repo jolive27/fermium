@@ -12,8 +12,11 @@ impl Checker {
     }
     // ---- vectors and matrices
     /// Fields of ODE solutions and data tables (not ported yet).
-    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, _name: &str, _t: Checked, _ctx: &mut Ctx)
+    pub fn field_other(&mut self, e: &A::Expr, _target: &A::Expr, name: &str, t: Checked, ctx: &mut Ctx)
                        -> CResult<Checked> {
+        if let Checked::Sol(view) = t {
+            return self.sol_field(e, view, name, ctx); // solve.rs
+        }
         Err(self.not_ported("a field", e.span))
     }
 }
@@ -34,10 +37,6 @@ impl Checker {
     }
     pub fn err_call(&mut self, e: &A::Expr, _args: &[A::Expr], _ctx: &mut Ctx) -> CResult<Checked> {
         Err(self.not_ported("err(…)", e.span))
-    }
-    /// zs[k] of a list of complex numbers (clist.index, D243).
-    pub fn clist_index(&mut self, _t: I::Expr, _idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
-        Err(self.not_ported("indexing a list of complex numbers", e.span))
     }
 }
 

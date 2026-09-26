@@ -26,6 +26,15 @@ fn affine(h: &Option<I::Hint>) -> bool {
 }
 
 impl Checker {
+    /// zs[k] of a list of complex numbers: a complex number (clist.index).
+    pub fn clist_index(&mut self, t: I::Expr, idx: I::Expr, e: &A::Expr) -> CResult<I::Expr> {
+        let (d, hint) = (dim(&t), t.hint.clone());
+        let mut r = builtin_ir("cl.get", vec![t, idx], Ty::Complex(d), e.span.line);
+        r.hint = hint;
+        r.sf = None;
+        Ok(r)
+    }
+
     /// fft(xs), ifft(X), complex(re_list, im_list), len/re/im/abs/arg/conj of a complex list.
     pub fn clist_call(&mut self, name: &str, args: Vec<I::Expr>, e: &A::Expr) -> CResult<I::Expr> {
         let n = args.len();

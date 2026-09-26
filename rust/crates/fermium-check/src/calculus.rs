@@ -152,14 +152,7 @@ impl Checker {
                 let d = self.derived_info(info, 0, order, e.span)?;
                 Ok(self.func_ref(d))
             }
-            Checked::Sol(view) => {
-                let v = self.sols[view].clone();
-                let p = Rational64::from_integer(order);
-                let nv = SolView { comp: v.comp + order as usize * v.stride, dim: v.dim.div(&v.tdim.pow(p)),
-                                   name: format!("{}{}", v.name, "'".repeat(order as usize)), ..v.clone() };
-                self.sols.push(nv);
-                Ok(Checked::Sol(self.sols.len() - 1))
-            }
+            Checked::Sol(view) => Ok(self.sol_prime_of(view, order)), // solve.rs
             Checked::Val(_) => Err(self.err("' (prime) means a derivative; it only works on functions and ODE solutions",
                                             e.span, Some("to differentiate a formula write d/dt (formula)".into()))),
         }
@@ -624,7 +617,13 @@ impl Checker {
         let (lam, mut lctx, _) = self.scalar_lambda("integrand", var, ld.clone(), ctx);
         let body = self.expr(integrand, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("an integral of a complex function", e.span)),
+            Ty::Complex(_) => {
+                // a complex integrand: one integral for each part (D93)
+                return self.component_integral(integrand, ctx, &|part| {
+                    mk(A::ExprKind::Integral { integrand: Box::new(part), var: var.clone(), lo: Some(lo_e.clone()),
+                                               hi: Some(hi_e.clone()) }, e.span)
+                });
+            }
             Ty::Vec { n, .. } => {
                 let n = *n;
                 return self.vector_integral(e, n, ctx).map(Checked::Val);
@@ -740,7 +739,12 @@ impl Checker {
         self.module.syms[ks].sf = None; // a count is exact
         let body = self.expr(body_e, &mut lctx)?;
         match &body.ty {
-            Ty::Complex(_) => return Err(self.not_ported("a sum of complex numbers", e.span)),
+            Ty::Complex(_) => {
+                return self.component_integral(body_e, ctx, &|part| {
+                    mk(A::ExprKind::Sum { body: Box::new(part), var: var.clone(), lo: lo_e.clone(), hi: hi_e.clone(),
+                                          step: step.clone() }, e.span)
+                });
+            }
             Ty::Vec { n, .. } => {
                 let mut comps = vec![];
                 for k in 0..*n {
@@ -760,6 +764,25 @@ impl Checker {
         self.module.lambdas[lam].body = vec![body];
         let mut r = ir(I::ExprKind::Sum { lam, lo: Box::new(lo), hi: Box::new(hi), step: Some(Box::new(st)) },
                        Ty::Num(bd), e.span.line);
+        r.hint = hint;
+        r.sf = sf;
+        Ok(Checked::Val(r))
+    }
+
+    /// ∫ f dx for a complex integrand: ∫ re(f) dx + i ∫ im(f) dx (D93; Python cplx.component_integral).
+    fn component_integral(&mut self, f: &A::Expr, ctx: &mut Ctx, make: &dyn Fn(A::Expr) -> A::Expr)
+                          -> CResult<Checked> {
+        let mut parts = vec![];
+        for part in ["re", "im"] {
+            let fld = mk(A::ExprKind::Field { target: Box::new(f.clone()), name: part.into() }, f.span);
+            parts.push(self.expr(&make(fld), ctx)?);
+        }
+        let (d0, d1) = (ty_dim(&parts[0].ty).unwrap(), ty_dim(&parts[1].ty).unwrap());
+        self.u.unify(&d0, &d1);
+        let hint = parts[0].hint.clone();
+        let sf = minsf(&[&parts[0], &parts[1]]);
+        let line = parts[0].line;
+        let mut r = ir(I::ExprKind::Vec(parts), Ty::Complex(d0), line);
         r.hint = hint;
         r.sf = sf;
         Ok(Checked::Val(r))
