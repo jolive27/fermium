@@ -6,7 +6,7 @@ mod run;
 use fermium_syntax::{sexpr, Diagnostics};
 
 fn usage() -> ExitCode {
-    eprintln!("usage: fermium run [--base-dir DIR] FILE.fm\n       fermium parse [--oracle|--tokens|--fix] FILE.fm\n       fermium fmt [--pretty|--ascii] [--fix] [-w] FILE.fm");
+    eprintln!("usage: fermium run [--base-dir DIR] [--backend llvm|interp] FILE.fm\n       fermium parse [--oracle|--tokens|--fix] FILE.fm\n       fermium fmt [--pretty|--ascii] [--fix] [-w] FILE.fm");
     ExitCode::from(2)
 }
 
@@ -88,16 +88,22 @@ fn main() -> ExitCode {
         Some("run") => {
             let mut file = None;
             let mut base = None;
+            let mut backend = run::BackendChoice::from_env();
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 if a == "--base-dir" {
                     base = it.next().cloned();
+                } else if a == "--backend" {
+                    match it.next().and_then(|s| run::BackendChoice::parse(s)) {
+                        Some(b) => backend = b,
+                        None => return usage(),
+                    }
                 } else {
                     file = Some(a.clone());
                 }
             }
             let Some(file) = file else { return usage() };
-            run::run_file(&file, base.as_deref())
+            run::run_file(&file, base.as_deref(), backend)
         }
         _ => usage(),
     }

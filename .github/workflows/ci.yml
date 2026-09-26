@@ -49,9 +49,18 @@ jobs:
             ~/.cargo/git
             rust/target
           key: rust-linux-${{ hashFiles('rust/Cargo.lock') }}
+      - name: LLVM 18 static libraries and lld (rust/BUILD.md)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18-dev lld-18 libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev || \
+            (wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+             sudo add-apt-repository -y "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" && \
+             sudo apt-get update && sudo apt-get install -y llvm-18-dev lld-18 libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev)
+          echo "LLVM_SYS_180_PREFIX=/usr/lib/llvm-18" >> "$GITHUB_ENV"
+          echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
       - name: Build and test the Rust compiler
         working-directory: rust
-        run: cargo build --profile fast && cargo test --profile fast
+        run: cargo build --profile fast && cargo test --profile fast && ldd target/fast/fermium
       - name: Install v1.5 (the oracle) for the conformance runner
         run: python3 -m pip install -e ".[full,dev]"
       - name: Conformance, legacy (must be 100%)

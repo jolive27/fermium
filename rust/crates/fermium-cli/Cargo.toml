@@ -13,3 +13,4 @@ fermium-syntax = { path = "../fermium-syntax" }
 fermium-check = { path = "../fermium-check" }
 fermium-codegen = { path = "../fermium-codegen" }
 fermium-fmt = { path = "../fermium-fmt" }
+fermium-ir = { path = "../fermium-ir" }

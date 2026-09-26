@@ -1,0 +1,7 @@
+# Link with lld: the static LLVM 18 libraries make the final link heavy, and GNU ld is several times slower.
+# (Linux only; macOS uses the system linker. CI installs lld: see rust/BUILD.md.)
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
