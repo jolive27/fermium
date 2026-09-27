@@ -323,6 +323,31 @@ solve_clause = "with" equation { ( "," | "and" ) equation }             (* initi
   `y'`); inside the equations these count as the program's variables for the unit rule (D211), so `u'' = -u`
   works although `u` is a unit (atomic mass unit). In the `with` clause they don't: `u(0) = 2 u` is 2 u.
 - `solve f(x) = g(x) for x from a to b` with no derivative is a root search (semantics.md §6.3).
+- **Clause order:** `with` and the `for` range may come in either order, on the first line or each on an
+  indented line of its own. `step` belongs to the range and must follow `to` directly (after another option, or
+  before the range, it is "didn't expect 'step' here"). The options `tolerance`, `absolute`, `using`/`method`
+  and `until` follow the range in any order, on its line or on indented lines. `until` ends the solution at the
+  first crossing, so asking for a time after it is a run-time error naming where the solution ends.
+
+```fermium
+solve x' = -x with x(0) = 1 for t from 0 to 1 step 0.01
+solve y' = -y for t from 0 to 1 with y(0) = 1
+solve z' = -z with z(0) = 1 for t from 0 to 1 using radau tolerance 1e-8
+solve w' = -w
+    with w(0) = 1
+    for t from 0 to 1
+    tolerance 1e-8
+print x(1), y(1), z(1), w(1)
+```
+
+```fermium-error
+solve x' = -x with x(0) = 1 for t from 0 to 1 tolerance 1e-8 step 0.01
+```
+
+```fermium-error
+solve x' = -x with x(0) = 1 for t from 0 to 1 until x = 0.5
+print x(1)
+```
 - Dividing by an unknown in an ODE (`ψ'' = -2 m_e E / ħ² ψ`) warns, because implicit multiplication binds
   tighter than `/` (§2.5).
 
@@ -642,8 +667,7 @@ option      = "log" [ "x" | "y" ] | "points" | "dots" | "markers" | "title" STR 
 
 ## 3. TODO for this chapter
 
-- The `solve` clause-ordering rules: the range comes first, then `step`; `tolerance`, `absolute`, `using` and
-  `until` may follow in any order, on the range's line or each on an indented line of its own.
+- ~~The `solve` clause-ordering rules~~ (done in 0.2: §2.3). Still open: where `lowest`, `grid` and `when` may go.
 - ~~A normative list of which tokens start a term for implicit multiplication~~ (done in 0.2: §2.4, "Which
   tokens start an implicit product").
 - The exact error set of the parser (each message is fixed by conformance/ today).
