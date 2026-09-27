@@ -407,6 +407,7 @@ impl Checker {
             Ty::Vec { n, dim, .. } => format!("a {n}-vector of {}", self.desc(dim.as_ref().unwrap())),
             Ty::Mat { r, c, dim } => format!("a {r}×{c} matrix of {}", self.desc(dim)),
             Ty::TextList => "a list of text".into(),
+            Ty::Array { rank, dim } => format!("a {rank}-dimensional array of {}", self.desc(dim)),
             Ty::VList(el) => {
                 let d = self.type_desc(el);
                 format!("a list of {}", d.strip_prefix("a ").unwrap_or(&d).replacen("vector", "vectors", 1)

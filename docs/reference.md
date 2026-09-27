@@ -507,6 +507,51 @@ names[1] = "H"
   program stays compiled), so a hot loop over a list of vectors runs at tree-walker speed for now.
 - **Not yet:** lists of lists (other than matrices), arithmetic between two lists of vectors (`a + b`), slices.
 
+### Arrays of 2, 3 or 4 dimensions (Fermium 2.5)
+
+In the Rust compiler (spec §C1), `fill(value, n1, n2, …)` makes an array: a grid of n1×n2(×n3×n4) numbers that share
+the value's unit. It is for fields on a grid (a temperature on a plate, a density in a box); matrices (§7) stay the
+small, fixed-size objects of linear algebra. Tested in `rust/c-cases/c1/array_heat_2d.fm` on both back ends.
+
+```text
+n = 21
+h = 0.2 m / (n - 1)
+α = 1e-4 m²/s
+dt = 0.2 h^2 / α
+θ = fill(300 K, n, n)                  # a 21×21 plate at 300 K
+θ[11, 11] = 400 K                      # a hot spot
+for k from 1 to 50
+    θn = copy(θ)
+    for i from 2 to n - 1
+        for j from 2 to n - 1
+            θn[i, j] = θ[i, j] + (α dt / h^2) (θ[i+1, j] + θ[i-1, j] + θ[i, j+1] + θ[i, j-1] - 4 θ[i, j])
+    θ = θn
+print θ[11, 11] to 6 digits            # 300.790 K (NumPy gives the same)
+print sum(θ - 300 K), max(θ), size(θ)  # 89.9 K 301 K [21, 21]
+print θ                                # 21×21 array, from 300 K to 301 K
+cube = fill(1.5 J, 2, 2, 2)
+cube[2, 1, 2] = 0 J
+print cube                             # [[[1.5, 1.5], [1.5, 1.5]], [[1.5, 0], [1.5, 1.5]]] J
+```
+
+- **Making one:** `fill(value, n1, n2)` (2-D), `fill(value, n1, n2, n3)` (3-D), up to 4 sizes; the value's unit is
+  every entry's unit (`fill(0 m, 2, 3)`). One size gives a list. At most 10⁹ entries.
+- **Entries:** `A[i, j]`, `A[i, j, k]` (from 1; an index out of range stops the program, naming the dimension), and
+  `A[i, j] = x`, `+=`, `-=`, …; the value must have the array's units ("A is an array of temperature [K]; can't put
+  length [m] in it"). An array takes exactly as many indexes as it has dimensions.
+- **Arithmetic** entry by entry: `A + B`, `A - B` (same units; the same shape, checked when the program runs), `A * B`,
+  `A / B`, a number times or over an array, `A + 1 K`, `-A`. Units work as for numbers.
+- **Functions:** `size(A)` (the shape, a list), `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, and `copy(A)`: like a
+  list, `B = A` shares the array, so a time step that reads the old grid while writing the new one starts with
+  `copy`.
+- **Printing:** up to 64 entries in nested brackets with the unit once (like a matrix); a larger array as its shape
+  and range.
+- **Speed:** the LLVM back end hands the statements and expressions that touch arrays to the tree-walker (the rest
+  of the program stays compiled), so array loops run at tree-walker speed for now; `fermium build` refuses programs
+  with arrays.
+- **Not yet:** slices (`A[2, :]`), `end` in an array index, `for x in A`, plotting an array, arrays of vectors or
+  complex numbers, and applying functions like `sin` to every entry.
+
 ### Memory
 
 Lists are freed when nothing can reach them any more, with both back ends: the tree-walker counts references, and

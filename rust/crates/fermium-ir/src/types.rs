@@ -134,6 +134,8 @@ pub enum Ty {
     TextList,
     /// A list of vectors or of matrices (spec C1, D281): every element has the element type's size and units.
     VList(Box<Ty>),
+    /// An N-dimensional array (2 ≤ rank ≤ 4) whose entries share one unit; its shape is known when it runs (D283).
+    Array { rank: usize, dim: DExpr },
     /// Handle to an ODE solution; the index is into the checker's solution table.
     Sol(usize),
     /// A data table (load, table(...)); index into the data table registry.
@@ -157,6 +159,7 @@ impl Ty {
             Ty::ComplexList(_) => "clist",
             Ty::TextList => "textlist",
             Ty::VList(_) => "vlist",
+            Ty::Array { .. } => "array",
             Ty::Sol(_) => "sol",
             Ty::Data(_) => "data",
             Ty::Void => "void",

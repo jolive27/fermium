@@ -1204,7 +1204,8 @@ impl Parser {
                     idx = Some(self.mks(ExprKind::Slice { lo: idx.map(bx), hi: hi.map(bx) }, st));
                 }
                 e = self.mks(ExprKind::Index { target: bx(e), index: idx.map(bx) }, t);
-                if self.at_op(",") {
+                // M[i, j], and A[i, j, k] of an array (D283)
+                while self.at_op(",") {
                     self.next();
                     let i2 = self.expr()?;
                     e = self.mks(ExprKind::Index { target: bx(e), index: Some(bx(i2)) }, t);

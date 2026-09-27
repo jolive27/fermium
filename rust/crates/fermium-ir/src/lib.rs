@@ -187,6 +187,8 @@ pub enum PrintItem {
     ComplexList(Expr, usize),
     /// A list of vectors or matrices (the element format).
     VList(Expr, usize),
+    /// An N-dimensional array (D283).
+    Array(Expr, usize),
     TextList(Expr),
     Bool(Expr),
     /// A constant text (index into the text table).
@@ -504,7 +506,7 @@ pub fn stmt_parts(s: &Stmt) -> (Vec<&Expr>, Vec<&Vec<Stmt>>) {
 pub fn print_item_expr(it: &PrintItem) -> Option<&Expr> {
     match it {
         PrintItem::Num(e, _) | PrintItem::List(e, _) | PrintItem::Complex(e, _) | PrintItem::Vec(e, _)
-        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::VList(e, _)
+        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::VList(e, _) | PrintItem::Array(e, _)
         | PrintItem::TextList(e)
         | PrintItem::Bool(e) | PrintItem::TextVar(e) | PrintItem::Data(e, _) => Some(e),
         PrintItem::Text(_) => None,

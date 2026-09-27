@@ -270,6 +270,9 @@ impl Checker {
         if let A::ExprKind::Slice { lo, hi } = &index.kind {
             return self.slice_expr(e, target, lo.as_deref(), hi.as_deref(), ctx);
         }
+        if let Some(r) = self.array_index(e, ctx)? {
+            return Ok(r); // A[i, j, …] of an array (D283)
+        }
         if let A::ExprKind::Index { target: inner_t, index: Some(inner_i) } = &target.kind {
             // M[i, j] (parsed as M[i][j]) or M[i][j]
             let _ = (inner_t, inner_i);

@@ -36,6 +36,7 @@ pub fn ty_dim(t: &Ty) -> Option<DExpr> {
         Ty::Vec { dim: Some(d), .. } => Some(d.clone()),
         Ty::Mat { dim, .. } => Some(dim.clone()),
         Ty::VList(el) => ty_dim(el),
+        Ty::Array { dim, .. } => Some(dim.clone()),
         _ => None,
     }
 }
@@ -302,6 +303,10 @@ impl Checker {
                     return Err(self.err(format!("{name} holds a {r}×{c} matrix; it can't now hold a {r2}×{c2} \
                                                  matrix"), span, None));
                 }
+                (Ty::Array { rank: a, .. }, Ty::Array { rank: b, .. }) if a != b => {
+                    return Err(self.err(format!("{name} holds a {a}-dimensional array; it can't now hold a \
+                                                 {b}-dimensional one"), span, None));
+                }
                 _ => {}
             }
             let mixed = matches!(sty, Ty::Vec { dims: Some(_), .. }) || matches!(v.ty, Ty::Vec { dims: Some(_), .. });
@@ -312,7 +317,7 @@ impl Checker {
                                         Some("each variable keeps its units; use a new name for a different \
                                               quantity".into())));
                 }
-            } else if matches!(sty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. }) {
+            } else if matches!(sty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Array { .. }) {
                 let (a, bd) = (ty_dim(&sty).unwrap(), ty_dim(&v.ty).unwrap());
                 if !self.u.unify(&a, &bd) {
                     if self.opts.repl && ctx.is_main {
@@ -397,8 +402,17 @@ impl Checker {
     }
 
     pub fn s_index_assign(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        let A::StmtKind::IndexAssign { target, index, index2, value, op } = &s.kind else { unreachable!() };
+        let A::StmtKind::IndexAssign { target, index, index2, value, op, rest } = &s.kind else { unreachable!() };
         let found = self.lookup(ctx.scope, target);
+        if let Some((Binding::Sym(b), _)) = &found {
+            if matches!(self.module.syms[*b].ty, Ty::Array { .. }) {
+                return self.array_index_assign(*b, s, ctx).map(|x| vec![x]);
+            }
+        }
+        if !rest.is_empty() {
+            return Err(self.err(format!("{target}[i, j, k] = … sets an entry of an array of 3 or more dimensions, but \
+                                         {target} isn't one"), s.span, None));
+        }
         if let Some((Binding::Sym(b), _)) = &found {
             if matches!(self.module.syms[*b].ty, Ty::Vec { .. } | Ty::Mat { .. }) {
                 return self.entry_assign(*b, s, ctx).map(|x| vec![x]);

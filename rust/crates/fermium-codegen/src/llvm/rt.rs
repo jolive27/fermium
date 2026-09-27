@@ -304,7 +304,7 @@ impl<'m> Ctx<'m> {
 
     /// Keep a Value for the compiled code (kind Obj); its index.
     pub(super) fn new_obj(&mut self, v: Value) -> usize {
-        let n = self.gc.made(64);
+        let n = self.gc.made(value_bytes(&v));
         self.gc_flag |= self.gc.due() as i32;
         match self.obj_free.pop() {
             Some(i) => {
@@ -1230,14 +1230,14 @@ impl Ctx<'_> {
             }
         });
         for (i, o) in self.objs.iter_mut().enumerate() {
-            if let Some((_, n)) = o {
+            if let Some((v, n)) = o {
                 if *n >= epoch && !objs.contains(&(i as u64)) {
                     *o = None;
                     self.obj_free.push(i);
                     freed += 1;
                 } else {
                     live += 1;
-                    bytes += 64;
+                    bytes += value_bytes(v);
                 }
             }
         }
@@ -1266,5 +1266,17 @@ impl Ctx<'_> {
     /// (FERMIUM_GC_STATS) collections run, values freed, lists still held.
     pub fn gc_stats(&self) -> (u64, u64, usize) {
         (self.gc.runs, self.gc.freed, self.lists.len() + self.tlists.len())
+    }
+}
+
+/// About how many bytes an Obj value holds (for when to collect).
+fn value_bytes(v: &Value) -> u64 {
+    64 + match v {
+        Value::List(l) => 8 * l.borrow().len() as u64,
+        Value::CList(l) => 16 * l.borrow().len() as u64,
+        Value::VList(l) => l.borrow().iter().map(|e| 8 * e.len() as u64 + 32).sum::<u64>(),
+        Value::NdArr(a) => 8 * a.borrow().data.len() as u64,
+        Value::TextList(l) => 24 * l.borrow().len() as u64,
+        _ => 0,
     }
 }

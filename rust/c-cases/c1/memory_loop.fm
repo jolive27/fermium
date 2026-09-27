@@ -23,3 +23,10 @@ pos = [<0, 0> m]
 for i from 1 to 20000
     pos = [<1, 2> m, <3, 4> m]
 print pos
+
+# arrays: 2000 copies of a 100×100 grid (160 MB if none were freed)
+plate = fill(0 K, 100, 100)
+for i from 1 to 2000
+    plate = copy(plate)
+    plate[1, 1] += 1 K
+print plate[1, 1], plate[100, 100]

@@ -172,7 +172,12 @@ pub(super) fn has_alloc_loop(m: &Module, body: &[Stmt], funcs: &[bool]) -> bool 
 
 /// A list the tree-walker holds for the compiled code (kind Obj): of vectors, matrices or complex numbers.
 fn tw_list(ty: &Ty) -> bool {
-    matches!(ty, Ty::VList(_) | Ty::ComplexList(_))
+    matches!(ty, Ty::VList(_) | Ty::ComplexList(_) | Ty::Array { .. })
+}
+
+/// Values the tree-walker computes whenever they appear (lists of vectors or matrices, arrays).
+fn tw_value(ty: &Ty) -> bool {
+    matches!(ty, Ty::VList(_) | Ty::Array { .. })
 }
 
 /// An expression the tree-walker computes for the compiled code (D281): a list of vectors, matrices or complex
@@ -182,7 +187,7 @@ pub(super) fn tree_walker_list(e: &Expr) -> bool {
     match &e.kind {
         ExprKind::Var(_) => false,
         ExprKind::List(_) => tw_list(&e.ty),
-        _ => matches!(e.ty, Ty::VList(_)) || expr_children(e).iter().any(|c| matches!(c.ty, Ty::VList(_))),
+        _ => tw_value(&e.ty) || expr_children(e).iter().any(|c| tw_value(&c.ty)),
     }
 }
 
@@ -195,7 +200,9 @@ pub(super) fn tree_walker_stmt(m: &Module, s: &Stmt) -> bool {
         // (xs[i] = "text" too: the compiled code's text lists have no element store)
         StmtKind::IndexAssign(x, _, _) => sym_tw(x) || matches!(m.syms[*x].ty, Ty::TextList),
         StmtKind::ForIn(_, l, _) => tw_list(&l.ty),
-        StmtKind::Print(items) => items.iter().any(|it| matches!(it, fermium_ir::PrintItem::VList(..))),
+        StmtKind::Print(items) => {
+            items.iter().any(|it| matches!(it, fermium_ir::PrintItem::VList(..) | fermium_ir::PrintItem::Array(..)))
+        }
         _ => false,
     }
 }

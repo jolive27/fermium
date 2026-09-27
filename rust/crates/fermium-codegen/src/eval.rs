@@ -22,6 +22,8 @@ pub enum Value {
     CList(Rc<RefCell<Vec<(f64, f64)>>>),
     /// A list of vectors or matrices (spec C1, D281), shared like a list.
     VList(Rc<RefCell<Vec<Rc<Vec<f64>>>>>),
+    /// An N-dimensional array (D283): its shape and its entries, the last index fastest.
+    NdArr(Rc<RefCell<NdArray>>),
     /// An opaque handle (solutions, data tables) owned by the runtime.
     Handle(usize),
     /// An uncertain number, 5.0 ± 0.2 (D120; eval_unc.rs).
@@ -369,6 +371,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                     return Ok(Flow::Normal);
                 }
+                if let Value::NdArr(a) = &lst {
+                    // A[i, j, …] = value (D283): the indexes come as a list
+                    let ix = match self.eval(idx, fr)? {
+                        Value::List(l) => l.borrow().clone(),
+                        v => vec![v.num()],
+                    };
+                    let k = self.arr_offset(&a.borrow().shape, &ix)?;
+                    let v = self.eval(value, fr)?;
+                    let x = self.plain(&v)?;
+                    a.borrow_mut().data[k] = x;
+                    return Ok(Flow::Normal);
+                }
                 if let Value::TextList(l) = &lst {
                     let i = self.eval(idx, fr)?;
                     let i = self.plain(&i)?;
@@ -590,6 +604,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::UVec(_) => return self.err(crate::eval_unc::GENERIC),
                     _ => {}
                 },
+                PrintItem::Array(e, f) => {
+                    if let Value::NdArr(a) = self.eval(e, fr)? {
+                        let s = crate::printer::format_array(self.module, *f, &a.borrow());
+                        self.printer.text(&s)
+                    }
+                }
                 PrintItem::VList(e, f) => {
                     let (k, cols) = match &e.ty {
                         Ty::VList(el) => match &**el {
@@ -711,6 +731,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Value::Num(x) => Value::Num(-x),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| -x).collect()))),
                 Value::Vec(v) => Value::Vec(Rc::new(v.iter().map(|x| -x).collect())),
+                Value::NdArr(a) => {
+                    let a = a.borrow();
+                    Value::NdArr(Rc::new(RefCell::new(NdArray { shape: a.shape.clone(), data: a.data.iter().map(|x| -x).collect() })))
+                }
+                Value::VList(l) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                    .map(|v| Rc::new(v.iter().map(|x| -x).collect())).collect()))),
                 v => v,
             },
             ExprKind::Cmp(op, a, b) => {
@@ -948,6 +974,22 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             (Value::Vec(v), Value::Num(y)) => Value::Vec(Rc::new(v.iter().map(|x| f(*x, y)).collect())),
             (Value::Num(x), Value::Vec(v)) => Value::Vec(Rc::new(v.iter().map(|y| f(x, *y)).collect())),
             (Value::Vec(a), Value::Vec(b)) => Value::Vec(Rc::new(a.iter().zip(b.iter()).map(|(x, y)| f(*x, *y)).collect())),
+            (Value::NdArr(a), Value::NdArr(b)) => {
+                let (a, b) = (a.borrow(), b.borrow());
+                if a.shape != b.shape {
+                    return self.err(format!("these two arrays have different shapes ({} and {})", shape_text(&a.shape),
+                                            shape_text(&b.shape)));
+                }
+                arr_new(a.shape.clone(), a.data.iter().zip(b.data.iter()).map(|(x, y)| f(*x, *y)).collect())
+            }
+            (Value::NdArr(a), Value::Num(y)) => {
+                let a = a.borrow();
+                arr_new(a.shape.clone(), a.data.iter().map(|x| f(*x, y)).collect())
+            }
+            (Value::Num(x), Value::NdArr(a)) => {
+                let a = a.borrow();
+                arr_new(a.shape.clone(), a.data.iter().map(|y| f(x, *y)).collect())
+            }
             // a list of vectors or matrices times or over a number (D281)
             (Value::VList(l), Value::Num(y)) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
                 .map(|v| Rc::new(v.iter().map(|x| f(*x, y)).collect())).collect()))),
@@ -1037,6 +1079,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         if name == "__sol_list" && args.len() == 6 {
             return self.sol_list_at(args);
         }
+        if let Some(op) = name.strip_prefix("arr.") {
+            return self.array_builtin(op, args);
+        }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
                      Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {
             if let Some(r) = area(self, name, args) {
@@ -1102,4 +1147,106 @@ pub fn empty_of(ty: &Ty) -> Value {
         Ty::TextList => Value::TextList(Rc::new(RefCell::new(vec![]))),
         _ => Value::List(Rc::new(RefCell::new(vec![]))),
     }
+}
+
+/// An N-dimensional array's shape and entries (row-major: the last index runs fastest; D283).
+#[derive(Clone, Debug, PartialEq)]
+pub struct NdArray {
+    pub shape: Vec<usize>,
+    pub data: Vec<f64>,
+}
+
+pub fn arr_new(shape: Vec<usize>, data: Vec<f64>) -> Value {
+    Value::NdArr(Rc::new(RefCell::new(NdArray { shape, data })))
+}
+
+/// 50×50
+pub fn shape_text(shape: &[usize]) -> String {
+    shape.iter().map(|n| n.to_string()).collect::<Vec<_>>().join("×")
+}
+
+impl<'m, P: Printer> Interpreter<'m, P> {
+    /// The position of entry [i, j, …] (1-based, checked against the shape).
+    pub(crate) fn arr_offset(&self, shape: &[usize], ix: &[f64]) -> Result<usize, RunError> {
+        let mut k = 0usize;
+        for (d, (&n, &i)) in shape.iter().zip(ix.iter()).enumerate() {
+            if !(i >= 1.0 && i <= n as f64 && i == i.trunc()) {
+                let shown = if i == i.trunc() && i.is_finite() { format!("{}", i as i64) } else { format!("{i}") };
+                return self.err(format!("index {shown} is out of range for dimension {} of this {} array (valid \
+                                         indexes there are 1 to {n})", d + 1, shape_text(shape)));
+            }
+            k = k * n + (i as usize - 1);
+        }
+        Ok(k)
+    }
+
+    /// arr.fill, arr.get, arr.size, arr.sum, … (D283).
+    pub(crate) fn array_builtin(&mut self, op: &str, args: &[Value]) -> Result<Value, RunError> {
+        if op == "fill" {
+            let x = self.plain(&args[0])?;
+            let mut shape = vec![];
+            for a in &args[1..] {
+                let n = a.num();
+                if !(n >= 0.0 && n == n.trunc()) {
+                    return self.err(format!("an array size must be a whole number 0 or more, not {}", py_num(n)));
+                }
+                shape.push(n as usize);
+            }
+            let total = shape.iter().try_fold(1usize, |acc, &n| acc.checked_mul(n)).unwrap_or(usize::MAX);
+            if total > 1_000_000_000 {
+                return self.err(format!("not enough memory for a {} array (the most is 10⁹ entries)", shape_text(&shape)));
+            }
+            if shape.len() == 1 {
+                return Ok(Value::List(Rc::new(RefCell::new(vec![x; total]))));
+            }
+            return Ok(arr_new(shape, vec![x; total]));
+        }
+        let Value::NdArr(a) = &args[0] else { return self.err("this array has no value") };
+        let a = a.borrow();
+        Ok(match op {
+            "get" => {
+                let ix: Vec<f64> = args[1..].iter().map(Value::num).collect();
+                let k = self.arr_offset(&a.shape, &ix)?;
+                Value::Num(a.data[k])
+            }
+            "size" if args.len() == 2 => {
+                let k = args[1].num();
+                if !(k >= 1.0 && k <= a.shape.len() as f64 && k == k.trunc()) {
+                    return self.err(format!("size(A, k): this array has {} dimensions, so k is 1 to {}", a.shape.len(),
+                                            a.shape.len()));
+                }
+                Value::Num(a.shape[k as usize - 1] as f64)
+            }
+            "size" => Value::List(Rc::new(RefCell::new(a.shape.iter().map(|&n| n as f64).collect()))),
+            "sum" => Value::Num(a.data.iter().sum()),
+            "mean" => {
+                if a.data.is_empty() {
+                    return self.err("the mean of an empty array is undefined");
+                }
+                Value::Num(a.data.iter().sum::<f64>() / a.data.len() as f64)
+            }
+            "max" | "min" => {
+                if a.data.is_empty() {
+                    return self.err(format!("the {op} of an empty array is undefined"));
+                }
+                let mut r = a.data[0];
+                for &x in &a.data[1..] {
+                    if x.is_nan() || r.is_nan() {
+                        r = f64::NAN;
+                    } else if (op == "max" && x > r) || (op == "min" && x < r) {
+                        r = x;
+                    }
+                }
+                Value::Num(r)
+            }
+            "abs" => arr_new(a.shape.clone(), a.data.iter().map(|x| x.abs()).collect()),
+            // B = A shares the array (as lists do, D26); copy(A) is a new one
+            "copy" => arr_new(a.shape.clone(), a.data.clone()),
+            _ => return self.err(format!("the built-in {op} isn't supported on arrays")),
+        })
+    }
+}
+
+fn py_num(x: f64) -> String {
+    if x == x.trunc() && x.is_finite() { format!("{}", x as i64) } else { format!("{x}") }
 }

@@ -20,5 +20,8 @@ refused now run. Design details are in `DECISIONS.md` (from D280).
   a list of vectors (`r(0) = r0`) is sized when the program runs, so reaction networks and N-body problems are
   written as loops in a function (`solve N' = rates(N) …`, `solve r'' = accel(r) …`). `N(t)` is the list at t;
   `until`, `absolute`, and all four methods work, with ordinary unknowns alongside.
+- **Arrays of 2 to 4 dimensions with units** (D283): `θ = fill(300 K, 50, 50)`, `θ[i, j]`, `θ[i, j] = …`, `A[i, j, k]`,
+  entry-by-entry arithmetic with units checked, `size`, `sum`, `mean`, `max`, `min`, `abs`, `copy`; printed in full up
+  to 64 entries, otherwise as shape and range. For fields on a grid (a heat-equation step is in the reference).
 - Tests: `rust/c-cases/c1/` (each program on both back ends, and under `FERMIUM_GC_STRESS=1`, which collects at
   every safe point), run by `cargo test` (`crates/fermium-cli/tests/c1_cases.rs`).

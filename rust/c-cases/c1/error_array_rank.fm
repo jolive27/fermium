@@ -1,0 +1,2 @@
+A = fill(0 K, 3, 4)
+print A[2]

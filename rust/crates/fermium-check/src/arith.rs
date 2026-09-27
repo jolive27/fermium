@@ -78,6 +78,9 @@ impl Checker {
         if matches!(a.ty, Ty::VList(_)) || matches!(b.ty, Ty::VList(_)) {
             return self.vlist_arith(op, a, b, e, left, right).map(Checked::Val);
         }
+        if matches!(a.ty, Ty::Array { .. }) || matches!(b.ty, Ty::Array { .. }) {
+            return self.array_arith(op, a, b, e).map(Checked::Val);
+        }
         self.need_numlike(&a, left, "this value", true)?;
         self.need_numlike(&b, right, "this value", true)?;
         self.arith(op, a, b, e).map(Checked::Val)
@@ -440,7 +443,9 @@ impl Checker {
             }
         }
         let a = self.expr(q, ctx)?;
-        self.need_numlike(&a, q, "this value", true)?;
+        if !matches!(a.ty, Ty::Array { .. } | Ty::VList(_)) {
+            self.need_numlike(&a, q, "this value", true)?;
+        }
         if is_affine(&a.hint) {
             return Err(self.err(format!("can't negate an absolute temperature ({})", a.hint.as_ref().unwrap().name),
                                 e.span, Some("write the negative number directly, like -5 °C, or use K".into())));

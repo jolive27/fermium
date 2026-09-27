@@ -1249,3 +1249,22 @@ chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
 loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
 tree-walker speed now); allowing `N[end]`, `values(N)` and `plot N` (a list per step; left out for now, with a clear
 error).
+
+## D283. N-dimensional arrays: `fill(value, n1, n2, …)`, `A[i, j, k]`, entry-by-entry arithmetic (spec C1)
+- **What:** a new type `Array { rank, dim }` (2 ≤ rank ≤ 4; every entry shares one unit; the shape is a run-time
+fact, the rank a compile-time one). `fill(value, n1, …, nr)` makes one (the value's unit is the array's; one size
+gives a list), `A[i, j, …]` reads an entry and `A[i, j, …] = x` (or `+=`) sets one, with exactly `rank` indexes;
+`+ - * /` work entry by entry with numbers and arrays of the same rank (same shape checked when it runs; `+`/`-` need
+the same units, `*`/`/` multiply them); `size(A)`, `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, `copy`. `B = A`
+shares the array, as lists do (D26). The parser now reads any number of indexes (`A[i, j, k]`, nested Index nodes as
+for `M[i, j]`), and `IndexAssign` keeps the ones after the second in a new field `rest` (empty for every program
+v1 accepts, so the AST dump and the formatter are unchanged for them). The tree-walker holds `Value::NdArr`
+(row-major); the LLVM back end holds arrays as Obj values and hands every construct that touches one to the
+tree-walker, and the collector counts an Obj's real size so arrays made in a loop are freed in time.
+- **Why:** spec C1 asks for N-dimensional arrays with units; physics grids (heat, diffusion, Poisson, lattice
+models) need more than 16×16 and more than 2 indexes. `fill(value, dims…)` reads like the notebook ("fill a 50×50
+grid with 300 K"), puts the unit in the value where the unit rule already applies, and is Julia's `fill(x, dims…)`.
+- **Alternatives:** growing matrices past 16×16 (they are straight-line code for linear algebra, D195, and their
+products and inverses mean something an array's don't); `zeros(n1, n2, n3) K` (zeros(r, c) is already a matrix; a
+unit after a call isn't the unit rule); `A[i][j][k]` only (kept working, but `A[i, j, k]` is what physicists write);
+NumPy-style broadcasting, slices and vectorized functions (next steps; each needs its own unit rules).

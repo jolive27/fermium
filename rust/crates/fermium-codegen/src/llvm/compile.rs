@@ -46,7 +46,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
         Ty::Complex(_) => Kind::V(2),
         Ty::Void => Kind::Void,
         Ty::Sol(_) => Kind::H,
-        Ty::Data(_) | Ty::ComplexList(_) | Ty::VList(_) => Kind::Obj,
+        Ty::Data(_) | Ty::ComplexList(_) | Ty::VList(_) | Ty::Array { .. } => Kind::Obj,
     })
 }
 
@@ -1375,7 +1375,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                     self.call("fm_print_tlist", &[ctx, v.v.unwrap()])?;
                 }
-                PrintItem::VList(..) => return Err("print of a list of vectors (the tree-walker prints it)".into()),
+                PrintItem::VList(..) | PrintItem::Array(..) => {
+                    return Err("print of a list of vectors or an array (the tree-walker prints it)".into())
+                }
                 PrintItem::ComplexList(e, f) => {
                     let v = self.expr(e)?;
                     if v.k != Kind::Obj {

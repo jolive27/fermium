@@ -48,9 +48,12 @@ pub fn for_each_stmt_expr(s: &A::Stmt, f: &mut dyn FnMut(&A::Expr)) {
     use A::StmtKind as K;
     match &s.kind {
         K::Assign { value, .. } => f(value),
-        K::IndexAssign { index, index2, value, .. } => {
+        K::IndexAssign { index, index2, value, rest, .. } => {
             f(index);
             if let Some(i) = index2 {
+                f(i);
+            }
+            for i in rest {
                 f(i);
             }
             f(value);

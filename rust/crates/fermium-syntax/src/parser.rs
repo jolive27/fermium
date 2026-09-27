@@ -622,9 +622,14 @@ impl Parser {
                         self.next();
                         let idx = self.expr()?;
                         let mut idx2 = None;
+                        let mut rest = vec![];
                         if self.at_op(",") {
                             self.next();
                             idx2 = Some(self.expr()?);
+                        }
+                        while self.at_op(",") {
+                            self.next();
+                            rest.push(self.expr()?);
                         }
                         if self.at_op(":") {
                             return Err(self.err("a slice xs[a:b] can be read but not assigned to; set the elements \
@@ -641,6 +646,7 @@ impl Parser {
                                 value: val,
                                 op,
                                 index2: idx2,
+                                rest,
                             },
                             name,
                         );

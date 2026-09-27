@@ -25,7 +25,7 @@ const OTHER: &[&str] = &[
     "sqrt", "cbrt", "min", "max", "atan2", "hypot", "sign", "mod", "linspace", "zeros", "ones", "range", "push",
     "append", "to", "values", "times", "dot", "factorial", "clamp", "isnan", "rand", "interp", "trapz", "clock", "norm",
     "unit", "hat", "cross", "vec", "transpose", "det", "inverse", "identity", "solve_linear", "eigenvalues",
-    "eigenvectors", "trace", "angle", "row", "column", "str",
+    "eigenvectors", "trace", "angle", "row", "column", "str", "fill", "size", "copy",
 ];
 
 /// Every built-in function name (Python BUILTINS), without duplicates.

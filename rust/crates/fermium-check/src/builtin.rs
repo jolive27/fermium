@@ -86,6 +86,20 @@ impl Checker {
             args.push(v);
         }
         let n = args.len();
+        if name == "fill" {
+            return self.array_fill(e, args, eargs); // N-dimensional arrays (D283)
+        }
+        if args.first().is_some_and(|a| matches!(a.ty, Ty::Array { .. })) {
+            return self.array_call(name, args, e);
+        }
+        if name == "copy" {
+            return Err(self.err("copy(A) is a new array with the same entries (made with fill(value, n1, n2, …))",
+                                e.span, None));
+        }
+        if name == "size" {
+            return Err(self.err("size(A) is the shape of an array (made with fill(value, n1, n2, …)); for a list use \
+                                 len(xs)", e.span, None));
+        }
         if name == "str" {
             // str(x): a number as text, as print shows it (its unit and digits), for labels (D216)
             if n != 1 {

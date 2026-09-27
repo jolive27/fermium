@@ -59,6 +59,10 @@ impl Checker {
                         let f = self.fmt(&v);
                         I::PrintItem::VList(v, f)
                     }
+                    Ty::Array { .. } => {
+                        let f = self.fmt(&v);
+                        I::PrintItem::Array(v, f)
+                    }
                     Ty::ComplexList(_) => {
                         let f = self.fmt(&v);
                         I::PrintItem::ComplexList(v, f)
