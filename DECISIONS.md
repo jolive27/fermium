@@ -1872,7 +1872,16 @@ had to be in the program's folder. (2) The compiler runs in its own process grou
 the language server can't hang. (3) The wrapper turns control characters (line breaks, tabs, ESC, DEL) in an
 exception's `what()` into spaces before handing it over, so the message is one line and can't drive the
 terminal. (4) A name part that is a C++ keyword (`phys::new`, `operator`) is refused at the signature with a
-hint, before compiling. Not done: telling `f(const double *)` from `f(double *)` apart when a header has both (a
+hint, before compiling. (5) macOS (PR #4's CI): the linker records a library by its install name, which for
+`c++ -shared -o libphys4.so` is the bare file name, so loading the wrapper failed ("Library not loaded:
+libphys4.so"); after linking, the wrapper's reference is changed to the library's absolute path
+(`otool -D` for the install name, `install_name_tool -change`, then `codesign --force --sign -`, since arm64
+refuses a modified binary with a stale signature). The linker's "Undefined symbols for architecture arm64:
+"phys::f(double)", referenced from:" is read as GNU ld's "undefined reference" (the same one-line errors); `-x
+none` is passed only before a library given by its path (clang warned about it after the last input), and the
+fallback message skips warning lines. Unit-tested with the captured macOS output; not yet run on macOS.
+Chosen over loading the library RTLD_GLOBAL first (dyld still resolves the wrapper's dependency by its install
+name) and `-undefined dynamic_lookup` (loses the link-time "no definition" error). Not done: telling `f(const double *)` from `f(double *)` apart when a header has both (a
 `: list` fits either; the import stops with *more than one overload has the C++ type*; documented).
 - **Why:** the reviewer's list; each was a raw compiler message, a hang, or terminal output from library code.
 - **Alternatives:** probing for headers with our own search (would disagree with the compiler's); a `: mutable

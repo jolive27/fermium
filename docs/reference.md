@@ -1424,7 +1424,10 @@ print tgamma(5)                                    # 24
   fits either, so the import stops with *more than one overload … has the C++ type*), operators and names that
   are C++ keywords (`phys::new`),
   more than one header per import, `import cpp` in a module or calls inside `units natural`, and the browser
-  playground. Tested on x86-64 Linux with g++; on macOS the linker options differ and are untested.
+  playground. Tested on x86-64 Linux with g++ (every test). On macOS (arm64, Apple clang) the continuous
+  integration runs the same tests; a wrapper names the library by its absolute path (`install_name_tool`,
+  then an ad-hoc signature), and the macOS linker's messages are read as on Linux (checked against captured
+  output), but the macOS fixes have not yet been confirmed by a macOS run.
 
 The worked example `examples/cpp_interop/` calls a small C++ kinematics library: daughter momenta in two-body
 decays (π⁺ → μ⁺ ν: 29.79 MeV/c, as the PDG gives), decay lengths βγcτ, and the invariant mass of the Λ rebuilt

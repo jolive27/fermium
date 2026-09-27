@@ -465,11 +465,13 @@ pub fn build_wrapper(imp: &CppImport) -> Result<String, CppError> {
     for d in &inc_dirs {
         cmd.arg("-I").arg(d);
     }
-    cmd.arg("-o").arg(&tmp_so).arg(&cpp).args(["-x", "none"]);
+    cmd.arg("-o").arg(&tmp_so).arg(&cpp);
     if !imp.lib.is_empty() {
         let lp = Path::new(imp.lib_path);
         if lp.is_absolute() {
-            cmd.arg(lp);
+            // `-x none`: the library is an input file, not C++ source (only here: after the last input clang
+            // warns that it has no effect)
+            cmd.args(["-x", "none"]).arg(lp);
             if let Some(parent) = lp.parent() {
                 cmd.arg(format!("-Wl,-rpath,{}", parent.display()));
             }
@@ -501,6 +503,9 @@ pub fn build_wrapper(imp: &CppImport) -> Result<String, CppError> {
         let _ = std::fs::remove_file(&tmp_so);
         let _ = std::fs::remove_file(&tmp_d);
         return Err(summarise(&stderr, imp, &cpp, &ranges, include_line, &log));
+    }
+    if cfg!(target_os = "macos") && !imp.lib.is_empty() && Path::new(imp.lib_path).is_absolute() {
+        mac_absolute_library(&tmp_so, Path::new(imp.lib_path));
     }
     // the manifest; without one (a path with a line break in it) the wrapper is used this once and not reused
     let deps = std::fs::read_to_string(&tmp_d).map(|d| deps_of(&d)).unwrap_or_default();
@@ -546,6 +551,34 @@ pub fn build_wrapper(imp: &CppImport) -> Result<String, CppError> {
     Ok(so.to_string_lossy().into_owned())
 }
 
+/// The install name `otool -D` prints for a library: the line after "<path>:" (None when it has none).
+fn install_name_of(otool_d: &str) -> Option<String> {
+    let mut it = otool_d.lines().map(str::trim).filter(|l| !l.is_empty());
+    let head = it.next()?;
+    if !head.ends_with(':') {
+        return None;
+    }
+    it.next().map(str::to_string)
+}
+
+/// macOS (D323): the linker records the library the wrapper needs by the library's install name, which for a
+/// library built with `c++ -shared -o libphys.so` is the bare file name, so dyld then looks for it relative to
+/// the current folder and fails. The wrapper is changed to name the library by its absolute path
+/// (`install_name_tool -change`), and signed again ad hoc (arm64 refuses a changed binary whose signature no
+/// longer matches). A library whose install name is already that path, or tools that are missing, leave the
+/// wrapper as it is.
+fn mac_absolute_library(so: &Path, lib: &Path) {
+    let Ok(o) = run_limited(Command::new("otool").arg("-D").arg(lib), 30) else { return };
+    let Some(name) = install_name_of(&String::from_utf8_lossy(&o.stdout)) else { return };
+    if Path::new(&name) == lib {
+        return;
+    }
+    let changed = run_limited(Command::new("install_name_tool").arg("-change").arg(&name).arg(lib).arg(so), 30);
+    if changed.is_ok_and(|o| o.status.success()) {
+        let _ = run_limited(Command::new("codesign").args(["--force", "--sign", "-"]).arg(so), 30);
+    }
+}
+
 /// The compiler's complaint in one line, about the signature it concerns.
 fn summarise(stderr: &str, imp: &CppImport, cpp: &Path, ranges: &[(usize, usize)], include_line: usize, log: &Path)
              -> CppError {
@@ -553,7 +586,15 @@ fn summarise(stderr: &str, imp: &CppImport, cpp: &Path, ranges: &[(usize, usize)
     let mapping = "Fermium passes a number ([unit] or plain) as double, : int and len(…) as int and : list as const \
                    double * (or double *), and expects double back (-> [unit], -> number) or int (-> int)";
     let cpp_s = cpp.to_string_lossy();
-    for line in stderr.lines() {
+    // macOS's linker: "Undefined symbols for architecture arm64:", then `  "phys::f(double)", referenced from:`
+    let mac_undefined = stderr.split_once("Undefined symbols for architecture").and_then(|(_, rest)| {
+        rest.lines().skip(1).map(str::trim).find(|l| l.starts_with('"'))
+            .and_then(|l| l[1..].split_once('"').map(|x| x.0.to_string()))
+    });
+    let mut lines: Vec<String> = mac_undefined.map(|s| format!("undefined symbol: {s}")).into_iter().collect();
+    lines.extend(stderr.lines().map(str::to_string));
+    for line in &lines {
+        let line = line.as_str();
         // link errors (GNU ld, lld, macOS ld)
         let undefined = line.split_once("undefined reference to `").map(|x| x.1.trim_end_matches('\''))
             .or_else(|| line.split_once("undefined symbol: ").map(|x| x.1.trim()));
@@ -623,7 +664,10 @@ fn summarise(stderr: &str, imp: &CppImport, cpp: &Path, ranges: &[(usize, usize)
         let shown = Path::new(&file).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or(file.clone());
         return cerr(None, format!("the header {} doesn't compile: {shown}, line {lno}: {msg}", imp.header), full);
     }
-    let first = stderr.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("no message");
+    // the first line that isn't a warning (clang: "warning: argument unused during compilation", …)
+    let is_warning = |l: &str| l.starts_with("warning:") || l.contains(": warning: ") || l.contains(": note: ");
+    let first = stderr.lines().map(str::trim).find(|l| !l.is_empty() && !is_warning(l))
+        .or_else(|| stderr.lines().map(str::trim).find(|l| !l.is_empty())).unwrap_or("no message");
     cerr(None, format!("compiling the C++ wrapper failed: {first}"), full)
 }
 
@@ -650,6 +694,48 @@ mod tests {
         assert_eq!(ranges.len(), 2);
         assert!(lines[ranges[1].0 - 1].starts_with("// sum: int(const double *, int)"));
         assert_eq!(cpp_type(&sigs[0]), "double(double, int)");
+    }
+
+    fn imp<'a>(lib: &'a str, qual: &str, params: Vec<A::CParamKind>, rint: bool) -> CppImport<'a> {
+        CppImport { lib, lib_path: lib, header: "phys.hpp", include: "/x/phys.hpp".into(), system: false, base: "/x",
+                    sigs: vec![CppSig { qual: qual.into(), params, rint }] }
+    }
+
+    #[test]
+    fn macos_link_errors_read_as_on_linux() {
+        let (cpp, log) = (Path::new("/c/w.cpp"), Path::new("/c/w.log"));
+        // captured from Apple clang on arm64 (PR #4's macOS CI)
+        let mac = "Undefined symbols for architecture arm64:\n  \"phys::detail::declared_only(double)\", referenced \
+                   from:\n      _fermium_cpp_0 in w-3f2a1b.o\nld: symbol(s) not found for architecture arm64\nclang: \
+                   error: linker command failed with exit code 1 (use -v to see invocation)\n";
+        let i = imp("libphys4.so", "phys::detail::declared_only", vec![A::CParamKind::Num(None)], false);
+        let e = summarise(mac, &i, cpp, &[(10, 20)], 5, log);
+        assert_eq!(e.sig, Some(0));
+        assert_eq!(e.msg, "the C++ library libphys4.so has no definition of phys::detail::declared_only(double)");
+        let gnu = "/usr/bin/ld: /tmp/w.o: in function `fermium_cpp_0':\nw.cpp:(.text+0x9): undefined reference to \
+                   `phys::detail::declared_only(double)'\ncollect2: error: ld returned 1 exit status\n";
+        assert_eq!(summarise(gnu, &i, cpp, &[(10, 20)], 5, log).msg, e.msg);
+        // no library: the warning about -x none (older command lines) is skipped, the link error is reported
+        let mac2 = "clang: warning: '-x none' after last input file has no effect [-Wunused-command-line-argument]\n\
+                    Undefined symbols for architecture arm64:\n  \"phys::twice(int)\", referenced from:\n      \
+                    _fermium_cpp_0 in w-1.o\nld: symbol(s) not found for architecture arm64\nclang: error: linker \
+                    command failed with exit code 1 (use -v to see invocation)\n";
+        let j = imp("", "phys::twice", vec![A::CParamKind::Int], true);
+        let e = summarise(mac2, &j, cpp, &[(10, 20)], 5, log);
+        assert_eq!((e.sig, e.msg.as_str()), (Some(0), "phys::twice(int) is declared in phys.hpp but defined nowhere: \
+                                                       the import names no library"));
+        // an unrecognised failure shows its first line that isn't a warning
+        let other = "clang: warning: argument unused during compilation: '-fPIC'\nclang: error: something odd\n";
+        assert_eq!(summarise(other, &j, cpp, &[(10, 20)], 5, log).msg,
+                   "compiling the C++ wrapper failed: clang: error: something odd");
+    }
+
+    #[test]
+    fn otool_install_names_are_read() {
+        assert_eq!(install_name_of("/abs/libphys4.so:\nlibphys4.so\n").as_deref(), Some("libphys4.so"));
+        assert_eq!(install_name_of("/abs/libphys4.so:\n@rpath/libphys4.dylib\n").as_deref(), Some("@rpath/libphys4.dylib"));
+        assert_eq!(install_name_of("/abs/a.o:\n"), None);
+        assert_eq!(install_name_of(""), None);
     }
 
     #[test]

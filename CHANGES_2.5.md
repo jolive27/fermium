@@ -97,7 +97,8 @@ print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 2
 - Not yet: objects and ordinary member functions, references, `std::vector` and strings, types other than
   `double`, `int` and arrays of doubles, functions returning nothing, explicit template arguments. C++ calls
   take about 0.6 µs each (they go through the run time to check for exceptions). Tested on x86-64 Linux with
-  g++; macOS is untested.
+  g++; on macOS (arm64, Apple clang) the wrapper names the library by its absolute path and the linker's
+  messages are read as on Linux (D323), not yet confirmed by a macOS run.
 
 ## C and Fortran interop (C3, DECISIONS D275)
 
