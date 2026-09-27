@@ -1821,3 +1821,93 @@ at parity with Julia, bound by the ODE solver's bookkeeping and an in-order sum'
   (2.7845×10⁻⁹ s) instead of v1's 2.7881×10⁻⁹ s; the test compares that case with the analytic values.
 - **Alternatives:** scaling parameters by their starting value for the whole fit (changes v1's fitted values
   in the last digits); fixing Fermium 1.5 too (it is the frozen oracle whose outputs the goldens record).
+
+## D320. The C++ wrapper cache: a SHA-256 key of every compile input, a manifest checked on reuse, system headers without the program's folder, a private cache folder (red team 15 #1, #2)
+- **What:** (1) a header the program's folder has (or an absolute path) is included by its absolute path with
+`-I` the program's and the header's folders, as before; any other name (`cmath`, `math.h`, `Eigen/Dense`) is
+included as `<name>` with **no** folder of the program's on the include path, so a `cstdio` planted next to a
+program can't stand in for the real one, and installed headers are found where the compiler finds them (a
+missing one is the compiler's "not found", reported as "can't find the header" with a hint). (2) The cache key
+is the SHA-256 (in-tree, `sha256.rs`; the workspace had no hashing dependency) of the wrapper's source, whether
+the header is local or a system one, its absolute path and text, the `-I` folders, `CXX`, `CXXFLAGS`, `CPATH`,
+`CPLUS_INCLUDE_PATH`, `C_INCLUDE_PATH`, `LIBRARY_PATH`, `GCC_EXEC_PREFIX`, `COMPILER_PATH`, `SDKROOT`,
+`MACOSX_DEPLOYMENT_TARGET`, and the library as written and its path; 40 hex digits name the files. (3) Next to
+each wrapper a manifest records the compiler's identity (each word of the command resolved on the PATH, links
+followed, with its size and time), the SHA-256 of its `--version` output, the wrapper's size and SHA-256, the
+library's size and time, and every file of the compiler's `-MD` list (now `-MD`, so system headers count) with
+its size and time. A wrapper is reused only when the manifest is complete and all of it still matches; a
+compile writes the manifest last, after the wrapper. With no compiler on the PATH a wrapper whose manifest
+otherwise matches is still used (nothing else could be built, and the old test "a second run needs no compiler"
+holds). (4) The cache folders (`cpp/`, and `jit/` of C6) are made 0700; a folder owned by another user or
+writable by group or others is not used: one warning, then a fresh private folder in the temporary folder for
+this run (cachedir.rs). (5) The compiler runs in its own process group and is killed after
+`$FERMIUM_CXX_TIMEOUT` seconds (120 by default), with a one-line error.
+- **Why:** the old key (FNV-1a 64 of the source, the named header's text, the library path, `$CXX`,
+`$CXXFLAGS`) left out the program's folder, which was on the include path, so `fermium check` on one program
+planted a wrapper that another program with the same import loaded and ran; it also left out the include-path
+variables and the compiler, so a stale wrapper silently printed old constants. The compiler's own identity is
+checked in the manifest rather than hashed into the name so a cache hit spawns no process (≈25 ms per program).
+- **Alternatives:** running `c++ --version` (or the preprocessor) on every run to put its output or the resolved
+header list in the key (a process per import per run; the manifest catches the same changes); a content hash
+of every dependency on reuse (≈100 system headers per wrapper to read each run; size and time is what make and
+ninja trust); keeping `-I <program folder>` for system headers (what made the attack work); `-iquote` for the
+program's folders (would break headers that include their neighbours with `<…>`). Known limit: a file newly
+added to an include folder that shadows one the wrapper didn't read isn't noticed (the wrapper stays as it was,
+which runs nothing new).
+
+## D321. Passing a parameter on to a function's `: list` parameter makes it a list parameter (red team 15 #4)
+- **What:** `takes_lists` (is a list argument taken whole, or is the function applied to each element?) also
+counts a call in the body that passes a parameter, as is, to a user function whose parameter at that position is
+declared `: list` in any of its versions: `s(x: list) = 2`, `f(y) = s(y)`, `f([1, 2])` is 2, not `[2, 2]`.
+- **Why:** D303 made the declaration the user's statement of intent; a plain wrapper around such a function should
+keep it. Calls with the parameter inside an expression (`s(2 y)`) still count as element-wise.
+- **Alternatives:** inferring list-ness through any chain of calls (a fixed point over the call graph: more
+machinery for a rare case); requiring the wrapper to declare `: list` too (surprising after D303).
+
+## D322. A Monte Carlo integral shows the nominal value; -0.00 ± σ stays as in v1 (red team 15 #5)
+- **What:** an integral that falls back to Monte Carlo (D278, D300) reports the integral at the measured inputs
+(every source at z = 0, computed with plain numbers, no random numbers drawn), with the spread and per-source
+contributions from the regression on the samples, as D304 does for ODE solutions; before, it showed the
+regression's intercept (≈ the sample mean: 0.505 instead of 0.500 for ∫₀² x·[x < a] dx at a = 1.0 ± 0.1). A
+negative value that rounds to zero still prints `-0.00 ± 0.14`: Fermium 1.5 prints it so, and the v1 formatting
+fixture (fermium-units tests/parity.rs, 51 247 checks against Fermium 1.5) pins `(-0.0 ± 2.5)×10²⁵`, so
+normalizing it would break v1 parity; it was tried and reverted. Arithmetic
+on Monte Carlo results stays first order, as all uncertain arithmetic is (documented in reference §21).
+- **Why:** one rule for every result (the value at the measured inputs); v1 parity outranks the cosmetic
+"-0.00".
+- **Alternatives:** the sample mean everywhere (what `propagate montecarlo` reports, and still does); storing the
+samples with the value to make later arithmetic Monte Carlo too (a different, heavier representation).
+
+## D323. C++ usability: installed headers, a compile timeout, one-line exception messages, keyword names (red team 15 #6)
+- **What:** (1) a header the program's folder doesn't have is `#include <name>`d and found by the compiler on its
+own include path (`math.h`, `Eigen/Dense`); a header nobody has is the compiler's "No such file", reported as
+*can't find the header X* with a hint naming both places. Before, any name with a `/` or ending in `.h`/`.hpp`
+had to be in the program's folder. (2) The compiler runs in its own process group with a timeout
+(`$FERMIUM_CXX_TIMEOUT`, 120 s); on expiry the group is killed and the import is a one-line error, so `check` and
+the language server can't hang. (3) The wrapper turns control characters (line breaks, tabs, ESC, DEL) in an
+exception's `what()` into spaces before handing it over, so the message is one line and can't drive the
+terminal. (4) A name part that is a C++ keyword (`phys::new`, `operator`) is refused at the signature with a
+hint, before compiling. (5) macOS (PR #4's CI): the linker records a library by its install name, which for
+`c++ -shared -o libphys4.so` is the bare file name, so loading the wrapper failed ("Library not loaded:
+libphys4.so"); after linking, the wrapper's reference is changed to the library's absolute path
+(`otool -D` for the install name, `install_name_tool -change`, then `codesign --force --sign -`, since arm64
+refuses a modified binary with a stale signature). The linker's "Undefined symbols for architecture arm64:
+"phys::f(double)", referenced from:" is read as GNU ld's "undefined reference" (the same one-line errors); `-x
+none` is passed only before a library given by its path (clang warned about it after the last input), and the
+fallback message skips warning lines. Unit-tested with the captured macOS output; not yet run on macOS.
+Chosen over loading the library RTLD_GLOBAL first (dyld still resolves the wrapper's dependency by its install
+name) and `-undefined dynamic_lookup` (loses the link-time "no definition" error). Not done: telling `f(const double *)` from `f(double *)` apart when a header has both (a
+`: list` fits either; the import stops with *more than one overload has the C++ type*; documented).
+- **Why:** the reviewer's list; each was a raw compiler message, a hang, or terminal output from library code.
+- **Alternatives:** probing for headers with our own search (would disagree with the compiler's); a `: mutable
+list` spelling to choose `double *` (new syntax for a rare case; later if asked).
+
+## D324. The same-dimension warning knows Bq vs 1/s and rad/m vs 1/m, fits its hint to the pair, and has no line number in the REPL (red team 15 #7)
+- **What:** D306's classifier gives a bare inverse unit (`1/s`, `1/m`, `s⁻¹`, `s^-1`) the kind "plain", so
+`A(r [Bq])` then `A(k [1/s])` and `k(q [rad/m])` then `k(q [1/m])` warn; `Hz` then `1/s` doesn't (a hertz is one
+per second). The hint's example is ω = 2π f only for Hz vs rad/s, "an angle in rad counts as a plain number" for
+rad vs plain, and none otherwise (J vs N m). In the REPL, where every input is line 1, the message leaves out
+"(line N)".
+- **Why:** the reviewer's cases; a wrong example in a hint is worse than none.
+- **Alternatives:** a table of named pairs (the kinds already are one); numbering REPL inputs (a larger change to
+the REPL's diagnostics).

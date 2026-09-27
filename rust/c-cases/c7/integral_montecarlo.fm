@@ -10,4 +10,6 @@ seed(3)
 propagate montecarlo 20000 samples
     J = ∫ exp(-((x - μ) / w)²) dx from -1 to 1
 print J
-print abs(uncertainty(I) / uncertainty(J) - 1) < 0.05, abs(value(I) - value(J)) < 0.01
+# the spread agrees with propagate montecarlo; the value is the integral at the measured inputs (μ = 0, w = 1),
+# as for the linear rule (D322), where propagate montecarlo reports the mean of its samples
+print abs(uncertainty(I) / uncertainty(J) - 1) < 0.05, abs(value(I) - ∫ exp(-x²) dx from -1 to 1) < 1e-9

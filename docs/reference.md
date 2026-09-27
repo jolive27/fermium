@@ -1362,8 +1362,9 @@ print tgamma(5)                                    # 24
 ```
 
 - **The import** names the shared library (relative to the program's folder, as for `import c`) and the
-  header that declares the functions (relative to the program's folder; a name the folder doesn't have and
-  that isn't a path or a `.h`/`.hpp` file, like `cmath`, is a system header). Without a library
+  header that declares the functions (relative to the program's folder; a name the folder doesn't have, like
+  `cmath`, `math.h` or `Eigen/Dense`, is looked up where the compiler looks for installed headers, with no
+  folder of the program's on that search: add folders with `CPATH`). Without a library
   (`import cpp header "…":`) only what the header defines itself can be called: inline functions,
   templates, and the standard library's functions.
 - **The signatures** are those of `import c`, with the C++ name qualified by its namespaces and classes
@@ -1389,11 +1390,16 @@ print tgamma(5)                                    # 24
   compiler errors (for example, a header that doesn't compile) give the first error and the path of a log with
   the compiler's full output.
 - **The compiler** is `$CXX` if it is set (it may carry arguments, like `ccache g++`), else the first of
-  `c++`, `g++` and `clang++` that runs; `$CXXFLAGS` is added to its command line (`-std=c++17 -O2` by
-  default). The compiled wrapper is kept in `$FERMIUM_CACHE_DIR/cpp` (else `$XDG_CACHE_HOME/fermium/cpp`,
-  else `~/.cache/fermium/cpp`; on macOS `~/Library/Caches/fermium/cpp`), named by a hash of its source, the
-  named header's text, the library's path, `$CXX` and `$CXXFLAGS`, and made again when a header it includes
-  (the compiler's own list) or the library is newer than it. With the cache filled, no compiler is needed.
+  `c++`, `g++` and `clang++` on the `PATH`; `$CXXFLAGS` is added to its command line (`-std=c++17 -O2` by
+  default). A compile that takes longer than `$FERMIUM_CXX_TIMEOUT` seconds (120 by default) is stopped with
+  an error. The compiled wrapper is kept in the `cpp` folder of Fermium's cache (`$FERMIUM_CACHE_DIR`, else
+  `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`; on macOS `~/Library/Caches/fermium`), named by the
+  SHA-256 of everything that changes what the compiler makes: the wrapper's source (the header's name and the
+  signatures), the header's path and text, the include folders, `$CXX`, `$CXXFLAGS`, `$CPATH`,
+  `$CPLUS_INCLUDE_PATH` (and the compiler's other search variables) and the library's path. Next to it is a
+  manifest: which compiler made it (its file, size and date), every file the compiler read (system headers
+  too), the library's size and date, and the wrapper's own SHA-256. The wrapper is used again only while all of
+  these still match; otherwise it is made again. With the cache filled, no compiler is needed.
 - **Names:** Greek letters and subscripts map to ASCII as for `import c` (`phys::λ_max` is
   `phys::lambda_max`), so `fmt --pretty` and `--ascii` round-trip.
 - **Speed:** C++ calls go through the run time (about 0.6 µs per call on the test machine), because the
@@ -1401,14 +1407,27 @@ print tgamma(5)                                    # 24
   (about 5 ns). `fermium build` executables work, and load the wrapper from the cache by the path it had
   when the program was built (clearing the cache breaks them until the program is built again).
 - **Trust:** the compiler checks the declaration against the header (a wrong parameter type is a compile
-  error, unlike `import c`), but not array lengths. Compiling the wrapper includes the header, and loading
-  the libraries runs their initialisers, when the program is checked (also by `fermium check` and the editor's
-  language server).
+  error, unlike `import c`), but not array lengths. Compiling a wrapper only compiles the header, which runs
+  nothing; loading the libraries runs their initialisers, so only `fermium run` and `fermium build` load them.
+  `fermium check` and the editor's language server compile the wrapper (so C++ errors show while you edit) but
+  don't load it or the library (DECISIONS D305). Everything in the cache folder (C++ wrappers in `cpp/`, and the machine
+  code `fermium run` saves for a program in `jit/`, D317) is code that a later run loads, so Fermium keeps it
+  private: it makes the folders readable and writable by you alone (0700), and refuses a
+  cache folder that another user owns or that group or others can write (a one-line warning, then the program
+  runs without the cache). A wrapper is reused only for exactly the inputs it was made from (above), so one
+  program's folder can't change what another program loads: a file in the program's folder is on the include
+  path only for a header of the program's own, never for a system header like `<cstdio>` (DECISIONS D320).
 - **Not yet supported:** ordinary member functions and objects (classes, `std::vector`, `std::string`),
   references (`const double &`), `float`/`long` and other types beyond `double`, `int` and arrays of doubles,
   functions returning nothing, template arguments written in the signature (`f<double>`: only deduced ones),
+  choosing between two overloads that differ only in `const double *` and `double *` (a `: list` parameter
+  fits either, so the import stops with *more than one overload … has the C++ type*), operators and names that
+  are C++ keywords (`phys::new`),
   more than one header per import, `import cpp` in a module or calls inside `units natural`, and the browser
-  playground. Tested on x86-64 Linux with g++; on macOS the linker options differ and are untested.
+  playground. Tested on x86-64 Linux with g++ (every test). On macOS (arm64, Apple clang) the continuous
+  integration runs the same tests; a wrapper names the library by its absolute path (`install_name_tool`,
+  then an ad-hoc signature), and the macOS linker's messages are read as on Linux (checked against captured
+  output), but the macOS fixes have not yet been confirmed by a macOS run.
 
 The worked example `examples/cpp_interop/` calls a small C++ kinematics library: daughter momenta in two-body
 decays (π⁺ → μ⁺ ν: 29.79 MeV/c, as the PDG gives), decay lengths βγcτ, and the invariant mass of the Λ rebuilt
@@ -1644,7 +1663,7 @@ These are known and not yet fixed. None of them is silent about units.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
-- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, and can't go directly into vectors, integrals or ODEs (use `propagate montecarlo`). `fit` doesn't weight points by their uncertainties.
+- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, and can't go directly into `solve … for x`, eigenvalue problems or PDEs (use `propagate montecarlo`); vectors, lists, integrals and ODEs take them directly since Fermium 2.5 (§21). `fit` doesn't weight points by their uncertainties.
 - **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
   has imported even if the file changes (restart the REPL to see the change).
 - **`fermium build`** executables write plots exactly as `fermium run` does (PNG, or SVG/GIF when the file name says so), and read data files relative to the folder the program is run in (§17).
@@ -1871,7 +1890,7 @@ prints
 - **Vectors and matrices** of uncertain values print with one unit (`<1.00 ± 0.10, 2.00 ± 0.20> m`, `[[2.00 ± 0.10, -1], [-1, 2.00 ± 0.10]] N/m`; a state vector with a unit per component). `|v|`, `unit`, `·`, `×`, `abs`, components, `det`, `inverse`, `solve_linear` and matrix products propagate with the correlations (`K inverse(K)` is exactly the identity). Lists of uncertain values work in every list function, including `std` (the spread, with its uncertainty) and `interp`.
 - **Integrals** whose integrand reads a measured value, or whose limits are measured, are propagated exactly: the derivative is taken under the integral sign (one more quadrature per error source) and through the limits (f(b)·σ_b). `∫ x² dx from 0 to a` minus `a³/3` is exactly `0 ± 0`.
 - **Differential equations** with a measured starting value, start time or parameter solve the sensitivities ∂y/∂(each source) alongside y with the same solver (the variational equations), so `y(t)`, `y'(t)` and `values(y)` are uncertain values that keep their correlations with the inputs. The stopping time of `until`, `max`/`min` of a solution and plots use the nominal solution.
-- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part, or the gap between either one-sided change and the first-order prediction, is more than 10 % of the change's typical size), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. This also catches a jump at a measured value, where the derivative is 0 almost everywhere but the result moves: `∫ (if x < a then 1 else 0) dx from 0 to 2` with `a = 1.0 ± 0.1` is `1.00 ± 0.10`. The value shown is the one at the measured inputs (as for the linear rule); the spread and the links to the inputs come from the samples, and all values of one Monte Carlo solution share the same samples, so `x(2) - x(1)^2` for x' = −k x is 0 in value. For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 and D300–D304 have the details.
+- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part, or the gap between either one-sided change and the first-order prediction, is more than 10 % of the change's typical size), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. This also catches a jump at a measured value, where the derivative is 0 almost everywhere but the result moves: `∫ (if x < a then 1 else 0) dx from 0 to 2` with `a = 1.0 ± 0.1` is `1.00 ± 0.10`. The value shown is the one at the measured inputs (as for the linear rule); the spread and the links to the inputs come from the samples, and all values of one Monte Carlo solution share the same samples, so `x(2) - x(1)^2` for x' = −k x is 0 in value. Arithmetic on Monte Carlo results is first order, like all arithmetic on uncertain values: the σ of `x(2) - x(1)^2` is the linearisation of the square around the values, not a new Monte Carlo run (write the whole expression inside `propagate montecarlo` for that). For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 and D300–D304 have the details.
 
 ### How it runs
 

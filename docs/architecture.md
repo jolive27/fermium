@@ -215,7 +215,9 @@ as the tree-walker and as Fermium 1.5 (`rust/c-cases/c6/*.fm`).
   object file and the run time's tables (the `fermium build` blob format) saved in `<cache>/jit/<key>.fmc`, used
   again while the program's text and every module file it read or looked for are unchanged. A cached compilation
   reads the context pointer from the global `fm_ctx` (`Gen::new_reloc`), so its machine code holds no address of
-  the process. `FERMIUM_NO_CACHE=1` turns it off.
+  the process. `FERMIUM_NO_CACHE=1` turns it off. The cache folders (`jit/`, and `cpp/` for C4) are made and
+  checked by `fermium-check/src/cachedir.rs`: owner-only (0700), and not used when another user owns them or
+  group or others can write them (D320).
 
 `benchmarks/run.py` measures the benchmark programs against Julia (benchmarks/README.md); on a shared machine
 compare two binaries with interleaved runs (A B A B …) and look at minimums and medians of many runs, or at

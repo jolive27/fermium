@@ -34,6 +34,19 @@ use crate::checker::*;
 use crate::exprs::hint_of;
 use crate::units::Unit;
 
+/// C++'s keywords (and alternative tokens): none can be a function's name (`phys::new`).
+const CPP_KEYWORDS: &[&str] = &[
+    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break", "case", "catch", "char",
+    "char8_t", "char16_t", "char32_t", "class", "compl", "concept", "const", "consteval", "constexpr", "constinit",
+    "const_cast", "continue", "co_await", "co_return", "co_yield", "decltype", "default", "delete", "do", "double",
+    "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if",
+    "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or",
+    "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return", "short",
+    "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template", "this",
+    "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual",
+    "void", "volatile", "wchar_t", "while", "xor", "xor_eq",
+];
+
 /// A declared C or Fortran function (what its name is bound to).
 #[derive(Clone, Debug)]
 pub struct CFuncRef {
@@ -196,16 +209,20 @@ impl Checker {
         let base_dir = if self.opts.base_dir.is_empty() { "." } else { self.opts.base_dir.as_str() };
         let base = std::fs::canonicalize(base_dir).map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|_| base_dir.to_string());
+        if header.is_empty() || header.chars().any(|c| c.is_control() || matches!(c, '<' | '>' | '"')) {
+            return Err(self.err(format!("{header:?} can't be the name of a header"), s.span, None));
+        }
+        // the program's own header (a path relative to its folder, or absolute) is included by its absolute path,
+        // with the program's and the header's folders on the include path; any other name is left to the
+        // compiler's own include path, with no folder of the program's on it (D320: a file in the program's
+        // folder can't stand in for <cstdio>)
         let local = Path::new(&base).join(header);
-        let include = if Path::new(header).is_absolute() {
-            header.to_string()
-        } else if local.exists() {
-            std::fs::canonicalize(&local).unwrap_or(local).to_string_lossy().into_owned()
-        } else if header.contains('/') || header.ends_with(".hpp") || header.ends_with(".h") || header.ends_with(".hh") {
-            return Err(self.err(format!("can't find the header {header}"), s.span,
-                                Some("the path is relative to the program's folder".into())));
+        let (include, system) = if Path::new(header).is_absolute() {
+            (header.to_string(), false)
+        } else if local.is_file() {
+            (std::fs::canonicalize(&local).unwrap_or(local).to_string_lossy().into_owned(), false)
         } else {
-            header.to_string() // a system header, like cmath
+            (header.to_string(), true) // a system or installed header, like cmath or Eigen/Dense
         };
         let mut names: Vec<String> = vec![];
         let mut csigs = vec![];
@@ -221,11 +238,17 @@ impl Checker {
                 return Err(self.err(format!("{written} can't be the name of a C++ function: a C++ name must be ASCII"),
                                     sig.span, None));
             }
+            if let Some(kw) = qual.iter().find(|q| CPP_KEYWORDS.contains(&q.as_str())) {
+                return Err(self.err(format!("{kw} is a C++ keyword, so {written} can't be imported"), sig.span,
+                                    Some("operators and keywords can't be called from Fermium: add a function with \
+                                          an ordinary name to the library that calls it".into())));
+            }
             let params = sig.params.iter().map(|p| p.kind.clone()).collect();
             csigs.push(crate::cppinterop::CppSig { qual: qual.join("::"), params,
                                                    rint: matches!(sig.ret, A::CRetDecl::Int) });
         }
-        let imp = crate::cppinterop::CppImport { lib, lib_path: &path, header, include, base: &base, sigs: csigs };
+        let imp = crate::cppinterop::CppImport { lib, lib_path: &path, header, include, system, base: &base,
+                                                 sigs: csigs };
         let wrapper = match crate::cppinterop::build_wrapper(&imp) {
             Ok(w) => w,
             Err(e) => {

@@ -55,7 +55,8 @@ size(xs: list) = len(xs)
 - A definition replaces every earlier version it covers (the same number of parameters, each at least as broad:
   `f(x) = 2 x` then `f(x) = 3 x`, or `force(x [m]) = …` then `force(x) = …`), so every existing program prints the
   same; a more specific definition written later adds a version. Replacing `E(f [Hz])` by `E(ω [rad/s])` (the
-  same dimension, a different meaning) warns. A parameter declared `: list` takes the list whole. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
+  same dimension, a different meaning) warns, as do Bq then 1/s and rad/m then 1/m (D324). A parameter declared
+  `: list` takes the list whole, also through a function that passes it on (`f(y) = s(y)`, D321). Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
 - Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
   function, the Python API (uses the last version), Fermium 1.5.
 
@@ -81,15 +82,23 @@ print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 2
 - A C++ exception stops the program with its message; compile-time problems (a misspelt function, no overload
   with the declared types, a symbol the library doesn't define, a missing header, no C++ compiler) are one line
   with a caret on the signature.
-- The compiler is `$CXX` or the first of c++, g++, clang++; wrappers are cached in `~/.cache/fermium/cpp` (or
-  `$FERMIUM_CACHE_DIR/cpp`) and rebuilt when a header or the library changes.
+- The compiler is `$CXX` or the first of c++, g++, clang++ (stopped after `$FERMIUM_CXX_TIMEOUT` seconds,
+  120 by default). A header the program's folder doesn't have is looked up on the compiler's own include path
+  (`header "math.h"`, `header "Eigen/Dense"`), with no folder of the program's on it.
+- Wrappers are cached in `~/.cache/fermium/cpp` (or `$FERMIUM_CACHE_DIR/cpp`), a folder only you can use
+  (0700; one that other users can write is not used). A wrapper is used again only when everything it was made
+  from still matches: its source, the header, the include folders, `CPATH`, `CPLUS_INCLUDE_PATH`, `CXXFLAGS`,
+  the compiler, every file the compiler read and the library (DECISIONS D320).
+- Exception messages are printed as one line of plain text (control characters become spaces); a C++ keyword
+  as a name (`phys::new`) is refused with a hint.
 - Worked example: [examples/cpp_interop/](examples/cpp_interop/) computes two-body decay momenta (π⁺ → μ⁺ ν:
   29.79 MeV/c, as the PDG gives), decay lengths and the invariant mass of the Λ in C++. Reference:
   [docs/reference.md](docs/reference.md), *C++ interop*.
 - Not yet: objects and ordinary member functions, references, `std::vector` and strings, types other than
   `double`, `int` and arrays of doubles, functions returning nothing, explicit template arguments. C++ calls
   take about 0.6 µs each (they go through the run time to check for exceptions). Tested on x86-64 Linux with
-  g++; macOS is untested.
+  g++; on macOS (arm64, Apple clang) the wrapper names the library by its absolute path and the linker's
+  messages are read as on Linux (D323), not yet confirmed by a macOS run.
 
 ## C and Fortran interop (C3, DECISIONS D275)
 
@@ -137,8 +146,8 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
   be uncertain (±) yet" / "a differential equation (solve) can't use uncertain values (±) yet".
 - **Monte Carlo when linear isn't valid:** each error source is tested at ±1σ; an integral or solve that isn't
   close to linear there (including a jump at a measured value, `∫ (if x < a then 1 else 0) dx`) is computed by
-  Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs; all values of a
-  Monte Carlo solution share its samples.
+  Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs (for
+  integrals too, D322); all values of a Monte Carlo solution share its samples.
 - **`use python`** refuses an uncertain argument again, as Fermium 1.5 does ("this operation needs a plain
   number, but got an uncertain value (±)"); 2.0 had passed the value alone.
 - Still errors: `solve … for x`, `solve` with a list of unknowns, eigenvalue problems and PDEs with uncertain

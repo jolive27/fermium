@@ -1,6 +1,6 @@
 //! The compile cache (spec C6, DECISIONS D317): `fermium run` keeps the machine code the JIT generated for a
 //! program, with what the run time needs besides (native::blob: the tables of the checked module and of the code
-//! generator), in `<cache>/jit/` (the folder of C4's C++ wrappers: `$FERMIUM_CACHE_DIR`, else
+//! generator), in `<cache>/jit/` (the private folder of C4's C++ wrappers, cachedir.rs: `$FERMIUM_CACHE_DIR`, else
 //! `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`). A later run of the same program loads it and skips
 //! parsing, checking, code generation, optimization and the JIT's code generation.
 //!

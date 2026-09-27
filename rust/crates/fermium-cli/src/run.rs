@@ -91,11 +91,18 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
         std::path::absolute(dir).unwrap_or(dir.to_path_buf()).to_string_lossy().into_owned()
     });
     // the compile cache (D317): a program compiled by an earlier run runs from its saved machine code
-    let cache = (!o.emit_llvm && backend != BackendChoice::Interp && !fermium_codegen::llvm::cache::off()).then(|| {
-        let dir = fermium_check::cppinterop::cache_root().join("jit");
-        let key = fermium_codegen::llvm::cache::key(&src, &name, &base);
-        (dir, key)
-    });
+    // in a private folder only (D320): one that another user owns or can write isn't used
+    let cache = if !o.emit_llvm && backend != BackendChoice::Interp && !fermium_codegen::llvm::cache::off() {
+        match fermium_check::cachedir::private_dir("jit") {
+            Ok(dir) => Some((dir, fermium_codegen::llvm::cache::key(&src, &name, &base))),
+            Err((msg, hint)) => {
+                fermium_check::cachedir::warn_once(&msg, &hint);
+                None
+            }
+        }
+    } else {
+        None
+    };
     if let Some((dir, key)) = &cache {
         if let Some(code) = run_cached(dir, key, &src, &name, o.time) {
             return code;

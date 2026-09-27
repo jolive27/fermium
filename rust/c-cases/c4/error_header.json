@@ -1,5 +1,5 @@
 {
  "stdout": "",
- "stderr": "error_header.fm, line 1: can't find the header nothere.hpp\n    import cpp \"libphys4.so\" header \"nothere.hpp\":\n    ^^^^^^\n  hint: the path is relative to the program's folder\n",
+ "stderr": "error_header.fm, line 1: can't find the header nothere.hpp\n    import cpp \"libphys4.so\" header \"nothere.hpp\":\n    ^^^^^^\n  hint: it isn't in the program's folder (a path is relative to it) or on the C++ compiler's include path (add folders with CPATH)\n",
  "exit": 1
 }

@@ -338,6 +338,17 @@ impl Checker {
                 A::ExprKind::Call { func, args } => {
                     if let A::ExprKind::Name { name: fname } = &func.kind {
                         let f = fname.as_str();
+                        // passed on to a function whose parameter there is declared `: list` (red team 15 #4)
+                        if !names.contains(&f) {
+                            if let Some((Binding::Func(g), _)) = self.lookup(self.funcs[info].scope, f) {
+                                let declared = |k: usize| self.versions_of(g).iter().any(|&v| {
+                                    self.func_params(v).get(k).is_some_and(|p| p.kind.as_deref() == Some("list"))
+                                });
+                                if args.iter().enumerate().any(|(k, a)| is_param(a) && declared(k)) {
+                                    return true;
+                                }
+                            }
+                        }
                         if LIST_FUNCS.contains(&f) || matches!(f, "push" | "append" | "max" | "min" | "dot") {
                             for a in args {
                                 if is_param(a) {
