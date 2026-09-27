@@ -8,7 +8,8 @@ refused now run. Design details are in `DECISIONS.md` (from D280).
 - **Lists are freed in compiled code too.** The LLVM back end and `fermium build` executables used to keep every
   list until the program ended (as Fermium 1.5's compiled code did), so a long loop that made lists grew without
   bound. They now run a collector at the top of loop iterations that make lists (D280): a loop that makes a million
-  lists of 100 numbers stays under 100 MB instead of 800 MB. `FERMIUM_GC_STATS=1` reports it. (The tree-walker's
+  lists of 100 numbers stays under 100 MB instead of 800 MB; texts made in a loop (`"run " + str(i)`) and arrays are
+  freed the same way. `FERMIUM_GC_STATS=1` reports it. (The tree-walker's
   lists were already reference counted.)
 - **Lists of vectors, matrices, complex numbers and text** (D281): `[<1, 2> m, <3, 4> m]`, a list of matrices
   (`[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or built with `push`), `[1 + 2i, 3i]`, and `[]` that becomes the kind

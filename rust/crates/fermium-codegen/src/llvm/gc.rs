@@ -8,9 +8,9 @@ use fermium_ir::{expr_children, lambda_of, stmt_parts, Expr, ExprKind, Module, S
 
 use super::*;
 
-/// Does evaluating this type's values make a list, text list or Obj value (something the collector frees)?
+/// Does evaluating this type's values make a list, text list, text or Obj value (something the collector frees)?
 fn collected(ty: &Ty) -> bool {
-    matches!(kind_of(ty), Ok(Kind::L | Kind::TL | Kind::Obj))
+    matches!(kind_of(ty), Ok(Kind::L | Kind::TL | Kind::Obj | Kind::S))
 }
 
 /// Which user functions may make lists when called (directly, through a lambda, or through a function they call).
@@ -80,6 +80,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             Kind::L => Some(1),
             Kind::TL => Some(2),
             Kind::Obj => Some(3),
+            Kind::S => Some(4),
             _ => None,
         }
     }

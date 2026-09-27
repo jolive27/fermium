@@ -554,9 +554,9 @@ print cube                             # [[[1.5, 1.5], [1.5, 1.5]], [[1.5, 0], [
 
 ### Memory
 
-Lists are freed when nothing can reach them any more, with both back ends: the tree-walker counts references, and
-compiled code (the LLVM back end and `fermium build` executables) runs a collector at the top of loop iterations that
-make lists (DECISIONS D280). A loop that makes a million lists of 100 numbers stays under 100 MB (it would need
+Lists (and arrays and texts made while the program runs) are freed when nothing can reach them any more, with both
+back ends: the tree-walker counts references, and compiled code (the LLVM back end and `fermium build` executables)
+runs a collector at the top of loop iterations that make them (DECISIONS D280). A loop that makes a million lists of 100 numbers stays under 100 MB (it would need
 800 MB if none were freed). `FERMIUM_GC_STATS=1 fermium run prog.fm` reports the collections and the peak memory.
 
 ## 8. Derivatives

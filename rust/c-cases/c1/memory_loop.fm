@@ -30,3 +30,9 @@ for i from 1 to 2000
     plate = copy(plate)
     plate[1, 1] += 1 K
 print plate[1, 1], plate[100, 100]
+
+# texts made while the program runs
+label = ""
+for i from 1 to 300000
+    label = "run " + str(i)
+print label

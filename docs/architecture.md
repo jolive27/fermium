@@ -58,7 +58,8 @@ back ends and requires identical output wherever LLVM compiles the program (at t
 
 ### Memory: the compiled code's collector
 
-The tree-walker's lists are reference counted (`Rc`). The compiled code's lists (`rt::FmList`), text lists and Obj
+The tree-walker's lists are reference counted (`Rc`). The compiled code's lists (`rt::FmList`), text lists, texts made
+at run time and Obj
 values (the tree-walker's values it holds: data sets, lists of vectors and complex numbers, arrays) are registered in
 the run-time context when made and freed by a mark-and-sweep collector (DECISIONS D280; `llvm/rt.rs`, memory
 section, and `llvm/gc.rs`). Roots are the variable slots of the running functions: `fm_main` and every function whose

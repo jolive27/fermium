@@ -1189,7 +1189,7 @@ the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` expe
 - **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
 
 ## D280. The LLVM back end frees lists: a mark-and-sweep collector with frame epochs (spec C1, memory)
-- **What:** the compiled code's lists, text lists and Obj values (the tree-walker's values it holds: lists of
+- **What:** the compiled code's lists, text lists, texts made at run time and Obj values (the tree-walker's values it holds: lists of
 complex numbers or vectors, data sets) are registered when made and freed by a collector (`llvm/rt.rs`, memory
 section; code generation in `llvm/gc.rs`). Roots are variable slots: fm_main registers the module's list variables
 and its own slots, and every compiled function whose loops may make lists registers its list slots on entry
@@ -1209,7 +1209,9 @@ reached 300 MB (now 52 MB; `memory_loop.fm`, 10⁶ lists of 100 numbers, peaks a
 - **Alternatives:** reference counting in the generated code (retain/release on every store, argument and
 temporary: much more code in compile.rs, and a cost on every list operation); a conservative scan of the machine
 stack (not portable, and LLVM may keep only derived pointers); an arena per statement (lists stored in variables
-outlive statements). Text ids (strings made at run time) are still kept until the end (a smaller, separate leak).
+outlive statements). Texts made at run time (`"run " + str(i)`) are collected the same way: text-id slots are roots
+(kind 4), the ids in surviving text lists are marked, and a freed id is reused (the module's own texts are never
+freed); 2×10⁶ labels in a loop stay at ~55 MB.
 
 ## D281. Lists of vectors, matrices, complex numbers and text (spec C1)
 - **What:** a list may hold vectors (all the same length and units: `[<1, 2> m, <3, 4> m]`, type `VList`), matrices

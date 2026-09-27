@@ -175,6 +175,11 @@ pub struct Ctx<'m> {
     printer: *mut (dyn Printer + 'm),
     pub error: Option<RunError>,
     pub texts: Vec<Rc<str>>,
+    /// texts made while the program runs (ids from `text_base` on): allocation number, or None once freed (the id
+    /// is then reused; D280)
+    text_base: usize,
+    text_seq: Vec<Option<u64>>,
+    text_free: Vec<usize>,
     /// every list the compiled code made, with its allocation number (freed by fm_gc when unreachable)
     lists: Vec<(*mut FmList, u64)>,
     tlists: Vec<(*mut FmTList, u64)>,
@@ -208,6 +213,9 @@ impl<'m> Ctx<'m> {
             printer: printer as *mut _,
             error: None,
             texts: module.tables.texts.iter().map(|s| Rc::from(s.as_str())).collect(),
+            text_base: module.tables.texts.len(),
+            text_seq: vec![],
+            text_free: vec![],
             gc_flag: 0,
             lists: vec![],
             tlists: vec![],
@@ -232,6 +240,9 @@ impl<'m> Ctx<'m> {
         let super::blob::GenTables { texts, builtins, mvec_fmts, ode_sites, msum_sites, interp_sites } = t;
         self.interp_sites = interp_sites;
         self.texts = texts;
+        self.text_base = self.texts.len();
+        self.text_seq.clear();
+        self.text_free.clear();
         self.builtins = builtins;
         self.mvec_fmts = mvec_fmts;
         self.ode_sites = ode_sites;
@@ -265,15 +276,25 @@ impl<'m> Ctx<'m> {
     }
 
     pub fn intern(&mut self, s: &str) -> i64 {
-        if let Some(i) = self.texts.iter().position(|t| &**t == s) {
+        // (a freed id is never a match: it may be reused for another text)
+        let live = |c: &Self, i: usize| i < c.text_base || c.text_seq.get(i - c.text_base).is_some_and(|x| x.is_some());
+        if let Some(i) = self.texts.iter().enumerate().position(|(i, t)| &**t == s && live(self, i)) {
             return i as i64;
         }
-        self.texts.push(Rc::from(s));
-        self.texts.len() as i64 - 1
+        self.add_text(Rc::from(s))
     }
 
+    /// A text made while the program runs; its id (collected like a list when no variable holds it, D280).
     fn add_text(&mut self, s: Rc<str>) -> i64 {
+        let n = self.gc.made(16 + s.len() as u64);
+        self.gc_flag |= self.gc.due() as i32;
+        if let Some(i) = self.text_free.pop() {
+            self.texts[i] = s;
+            self.text_seq[i - self.text_base] = Some(n);
+            return i as i64;
+        }
         self.texts.push(s);
+        self.text_seq.push(Some(n));
         self.texts.len() as i64 - 1
     }
 
@@ -1104,7 +1125,7 @@ mod tests {
 // slots or deeper ones, which no longer exist. The main program's frame has epoch 0, so its loops free everything
 // unreachable. Nothing is collected while a parallel for runs (its threads make and share lists without frames).
 
-/// One registered frame: `n` slot addresses and their kinds (1 list, 2 text list, 3 Obj index).
+/// One registered frame: `n` slot addresses and their kinds (1 list, 2 text list, 3 Obj index, 4 text id).
 #[derive(Clone, Copy)]
 pub struct GcFrame {
     slots: *const *const u64,
@@ -1191,7 +1212,7 @@ impl Ctx<'_> {
     /// Free the lists, text lists and Obj values made at or after `epoch` that no registered slot holds.
     unsafe fn collect(&mut self, epoch: u64) {
         use std::collections::HashSet;
-        let (mut lists, mut objs) = (HashSet::new(), HashSet::new());
+        let (mut lists, mut objs, mut texts) = (HashSet::new(), HashSet::new(), HashSet::new());
         for f in &self.gc.frames {
             for i in 0..f.n {
                 let p = *f.slots.add(i);
@@ -1199,10 +1220,16 @@ impl Ctx<'_> {
                     continue;
                 }
                 let v = *p;
-                if *f.kinds.add(i) == 3 {
-                    objs.insert(v);
-                } else {
-                    lists.insert(v);
+                match *f.kinds.add(i) {
+                    3 => {
+                        objs.insert(v);
+                    }
+                    4 => {
+                        texts.insert(v);
+                    }
+                    _ => {
+                        lists.insert(v);
+                    }
                 }
             }
         }
@@ -1226,9 +1253,24 @@ impl Ctx<'_> {
             } else {
                 live += 1;
                 bytes += 8 * (*p).0.capacity() as u64;
+                texts.extend((*p).0.iter().map(|&t| t as u64));
                 true
             }
         });
+        for (k, seq) in self.text_seq.iter_mut().enumerate() {
+            if let Some(n) = *seq {
+                let id = self.text_base + k;
+                if n >= epoch && !texts.contains(&(id as u64)) {
+                    *seq = None;
+                    self.texts[id] = Rc::from("");
+                    self.text_free.push(id);
+                    freed += 1;
+                } else {
+                    live += 1;
+                    bytes += 16 + self.texts[id].len() as u64;
+                }
+            }
+        }
         for (i, o) in self.objs.iter_mut().enumerate() {
             if let Some((v, n)) = o {
                 if *n >= epoch && !objs.contains(&(i as u64)) {
@@ -1266,6 +1308,11 @@ impl Ctx<'_> {
     /// (FERMIUM_GC_STATS) collections run, values freed, lists still held.
     pub fn gc_stats(&self) -> (u64, u64, usize) {
         (self.gc.runs, self.gc.freed, self.lists.len() + self.tlists.len())
+    }
+
+    /// Texts made at run time and still held (tests).
+    pub fn live_texts(&self) -> usize {
+        self.text_seq.iter().filter(|x| x.is_some()).count()
     }
 }
 
