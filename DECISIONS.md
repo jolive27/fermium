@@ -2004,3 +2004,23 @@ a different citation (the neutron-branch form is the standard one).
   default changed to populate-only) and red team 17 found errors in RUN_REPORT, CHANGES_2.5 and the docs'
   examples. A release built from eb63425 would miss the D316 fix, so `claude/v2.5-freeze` and the local `v2.5`
   tag were moved to the run's final commit, once its CI passed. The branch only moved forward: eb63425 is an ancestor.
+
+## D350. A formal language specification in docs/spec/, checked by its own examples (spec D1)
+- **What:** `docs/spec/` defines Fermium as the Rust compiler implements it (draft 0.1): `grammar.md` (the lexical
+  structure and the syntax in EBNF, with the precedence table and every place where the parser is context- or
+  spacing-sensitive), `units.md` (dimensions, the unit rule quoted verbatim from the bootcamp plus a precise
+  version, conversions, affine temperatures, natural units, Kennedy-style inference, the 64-bit exact-exponent
+  limit), `semantics.md` (values and types, execution model, IEEE-754 numerics, printing rules, errors, the
+  calculus operators and `solve`, partial). Each file lists what it doesn't cover yet.
+- **Authority:** conformance/ is the executable truth. Where the specification and the suite disagree, the suite
+  wins until the specification is fixed; docs/reference.md stays the user guide, DECISIONS.md the rationale.
+- **Examples are tested:** `rust/crates/fermium-syntax/tests/spec_examples.rs` extracts every ```` ```fermium ````
+  block from docs/spec/*.md and parses it with the Rust front end; with `FERMIUM_BIN` set it also runs each one
+  (exit 0) and checks that every ```` ```fermium-error ```` block is rejected. docs/spec/ is outside the legacy
+  docs test's glob (`docs/*.md`), so spec examples may use v2.5-only syntax.
+- **Descriptive, not prescriptive:** the draft records current behaviour, including rough edges (a compile-time
+  `√(-1)` is an error while a run-time one is NaN; `½ kg` reads a unit through a parser special case) and lists
+  them as TODO rather than changing the language.
+- **Alternatives:** generating the grammar from the parser (no parser generator is used, and the context-sensitive
+  unit rule doesn't fit a generated grammar); extending docs/reference.md §18 (the user guide should stay a guide);
+  a spec written for the Python implementation (it is frozen; the Rust front end is the one that will reach 1.0).
