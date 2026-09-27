@@ -305,7 +305,7 @@ origin v2.5`.
 ## Phase D (v3)
 
 **D1 started; D2–D8 not started.** With gate C9 met, the last part of the run began D1, a formal language
-specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0.4, in `docs/spec/`:
+specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0.5, in `docs/spec/`:
 - `grammar.md`: the full lexical structure and the syntax in EBNF, taken from the parser, with a 14-level
   precedence table and the parser's special cases.
 - `units.md`: dimensions, the unit rule (the bootcamp's three sentences word for word, then a precise
@@ -317,9 +317,9 @@ specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0
   normative list of tokens that start an implicit product (`2 x`, `3 (a + b)`) and those that don't.
 - `grammar.md` §3 lists every syntax error the front end can raise (115 message templates, 113 with an example),
   and `units.md` §2.3 names conformance cases (43) that exercise each point of the unit rule.
-- `errors.md`: the type checker's error messages, 208 of them from 16 of the checker's ~40 source files (122
-  with a tested example); the other files (about 370 messages: solve, data, PDE, interop, modules, …) are its
-  to-do list.
+- `errors.md`: every error message the type checker can raise, 541 of them from all 31 checker source files
+  that raise errors (306 with a tested example; the rest need module files, Python, a native library or a C++
+  compiler, or are reached only after another check, and say so).
 
 The spec is tested so it can't drift from the compiler:
 - its examples must parse and run, and its rejected programs must fail with a one-line error;
@@ -331,8 +331,8 @@ The spec is tested so it can't drift from the compiler:
 
 The tests are `rust/crates/fermium-syntax/tests/spec_examples.rs`, `fermium-check/tests/spec_builtins.rs` and
 `fermium-units/tests/spec_catalogue.rs`, `fermium-check/tests/spec_errors.rs`. Still open, listed in each file:
-the rest of the checker's error set, and a case-by-case conformance link beyond the unit rule. DECISIONS
-D350–D353.
+examples for the remaining 235 checker errors, and a case-by-case conformance link beyond the unit rule.
+DECISIONS D350–D354.
 ---
 
 ## Every divergence from v1.5
@@ -474,7 +474,7 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
 1. Review and merge the draft PRs (#2 v1.5 → #3 v2.0 → #4 v2.5, then #5 for the spec draft), then push the tags `v1.5`, `v2.0` and `v2.5`
    from their `claude/*-freeze` branches, so the release binaries get built.
 2. Build it on your Mac (above) and run your own programs and the bootcamp. Report anything that differs.
-3. Phase D1: finish the language specification (draft 0.4 on `claude/v3`, PR #5): the TODO lists in each
+3. Phase D1: finish the language specification (draft 0.5 on `claude/v3`, PR #5): the TODO lists in each
    `docs/spec/` file, then D2 onward.
 4. The performance items in BACKLOG ("High value"), then compiled code for ± values (today they need the
    interpreter).
