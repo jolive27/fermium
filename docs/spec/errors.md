@@ -12,18 +12,18 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 24 of the files completely** (418 templates) — the ones that hold the most common errors: unit and
+covers 27 of the files completely** (443 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
 numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
 `plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
-events in ODEs (`when`, events.rs) and eigenvalue problems (`solve … lowest N`, eigen.rs). The other files (PDEs,
-parallel loops, `analyze` and the C, C++ and Python
-interop; about 155 templates) are still to do; see §4.
+events in ODEs (`when`, events.rs) , eigenvalue problems (`solve … lowest N`, eigen.rs),
+natural-units regions (systems.rs), `analyze` (analyze.rs) and `parallel for` (parallel.rs). The other files (PDEs and the C, C++ and Python
+interop; about 130 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -42,8 +42,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 146 of the
-418. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 162 of the
+443. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -498,6 +498,34 @@ errors come first, and the rest are simply not written yet (§4).
 | 416 | `an eigenvalue problem needs an unknown constant, like E in  … = E …; every name here already has a value (use a new name for the eigenvalue)` | eigen.rs | an eigenvalue problem where every name already has a value (no eigenvalue to find) | C416 |
 | 417 | `this equation has … undefined names (…); an eigenvalue problem has exactly one unknown constant (the eigenvalue)` | eigen.rs | an eigenvalue problem with more than one undefined name | C417 |
 | 418 | `…'' works out to … but should be …` | eigen.rs | the second-derivative term works out to another dimension than the equation needs | — |
+| | **Natural-units regions (systems.rs)** | | | |
+| 419 | `a  units  line must be at the top level of the program (not inside a function, loop or if)` | systems.rs | a `units natural(…)` line inside a function, loop or `if` | C419 |
+| 420 | `…, so its units here are ambiguous` | systems.rs | a value whose units are ambiguous in a natural-units region (it could be read in more than one way) | — |
+| 421 | `… was set outside this … region and can't be used here` | systems.rs | a variable set before a natural-units region used inside it | — |
+| 422 | `the units of … aren't known yet, so it can't be converted into … units here` | systems.rs | a value whose dimension isn't known yet converted into a region's units | — |
+| 423 | `this mixes values from different unit systems: …` | systems.rs | an expression that combines values from different unit systems | — |
+| 424 | `can't convert from … units to …; use K` | systems.rs | converting a temperature between unit systems other than through kelvin | — |
+| 425 | `… is … in … units, so it can't be shown in … (…)` | systems.rs | showing a value in a unit whose dimension doesn't match the value's in that region's units | — |
+| | **Dimensional analysis (analyze.rs)** | | | |
+| 426 | `analyze must be at the top level of the program (not inside a block)` | analyze.rs | `analyze` inside a block | C426 |
+| 427 | `the units of … aren't known yet` | analyze.rs | an `analyze` quantity whose dimension isn't known yet | — |
+| 428 | `… was computed in natural units, so its SI dimension (which analyze works with) isn't known` | analyze.rs | an `analyze` quantity computed in natural units | — |
+| 429 | `… has no units yet: analyze needs to know what it is` | analyze.rs | an `analyze` quantity that has no units yet | — |
+| 430 | `… isn't a number with units, so it can't be analyzed` | analyze.rs | an `analyze` quantity that isn't a number (a list, a vector, …) | — |
+| 431 | `the analysis can't be called …: that's one of its quantities` | analyze.rs | an analysis named like one of its own quantities | C431 |
+| | **Parallel loops (parallel.rs)** | | | |
+| 432 | `… uses …, so it can't be called inside a parallel for` | parallel.rs | a function called inside a `parallel for` that uses something not allowed there (random numbers, output, …) | — |
+| 433 | `… can't be used inside a parallel for: …` | parallel.rs | a construct that can't be used inside a `parallel for` (print, plot, solve, …) | C433 |
+| 434 | `a parallel for can't be inside another parallel for` | parallel.rs | a `parallel for` inside another | C434 |
+| 435 | `a parallel for can't be used here (inside an integral or equation)` | parallel.rs | a `parallel for` inside an integral or equation | — |
+| 436 | `… is shared by all the iterations of this parallel for, so it can't be a loop variable inside it` | parallel.rs | a shared variable used as the loop variable of an inner loop | — |
+| 437 | `… is shared by all the iterations of this parallel for, so it can't be set inside it` | parallel.rs | a shared variable assigned inside a `parallel for` | C437 |
+| 438 | `… is made inside the parallel for; changing its elements there isn't supported` | parallel.rs | changing the elements of a list made inside the `parallel for` | — |
+| 439 | `each iteration of a parallel for may only write its own element, …[…]` | parallel.rs | an iteration writing an element other than its own, `xs[i]` | C439 |
+| 440 | `… is written by the iterations (…[…] = …), so inside the loop it can only be read as …[…]` | parallel.rs | a list written by the iterations read at an index other than the iteration's own | C440 |
+| 441 | `the sum … can't be read inside the parallel for: its value is only known after the loop` | parallel.rs | a reduction (`s += …`) read inside the `parallel for` | — |
+| 442 | `random numbers can't be drawn inside a parallel for: the iterations run in a different order each time, so the results would change from run to run` | parallel.rs | random numbers drawn inside a `parallel for` | C442 |
+| 443 | `… calls itself; a recursive function can't be used inside a parallel for` | parallel.rs | a recursive function called inside a `parallel for` | — |
 
 ## 3. Examples
 
@@ -1999,17 +2027,77 @@ solve -ψ'' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
 solve -ψ'' = E F ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
 ```
 
+```fermium-error
+# C419
+if true:
+    units natural(ħ = c = 1)
+```
+
+```fermium-error
+# C426
+if true:
+    analyze pendulum: T [s] depends on L [m]
+```
+
+```fermium-error
+# C431
+analyze T: T [s] depends on L [m]
+```
+
+```fermium-error
+# C433
+xs = [0, 0, 0]
+parallel for i from 1 to 3:
+    print i
+```
+
+```fermium-error
+# C434
+xs = [0, 0, 0]
+parallel for i from 1 to 3:
+    parallel for j from 1 to 3:
+        xs[i] = j
+```
+
+```fermium-error
+# C437
+s = 0
+parallel for i from 1 to 3:
+    s = i
+```
+
+```fermium-error
+# C439
+xs = [0, 0, 0]
+parallel for i from 1 to 3:
+    xs[1] = i
+```
+
+```fermium-error
+# C440
+xs = [0, 0, 0]
+parallel for i from 1 to 3:
+    xs[i] = 1
+    y = xs[1]
+```
+
+```fermium-error
+# C442
+xs = [0, 0, 0]
+parallel for i from 1 to 3:
+    xs[i] = rand()
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
   covered, by size of their error set: pde.rs (31), cinterop.rs (25),
-  pyinterop.rs (18), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), plus cppinterop.rs's `cerr(…)` messages. About 155 templates remain.
+  pyinterop.rs (18), plus cppinterop.rs's `cerr(…)` messages. About 130 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (146). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (162). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -2025,6 +2113,7 @@ solve -ψ'' = E F ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
   and `sweep`. In rows 359–373 (modules.rs), 12 rows: they need module files next to the program, which a
   one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
   In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one; in rows 405–418
-  (eigen.rs), 1 row.
+  (eigen.rs), 1 row; in rows 419–425 (systems.rs), 6; in rows 426–431 (analyze.rs), 4; in rows 432–443
+  (parallel.rs), 6.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
