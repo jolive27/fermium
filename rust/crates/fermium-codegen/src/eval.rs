@@ -929,6 +929,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         if name == "pycall" {
             return self.pycall(args); // a Python function (D140, eval_py.rs)
         }
+        if name == "ccall" {
+            return self.ccall(args); // a C or Fortran function (D275, eval_c.rs)
+        }
         if !self.builtins.is_empty() {
             if let Some(f) = self.builtins.get(name) {
                 return f(args).map_err(|m| RunError { message: m, line: self.line, hint: None });

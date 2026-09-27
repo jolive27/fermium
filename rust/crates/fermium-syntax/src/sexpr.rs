@@ -500,6 +500,11 @@ impl Printer {
                     .collect();
                 f.push(("sigs", PV::List(ss)));
             }
+            ImportC { lang, lib, sigs } => {
+                f.push(("lang", s(lang)));
+                f.push(("lib", s(lib)));
+                f.push(("sigs", PV::List(sigs.iter().map(|g| s(&g.name)).collect())));
+            }
         }
         PV::Node(Box::new(NodeRepr { class: st.kind.class(), span: st.span, paren: false, fields: f, extras: x }))
     }
@@ -646,7 +651,7 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
             ExprStmt { value } => ex(value, live),
             Assert { cond, .. } => ex(cond, live),
             Units { body, .. } => body.iter().flatten().for_each(|x| st(x, live)),
-            Analyze { .. } | Break | Continue | Import { .. } | UsePython { .. } => {}
+            Analyze { .. } | Break | Continue | Import { .. } | UsePython { .. } | ImportC { .. } => {}
         }
     }
     p.body.iter().for_each(|s| st(s, &mut live));

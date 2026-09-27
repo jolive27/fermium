@@ -116,6 +116,8 @@ pub enum Binding {
     Module(usize),
     /// `use python numpy as np` (pyinterop.py PyModRef)
     PyModule(usize),
+    /// a C or Fortran function (`import c`, D275); index into `mods.cfuncs`
+    CFunc(usize),
     /// the unknown of a PDE after its solve (m3solve.py PdeView); index into Checker::solve.pdes
     Pde(usize),
 }
@@ -591,6 +593,7 @@ impl Checker {
             K::Analyze { .. } => self.s_analyze(s, ctx),
             K::Import { .. } => self.s_import(s, ctx),
             K::UsePython { .. } => self.s_use_python(s, ctx),
+            K::ImportC { .. } => self.s_import_c(s, ctx),
             K::Fit { .. } => self.s_fit(s, ctx),
             K::Plot { .. } => self.s_plot(s, ctx),
             K::Units { system, consts, body } => self.s_units(s, system, consts, body.as_deref(), ctx),
@@ -684,6 +687,7 @@ pub fn stmt_kind_name(k: &A::StmtKind) -> &'static str {
         K::Units { .. } => "units",
         K::Import { .. } => "import",
         K::UsePython { .. } => "use python",
+        K::ImportC { lang, .. } => if lang == "c" { "import c" } else { "import fortran" },
         K::Propagate { .. } => "propagate montecarlo",
     }
 }

@@ -259,6 +259,7 @@ impl Checker {
             }
             Binding::Module(m) => Err(self.module_as_value(m, name, e)),
             Binding::Pde(p) => Err(self.pde_as_value(p, name, e)),
+            Binding::CFunc(c) => Err(self.c_func_as_value(c, name, e)),
             Binding::PyModule(m) => {
                 let module = self.py_module_name(m);
                 Err(self.err(format!("{name} is the Python module {module}, not a value; call its functions, like \

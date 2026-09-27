@@ -81,6 +81,8 @@ pub struct ModState {
     pub py: Vec<String>,
     /// what each `use python` name stands for (same index as `py`)
     pub py_refs: Vec<crate::pyinterop::PyModRef>,
+    /// the C and Fortran functions of `import c` / `import fortran` (C3, D275)
+    pub cfuncs: Vec<crate::cinterop::CFuncRef>,
     /// the last AST node id given to a module's nodes (ids are unique across the program and its modules)
     pub last_id: u32,
 }
@@ -395,6 +397,7 @@ fn same_binding(a: &Binding, b: &Binding) -> bool {
         (Binding::Local(x), Binding::Local(y)) => x == y,
         (Binding::Module(x), Binding::Module(y)) => x == y,
         (Binding::PyModule(x), Binding::PyModule(y)) => x == y,
+        (Binding::CFunc(x), Binding::CFunc(y)) => x == y,
         (Binding::Const(x), Binding::Const(y)) => x.name == y.name,
         _ => false,
     }

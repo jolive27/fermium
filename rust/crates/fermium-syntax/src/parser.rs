@@ -550,6 +550,9 @@ impl Parser {
                 return Ok(s);
             }
         }
+        if tt.is_name("import") && (nx.is_name("c") || nx.is_name("fortran")) && self.peek(2).kind == Kind::Str {
+            return self.import_c_stmt(end_line); // import c "libphys.so": … (C3, D275)
+        }
         if (tt.is_name("import") || tt.is_kw("from")) && matches!(nx.kind, Kind::Name | Kind::Str) {
             let s = self.import_stmt()?;
             if end_line {
@@ -1638,6 +1641,184 @@ impl Parser {
             self.end_statement()?;
         }
         Ok(self.stmt(StmtKind::UsePython { module, alias, sigs }, t))
+    }
+
+    /// import c "libphys.so": / import fortran "libnuclear.so":  then one signature per line (C3, D275).
+    fn import_c_stmt(&mut self, end_line: bool) -> R<Stmt> {
+        let t = self.next();
+        let lt = self.next();
+        let lang = self.toks[lt].s().to_string();
+        let st = self.next();
+        let lib = self.toks[st].s().to_string();
+        let what = if lang == "c" { "C" } else { "Fortran" };
+        let example = if lang == "c" {
+            "like\n    import c \"libphys.so\":\n        kinetic_energy(m [kg], v [m/s]) -> [J]"
+        } else {
+            "like\n    import fortran \"libnuclear.so\":\n        binding_energy(Z: int, A: int) -> [MeV]"
+        };
+        if !self.at_op(":") {
+            return Err(self.err_h(format!("expected ':' and the signatures of the {what} functions after the \
+                                           library's name{}", self.found()), example));
+        }
+        self.next();
+        let mut sigs = vec![];
+        if self.kind() != Kind::Newline {
+            sigs.push(self.c_signature(&lang)?);
+            while self.at_op(";") {
+                self.next();
+                sigs.push(self.c_signature(&lang)?);
+            }
+            if end_line {
+                self.end_statement()?;
+            }
+        } else {
+            self.next();
+            self.skip_newlines();
+            if self.kind() != Kind::Indent {
+                return Err(self.err_h(format!("expected the signatures of the {what} functions, indented on the \
+                                               next lines"), example));
+            }
+            self.next();
+            while !self.at_kind(&[Kind::Dedent, Kind::Eof]) {
+                sigs.push(self.c_signature(&lang)?);
+                if self.kind() == Kind::Newline {
+                    self.next();
+                } else if !self.at_kind(&[Kind::Dedent, Kind::Eof]) {
+                    return Err(self.err(format!("expected one signature per line{}", self.found())));
+                }
+                self.skip_newlines();
+            }
+            if self.kind() == Kind::Dedent {
+                self.next();
+            }
+        }
+        for g in &sigs {
+            self.known.insert(g.name.clone());
+        }
+        Ok(self.stmt(StmtKind::ImportC { lang, lib, sigs }, t))
+    }
+
+    /// kinetic_energy(m [kg], v [km/s]) -> [J];  sum_sq(x: list [m], n: len(x)) -> [m²];
+    /// neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
+    fn c_signature(&mut self, lang: &str) -> R<CSig> {
+        let what = if lang == "c" { "C" } else { "Fortran" };
+        let nt = self.i;
+        let ntt = self.tok().clone();
+        if ntt.kind == Kind::Kw && self.peek(1).is_op("(") {
+            let hint = if lang == "c" {
+                format!("give it another name in a small C wrapper, like  double my_{0}(double x) {{ return {0}(x); }}",
+                        ntt.raw)
+            } else {
+                format!("declare it under another name with its symbol:  my_{0}(…) -> [J] bind(C, name=\"{0}_\")",
+                        ntt.raw)
+            };
+            return Err(self.error(format!("{} is a Fermium keyword, so it can't be the name of a {what} function",
+                                          ntt.raw), None, Some(hint)));
+        }
+        if ntt.kind != Kind::Name {
+            return Err(self.err(format!(
+                "expected a {what} function's signature, like  energy(m [kg], v [m/s]) -> [J]{}", self.found())));
+        }
+        self.next();
+        let fname = ntt.s().to_string();
+        self.expect_op("(", Some(&format!("after {0} (write the signature like  {0}(x [m]) -> [J])", ntt.raw)))?;
+        let mut params = vec![];
+        while !self.at_op(")") {
+            let p0 = self.i;
+            let pt = self.expect_name("a parameter name")?;
+            let pname = self.toks[pt].s().to_string();
+            let kind = if self.at_op("[") {
+                CParamKind::Num(Some(self.bracket_unit()?))
+            } else if self.at_op(":") {
+                self.next();
+                let kt = self.expect_name("int, list or len(…) after ':'")?;
+                match self.toks[kt].s() {
+                    "int" => CParamKind::Int,
+                    "list" => CParamKind::List(if self.at_op("[") { Some(self.bracket_unit()?) } else { None }),
+                    "len" => {
+                        self.expect_op("(", Some("after len (like  n: len(x))"))?;
+                        let lt = self.expect_name("the name of a list parameter inside len( )")?;
+                        self.expect_op(")", None)?;
+                        CParamKind::Len(self.toks[lt].s().to_string())
+                    }
+                    _ => {
+                        let unit = self.toks[kt].raw.clone();
+                        return Err(self.error(
+                            format!("a parameter can be marked  : int  (a whole number), : list  or  : len(x), not : \
+                                     {unit}"),
+                            Some(kt),
+                            Some(format!("give a unit in brackets instead:  {} [{unit}]", self.toks[pt].raw)),
+                        ));
+                    }
+                }
+            } else {
+                CParamKind::Num(None)
+            };
+            params.push(CParam { name: pname, kind, span: self.span_from(p0) });
+            if self.at_op(",") {
+                self.next();
+            } else if !self.at_op(")") {
+                return Err(self.err(format!("expected ',' or ')' in the list of parameters{}", self.found())));
+            }
+        }
+        self.expect_op(")", None)?;
+        if !(self.at_op("-") && self.peek(1).is_op(">")) {
+            return Err(self.err_h(
+                format!("a {what} function's signature needs its result after ->{}", self.found()),
+                format!("like  {}(…) -> [J]   (-> number or -> int for a plain number; functions that return \
+                         nothing aren't supported yet)", ntt.raw),
+            ));
+        }
+        self.next();
+        self.next();
+        let ret = if self.at_op("[") {
+            CRetDecl::Unit(self.bracket_unit()?)
+        } else if self.tok().is_name("number") {
+            self.next();
+            CRetDecl::Number
+        } else if self.tok().is_name("int") {
+            self.next();
+            CRetDecl::Int
+        } else {
+            return Err(self.err_h(
+                format!("expected the result's unit in brackets, or number / int, after ->{}", self.found()),
+                format!("like  {}(x [m]) -> [J]   or  -> int", ntt.raw),
+            ));
+        };
+        let mut bind = None;
+        if self.tok().is_name("bind") {
+            let bt = self.next();
+            if lang != "fortran" {
+                return Err(self.error("bind(C) is for Fortran functions; a C function is found by its own name",
+                                      Some(bt), Some("remove bind(…)".into())));
+            }
+            self.expect_op("(", Some("after bind (like  bind(C)  or  bind(C, name=\"f\"))"))?;
+            let ct = self.i;
+            if !(self.kind() == Kind::Name && self.tok().raw == "C") {
+                return Err(self.error(format!("expected C in bind( ){}", self.found()), Some(ct),
+                                      Some("write  bind(C)  or  bind(C, name=\"f\")".into())));
+            }
+            self.next();
+            let mut name = None;
+            if self.at_op(",") {
+                self.next();
+                if !self.tok().is_name("name") {
+                    return Err(self.err_h(format!("expected name=\"…\" after bind(C,{}", self.found()),
+                                          "write  bind(C, name=\"f\")"));
+                }
+                self.next();
+                self.expect_op("=", Some("after name (like  bind(C, name=\"f\"))"))?;
+                if self.kind() != Kind::Str {
+                    return Err(self.err_h(format!("expected the symbol's name in quotes{}", self.found()),
+                                          "write  bind(C, name=\"f\")"));
+                }
+                let q = self.next();
+                name = Some(self.toks[q].s().to_string());
+            }
+            self.expect_op(")", None)?;
+            bind = Some(name);
+        }
+        Ok(CSig { name: fname, params, ret, bind, span: self.span_from(nt) })
     }
 
     /// f(x [m], xs [s], n: int) -> list [J]   (the result part is optional).

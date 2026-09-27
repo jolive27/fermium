@@ -210,10 +210,18 @@ pub fn open_library(path: &str) -> Result<usize, String> {
     m.entry(path.to_string()).or_insert_with(|| dl::open(path)).clone()
 }
 
-/// The address of `symbol` in the library at `path`, or None when it doesn't define it.
+/// The address of `symbol` in the library at `path`, or None when it doesn't define it (remembered).
 pub fn symbol(path: &str, symbol: &str) -> Result<Option<usize>, String> {
+    type Cache = Mutex<HashMap<(String, String), Option<usize>>>;
+    static S: OnceLock<Cache> = OnceLock::new();
+    let cache = S.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(p) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&(path.to_string(), symbol.to_string())) {
+        return Ok(*p);
+    }
     let h = open_library(path)?;
-    Ok(dl::sym(h, symbol))
+    let p = dl::sym(h, symbol);
+    cache.lock().unwrap_or_else(|e| e.into_inner()).insert((path.to_string(), symbol.to_string()), p);
+    Ok(p)
 }
 
 /// The name a Fortran compiler gives `name` in the object file: gfortran's and flang's default (lowercase, one

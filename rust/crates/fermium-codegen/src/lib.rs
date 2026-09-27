@@ -11,6 +11,7 @@ mod eval_memo;
 mod eval_more;
 mod eval_par;
 mod eval_py;
+mod eval_c;
 mod eval_solve;
 mod eval_unc;
 mod eval_unc_la;
