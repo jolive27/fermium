@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_array_rank.fm, line 2: A is a 2-dimensional array, so it takes 2 indexes, like A[i, j]\n    print A[2]\n          ^^^\n",
+ "exit": 1
+}

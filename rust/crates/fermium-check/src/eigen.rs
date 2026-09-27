@@ -203,7 +203,7 @@ impl Checker {
             let pretty = format!("{psi}{}", subscript(k + 1));
             let view = SolView { sol_sym, comp: 2 * k, top: 2 * k + 1, dim: psidim.clone(), tdim: xdim.clone(),
                                  tname: x.clone(), name: pretty, n: 1, stride: 1, cplx: false, hint: None, hints: vec![],
-                                 thint: thint.clone(), sf: None };
+                                 thint: thint.clone(), sf: None , list: None };
             self.sols.push(view);
             self.bind(ctx.scope, nm, Binding::Sol(self.sols.len() - 1));
         }

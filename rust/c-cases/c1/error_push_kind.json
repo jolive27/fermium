@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_push_kind.fm, line 2: pos is a list of 2-vectors of length [m], so you can't push a 3-vector of length [m] onto it\n    push(pos, <1, 2, 3> m)\n              ^^^^^^^^^^^\n",
+ "exit": 1
+}

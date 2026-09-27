@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_solve_list_kind.fm, line 1: N is a list of numbers, so N' must be a list of numbers too (here it is frequency [1/s])\n    solve N' = sum(N) / (1 s) with N(0 s) = [1, 2, 3] for t from 0 s to 1 s\n    ^^^^^\n",
+ "exit": 1
+}

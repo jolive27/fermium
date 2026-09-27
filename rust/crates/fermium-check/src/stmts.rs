@@ -35,6 +35,8 @@ pub fn ty_dim(t: &Ty) -> Option<DExpr> {
         Ty::Num(d) | Ty::List(d) | Ty::Complex(d) | Ty::ComplexList(d) => Some(d.clone()),
         Ty::Vec { dim: Some(d), .. } => Some(d.clone()),
         Ty::Mat { dim, .. } => Some(dim.clone()),
+        Ty::VList(el) => ty_dim(el),
+        Ty::Array { dim, .. } => Some(dim.clone()),
         _ => None,
     }
 }
@@ -52,7 +54,9 @@ impl Checker {
                             _ => return Err(self.err("clear needs a list variable: clear(xs)", e.span, None)),
                         };
                         let lst = self.expr(name_arg, ctx)?;
-                        if let (I::ExprKind::Var(sym), Ty::List(_) | Ty::TextList) = (&lst.kind, &lst.ty) {
+                        if let (I::ExprKind::Var(sym), Ty::List(_) | Ty::TextList | Ty::VList(_) | Ty::ComplexList(_))
+                            = (&lst.kind, &lst.ty)
+                        {
                             return Ok(vec![self.stmt_at(I::StmtKind::Clear(*sym), s)]);
                         }
                         let A::ExprKind::Name { name: n } = &name_arg.kind else { unreachable!() };
@@ -92,6 +96,9 @@ impl Checker {
         }
         let lst = self.expr(&args[0], ctx)?;
         let line = e.span.line;
+        if let Some(st) = self.push_other(&lst, args, ctx)? {
+            return Ok(I::Stmt { kind: st, line });
+        }
         if let (I::ExprKind::Var(sym), Ty::TextList) = (&lst.kind, &lst.ty) {
             let v = self.expr(&args[1], ctx)?;
             if !matches!(v.ty, Ty::Str) {
@@ -120,6 +127,67 @@ impl Checker {
             }
         }
         Ok(I::Stmt { kind: I::StmtKind::Push(sym, v), line })
+    }
+
+    /// push onto a list of vectors, matrices or complex numbers, or onto a list set to [] that becomes one (and
+    /// text onto []): D281. None: an ordinary list of numbers or of text.
+    fn push_other(&mut self, lst: &I::Expr, args: &[A::Expr], ctx: &mut Ctx) -> CResult<Option<I::StmtKind>> {
+        let I::ExprKind::Var(sym) = lst.kind else { return Ok(None) };
+        let lty = self.module.syms[sym].ty.clone();
+        let fresh_empty = self.extra[sym].empty_list && matches!(lty, Ty::List(_));
+        if !fresh_empty && !matches!(lty, Ty::VList(_) | Ty::ComplexList(_)) {
+            return Ok(None);
+        }
+        let v = self.expr(&args[1], ctx)?;
+        let new_ty = match (&lty, &v.ty) {
+            (Ty::List(_), Ty::Vec { dims: Some(_), .. }) => {
+                return Err(self.err(format!("a list of vectors needs one unit for all components; this is {}",
+                                            self.type_desc(&v.ty)), args[1].span, None));
+            }
+            (Ty::List(_), Ty::Vec { .. } | Ty::Mat { .. }) => Ty::VList(Box::new(v.ty.clone())),
+            (Ty::List(_), Ty::Complex(d)) => Ty::ComplexList(d.clone()),
+            (Ty::List(_), Ty::Str) => Ty::TextList,
+            (Ty::List(_), _) => return Ok(None),
+            (Ty::VList(el), _) => {
+                let same = match (&**el, &v.ty) {
+                    (Ty::Vec { n, .. }, Ty::Vec { n: m, dims: None, .. }) => n == m,
+                    (Ty::Mat { r, c, .. }, Ty::Mat { r: r2, c: c2, .. }) => (r, c) == (r2, c2),
+                    _ => false,
+                };
+                if !same {
+                    let name = self.module.syms[sym].name.clone();
+                    return Err(self.err(format!("{name} is {}, so you can't push {} onto it", self.type_desc(&lty),
+                                                self.type_desc(&v.ty)), args[1].span, None));
+                }
+                let (ld, vd) = (ty_dim(el).unwrap(), ty_dim(&v.ty).unwrap());
+                self.unify_or(&ld, &vd, |c| format!("can't add {} to a list of {}", c.desc(&vd), c.desc(&ld)),
+                              args[1].span, None)?;
+                lty.clone()
+            }
+            (Ty::ComplexList(d), Ty::Complex(_) | Ty::Num(_)) => {
+                let vd = ty_dim(&v.ty).unwrap();
+                self.unify_or(d, &vd, |c| format!("can't add {} to a list of complex numbers of {}", c.desc(&vd),
+                                                  c.desc(d)), args[1].span, None)?;
+                lty.clone()
+            }
+            (Ty::ComplexList(_), _) => {
+                return Err(self.err(format!("this list holds complex numbers, so you can't push {} onto it",
+                                            self.type_desc(&v.ty)), args[1].span, None));
+            }
+            _ => return Ok(None),
+        };
+        if fresh_empty {
+            self.module.syms[sym].ty = new_ty;
+            self.extra[sym].empty_list = false;
+        }
+        if self.module.syms[sym].hint.is_none() {
+            if let Some(h) = &v.hint {
+                if h.offset == 0.0 {
+                    self.module.syms[sym].hint = Some(h.clone());
+                }
+            }
+        }
+        Ok(Some(I::StmtKind::Push(sym, v)))
     }
 
     pub fn s_assign(&mut self, s: &A::Stmt, name: &str, value: &A::Expr, op: &str, ctx: &mut Ctx)
@@ -206,6 +274,18 @@ impl Checker {
             }
             let mut s = b;
             let sty = self.module.syms[s].ty.clone();
+            let empty_lit = matches!(&v.kind, I::ExprKind::List(items) if items.is_empty());
+            if empty_lit && matches!(sty, Ty::VList(_) | Ty::ComplexList(_) | Ty::TextList) {
+                // ps = [] again: an empty list of the same kind (D281)
+                let mut v = v;
+                v.ty = sty.clone();
+                self.extra[s].assigned = true;
+                self.note_assign(ctx, s, false);
+                return Ok(I::Stmt { kind: I::StmtKind::Assign(s, v), line: span.line });
+            }
+            if !empty_lit {
+                self.extra[s].empty_list = false;
+            }
             if !same_kind(&sty, &v.ty) {
                 let mut hint = "use a different name for the new value".to_string();
                 if matches!(sty, Ty::Num(_)) && matches!(v.ty, Ty::Complex(_)) {
@@ -223,6 +303,10 @@ impl Checker {
                     return Err(self.err(format!("{name} holds a {r}×{c} matrix; it can't now hold a {r2}×{c2} \
                                                  matrix"), span, None));
                 }
+                (Ty::Array { rank: a, .. }, Ty::Array { rank: b, .. }) if a != b => {
+                    return Err(self.err(format!("{name} holds a {a}-dimensional array; it can't now hold a \
+                                                 {b}-dimensional one"), span, None));
+                }
                 _ => {}
             }
             let mixed = matches!(sty, Ty::Vec { dims: Some(_), .. }) || matches!(v.ty, Ty::Vec { dims: Some(_), .. });
@@ -233,7 +317,7 @@ impl Checker {
                                         Some("each variable keeps its units; use a new name for a different \
                                               quantity".into())));
                 }
-            } else if matches!(sty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. }) {
+            } else if matches!(sty, Ty::Num(_) | Ty::List(_) | Ty::Vec { .. } | Ty::Mat { .. } | Ty::Array { .. }) {
                 let (a, bd) = (ty_dim(&sty).unwrap(), ty_dim(&v.ty).unwrap());
                 if !self.u.unify(&a, &bd) {
                     if self.opts.repl && ctx.is_main {
@@ -310,6 +394,7 @@ impl Checker {
             self.extra[sym].tdelta = v.get_extra().is_some_and(|x| x.tdelta);
             self.extra[sym].fit_sf = I::uses_fit_sf(&v);
             self.extra[sym].mixed_hint = crate::vecmat::mixed_of(&v);
+            self.extra[sym].empty_list = matches!(&v.kind, I::ExprKind::List(items) if items.is_empty());
         }
         self.extra[sym].assigned = true;
         self.note_assign(ctx, sym, !owned);
@@ -317,11 +402,25 @@ impl Checker {
     }
 
     pub fn s_index_assign(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        let A::StmtKind::IndexAssign { target, index, index2, value, op } = &s.kind else { unreachable!() };
+        let A::StmtKind::IndexAssign { target, index, index2, value, op, rest } = &s.kind else { unreachable!() };
         let found = self.lookup(ctx.scope, target);
+        if let Some((Binding::Sym(b), _)) = &found {
+            if matches!(self.module.syms[*b].ty, Ty::Array { .. }) {
+                return self.array_index_assign(*b, s, ctx).map(|x| vec![x]);
+            }
+        }
+        if !rest.is_empty() {
+            return Err(self.err(format!("{target}[i, j, k] = … sets an entry of an array of 3 or more dimensions, but \
+                                         {target} isn't one"), s.span, None));
+        }
         if let Some((Binding::Sym(b), _)) = &found {
             if matches!(self.module.syms[*b].ty, Ty::Vec { .. } | Ty::Mat { .. }) {
                 return self.entry_assign(*b, s, ctx).map(|x| vec![x]);
+            }
+        }
+        if let Some((Binding::Sym(b), _)) = &found {
+            if matches!(self.module.syms[*b].ty, Ty::VList(_) | Ty::ComplexList(_) | Ty::TextList) && index2.is_none() {
+                return self.other_index_assign(*b, s, ctx).map(|x| vec![x]);
             }
         }
         let is_list = |c: &Checker| match &found {
@@ -357,6 +456,48 @@ impl Checker {
                       value.span, None)?;
         let I::ExprKind::Var(tsym) = tgt.kind else { unreachable!() };
         Ok(vec![self.stmt_at(I::StmtKind::IndexAssign(tsym, idx, v), s)])
+    }
+
+    /// ps[i] = <…> (or +=) on a list of vectors or matrices, zs[i] = … on a list of complex numbers (D281).
+    fn other_index_assign(&mut self, b: usize, s: &A::Stmt, ctx: &mut Ctx) -> CResult<I::Stmt> {
+        let A::StmtKind::IndexAssign { target, index, value, op, .. } = &s.kind else { unreachable!() };
+        let name_ast = crate::ast_ext::mk(A::ExprKind::Name { name: target.clone() }, s.span);
+        let tgt = self.expr(&name_ast, ctx)?;
+        let idx = self.index_expr(index, &tgt, ctx)?;
+        let v = if op != "=" {
+            let cur = crate::ast_ext::mk(A::ExprKind::Index { target: Box::new(name_ast.clone()),
+                                                        index: Some(Box::new(index.clone())) }, s.span);
+            let bop: String = op.chars().next().unwrap().to_string();
+            let val_ast = crate::ast_ext::mk(A::ExprKind::BinOp { op: bop, left: Box::new(cur),
+                                                            right: Box::new(value.clone()), implicit: false },
+                                       s.span);
+            self.expr(&val_ast, ctx)?
+        } else {
+            self.expr(value, ctx)?
+        };
+        let lty = self.module.syms[b].ty.clone();
+        let ok = match (&lty, &v.ty) {
+            (Ty::VList(el), _) => match (&**el, &v.ty) {
+                (Ty::Vec { n, .. }, Ty::Vec { n: m, dims: None, .. }) => n == m,
+                (Ty::Mat { r, c, .. }, Ty::Mat { r: r2, c: c2, .. }) => (r, c) == (r2, c2),
+                _ => false,
+            },
+            (Ty::ComplexList(_), Ty::Complex(_) | Ty::Num(_)) => true,
+            (Ty::TextList, Ty::Str) => {
+                let I::ExprKind::Var(tsym) = tgt.kind else { unreachable!() };
+                return Ok(self.stmt_at(I::StmtKind::IndexAssign(tsym, idx, v), s));
+            }
+            _ => false,
+        };
+        if !ok {
+            return Err(self.err(format!("{target} is {}; can't put {} in it", self.type_desc(&lty),
+                                        self.type_desc(&v.ty)), value.span, None));
+        }
+        let (bd, vd) = (ty_dim(&lty).unwrap(), ty_dim(&v.ty).unwrap());
+        self.unify_or(&bd, &vd, |c| format!("{target} is a list of {}; can't put {} in it", c.desc(&bd), c.desc(&vd)),
+                      value.span, None)?;
+        let I::ExprKind::Var(tsym) = tgt.kind else { unreachable!() };
+        Ok(self.stmt_at(I::StmtKind::IndexAssign(tsym, idx, v), s))
     }
 
     pub fn s_funcdef(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
@@ -654,6 +795,15 @@ impl Checker {
             return Ok(vec![self.stmt_at(I::StmtKind::ForIn(sym, lst, b), s)]);
         }
         let sym = match &lst.ty {
+            Ty::VList(el) => {
+                // for r in positions: each r a vector (or matrix) (D281)
+                let sym = self.loop_var(var, (**el).clone(), ctx);
+                let ms = &mut self.module.syms[sym];
+                ms.hint = lst.hint.clone();
+                ms.sf = lst.sf;
+                ms.direct = 0;
+                sym
+            }
             Ty::ComplexList(d) => {
                 // for z in fft(xs): each z a complex number (D243)
                 let sym = self.loop_var(var, Ty::Complex(d.clone()), ctx);

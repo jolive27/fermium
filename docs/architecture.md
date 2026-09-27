@@ -57,6 +57,21 @@ that statement or expression:
 back ends and requires identical output wherever LLVM compiles the program (at the mixed-mode merge: 2524 of
 2614 compiled, 2521 identical, the other 3 time out or run out of stack in the tree-walker).
 
+### Memory: the compiled code's collector
+
+The tree-walker's lists are reference counted (`Rc`). The compiled code's lists (`rt::FmList`), text lists, texts made
+at run time and Obj
+values (the tree-walker's values it holds: data sets, lists of vectors and complex numbers, arrays) are registered in
+the run-time context when made and freed by a mark-and-sweep collector (DECISIONS D280; `llvm/rt.rs`, memory
+section, and `llvm/gc.rs`). Roots are the variable slots of the running functions: `fm_main` and every function whose
+loops may make lists register an array of their slot addresses on entry (`fm_gc_enter`) and drop it on return.
+Collections happen only at the top of such loops' iterations (one flag load), and free only what was made after the
+innermost frame was entered, so temporaries held by callers mid-expression are safe. `FERMIUM_GC_STRESS=1` collects
+at every safe point (run `rust/tools/llvm_diff.py` with a wrapper binary that sets it); `FERMIUM_GC_STATS=1` prints
+the collections and the peak memory. Lists of vectors, matrices and complex numbers, arrays (D281, D283) and solves
+with list unknowns (D282) are mixed-mode constructs: the statements and expressions that touch them run in the
+tree-walker.
+
 ### `fermium build`: executables linked with the built-in lld
 
 `fermium build prog.fm [-o prog]` (`fermium-cli/src/aot.rs`) compiles the program with the LLVM back end into

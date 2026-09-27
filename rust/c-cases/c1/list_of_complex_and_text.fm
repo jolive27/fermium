@@ -1,0 +1,21 @@
+# C1: lists of complex numbers and of text
+R = 100 Ω
+L = 0.5 H
+C = 10 μF
+Zs = [R + 1i (2π × 50 Hz) L, R + 1i (2π × 60 Hz) L]
+push(Zs, R + 1 / (1i (2π × 50 Hz) C))
+print Zs, len(Zs)
+Zs[1] = 50 Ω + 0i Ω
+for Z in Zs
+    print |Z|, arg(Z) in °
+amps = []
+push(amps, 1 + 0i)
+push(amps, exp(1i π / 2))
+print amps
+names = []
+push(names, "hydrogen")
+push(names, "helium")
+names[2] = "He"
+for n in names
+    print n
+print names, len(names)

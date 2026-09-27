@@ -269,7 +269,9 @@ or a quantity found by cancellation). What differs, in the browser only:
 v1's compiled code never freed lists (a documented trap: a long loop that builds lists grows without bound).
 In the Rust implementation a list is a reference-counted value (`Rc<RefCell<Vec<f64>>>` in the tree-walker),
 freed when the last variable holding it goes away; list aliasing semantics (D26: `ys = xs` shares the list) are
-unchanged, so no program prints anything different.
+unchanged, so no program prints anything different. Since v2.5 the LLVM back end (and `fermium build` executables)
+free lists too: a mark-and-sweep collector over the variables of the running functions (DECISIONS D280; test:
+`rust/c-cases/c1/memory_loop.fm`, 10⁶ lists of 100 numbers in bounded memory).
 
 ## parallel for: the first failing iteration's error is reported
 

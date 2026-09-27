@@ -1,0 +1,10 @@
+# C1: list unknowns with rk4 (fixed step), bdf, and a solve inside a function
+k = [1, 2] / (1 s)
+solve x' = -k * x with x(0 s) = [1, 1] for t from 0 s to 1 s step 1 ms using rk4
+print x(1 s)
+solve y' = -k * y with y(0 s) = [1, 1] for t from 0 s to 1 s using bdf
+print y(1 s)
+final(n) =
+    solve z' = -z / (1 s) with z(0 s) = linspace(1, n, n) for t from 0 s to 1 s
+    return sum(z(1 s))
+print final(4), 10 exp(-1)

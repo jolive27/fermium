@@ -1,0 +1,5 @@
+{
+ "stdout": "[100 + 160i, 100 + 190i, 100 - 320i] Ω 3\n50 Ω 0°\n213 Ω 62.1°\n334 Ω -72.6°\n[1 + 0i, 0 + 1i]\nhydrogen\nHe\n[hydrogen, He] 2\n",
+ "stderr": "",
+ "exit": 0
+}

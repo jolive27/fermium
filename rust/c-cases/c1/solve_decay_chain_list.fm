@@ -1,0 +1,18 @@
+# C1: solve with a list of unknowns — a decay chain of any length, its rates written as a loop
+half = [3.098, 26.8, 19.9, 0.1643] min      # Po-218 → Pb-214 → Bi-214 → Po-214
+λ = ln(2) / half
+
+rates(N) =
+    dN = -λ * N
+    for i from 2 to len(N)
+        dN[i] += λ[i-1] N[i-1]
+    return dN
+
+N0 = [1e6, 0, 0, 0]
+solve N' = rates(N) with N(0 min) = N0 for t from 0 min to 60 min using radau
+print N(60 min), N[end][4]
+print "Bi-214 at 10 min:", N(10 min)[3]
+print "activities at 10 min:", λ * N(10 min) in 1/s
+print N'(10 min)
+# the first member against Bateman's formula
+print N(60 min)[1] / (N0[1] exp(-λ[1] 60 min)) to 6 digits

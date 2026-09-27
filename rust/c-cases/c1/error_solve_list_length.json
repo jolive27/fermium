@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_solve_list_length.fm, line 2: the right side of this differential equation gives 2 numbers, but its unknowns hold 3 (a list on the right must have as many elements as the unknown it is for)\n    solve N' = grow(N) with N(0 s) = [1, 2, 3] for t from 0 s to 1 s\n",
+ "exit": 1
+}

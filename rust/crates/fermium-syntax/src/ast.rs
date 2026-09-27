@@ -317,7 +317,8 @@ pub enum StmtKind {
     /// `name = value`, `+=`, `-=`, `*=`, `/=`.
     Assign { name: String, value: Expr, op: String },
     /// `xs[i] = …`, `M[i, j] = …` (D195).
-    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr> },
+    /// `rest`: indexes after the second, `A[i, j, k] = …` (N-dimensional arrays, D283; empty otherwise)
+    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr>, rest: Vec<Expr> },
     FuncDef { name: String, params: Vec<Param>, body: FuncBody, where_: Vec<(String, Expr)> },
     Print { items: Vec<Expr> },
     Plot { series: Vec<PlotSeries>, out: Option<String>, options: Vec<(String, PlotOpt)> },

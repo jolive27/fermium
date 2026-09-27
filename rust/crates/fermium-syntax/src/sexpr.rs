@@ -352,12 +352,15 @@ impl Printer {
                 f.push(("value", self.expr(value)));
                 f.push(("op", s(op)));
             }
-            IndexAssign { target, index, value, op, index2 } => {
+            IndexAssign { target, index, value, op, index2, rest } => {
                 f.push(("target", s(target)));
                 f.push(("index", self.expr(index)));
                 f.push(("value", self.expr(value)));
                 f.push(("op", s(op)));
                 f.push(("index2", self.opt(index2.as_ref())));
+                if !rest.is_empty() {
+                    f.push(("rest", PV::List(rest.iter().map(|e| self.expr(e)).collect())));
+                }
             }
             FuncDef { name, params, body, where_ } => {
                 f.push(("name", s(name)));
@@ -589,10 +592,11 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
                 body.iter().for_each(|x| st(x, live));
             }
             Assign { value, .. } => ex(value, live),
-            IndexAssign { index, value, index2, .. } => {
+            IndexAssign { index, value, index2, rest, .. } => {
                 ex(index, live);
                 ex(value, live);
                 index2.iter().for_each(|e| ex(e, live));
+                rest.iter().for_each(|e| ex(e, live));
             }
             FuncDef { body, where_, .. } => {
                 match body {

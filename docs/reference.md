@@ -397,7 +397,7 @@ print 2 v + <1, 1> m/s
 - **A unit after a vector:** `<3, 4> m/s`, `<0, 0> /s` and `<1, 2> 1/s` all work, as after a number.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
 - **In `solve`:** unknowns can be vectors, in 2-D or 3-D (see §10 and `examples/26_orbit_3d.fm`).
-- **Not yet:** lists of vectors (push the components into separate lists instead).
+- **Lists of vectors:** in Fermium 2.5, see [Lists of vectors, matrices, complex numbers and text](#lists-of-vectors-matrices-complex-numbers-and-text-fermium-25) (Fermium 1.5: push the components into separate lists instead).
 
 **A different unit on each component.** A state vector such as position and velocity keeps one unit per component:
 
@@ -494,7 +494,7 @@ print (230 + 0i) [V] / Z                # the current, in A
 - **Arithmetic:** `+ - * /` between complex and real numbers; `z^n` for a whole number n (repeated multiplication), `z^p` for another fixed number p (the principal value, units to the power p), and `z^w`, `2^(1i)` with a complex or variable exponent (plain numbers only). `exp ln log sqrt sin cos tan sinh cosh tanh` take complex plain numbers (`sqrt` keeps units to the power ½; √z also works); these are the principal branches (the cut of `ln` and `sqrt` is the negative real axis).
 - **Parts:** `abs(z)` or `|z|` and `re(z)`, `im(z)` (also `z.re`, `z.im`) keep the units; `arg(z)` is the angle from −π to π; `conj(z)` is the complex conjugate.
 - **Comparisons:** `==`, `!=` and `≈` work; `<`, `>`, `<=`, `>=` are an error (complex numbers aren't ordered; compare `|z|` or `re(z)`).
-- **Lists:** `fft(xs)` gives a list of complex numbers; what works on one is listed under Fourier transforms (§20). Other lists, vectors and matrices hold real numbers.
+- **Lists:** `fft(xs)` gives a list of complex numbers; what works on one is listed under Fourier transforms (§20). In Fermium 2.5 a list of complex numbers can also be written out (`[1 + 2i, 3i]`) or grown with `push` ([below](#lists-of-vectors-matrices-complex-numbers-and-text-fermium-25)). Vectors and matrices hold real numbers.
 - **A variable keeps its kind:** `z = 0` then `z += 1i` is an error; start with `z = 0i`.
 
 ```fermium
@@ -515,7 +515,101 @@ print g'(0 m)
 
 - **Differential equations:** an unknown is complex when its initial value is (`ψ(0) = 1 + 0i`), or when the equation is (`𝑖ħ ψ' = E ψ` with `ψ(0) = 1` is complex). It takes two real state slots (real and imaginary parts), so `rk45`, `rk4`, `radau`/`bdf`, `until` and backward ranges work unchanged. `ψ(t)` and `ψ'(t)` are complex; `ψ.re` and `ψ.im` are real solutions (for `plot ψ.re vs t`, `max(ψ.im)`, `values(ψ.re)`).
 - **Integrals and sums** of a complex expression are computed part by part, each with its own adaptive quadrature. **Derivatives** of functions with complex values work (`𝑖` is a constant to the differentiator), and indefinite integrals hand `𝑖` to SymPy as its imaginary unit.
-- **Not yet:** lists, vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+- **Not yet:** vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+
+### Lists of vectors, matrices, complex numbers and text (Fermium 2.5)
+
+In the Rust compiler (spec §C1; Fermium 1.5 refuses these), a list can hold vectors, matrices, complex numbers or
+text as well as numbers. The examples are tested in `rust/c-cases/c1/` on both back ends.
+
+```text
+pos = [<1, 2> m, <3, 4> m]
+print pos, len(pos), pos[2], pos[end].y   # [<1, 2>, <3, 4>] m 2 <3, 4> m 4 m
+push(pos, <5, 6> m)
+pos[2] += <1, 1> m
+for p in pos
+    print p, |p|
+print 2*pos, sum(pos), mean(pos)
+dirs = [<1, 0, 0>, <0, 1, 0>] km/s        # a unit after the list: every element
+vel = []
+push(vel, <1, 0, 0> km/s)                 # [] becomes a list of 3-vectors of speed
+
+rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+Rs = []
+for k from 0 to 2
+    push(Rs, rot(k * 30°))                # a list of 2×2 matrices
+Ks = [[[2, -1], [-1, 2]], [[1, 0], [0, 1]]] N/m
+
+Zs = [100 Ω + 160i Ω, 100 Ω - 320i Ω]    # complex numbers sharing one unit
+names = []
+push(names, "hydrogen")
+names[1] = "H"
+```
+
+- **Elements are all the same kind:** vectors of one length, or matrices of one size, sharing one unit
+  (`[<1, 2> m, <3, 4> s]` is an error: "all elements of a list need the same units"). A vector with a different unit
+  on each component can't go in a list; a list mixing real and complex numbers is still an error (write `2 + 0i`).
+- **What works:** writing the list out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` and `+=`, `len`, `for x in xs`,
+  `clear`, `print` (the unit once, at the end: `[<1, 2>, <3, 4>] m`; more than 12 elements show the first 5 and last
+  3), multiplying or dividing by a number, and `sum` and `mean` (a vector or matrix). Lists can be function arguments:
+  an N-body acceleration is a loop over `r[j] - r[i]` (`rust/c-cases/c1/nbody_lists.fm`).
+- **`[]` then `push`:** a variable set to the empty list takes the kind of the first value pushed onto it, and is
+  checked from then on (pushing a 3-vector onto a list of 2-vectors, or metres onto a list of speeds, is an error).
+- **Speed:** the LLVM back end hands the statements that touch these lists to the tree-walker (the rest of the
+  program stays compiled), so a hot loop over a list of vectors runs at tree-walker speed for now.
+- **Not yet:** lists of lists (other than matrices), arithmetic between two lists of vectors (`a + b`), slices.
+
+### Arrays of 2, 3 or 4 dimensions (Fermium 2.5)
+
+In the Rust compiler (spec §C1), `fill(value, n1, n2, …)` makes an array: a grid of n1×n2(×n3×n4) numbers that share
+the value's unit. It is for fields on a grid (a temperature on a plate, a density in a box); matrices (§7) stay the
+small, fixed-size objects of linear algebra. Tested in `rust/c-cases/c1/array_heat_2d.fm` on both back ends.
+
+```text
+n = 21
+h = 0.2 m / (n - 1)
+α = 1e-4 m²/s
+dt = 0.2 h^2 / α
+θ = fill(300 K, n, n)                  # a 21×21 plate at 300 K
+θ[11, 11] = 400 K                      # a hot spot
+for k from 1 to 50
+    θn = copy(θ)
+    for i from 2 to n - 1
+        for j from 2 to n - 1
+            θn[i, j] = θ[i, j] + (α dt / h^2) (θ[i+1, j] + θ[i-1, j] + θ[i, j+1] + θ[i, j-1] - 4 θ[i, j])
+    θ = θn
+print θ[11, 11] to 6 digits            # 300.790 K (NumPy gives the same)
+print sum(θ - 300 K), max(θ), size(θ)  # 89.9 K 301 K [21, 21]
+print θ                                # 21×21 array, from 300 K to 301 K
+cube = fill(1.5 J, 2, 2, 2)
+cube[2, 1, 2] = 0 J
+print cube                             # [[[1.5, 1.5], [1.5, 1.5]], [[1.5, 0], [1.5, 1.5]]] J
+```
+
+- **Making one:** `fill(value, n1, n2)` (2-D), `fill(value, n1, n2, n3)` (3-D), up to 4 sizes; the value's unit is
+  every entry's unit (`fill(0 m, 2, 3)`). One size gives a list. At most 10⁹ entries.
+- **Entries:** `A[i, j]`, `A[i, j, k]` (from 1; an index out of range stops the program, naming the dimension), and
+  `A[i, j] = x`, `+=`, `-=`, …; the value must have the array's units ("A is an array of temperature [K]; can't put
+  length [m] in it"). An array takes exactly as many indexes as it has dimensions.
+- **Arithmetic** entry by entry: `A + B`, `A - B` (same units; the same shape, checked when the program runs), `A * B`,
+  `A / B`, a number times or over an array, `A + 1 K`, `-A`. Units work as for numbers.
+- **Functions:** `size(A)` (the shape, a list), `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, and `copy(A)`: like a
+  list, `B = A` shares the array, so a time step that reads the old grid while writing the new one starts with
+  `copy`.
+- **Printing:** up to 64 entries in nested brackets with the unit once (like a matrix); a larger array as its shape
+  and range.
+- **Speed:** in compiled code each `A[i, j]` read or write is a call into the run time (the loop around it stays
+  compiled), and the other statements and expressions that touch arrays are handed to the tree-walker, so array loops
+  are not yet as fast as loops over lists; `fermium build` refuses programs with arrays.
+- **Not yet:** slices (`A[2, :]`), `end` in an array index, `for x in A`, plotting an array, arrays of vectors or
+  complex numbers, and applying functions like `sin` to every entry.
+
+### Memory
+
+Lists (and arrays and texts made while the program runs) are freed when nothing can reach them any more, with both
+back ends: the tree-walker counts references, and compiled code (the LLVM back end and `fermium build` executables)
+runs a collector at the top of loop iterations that make them (DECISIONS D280). A loop that makes a million lists of 100 numbers stays under 100 MB (it would need
+800 MB if none were freed). `FERMIUM_GC_STATS=1 fermium run prog.fm` reports the collections and the peak memory.
 
 ## 8. Derivatives
 
@@ -765,6 +859,52 @@ print "u halves at", times(u)[end]
 
 - **An `if` on t** (a force that switches on at 0.3 s, a potential step in x): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it. A jump that depends on the unknowns instead (`if x > 0 m`) is not located this way.
 - **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
+
+### A list of unknowns: reaction networks and N-body problems (Fermium 2.5)
+
+In the Rust compiler (spec §C1), an unknown can be a whole list, sized by its initial value when the program runs,
+so a network of any size, or N bodies, is written with loops instead of one equation per species or body. Tested
+in `rust/c-cases/c1/solve_*.fm` on both back ends.
+
+```text
+half = [3.098, 26.8, 19.9, 0.1643] min     # Po-218 → Pb-214 → Bi-214 → Po-214
+λ = ln(2) / half
+rates(N) =
+    dN = -λ * N
+    for i from 2 to len(N)
+        dN[i] += λ[i-1] N[i-1]
+    return dN
+solve N' = rates(N) with N(0 min) = [1e6, 0, 0, 0] for t from 0 min to 60 min using radau
+print N(60 min)                           # [1.48, 2.40×10⁵, 2.68×10⁵, 2220]
+print N(10 min)[3], N'(10 min)
+
+accel(r) =                                # r: a list of position vectors
+    a = []
+    for i from 1 to len(r)
+        ai = <0, 0> m/s²
+        for j from 1 to len(r)
+            if j != i
+                d = r[j] - r[i]
+                ai += G_N M d / |d|^3
+        push(a, ai)
+    return a
+solve r'' = accel(r) with r(0 s) = r0, r'(0 s) = v0 for t from 0 s to T
+print r(T)[1], r'(T)[3]
+```
+
+- **The unknown:** its initial value is a list of numbers (`N(0) = [1e6, 0, 0]`) or of vectors (`r(0) = r0` with r0
+  a list of 2- or 3-vectors). All its elements share one unit, checked like any unknown: the right side of `N' = …`
+  must be a list of numbers in N's units per time. `x` and `x'` of a second-order list unknown must have the same
+  length, and so must the list the right side returns (else a run-time error saying how many numbers it gave).
+- **Afterwards:** `N(t)` is the list at a time, `N(t)[i]` one element, `N'(t)` the list of derivatives (from the
+  right side), `N[end]` the list at the end (or where `until` stopped), `times(N)` the solver's times. `values(N)`,
+  `plot N` and `N(ts)` with a list of times are errors for a list unknown (use `N(t)` in a loop).
+- **With other unknowns:** ordinary unknowns can be in the same `solve` (`x' = -k * x` next to `T' = …`). `until` can
+  test an element (`until x[3] = 0.01 m`); `absolute` takes one value per unknown's units, used for every element of a
+  list unknown; `rk45`, `rk4` with a step, `radau` and `bdf` all work.
+- **Not yet:** complex list unknowns, lists of matrices as unknowns, equations whose highest derivatives are coupled
+  (write `N' = …` explicitly). The LLVM back end hands such a `solve` to the tree-walker (the rest of the program
+  stays compiled), and `fermium build` refuses the program.
 
 ### Equations: solve … for x from a to b
 

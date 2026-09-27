@@ -97,6 +97,9 @@ pub struct SolView {
     pub hints: Vec<Option<I::Hint>>,
     pub thint: Option<I::Hint>,
     pub sf: Option<u32>,
+    /// a list unknown (spec C1, D282): the list's type (List or VList of vectors); comp and top are then positions
+    /// in the solve's layout of state slots, whose sizes are known only when it runs
+    pub list: Option<Ty>,
 }
 
 /// A one-line helper defined inside a function (D194), expanded at each call.
@@ -188,6 +191,8 @@ pub struct SymExtra {
     /// why the variable may have no value here, if it may not
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
+    /// every value it was set to so far is the empty list [] (it may still become a list of vectors, D281)
+    pub empty_list: bool,
     pub list_sf: Option<u32>,
     /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
     pub err_sym: Option<I::SymId>,
@@ -411,6 +416,12 @@ impl Checker {
             Ty::Vec { n, dim, .. } => format!("a {n}-vector of {}", self.desc(dim.as_ref().unwrap())),
             Ty::Mat { r, c, dim } => format!("a {r}×{c} matrix of {}", self.desc(dim)),
             Ty::TextList => "a list of text".into(),
+            Ty::Array { rank, dim } => format!("a {rank}-dimensional array of {}", self.desc(dim)),
+            Ty::VList(el) => {
+                let d = self.type_desc(el);
+                format!("a list of {}", d.strip_prefix("a ").unwrap_or(&d).replacen("vector", "vectors", 1)
+                    .replacen("matrix", "matrices", 1))
+            }
             Ty::ComplexList(d) => {
                 if self.u.resolve(d).is_dimensionless() {
                     "a list of complex numbers".into()

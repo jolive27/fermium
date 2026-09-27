@@ -1,0 +1,4 @@
+A = fill(0 K, 3, 4)
+A[2, 4] = 1 K
+print A[2, 4]
+print A[4, 1]

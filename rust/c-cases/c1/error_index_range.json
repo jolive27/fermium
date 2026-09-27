@@ -1,0 +1,5 @@
+{
+ "stdout": "<1, 2> m\n",
+ "stderr": "error_index_range.fm, line 3: index 3 is out of range: the list has 2 elements (valid indexes are 1 to 2)\n    print pos[3]\n",
+ "exit": 1
+}

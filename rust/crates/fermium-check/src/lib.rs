@@ -6,6 +6,7 @@ pub use fermium_ir::{types, Dim, DIMLESS};
 pub mod analyze;
 pub mod api;
 pub mod arith;
+pub mod arrays;
 pub mod ast_ext;
 pub mod builtin;
 pub mod builtins;

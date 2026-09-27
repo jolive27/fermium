@@ -1327,3 +1327,88 @@ look alike.
   (arbitrary; equal scores are reported as ambiguous instead). Not yet: differentiating a formula that calls a
   function with versions, versions added to an imported function (still "defined again" as before), the Python
   API's `fermium.compile` (checks arguments against the last version), and Fermium 1.5.
+
+## D280. The LLVM back end frees lists: a mark-and-sweep collector with frame epochs (spec C1, memory)
+- **What:** the compiled code's lists, text lists, texts made at run time and Obj values (the tree-walker's values it holds: lists of
+complex numbers or vectors, data sets) are registered when made and freed by a collector (`llvm/rt.rs`, memory
+section; code generation in `llvm/gc.rs`). Roots are variable slots: fm_main registers the module's list variables
+and its own slots, and every compiled function whose loops may make lists registers its list slots on entry
+(`fm_gc_enter`: an array of slot addresses on its stack) and unregisters on each return. Collections happen only at
+safe points, the top of an iteration of such a loop when the allocator has set a flag (`gc_flag`, one load and a
+cold branch), where the function holds no list in a register (a `for … in` keeps its copy of the list in a hidden
+registered slot). A collection frees only lists made after the innermost registered frame was entered (its
+epoch): a caller in the middle of an expression may hold a temporary (`f(2 xs, g(y))` while g loops), and those
+are all older. The main program's frame has epoch 0. A function without such loops is never interrupted by a
+collection, so it needs no frame; nothing is collected while a parallel for runs. A collection runs after as many
+allocations (or bytes) as were live after the last one, at least 20 000 lists or 64 MB. `FERMIUM_GC_STATS=1`
+reports collections and peak memory; `FERMIUM_GC_STRESS=1` collects at every safe point (the whole conformance
+suite agrees with the tree-walker under it: `rust/tools/llvm_diff.py --bin` a wrapper that sets it).
+- **Why:** the tree-walker's lists were already reference counted (DIVERGENCES "Lists are freed"), but the LLVM
+back end kept every list until the program ended, like v1's compiled code: a loop making 3×10⁶ small lists
+reached 300 MB (now 52 MB; `memory_loop.fm`, 10⁶ lists of 100 numbers, peaks at ~76 MB instead of ~800 MB).
+- **Alternatives:** reference counting in the generated code (retain/release on every store, argument and
+temporary: much more code in compile.rs, and a cost on every list operation); a conservative scan of the machine
+stack (not portable, and LLVM may keep only derived pointers); an arena per statement (lists stored in variables
+outlive statements). Texts made at run time (`"run " + str(i)`) are collected the same way: text-id slots are roots
+(kind 4), the ids in surviving text lists are marked, and a freed id is reused (the module's own texts are never
+freed); 2×10⁶ labels in a loop stay at ~55 MB.
+
+## D281. Lists of vectors, matrices, complex numbers and text (spec C1)
+- **What:** a list may hold vectors (all the same length and units: `[<1, 2> m, <3, 4> m]`, type `VList`), matrices
+(same size and units: `[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or `[A, B]`), complex numbers (`[1 + 2i, 3i]`,
+the existing `ComplexList`) and text. For each: written out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` (and `+=`),
+`len`, `for x in xs`, `clear`, `print`; a unit after the list applies to every element; a list of vectors or
+matrices times or over a number; `sum` and `mean` of a list of vectors or matrices. A variable set to `[]` becomes
+the kind of the first value pushed (`vel = []` then `push(vel, <1, 0> m/s)`), checked from then on (units per
+element type, sizes). The tree-walker holds these as values (`Value::VList`, `CList`, `TextList`); the LLVM back end
+holds lists of vectors and complex numbers as Obj values and hands the statements and expressions that use them to
+the tree-walker (mixed mode), so the rest of the program stays compiled (N-body code over lists of vectors runs
+compiled apart from those accesses).
+- **Why:** reaction networks and N-body problems are written as loops over lists of state vectors; before this,
+users kept one list per component.
+- **Kept from v1:** a list mixing real and complex numbers (`[1i, 2]`) is still the error "a list element must be
+a number, but it is a complex number" (conformance golden ae4d6aeeae8f); write `2 + 0i`. A list of vectors with a
+different unit per component is refused (put each component in its own list).
+- **Alternatives:** a general `List(Ty)` of any element type (nested lists, lists of lists): more checker
+surface than C1 needs; N-dimensional arrays (D283) cover grids. Compiling list-of-vector operations in LLVM
+natively (a flat buffer with a stride) is the performance follow-up.
+
+## D282. `solve` with a list of unknowns (spec C1)
+- **What:** an unknown whose initial value is a list of numbers or of vectors (one unit for all elements) is a list
+unknown: its state variables in the right-hand side are lists (`List`, `VList`), and its size is the initial value's
+length when the solve runs. The checker puts list unknowns' state slots last in the layout (`SolveExtra::lists`),
+so the other unknowns keep offsets known at compile time; a list unknown's `SolView` holds positions in the layout
+(`SolView::list`) and `N(t)` becomes the built-in `__sol_list(solution, slot, t, derivative?, k, format)`, which
+finds the offset from the sizes stored with the solution (`SolData::lens`). The tree-walker flattens the initial
+values, records each list state variable's size for the right side's evaluations, and checks that the right side
+returns as many numbers as the unknowns hold. `absolute` gives one value per unknown's units; a list unknown's value
+is repeated over its elements. The LLVM back end hands the whole `solve` statement to the tree-walker (mixed mode)
+and gets the solution back as a handle into the tree-walker's table (`from_value` of kind H); `N(t)` is then a
+built-in call, so the rest of the program stays compiled.
+- **Why:** spec C1: reaction networks and N-body problems written as loops. One equation per species (the radon
+chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
+- **Alternatives:** unrolling at compile time (needs the length at compile time, which a list built by `push` in a
+loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
+tree-walker speed now); `values(N)` and `plot N` (a list per step; left out for now, with a clear error; `N[end]` is
+`N` at the last time).
+
+## D283. N-dimensional arrays: `fill(value, n1, n2, …)`, `A[i, j, k]`, entry-by-entry arithmetic (spec C1)
+- **What:** a new type `Array { rank, dim }` (2 ≤ rank ≤ 4; every entry shares one unit; the shape is a run-time
+fact, the rank a compile-time one). `fill(value, n1, …, nr)` makes one (the value's unit is the array's; one size
+gives a list), `A[i, j, …]` reads an entry and `A[i, j, …] = x` (or `+=`) sets one, with exactly `rank` indexes;
+`+ - * /` work entry by entry with numbers and arrays of the same rank (same shape checked when it runs; `+`/`-` need
+the same units, `*`/`/` multiply them); `size(A)`, `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, `copy`. `B = A`
+shares the array, as lists do (D26). The parser now reads any number of indexes (`A[i, j, k]`, nested Index nodes as
+for `M[i, j]`), and `IndexAssign` keeps the ones after the second in a new field `rest` (empty for every program
+v1 accepts, so the AST dump and the formatter are unchanged for them). The tree-walker holds `Value::NdArr`
+(row-major); the LLVM back end holds arrays as Obj values: `A[i, j]` reads and writes (and the other array
+built-ins, `len`/`sum`/`mean` of a list of vectors, and `N(t)` of a list unknown) are calls through `fm_builtin` with
+the array as an argument (it is shared, so a write needs no copy back), and the other constructs that touch one are
+handed to the tree-walker; the collector counts an Obj's real size so arrays made in a loop are freed in time.
+- **Why:** spec C1 asks for N-dimensional arrays with units; physics grids (heat, diffusion, Poisson, lattice
+models) need more than 16×16 and more than 2 indexes. `fill(value, dims…)` reads like the notebook ("fill a 50×50
+grid with 300 K"), puts the unit in the value where the unit rule already applies, and is Julia's `fill(x, dims…)`.
+- **Alternatives:** growing matrices past 16×16 (they are straight-line code for linear algebra, D195, and their
+products and inverses mean something an array's don't); `zeros(n1, n2, n3) K` (zeros(r, c) is already a matrix; a
+unit after a call isn't the unit rule); `A[i][j][k]` only (kept working, but `A[i, j, k]` is what physicists write);
+NumPy-style broadcasting, slices and vectorized functions (next steps; each needs its own unit rules).

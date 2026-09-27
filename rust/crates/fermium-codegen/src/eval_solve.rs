@@ -18,6 +18,8 @@ pub(crate) struct SolData {
     pub sol: ode::Sol,
     pub rhs: Option<(usize, Frame)>,
     pub grid: Option<(f64, f64)>,
+    /// a solve with list unknowns (D282): the size of each state slot of the layout, in numbers
+    pub lens: Option<Vec<usize>>,
     /// a PDE's grid check (Fermium 2, DIVERGENCES.md): the solution on half the grid, each component's range,
     /// the names of x and t (text ids), and whether it has warned
     pub check: Option<PdeCheck>,
@@ -37,6 +39,8 @@ pub(crate) struct PdeCheck {
 #[derive(Default)]
 pub struct SolveState {
     pub(crate) sols: Vec<Rc<SolData>>,
+    /// the run-time sizes (in numbers) of the list unknowns' state variables of the solves running (D282)
+    pub(crate) list_lens: std::collections::HashMap<SymId, usize>,
 }
 
 /// v1's `fmt_value` (eval_calc's).
@@ -202,8 +206,24 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             fr.vars.insert(p, Value::Num(t));
         }
         let mut i = 0;
+        let mut lists = false;
         for &s in &lam.state {
             let n = slots(&module.syms[s].ty);
+            if let Ty::List(_) | Ty::VList(_) = &module.syms[s].ty {
+                // a list unknown (D282): its size is the initial value's
+                lists = true;
+                let n = self.solve.list_lens.get(&s).copied().unwrap_or(0).min(y.len().saturating_sub(i));
+                let v = match &module.syms[s].ty {
+                    Ty::VList(el) => {
+                        let k = slots(el).max(1);
+                        Value::VList(Rc::new(RefCell::new(y[i..i + n].chunks(k).map(|c| Rc::new(c.to_vec())).collect())))
+                    }
+                    _ => Value::List(Rc::new(RefCell::new(y[i..i + n].to_vec()))),
+                };
+                fr.vars.insert(s, v);
+                i += n;
+                continue;
+            }
             if matches!(module.syms[s].ty, Ty::Num(_)) {
                 fr.vars.insert(s, Value::Num(y[i]));
             } else {
@@ -240,6 +260,22 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         j += 1;
                     }
                 }
+                Value::List(l) if lists => {
+                    for x in l.borrow().iter() {
+                        if j < out.len() {
+                            out[j] = *x;
+                        }
+                        j += 1;
+                    }
+                }
+                Value::VList(l) if lists => {
+                    for x in l.borrow().iter().flat_map(|v| v.iter()) {
+                        if j < out.len() {
+                            out[j] = *x;
+                        }
+                        j += 1;
+                    }
+                }
                 v => {
                     if j < out.len() {
                         out[j] = v.num();
@@ -247,6 +283,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     j += 1;
                 }
             }
+        }
+        if lists && j != out.len() && lam.kind == fermium_ir::LambdaKind::Ode && out.len() > 1 {
+            // a right side that made a list of another length than its unknown (D282)
+            return self.err(format!("the right side of this differential equation gives {j} numbers, but its unknowns \
+                                     hold {} (a list on the right must have as many elements as the unknown it is for)",
+                                    out.len()));
         }
         Ok(())
     }
@@ -279,6 +321,51 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         Ok(y0)
     }
 
+    /// The initial values of a solve with list unknowns (D282), flattened, and the size of each state slot; the
+    /// sizes of the lambda's list variables are recorded for its evaluations.
+    fn flat_lists(&mut self, lam: usize, es: &[Expr], line: u32, fr: &mut Frame)
+                  -> Result<(Vec<f64>, Option<Vec<usize>>), RunError> {
+        let module = self.module;
+        let mut y0 = vec![];
+        let mut lens = vec![];
+        for e in es {
+            let before = y0.len();
+            match self.eval(e, fr)? {
+                Value::Vec(v) => y0.extend(v.iter()),
+                Value::List(l) => y0.extend(l.borrow().iter()),
+                Value::VList(l) => y0.extend(l.borrow().iter().flat_map(|v| v.iter().copied())),
+                Value::Unc(_) | Value::UVec(_) | Value::UList(_) => {
+                    self.line = line;
+                    return self.err("a starting value of solve can't be uncertain (±) yet; put the solve inside a  \
+                                     propagate montecarlo  block, or use value(x)");
+                }
+                v => y0.push(v.num()),
+            }
+            lens.push(y0.len() - before);
+        }
+        let l = &module.lambdas[lam];
+        for (s, n) in l.state.iter().zip(lens.iter()) {
+            if matches!(module.syms[*s].ty, Ty::List(_) | Ty::VList(_)) {
+                self.solve.list_lens.insert(*s, *n);
+            }
+        }
+        // x and x' of a list unknown must have the same size
+        let mut by_name: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        for (s, n) in l.state.iter().zip(lens.iter()) {
+            if !matches!(module.syms[*s].ty, Ty::List(_) | Ty::VList(_)) {
+                continue;
+            }
+            let name = module.syms[*s].name.trim_end_matches('\'').to_string();
+            if let Some(m) = by_name.insert(name.clone(), *n) {
+                if m != *n {
+                    self.line = line;
+                    return self.err(format!("the initial values of {name} and {name}' have different lengths"));
+                }
+            }
+        }
+        Ok((y0, Some(lens)))
+    }
+
     pub(crate) fn store_sol(&mut self, sym: SymId, data: SolData, fr: &mut Frame) {
         self.solve.sols.push(Rc::new(data));
         let h = Value::Handle(self.solve.sols.len() - 1);
@@ -305,8 +392,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     fn solve_ode(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
-        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, .. } = &s.kind else { unreachable!() };
+        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
+        if x.lists {
+            return self.solve_ode_lists(s, fr);
+        }
         let y0v = self.flat_vals(y0, fr)?;
         let (vt0, vt1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
         let (t0, t1) = (vt0.num(), vt1.num());
@@ -327,7 +417,34 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             r => r?,
         };
         let snap = self.snapshot(*rhs, fr);
-        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None, unc: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None, unc: None }, fr);
+        Ok(())
+    }
+
+    /// A solve with list unknowns (D282): the state is sized when the program runs; not uncertain (C7 doesn't
+    /// reach list unknowns yet, so uncertain values keep v1's error).
+    fn solve_ode_lists(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
+        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, .. } = &s.kind else { unreachable!() };
+        let module = self.module;
+        let (y0, lens) = self.flat_lists(*rhs, y0, s.line, fr)?;
+        let (vt0, vt1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
+        let (t0, t1) = (vt0.num(), vt1.num());
+        if matches!(vt0, Value::Unc(_)) || matches!(vt1, Value::Unc(_)) {
+            let lam = &module.lambdas[*rhs];
+            let mut out = vec![0.0; y0.len()];
+            self.ode_call(lam, t0, &y0, &mut out, fr)?;
+            self.line = s.line;
+            return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the solve inside \
+                             a  propagate montecarlo  block, or use value(x)");
+        }
+        let h0 = match step {
+            Some(e) => Some(self.eval(e, fr)?.num()),
+            None => None,
+        };
+        let solv = self.ode_core_l(s, &y0, t0, t1, h0, None, lens.as_deref(), fr)?;
+        let snap = self.snapshot(*rhs, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, lens, check: None, unc: None },
+                       fr);
         Ok(())
     }
 
@@ -336,6 +453,13 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// tolerance is scaled so that the nominal part keeps its accuracy.
     pub(crate) fn ode_core(&mut self, s: &Stmt, y0: &[f64], t0: f64, t1: f64, h0: Option<f64>, aug: Option<&[u64]>,
                            fr: &mut Frame) -> Result<ode::Sol, RunError> {
+        self.ode_core_l(s, y0, t0, t1, h0, aug, None, fr)
+    }
+
+    /// `ode_core` for a solve with list unknowns: `lens` is the size of each state slot (D282).
+    #[allow(clippy::too_many_arguments)]
+    fn ode_core_l(&mut self, s: &Stmt, y0: &[f64], t0: f64, t1: f64, h0: Option<f64>, aug: Option<&[u64]>,
+                  lens: Option<&[usize]>, fr: &mut Frame) -> Result<ode::Sol, RunError> {
         let StmtKind::Solve { rhs, method, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
         self.line = s.line;
@@ -344,7 +468,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let nsrc = aug.map_or(0, |a| a.len());
         let n = y0.len() / (1 + nsrc);
         let atol = x.atol.as_ref().and_then(|spec| ode::abs_tolerances(spec, t0, t1))
-            .map(|a| a.iter().cycle().take(n * (1 + nsrc)).copied().collect::<Vec<f64>>());
+            .map(|a| match lens {
+                // one absolute tolerance per list unknown's slot: the same for each of its numbers (D282)
+                Some(lens) => expand_list_atol(module, lam, &a, lens),
+                None => a.iter().cycle().take(n * (1 + nsrc)).copied().collect::<Vec<f64>>(),
+            });
         let rtol = if nsrc > 0 { x.rtol / ((1 + nsrc) as f64).sqrt() } else { x.rtol };
         let opts = ode::OdeOpts { rtol, atol: atol.as_deref(), tname: x.tname as f64, evtext: x.evtext as f64,
                                   tdep: x.tdep };
@@ -476,7 +604,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             solv.push(xv, &row, &drow);
         }
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, check: None, unc: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, lens: None, check: None, unc: None }, fr);
         Ok(())
     }
 
@@ -531,7 +659,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let check = r.coarse.as_ref().map(|c| PdeCheck { coarse: c.to_sol(), ranges: r.fine.ranges(), xname: x.xname,
                                                           tname: x.tname, warned: std::cell::Cell::new(false) });
         let solv = r.fine.to_sol();
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), check, unc: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), lens: None, check, unc: None }, fr);
         Ok(())
     }
 
@@ -548,6 +676,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let r = match (&d.rhs, use_dy) {
             (Some((lam, snap)), true) => {
                 let lam = &module.lambdas[*lam];
+                if let Some(lens) = &d.lens {
+                    for (s, n) in lam.state.iter().zip(lens.iter()) {
+                        self.solve.list_lens.insert(*s, *n);
+                    }
+                }
                 let mut frame = Frame { vars: snap.vars.clone() };
                 let mut err = None;
                 let r = {
@@ -720,6 +853,23 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 }
 
+/// Absolute tolerances with one value per list unknown's slot, spread over its numbers (D282).
+fn expand_list_atol(module: &Module, lam: &Lambda, a: &[f64], lens: &[usize]) -> Vec<f64> {
+    let mut out = vec![];
+    let mut k = 0;
+    for (s, n) in lam.state.iter().zip(lens.iter()) {
+        if matches!(module.syms[*s].ty, Ty::List(_) | Ty::VList(_)) {
+            let v = a.get(k).copied().unwrap_or(0.0);
+            out.extend(std::iter::repeat(v).take(*n));
+            k += 1;
+        } else {
+            out.extend(a.iter().skip(k).take(*n).copied());
+            k += n;
+        }
+    }
+    out
+}
+
 /// fermium.linalg.solve with one right-hand side: Gaussian elimination with branch-free partial pivoting.
 /// Returns the solution and the pivots (a zero pivot: singular).
 fn solve_linear(a: &[f64], n: usize, b: &[f64]) -> (Vec<f64>, Vec<f64>) {
@@ -759,4 +909,45 @@ fn solve_linear(a: &[f64], n: usize, b: &[f64]) -> (Vec<f64>, Vec<f64>) {
         x[i] = acc / rows[i][i];
     }
     (x, pivots)
+}
+
+impl<'m, P: Printer> Interpreter<'m, P> {
+    /// N(t) of a list unknown (D282): `__sol_list(solution, slot, t, derivative?, k, tfmt)`, the list (of numbers, or
+    /// of k-vectors) at t.
+    pub(crate) fn sol_list_at(&mut self, args: &[Value]) -> Result<Value, RunError> {
+        let Value::Handle(h) = args[0] else { return self.err("this solution has no value") };
+        let d = self.solve.sols[h].clone();
+        let (slot, t, dy, k, tfmt) = (args[1].num() as usize, args[2].num(), args[3].num() != 0.0, args[4].num() as usize,
+                                      args[5].num() as usize);
+        let lens = d.lens.clone().unwrap_or_default();
+        let off: usize = lens.iter().take(slot).sum();
+        let n = lens.get(slot).copied().unwrap_or(0);
+        let mut vals = Vec::with_capacity(n);
+        if dy {
+            // the right side once, at the interpolated state
+            let dim = d.sol.dim;
+            let mut y = Vec::with_capacity(dim);
+            for c in 0..dim {
+                y.push(self.sol_at(&d, c, t, false, tfmt)?);
+            }
+            let (lam, snap) = d.rhs.as_ref().unwrap();
+            let lam = &self.module.lambdas[*lam];
+            for (s, m) in lam.state.iter().zip(lens.iter()) {
+                self.solve.list_lens.insert(*s, *m);
+            }
+            let mut frame = Frame { vars: snap.vars.clone() };
+            let mut out = vec![0.0; dim];
+            self.ode_call(lam, t, &y, &mut out, &mut frame)?;
+            vals.extend_from_slice(&out[off..off + n]);
+        } else {
+            for c in off..off + n {
+                vals.push(self.sol_at(&d, c, t, false, tfmt)?);
+            }
+        }
+        Ok(if k > 0 {
+            Value::VList(Rc::new(RefCell::new(vals.chunks(k).map(|c| Rc::new(c.to_vec())).collect())))
+        } else {
+            Value::List(Rc::new(RefCell::new(vals)))
+        })
+    }
 }

@@ -1,0 +1,4 @@
+A = fill(1 m, 3, 4)
+B = fill(2 m, 4, 3)
+print sum(A)
+print A + B

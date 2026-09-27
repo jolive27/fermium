@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_list_units.fm, line 1: all elements of a list need the same units; this one is time [s] but earlier ones are length [m]\n    pos = [<1, 2> m, <3, 4> s]\n                     ^^^^^^^^\n",
+ "exit": 1
+}
