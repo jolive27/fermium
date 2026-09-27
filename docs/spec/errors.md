@@ -12,7 +12,7 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 29 of the files completely** (499 templates) — the ones that hold the most common errors: unit and
+covers 30 of the files completely** (524 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
@@ -20,11 +20,10 @@ numbers, the statements (control flow, reassignment, list entries, `push`, local
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
 `plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
 events in ODEs (`when`, events.rs) , eigenvalue problems (`solve … lowest N`, eigen.rs),
-natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) , PDEs (pde.rs) and `use python`
-(pyinterop.rs). The other files (the C and C++
-interop; about 75 templates) are still to do; see §4.
+natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) , PDEs (pde.rs) , `use python`
+(pyinterop.rs) and `import c`/`import fortran` (cinterop.rs). The rest (the C++ interop's messages in cppinterop.rs; about 50 templates) are still to do; see §4.
 
-Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `pyinterop.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `cinterop.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `pyinterop.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -43,8 +42,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 195 of the
-499. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 218 of the
+524. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -585,6 +584,32 @@ errors come first, and the rest are simply not written yet (§4).
 | 497 | `….…: Python functions can't be called inside  …  yet` | pyinterop.rs | a Python function called inside a construct that can't call Python yet (for example a compiled integrand) | — |
 | 498 | `… takes … argument… (as declared in the use line on line …), but got …` | pyinterop.rs | a Python function called with a different number of arguments than its declared signature | — |
 | 499 | `…: a Python function takes numbers and lists of numbers, but … is …` | pyinterop.rs | a Python function given an argument that isn't a number or a list of numbers | — |
+| | **C, C++ and Fortran interop (cinterop.rs)** | | | |
+| 500 | `import … must be at the top level of the program (not inside a block or function)` | cinterop.rs | `import c`/`import fortran`/`import cpp` inside a block or a function | C500 |
+| 501 | `a Fermium module can't import a … library yet; put the  import …  lines in the program` | cinterop.rs | a native import in a module file | — |
+| 502 | `calling … functions isn't supported on this platform yet (only x86-64 and AArch64 Linux and macOS)` | cinterop.rs | a native import on a platform whose calling convention isn't supported | — |
+| 503 | `… has two signatures in this import` | cinterop.rs | a function with two signatures in one import block | — |
+| 504 | `… can't be the name of a … function: a symbol must be ASCII` | cinterop.rs | a C or Fortran function name that isn't ASCII | — |
+| 505 | `can't load the … library …` | cinterop.rs | a native library that can't be loaded | C505 |
+| 506 | `… can't be the name of a header` | cinterop.rs | a C++ header name that isn't valid | — |
+| 507 | `… can't be the name of a C++ function: a C++ name must be ASCII` | cinterop.rs | a C++ function name that isn't ASCII | — |
+| 508 | `… is a C++ keyword, so … can't be imported` | cinterop.rs | a C++ keyword imported as a function name | — |
+| 509 | `can't load the compiled C++ wrapper …` | cinterop.rs | the compiled C++ wrapper library can't be loaded | — |
+| 510 | `the compiled C++ wrapper … has no …` | cinterop.rs | the compiled C++ wrapper lacks a declared function | — |
+| 511 | `… already means something in this program, so it can't also be the … function …` | cinterop.rs | an imported native function whose name already means something in the program | — |
+| 512 | `… is the … function from … (line …) and is defined again on line …` | cinterop.rs | a name defined again after it was imported as a native function | — |
+| 513 | `the … library … has no function …` | cinterop.rs | a declared function the native library doesn't export | — |
+| 514 | `… has … parameters; a … function can take at most … here` | cinterop.rs | a native function with more parameters than supported | — |
+| 515 | `… has two parameters named …` | cinterop.rs | a native signature with two parameters of the same name | — |
+| 516 | `…: len(…) needs a list parameter named …` | cinterop.rs | `len(name)` in a signature where no list parameter has that name | — |
+| 517 | `…: … isn't a list, so len(…) can't be passed` | cinterop.rs | `len(name)` of a parameter that isn't a list | — |
+| 518 | `… takes the list …, so it needs its length too` | cinterop.rs | a list parameter without a matching `len(…)` parameter | — |
+| 519 | `a C function's unit can't be … (a scale with an offset); use K` | cinterop.rs | a native function's declared unit is °C or °F | — |
+| 520 | `…: … functions can't be called inside  …  yet` | cinterop.rs | a native function called inside a construct that can't call it yet | — |
+| 521 | `… takes … argument… (as declared in the import on line …), but got …` | cinterop.rs | a native function called with a different number of arguments than declared | — |
+| 522 | `…: a … function takes numbers and lists of numbers, but … is …` | cinterop.rs | a native function given an argument that isn't a number or a list of numbers | — |
+| 523 | `… expects … to be a list (declared on line …), but got a single number` | cinterop.rs | a list parameter given a single number | — |
+| 524 | `… is a … function from …; it can only be called, like …(…)` | cinterop.rs | a native function used as a value without calling it | — |
 
 ## 3. Examples
 
@@ -2265,15 +2290,28 @@ if true:
     use python math
 ```
 
+```fermium-error
+# C500
+if true:
+    import c "libm.so.6":
+        cos(x) -> [1]
+```
+
+```fermium-error
+# C505
+import c "no_such_library_here.so":
+    f(x) -> [1]
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: cinterop.rs (25), plus cppinterop.rs's `cerr(…)` messages. About 75 templates remain.
+  covered, cppinterop.rs's `cerr(…)` messages (about 50 templates).
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (195). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (218). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -2291,6 +2329,7 @@ if true:
   In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one; in rows 405–418
   (eigen.rs), 1 row; in rows 419–425 (systems.rs), 6; in rows 426–431 (analyze.rs), 4; in rows 432–443
   (parallel.rs), 6; in rows 444–481 (pde.rs), 16; in rows 482–499 (pyinterop.rs), 17 (they need a Python
-  installation, which the test doesn't assume).
+  installation, which the test doesn't assume); in rows 500–524 (cinterop.rs), 23 (most need a native
+  library).
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
