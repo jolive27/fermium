@@ -10,7 +10,8 @@
  * the area under it is close to sqrt(pi) Delta / 2 exp(-3 E0 / kT) (the Gaussian approximation).
  * References: D. D. Clayton, "Principles of Stellar Evolution and Nucleosynthesis" (McGraw-Hill, 1968),
  * ch. 4 (thermonuclear reaction rates); C. Iliadis, "Nuclear Physics of Stars", 2nd ed. (Wiley-VCH, 2015),
- * sec. 3.2 (nonresonant rates for a constant S-factor). For p + p in the Sun's core (T = 15.7 MK) E0 is about 6 keV.
+ * sec. 3.2 (nonresonant rates for a constant S-factor). For p + p in the Sun's core (T = 15.7 MK) E0 is
+ * about 6 keV.
  *
  * Written for Fermium; MIT license, like the rest of the repository.
  *

@@ -17,7 +17,7 @@
 //!
 //! Libraries are opened with `dlopen` once and kept open for the life of the process.
 use std::collections::HashMap;
-use std::ffi::{CStr, CString, c_char, c_int, c_void};
+use std::ffi::c_void;
 use std::sync::{Mutex, OnceLock};
 
 /// The most arguments a C or Fortran function can take through [`call`].
@@ -166,7 +166,7 @@ unsafe fn raw_call(_: *const c_void, _: &[u64; 8], _: &[f64; FP_REGS], _: &[u64;
 // ---------------------------------------------------------------- libraries and symbols
 #[cfg(not(target_arch = "wasm32"))]
 mod dl {
-    use super::*;
+    use std::ffi::{CStr, CString, c_char, c_int, c_void};
     const RTLD_NOW: c_int = 2;
     unsafe extern "C" {
         fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
@@ -241,6 +241,8 @@ mod tests {
     extern "C" fn add3(a: f64, b: f64, c: f64) -> f64 {
         a + 10.0 * b + 100.0 * c
     }
+    use std::ffi::c_int;
+
     extern "C" fn twice(n: c_int) -> c_int {
         2 * n
     }

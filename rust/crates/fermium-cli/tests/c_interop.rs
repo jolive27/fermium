@@ -416,3 +416,17 @@ fn the_worked_example_prints_its_expected_output() {
     assert!(want.contains("Fe-56 495.38 MeV 495.38 MeV 492.26 MeV"), "{want}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[test]
+fn the_repl_takes_an_import_block_and_a_redefinition() {
+    let Some(d) = libs() else { return };
+    use std::io::Write;
+    let mut p = Command::new(env!("CARGO_BIN_EXE_fermium")).arg("repl").current_dir(d)
+        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped())
+        .spawn().unwrap();
+    p.stdin.take().unwrap().write_all(b"import c \"libphys.so\":\n    twice(n: int) -> int\n\nprint twice(4)\n\
+        import c \"libphys.so\": twice(n: int) -> int; negate(n: int) -> int\nprint negate(twice(3))\n").unwrap();
+    let o = p.wait_with_output().unwrap();
+    let (out, err) = (String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    assert!(out.contains("8\n") && out.contains("-6\n") && !err.contains("line"), "{out}\n{err}");
+}

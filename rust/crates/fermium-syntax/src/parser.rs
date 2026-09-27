@@ -1675,8 +1675,8 @@ impl Parser {
             self.next();
             self.skip_newlines();
             if self.kind() != Kind::Indent {
-                return Err(self.err_h(format!("expected the signatures of the {what} functions, indented on the \
-                                               next lines"), example));
+                return Err(self.err_h(format!("expected an indented block: the signatures of the {what} functions, \
+                                               one per line"), example));
             }
             self.next();
             while !self.at_kind(&[Kind::Dedent, Kind::Eof]) {

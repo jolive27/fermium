@@ -1187,3 +1187,35 @@ the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` expe
 - **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
 - **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
 - **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
+
+## D275. C and Fortran interop (C3): use python's signatures, a trampoline without libffi, checked at compile time
+- **What:** `import c "libphys.so":` and `import fortran "libnuclear.so":` followed by one signature per line, in
+the syntax of `use python` (D140): `kinetic_energy(m [kg], v [km/s]) -> [J]`, `twice(n: int) -> int`, plus
+`x: list [m]` with `n: len(x)` for arrays of doubles, and `bind(C)` / `bind(C, name="…")` after a Fortran
+function's result. The spec's `m: kg` form gets the existing error pointing to `m [kg]`. Functions are called by
+their bare name; each argument's dimension is checked at every call (generic functions per call); values cross
+as SI ÷ the declared unit's factor, the result is multiplied back. The result must be declared (`-> [unit]`,
+`-> number`, `-> int`). Fortran passes everything by reference; the default symbol is lowercase plus a trailing
+underscore (gfortran, flang), `bind(C)` is lowercase without it, `bind(C, name=…)` is exact. Greek letters and
+subscripts in a name map to ASCII (`δ_e` → `delta_e`, `v₀` → `v_0`) so `fmt --pretty/--ascii` round-trips keep
+the symbol. The library is dlopen'd at check time relative to the program's folder (a bare name it doesn't have
+is left to the system's search), and every symbol is looked up then: a missing library or symbol is a compile
+error with a hint (naming the other Fortran underscore spelling when the library has it). Run time:
+`fermium-runtime/src/cffi.rs` classifies the arguments (double / int / pointer) into the platform's registers and
+8-byte stack slots and calls the function pointer as an `extern "C" fn` taking every integer register, every
+floating-point register and ten stack slots (x86-64 SysV: 6 + 8; AArch64: 8 + 8; up to 16 arguments; Apple's
+AArch64 packs small stack arguments, so a spilled `int` is refused there). The tree-walker converts in
+`eval_c.rs`; the LLVM JIT calls the function directly when every argument and the result are doubles (≈5 ns per
+call), otherwise through the built-in callback (≈0.5 µs); `fermium build` executables use the callback and the
+library's path as resolved at build time. A list passed to a number parameter maps elementwise.
+- **Why:** one signature language for every foreign function (the user learns it once), with the unit check
+where the value crosses the boundary, which is the whole point of C3. Resolving the library at check time makes
+a typo a compile error, like a misspelt Python function. Only doubles, ints and pointers are needed for the
+physics routines this is for, and for those the C ABI is simple enough to reach from Rust alone, so there is no
+libffi dependency (the binary stays one file with no shared-library dependencies beyond libc).
+- **Alternatives:** libffi (general, but a C dependency to build and ship on every platform); generating and
+  compiling a C shim per program (needs a C compiler at run time, which Fermium 2 has avoided since B7); the
+  spec's `m: kg` parameter syntax (rejected: it would give two spellings of the same thing, and `: int` already
+  means a type after the colon); passing Fortran's hidden string lengths or `value` arguments (not needed yet).
+  Known gaps: output arrays, `float`/`long`, structs, strings, callbacks, void functions, `import c` in modules or
+  calls inside `units natural`, the playground.

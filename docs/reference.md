@@ -15,7 +15,7 @@ Every program example on this page is tested: `legacy/tests/test_docs.py` runs e
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules) and [Python interop](#python-interop)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules), [Python interop](#python-interop) and [C and Fortran interop](#c-and-fortran-interop-fermium-25)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -1015,6 +1015,69 @@ itself `use python`. One difference: Fermium 2 runs these programs with its tree
 the LLVM back end, so a loop-heavy function is about as fast as pure Python rather than ~10× faster
 (rust/DIVERGENCES.md). Tests: `rust/crates/fermium-pyapi/python/test_fermium2.py` (run by `cargo test -p
 fermium-pyapi`).
+
+## C and Fortran interop (Fermium 2.5)
+
+Fermium can call functions in C and Fortran shared libraries (`.so` on Linux, `.dylib` on macOS) through the
+C ABI. C and Fortran know nothing about units, so, as with `use python`, **the import declares the unit each
+function works in, and every call is checked against it before the program runs**.
+
+```text
+import c "libphys.so":
+    kinetic_energy(m [kg], v [km/s]) -> [J]
+    twice(n: int) -> int
+    sum_sq(x: list [m], n: len(x)) -> [m²]
+import fortran "libnuclear.so":
+    binding_energy(Z: int, A: int) -> [MeV]                      # the symbol binding_energy_
+    neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
+
+print kinetic_energy(2 kg, 3000 m/s)     # C gets m = 2 and v = 3 (km/s); its result is read as joules
+print binding_energy(26, 56)             # Fortran gets pointers to the ints 26 and 56
+print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
+```
+
+- **The signatures** are those of `use python` (a unit in brackets for each parameter that has one; `n: int`
+  for a C `int` or a Fortran `integer`; no unit for a plain number), plus `x: list [m]` (an array of doubles)
+  and `n: len(x)` (its length, filled in by Fermium: `sum_sq` is called with one argument). The result is
+  required: `-> [unit]` (a `double` in that unit), `-> number` (a plain `double`) or `-> int`. Writing
+  `m: kg` is an error that points to `m [kg]`.
+- **Calling:** the functions are called by their bare name, like Fermium functions. Each argument must have
+  the declared dimension (`kinetic_energy(2 kg, 3 s)` is a compile-time error: *kinetic_energy expects v in
+  km/s (declared on line 2), but got time [s]*, with a caret and a hint), also inside generic functions,
+  which are checked per call. A value is passed as its SI value ÷ the declared unit's factor, and the result
+  is multiplied back, so `v [km/s]` receives 3 for `3000 m/s`. An `int` argument must be a whole number
+  (`twice(2.5)` stops with *twice: n must be a whole number (it is passed as an int), not 2.5*).
+- **Lists:** a list passed to a number parameter makes one call per element and gives a list
+  (`kinetic_energy(1 kg, [1, 2, 3] km/s)`). A `list` parameter passes a pointer to the elements (each ÷ the
+  unit's factor) and its `len` the count; lists without a `len` of their own must have the length of the one
+  that has it (*dot: y has 3 elements, but x has 2; they are passed with one length (n)*).
+- **The library** is opened when the program is checked, relative to the program's folder (a bare name the
+  folder doesn't have, like `libm.so.6`, is looked up by the system). A missing library or function is a
+  compile error with a hint: how to build the library, or, for a misspelt function, `nm -D` (and, when the
+  other spelling of a Fortran name is there, which one: *the library has cstyle without the trailing underscore
+  (a bind(C) function): add bind(C) after the result*).
+- **Fortran:** every argument is passed by reference. The symbol is the name in lowercase with a trailing
+  underscore (gfortran's and flang's default; write the functions outside modules, or use `bind(C)`);
+  `bind(C)` after the result means the lowercase name without the underscore, and `bind(C, name="…")` the
+  exact name. Fortran `real(8)` is a `double`, `integer` an `int`.
+- **Names:** Greek letters and subscripts in a name map to its ASCII spelling (`δ_e` → the symbol `delta_e`,
+  `v₀` → `v_0`), so `fermium fmt --pretty` and `--ascii` keep calling the same function. A Fermium keyword
+  (`solve`, `for`, …) can't be a function's name.
+- **Speed:** in `fermium run`, a function whose arguments and result are all doubles is called directly from
+  the compiled code (about 5 ns per call on the test machine); other signatures go through the run time
+  (about 0.5 µs). **`fermium build`** executables work too; they open the library by the path it had
+  when the program was built.
+- **Trust:** as in C, the declaration is the contract. Fermium can't check that `kinetic_energy` really
+  takes two doubles, or that a Fortran array is as long as the length passed; a wrong declaration is
+  undefined behaviour, exactly as a wrong prototype in C.
+- **Not yet supported:** output arrays (a function that writes into an array), `float` and `long`
+  parameters, structs, strings, callbacks (passing a Fermium function to C), functions that return nothing,
+  `import c` inside a module or a call inside `units natural`, and the browser playground (which can't load
+  native libraries). Up to 16 parameters. Linux and macOS on x86-64 and AArch64 (tested on x86-64 Linux).
+
+The worked example `examples/c_interop/` calls a Fortran semi-empirical mass formula (compared with the
+standard library's `semf_binding` and measured binding energies) and a C routine for the Gamow peak of
+p + p in the Sun's core (about 6 keV at 15.7 MK); its first lines say how to build the two libraries.
 
 ## 12. Symbols and ASCII spellings
 
