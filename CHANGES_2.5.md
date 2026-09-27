@@ -4,6 +4,34 @@ Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Progr
 exactly the same: the conformance suite still holds every program to Fermium 1.5's output (3334 pass, 32
 documented divergences). This file lists each Phase C item as it lands.
 
+## Performance (C6, DECISIONS D310)
+
+Compiled programs are faster where the loop vectorizer can now work, and a program runs from a cache of its
+compiled code when neither it nor its modules changed. Every printed number stays bit for bit what it was: no
+fast-math, no reassociation.
+
+- **Vectorized loops, exactly** (D311, D312, D313). A loop whose floating-point sum must keep its order
+  (`U += …`) is vectorized with the sum still added term by term in the original order; an `if` inside a loop
+  that only assigns numbers is compiled without a branch (`v + (c ? e : −0)`, exact for every value, ±0 and NaN
+  included); loops that only read lists no longer stop at a collector safe point. The all-pairs `forces`
+  benchmark's inner loop now runs 4 pairs at a time: about 2× faster on one thread and on four (A/B on a shared
+  machine; the quiet-machine table in benchmarks/RESULTS.md is the reference).
+- **Fixed-step RK4 with a stored solution** (D316): the solution's sample arrays are mapped in one go (huge
+  pages where Linux has them) instead of one page fault per 4 KiB, which cost as much as the steps themselves in
+  `spring_rk4` (≈ 20–30 % faster there).
+- **Smaller things** (D314, D315): functions that call no function skip the runaway-recursion check (so they
+  inline as plain arithmetic); `exp`, `ln`, `sin`, `cos` call the C library directly (the same functions, so the
+  same numbers).
+- **The compile cache** (D317). `fermium run` keeps the machine code of a program in `~/.cache/fermium/jit`
+  (`$FERMIUM_CACHE_DIR/jit`, `$XDG_CACHE_HOME/fermium/jit`), keyed by the program's text, the `fermium` binary
+  and the CPU, and checked against every module file and `fermium.toml` the compilation read or looked for. The
+  next run of the same program skips parsing, checking and LLVM: a program that imports the whole standard
+  library starts in about 1 ms instead of ≈ 20 ms. A changed module, a module added where an import looks first,
+  a damaged entry or a new `fermium` binary make it compile again. Not cached: programs that use Python, C or C++,
+  read data files when checked, or have constructs the tree-walker runs. `FERMIUM_NO_CACHE=1` turns it off.
+- Not done: blackbody stays ≈ 1.5× Julia (its time is the quadrature's bookkeeping around each integrand call and
+  glibc's `exp`; a batched integrand is in BACKLOG), and `fermium build` doesn't use these caches.
+
 ## Several versions of one function: multiple dispatch (C5, DECISIONS D285)
 
 One function name can have several versions, and each call uses the one its arguments fit, by their number,

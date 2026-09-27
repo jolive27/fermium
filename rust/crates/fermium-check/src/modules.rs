@@ -268,7 +268,39 @@ fn toml_err(msg: String, hint: Option<&str>) -> Diagnostic {
     d
 }
 
+/// What a compilation read to find and load its modules (the compile cache's dependencies, D317): every file it
+/// read or looked for, found or not (the module files and fermium.toml files it read, and the ones it looked for
+/// and didn't find: a module file added where an import looked first changes what it finds).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ModuleDeps {
+    pub files: Vec<String>,
+}
+
+thread_local! {
+    static DEPS: std::cell::RefCell<ModuleDeps> = Default::default();
+}
+
+fn note_file(p: &str) {
+    DEPS.with(|d| {
+        let mut d = d.borrow_mut();
+        if !d.files.iter().any(|f| f == p) {
+            d.files.push(p.to_string());
+        }
+    });
+}
+
+/// Start recording ModuleDeps (check() does, for each compilation on this thread).
+pub fn reset_deps() {
+    DEPS.with(|d| *d.borrow_mut() = ModuleDeps::default());
+}
+
+/// What the last compilation on this thread read to find its modules.
+pub fn deps() -> ModuleDeps {
+    DEPS.with(|d| d.borrow().clone())
+}
+
 pub fn read_project(path: &str) -> Result<Project, Diagnostic> {
+    note_file(path);
     let src = std::fs::read_to_string(path).unwrap_or_default();
     let data = mini_toml(path, &src)?;
     let root = dirname(path);
@@ -308,6 +340,7 @@ pub fn find_project(start_dir: &str) -> Result<Option<Project>, Diagnostic> {
     let mut d = abspath(start_dir);
     loop {
         let p = d.join(PROJECT_FILE);
+        note_file(&p.to_string_lossy());
         if p.is_file() {
             return read_project(&p.to_string_lossy()).map(Some);
         }
@@ -351,6 +384,7 @@ pub fn resolve_module(name: &str, is_path: bool, program_dir: &str, importer_dir
             _ => name.to_string(),
         };
         let p = normpath(&Path::new(&base).join(expanded)).to_string_lossy().into_owned();
+        note_file(&p);
         let found = Path::new(&p).is_file();
         return Ok((if found { Some(p) } else { None }, vec![base]));
     }
@@ -363,6 +397,7 @@ pub fn resolve_module(name: &str, is_path: bool, program_dir: &str, importer_dir
             continue;
         }
         let p = Path::new(d).join(format!("{name}.fm"));
+        note_file(&p.to_string_lossy());
         if p.is_file() {
             return Ok((Some(normpath(&p).to_string_lossy().into_owned()), folders.clone()));
         }
@@ -844,6 +879,7 @@ impl Checker {
         let src = if dirname(path) == STDLIB_DIR {
             stdlib_source(stem).unwrap_or("").to_string()
         } else {
+            note_file(path);
             match std::fs::read_to_string(path) {
                 Ok(t) => t,
                 Err(e) => return Err(self.err(format!("can't read the module {display}: {e}"), s.span, None)),

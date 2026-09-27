@@ -1,0 +1,11 @@
+# Every standard-library module imported, a few functions of each used (the module cache, DECISIONS D317).
+import mechanics as mech
+import em
+import stats
+import astro
+import nuclear
+import quantum
+print mech.pendulum_period(1 m, 9.80665 m/s²) to 6 digits
+print mech.projectile_range(20 m/s, 0.5, 9.80665 m/s²) to 6 digits
+print stats.correlation([1, 2, 3, 4], [2, 4, 5, 9]) to 6 digits
+print astro.wien_peak(5778 K) to 6 digits

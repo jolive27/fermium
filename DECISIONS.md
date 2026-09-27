@@ -1456,3 +1456,140 @@ Known gaps: non-static member functions and objects, references, `float`/`long`/
 `void` results, explicit template arguments, several headers per import, `import cpp` in modules, calls inside
 `units natural`, the playground; macOS linking is written but untested; `fermium build` executables load the
 wrapper from the cache by its build-time path.
+
+## D310. Performance (spec C6): faster compiled loops, bit for bit, and a compile cache
+- **What:** C6's changes to the LLVM back end and `fermium run`, each keeping every printed number bit for bit
+(conformance at its floor, `rust/tools/llvm_diff.py` without a new disagreement, `rust/c-cases/c6/*.fm` equal to
+Fermium 1.5's output with the tree-walker, with the LLVM back end, and with the LLVM back end with each change
+switched off in turn, and from the cache): the loop and SLP vectorizers on in-order sums (D311), if-conversion in
+compiled loops (D312), no collector safe point in loops that only read lists (D313), no stack check in leaf
+functions (D314), the C library's exp/log/sin/cos through LLVM intrinsics (D315), the samples of a compiled RK4
+solve mapped in one go (D316), and a compile cache for whole programs with their modules (D317).
+- **Measured:** A/B on this shared 4-core machine (load average 2–4), the previous binary and the new one run
+alternately, inner (compute-only) times, min / median of 9–15 runs; such numbers move by 10–30 % between runs, and
+the coordinator's quiet-machine run in benchmarks/RESULTS.md is the reference: forces (4 threads) 4.7 / 5.5 ms →
+2.4 / 2.8 ms and forces (1 thread) 15.1 / 19.4 ms → 7.2 / 9.0 ms (the inner loop vectorized: D311–D313);
+spring_rk4 31.1 / 32.9 ms → 23.1 / 28.5 ms (D316); nbody 46.0 / 58.1 ms → 43.9 / 56.9 ms, blackbody 2.77 / 3.41
+ms → 2.71 / 3.68 ms, unit_loop 4.88 / 6.46 ms → 5.02 / 6.32 ms, spring_adaptive 0.54 / 0.65 ms → 0.66 / 0.77 ms:
+unchanged within the noise. Instructions executed by the compiled code (callgrind, deterministic): forces 304 M →
+120 M, nbody 789 M → 623 M, blackbody's integrand 7.8 M → 6.0 M, unit_loop 52.5 M → 56.9 M (an in-order vectorized
+sum: more instructions, the same add chain), spring_rk4 and spring_adaptive unchanged. Start-up: see D317.
+- **Why:** spec C6 ("SIMD-friendly codegen and loop vectorization… Cache compiled modules"), within the priority
+order: every change is exact (no fast-math, no reassociation), so unit safety and the printed results don't move.
+- **Alternatives, and what was left:** D318.
+
+## D311. The vectorizers: SLP on, and in-order floating-point sums vectorized (`force-ordered-reductions`)
+- **What:** the pass pipeline (`default<O2>`) runs with SLP vectorization on (a PassBuilderOptions flag that LLVM's
+C API leaves off; clang turns it on at -O2) and with LLVM's option `-force-ordered-reductions`, set once per process
+through LLVMParseCommandLineOptions (`llvm::LLVM_OPTIONS`). With it the loop vectorizer takes a loop whose
+floating-point sum must keep its order (`s += f(j)`): the terms are computed several at a time (4 doubles with AVX2)
+and added one by one in the original order (`llvm.vector.reduce.fadd` without `reassoc`), so the sum is bit for bit
+the scalar loop's. Only sums made of `fadd` qualify, so where D312 applies a sum `v − e` is emitted as `v + (−e)`
+(the same number: IEEE subtraction is the addition of the negation). `FERMIUM_LLVM_ARGS` replaces the option list
+and `FERMIUM_LLVM_NOSLP=1` turns SLP off (experiments, and the tests that show each change keeps the results).
+- **Why:** the costly part of a loop like forces' (a √ and two divisions per pair) runs in vector registers while
+the sums stay exact. Julia doesn't vectorize these loops without `@simd`/`@fastmath` (which reassociate); Fermium
+does, exactly.
+- **Alternatives:** fast-math or `reassoc` flags (they change results: never); vectorizing only on request.
+
+## D312. If-conversion in compiled loops, and scratch variables
+- **What:** in the copy of a loop whose index checks were proven before it (D273's versioned loops), an `if` whose
+branches only assign numbers built from constants, numeric variables, + − × ÷, constant powers, a few pure
+built-ins (√, abs, floor, ceil, round, exp, sin, cos, tan, atan, sinh, cosh, tanh, asinh, expm1) and proven list
+reads is compiled without a branch (hoist::if_converted): both sides are computed whatever the condition, and a
+`select` keeps the right values. A sum `v = v + e` becomes `v + (c ? e : −0)` and `v = v − e` becomes
+`v + (c ? −e : −0)`: adding −0 gives v back exactly (±0, ±∞ and NaN included), and the sum stays an in-order
+reduction (D311). A *scratch* variable (hoist::scratch_vars: one whose every read, anywhere in the program, comes
+after an assignment to it earlier in the same run of statements, with no loop or `if` in between that could have
+set it) needs no select: nothing reads its value before it is set again. `FERMIUM_NO_IFCONV=1` switches this off.
+- **Why:** a branch in a loop body stops the loop vectorizer ("control flow cannot be substituted for a select").
+The select form is exact: nothing computed under a false condition is kept, and floating point doesn't trap (√ of
+a negative number is NaN in both forms, a division by zero ±∞ or NaN). forces' inner loop (`if j != i …`) is the
+case. The language already forbids reading, after an `if`, a variable set only inside it, which makes most such
+variables scratch variables.
+- **Alternatives:** masked loads (LLVM can't prove the list reads safe to speculate: their bounds are known only at
+run time); converting every `if` (slower when the branch is rarely taken and the loop doesn't vectorize: limited to
+the proven, check-free copies of loops, whose bodies are small).
+
+## D313. No collector safe point in loops that only read lists
+- **What:** gc.rs counted any expression of list type, even reading a list variable (`xs[i]`, `len(xs)`), as
+something that may allocate, so every loop over lists in `fm_main` had a safe point (a load, and a call to `fm_gc`
+when the collector asks). Reading a variable allocates nothing: an innermost loop that only reads lists now has no
+safe point, and a function whose loops only read lists needs no collector frame. Loops that contain other loops or
+write list elements keep theirs (a well-predicted branch per pass): without them LLVM turned nbody's loop nest into
+code ≈ 15 % slower (with or without vectorization, measured), so they stay until that is understood.
+- **Why:** the call in the loop body stopped the loop vectorizer (and register promotion) in forces' serial loop;
+no allocation can happen in such a loop, so the collector never needs to run there.
+
+## D314. No stack check in functions that call no function
+- **What:** a user function whose body calls no user function, directly or through a lambda (an integrand, sum,
+root, sample, a solve's right side), and has no statement the tree-walker runs (hoist::is_leaf), is compiled
+without the runaway-recursion check (its frame address compared with a limit).
+- **Why:** it can't be part of a recursion, and the check (a load, a compare and a branch to an error block) stayed
+in every inlined copy, e.g. in each of blackbody's 215 000 integrand calls. Runaway recursion is still caught in the
+recursive functions, and the message can no longer name a leaf as the function that "called itself".
+
+## D315. exp, log, sin and cos through LLVM's intrinsics
+- **What:** in the JIT, `exp`, `ln`/`log`, `sin` and `cos` of a number compile to `llvm.exp.f64` etc. instead of
+calls to the Rust shims `fm_exp`…; LLVM emits calls to the C library's `exp`/`log`/`sin`/`cos`, the very functions
+the shims call (Rust's `f64::exp` is `llvm.exp.f64` too), so the numbers are the same. `fermium build` keeps the
+shims. `FERMIUM_NO_MATH_INTRINSICS=1` switches this off.
+- **Why:** one call level less per evaluation, and LLVM knows the functions are pure (it computes a repeated one
+once and hoists one out of a loop).
+- **Alternatives:** vector math libraries (libmvec, SVML: different last bits, so never); an exp compiled into the
+module, as Julia does (a different function, with different last bits than the tree-walker's).
+
+## D316. The samples of a compiled RK4 solve are mapped in one go
+- **What:** fm_rk4_begin reserves the solution's arrays for all steps + 1 samples (t, y, y′: 40 MB for
+spring_rk4's 10⁶ steps of a 2-state system). For an array of 4 MiB or more it now asks Linux for huge pages
+(MADV_HUGEPAGE) and maps the pages at once (MADV_POPULATE_WRITE, Linux 5.14+). Advice only: an error, an older
+kernel or another system changes nothing. `FERMIUM_PREFAULT=0` (off) / `p` (populate only) / `h` (the default)
+for experiments.
+- **Why:** spring_rk4's steps take ≈ 15 ms; writing its samples into fresh memory took as long again, almost all
+of it page faults (one per 4 KiB page; measured with the stores left out: 15.5 ms against 33 ms). Julia's program
+stores nothing, which is most of why the row was 1.89×. The dense solution (x(t) between steps, x′(t), len(x)) is
+part of the language, so the samples stay.
+- **Caveat:** with the kernel's huge-page `defrag` setting `madvise` (this machine's), a huge-page request may
+compact memory first; on this loaded machine about one run in 20 took 100–250 ms longer. benchmarks/run.py
+reports medians.
+- **Alternatives:** storing fewer samples, or rebuilding them when the solution is first read (checkpointing; bit
+for bit possible, but the work would move out of the timed region: rejected as unfair to the comparison); not
+storing t (it is t0 + i·h except at the end; the solution object is shared with the tree-walker: a larger change);
+populate without huge pages (≈ 20 % of the gain).
+
+## D317. The compile cache: a program's machine code, reused while its text and its modules are unchanged
+- **What:** `fermium run` saves the machine code the JIT generated for a program, with what the run time reads
+besides (native::blob, the format of `fermium build`'s executables), in `<cache>/jit/<key>.fmc`, beside C4's C++
+wrappers (`$FERMIUM_CACHE_DIR`, else `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`). The key hashes this
+binary (version, size, modification time), LLVM's version, the CPU and its features, the code generator's
+switches, the program's file name, folder and text. An entry is used only if it is intact (magic, checksum), holds
+exactly the program's text, and every module file and fermium.toml the compilation read, and every one it looked
+for and didn't find, is as it was (contents hashed; a module file added where an import looked first would change
+what it finds). A hit parses, checks, generates and optimizes nothing: MCJIT loads the saved object through an
+`llvm::ObjectCache` (jit_cache.cpp; LLVM's C API has none) with the run time's callbacks mapped by name, and the
+program runs with the saved tables. The warnings of the check are saved and printed again. To make machine code
+movable between processes, a compilation for the cache reads the context pointer from the global `fm_ctx` (as
+`fermium build`'s code does) instead of a constant address (`Gen::new_reloc`). Direct calls to C functions and
+constructs the tree-walker runs hold addresses of the process, so programs with them, and programs that use
+Python, C or C++ or read data files when checked, are compiled every time. Writes are atomic (a temporary file
+renamed into place); a damaged entry is ignored and replaced; at most 400 entries are kept (the oldest go);
+`FERMIUM_NO_CACHE=1` turns it off; the LLVM dump switches bypass it.
+- **Why:** spec C6 "cache compiled modules". Fermium's modules are checked with the program that imports them
+(their functions are generic, instantiated with the caller's units) and compiled into one LLVM module, so the unit
+that can be cached is the program with its modules. What a run spends before the program starts is mostly LLVM:
+for a program that imports the six standard-library modules, parse 0.5 ms, check 5.5 ms, code generation and
+optimization 6 ms, JIT 8 ms (a moderately loaded machine); from the cache it starts in about 1 ms.
+- **Alternatives:** caching each module's checked form (saves only the checking, and the checked form is
+instantiated per caller); caching optimized LLVM bitcode (saves optimization, not code generation); ORC's object
+layers (not in LLVM 18's C API, and a larger change than MCJIT's ObjectCache); keying on modification times instead
+of contents (misses edits within one timestamp tick).
+
+## D318. What C6 tried and left
+- **Tried and dropped:** removing every safe point in loops over lists (nbody slower: D313 keeps the outer and
+writing loops'); `default<O3>` (D273: no gain).
+- **Left:** blackbody (≈ 1.5× Julia) spends its time in the quadrature's bookkeeping around each of its 215 000
+integrand calls and in glibc's exp; both programs evaluate about the same number of points (Julia 211 140, Fermium
+214 919). A batched integrand (the 15 Gauss–Kronrod nodes of a panel in one compiled call) would remove the call
+overhead and let the divisions vectorize; the adaptive algorithm must stay v1's (its results are the oracle's), so
+this is a change to fermium-runtime's quad and to the code generator (BACKLOG). spring_adaptive and unit_loop are
+at parity with Julia, bound by the ODE solver's bookkeeping and an in-order sum's latency.

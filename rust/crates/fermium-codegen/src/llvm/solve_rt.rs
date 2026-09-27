@@ -252,11 +252,53 @@ pub extern "C" fn fm_rk4_begin(c: C, site: i64, f: OdeFn, env: *mut u8, y0: *con
     sol.t.reserve_exact(total);
     sol.y.reserve_exact(total * n);
     sol.dy.reserve_exact(total * n);
+    prefault(sol.t.as_mut_ptr(), total);
+    prefault(sol.y.as_mut_ptr(), total * n);
+    prefault(sol.dy.as_mut_ptr(), total * n);
     unsafe {
         let (t, y, dy) = (sol.t.as_mut_ptr(), sol.y.as_mut_ptr(), sol.dy.as_mut_ptr());
         *plan = Rk4Plan { t, y, dy, h, steps: steps as i64, sol: Box::into_raw(Box::new(sol)) };
     }
     0
+}
+
+/// A large array about to be written from start to end (the samples of a compiled RK4 solve): its pages mapped in
+/// one go (D316). Touching fresh memory page by page costs a fault per 4 KiB page, which on this solver was as
+/// much time as the steps themselves; MADV_POPULATE_WRITE (Linux 5.14+) maps them in one system call, and
+/// MADV_HUGEPAGE asks for 2 MiB pages where the kernel has them. Advice only: an error (an older kernel, another
+/// system) changes nothing.
+fn prefault(p: *mut f64, n: usize) {
+    #[cfg(target_os = "linux")]
+    {
+        const MADV_HUGEPAGE: i32 = 14;
+        const MADV_POPULATE_WRITE: i32 = 23;
+        extern "C" {
+            fn madvise(addr: *mut std::ffi::c_void, len: usize, advice: i32) -> i32;
+        }
+        // FERMIUM_PREFAULT: 0 = off, p = populate only, h = huge pages and populate (the default); experiments
+        let mode = std::env::var("FERMIUM_PREFAULT").unwrap_or_else(|_| "h".into());
+        let bytes = n * 8;
+        if bytes < (4 << 20) || mode == "0" {
+            return;
+        }
+        let page = 4096usize;
+        let start = (p as usize).div_ceil(page) * page;
+        let end = (p as usize + bytes) / page * page;
+        if end <= start {
+            return;
+        }
+        // SAFETY: [start, end) lies inside the allocation of n f64 behind p; advice doesn't change its contents
+        unsafe {
+            if mode.contains('h') {
+                madvise(start as *mut _, end - start, MADV_HUGEPAGE);
+            }
+            if !mode.contains('n') {
+                madvise(start as *mut _, end - start, MADV_POPULATE_WRITE);
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (p, n);
 }
 
 /// The end of a compiled RK4 solve whose loop filled every sample (sol and steps: fm_rk4_begin's plan): ode::rk4's error estimate and warning, then

@@ -104,6 +104,10 @@ pub struct Gen<'c, 'm> {
     proven: std::collections::HashSet<(SymId, SymId)>,
     /// lists whose elements have a TBAA type of their own (consts::owned_lists)
     owned: std::collections::HashSet<SymId>,
+    /// variables whose value never outlives the block that set it (hoist::scratch_vars, D312)
+    scratch: std::collections::HashSet<SymId>,
+    /// the JIT with the compile cache: the global the context pointer is read from (new_reloc)
+    pub ctx_global: Option<GlobalValue<'c>>,
     /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
     /// not an address known now
     aot: Option<GlobalValue<'c>>,
@@ -141,6 +145,17 @@ impl<'c, 'm> Gen<'c, 'm> {
         g
     }
 
+    /// For the JIT with the compile cache (D317): as new, but the context pointer is read from the global
+    /// `fm_ctx` (mapped at load time), so the machine code has no address of this process in it and can be saved
+    /// and loaded by a later run.
+    pub fn new_reloc(cx: &'c Context, m: &'m Module) -> Gen<'c, 'm> {
+        let mut g = Gen::new(cx, m, 0);
+        let gv = g.lm.add_global(g.ptrt(), None, "fm_ctx");
+        gv.set_linkage(Linkage::External);
+        g.ctx_global = Some(gv);
+        g
+    }
+
     pub fn new(cx: &'c Context, m: &'m Module, ctx_addr: usize) -> Gen<'c, 'm> {
         let lm = cx.create_module("fermium");
         let i64t = cx.i64_type();
@@ -166,6 +181,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                           hoisted: HashMap::new(), int_vars: HashMap::new(),
                           node_ids: HashMap::new(), consts: HashMap::new(), fixed: HashMap::new(),
                           proven: std::collections::HashSet::new(), owned: std::collections::HashSet::new(),
+                          scratch: hoist::scratch_vars(m), ctx_global: None,
                           gc_frame: false, gc_roots: vec![], start_bb: None, alloc_funcs: vec![], main_gc: None };
         g.declare_runtime();
         g
@@ -759,7 +775,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.err_bb = Some(err);
         self.b.position_at_end(entry);
         self.known_line = None;
-        if let Some(g) = self.aot {
+        if let Some(g) = self.aot.or(self.ctx_global) {
             let p = bl_unwrap(self.b.build_load(self.ptrt(), g.as_pointer_value(), "ctx")).into_pointer_value();
             self.ctx_ptr = p;
         }
@@ -809,13 +825,17 @@ impl<'c, 'm> Gen<'c, 'm> {
         let fv = self.funcs[fid];
         self.begin_fn(fv, kind_of(&f.ret_ty)?);
         self.gc_frame = self.alloc_funcs[fid] && gc::has_alloc_loop(self.m, &f.body, &self.alloc_funcs);
-        // runaway recursion: a clear error before the stack overflows (v1 stack_check; off while stackbase is 0)
-        let sp = self.frame_addr()?;
-        let base = bl!(self.b.build_load(self.cx.i64_type(), self.stackbase_g.as_pointer_value(), "base")).into_int_value();
-        let used = bl!(self.b.build_int_sub(base, sp, "used"));
-        let ok = bl!(self.b.build_int_compare(IntPredicate::SLE, used, self.i64c(STACK_LIMIT as i64), "stackok"));
-        let (fa, zero) = (self.fconst(fid as f64), self.fconst(0.0));
-        self.guard(ok, rt::E_DEEP, fa, zero)?;
+        // runaway recursion: a clear error before the stack overflows (v1 stack_check; off while stackbase is 0).
+        // A function that calls no function (a leaf, D314) can't be part of a recursion: no check, so it inlines
+        // into its callers as plain arithmetic (the check would also name it as the function that "called itself")
+        if !hoist::is_leaf(self.m, &f.body) {
+            let sp = self.frame_addr()?;
+            let base = bl!(self.b.build_load(self.cx.i64_type(), self.stackbase_g.as_pointer_value(), "base")).into_int_value();
+            let used = bl!(self.b.build_int_sub(base, sp, "used"));
+            let ok = bl!(self.b.build_int_compare(IntPredicate::SLE, used, self.i64c(STACK_LIMIT as i64), "stackok"));
+            let (fa, zero) = (self.fconst(fid as f64), self.fconst(0.0));
+            self.guard(ok, rt::E_DEEP, fa, zero)?;
+        }
         for (i, p) in f.params.iter().enumerate() {
             let k = kind_of(&self.m.syms[*p].ty)?;
             let v = fv.get_nth_param(i as u32).unwrap();
@@ -929,6 +949,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                 };
             }
             StmtKind::If(c, then, other) => {
+                if self.if_converted(c, then, other)? {
+                    return Ok(());
+                }
                 let cv = self.expr(c)?;
                 let t = self.truth(cv)?;
                 let (tb, eb, join) = (self.new_bb("then"), self.new_bb("else"), self.new_bb("endif"));
@@ -1813,6 +1836,19 @@ impl<'c, 'm> Gen<'c, 'm> {
         if all_num {
             let x = self.to_f(vals[0])?;
             if vals.len() == 1 {
+                // the C library's own exp, log, sin and cos through LLVM's intrinsics (D315): the very functions
+                // the shims call (Rust's f64::exp is llvm.exp too), so the same numbers, but called directly, and
+                // known to LLVM as pure (hoisted out of loops, computed once when repeated)
+                let intr = match name {
+                    "exp" => Some("llvm.exp"),
+                    "ln" | "log" => Some("llvm.log"),
+                    "sin" => Some("llvm.sin"),
+                    "cos" => Some("llvm.cos"),
+                    _ => None,
+                };
+                if let (Some(i), false) = (intr, self.aot.is_some() || std::env::var_os("FERMIUM_NO_MATH_INTRINSICS").is_some()) {
+                    return Ok(fv(self.intrinsic(i, &[x])?));
+                }
                 if SHIM1.contains(&name) {
                     let sym = format!("fm_{name}");
                     let f = self.externs.iter().find(|(k, _)| **k == sym).map(|(k, _)| *k).unwrap();
