@@ -470,6 +470,72 @@ print data, |<3, 4> m|
 print 4/3 π
 ```
 
+#### Which tokens start an implicit product (normative; `starts_term` in expr.rs)
+
+After a complete `power` (a factor with its postfix operators, exponent and any unit), the parser multiplies
+by a following factor **exactly when the next token is one of these**:
+
+| Next token | Starts a factor? | Example | Reads as |
+|---|---|---|---|
+| a number `NUM` (with or without a space: `2x`, `2 x`) | yes | `x 2` | x·2 |
+| an imaginary literal `IMAG` (`3i`) | yes | `2 3i` | 2·(3i) |
+| a `NAME` (a variable, a function, a constant, a unit name, the `d` of `d/dx`, `sum`/`Σ`) | yes, unless it is an option word of the enclosing clause (below) | `h c`, `2 d/dx(x²)` | h·c |
+| the keywords `√` `∛` `∫` `∂` `∇` (`sqrt cbrt integral partial nabla`) | yes | `2 √x`, `3 ∫ x² dx from 0 to 1` | 2·√x |
+| `(` | yes; with no space after a callable name it is a call instead (postfix, level 14) | `k (x + 1)` | k·(x+1) |
+| `\|` | yes when not already inside `\| \|` (inside, `\|` closes) | `\|a\| \|b\|` | \|a\|·\|b\| |
+| `[` with a space before it | a unit in brackets if `bracket_is_unit` holds (`2 [m]`, §2.6), otherwise a list factor (`3 [1, 2]`); with no space before it, an index | `3 [1, 2]` | 3·[1, 2] |
+| `<` | only for a vector literal: a space before `<`, none after it, and a matching `>` (no space before it) on the same line with a top-level comma; otherwise a comparison | `r <1, 2, 3>` | r·⟨1, 2, 3⟩ |
+| any other keyword: `true false load if then else for from to step in where and or not print …` | **no**: it ends the product (`true`, `false`, `load` right after a factor are errors) | `2 true` | error |
+| a string `STR` | **no** (an error right after a factor) | `2 "a"` | error |
+| `-` `+` | **no**: always binary (`x -1` is x − 1; write `x (-1)` for the product) | `x -1` | x − 1 |
+| `* / × · ^ ±`, comparison operators, `,` `)` `]` `>` `=` | no: binary operators or closers | | |
+| superscripts `SUP`, `'`, `ᵀ` | no: postfix on the factor before them (levels 13–14), not a new factor | `x²y` | (x²)·y |
+| end of line, `INDENT`, `DEDENT` | no | | |
+
+**Option words.** Inside a clause with trailing option words, a name spelled like an option word does not start
+a factor, so the option ends the expression: in a `solve` range `tolerance absolute using method until lowest
+grid`; in `plot` `title animate` (unless the program defines a variable of that name, D216); after a single `≈`,
+`within`. Everywhere else every name starts a factor.
+
+**Units come first.** Which names after a *number* are units rather than factors is decided by the unit rule
+(units.md §2) before this table is consulted: `2 m s` is 2 m·s, one quantity. After a bracket or a vulgar
+fraction a free unit name multiplies by one unit (§2.6). A function name inside a product with a space before
+its `(` is rejected (`2 f (x)`: "f is a function; give it an argument"); at the start of a term, `f (x)` is a
+call.
+
+```fermium-reads
+x 2 ≡ x * 2
+2x ≡ 2 * x
+2 3i ≡ 2 * (3i)
+a b c ≡ (a * b) * c
+k (x + 1) ≡ k * (x + 1)
+2 √x ≡ 2 * (√x)
+|a| |b| ≡ |a| * |b|
+x -1 ≡ x - 1
+x +1 ≡ x + 1
+x²y ≡ (x^2) * y
+r <1, 2, 3> ≡ r * <1, 2, 3>
+3 [1, 2] ≡ 3 * [1, 2]
+2 [m] ≡ 2 m
+```
+
+```fermium
+x = 2
+r = 2
+f(y) = y^2
+print 3 [1, 2], 2 [m], x -1, 2 3i, |x| |x|, x²x, 2x
+print 2 √x, 2 ∛x, 3 ∫ x² dx from 0 to 1, 2 d/dx(x^2)
+print r <1, 2, 3>, r < 3, f (x), x (-1)
+```
+
+```fermium-error
+print 2 true
+```
+
+```fermium-error
+print 2 "a"
+```
+
 #### Calculus syntax
 
 ```text
@@ -578,5 +644,6 @@ option      = "log" [ "x" | "y" ] | "points" | "dots" | "markers" | "title" STR 
 
 - The `solve` clause-ordering rules: the range comes first, then `step`; `tolerance`, `absolute`, `using` and
   `until` may follow in any order, on the range's line or each on an indented line of its own.
-- A normative list of which tokens *start a term* for implicit multiplication (`starts_term` in expr.rs).
+- ~~A normative list of which tokens start a term for implicit multiplication~~ (done in 0.2: §2.4, "Which
+  tokens start an implicit product").
 - The exact error set of the parser (each message is fixed by conformance/ today).
