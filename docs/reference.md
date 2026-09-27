@@ -1199,7 +1199,7 @@ prog.fm, line 3: can't add length [m] to time [s]
   hint: both sides of + and - must have the same units
 ```
 
-Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. **Control+C** stops a running program (it prints `stopped by Ctrl+C`). See `bootcamp/TROUBLESHOOTING.md` for the common ones.
+Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. **Control+C** stops a running program (it prints `stopped by Ctrl+C`); in the REPL it ends the session, so its names are lost. In the Jupyter kernel an interrupt doesn't stop a running cell yet: restart the kernel (Kernel → Restart Kernel), which forgets the notebook's names (rust/DIVERGENCES.md, "The Jupyter kernel"). See `bootcamp/TROUBLESHOOTING.md` for the common ones.
 
 ## 17. Tools
 
