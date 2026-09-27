@@ -44,8 +44,16 @@ impl Dim {
     }
 
     /// Raise to a rational power (multiply every exponent).
+    ///
+    /// Checked (red team 13): a power that doesn't fit in 64 bits is recorded (see [`crate::exact`]).
     pub fn pow(self, p: Rational64) -> Dim {
-        Dim(self.0.map(|a| a * p))
+        let mut e = self.0;
+        for (i, a) in e.iter_mut().enumerate() {
+            if !a.is_zero() {
+                *a = crate::exact::mul_or_record(*a, p, Some(BASE_SYMBOLS[i]));
+            }
+        }
+        Dim(e)
     }
 
     /// Raise to an integer power.
@@ -68,7 +76,7 @@ impl Mul for Dim {
     fn mul(self, o: Dim) -> Dim {
         let mut e = self.0;
         for i in 0..7 {
-            e[i] += o.0[i];
+            e[i] = crate::exact::add_or_record(e[i], o.0[i], Some(BASE_SYMBOLS[i]));
         }
         Dim(e)
     }
@@ -79,7 +87,7 @@ impl Div for Dim {
     fn div(self, o: Dim) -> Dim {
         let mut e = self.0;
         for i in 0..7 {
-            e[i] -= o.0[i];
+            e[i] = crate::exact::sub_or_record(e[i], o.0[i], Some(BASE_SYMBOLS[i]));
         }
         Dim(e)
     }

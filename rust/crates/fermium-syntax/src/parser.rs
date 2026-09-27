@@ -164,8 +164,11 @@ impl Parser {
     /// Run a recursive step with the nesting depth checked.
     pub fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
         if self.depth >= MAX_DEPTH {
-            return Err(Diagnostic { message: "this program is nested too deeply for Fermium to compile".into(),
-                                    line: None, col: None, length: 1, hint: None,
+            // v1's message and hint (driver.run_source; red team 13 #10)
+            return Err(Diagnostic { message: "this program is nested too deeply for Fermium to compile (very long or \
+                                              deeply nested expressions)".into(),
+                                    line: None, col: None, length: 1,
+                                    hint: Some("split the expression into several lines with names".into()),
                                     severity: crate::diag::Severity::Error, fix: vec![] });
         }
         self.depth += 1;

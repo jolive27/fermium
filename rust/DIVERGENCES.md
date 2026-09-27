@@ -254,6 +254,13 @@ or a quantity found by cancellation). What differs, in the browser only:
   to corners); log axes have no minor ticks; `plot … animate` without a .gif path writes PNG frames (v1 did so
   only without pillow).
 - A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
+- File formats (red team 13 #3): the extension of `to "<path>"` decides, in any case, as with matplotlib, and
+  a path without one gets `.png` added. v2 writes png, svg and gif; every other extension is refused with
+  v1's line `(plot not saved: Format 'txt' is not supported (supported formats: gif, png, svg))`, which lists
+  the formats v2 writes (v1 listed matplotlib's, and also wrote pdf, eps, ps, jpg, tif, webp, avif, svgz,
+  pgf, raw and rgba). Before, v2 wrote PNG bytes to any path (`notes.txt`, `prog.fm`, `c.pdf`). A refused
+  plot makes no folder (v1 made the folder before matplotlib refused). v1 printed `plot saved to …/noext`
+  for a path without an extension although matplotlib wrote `noext.png`; v2 prints the file it wrote.
 - Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
   deflate (round trip), LZW (round trip), labels and number format.
 
@@ -339,6 +346,9 @@ failed input leaving no names behind (D220: the checker is rolled back to a copy
 session of tests/test_repl.py plus 30 more) print exactly what v1 prints
 (`cargo test -p fermium-repl`, fixtures from rust/tools/repl_sessions.py). Differences:
 
+- Uncertainties work in the REPL and in the Jupyter kernel (`L = 1.20 ± 0.01 m`, then `print L - L` prints
+  `0 ± 0 m`, correlations kept from one input to the next); v1 refused `±` there (red team 13 #6).
+
 - Line editing and history are a small editor of Fermium's own over the terminal (termios through the libc
   crate) instead of GNU readline/libedit: arrows, Home/End, Ctrl-A/E/K/U/W/L, Up/Down history saved in
   `~/.fermium_history` (v1's file; a libedit file from macOS is read too), at most 1000 entries kept.
@@ -419,3 +429,33 @@ error; v2.5 computes them. For example, `solve x' = -k x / (1 s)` with k = 1.0 �
 (e⁻¹, and |∂x/∂k|·0.1 = e⁻¹·0.1), and `∫ exp(-k x) dx from 0 to 1` prints 0.632 ± 0.026. Each recorded output was
 checked against the analytic derivative. Programs that still can't propagate (see rust/c-cases/c7/still_errors.fm)
 keep v1's error.
+
+## fermium build (red team 13 #6, #7, #14)
+
+- A program that uses Python builds (v1 refused it: *an executable doesn't carry Python*). The executable
+  loads libpython like `fermium run` and imports the program's own modules from the program's folder at build
+  time, stored as an absolute path.
+- `fermium build noext` and `fermium build -o prog.fm prog.fm` are refused (*fermium build would overwrite the
+  program … with the executable*); v1 overwrote the source.
+- The linker's temporary folder is created exclusively, with a random name and owner-only permissions, instead
+  of `/tmp/fermium-build-<pid>`.
+
+## Unit powers are exact fractions of 64-bit whole numbers (red team 13 #1, #2)
+
+v1 keeps a unit's power as a Python `Fraction`, which never overflows: `print √(√(…√(1 m)…))` nested 64 deep
+prints `1 m^(1/18446744073709551616)`. v2 keeps each power as a fraction of two 64-bit integers. Every power
+the checker works out from a program (powers and roots, √ ∛ cbrt, products and quotients, generic functions,
+derivatives and integrals of units, solve/fit and the unifier, `units natural`, `analyze`, and exponents
+written in a unit such as `m^1e300`) is computed exactly in 128 bits and kept only if it fits. One that
+doesn't fit is an error before the program runs, at the expression that made it:
+
+    prog.fm, line 2: this unit's power is too large to track exactly (m^(1/18446744073709551616))
+        z = (x^(1/4294967296))^(1/4294967296)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      hint: Fermium keeps a unit's power as an exact fraction of 64-bit whole numbers; raise a plain number to
+      the power instead, and attach the unit afterwards
+
+Before this fix the arithmetic wrapped silently (`y = (x^4294967296)^4294967296` became a plain number and
+`y + 1` printed 2) or panicked ("denominator == 0", which ended a REPL session). So programs whose unit powers
+pass 2⁶³ (or have a denominator past 2⁶³) are refused where v1 runs them; no conformance case has one. A
+written exponent is a float, as in v1: `(1 m)^4611686018427387903` is m^4611686018427387904.

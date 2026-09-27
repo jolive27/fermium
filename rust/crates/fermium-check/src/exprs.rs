@@ -50,6 +50,11 @@ impl Checker {
         self.estack.push(e as *const A::Expr);
         let r = self.expr_dispatch(e, ctx);
         self.estack.pop();
+        // a unit power too large to track exactly: the error is at the innermost expression that made it (red
+        // team 13), whatever else went wrong after it
+        if let Some(err) = self.take_overflow(e.span) {
+            return Err(err);
+        }
         let mut r = r?;
         if let Checked::Val(v) = &mut r {
             v.line = e.span.line;

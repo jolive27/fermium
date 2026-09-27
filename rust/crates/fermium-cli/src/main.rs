@@ -21,8 +21,7 @@ fn help() -> String {
     \x20   run                 run a .fm program\n\
     \x20   check               check a program's units without running it\n\
     \x20   fmt                 convert a program between ASCII and symbols\n\
-    \x20   build               compile a program into a standalone executable (not\n\
-    \x20                       yet in this version)\n\
+    \x20   build               compile a program into a standalone executable\n\
     \x20   doctor              check that Fermium is installed correctly\n\
     \x20   jupyter             set up the Jupyter kernel: fermium jupyter install\n\
     \x20   repl                start the interactive prompt (same as plain 'fermium')\n\
@@ -92,7 +91,7 @@ impl Sub {
     /// -h/--help anywhere in the arguments: print the help (exit 0).
     fn wants_help(&self, args: &[String]) -> bool {
         if args.iter().any(|a| a == "-h" || a == "--help") {
-            println!("{}\n{}", self.usage, self.help);
+            { use std::io::Write; let _ = writeln!(std::io::stdout(), "{}\n{}", self.usage, self.help); }
             return true;
         }
         false
@@ -247,7 +246,7 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         None => ExitCode::from(repl_main() as u8),
         Some("-h" | "--help") => {
-            println!("{}", help());
+            { use std::io::Write; let _ = writeln!(std::io::stdout(), "{}", help()); } // no panic when piped into head
             ExitCode::SUCCESS
         }
         Some("--version") => {

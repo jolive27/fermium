@@ -168,11 +168,6 @@ pub fn sample_solution(t: &[f64], y: &[f64], dy: &[f64], dim: usize, comp: usize
     (tt, out)
 }
 
-/// The kind of image a path asks for.
-fn is_svg(path: &str) -> bool {
-    path.to_lowercase().ends_with(".svg")
-}
-
 fn absolute(path: &str) -> String {
     let p = Path::new(path);
     let abs = if p.is_absolute() {
@@ -187,13 +182,42 @@ fn write_file(path: &str, bytes: &[u8]) -> Result<(), String> {
     crate::vfs::write(path, bytes).map_err(|e| format!("can't write {path}: {e}"))
 }
 
+/// The image formats `plot … to "<path>"` can write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageFormat {
+    Png,
+    Svg,
+    Gif,
+}
+
+/// The format a plot path asks for, and the path actually written (red team 13 #3). As v1 (matplotlib's
+/// savefig): the extension decides, in any case; a path without one gets ".png" added. Any other extension is
+/// refused before anything is written or any folder is made, so a typo can't overwrite `prog.fm`, a `.py` or
+/// a text file. v1 also wrote pdf, eps, jpg, … with matplotlib; this version draws png, svg and gif natively.
+pub fn image_target(path: &str) -> Result<(ImageFormat, String), String> {
+    let p = Path::new(path);
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase());
+    match ext.as_deref() {
+        None | Some("") => Ok((ImageFormat::Png, format!("{path}.png"))),
+        Some("png") => Ok((ImageFormat::Png, path.to_string())),
+        Some("svg") => Ok((ImageFormat::Svg, path.to_string())),
+        Some("gif") => Ok((ImageFormat::Gif, path.to_string())),
+        Some(e) => Err(format!("Format '{e}' is not supported (supported formats: gif, png, svg)")),
+    }
+}
+
 /// Draw and save a plot. Ok: v1's line "plot saved to <absolute path>"; Err: the reason, for v1's
 /// "(plot not saved: …)".
 pub fn save_plot(spec: &PlotSpec) -> Result<String, String> {
+    let (fmt, path) = image_target(&spec.path)?;
     let scene = scene::build_plot(spec);
-    let bytes = if is_svg(&spec.path) { svg::render(&scene).into_bytes() } else { png::encode_rgb(&raster::render(&scene)) };
-    write_file(&spec.path, &bytes)?;
-    Ok(format!("plot saved to {}", absolute(&spec.path)))
+    let bytes = match fmt {
+        ImageFormat::Svg => svg::render(&scene).into_bytes(),
+        ImageFormat::Png => png::encode_rgb(&raster::render(&scene)),
+        ImageFormat::Gif => gif::encode_animation(&[raster::render(&scene)], 15),
+    };
+    write_file(&path, &bytes)?;
+    Ok(format!("plot saved to {}", absolute(&path)))
 }
 
 /// Render a plot to an image in memory (SVG text or PNG bytes) without writing it.
@@ -260,8 +284,7 @@ pub fn save_pde_plot(p: &PdePlot) -> Result<String, String> {
             let spec = base(idx.iter().map(|&k| line(k, p.labels[k].clone())).collect());
             let mut spec = spec;
             spec.series.iter_mut().for_each(|s| s.legend = s.legend.clone());
-            save_plot(&spec)?;
-            Ok(format!("plot saved to {abs}"))
+            save_plot(&spec)
         }
         Some(frames) => {
             let f = frames.min(n).max(1);

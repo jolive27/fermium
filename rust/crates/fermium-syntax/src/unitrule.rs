@@ -88,10 +88,37 @@ pub fn limit_denominator(x: f64, max_den: i128) -> Rational64 {
     let (b1n, b1d) = (p0 + k * p1, q0 + k * q1);
     let (b2n, b2d) = (p1, q1);
     // |b2 - x| <= |b1 - x|
-    let diff2 = (b2n * od - on * b2d).abs() * b1d;
-    let diff1 = (b1n * od - on * b1d).abs() * b2d;
-    let (rn, rd) = if diff2 <= diff1 { (b2n, b2d) } else { (b1n, b1d) };
+    // checked: with a tiny x these products overflow i128 (red team 13); then compare as floats
+    let diff = |bn: i128, bd: i128, other_d: i128| -> Option<i128> {
+        bn.checked_mul(od)?.checked_sub(on.checked_mul(bd)?)?.checked_abs()?.checked_mul(other_d)
+    };
+    let closer_b2 = match (diff(b2n, b2d, b1d), diff(b1n, b1d, b2d)) {
+        (Some(d2), Some(d1)) => d2 <= d1,
+        _ => {
+            let x = on as f64 / od as f64;
+            (b2n as f64 / b2d as f64 - x).abs() <= (b1n as f64 / b1d as f64 - x).abs()
+        }
+    };
+    let (rn, rd) = if closer_b2 { (b2n, b2d) } else { (b1n, b1d) };
     Rational64::new(rn as i64, rd as i64)
+}
+
+/// a · b for unit exponents, None if it doesn't fit in 64 bits (red team 13).
+fn exp_mul(a: Rational64, b: Rational64) -> Option<Rational64> {
+    let n = (*a.numer() as i128).checked_mul(*b.numer() as i128)?;
+    let d = (*a.denom() as i128).checked_mul(*b.denom() as i128)?;
+    let g = gcd(n, d).max(1);
+    let (n, d) = (n / g, d / g);
+    let lim = i64::MAX as i128;
+    (n.abs() <= lim && d <= lim).then(|| Rational64::new_raw(n as i64, d as i64))
+}
+
+/// The message and hint for a unit power too large for 64 bits (the checker's wording, fermium_units::exact).
+pub fn exp_too_large(what: &str) -> (String, String) {
+    (format!("this unit's power is too large to track exactly ({what})"),
+     "Fermium keeps a unit's power as an exact fraction of 64-bit whole numbers; raise a plain number to the \
+      power instead, and attach the unit afterwards"
+         .to_string())
 }
 
 fn gcd(a: i128, b: i128) -> i128 {
@@ -402,7 +429,11 @@ impl Parser {
             let exp = self.unit_exponent()?;
             for f in inner.factors {
                 let sp = Span { length: if f.span.length == 0 { 1 } else { f.span.length }, ..f.span };
-                factors.push(UnitFactor { name: f.name, exp: f.exp * exp * Rational64::from_integer(sign), span: sp });
+                let Some(e) = exp_mul(f.exp, exp * Rational64::from_integer(sign)) else {
+                    let msg = exp_too_large(&format!("{}^({}·{})", f.name, f.exp, exp));
+                    return Err(Diagnostic::error(msg.0, sp.line, sp.col, sp.length, Some(msg.1)));
+                };
+                factors.push(UnitFactor { name: f.name, exp: e, span: sp });
             }
             return Ok(());
         }
@@ -653,9 +684,28 @@ impl Parser {
     }
 
     fn unit_exponent(&mut self) -> R<Rational64> {
+        let start = self.i;
+        let r = self.unit_exponent_raw()?;
+        match r {
+            Some(p) => Ok(p),
+            None => {
+                let text = self.text(start, self.i);
+                let (msg, hint) = exp_too_large(&format!("a power of {}", text.trim_start_matches('^')));
+                // underline the whole exponent, ^ to its last token
+                let (a, b) = (&self.toks[start], &self.toks[self.i.saturating_sub(1).max(start)]);
+                let len = if a.line == b.line { (b.col + b.rawlen as u32).saturating_sub(a.col).max(1) } else { 1 };
+                Err(Diagnostic::error(msg, a.line, a.col, len, Some(hint)))
+            }
+        }
+    }
+
+    /// The exponent after a unit name; None if it doesn't fit in 64 bits (red team 13: `m^1e300` saturated).
+    fn unit_exponent_raw(&mut self) -> R<Option<Rational64>> {
+        const LIM: f64 = 9.2e18; // below i64::MAX
         if self.kind() == Kind::Sup {
             let s = self.next();
-            return Ok(Rational64::from_integer(self.toks[s].int()));
+            let v = self.toks[s].int();
+            return Ok((v != i64::MIN).then(|| Rational64::from_integer(v)));
         }
         if self.at_op("^") {
             self.next();
@@ -685,20 +735,32 @@ impl Parser {
                         return Err(self.error("a unit's exponent must be a fraction of whole numbers, like m^(1/2)",
                                               Some(b), None));
                     }
+                    if av.abs() > LIM || bv.abs() > LIM {
+                        self.expect_op(")", None)?;
+                        return Ok(None);
+                    }
                     Rational64::new(av as i64, bv as i64)
                 } else {
+                    if av.abs() > LIM {
+                        self.expect_op(")", None)?;
+                        return Ok(None);
+                    }
                     limit_denominator(av, 1000)
                 };
                 self.expect_op(")", None)?;
-                return Ok(p * Rational64::from_integer(sgn * neg));
+                return Ok(Some(p * Rational64::from_integer(sgn * neg)));
             }
             let a = self.next();
             if self.toks[a].kind != Kind::Num {
                 return Err(self.error("expected a number after ^ in this unit", Some(a), None));
             }
-            return Ok(limit_denominator(self.toks[a].f(), 1000) * Rational64::from_integer(neg));
+            let av = self.toks[a].f();
+            if av.abs() > LIM {
+                return Ok(None);
+            }
+            return Ok(Some(limit_denominator(av, 1000) * Rational64::from_integer(neg)));
         }
-        Ok(Rational64::from_integer(1))
+        Ok(Some(Rational64::from_integer(1)))
     }
 }
 

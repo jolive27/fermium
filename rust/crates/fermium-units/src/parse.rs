@@ -124,7 +124,7 @@ struct P<'a> {
 }
 
 fn py_int(s: &str) -> Result<i64, UnitSyntaxError> {
-    s.parse::<i64>().map_err(|_| exc(format!("bad exponent '{s}' in unit")))
+    s.parse::<i64>().ok().filter(|v| *v != i64::MIN).ok_or_else(|| exc(format!("bad exponent '{s}' in unit")))
 }
 
 impl P<'_> {

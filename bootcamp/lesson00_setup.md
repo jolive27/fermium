@@ -225,7 +225,7 @@ Here is what to do, in order:
 2. **Run `fermium doctor`.** It checks everything and tells you what to fix.
 3. **Look in [TROUBLESHOOTING.md](TROUBLESHOOTING.md).** It lists the most common problems.
 
-If a program seems stuck (nothing happens and the prompt doesn't come back), press **Control + C**. Fermium stops the program and prints `stopped by Ctrl+C`.
+If a program seems stuck (nothing happens and the prompt doesn't come back), press **Control + C**. Fermium stops the program and prints `stopped by Ctrl+C`. (In a Jupyter notebook that doesn't work yet: the interrupt button doesn't stop a running cell, so use **Kernel → Restart Kernel** instead.)
 
 The most common setup problems:
 

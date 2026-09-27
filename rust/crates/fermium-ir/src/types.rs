@@ -5,6 +5,7 @@
 //! solved by substitution (Kennedy-style inference): this is how `E = 0` followed by `E += ½ m v²` learns that E
 //! is an energy, and how `fit T = 2π √(L/g)` works out that g is an acceleration.
 use crate::dim::{Dim, DIMLESS};
+use fermium_units::exact::{add_or_record, div_or_record, mul_or_record, sub_or_record};
 use num_rational::Rational64;
 use num_traits::{One, Signed, Zero};
 use std::collections::BTreeMap;
@@ -50,19 +51,21 @@ impl DExpr {
     pub fn mul(&self, o: &DExpr) -> DExpr {
         let mut t = self.terms.clone();
         for (k, v) in &o.terms {
-            *t.entry(*k).or_insert_with(Rational64::zero) += *v;
+            let e = t.entry(*k).or_insert_with(Rational64::zero);
+            *e = add_or_record(*e, *v, None);
         }
         DExpr { konst: self.konst * o.konst, terms: t }.clean()
     }
     pub fn div(&self, o: &DExpr) -> DExpr {
         let mut t = self.terms.clone();
         for (k, v) in &o.terms {
-            *t.entry(*k).or_insert_with(Rational64::zero) -= *v;
+            let e = t.entry(*k).or_insert_with(Rational64::zero);
+            *e = sub_or_record(*e, *v, None);
         }
         DExpr { konst: self.konst / o.konst, terms: t }.clean()
     }
     pub fn pow(&self, p: Rational64) -> DExpr {
-        DExpr { konst: self.konst.pow(p), terms: self.terms.iter().map(|(k, v)| (*k, *v * p)).collect() }.clean()
+        DExpr { konst: self.konst.pow(p), terms: self.terms.iter().map(|(k, v)| (*k, mul_or_record(*v, p, None))).collect() }.clean()
     }
     pub fn is_concrete(&self) -> bool {
         self.terms.is_empty()
@@ -102,7 +105,7 @@ impl Unifier {
         let mut rest = diff.clone();
         rest.terms.remove(&var);
         // c·var + rest = 0  →  var = -rest / c
-        self.subst.insert(var, rest.pow(Rational64::new(-1, 1) / c));
+        self.subst.insert(var, rest.pow(div_or_record(Rational64::new(-1, 1), c, None)));
         true
     }
 

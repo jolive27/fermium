@@ -44,6 +44,7 @@
 pub mod constants;
 pub mod db;
 pub mod dim;
+pub mod exact;
 pub mod display;
 pub mod natural;
 pub mod numfmt;

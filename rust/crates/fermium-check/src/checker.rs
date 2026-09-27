@@ -514,6 +514,24 @@ impl Checker {
 
     // ============================================================ program
     pub fn check_program(&mut self, prog: &A::Program) -> CResult<I::Module> {
+        fermium_units::exact::overflow_clear();
+        let r = self.check_program_inner(prog);
+        // the backstop for a unit power that overflowed outside any expression or statement (red team 13)
+        if let Some(e) = self.take_overflow(A::Span { line: 1, col: 1, length: 1 }) {
+            return Err(r.err().unwrap_or(e));
+        }
+        r
+    }
+
+    /// A unit power that didn't fit in 64 bits since the last look (see fermium_units::exact), as the error at
+    /// `span`: the expression or statement that produced it.
+    pub fn take_overflow(&self, span: A::Span) -> Option<Diagnostic> {
+        let what = fermium_units::exact::overflow_take()?;
+        let (msg, hint) = fermium_units::exact::overflow_message(&what);
+        Some(self.err(msg, span, Some(hint)))
+    }
+
+    fn check_program_inner(&mut self, prog: &A::Program) -> CResult<I::Module> {
         self.main_count += 1;
         self.uses_unc = false;
         let ctx = Ctx { func: Owner::Main, scope: self.globals, is_main: true, lam: None, loop_depth: 0, branch: 0,
@@ -578,6 +596,15 @@ impl Checker {
 
     /// One statement → zero or more IR statements (Python dispatches on s_<Class>).
     pub fn stmt(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
+        let r = self.stmt_dispatch(s, ctx);
+        // a unit power that overflowed in this statement but outside its expressions (red team 13)
+        if let Some(e) = self.take_overflow(s.span) {
+            return Err(e);
+        }
+        r
+    }
+
+    fn stmt_dispatch(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         use A::StmtKind as K;
         match &s.kind {
             K::ExprStmt { value: e } => self.s_expr_stmt(s, e, ctx),

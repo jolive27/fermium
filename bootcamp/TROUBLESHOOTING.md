@@ -453,7 +453,7 @@ while x > 0
     x += 1
 ```
 
-**Fix:** press **Control + C** to stop the program. Fermium prints `stopped by Ctrl+C` and you get the prompt back. (In the unlikely case that doesn't work, close the Terminal window.) Then check the loop: does something inside it change the condition, in the right direction? For a simulation, does the stopping condition ever become true (e.g. `while y >= 0 m` for a ball that never comes down)? Adding a `print` inside the loop shows what's happening.
+**Fix:** press **Control + C** to stop the program. Fermium prints `stopped by Ctrl+C` and you get the Terminal's prompt back. (In the unlikely case that doesn't work, close the Terminal window.) In the REPL (`fermium` on its own), Control + C while a line is running ends the whole REPL, so the names you defined are gone: start `fermium` again. In a Jupyter notebook, the interrupt button (■) doesn't stop a running cell yet: use **Kernel → Restart Kernel**, then run the cells above again (a restart forgets every name). Then check the loop: does something inside it change the condition, in the right direction? For a simulation, does the stopping condition ever become true (e.g. `while y >= 0 m` for a ball that never comes down)? Adding a `print` inside the loop shows what's happening.
 
 ---
 
