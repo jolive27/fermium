@@ -60,7 +60,7 @@ fn run_one(dir: &str, prog: &str) -> Result<(), String> {
         return Ok(());
     }
     let want = std::fs::read_to_string(&exp_path).map_err(|e| format!("{}: {e}", exp_path.display()))?;
-    if got != want {
+    if !same_text(&want, &got) {
         let first = got
             .lines()
             .zip(want.lines())
@@ -89,4 +89,106 @@ fn every_c8_folder_cites_its_data() {
         assert!(s.contains("http"), "{d}/SOURCE.md has no URL");
         assert!(s.contains("Citation") || s.contains("citation"), "{d}/SOURCE.md has no citation");
     }
+}
+
+// The conformance runner's comparison (conformance/run same_text, DECISIONS D264): a number with a decimal point
+// or a power of ten may differ by one unit in its last digit when it has the same shape (C libraries differ in the
+// last bit of exp, sin, …; a fitted parameter that is statistically zero shows it: G_0 = 0.0005831 on macOS,
+// 0.0005832 on Linux, standard error 0.028).
+fn tokens(s: &str) -> Vec<&str> {
+    let mut out = vec![];
+    let mut start = 0;
+    let is_sep = |c: char| c.is_whitespace() || "[](),<>;:=".contains(c);
+    let cs: Vec<(usize, char)> = s.char_indices().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let (b, c) = cs[i];
+        if is_sep(c) {
+            if b > start {
+                out.push(&s[start..b]);
+            }
+            let mut j = i;
+            // a run of whitespace is one token; each other separator is its own token
+            if c.is_whitespace() {
+                while j + 1 < cs.len() && cs[j + 1].1.is_whitespace() {
+                    j += 1;
+                }
+            }
+            let end = if j + 1 < cs.len() { cs[j + 1].0 } else { s.len() };
+            out.push(&s[b..end]);
+            start = end;
+            i = j + 1;
+        } else {
+            i += 1;
+        }
+    }
+    if start < s.len() {
+        out.push(&s[start..]);
+    }
+    out
+}
+
+/// (value, unit of the last digit, shape) of a number with a decimal point or a power of ten (conformance/run num_shape).
+fn num_shape(t: &str) -> Option<(f64, f64, (usize, usize, i32, i32, bool))> {
+    let (mant, exp) = match t.find("×10") {
+        Some(k) => (&t[..k], Some(&t[k + "×10".len()..])),
+        None => (t, None),
+    };
+    if !(mant.contains('.') || mant.contains('e') || exp.is_some()) {
+        return None;
+    }
+    let v: f64 = mant.parse().ok()?;
+    let digits = mant.split('e').next().unwrap();
+    let decimals = digits.split_once('.').map(|(_, d)| d.len()).unwrap_or(0);
+    let e10: i32 = match exp {
+        Some(e) => {
+            let s: String = e.chars().map(|c| match c {
+                '⁰' => '0', '¹' => '1', '²' => '2', '³' => '3', '⁴' => '4', '⁵' => '5', '⁶' => '6', '⁷' => '7',
+                '⁸' => '8', '⁹' => '9', '⁻' => '-', other => other,
+            }).collect();
+            s.parse().ok()?
+        }
+        None => 0,
+    };
+    let e_part: i32 = match mant.split_once('e') {
+        Some((_, e)) => e.parse().ok()?,
+        None => 0,
+    };
+    let scale = 10f64.powi(e10);
+    let last = 10f64.powi(e_part - decimals as i32) * scale;
+    let ndig = digits.trim_start_matches(['-', '+']).replace('.', "").len();
+    Some((v * scale, last, (ndig, decimals, e_part, e10, t.starts_with('-'))))
+}
+
+fn same_token(want: &str, got: &str) -> bool {
+    if want == got {
+        return true;
+    }
+    let (Some((va, ulp, sa)), Some((vb, _, sb))) = (num_shape(want), num_shape(got)) else { return false };
+    // a carry (9.99 -> 10.00) may add one digit
+    if (sa.1, sa.2, sa.3, sa.4) != (sb.1, sb.2, sb.3, sb.4) || sa.0.abs_diff(sb.0) > 1 {
+        return false;
+    }
+    (va - vb).abs() <= ulp * 1.0000001
+}
+
+fn same_text(want: &str, got: &str) -> bool {
+    let (wl, gl): (Vec<&str>, Vec<&str>) = (want.trim_end_matches('\n').split('\n').collect(),
+                                             got.trim_end_matches('\n').split('\n').collect());
+    wl.len() == gl.len()
+        && wl.iter().zip(&gl).all(|(w, g)| {
+            let (wt, gt) = (tokens(w), tokens(g));
+            w == g || (wt.len() == gt.len() && wt.iter().zip(&gt).all(|(a, b)| same_token(a, b)))
+        })
+}
+
+#[test]
+fn the_comparison_allows_one_unit_in_the_last_digit_only() {
+    assert!(same_text("  G_0 = 0.0005832   (standard error 0.028)\n", "  G_0 = 0.0005831   (standard error 0.028)\n"));
+    assert!(same_text("x 9.99 m\n", "x 10.00 m\n"));
+    assert!(same_text("T = 2.725×10⁻³ K\n", "T = 2.726×10⁻³ K\n"));
+    assert!(!same_text("G_0 = 0.0005832\n", "G_0 = 0.0005830\n"));
+    assert!(!same_text("n = 12\n", "n = 13\n"));
+    assert!(!same_text("a = 0.583\n", "a = 0.5831\n"));
+    assert!(!same_text("a\nb\n", "a\n"));
 }
