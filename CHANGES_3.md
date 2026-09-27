@@ -17,5 +17,13 @@ Changes on the branch `claude/v3` (spec Phase D). Draft; items are added as they
   `cargo test -p fermium-check --test spec_builtins` checks against the checker; the unit catalogue generated
   from the unit database (units.md §3.1, kept equal by `cargo test -p fermium-units --test spec_catalogue`);
   chapter-to-conformance-area case counts (README, checked by `spec_conformance_counts`).
+- `docs/spec/` draft 0.3 (DECISIONS D352): every row of the built-in table is machine-checked, a call per row
+  type-checked with the checker against the documented kind and dimension (semantics.md §7.1,
+  `spec_builtins_types`; it corrected the `ifft` row, whose result on a complex list is a complex list, and added
+  `sqrt` of a complex); the parser's complete error set as a normative table of 115 message templates, tested
+  equal to the templates in the lexer/parser/unit-rule source, with a `fermium-error` example for 113 of them that
+  must fail with that row's message (grammar.md §3, `spec_syntax_errors`); conformance cases named for each point
+  of the unit rule, tested to exist with the expected outcome (units.md §2.3, `spec_unit_rule_cases`).
 - Not yet specified: the full clause grammar of `plot`, `analyze`, `propagate` and the interop signatures; the
-  built-in functions' static semantics; the numerical methods in one place; a cross-reference to conformance cases.
+  checker's error set; the numerical methods in one place; a cross-reference to conformance cases beyond the unit
+  rule.

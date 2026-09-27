@@ -1,15 +1,15 @@
 # The Fermium Language Specification
 
-**Status: draft 0.2 (2026-09-27, spec item D1; 0.1 earlier the same day).** This is a formal specification of
+**Status: draft 0.3 (2026-09-27, spec item D1; 0.1 and 0.2 earlier the same day).** This is a formal specification of
 Fermium, the language implemented by the Rust compiler `fermium` (Fermium 2.5). It is incomplete; every section
 says what it covers and what is still to do. It describes the language as implemented today; it does not
 propose changes.
 
 | File | Contents | State |
 |---|---|---|
-| [grammar.md](grammar.md) | Lexical structure (characters, names, numbers, superscripts, fractions, strings, comments, indentation, the ASCII ⇄ symbol equivalences) and the syntax in EBNF, with the precedence table, the normative list of tokens that start an implicit product, and the parser's special cases | Lexical structure: complete. Statements and expressions: the core is complete, and implicit multiplication is specified token by token (0.2); the clause-level grammar of `plot`, `analyze`, `propagate`, the interop signatures and `solve … lowest/grid` is summarised, not exhaustive |
-| [units.md](units.md) | Dimensions (7 rational exponents), the unit rule (the bootcamp's three sentences and a precise version), unit expressions, the unit catalogue, conversions with `in`, affine temperatures, angles, natural units, dimension inference by unification, exact exponent arithmetic | Complete for the rules; the catalogue (§3.1) is a normative table generated from the unit database and tested equal to it (0.2) |
-| [semantics.md](semantics.md) | Values and types, scoping, the linear model of uncertainties, evaluation order, numeric semantics (IEEE-754 double, significant figures for printing), errors (compile time and run time; one line, a caret, a hint), the meaning of the calculus operators and of `solve`, and the static semantics of every built-in function | Partial. New in 0.2: scoping (§2.2), uncertainty propagation (§2.3), the built-in table (§7, names tested against the checker). Still a high-level account of the numerical methods, `propagate`, `analyze` and interop; see its TODO list |
+| [grammar.md](grammar.md) | Lexical structure (characters, names, numbers, superscripts, fractions, strings, comments, indentation, the ASCII ⇄ symbol equivalences) and the syntax in EBNF, with the precedence table, the normative list of tokens that start an implicit product, and the parser's special cases | Lexical structure: complete. Statements and expressions: the core is complete, implicit multiplication is specified token by token (0.2); the parser's complete error set is a normative table (§3), tested equal to the message templates in the source, with an example for 113 of its 115 rows (0.3); the clause-level grammar of `plot`, `analyze`, `propagate`, the interop signatures and `solve … lowest/grid` is summarised, not exhaustive |
+| [units.md](units.md) | Dimensions (7 rational exponents), the unit rule (the bootcamp's three sentences and a precise version), unit expressions, the unit catalogue, conversions with `in`, affine temperatures, angles, natural units, dimension inference by unification, exact exponent arithmetic | Complete for the rules; the catalogue (§3.1) is a normative table generated from the unit database and tested equal to it (0.2); each point of the unit rule names the conformance cases that exercise it (§2.3, tested, 0.3) |
+| [semantics.md](semantics.md) | Values and types, scoping, the linear model of uncertainties, evaluation order, numeric semantics (IEEE-754 double, significant figures for printing), errors (compile time and run time; one line, a caret, a hint), the meaning of the calculus operators and of `solve`, and the static semantics of every built-in function | Partial. New in 0.2: scoping (§2.2), uncertainty propagation (§2.3), the built-in table (§7, names tested against the checker). New in 0.3: every row's result kind and dimension is machine-checked with the checker (§7.1). Still a high-level account of the numerical methods, `propagate`, `analyze` and interop; see its TODO list |
 
 ## How this document relates to the others
 
@@ -50,7 +50,7 @@ propose changes.
 
 The suite has 3366 cases in 22 areas; every count above is checked by the test
 `spec_conformance_counts` (spec_examples.rs), so the table can't go stale silently. A case-by-case
-cross-reference (which rule each case exercises) is future work.
+cross-reference (which rule each case exercises) exists for the unit rule (units.md §2.3); for the rest it is future work.
 
 ## Notation
 
@@ -63,7 +63,9 @@ cross-reference (which rule each case exercises) is future work.
   every one must also run without an error. Blocks marked `fermium-error` must be rejected: with `FERMIUM_BIN`
   set, the test checks that each exits with status 1 and a one-line `file, line N: …` error. Blocks marked `text`
   are not checked. Blocks marked `fermium-reads` hold lines `A ≡ B`: A must parse to the same tree as the
-  bracketed B (the precedence rules). The same test checks that grammar.md's keyword and operator lists are the
+  bracketed B (the precedence rules). Blocks marked `fermium-types` hold lines `CALL ⇒ KIND [UNIT]` (semantics.md §7.1), checked with
+  the checker by `cargo test -p fermium-check --test spec_builtins`. A `fermium-error` block in grammar.md §3
+  starts with `# E<n>` and must fail to parse with the message of row n. The same test checks that grammar.md's keyword and operator lists are the
   lexer's. To run everything:
   `FERMIUM_BIN=rust/target/fast/fermium cargo test --profile fast -p fermium-syntax --test spec_examples`
   (from `rust/`, with an absolute path for the binary).
@@ -71,11 +73,13 @@ cross-reference (which rule each case exercises) is future work.
 ## What "1.0" needs from this document (not done yet)
 
 1. A full clause grammar for `plot`, `solve` (all options), `analyze`, `propagate` and the interop signatures.
-2. Machine-checked static semantics of the built-in functions. Since 0.2 semantics.md §7 has the table, written
-   by hand from the checker; only its *names* are tested against the checker's list, not each row's dimensions.
+2. ~~Machine-checked static semantics of the built-in functions~~ (done in 0.3: semantics.md §7.1 type-checks a
+   call per row with the checker and compares the result's kind and dimension; the argument-error cases are
+   still prose).
 3. The run-time semantics of every numerical method (tolerances, error estimates, failure modes) in one place;
    today they are in docs/reference.md and DECISIONS.md.
 4. A cross-reference from every rule here to the conformance cases that exercise it (0.2 maps chapters to areas,
-   with tested case counts, above).
+   with tested case counts, above; 0.3 names cases for each point of the unit rule, units.md §2.3, and every
+   syntax error has an example in grammar.md §3, but most rules have no case list yet).
 5. The unit catalogue is done (units.md §3.1, generated and tested); the warnings about `Hz`/`rad/s`, `Gy`/`Sv`
    and `J`/`N m` are still prose.

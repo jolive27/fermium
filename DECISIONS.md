@@ -2052,3 +2052,32 @@ a different citation (the neutron-branch form is the standard one).
 - **Alternatives:** generating §7 from the checker (its argument rules are code, not tables; a table in the
   checker would be a refactor of a large, conformance-bound module late in the run); reproducing
   docs/reference.md §15's unit list by hand (it would drift; a generated table can't).
+
+## D352. Specification draft 0.3: the built-in rows, the syntax errors and the unit rule held by tests (spec D1)
+- **What:** three additions to docs/spec/, each machine-checked. (1) semantics.md §7.1, a ```fermium-types block of
+  lines `CALL ⇒ KIND [UNIT]` after a prelude that defines arguments of the documented dimensions; the test
+  `spec_builtins_types` (fermium-check) type-checks `res_ = CALL` and `want_ = 1 UNIT` with the checker
+  (`api::check_keep`), and compares the kind of `res_`'s type and its resolved dimension with the line. Every
+  built-in is called in some line except the statements `seed`, `push` and `append`, which have no value. It found
+  two errors in the 0.2 table, both fixed in the table (the checker is right): `ifft` of a complex list returns a
+  complex list, not a real list, and `sqrt` also takes a complex. (2) grammar.md §3, the parser's error set: 115
+  message templates (placeholders written `…`), with where each is raised and an example. `spec_syntax_errors`
+  (fermium-syntax) extracts the templates from lexer.rs, parser.rs, expr.rs and unitrule.rs (the first literal
+  argument of `err`, `err_h`, `error`, `Diagnostic::error`, an error-severity `Diagnostic { message }`, the literals
+  of a `let msg = …`, and `exp_too_large`) and requires the table to list exactly those; each ```fermium-error
+  example in §3 starts with `# E<n>` and must fail to parse with a message matching row n. 113 rows have one; the
+  nesting-limit error (5000 levels) and the stray-line error of an indented solve clause block don't. (3) units.md
+  §2.3 names conformance cases for each of the seven points of the unit rule (plus `h` and `where`), found by
+  searching the suite's programs and expected errors; `spec_unit_rule_cases` checks each exists and that its
+  expected exit status matches the † (rejected) mark.
+- **Why:** 0.2's built-in table was hand-written and only its names were tested; a spec that states dimensions
+  must be checked against the implementation or it drifts. An error set extracted from the source can't silently
+  gain a message the specification doesn't list. Naming cases per point turns "the suite wins" into a pointer a
+  reader can follow.
+- **Alternatives:** checking dimensions through `fermium run` output (slower, needs the binary, and printing picks
+  display units, so the dimension has to be parsed back); parsing the table's free-text Result column (too
+  irregular); extracting error messages at run time by fuzzing the parser (incomplete); listing every
+  conformance case per point (thousands; a tested sample is enough to follow the rule into the suite).
+- **Limits:** the `fermium-types` lines check one call per argument shape the table names, not every argument
+  combination or the argument errors; the syntax-error extraction is textual, so a message built in a new way
+  (for example a helper function returning a string) must be added to the extractor; the §2.3 lists are samples.
