@@ -18,7 +18,7 @@ fast-math, no reassociation.
   machine; the quiet-machine table in benchmarks/RESULTS.md is the reference).
 - **Fixed-step RK4 with a stored solution** (D316): the solution's sample arrays are mapped in one go (huge
   pages where Linux has them) instead of one page fault per 4 KiB, which cost as much as the steps themselves in
-  `spring_rk4` (≈ 20–30 % faster there).
+  `spring_rk4` (≈ 20 % faster there, median).
 - **Smaller things** (D314, D315): functions that call no function skip the runaway-recursion check (so they
   inline as plain arithmetic); `exp`, `ln`, `sin`, `cos` call the C library directly (the same functions, so the
   same numbers).
@@ -26,7 +26,7 @@ fast-math, no reassociation.
   (`$FERMIUM_CACHE_DIR/jit`, `$XDG_CACHE_HOME/fermium/jit`), keyed by the program's text, the `fermium` binary
   and the CPU, and checked against every module file and `fermium.toml` the compilation read or looked for. The
   next run of the same program skips parsing, checking and LLVM: a program that imports the whole standard
-  library starts in about 1 ms instead of ≈ 20 ms. A changed module, a module added where an import looks first,
+  library takes 8–9 ms from start to finish instead of 25–28 ms (the rest is starting the binary). A changed module, a module added where an import looks first,
   a damaged entry or a new `fermium` binary make it compile again. Not cached: programs that use Python, C or C++,
   read data files when checked, or have constructs the tree-walker runs. `FERMIUM_NO_CACHE=1` turns it off.
 - Not done: blackbody stays ≈ 1.5× Julia (its time is the quadrature's bookkeeping around each integrand call and

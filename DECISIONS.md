@@ -1564,15 +1564,21 @@ switched off in turn, and from the cache): the loop and SLP vectorizers on in-or
 compiled loops (D312), no collector safe point in loops that only read lists (D313), no stack check in leaf
 functions (D314), the C library's exp/log/sin/cos through LLVM intrinsics (D315), the samples of a compiled RK4
 solve mapped in one go (D316), and a compile cache for whole programs with their modules (D317).
-- **Measured:** A/B on this shared 4-core machine (load average 2–4), the previous binary and the new one run
-alternately, inner (compute-only) times, min / median of 9–15 runs; such numbers move by 10–30 % between runs, and
-the coordinator's quiet-machine run in benchmarks/RESULTS.md is the reference: forces (4 threads) 4.7 / 5.5 ms →
-2.4 / 2.8 ms and forces (1 thread) 15.1 / 19.4 ms → 7.2 / 9.0 ms (the inner loop vectorized: D311–D313);
-spring_rk4 31.1 / 32.9 ms → 23.1 / 28.5 ms (D316); nbody 46.0 / 58.1 ms → 43.9 / 56.9 ms, blackbody 2.77 / 3.41
-ms → 2.71 / 3.68 ms, unit_loop 4.88 / 6.46 ms → 5.02 / 6.32 ms, spring_adaptive 0.54 / 0.65 ms → 0.66 / 0.77 ms:
-unchanged within the noise. Instructions executed by the compiled code (callgrind, deterministic): forces 304 M →
-120 M, nbody 789 M → 623 M, blackbody's integrand 7.8 M → 6.0 M, unit_loop 52.5 M → 56.9 M (an in-order vectorized
-sum: more instructions, the same add chain), spring_rk4 and spring_adaptive unchanged. Start-up: see D317.
+- **Measured:** A/B on this shared 4-core machine at 06:54–07:05 UTC (load average 2.4–3.1, 5 GB free), the
+v2.5 binary before C6 and the C6 binary run alternately, inner (compute-only) times, min / median of 11–15 runs.
+Such numbers move by 10–30 % between runs; the coordinator's quiet-machine run in benchmarks/RESULTS.md is the
+reference. forces (4 threads) 7.44 / 10.8 ms → 3.46 / 3.89 ms and forces (1 thread) 19.4 / 19.8 ms → 9.17 / 9.29
+ms (≈ 2.1–2.8×: the inner loop vectorized, D311–D313); spring_rk4 30.5 / 35.2 ms → 20.9 / 28.1 ms (D316; populate
+without huge pages 27.2 / 33.9, off 30.3 / 34.8); nbody 47.1 / 58.2 ms → 45.1 / 57.6 ms; blackbody 2.95 / 3.80 ms →
+2.83 / 3.46 ms; unit_loop 4.92 / 5.94 ms → 4.89 / 6.25 ms (unchanged within the noise); spring_adaptive 0.579 /
+0.649 ms → 0.669 / 0.750 ms (slower in each of three A/Bs, though the compiled code executes the same
+instructions under callgrind and the solver's Rust code is unchanged: code layout, not explained). Instructions
+executed by the compiled code (callgrind, deterministic): forces 304 M → 120 M, nbody 789 M → 623 M, blackbody's
+integrand 7.8 M → 6.0 M, unit_loop 52.5 M → 56.9 M (an in-order vectorized sum: more instructions, the same add
+chain), spring_rk4 and spring_adaptive unchanged. Against Julia's times in the last quiet run (RESULTS.md), these
+ratios suggest forces well below Julia on 1 and 4 threads, nbody and unit_loop at parity, spring_rk4 ≈ 1.5×,
+blackbody ≈ 1.4×, spring_adaptive ≈ 1.1×: the goal "faster than Julia on half the rows" is not clearly met (two
+clear wins, two ties of seven rows); the quiet run decides. Start-up: D317.
 - **Why:** spec C6 ("SIMD-friendly codegen and loop vectorization… Cache compiled modules"), within the priority
 order: every change is exact (no fast-math, no reassociation), so unit safety and the printed results don't move.
 - **Alternatives, and what was left:** D318.
@@ -1677,7 +1683,11 @@ renamed into place); a damaged entry is ignored and replaced; at most 400 entrie
 (their functions are generic, instantiated with the caller's units) and compiled into one LLVM module, so the unit
 that can be cached is the program with its modules. What a run spends before the program starts is mostly LLVM:
 for a program that imports the six standard-library modules, parse 0.5 ms, check 5.5 ms, code generation and
-optimization 6 ms, JIT 8 ms (a moderately loaded machine); from the cache it starts in about 1 ms.
+optimization 6 ms, JIT 8 ms (a moderately loaded machine); from the cache it runs in about 1 ms. Whole-process wall
+time, min / median of 15 alternating runs (load ≈ 3): benchmarks/fermium/startup.fm 14.2 / 15.8 ms compiled →
+7.6 / 8.7 ms cached; the standard-library program 24.9 / 27.5 → 7.8 / 8.9 ms; blackbody.fm 25.6 / 28.8 → 10.8 /
+12.1 ms; forces.fm 90.5 / 105 → 19.7 / 23.8 ms. What remains (≈ 7 ms) is starting the 100 MB binary and LLVM's
+initialization.
 - **Alternatives:** caching each module's checked form (saves only the checking, and the checked form is
 instantiated per caller); caching optimized LLVM bitcode (saves optimization, not code generation); ORC's object
 layers (not in LLVM 18's C API, and a larger change than MCJIT's ObjectCache); keying on modification times instead
