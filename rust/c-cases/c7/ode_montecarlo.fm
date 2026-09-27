@@ -1,0 +1,10 @@
+# C7: a solution that isn't linear in its uncertain input over ±1σ comes from Monte Carlo (with a warning).
+# y(4 s) = e^(−4k) with k normal (0.5 ± 0.2)/s is log-normal: mean e^(−2 + 8·0.04) = 0.186 m and standard
+# deviation 0.186 m · √(e^0.64 − 1) = 0.176 m; the linear rule would give 0.135 ± 0.108 m
+k = 0.5 ± 0.2 1/s
+seed(1)
+solve y' = -k y with y(0 s) = 1.0 m for t from 0 s to 4 s
+print y(4 s)
+print abs(value(y(4 s)) / 0.186 m - 1) < 0.05, abs(uncertainty(y(4 s)) / 0.176 m - 1) < 0.1
+print y(4 s) - y(4 s)
+print value(y(0 s)), uncertainty(y(0 s))

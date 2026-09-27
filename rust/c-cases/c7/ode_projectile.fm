@@ -1,0 +1,22 @@
+# C7: a projectile with an uncertain launch speed, as a 2-D vector ODE: R = v₀² sin(2θ) / g, σ_R = 2 R σ_v / v₀
+v0 = 20.0 ± 0.5 m/s
+θ = 30°
+g = 9.81 m/s²
+solve r'' = <0 m/s², -g> with r(0 s) = <0 m, 0 m>, r'(0 s) = v0 <cos(θ), sin(θ)> for t from 0 s to 5 s
+T = 2 v0 sin(θ) / g
+print r(T)
+print r(T).x, v0² sin(2θ) / g
+print uncertainty(r(T).x), 2 value(v0² sin(2θ) / g) uncertainty(v0) / value(v0)
+# with air drag (no closed form) and an uncertain drag coefficient, stopped at the landing
+b = 0.010 ± 0.002 1/m
+solve q'' = <0 m/s², -g> - b |q'| q' with q(0 s) = <0 m, 0 m>, q'(0 s) = v0 <cos(θ), sin(θ)> for t from 0 s to 5 s
+    until q.y = 0 m
+tl = times(q)[end]
+print tl
+print q(tl).x
+seed(5)
+propagate montecarlo 4000 samples
+    solve u'' = <0 m/s², -g> - b |u'| u' with u(0 s) = <0 m, 0 m>, u'(0 s) = v0 <cos(θ), sin(θ)> for t from 0 s to 5 s
+    ul = u(tl).x
+print ul
+print abs(uncertainty(q(tl).x) / uncertainty(ul) - 1) < 0.05

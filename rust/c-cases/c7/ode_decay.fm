@@ -1,0 +1,26 @@
+# C7: exponential decay with an uncertain rate: y(t) = y₀ e^(−k t), so σ_y(t) = t y σ_k
+k = 0.50 ± 0.02 1/s
+solve y' = -k y with y(0 s) = 1.00 m for t from 0 s to 4 s
+print y(2 s), y(4 s)
+print uncertainty(y(2 s)), 2 s value(y(2 s)) uncertainty(k)
+print abs(uncertainty(y(4 s)) / (4 s value(y(4 s)) uncertainty(k)) - 1) < 1e-4
+print abs(value(y(2 s) - exp(-k 2 s) 1.00 m)) < 1e-8 m, uncertainty(y(2 s) - exp(-k 2 s) 1.00 m) < 1e-8 m
+# y' (from the right side) and the values at the solver's steps are uncertain too; y' = −k y₀ e^(−k t) doesn't
+# change with k at k t = 1, so y'(2 s) is (almost) exact
+print value(y'(2 s)), uncertainty(y'(2 s)) < 1e-8 m/s, y'(3 s)
+print values(y)[3]
+# an uncertain starting value: the result is fully correlated with it
+y0 = 2.0 ± 0.1 m
+solve x' = -x / (1 s) with x(0 s) = y0 for t from 0 s to 1 s
+print x(1 s), x(1 s) / y0
+# an uncertain start time
+t0 = 1.0 ± 0.1 s
+solve p' = -p / (1 s) with p(t0) = 1.0 m for t from t0 to 3 s
+print p(2 s), exp(-(2 s - t0) / (1 s)) 1 m
+# against Monte Carlo
+seed(11)
+propagate montecarlo 20000 samples
+    solve z' = -k z with z(0 s) = 1.00 m for t from 0 s to 4 s
+    z4 = z(4 s)
+print z4
+print abs(uncertainty(y(4 s)) / uncertainty(z4) - 1) < 0.03

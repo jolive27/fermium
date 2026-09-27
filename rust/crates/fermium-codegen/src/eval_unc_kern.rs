@@ -24,7 +24,7 @@ use fermium_runtime::numerics::uncertain::{self as U, UFloat};
 
 use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
 use crate::eval_solve::SolData;
-use crate::eval_unc::{fixed_begin, fixed_end, fixed_sample, is_unc_error, mc_sample, mc_ufloat};
+use crate::eval_unc::{fixed_begin, fixed_end, fixed_sample, is_unc_error, mc_begin, mc_sample, mc_take, mc_ufloat};
 
 /// Samples for the Monte Carlo fallback of a kernel (as a  propagate montecarlo  block that needs one sample at
 /// a time).
@@ -73,9 +73,15 @@ pub(crate) fn linear_enough(y0: f64, yp: f64, ym: f64, noise: f64) -> bool {
 }
 
 /// The warning for a kernel that fell back to Monte Carlo.
-pub(crate) fn mc_warning(what: &str, n: usize) -> String {
-    format!("{what} is too far from linear in its uncertain inputs over ±1σ for first-order propagation, so its \
-             uncertainty comes from Monte Carlo ({n} samples; see  propagate montecarlo  to set the number)")
+pub(crate) fn mc_warning(what: &str, plain_needed: bool, n: usize) -> String {
+    let why = if plain_needed {
+        "uses an uncertain value where a plain number is needed (a loop bound, an index), which first-order \
+         propagation can't follow"
+    } else {
+        "is too far from linear in its uncertain inputs over ±1σ for first-order propagation"
+    };
+    format!("{what} {why}; its uncertainty comes from Monte Carlo ({n} samples; see  propagate montecarlo  to \
+             set the number)")
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {
@@ -137,6 +143,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn integral_unc(&mut self, lam: usize, va: &Value, vb: &Value, atol: f64, name: f64,
                                fail: &dyn Fn(&Self, fermium_runtime::numerics::Fail) -> RunError, fr: &mut Frame)
                                -> Result<Value, RunError> {
+        let started = kernel_pm_begin();
+        let r = self.integral_unc_in(lam, va, vb, atol, name, fail, fr);
+        kernel_pm_end(started);
+        r
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn integral_unc_in(&mut self, lam: usize, va: &Value, vb: &Value, atol: f64, name: f64,
+                       fail: &dyn Fn(&Self, fermium_runtime::numerics::Fail) -> RunError, fr: &mut Frame)
+                       -> Result<Value, RunError> {
         let (a, b) = (nominal(va), nominal(vb));
         let line = self.line;
         // the value, and the sources the integrand meets
@@ -274,7 +290,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let n = MC_KERNEL;
         let zs: Vec<(u64, Vec<f64>)> =
             srcs.iter().map(|&k| (k, (0..n).map(|_| crate::eval_m3::randn_draw()).collect())).collect();
-        let prev = fixed_begin(n, zs.clone());
+        let prev = mc_begin(n, zs);
         let mut ys = Vec::with_capacity(n);
         let mut res = Ok(());
         for j in 0..n {
@@ -292,10 +308,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
         }
-        fixed_end(prev);
+        let zs = mc_take(prev);
         self.line = line;
         res?;
-        crate::eval_calc::warn_at(line, &mc_warning("this integral", n));
+        crate::eval_calc::warn_at(line, &mc_warning("this integral", !linear_ok, n));
+        let srcs: Vec<u64> = zs.iter().map(|(k, _)| *k).collect();
         let zr: Vec<&[f64]> = zs.iter().map(|(_, z)| &z[..]).collect();
         let _ = U::NOISE;
         Ok(Value::Unc(Rc::new(mc_ufloat(&ys, &zr, &srcs))))
@@ -311,6 +328,46 @@ thread_local! {
     /// > 0 while a kernel's linear pass evaluates (an integral inside an ODE's right side): nested kernels then
     /// propagate linearly without their own ±1σ check or Monte Carlo.
     static KERNEL_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+thread_local! {
+    /// While a kernel with uncertain inputs runs: the value of each ± written inside it (by IR node), so that
+    /// every evaluation of the integrand or right side sees the same measurement.
+    static KERNEL_PM: RefCell<Option<HashMap<usize, Value>>> = const { RefCell::new(None) };
+}
+
+pub(crate) fn kernel_pm_active() -> bool {
+    KERNEL_PM.with(|k| k.borrow().is_some())
+}
+
+pub(crate) fn kernel_pm_get(key: usize) -> Option<Value> {
+    KERNEL_PM.with(|k| k.borrow().as_ref().and_then(|m| m.get(&key).cloned()))
+}
+
+pub(crate) fn kernel_pm_put(key: usize, v: Value) {
+    KERNEL_PM.with(|k| {
+        if let Some(m) = k.borrow_mut().as_mut() {
+            m.insert(key, v);
+        }
+    })
+}
+
+/// Starts a kernel's ± cache (unless an enclosing kernel has one); true if this call started it.
+fn kernel_pm_begin() -> bool {
+    KERNEL_PM.with(|k| {
+        let mut k = k.borrow_mut();
+        if k.is_some() {
+            return false;
+        }
+        *k = Some(HashMap::new());
+        true
+    })
+}
+
+fn kernel_pm_end(started: bool) {
+    if started {
+        KERNEL_PM.with(|k| *k.borrow_mut() = None);
+    }
 }
 
 pub(crate) fn nested() -> bool {
@@ -406,6 +463,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     /// alongside, checked at ±1σ per source; else Monte Carlo.
     pub(crate) fn solve_ode_unc(&mut self, s: &Stmt, y0v: &[Value], vt0: &Value, t1: f64, h0: Option<f64>,
                                 fr: &mut Frame) -> Result<(), RunError> {
+        let started = kernel_pm_begin();
+        let r = self.solve_ode_unc_in(s, y0v, vt0, t1, h0, fr);
+        kernel_pm_end(started);
+        r
+    }
+
+    fn solve_ode_unc_in(&mut self, s: &Stmt, y0v: &[Value], vt0: &Value, t1: f64, h0: Option<f64>,
+                        fr: &mut Frame) -> Result<(), RunError> {
         let StmtKind::Solve { sol, rhs, x, .. } = &s.kind else { unreachable!() };
         let module = self.module;
         let lam = &module.lambdas[*rhs];
@@ -428,6 +493,15 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Err(e) => return Err(e),
         };
         let y0n: Vec<f64> = y0v.iter().map(nominal).collect();
+        let mut plain_needed = linear.is_none();
+        if linear.is_some() && srcs.is_empty() {
+            // only the end time is uncertain: the solution doesn't depend on it
+            let solv = self.ode_core(s, &y0n, t0, t1, h0, None, fr)?;
+            let snap = self.snapshot(*rhs, fr);
+            self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None, unc: None },
+                           fr);
+            return Ok(());
+        }
         if let Some(fv) = linear.take() {
             let mut yaug = y0n.clone();
             for &k in &srcs {
@@ -447,7 +521,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         return Ok(());
                     }
                 }
-                Err(e) if is_unc_error(&e) => {}
+                Err(e) if is_unc_error(&e) => plain_needed = true,
                 Err(e) => return Err(e),
             }
         }
@@ -455,7 +529,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let _ = x;
         let nmc = MC_ODE;
         let zs: Vec<Vec<f64>> = srcs.iter().map(|_| (0..nmc).map(|_| crate::eval_m3::randn_draw()).collect()).collect();
-        let prev = fixed_begin(nmc, srcs.iter().copied().zip(zs.iter().cloned()).collect());
+        let prev = mc_begin(nmc, srcs.iter().copied().zip(zs).collect());
         let mut sols = Vec::with_capacity(nmc);
         let mut res = Ok(());
         for j in 0..nmc {
@@ -470,7 +544,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
         }
-        fixed_end(prev);
+        let zs = mc_take(prev);
+        let srcs: Vec<u64> = zs.iter().map(|(k, _)| *k).collect();
+        let zs: Vec<Vec<f64>> = zs.into_iter().map(|(_, z)| z).collect();
         res?;
         // the nominal solve: every source at its value
         let prev = fixed_begin(1, vec![]);
@@ -478,7 +554,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         fixed_end(prev);
         let nom = nom?;
         self.line = line;
-        crate::eval_calc::warn_at(line, &mc_warning("this differential equation's solution", nmc));
+        crate::eval_calc::warn_at(line, &mc_warning("this differential equation's solution", plain_needed, nmc));
         let snap = self.snapshot(*rhs, fr);
         self.store_sol(*sol, SolData { sol: nom, rhs: Some((*rhs, snap)), grid: None, check: None,
                                        unc: Some(UncSol::Mc { srcs, zs, sols, resid: RefCell::new(HashMap::new()) }) },

@@ -832,6 +832,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
                 }
+                if (name == "pm" || name == "pm_rel") && crate::eval_unc_kern::kernel_pm_active() {
+                    // a ± written inside an integrand or a right side: one measurement per kernel (C7)
+                    let key = e as *const Expr as usize;
+                    if let Some(v) = crate::eval_unc_kern::kernel_pm_get(key) {
+                        return Ok(v);
+                    }
+                    let v = self.builtin_slice(name, &vals)?;
+                    crate::eval_unc_kern::kernel_pm_put(key, v.clone());
+                    return Ok(v);
+                }
                 let r = self.builtin_slice(name, &vals);
                 crate::varmap::give_args(vals);
                 r?

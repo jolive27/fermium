@@ -1,0 +1,5 @@
+{
+ "stdout": "0.19 ± 0.19 m\ntrue true\n0 ± 0 m\n1.0 m 0 m\n",
+ "stderr": "warning: line 6: this differential equation's solution is too far from linear in its uncertain inputs over ±1σ for first-order propagation; its uncertainty comes from Monte Carlo (2000 samples; see  propagate montecarlo  to set the number)\n",
+ "exit": 0
+}

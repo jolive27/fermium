@@ -1437,7 +1437,7 @@ print "Monte Carlo:", R
 - At 45° the slope of the range is zero, so the linear rule ignores the angle; the simulation shows the range getting shorter and more spread out.
 - The samples come from the seeded generator of §20: the same program gives the same numbers, and `seed(n)` before the block changes them. Correlated inputs (say g and a later formula that uses g) are sampled consistently, and the results stay linked to the inputs, so later formulas keep the correlations.
 - Only formulas (`name = …`, `if`, loops, `solve`) go in the block: no `print`, `plot` or `fit`. A block that needs one sample at a time (an `if` on a sampled value, an integral, an ODE) runs more slowly, with a default of 10 000 samples.
-- **Integrals, `solve` (ODEs and equations) and vectors** can't take uncertain values directly; they stop with a message that points here. Inside `propagate montecarlo` they work:
+- **Integrals, ODEs and vectors** take uncertain values directly in Fermium 2.5 (next section). In Fermium 1.5, and still for `solve … for x`, eigenvalue problems and PDEs, they stop with a message that points here. Inside `propagate montecarlo` they all work:
 
 ```fermium
 k = 0.50 ± 0.05 1/s
@@ -1446,6 +1446,34 @@ propagate montecarlo 2000 samples
     x2 = x(2 s)
 print x2
 ```
+
+### Vectors, integrals and differential equations (Fermium 2.5)
+
+In the Rust compiler from Fermium 2.5 (spec C7); Fermium 1.5 stops with the messages above. The program (a
+`text` block, since the docs' `fermium` blocks also run with Fermium 1.5; it is `rust/c-cases/c7/doc_example.fm`)
+
+```text
+v = <3.0 ± 0.1, 4.0 ± 0.1> m/s
+print v, |v|, unit(v)
+a = 2.0 ± 0.1 m
+print ∫ x² dx from 0 m to a          # σ = a² σ_a
+k = 0.50 ± 0.02 1/s
+solve y' = -k y with y(0 s) = 1.00 m for t from 0 s to 4 s
+print y(2 s)                          # σ = t y σ_k
+```
+
+prints
+
+```
+<3.00 ± 0.10, 4.00 ± 0.10> m/s 5.00 ± 0.10 m/s <0.600 ± 0.016, 0.800 ± 0.012>
+2.67 ± 0.40 m³
+0.368 ± 0.015 m
+```
+
+- **Vectors and matrices** of uncertain values print with one unit (`<1.00 ± 0.10, 2.00 ± 0.20> m`, `[[2.00 ± 0.10, -1], [-1, 2.00 ± 0.10]] N/m`; a state vector with a unit per component). `|v|`, `unit`, `·`, `×`, `abs`, components, `det`, `inverse`, `solve_linear` and matrix products propagate with the correlations (`K inverse(K)` is exactly the identity). Lists of uncertain values work in every list function, including `std` (the spread, with its uncertainty) and `interp`.
+- **Integrals** whose integrand reads a measured value, or whose limits are measured, are propagated exactly: the derivative is taken under the integral sign (one more quadrature per error source) and through the limits (f(b)·σ_b). `∫ x² dx from 0 to a` minus `a³/3` is exactly `0 ± 0`.
+- **Differential equations** with a measured starting value, start time or parameter solve the sensitivities ∂y/∂(each source) alongside y with the same solver (the variational equations), so `y(t)`, `y'(t)` and `values(y)` are uncertain values that keep their correlations with the inputs. The stopping time of `until`, `max`/`min` of a solution and plots use the nominal solution.
+- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part is more than 10 % of the first-order part), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 have the details.
 
 ### How it runs
 

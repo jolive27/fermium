@@ -916,6 +916,22 @@ pub(crate) fn fixed_end(prev: Option<Mc>) {
     MC.with(|m| *m.borrow_mut() = prev);
 }
 
+/// Monte Carlo for a kernel: like [`fixed_begin`], but a source met that isn't among the given streams gets a
+/// stream of its own from the program's random numbers (at its first use); [`mc_take`] returns them all.
+pub(crate) fn mc_begin(n: usize, zs: Vec<(u64, Vec<f64>)>) -> Option<Mc> {
+    let zs = zs.into_iter().map(|(k, z)| (Key::Src(k), z)).collect();
+    MC.with(|m| m.borrow_mut().replace(Mc { k: Some(0), n, zs, fixed: false }))
+}
+
+/// Ends [`mc_begin`]: restores the sampler that was active before and returns the sources' streams.
+pub(crate) fn mc_take(prev: Option<Mc>) -> Vec<(u64, Vec<f64>)> {
+    let cur = MC.with(|m| std::mem::replace(&mut *m.borrow_mut(), prev));
+    cur.map(|m| m.zs.into_iter().filter_map(|(k, z)| match k {
+        Key::Src(id) => Some((id, z)),
+        Key::Pm(..) => None,
+    }).collect()).unwrap_or_default()
+}
+
 /// Monte Carlo results y (one per sample of the streams zs, sources src) as an uncertain value: the linear model
 /// fitted by least squares gives the value at z = 0 and one contribution per source, and what it doesn't
 /// explain (the nonlinear part) is a new source of its own (interp.s_SPropagate's regression).

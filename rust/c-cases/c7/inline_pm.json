@@ -1,0 +1,5 @@
+{
+ "stdout": "0.500 ± 0.050\n0.368 ± 0.015\n0.96 ± 0.15\n",
+ "stderr": "warning: line 13: this integral uses an uncertain value where a plain number is needed (a loop bound, an index), which first-order propagation can't follow; its uncertainty comes from Monte Carlo (10000 samples; see  propagate montecarlo  to set the number)\n",
+ "exit": 0
+}

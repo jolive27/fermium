@@ -1187,3 +1187,72 @@ the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` expe
 - **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
 - **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
 - **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
+
+## D276. Uncertain values through integrals: exact derivatives under the integral sign and by the limits (spec C7)
+- **What:** `∫ f dx from a to b` whose integrand reads uncertain values, or whose limits are uncertain, gives an
+uncertain value instead of v1's "an integral can't use uncertain values (±) yet". Linear propagation with exact
+derivatives: each uncertain value carries its contributions c_k = ∂x/∂z_k (one per independent source k), and the
+tree-walker's arithmetic on those values is forward-mode differentiation, so the integrand evaluated at a plain x
+gives ∂f/∂z_k there. Then ∂I/∂z_k = ∫ ∂f/∂z_k dx (one extra quadrature per source, rtol 10⁻¹⁰, an absolute
+tolerance of 10⁻¹² × the largest |∂f/∂z_k| at a, b and the midpoint × the width) + f(b) ∂b/∂z_k − f(a) ∂a/∂z_k.
+Correlations are kept: `∫ x² dx from 0 to a` minus `a³/3` is exactly 0 ± 0. An integrand that doesn't depend on x
+with uncertain limits keeps v1's path (the result is linear in b − a). A `±` written inside the integrand (or an
+ODE's right side) is one measurement for the whole kernel: its value is kept per IR node while the kernel runs
+(otherwise each evaluation would be a new independent source). Code: `fermium-codegen/src/eval_unc_kern.rs`.
+- **Why:** exact (no step to choose), cheap (K + 1 quadratures for K sources), and it reuses the propagation every
+operator already has. Differentiation under the integral sign needs f and ∂f/∂z continuous in x on the range,
+which holds for the integrands the quadrature handles anyway.
+- **Alternatives:** central differences in each source with a step (rejected: a step to choose, and the adaptive
+quadrature's node changes make the difference noisy); a vector quadrature of (f, ∂f/∂z_1, …) on one set of nodes
+(the runtime's quadrature is scalar; left for later); always Monte Carlo (slow, and noisy where linear is exact).
+
+## D277. Uncertain values through ODEs: the sensitivity (variational) equations solved alongside, by the same solver
+- **What:** `solve` with uncertain starting values, an uncertain start time, or a right side that reads uncertain
+values solves the state y (n components) together with S_k = ∂y/∂z_k for each source k: dS_k/dt = J S_k + ∂f/∂z_k.
+The right side is evaluated once per step stage on uncertain numbers whose contributions are the S_k, which gives
+f and J S_k + ∂f/∂z_k at once (forward-mode differentiation; no Jacobian is formed). S_k(t₀) = ∂y₀/∂z_k −
+f(t₀, y₀) ∂t₀/∂z_k. The augmented system (n(1 + K) components) goes through the chosen solver (RK45, RK4, Radau,
+BDF) with its step control over all components; the relative tolerance is divided by √(1 + K) because the error norm
+is an RMS over all components, so the nominal part keeps its accuracy. `y(t)` is the interpolated value with the
+interpolated S_k as contributions (correlations kept: `x(1 s) / x0` is exactly ± 0 for x' = −x); `y'(t)` evaluates
+the augmented right side at the interpolated state; `values(y)` is a list of uncertain values; an uncertain query
+time adds the slope times its uncertainty. The event time of `until` stays a plain number (the nominal crossing),
+and `max`/`min` of a solution and plots use the nominal solution. An uncertain end time is used at its value.
+- **Why:** the textbook method (it is what "linear error propagation through an ODE" means), accurate to the
+solver's tolerance, and one solve instead of 2K + 1 finite-difference solves.
+- **Alternatives:** finite differences of whole solves (step choice, adaptive-step noise); forming ∂f/∂y by finite
+differences (a step again); Monte Carlo only (see D278).
+
+## D278. When linear propagation isn't valid: a ±1σ test per source, then Monte Carlo (integrals and ODEs)
+- **What:** after the linear result, each source k is moved to z_k = +1 and −1 (every uncertain input read as its
+value ± its contribution c_k, through the Monte Carlo sampler with fixed streams) and the kernel recomputed with
+plain numbers. With y₀ the linear result's value, d₁ = (y₊ − y₋)/2 and d₂ = (y₊ + y₋ − 2 y₀)/2, linear
+propagation is accepted when |d₂| ≤ 0.1 |d₁| (the second-order change over ±1σ is at most 10 % of the first-order
+one) or |d₂| is below the kernel's own accuracy (10³ × the quadrature's error estimate; 100 × rtol × the component's
+largest |y| for an ODE, at 8 times across the solution). Otherwise the result comes from Monte Carlo, with a
+warning: 10 000 samples for an integral, 2 000 whole solves for an ODE (each sample draws every source from the
+program's seeded random numbers, so a run is reproducible and `seed(n)` changes it). The result is linked to the
+sources by the same regression as `propagate montecarlo` (value at z = 0, one contribution per source, the
+nonlinear rest as a new source; for an ODE the same new source at each (component, t) asked twice). A kernel whose
+integrand or right side needs a plain number (an uncertain loop bound, an index) goes to Monte Carlo directly.
+Kernels nested inside another kernel's linear pass (an integral inside an ODE's right side) propagate linearly
+without their own test.
+- **Why:** first-order propagation is wrong exactly where the slope vanishes or the function bends strongly over
+±1σ (a peak centred in an integration range, a decay rate known to ±40 %). Testing at ±1σ is the scale the result
+describes; it costs 2K extra kernel runs. The test misses cross terms between sources (∂²/∂z_i∂z_j) and nonlinearity
+between the 8 test times of an ODE.
+- **Alternatives:** always Monte Carlo (slow, noisy); only a warning pointing at `propagate montecarlo` (the user
+asked for a result); a second-order (Hessian) correction (needs second derivatives; doesn't cover strongly
+non-Gaussian outputs).
+
+## D279. Vectors, matrices and lists of uncertain values print and work in every operation (spec C7)
+- **What:** `<1.0 ± 0.1, 2.0 ± 0.2> m` is a vector of uncertain values (v1: "needs a plain number"). Printing: one
+unit for the vector or matrix, each uncertain entry rounded as a single uncertain number (σ to 2 figures), plain
+entries with up to 6 figures as in lists of uncertain values; a state vector prints each component with its unit;
+an entry whose value and σ are both below 10⁻¹⁴ of the largest entry is rounding noise and prints `0 ± 0` (D197).
+`norm`/`|v|`, `unit`, `abs`, `≈` (on values), `len`, components, `·`, `×`, `det`, `inverse`, `solve_linear`,
+matrix products and transposes propagate with correlations. For lists, `std` (the spread, with its uncertainty
+propagated) and `interp` (segment chosen by the values) now work; the other list functions already did.
+- **Why:** spec C7. Plain 6-figure entries follow v1's rule for lists of uncertain values, so a list and a vector
+look alike.
+- **Alternatives:** a common exponent for the whole vector (harder to read when entries differ in size).

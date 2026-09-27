@@ -1,0 +1,14 @@
+# C7: an uncertain limit. ∫₀^a x² dx = a³/3, so σ = a² σ_a (dI/da = f(a))
+a = 2.0 ± 0.1 m
+I = ∫ x² dx from 0 m to a
+print I
+print uncertainty(I), value(a)² uncertainty(a)
+print I - a³ / 3
+# both limits uncertain and correlated: the same measurement at both ends gives exactly 0
+print ∫ x² dx from a to a
+b = 1.0 ± 0.05
+k = 1.0 ± 0.1
+# ∂/∂b = e^(−k b), ∂/∂k = −∫₀^b x e^(−k x) dx
+J = ∫ exp(-k x) dx from 0 to b
+print J, (1 - exp(-k b)) / k
+print J - (1 - exp(-k b)) / k
