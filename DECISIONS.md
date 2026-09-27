@@ -2000,3 +2000,7 @@ a different citation (the neutron-branch form is the standard one).
   it, and the release workflow then builds the macOS and Linux binaries (that workflow has never run).
 - **Alternatives:** tagging at 0b19459 when CI first went green (before the round-16 fixes; rejected because the
   JIT cache could print stale results); a GitHub release through the API (the same permission problem).
+- **Moved forward (Sun ~11:00 UTC):** after the gate, the benchmark runs found the huge-page slowdown (D316's
+  default changed to populate-only) and red team 17 found errors in RUN_REPORT, CHANGES_2.5 and the docs'
+  examples. A release built from eb63425 would miss the D316 fix, so `claude/v2.5-freeze` and the local `v2.5`
+  tag were moved to the run's final commit, once its CI passed. The branch only moved forward: eb63425 is an ancestor.

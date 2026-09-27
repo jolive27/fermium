@@ -1,4 +1,4 @@
-# What changes in Fermium 2.5 (in progress)
+# What changes in Fermium 2.5
 
 Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Programs that ran with 2.0 print the
 same, except the documented divergences below: the conformance suite still holds every program to Fermium 1.5's
@@ -16,9 +16,10 @@ fast-math, no reassociation.
   included); loops that only read lists no longer stop at a collector safe point. The all-pairs `forces`
   benchmark's inner loop now runs 4 pairs at a time: about 2× faster on one thread and on four (A/B on a shared
   machine; the quiet-machine table in benchmarks/RESULTS.md is the reference).
-- **Fixed-step RK4 with a stored solution** (D316): the solution's sample arrays are mapped in one go (huge
-  pages where Linux has them) instead of one page fault per 4 KiB, which cost as much as the steps themselves in
-  `spring_rk4` (≈ 20 % faster there, median).
+- **Fixed-step RK4 with a stored solution** (D316): the solution's sample arrays are mapped in one go
+  instead of one page fault per 4 KiB, which cost as much as the steps themselves in `spring_rk4`. (Huge pages were
+  the default at first; the v2.5 benchmark run showed them 4× slower right after another process had churned
+  memory, so the default is populate only: `FERMIUM_PREFAULT=h` still asks for them.)
 - **Smaller things** (D314, D315): functions that call no function skip the runaway-recursion check (so they
   inline as plain arithmetic); `exp`, `ln`, `sin`, `cos` call the C library directly (the same functions, so the
   same numbers).
@@ -29,7 +30,7 @@ fast-math, no reassociation.
   library takes 8–9 ms from start to finish instead of 25–28 ms (the rest is starting the binary). A changed module, a module added where an import looks first,
   a damaged entry or a new `fermium` binary make it compile again. Not cached: programs that use Python, C or C++,
   read data files when checked, or have constructs the tree-walker runs. `FERMIUM_NO_CACHE=1` turns it off.
-- Not done: blackbody stays ≈ 1.5× Julia (its time is the quadrature's bookkeeping around each integrand call and
+- Not done: blackbody stays 1.8–2× Julia (its time is the quadrature's bookkeeping around each integrand call and
   glibc's `exp`; a batched integrand is in BACKLOG), and `fermium build` doesn't use these caches.
 
 ## Several versions of one function: multiple dispatch (C5, DECISIONS D285)
@@ -73,7 +74,7 @@ import cpp "libkinematics.so" header "kinematics.hpp":
     kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass  # … another
 import cpp header "cmath":
     std::tgamma(x) -> number
-print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 24
+print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.8 MeV/c 24
 ```
 
 - The signatures are those of `import c`, with namespaced names; the declared signature picks the overload
@@ -226,6 +227,7 @@ solve y'' = -g
   each other). `sweep L from 0.5 m to 2 m step 0.5 m` works too.
 
 ```text
+M = 1 kg
 sweep k in [1, 2, 4] N/m
     solve M x'' = -k x
       with x(0 s) = 1 m, x'(0 s) = 0 m/s
@@ -258,13 +260,13 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
 - [neutron_star_cooling](research/neutron_star_cooling/): Ioffe table of 48 thermally emitting neutron stars — one-zone modified-Urca + envelope cooling model.
 - [level_density](research/level_density/): RIPL-3 s-wave resonance spacings — Bethe Fermi-gas level density, a ≈ A/8 and the shell dips.
 - Found on the way: `fit` reports a wrong standard error for a parameter with a tiny SI value (e.g. a fit parameter in MeV);
-  the fitted value is right. Logged under "Bugs first" in BACKLOG.md (not fixed here; Fermium 1.5 does the same).
+  the fitted value is right. Fixed afterwards in v2.5 (DECISIONS D326); Fermium 1.5 keeps the bug.
 - Tests: `rust/crates/fermium-cli/tests/research_c8.rs` runs every one with the `fermium` binary (in a copy of its folder,
   so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
   absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1
   conformance suite is unchanged.
 
-## Red team 16 fixes (DECISIONS D330–D337)
+## Red team 16 fixes (DECISIONS D330–D336)
 - The compile cache's key holds `$HOME` and the current folder, and `--base-dir .` is made absolute: `import "~/m.fm"`
   under another `$HOME`, or the same program run with `--base-dir .` from another folder, no longer runs stale code.
 - `(u^a)^b` is merged into `u^(ab)` only when that holds for every real u: `d/dx (x²)^(3/2)` is `3x (x²)^(1/2)`

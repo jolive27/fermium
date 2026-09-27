@@ -3,7 +3,7 @@
 ## Where Fermium stands
 
 Fermium is now a single compiled program written in Rust (version 2.5.0). It checks units before your program
-runs, understands calculus, and starts in about 12 ms. The run reached **Phase C (v2.5) and its gate**:
+runs, understands calculus, and starts in about 15 ms. The run reached **Phase C (v2.5) and its gate**:
 - **Phase A:** v1.5 was fixed and frozen.
 - **Phase B:** the Rust compiler replaced the Python one. It prints exactly what v1.5 printed on 3324 of 3366
   recorded programs, and the other 42 are documented, deliberate differences.
@@ -11,10 +11,11 @@ runs, understands calculus, and starts in about 12 ms. The run reached **Phase C
   multi-line functions, unit-checked C, Fortran and C++ calls, multiple dispatch, uncertainties through
   integrals and ODEs, faster loops, and 10 new research reproductions with downloaded data.
 
-Phase D was not started. Four independent red-team rounds tested v2.5 during the run; every high finding was
+Phase D was not started. Five independent red-team rounds (13–17) tested v2.5 during the run; every high finding was
 fixed and has a test. The biggest gaps:
 - **There is still no download.** GitHub refused every tag push, so you build it once from source (below).
-- **The Julia goal is only half met:** faster on 3 of 7 compute benchmarks, level on 1, and slower on 3.
+- **The Julia goal is only half met:** of the 6 benchmark programs, faster on 2 (nbody, and forces on both 1
+  and 4 threads), level on 1, slower on 3.
 - **All of it is in draft pull requests** (#2 → #3 → #4) waiting for your review.
 
 ---
@@ -148,7 +149,7 @@ accurate results).
 
 ### Speed: before (v1.5) and after (v2.0)
 
-Source: `benchmarks/RESULTS.md` (2026-09-26 12:42 UTC, `fermium 2.0.0-dev`), median of 7 runs on a shared 4-core
+Source: `benchmarks/RESULTS.md` as of commit `0658569` (2026-09-26 12:42 UTC, `fermium 2.0.0-dev`; the file now holds the v2.5 run), median of 7 runs on a shared 4-core
 machine (load 1.4–2.8): treat differences under about 10–30 % as noise. The v2.5 numbers are in the Phase C section.
 
 **Whole programs, including start-up and compiling (Wall):**
@@ -196,7 +197,7 @@ answers as v1.5.
 - **B5.6 uncertainties: partial.** ± works in native Rust, including the REPL and Jupyter (v1 refused it there), but
   runs only in the interpreter, not in LLVM-compiled code, and `fermium build` refuses ± programs.
 - **B5.10 `fermium build`: partial.** Linux works (built-in lld, no C compiler; 85 of 85 sampled programs match
-  `fermium run`, `83b778c`). macOS has never been tested.
+  `fermium run`, `5dcff42`). macOS has never been tested.
 - **B5.13 Jupyter: done, with one gap:** interrupting a running cell doesn't stop it.
 - **B5.14 Python interop: done, with one gap:** calling Fermium from Python (`fermium2`) runs on the interpreter,
   about 10× slower than v1's JIT.
@@ -218,8 +219,8 @@ C9 is met: CI is green on Linux and macOS and the suite has grown with every fea
 |---|---|---|---|
 | C1 Memory and data structures | **done**, gaps below | Lists are freed in compiled code too: a mark-and-sweep collector, so a loop making 10⁶ lists stays under 100 MB (it was 800 MB). Lists of vectors, matrices, complex numbers and text. `solve` with a list of unknowns, sized when the program runs: a decay chain matches Bateman's formula, an N-body orbit closes. N-dimensional arrays with units (`fill(300 K, n, n)`, `A[i, j, k]`); a 2-D heat step matches NumPy. | D280–D283; `rust/c-cases/c1/` (22 programs, also under `FERMIUM_GC_STRESS=1`) |
 | C2 Calculus reach | **done**, gaps below | Derivatives of multi-line functions (automatic differentiation, on by default). An `if` on the unknowns in `solve` is located exactly (a piecewise spring's error drops from 6e-8 m to 1.5e-9 m; dry friction sticks at the analytic amplitude). `when y = 0 m: y' = -0.9 y'` events: the bouncing ball matches the analytic bounces to 6e-14 m. Tidier printed derivatives. `sweep k in [1, 2, 4] N/m` draws one curve per value. | D295–D299; `rust/c-cases/c2/` (15) |
-| C3 C and Fortran interop | **done** | `import c "libfoo.so": energy(m [kg], v [m/s]) -> [J]`, and `import fortran` with `bind(C)` and name mangling. Units are checked at every call. The worked example calls a small C stellar-physics routine; SEMF through Fortran gives 489 MeV. `fermium check` doesn't load the library (it reads the symbol table). | D275, D305; `examples/c_interop/`, `tests/c_interop.rs` (15 tests) |
-| C4 C++ interop | **done**, gaps below | `import cpp "libphys.so" header "phys.hpp": phys::energy(m [kg]) -> [J]`: Fermium writes an `extern "C"` wrapper, compiles it with your C++ compiler and caches it. Overloads and templates are chosen by the declared signature, and C++ exceptions become Fermium errors. Worked example: two-body decay momenta (π⁺→μ⁺ν 29.79 MeV/c, as the PDG gives). After red team 15, the wrapper cache is keyed by SHA-256 of every compile input and checked against a manifest; the cache folder is private. | D290, D320–D324; `examples/cpp_interop/`, `rust/c-cases/c4/` (23) |
+| C3 C and Fortran interop | **done** | `import c "libfoo.so": energy(m [kg], v [m/s]) -> [J]`, and `import fortran` with `bind(C)` and name mangling. Units are checked at every call. The worked example calls a small C stellar-physics routine; the Fortran mass formula gives 495.38 MeV for ⁵⁶Fe. `fermium check` doesn't load the library (it reads the symbol table). | D275, D305; `examples/c_interop/`, `tests/c_interop.rs` (15 tests) |
+| C4 C++ interop | **done**, gaps below | `import cpp "libphys.so" header "phys.hpp": phys::energy(m [kg]) -> [J]`: Fermium writes an `extern "C"` wrapper, compiles it with your C++ compiler and caches it. Overloads and templates are chosen by the declared signature, and C++ exceptions become Fermium errors. Worked example: two-body decay momenta (π⁺→μ⁺ν 29.79 MeV/c to 4 digits, as the PDG gives). After red team 15, the wrapper cache is keyed by SHA-256 of every compile input and checked against a manifest; the cache folder is private. | D290, D320–D324; `examples/cpp_interop/`, `rust/c-cases/c4/` (23) |
 | C5 Multiple dispatch | **done** | One function name with several versions, chosen before the program runs by the number of arguments, their units (dimensions) and their kinds (`r: vector [m]`). Ambiguous calls and calls no version fits are one-line errors. A later, more general definition replaces an earlier one, so v1 programs behave as before. | D285, D302; `rust/c-cases/c5/` (13) |
 | C6 Performance | **partial** (the benchmark goal) | SLP and ordered-reduction vectorization, if-conversion in loops, math intrinsics, fewer collector safe points; all printed digits unchanged. A JIT compile cache: a repeat run starts in about a third of the time. Beating Julia on at least half the benchmark rows is **not** met; see the table below. | D310–D318; `rust/c-cases/c6/`, `tests/c6_perf.rs` |
 | C7 Uncertainties everywhere | **done**, gaps below | `±` through vectors, lists, integrals and ODEs, with linear propagation where it is valid and Monte Carlo otherwise. Correlations are kept (x − x = 0 through a solve). Jumps at an uncertain parameter are detected (red team 14). | D276–D279, D300, D304, D322; `rust/c-cases/c7/` (11), `tests/uncertain.rs` |
@@ -230,8 +231,8 @@ C9 is met: CI is green on Linux and macOS and the suite has grown with every fea
 - C1: programs using lists of vectors, arrays or list unknowns run those statements in the tree-walker (slower),
   and `fermium build` refuses them; no array slices or element-wise `sin` on arrays yet.
 - C2: conditions are located only in RK45 solves (not rk4/radau/bdf, not inside multi-line functions); `when`
-  needs RK45; edge cases (an event exactly at the end time, a crossing at the start) are being documented after
-  red team 16.
+  needs RK45; edge cases (an event exactly at the end time, a crossing at the start, a `y' = 0` reset) are
+  documented in docs/reference.md as limitations.
 - C4: no objects, references, strings or `std::vector`; each C++ call costs about 0.6 µs (it goes through the
   run time to catch exceptions); macOS linking is verified only by CI.
 - C6: see the benchmark table; `fermium build` doesn't use the new cache or intrinsics.
@@ -272,9 +273,10 @@ compile time is excluded).
 | startup (whole process) | 178 ms | 17.7 ms | 14.6 ms | 288 ms | 20× faster to start |
 
 - **The goal, "beat Julia on at least half of the benchmark rows": not met by a strict reading.** Fermium is
-  clearly faster on 3 of the 7 compute rows and level on a 4th (unit_loop). It is slower on 3: spring_adaptive,
+  clearly faster on 2 of the 6 benchmark programs (nbody; forces, on 1 and on 4 threads) and level on a 3rd
+  (unit_loop). It is slower on 3: spring_adaptive,
   spring_rk4 and blackbody. The blackbody row moved between runs (1.76× and 1.98×), so treat differences under
-  about 10–15 % as noise.
+  about 10–15 % between runs as noise on this machine.
 - **A bug found by this measurement, and fixed.** In the first two full runs spring_rk4 took 131 ms (8× Julia),
   but only when it ran right after NumPy's 8-second benchmark. The cause was C6's default of asking the kernel
   for huge pages for the solver's 40 MB trajectory arrays: after another process has churned through memory,
@@ -289,8 +291,11 @@ compile time is excluded).
 ### The v2.5 tag
 
 Gate C9 was met at commit `eb63425`: PR #4's CI run 249 passed on Linux and macOS, and every high red-team
-finding was fixed. The tag `v2.5` was created on it, but GitHub refused the push (the connection is cut, as for
-v1.5 and v2.0), so the branch **`claude/v2.5-freeze`** marks the commit (D340). To publish the tag and let the
+finding was fixed. The tag `v2.5` was created there, but GitHub refused the push (the connection is cut, as for
+v1.5 and v2.0), so the branch **`claude/v2.5-freeze`** marks the release commit instead (D340). After the
+gate, the benchmark runs found the huge-page slowdown (D316) and red team 17 found errors in this report and
+the docs, so the marker and the local tag were moved forward to the run's final commit (the last commit of
+`claude/v2.5`, where `claude/v2.5-freeze` now points), which includes those fixes and passed CI. To publish the tag and let the
 release workflow build the downloads: `git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push
 origin v2.5`.
 
@@ -369,13 +374,14 @@ The spec-B2 fixes are 5, 6, 7, 8, 13 and 16. The Phase C changes are 23 and 26�
 ## Try it on your Mac
 
 There is no download yet (no release tag could be pushed from here; see "What you must install today"), so you
-build it once from source. It takes about 15 minutes, most of it compiling LLVM-linked code.
+build it once from source. The first build takes 15–30 minutes, most of it compiling LLVM-linked code.
 
 1. **Tools** (once):
    ```sh
    xcode-select --install                                   # Apple's C/C++ compiler and linker
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust; then open a new terminal
-   brew install llvm@18 lld@18 zstd
+   brew install llvm@18 zstd
+   brew install lld@18 || true      # optional (for `fermium build`); the formula isn't always available
    ```
 2. **Get the v2.5 code:**
    ```sh
@@ -392,6 +398,8 @@ build it once from source. It takes about 15 minutes, most of it compiling LLVM-
    else is needed.
 5. **Try it:**
    - `fermium run examples/01_pendulum.fm`, then the bootcamp lessons in `bootcamp/` (every code block runs as is).
+     Some examples save their plot into `examples/gallery/`, which is part of the repository, so `git status`
+     shows it changed afterwards; `git checkout -- examples/gallery` puts it back.
    - Your own programs: `fermium fmt --fix lesson2.fm` once (it adds the two brackets the unit rule asks for),
      then `fermium run lesson2.fm`.
    - New in 2.5: `research/` rows 12–21 (`cd research/cmb_firas && fermium run firas.fm`), multiple dispatch
@@ -425,9 +433,12 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
 6. **Fermium 1.5 (legacy/) keeps bugs v2.5 fixed:** the `fit` error for tiny SI parameters, the (x²)^(3/2)
    derivative, and the formatter turning `fm * A` into a unit. It is frozen as the oracle, so these are listed,
    not fixed.
-7. **Research track:** C8's r-process reproduction wasn't done (no downloadable table). The neutron-star cooling
+7. **Messages a beginner still meets without a hint line** (red team 17): the `when` "infinitely many events"
+   error, a unit mismatch inside a `when` reset, `A[2, :]` on an array (slices aren't supported), `sin` of an
+   array. A text list prints as `[H, He]`, which looks like a unit in brackets.
+8. **Research track:** C8's r-process reproduction wasn't done (no downloadable table). The neutron-star cooling
    model assumes a proton fraction of 0.05, flagged in its README.
-8. **The run's own environment:** the machine had 15 GB and no swap. Legacy test workers were killed several
+9. **The run's own environment:** the machine had 15 GB and no swap. Legacy test workers were killed several
    times when agents' test runs overlapped, so some checks were run in two parts (every part passed; stated
    in the commits).
 

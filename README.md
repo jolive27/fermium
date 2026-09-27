@@ -141,7 +141,7 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 Fermium 2.5 (the Rust binary, release build), measured 27 Sep 2026 09:52 UTC on one 4-core machine (Intel Xeon
 @ 2.10 GHz, a shared VM, load average 0.9–1.3 during the run), median of 7 interleaved runs. The full table,
 methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md);
-`python benchmarks/run.py --interleave --langs fermium,fermium-1.5,julia,python,numpy` reproduces every number.
+`python benchmarks/run.py --interleave -r 7 --langs fermium,fermium-1.5,julia,python,numpy` reproduces every number.
 The Fermium 1.5 column (the Python implementation, LLVM through llvmlite) is from the same run, for reference;
 the back end's own measurements and what is still slower are in
 [rust/crates/fermium-codegen/PERF.md](rust/crates/fermium-codegen/PERF.md). Ratios near 1 move by 5–10% from run

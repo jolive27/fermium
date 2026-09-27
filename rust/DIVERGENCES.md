@@ -337,7 +337,7 @@ arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argume
   small function). A program the tree-walker runs (one with ±, or a construct the LLVM back end doesn't
   compile yet) has 1.9 GB but bigger frames: a one-line recursive function stops at about 500 000 calls deep
   (v1's compiled code goes past 10⁶). Red team 10 #5; making the tree-walker's frames smaller is open.
-- `fermium --version` prints `fermium 2.0.0 (Rust)`.
+- `fermium --version` prints `fermium 2.5.0 (Rust)` (2.0.0 at the v2.0 cutover).
 
 ## The REPL (fermium-repl)
 

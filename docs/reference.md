@@ -664,6 +664,7 @@ root(a) =
     r
 print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
 
+k = 8.99e9 N m²/C² * 1 nC
 φ(x, y, z) =
     r = √(x² + y² + z²)
     k / r
@@ -938,6 +939,10 @@ solve N' = rates(N) with N(0 min) = [1e6, 0, 0, 0] for t from 0 min to 60 min us
 print N(60 min)                           # [1.48, 2.40×10⁵, 2.68×10⁵, 2220]
 print N(10 min)[3], N'(10 min)
 
+M = 1 M☉                                  # two light bodies around a fixed Sun-mass centre
+r0 = [<1, 0> AU, <0, 1.5> AU]
+v0 = [<0, 29.8> km/s, <-24.3, 0> km/s]
+T = 1 yr
 accel(r) =                                # r: a list of position vectors
     a = []
     for i from 1 to len(r)
@@ -945,11 +950,12 @@ accel(r) =                                # r: a list of position vectors
         for j from 1 to len(r)
             if j != i
                 d = r[j] - r[i]
-                ai += G_N M d / |d|^3
+                ai += G (M / 1e6) d / |d|^3   # the bodies' pull on each other
+        ai += -G M r[i] / |r[i]|^3               # and the centre's
         push(a, ai)
     return a
 solve r'' = accel(r) with r(0 s) = r0, r'(0 s) = v0 for t from 0 s to T
-print r(T)[1], r'(T)[3]
+print r(T)[1], r'(T)[2]              # <1.0, -0.0099> AU and body 2's velocity
 ```
 
 - **The unknown:** its initial value is a list of numbers (`N(0) = [1e6, 0, 0]`) or of vectors (`r(0) = r0` with r0
@@ -1361,7 +1367,7 @@ import cpp "libkinematics.so" header "kinematics.hpp":
 import cpp header "cmath":                                               # header only: no library
     std::tgamma(x) -> number
 
-print momentum(139.57 MeV/c², m_μ, 0 MeV/c²)      # 29.79 MeV/c: π⁺ → μ⁺ ν
+print momentum(139.57 MeV/c², m_μ, 0 MeV/c²)      # 29.8 MeV/c: π⁺ → μ⁺ ν (29.79 with to 4 digits)
 print tgamma(5)                                    # 24
 ```
 

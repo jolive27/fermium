@@ -2154,3 +2154,32 @@ absolute), #5 (D331: (u^a)^b merged only when b is an integer or a isn't; no con
 #10–#12 (D336; the ns_cooling numbers changed: N₉ 2.44×10⁴⁰ erg/s, 31 of 48 within a factor 3), #13 documented,
 #16 fixed, #14 partly (the sweep message; nested sweep figures and a warning for `sweep c` not done). #15 not
 done. Tests: rust/crates/fermium-cli/tests/redteam16.rs, rust/crates/fermium-fmt/tests/roundtrip.rs.
+
+## Round 17 (2026-09-27 10:05 UTC): fact-check of RUN_REPORT and README, and a beginner pass on the v2.5 docs
+
+Independent reviewer, testing a prebuilt binary (c366d20). Every claim that could be checked in the report was
+checked against the repository, git history, CONFORMANCE.md (plus a fresh conformance run), the divergence
+records, benchmarks/RESULTS.md, and the bootcamp. Nothing was fixed by the reviewer.
+
+**High:** (1) the report said "SEMF through Fortran gives 489 MeV"; the example and its test print 495.38 MeV
+for ⁵⁶Fe. (2) The v2.5 marker (eb63425) predates the D316 prefault fix the report calls fixed, so a release built
+from it would have the slow spring_rk4.
+**Medium:** (3) "faster on 3 of 7" counts forces twice: by program it is 2 of 6 faster, 1 level, 3 slower.
+(4) CHANGES_2.5.md was stale on D316, the blackbody ratio and the fit fix, still said "(in progress)", and cited
+a nonexistent D337. (5–7) Documented examples didn't run as written: ∇φ without k, the CHANGES sweep without M,
+and the C++ momentum comment (29.8 printed, not 29.79).
+**Low:** (8) the N-body fragment used undefined names (and `G_N`, which isn't a Fermium constant); (9) the
+start-up time was stated three ways; (10) README's reproduction command omitted `-r 7`; (11) the noise band was
+stated four ways; (12, 13) two stale citations (RESULTS.md's date, 83b778c instead of 5dcff42); (14) running an
+example rewrites a tracked gallery PNG; (15) the Mac steps install lld@18 in the same brew command as LLVM,
+though the formula may not exist; the build takes up to 30 min; (16) a stale "being documented" note;
+(17) DIVERGENCES still said `fermium 2.0.0`; (18) several beginner errors lack hint lines; (19) text lists print
+like units in brackets.
+**Verified:** the conformance numbers and the per-area table (fresh run), the divergence counts per section, every
+cited commit and decision (except #13), branches and PRs, the unit-rule quote (verbatim), the OPEN_ITEMS counts,
+every benchmark number in the report and README, the test and c-case counts, the binary's dependencies,
+`make install`, and every v2.5 docs example apart from #5–#8.
+
+Status: #1–#17 fixed by the coordinator (report, CHANGES, docs, README, DIVERGENCES; the N-body block now runs,
+and every corrected example was run). The marker moves to the final commit after CI (D340 updated). #18 and #19
+are listed in the report's weaknesses.
