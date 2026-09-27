@@ -1564,7 +1564,7 @@ switched off in turn, and from the cache): the loop and SLP vectorizers on in-or
 compiled loops (D312), no collector safe point in loops that only read lists (D313), no stack check in leaf
 functions (D314), the C library's exp/log/sin/cos through LLVM intrinsics (D315), the samples of a compiled RK4
 solve mapped in one go (D316), and a compile cache for whole programs with their modules (D317).
-- **Measured:** A/B on this shared 4-core machine at 06:54–07:05 UTC (load average 2.4–3.1, 5 GB free), the
+- **Measured:** A/B on this shared 4-core machine around 06:50 UTC (load average 2.4–3.1, 5 GB free), the
 v2.5 binary before C6 and the C6 binary run alternately, inner (compute-only) times, min / median of 11–15 runs.
 Such numbers move by 10–30 % between runs; the coordinator's quiet-machine run in benchmarks/RESULTS.md is the
 reference. forces (4 threads) 7.44 / 10.8 ms → 3.46 / 3.89 ms and forces (1 thread) 19.4 / 19.8 ms → 9.17 / 9.29
