@@ -189,6 +189,38 @@ of operations in the numerics (each `fermium-runtime` module documents its agree
 the C library for the libm functions v1's compiled code called, and v1's own algorithms elsewhere. `parallel
 for` adds sums in fixed blocks (`par_blocks`) so results don't depend on the number of threads (D152).
 
+## Performance (spec C6, DECISIONS D310–D318)
+
+Speed never buys a different number: no fast-math or reassociation flags anywhere, and every optimization below
+has a switch that turns it off, so `rust/crates/fermium-cli/tests/c6_perf.rs` can show each one prints the same
+as the tree-walker and as Fermium 1.5 (`rust/c-cases/c6/*.fm`).
+
+- **Pass pipeline** (`llvm/mod.rs`): `default<O2>` for this computer's CPU and features (the JIT's code runs only
+  here), with the SLP vectorizer on and LLVM's `-force-ordered-reductions` (`LLVM_OPTIONS`), which lets the loop
+  vectorizer take a loop with an in-order floating-point sum: terms several at a time, added in the original order
+  (D311). `FERMIUM_LLVM_ARGS` replaces the LLVM options, `FERMIUM_LLVM_PASSES` the pipeline,
+  `FERMIUM_LLVM_NOVEC` / `FERMIUM_LLVM_NOSLP` turn the vectorizers off; `FERMIUM_LLVM_ARGS="-force-ordered-reductions
+  -pass-remarks=loop-vectorize -pass-remarks-analysis=loop-vectorize"` prints which loops were vectorized and why
+  the others weren't. `FERMIUM_DUMP_LLVM_OPT=1` prints the optimized IR, `FERMIUM_LLVM_TIME=1` the compile, JIT and
+  run times.
+- **Loops** (`llvm/hoist.rs`): list headers read once per loop and index checks proven before a versioned loop
+  (D273); in the proven copy, an `if` that only assigns numbers is compiled with selects (if-conversion,
+  `FERMIUM_NO_IFCONV`), sums as `v + (c ? e : −0)`, and scratch variables (never read before being set again)
+  without a select (D312). Loops that only read lists have no collector safe point (`gc.rs`, D313).
+- **Calls**: functions that call no function have no stack check (D314); `exp`, `log`, `sin`, `cos` are LLVM
+  intrinsics, i.e. direct calls to the C library (D315, `FERMIUM_NO_MATH_INTRINSICS`).
+- **Memory**: a compiled RK4 solve's sample arrays are mapped at once, with huge pages where Linux has them
+  (`solve_rt.rs prefault`, D316, `FERMIUM_PREFAULT`).
+- **The compile cache** (`llvm/cache.rs`, `jit_cache.cpp`, `fermium-cli/src/run.rs run_cached`, D317): the JIT's
+  object file and the run time's tables (the `fermium build` blob format) saved in `<cache>/jit/<key>.fmc`, used
+  again while the program's text and every module file it read or looked for are unchanged. A cached compilation
+  reads the context pointer from the global `fm_ctx` (`Gen::new_reloc`), so its machine code holds no address of
+  the process. `FERMIUM_NO_CACHE=1` turns it off.
+
+`benchmarks/run.py` measures the benchmark programs against Julia (benchmarks/README.md); on a shared machine
+compare two binaries with interleaved runs (A B A B …) and look at minimums and medians of many runs, or at
+instruction counts (`valgrind --tool=callgrind`: the JIT's code appears as unnamed addresses).
+
 ## Tests
 
 `make check` (`check.sh`) runs, in order:

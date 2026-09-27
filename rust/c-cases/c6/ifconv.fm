@@ -1,0 +1,62 @@
+# If-conversion in compiled loops (DECISIONS D312): the values after the if, else branches, signed zeros,
+# infinities and NaN come out exactly as the tree-walker's.
+N = 40
+xs = zeros(N)
+for k from 1 to N
+    xs[k] = sin(k) * 3
+last = -1
+s = -0.0
+t = 0
+p = 1
+for i from 1 to N
+    if xs[i] > 10
+        s += xs[i]
+    if xs[i] > 0
+        last = xs[i]
+        t -= √xs[i]
+    else
+        p = p * 2
+        t += xs[i] / 0
+print "last", last to 17 digits
+print "s", s
+print "1/s", 1 / s
+print "t", t
+print "p", p
+# a variable set before the if and read after it keeps its value when the condition is false
+for i from 1 to 6
+    d = 5
+    if xs[i] > 2.5
+        d = xs[i]
+    print "d", d
+# a sum over a condition that is almost always true (the form the loop vectorizer takes)
+u = 0
+v = 0
+w = -0.0
+for i from 1 to N
+    for j from 1 to N
+        if j != i
+            dx = xs[j] - xs[i]
+            r = √(dx² + 1)
+            u += dx / r
+            v -= 1 / r
+        if j == i
+            w -= 0
+print "u", u to 17 digits
+print "v", v to 17 digits
+print "w", w, 1 / w
+# NaN terms in a branch that is never taken, and one that is
+q = 0
+z = 0
+for i from 1 to N
+    if xs[i] > 100
+        q += √(xs[i] - 200) + xs[i]
+    if i == N
+        z += 0 / 0
+print "q", q
+print "z", z
+# √ of a negative number in a branch that is taken stops the program at that line
+e = 0
+for i from 1 to N
+    if xs[i] < -2.9
+        e += √(xs[i])
+print "e", e

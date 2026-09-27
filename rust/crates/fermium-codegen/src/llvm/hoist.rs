@@ -204,3 +204,229 @@ impl<'c, 'm> Gen<'c, 'm> {
         Ok(syms)
     }
 }
+
+/// A function body that calls no user function, directly or through a lambda (an integrand, a sum, a solve's
+/// right side …), and has no statement the tree-walker runs: it can't recurse (D314).
+pub(super) fn is_leaf(m: &Module, body: &[Stmt]) -> bool {
+    fn expr(m: &Module, e: &Expr) -> bool {
+        !matches!(e.kind, ExprKind::Call(..) | ExprKind::Map { .. }) && lambda_of(e).is_none()
+            && !matches!(e.kind, ExprKind::Root { .. } | ExprKind::Sample { .. } | ExprKind::Load(_) | ExprKind::Table(_))
+            && expr_children(e).into_iter().all(|c| expr(m, c))
+    }
+    body.iter().all(|s| {
+        matches!(s.kind, StmtKind::Assign(..) | StmtKind::IndexAssign(..) | StmtKind::Expr(_) | StmtKind::Assert(..)
+                         | StmtKind::Print(_) | StmtKind::Break | StmtKind::Continue | StmtKind::If(..)
+                         | StmtKind::While(..) | StmtKind::For { par: None, .. } | StmtKind::ForIn(..)
+                         | StmtKind::Return(_) | StmtKind::Push(..) | StmtKind::Clear(_))
+            && !gc::tree_walker_stmt(m, s)
+            && {
+                let (es, blocks) = stmt_parts(s);
+                es.into_iter().all(|e| expr(m, e)) && blocks.into_iter().all(|b| is_leaf(m, b))
+            }
+    })
+}
+
+/// Scratch variables (D312): the variables whose every read, anywhere in the program, comes after an assignment
+/// to them earlier in the same run of statements (the same block, or a block around it), with no loop or `if`
+/// in between that could have assigned them too. Such a variable's value never outlives the block that set it,
+/// so an if-converted branch (if_converted) may store its value even when the condition is false: nothing reads
+/// it before it is set again. Everything else a statement reads (a solve's right side, a lambda, a function's
+/// module variables) counts as a read where it stands; a construct not walked here makes every variable it
+/// mentions a non-scratch one.
+pub(super) fn scratch_vars(m: &Module) -> HashSet<SymId> {
+    fn reads(m: &Module, e: &Expr, defined: &HashSet<SymId>, carried: &mut HashSet<SymId>) {
+        let (mut used, mut bound) = (HashSet::new(), HashSet::new());
+        super::lam::expr_syms(m, e, &mut used, &mut bound);
+        carried.extend(used.into_iter().filter(|s| !defined.contains(s)));
+    }
+    fn lambda(m: &Module, l: fermium_ir::LambdaId, defined: &HashSet<SymId>, carried: &mut HashSet<SymId>) {
+        for b in &m.lambdas[l].body {
+            reads(m, b, defined, carried);
+        }
+    }
+    fn assigned(body: &[Stmt], out: &mut HashSet<SymId>) {
+        for s in body {
+            match &s.kind {
+                StmtKind::Assign(sym, _) | StmtKind::ForIn(sym, _, _) | StmtKind::For { sym, .. } => {
+                    out.insert(*sym);
+                }
+                StmtKind::Solve { sol, .. } => {
+                    out.insert(*sol);
+                }
+                StmtKind::Fit { params, errs, .. } => out.extend(params.iter().chain(errs.iter()).copied()),
+                StmtKind::Propagate { outs, .. } => out.extend(outs.iter().copied()),
+                _ => {}
+            }
+            for b in stmt_parts(s).1 {
+                assigned(b, out);
+            }
+        }
+    }
+    fn walk(m: &Module, body: &[Stmt], defined: &mut HashSet<SymId>, carried: &mut HashSet<SymId>) {
+        for s in body {
+            let (es, blocks) = stmt_parts(s);
+            for e in &es {
+                reads(m, e, defined, carried);
+            }
+            match &s.kind {
+                StmtKind::Assign(sym, _) => {
+                    defined.insert(*sym);
+                }
+                StmtKind::If(..) | StmtKind::While(..) | StmtKind::For { .. } | StmtKind::ForIn(..)
+                | StmtKind::Propagate { .. } => {
+                    // a loop body starts with nothing set (the previous pass may have set anything); an if's
+                    // branches start with what is set before it
+                    let is_if = matches!(s.kind, StmtKind::If(..));
+                    for b in &blocks {
+                        let mut inner = if is_if { defined.clone() } else { HashSet::new() };
+                        match &s.kind {
+                            StmtKind::For { sym, .. } | StmtKind::ForIn(sym, _, _) => {
+                                inner.insert(*sym);
+                            }
+                            _ => {}
+                        }
+                        walk(m, b, &mut inner, carried);
+                    }
+                    // after it, what it may have set is no longer known to be set here
+                    let mut set = HashSet::new();
+                    assigned(std::slice::from_ref(s), &mut set);
+                    defined.retain(|x| !set.contains(x));
+                }
+                StmtKind::Solve { sol, rhs, x, .. } => {
+                    lambda(m, *rhs, defined, carried);
+                    if let Some(ev) = x.event {
+                        lambda(m, ev, defined, carried);
+                    }
+                    defined.remove(sol);
+                }
+                StmtKind::Fit { model, params, errs, .. } => {
+                    lambda(m, *model, defined, carried);
+                    for p in params.iter().chain(errs.iter()) {
+                        defined.remove(p);
+                    }
+                }
+                StmtKind::Animate { sol, .. } => {
+                    carried.insert(*sol);
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut carried = HashSet::new();
+    walk(m, &m.main, &mut HashSet::new(), &mut carried);
+    for f in &m.funcs {
+        let mut d: HashSet<SymId> = f.params.iter().copied().collect();
+        walk(m, &f.body, &mut d, &mut carried);
+    }
+    (0..m.syms.len()).filter(|s| !carried.contains(s)).collect()
+}
+
+/// The math built-ins that are pure functions of one number and never stop the program (safe to evaluate when
+/// their result is thrown away: if_converted).
+const PURE1: &[&str] = &["sqrt", "abs", "floor", "ceil", "round", "exp", "sin", "cos", "tan", "atan", "sinh", "cosh",
+                         "tanh", "asinh", "expm1"];
+
+impl<'c, 'm> Gen<'c, 'm> {
+    /// Can e be evaluated whatever the condition of the `if` around it (if_converted)? Numbers only: constants,
+    /// numeric variables, + − × ÷, constant powers, a few pure built-ins and list reads whose index check was
+    /// proven before the loop (versioned_loop). Nothing that can stop the program or have an effect.
+    fn speculable(&self, e: &Expr) -> bool {
+        if !matches!(e.ty, Ty::Num(_)) {
+            return false;
+        }
+        match &e.kind {
+            ExprKind::Const(_) => true,
+            ExprKind::Var(s) => kind_of(&self.m.syms[*s].ty).ok() == Some(Kind::F),
+            ExprKind::Bin(_, a, b) => self.speculable(a) && self.speculable(b),
+            ExprKind::PowC(a, _) | ExprKind::Neg(a) => self.speculable(a),
+            ExprKind::Builtin(name, args) => {
+                args.len() == 1 && PURE1.contains(&name.as_str()) && self.speculable(&args[0])
+            }
+            ExprKind::Index(l, i) => match (&l.kind, &i.kind) {
+                (ExprKind::Var(ls), ExprKind::Var(is)) => {
+                    self.proven.contains(&(*ls, *is)) && self.hoisted.contains_key(ls)
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Is this branch of an `if` a few assignments of speculable numbers to numeric variables (if_converted)?
+    fn convertible_block(&self, body: &[Stmt]) -> bool {
+        body.len() <= 24 && body.iter().all(|s| match &s.kind {
+            StmtKind::Assign(sym, e) => {
+                kind_of(&self.m.syms[*sym].ty).ok() == Some(Kind::F) && !self.int_vars.contains_key(sym)
+                    && !self.consts.contains_key(sym) && self.speculable(e)
+            }
+            _ => false,
+        })
+    }
+
+    /// `if c` inside the copy of a loop whose index checks were proven (versioned_loop), when its branches only
+    /// assign speculable numbers to numeric variables: compiled without a branch (D312). Each branch's values are
+    /// computed whatever c is and kept with a select, so the loop body is one straight block that the loop
+    /// vectorizer can take. A sum `v = v + e` (`v += e`) becomes v + (c ? e : −0) and `v = v − e` becomes
+    /// v − (c ? e : +0): adding −0 or subtracting +0 gives v back exactly (±0 and NaN included), and the sum stays
+    /// an in-order reduction LLVM recognizes (force-ordered-reductions, D311). The results are bit for bit the
+    /// branchy code's: nothing computed under a false condition is kept, and floating point doesn't trap.
+    /// Ok(false): not convertible (nothing compiled).
+    pub(super) fn if_converted(&mut self, c: &Expr, then: &[Stmt], other: &[Stmt]) -> R<bool> {
+        if self.proven.is_empty() || std::env::var_os("FERMIUM_NO_IFCONV").is_some() || then.is_empty()
+            || !self.convertible_block(then) || !self.convertible_block(other) {
+            return Ok(false);
+        }
+        let cv = self.expr(c)?;
+        let t = self.truth(cv)?;
+        let nt = bl!(self.b.build_not(t, "nc"));
+        let reads_of = |g: &Self, body: &[Stmt]| -> HashSet<SymId> {
+            let (mut used, mut bound) = (HashSet::new(), HashSet::new());
+            for s in body {
+                for e in stmt_parts(s).0 {
+                    super::lam::expr_syms(g.m, e, &mut used, &mut bound);
+                }
+            }
+            used
+        };
+        for (cond, body, rest) in [(t, then, other), (nt, other, then)] {
+            let read_elsewhere = reads_of(self, rest);
+            for s in body {
+                let StmtKind::Assign(sym, e) = &s.kind else { return Err("not an assignment".into()) };
+                if self.scratch.contains(sym) && !read_elsewhere.contains(sym) {
+                    // a scratch variable: nothing reads it before it is set again, so no select is needed
+                    let nv = self.expr(e)?;
+                    self.store_var(*sym, nv)?;
+                    continue;
+                }
+                let old = self.load_var(*sym)?;
+                let old = self.to_f(old)?;
+                let sum = match &e.kind {
+                    ExprKind::Bin(op @ (BinOp::Add | BinOp::Sub), a, b)
+                        if matches!(a.kind, ExprKind::Var(v) if v == *sym) => Some((*op, b)),
+                    _ => None,
+                };
+                let v = match sum {
+                    Some((op, b)) => {
+                        let bv = self.expr(b)?;
+                        let mut bv = self.to_f(bv)?;
+                        if op == BinOp::Sub {
+                            // v − e is v + (−e) exactly (IEEE subtraction is the addition of the negation); LLVM
+                            // vectorizes only in-order sums made of fadd
+                            bv = bl!(self.b.build_float_neg(bv, "neg"));
+                        }
+                        let zero = self.fconst(-0.0);
+                        let term = bl!(self.b.build_select(cond, bv, zero, "term")).into_float_value();
+                        self.arith(BinOp::Add, old, term)?
+                    }
+                    None => {
+                        let nv = self.expr(e)?;
+                        let nv = self.to_f(nv)?;
+                        bl!(self.b.build_select(cond, nv, old, "sel")).into_float_value()
+                    }
+                };
+                self.store_var(*sym, fv(v))?;
+            }
+        }
+        Ok(true)
+    }
+}

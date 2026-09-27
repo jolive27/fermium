@@ -58,6 +58,11 @@ fn lambda_allocs(m: &Module, l: usize, funcs: &[bool], seen: &mut HashSet<usize>
 }
 
 fn expr_allocs(m: &Module, e: &Expr, funcs: &[bool], seen: &mut HashSet<usize>) -> bool {
+    // reading a list variable (for xs[i], len(xs), …) makes nothing new (D313): a loop that only reads lists
+    // needs no safe point, whose call to the collector would stop LLVM from keeping variables in registers
+    if matches!(e.kind, ExprKind::Var(_)) {
+        return false;
+    }
     if collected(&e.ty) {
         return true;
     }
@@ -87,7 +92,11 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     /// At the top of a loop iteration: collect if gc_flag is set and the body may make lists.
     pub(super) fn safe_point(&mut self, body: &[Stmt]) -> R<()> {
-        if !self.gc_frame || !block_allocs(self.m, body, &self.alloc_funcs, &mut HashSet::new()) {
+        // a loop that only reads lists needs no safe point (D313): its call to the collector would keep LLVM from
+        // vectorizing it. Loops around other loops and loops that write list elements keep theirs, as before
+        // (a branch per pass): measured, LLVM turns nbody's loop nest into slower code without them
+        let outer_reads = || (has_loop(body) || writes_lists(body)) && reads_collected(body);
+        if !self.gc_frame || !(block_allocs(self.m, body, &self.alloc_funcs, &mut HashSet::new()) || outer_reads()) {
             return Ok(());
         }
         let fp = unsafe { bl!(self.b.build_gep(self.cx.i8_type(), self.ctx_ptr, &[self.i64c(8)], "gcfp")) };
@@ -158,6 +167,28 @@ impl<'c, 'm> Gen<'c, 'm> {
 }
 
 /// Does this function body have a loop that may make lists (so it needs a frame and safe points)?
+/// Does a block hold a loop (at any depth)?
+fn has_loop(body: &[Stmt]) -> bool {
+    body.iter().any(|s| matches!(s.kind, StmtKind::While(..) | StmtKind::For { .. } | StmtKind::ForIn(..))
+        || stmt_parts(s).1.into_iter().any(|b| has_loop(b)))
+}
+
+/// Does a block set list elements (xs[i] = …)?
+fn writes_lists(body: &[Stmt]) -> bool {
+    body.iter().any(|s| matches!(s.kind, StmtKind::IndexAssign(..)) || stmt_parts(s).1.into_iter().any(|b| writes_lists(b)))
+}
+
+/// Does a block read a variable holding a collected value (a list …)?
+fn reads_collected(body: &[Stmt]) -> bool {
+    fn expr(e: &Expr) -> bool {
+        (matches!(e.kind, ExprKind::Var(_)) && collected(&e.ty)) || expr_children(e).into_iter().any(expr)
+    }
+    body.iter().any(|s| {
+        let (es, blocks) = stmt_parts(s);
+        es.into_iter().any(expr) || blocks.into_iter().any(|b| reads_collected(b))
+    })
+}
+
 pub(super) fn has_alloc_loop(m: &Module, body: &[Stmt], funcs: &[bool]) -> bool {
     body.iter().any(|s| {
         let (_, blocks) = stmt_parts(s);

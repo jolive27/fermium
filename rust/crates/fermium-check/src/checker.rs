@@ -778,6 +778,7 @@ pub fn dimless_num() -> Ty {
 
 /// Check a whole program (the public entry point, Python checker.check).
 pub fn check(prog: &A::Program, opts: CheckOptions) -> Result<(I::Module, Diagnostics), (Diagnostic, Diagnostics)> {
+    crate::modules::reset_deps();
     let mut c = Checker::new(opts);
     match c.check_program(prog) {
         Ok(m) => Ok((m, std::mem::take(&mut c.diags))),

@@ -14,6 +14,8 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 - [x] A50 (push on a loaded column).
 
 ## High value
+- [ ] C6 leftover (D318): blackbody is ≈ 1.5× Julia. Batch the integrand: compile a version of a pure scalar lambda that evaluates the 15 Gauss–Kronrod nodes of a panel in one call (the divisions vectorize, no per-node call and error-flag check), with fermium-runtime's quad keeping v1's adaptive algorithm and its order of sums exactly.
+- [ ] C6 leftover (D313): find why removing the collector safe points from nbody's list-writing loops makes it ≈ 15 % slower, then drop them there too (it would let element-wise list loops in the main program vectorize).
 - [ ] Re-run the benchmarks; the adaptive spring disagreed with Julia at 00:09 (before the A15 error-norm change). Update RESULTS.md and the README table.
 - [ ] Raise test coverage toward 95% (91% at 01:10).
 - [ ] Better symbolic simplification. (Done: `d/dt (3 t^2)` and `∫ x dx` now print readable labels.)

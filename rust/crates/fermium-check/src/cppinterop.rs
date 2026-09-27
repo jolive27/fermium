@@ -157,20 +157,26 @@ fn fnv1a(parts: &[&[u8]]) -> u64 {
 
 /// Where compiled wrappers are kept.
 pub fn cache_dir() -> PathBuf {
+    cache_root().join("cpp")
+}
+
+/// Fermium's cache folder: `$FERMIUM_CACHE_DIR`, else `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`
+/// (`~/Library/Caches/fermium` on macOS). C++ wrappers go in `cpp/`, compiled programs in `jit/` (D317).
+pub fn cache_root() -> PathBuf {
     let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
     if let Some(d) = env("FERMIUM_CACHE_DIR") {
-        return PathBuf::from(d).join("cpp");
+        return PathBuf::from(d);
     }
     if let Some(d) = env("XDG_CACHE_HOME") {
-        return PathBuf::from(d).join("fermium").join("cpp");
+        return PathBuf::from(d).join("fermium");
     }
     if let Some(h) = env("HOME") {
         if cfg!(target_os = "macos") {
-            return PathBuf::from(h).join("Library/Caches/fermium/cpp");
+            return PathBuf::from(h).join("Library/Caches/fermium");
         }
-        return PathBuf::from(h).join(".cache/fermium/cpp");
+        return PathBuf::from(h).join(".cache/fermium");
     }
-    std::env::temp_dir().join("fermium-cache").join("cpp")
+    std::env::temp_dir().join("fermium-cache")
 }
 
 fn mtime(p: &Path) -> Option<std::time::SystemTime> {

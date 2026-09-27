@@ -82,8 +82,11 @@ fn main() {
     let stub_path = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("lld_target_stubs.cpp");
     std::fs::write(&stub_path, stubs).unwrap();
     shim.file(&stub_path);
+    // the compile cache's ObjectCache for MCJIT (D317)
+    shim.file("src/llvm/jit_cache.cpp");
     shim.compile("fermium_lld_shim");
     println!("cargo:rerun-if-changed=src/llvm/lld_shim.cpp");
+    println!("cargo:rerun-if-changed=src/llvm/jit_cache.cpp");
     if let Some(p) = &lld_prefix {
         println!("cargo:rustc-link-search=native={}", Path::new(p).join("lib").display());
     }
