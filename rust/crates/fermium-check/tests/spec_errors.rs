@@ -5,7 +5,7 @@ use std::path::Path;
 
 /// The checker source files errors.md covers completely (errors.md §1 says which are still to do).
 const COVERED: &[&str] = &["analyze.rs", "arith.rs", "arrays.rs", "builtin.rs", "calculus.rs", "calls.rs", "checker.rs", "cinterop.rs", "clist.rs",
-                           "convert.rs", "cplx.rs", "data.rs", "dispatch.rs", "eigen.rs", "events.rs", "exprs.rs", "lists.rs", "modules.rs", "names.rs", "parallel.rs", "pde.rs", "print.rs", "pyinterop.rs", "rng.rs", "solve.rs",
+                           "convert.rs", "cplx.rs", "cppinterop.rs", "data.rs", "dispatch.rs", "eigen.rs", "events.rs", "exprs.rs", "lists.rs", "modules.rs", "names.rs", "parallel.rs", "pde.rs", "print.rs", "pyinterop.rs", "rng.rs", "solve.rs",
                            "stmts.rs", "systems.rs", "uncertain.rs", "units.rs", "vecmat.rs"];
 
 /// The Rust string literal at the start of `s` (which starts with '"'): its value and its length in bytes.
@@ -81,7 +81,8 @@ fn src_of(crate_dir: &str, f: &str) -> String {
 }
 
 /// Every error message template of the covered files: the first literal argument of each `.err(…)` and
-/// `Diagnostic::error(…)`, the message of each `unify_or(…, |c| …)` closure, the literals that start a
+/// `Diagnostic::error(…)`, the second argument of each cppinterop.rs `cerr(sig, msg, hint)`, the message of each
+/// `unify_or(…, |c| …)` closure, the literals that start a
 /// `format!(` or a `{ … }` branch of a `let msg = …;` that the next lines raise with `err(msg`; plus the stored
 /// "might not have a value" messages (`unset_msg = Some(format!(…))`, any checker file, raised in exprs.rs) and the unit-power overflow message
 /// (fermium-units exact.rs `overflow_message`, raised in checker.rs).
@@ -101,7 +102,15 @@ fn checker_templates() -> Vec<String> {
     let at = ex.find("fn overflow_message").expect("fermium-units has overflow_message");
     let at = at + ex[at..].find("format!(").unwrap();
     out.extend(first_literal(&ex[at..]));
-    let openers = [".err(", "Diagnostic::error(", "unify_or(", "let msg = "];
+    let openers = [".err(", "Diagnostic::error(", "unify_or(", "let msg = ", "cerr("];
+    // the checker files errors.md doesn't cover raise no errors of their own
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let f = entry.unwrap().file_name().into_string().unwrap();
+        if !COVERED.contains(&f.as_str()) {
+            let s = src_of("fermium-check", &f);
+            assert!(!openers.iter().any(|o| s.contains(o)), "{f} raises errors, but errors.md doesn't cover it");
+        }
+    }
     for f in COVERED {
         let s = src_of("fermium-check", f);
         let mut pos = 0;
@@ -131,6 +140,12 @@ fn checker_templates() -> Vec<String> {
                             && !rest[..k].ends_with('\\') {
                             out.extend(first_literal(&rest[k..]));
                         }
+                    }
+                }
+                "cerr(" => {
+                    // cppinterop.rs's `cerr(sig, msg, hint)`: the message is the second argument
+                    if let Some(j) = rest.find(',') {
+                        out.extend(first_literal(&rest[j + 1..]));
                     }
                 }
                 _ => out.extend(first_literal(rest)),

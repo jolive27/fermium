@@ -1,6 +1,6 @@
 # Grammar
 
-Draft 0.4. Source: `rust/crates/fermium-syntax/src/lexer.rs` (tokens), `parser.rs` (statements), `expr.rs`
+Draft 0.5. Source: `rust/crates/fermium-syntax/src/lexer.rs` (tokens), `parser.rs` (statements), `expr.rs`
 (expressions) and `unitrule.rs` (unit expressions and the unit rule). The Rust front end is a port of Fermium
 1.5's `lexer.py` and `parser.py`, the frozen oracle; conformance/ holds its behaviour.
 

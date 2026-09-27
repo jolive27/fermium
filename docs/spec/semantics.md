@@ -1,6 +1,6 @@
 # Semantics
 
-Draft 0.4, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
+Draft 0.5, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
 conformance/ and docs/reference.md are the authority. Source: `rust/crates/fermium-check` (static semantics),
 `fermium-ir` (the typed IR), `fermium-codegen` / `fermium-runtime` (execution), `fermium-units/src/numfmt.rs`
 (printing numbers), `fermium-sym` (symbolic and automatic differentiation).
@@ -642,5 +642,5 @@ size(A, 1) ⇒ number [1]
 - ~~Uncertainty propagation as a formal model~~ (done in 0.2: §2.3, the linear model and the kernels' ±1σ test).
   Still open: `propagate montecarlo` and `analyze` as formal models.
 - The interop type mappings (`use python`, `import c/cpp/fortran`).
-- The checker's error set (0.4: errors.md, complete for 16 of the checker's source files, 208 templates; its §4
-  lists the files still to do, about 370 templates, and the 86 rows without an example).
+- Examples for the checker's error set (errors.md, complete since 0.5 for all 31 checker files that raise errors,
+  541 templates; its §4 lists the 235 rows without an example).

@@ -2107,3 +2107,24 @@ a different citation (the neutron-branch form is the standard one).
 - **Limits:** the other ~24 files (about 370 templates) are errors.md §4's TODO; an error raised in a covered file
   through a helper in another file (e.g. stmts.rs's `need_num`) is listed under the helper's file; the extraction is textual,
   so a message built a new way must be added to the extractor; hints are not listed.
+
+## D354. Specification draft 0.5: the checker's error set complete for every file that raises errors (spec D1)
+- **What:** errors.md now covers all 31 fermium-check source files that raise errors (541 templates, up from 16
+  files and 208): vecmat, solve, data, modules, cplx, arrays, events, eigen, systems, analyze, parallel, pde,
+  pyinterop, cinterop and cppinterop were added, each with all its templates as rows and a `# C<n>` example where
+  a one-file program reaches the message (306 of 541 rows have one; the rest need module files, a Python
+  installation, a native library or C++ compiler, or are reached only after another check). The extractor in
+  `spec_checker_errors` also reads cppinterop.rs's `cerr(sig, msg, hint)` (message = second argument), and the
+  test now asserts that every checker file outside `COVERED` contains none of the error-raising forms (the other
+  9 files: api, ast_ext, builtins, cachedir, lib, pending, sha256, source, walk). A template raised in several
+  files is one row, under the first file that listed it. Since coverage passed half the files, the spec's draft
+  number is 0.5.
+- **Why:** completing the table turns "exactly these templates" into a statement about the whole checker, and
+  the new assertion keeps it true when a file starts raising errors.
+- **Alternatives:** stopping at the files named in the plan (leaving interop out of a "complete" claim); writing
+  examples that depend on Python or a C++ compiler being installed (the test would fail on machines without
+  them).
+- **Limits:** 235 rows have no example; hints are not listed; messages built outside the checker (the unit
+  parser's for `to(x, unit)`, calculus.rs's `none_msg`) are not rows. Writing examples showed that some messages
+  are guarded by earlier checks (e.g. two `until`s are rejected by the parser; `plot z vs t from …` on an ODE
+  solution reports the solution-as-value error first); their rows say so.

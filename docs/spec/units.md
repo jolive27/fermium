@@ -1,6 +1,6 @@
 # Units and dimensions
 
-Draft 0.4. Source: `rust/crates/fermium-units` (`dim.rs`, `exact.rs`, `db.rs`, `natural.rs`, `quantity.rs`),
+Draft 0.5. Source: `rust/crates/fermium-units` (`dim.rs`, `exact.rs`, `db.rs`, `natural.rs`, `quantity.rs`),
 `rust/crates/fermium-syntax/src/unitrule.rs` and `expr.rs` (the unit rule), `rust/crates/fermium-ir/src/types.rs`
 (inference) and `rust/crates/fermium-check` (checking). Decisions: D5, D6, D12, D13, D14, D60, D235, D236, D238.
 

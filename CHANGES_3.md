@@ -33,6 +33,11 @@ Changes on the branch `claude/v3` (spec Phase D). Draft; items are added as they
   print, rng, stmts, uncertain, units), tested equal to the templates extracted from those files, with a
   `fermium-error` example for 122 rows that the checker must
   reject with that row's message (`cargo test -p fermium-check --test spec_errors`).
-- Not yet specified: the full clause grammar of `plot`, `analyze`, `propagate` and the interop signatures; the
-  rest of the checker's error set (about 370 templates in ~24 files, errors.md §4); the numerical methods in one place; a cross-reference to conformance cases beyond the unit
+- `docs/spec/` draft 0.5 (DECISIONS D354): errors.md complete for all 31 checker files that raise errors — 541
+  message templates (vectors and matrices, ODE and PDE `solve`, eigenvalue problems, data, `fit`, `plot`, modules,
+  complex numbers, arrays, events, natural-units regions, `analyze`, `parallel for` and the Python, C, Fortran and
+  C++ interop added), with an example for 306 rows; the test also checks that the other 9 checker files raise no
+  errors.
+- Not yet specified: the full clause grammar of `plot`, `analyze`, `propagate` and the interop signatures; examples
+  for 235 of the checker's 541 error templates (errors.md §4); the numerical methods in one place; a cross-reference to conformance cases beyond the unit
   rule.

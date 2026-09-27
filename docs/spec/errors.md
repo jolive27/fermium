@@ -1,6 +1,6 @@
 # Check errors
 
-**Part of the Fermium language specification, draft 0.4.** See [README.md](README.md) for the notation.
+**Part of the Fermium language specification, draft 0.5.** See [README.md](README.md) for the notation.
 
 ## 1. Scope
 
@@ -11,29 +11,33 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 (semantics.md §5). The syntax errors raised before this are grammar.md §3; the warnings (the program still runs)
 are not listed here.
 
-The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 30 of the files completely** (524 templates) — the ones that hold the most common errors: unit and
-dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
-conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
-operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
-numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
-matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
-`plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
-events in ODEs (`when`, events.rs) , eigenvalue problems (`solve … lowest N`, eigen.rs),
-natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) , PDEs (pde.rs) , `use python`
-(pyinterop.rs) and `import c`/`import fortran` (cinterop.rs). The rest (the C++ interop's messages in cppinterop.rs; about 50 templates) are still to do; see §4.
+The checker is `rust/crates/fermium-check`: 40 source files, 31 of which raise errors. **This draft covers all
+31 completely** (541 templates): unit and dimension mismatches, undefined names, arity and argument kinds,
+dispatch between versions of a function, conversions with `in`, the built-in functions' arguments, lists and
+indexing, uncertainties, the calculus operators (derivatives, integrals, sums, `solve … for x`), complex lists
+and Fourier transforms, random numbers, the statements (control flow, reassignment, list entries, `push`, local
+functions), vectors and matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs),
+data files, `table`, `fit` and `plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or
+more dimensions (arrays.rs), events in ODEs (`when`, events.rs), eigenvalue problems (`solve … lowest N`,
+eigen.rs), natural-units regions (systems.rs), `analyze` (analyze.rs), `parallel for` (parallel.rs), PDEs
+(pde.rs), `use python` (pyinterop.rs), `import c`/`import fortran` (cinterop.rs) and `import cpp`
+(cppinterop.rs). The other 9 files (api.rs, ast_ext.rs, builtins.rs, cachedir.rs, lib.rs, pending.rs,
+sha256.rs, source.rs, walk.rs) raise no errors of their own, which the test checks. What is still to do is
+examples for many rows, the hints and a few messages made outside the checker (§4).
 
-Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `cinterop.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `pyinterop.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `cinterop.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `cppinterop.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `pyinterop.rs`, `rng.rs`, `solve.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
-first argument of each `err(…)` and `Diagnostic::error(…)`, the message of each `unify_or(…, |c| …)` closure,
+first argument of each `err(…)` and `Diagnostic::error(…)`, the second argument (the message) of each cppinterop.rs
+`cerr(sig, msg, hint)`, the message of each `unify_or(…, |c| …)` closure,
 and the literals that start a `format!(` or a `{ … }` branch of a `let msg = …` that the next lines raise with
 `err(msg, …)` — plus two kinds of
 message that are built in one place and raised in another: the "might not have a value" messages stored as
 `unset_msg` (stmts.rs, parallel.rs; raised in exprs.rs) and the unit-power overflow message (fermium-units
 `exact.rs`, raised in checker.rs). It checks that the table lists exactly those templates, and that the
-*Covered files* line above is the test's list. In a message, `…` stands for a part filled in from the program
+*Covered files* line above is the test's list, and that no other checker file contains any of those
+error-raising forms. In a message, `…` stands for a part filled in from the program
 (a name, a unit, a dimension in words such as `length [m]`, a line number, a kind such as `a 3-D vector of …`).
 Errors raised in a covered file through a helper defined in another file (for example stmts.rs's `need_num`,
 "… must be a number, but it is …", used for the two sides of a comparison) are listed under the helper's file, and a template raised in several covered files (such as "can't add … to …") is
@@ -42,8 +46,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 218 of the
-524. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 235 of the
+541. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -610,6 +614,24 @@ errors come first, and the rest are simply not written yet (§4).
 | 522 | `…: a … function takes numbers and lists of numbers, but … is …` | cinterop.rs | a native function given an argument that isn't a number or a list of numbers | — |
 | 523 | `… expects … to be a list (declared on line …), but got a single number` | cinterop.rs | a list parameter given a single number | — |
 | 524 | `… is a … function from …; it can only be called, like …(…)` | cinterop.rs | a native function used as a value without calling it | — |
+| | **C++ interop (cppinterop.rs)** | | | |
+| 525 | `can't make a folder for the compiled C++ wrapper: …` | cppinterop.rs | the cache folder for the compiled wrapper can't be made | — |
+| 526 | `import cpp needs a C++ compiler, and none was found (tried c++, g++ and clang++)` | cppinterop.rs | `import cpp` with no C++ compiler on the machine | — |
+| 527 | `can't write the C++ wrapper …: …` | cppinterop.rs | the generated wrapper source can't be written | — |
+| 528 | `the C++ compiler … didn't finish within … s, so it was stopped` | cppinterop.rs | the C++ compiler ran past its time limit | — |
+| 529 | `can't run the C++ compiler …: …` | cppinterop.rs | the C++ compiler can't be started | — |
+| 530 | `can't store the compiled C++ wrapper in …: …` | cppinterop.rs | the compiled wrapper can't be stored in the cache | — |
+| 531 | `… is declared in … but defined nowhere: the import names no library` | cppinterop.rs | a declared function the header declares but no library defines (the import names no library) | — |
+| 532 | `the C++ library … has no definition of …` | cppinterop.rs | a declared function the named C++ library doesn't define | — |
+| 533 | `can't find the header …` | cppinterop.rs | `import cpp` of a header that can't be found | — |
+| 534 | `the C++ wrapper didn't compile: …` | cppinterop.rs | the generated wrapper doesn't compile (a reason not tied to one function) | — |
+| 535 | `the header … declares no function …` | cppinterop.rs | a declared function the header doesn't declare | — |
+| 536 | `… is a member function, which needs an object; only free functions and static member functions can be imported` | cppinterop.rs | a non-static member function imported | — |
+| 537 | `more than one overload of … has the C++ type …` | cppinterop.rs | a declared C++ type that matches more than one overload | — |
+| 538 | `no overload of … has the C++ type …` | cppinterop.rs | a declared C++ type that matches no overload | — |
+| 539 | `the C++ wrapper for … didn't compile: …` | cppinterop.rs | the wrapper for one declared function doesn't compile | — |
+| 540 | `the header … doesn't compile: …, line …: …` | cppinterop.rs | the header itself doesn't compile | — |
+| 541 | `compiling the C++ wrapper failed: …` | cppinterop.rs | compiling the wrapper failed (the compiler's first message follows) | — |
 
 ## 3. Examples
 
@@ -2305,13 +2327,13 @@ import c "no_such_library_here.so":
 
 ## 4. To do
 
-- **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, cppinterop.rs's `cerr(…)` messages (about 50 templates).
+- **New checker files.** All 31 checker files that raise errors are covered; a new file that raises errors
+  fails the test until it is added to the table and to `COVERED`.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (218). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (235). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -2330,6 +2352,6 @@ import c "no_such_library_here.so":
   (eigen.rs), 1 row; in rows 419–425 (systems.rs), 6; in rows 426–431 (analyze.rs), 4; in rows 432–443
   (parallel.rs), 6; in rows 444–481 (pde.rs), 16; in rows 482–499 (pyinterop.rs), 17 (they need a Python
   installation, which the test doesn't assume); in rows 500–524 (cinterop.rs), 23 (most need a native
-  library).
+  library); rows 525–541 (cppinterop.rs) have none (they need a C++ compiler and a header).
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
