@@ -711,7 +711,35 @@ solve u' = u / (1 s)
 print "u halves at", times(u)[end]
 ```
 
-- **An `if` on t** (a force that switches on at 0.3 s, a potential step in x): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it. A jump that depends on the unknowns instead (`if x > 0 m`) is not located this way.
+- **An `if` on t** (a force that switches on at 0.3 s): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it.
+- **An `if` on the unknowns** (Fermium 2.5, spec §C2, DECISIONS D296): a condition that depends on the unknowns, like a wall spring that acts only for `x < 0 m`, is located accurately too. During each RK45 step the condition keeps the value it had at the start of the step (so the right side is smooth within the step); after the step it is evaluated on the solver's dense output, and where it changes, the switch is found by root finding on that interpolant (regula falsi, to rounding), the step ends there and the solution restarts on the other branch. This works for the comparisons `<`, `>`, `<=`, `>=` written in the equation, or in a one-line function the equation calls with the unknowns (`F(x) = if x > 0 m then …`, including its `where`). Where both branches push the solution back onto the switching surface (a sliding mode: dry friction on a mass at rest, a block riding a conveyor belt), the solution slides along the surface: the right side is Filippov's convex combination of the two branches that keeps the condition's two sides equal, until the flow on one side turns away, which is located the same way (stick–slip works). A condition that still switches back and forth at one point more than 20 times in a row is evaluated as written from then on. A branch that can't be evaluated just past its switch (like `(y² - 1)^(3/2)` for y < 1) is evaluated as written for those stages. Not located: conditions inside functions written over several lines, `abs`, `sign`, `min` and `max`, solves with `step`, `using rk4`, `radau` or `bdf`, and solves with uncertain values (±, C7) (evaluated as written, as in Fermium 1.5 and 2.0).
+
+```text
+M = 2 kg
+k1 = 8 N/m
+k2 = 200 N/m
+solve M x'' = if x > 0 m then -k1 x else -k2 x
+  with x(0 s) = 0.5 m, x'(0 s) = 0 m/s
+  for t from 0 s to 20 s
+T = π/√(k1/M) + π/√(k2/M)      # half a period on each side
+print x(3 T)                    # 0.500 m (to 10⁻⁹ m)
+```
+
+- `x'(t)` of the highest derivative while a solution slides evaluates the condition as written (the sliding combination isn't stored).
+- **Events that change the state, `when`** (Fermium 2.5, spec §C2, DECISIONS D297): `when lhs = rhs: x' = …` on a line of its own in a solve replaces unknowns (or their derivatives below the highest) at the moment the two sides cross, then continues from the new state. The crossing is located on the dense output like `until`; the new values are all computed from the state just before the event. `when y = 0 m` fires on every crossing, `when y < 0 m` (or `<=`) only when y − 0 m falls through zero, `when y > 0 m` (or `>=`) only when it rises through it. Several assignments are separated by commas, and a solve can have several `when` lines and an `until`. A bouncing ball:
+
+```text
+g = 9.81 m/s²
+solve y'' = -g
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 12 s
+  when y = 0 m: y' = -0.9 y'
+print y(5 s)       # 6.44 m: within 10⁻¹³ m of the analytic bounces
+```
+
+  - An event that fires again and again ever faster (the ball above bounces infinitely often before t ≈ 27.1 s, a Zeno point) stops the solve with an error that names the time: end the range before it, or stop with `until`.
+  - `when` needs the adaptive solver (rk45): with `step`, `using rk4`, `radau` or `bdf` it is an error. A solve with `when` can't use uncertain values (±) yet (use `propagate montecarlo`).
+  - The solution keeps both sides of each event: `y(t)` just before and just after it are the values before and after the change, and `plot y vs t` shows the jump.
 - **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
 
 ### Equations: solve … for x from a to b

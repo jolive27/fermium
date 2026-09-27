@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "events_error_step.fm, line 5: when works with the adaptive solver (rk45) for now\n      when y = 0 m: y' = -0.9 y'\n      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: remove step … to use it\n",
+ "exit": 1
+}

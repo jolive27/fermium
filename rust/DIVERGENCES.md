@@ -428,3 +428,13 @@ one-line function that calls one, with "can't differentiate through g: it's defi
 only differentiate one-line functions …"); v2.5 computes them. The recorded programs: `g(t) = (a = 2 s; t²/a)`,
 `f(t) = g(t) + 1 s`, `print f'(5 s)` prints 5 (2t/a = 10 s / 2 s), and `F(x) = (a = 2; x²/a)`, `N(T) = F(T) + 1`,
 `dN = d/dT N`, `print dN(3)` prints 3 (2·3/2). `∇·` and `∇×` of a multi-line function keep v1's error.
+
+## v2.5: conditions on the unknowns in solve are located (C2)
+
+Spec C2 locates the switches of `if` conditions that depend on the unknowns of an RK45 solve (DECISIONS D296): the
+condition is frozen during each step and its switch found on the dense output, where v1 evaluated it at every
+stage and let the error control shrink the steps around the jump. Results change at the level of the solver's
+tolerance, towards the converged solution. The recorded program (a white dwarf with the full Fermi-gas equation of
+state, whose density is cut off by `ρ_of(y) = if y > 1 then … (y² − 1)^(3/2) else 0 kg/m³`) prints M = 0.51019701 M☉
+for x_c = 1 where v1 printed 0.51019703; the same solve with `tolerance 1e-13` gives 0.51019700 in both Fermium 1.5
+and 2.5, so the new value is the more accurate one (the other lines agree to their printed digits).

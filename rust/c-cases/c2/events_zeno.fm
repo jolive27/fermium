@@ -1,0 +1,8 @@
+# A ball that bounces ever lower bounces infinitely often before t = t₁ (1 + 2·0.9/(1 - 0.9)) ≈ 27.1 s, a
+# Zeno point: the events accumulate there, and the solve stops with an error that names the time (D297).
+g = 9.81 m/s²
+solve y'' = -g
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 40 s
+  when y = 0 m: y' = -0.9 y'
+print y(20 s)

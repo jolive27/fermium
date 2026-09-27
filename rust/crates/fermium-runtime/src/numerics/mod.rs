@@ -66,6 +66,8 @@ pub mod err {
     pub const QUAD_INF: i64 = 32;
     pub const ODE_SINGULAR: i64 = 33;
     pub const ODE_H_FLAT: i64 = 34;
+    /// a `when` event fires again and again, ever faster (a Zeno point, D297); a = t, b = the event's text id
+    pub const ZENO: i64 = 35;
     /// + 1 + the variable's text id: "too many steps" (RK45); a = reached, b = start (D214)
     pub const ODE_STEPS_FROM: i64 = 1_000_000;
     /// + 1 + the variable's text id: "too many steps" (stiff solvers)

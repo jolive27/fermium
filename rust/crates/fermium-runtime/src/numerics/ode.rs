@@ -362,6 +362,33 @@ impl<'a> Event<'a> {
     }
 }
 
+impl Event<'_> {
+    /// `check` on part of a step: did g cross zero between the step's start and (te, ye), a point on its dense
+    /// output? If so, end the solution at the crossing and return true (D297: an event cut the step short).
+    fn check_dense<F: FnMut(f64, &[f64], &mut [f64])>(&mut self, f: &mut F, sol: &mut Sol, dn: &DenseStep<'_>,
+                                                      te: f64, ye: &[f64]) -> bool {
+        let gn = (self.g)(te, ye);
+        if gn != gn || self.sgn == 0.0 || !(gn == 0.0 || gn * self.sgn < 0.0) {
+            return false;
+        }
+        let mut tc = te;
+        if gn != 0.0 {
+            let g = &mut self.g;
+            tc = illinois(|x| g(x, &dn.state(x)), dn.t, self.sgn, te, gn);
+        }
+        let yc = if tc == te { ye.to_vec() } else { dn.state(tc) };
+        let mut kc = vec![0.0; yc.len()];
+        f(tc, &yc, &mut kc);
+        sol.push(tc, &yc, &kc);
+        true
+    }
+
+    /// After a restart from a new state: the sign of g there.
+    fn resign(&mut self, t: f64, y: &[f64]) {
+        self.sgn = sgn((self.g)(t, y));
+    }
+}
+
 /// Options shared by the solvers.
 #[derive(Debug, Clone, Copy)]
 pub struct OdeOpts<'a> {
@@ -375,11 +402,14 @@ pub struct OdeOpts<'a> {
     pub evtext: f64,
     /// the right side reads t in a condition: probe for jumps (D40)
     pub tdep: bool,
+    /// the leading state components the RK45 error control, first step and "step too small" look at (0: all);
+    /// the rest are the branch flags of conditions on the unknowns (D296)
+    pub nerr: usize,
 }
 
 impl Default for OdeOpts<'_> {
     fn default() -> Self {
-        OdeOpts { rtol: 1e-6, atol: None, tname: -1.0, evtext: -1.0, tdep: false }
+        OdeOpts { rtol: 1e-6, atol: None, tname: -1.0, evtext: -1.0, tdep: false, nerr: 0 }
     }
 }
 
@@ -546,9 +576,10 @@ fn first_step<F: FnMut(f64, &[f64], &mut [f64])>(
     dirn: f64,
     aspan: f64,
     rtol: f64,
+    nerr: usize,
 ) -> f64 {
     let (mut d0, mut d1, mut cnt) = (0.0f64, 0.0f64, 0.0f64);
-    for (&yj, &fj) in y.iter().zip(k0) {
+    for (&yj, &fj) in y.iter().zip(k0).take(nerr) {
         if yj.abs() > 0.0 {
             let sc = rtol * yj.abs();
             d0 += (yj.abs() / sc).powi(2);
@@ -563,7 +594,7 @@ fn first_step<F: FnMut(f64, &[f64], &mut [f64])>(
         let mut k1 = vec![0.0; y.len()];
         f(t0 + dirn * h0, &yt, &mut k1);
         let mut d2 = 0.0f64;
-        for ((&yj, &fj), &gj) in y.iter().zip(k0).zip(&k1) {
+        for ((&yj, &fj), &gj) in y.iter().zip(k0).zip(&k1).take(nerr) {
             if yj.abs() > 0.0 {
                 d2 += ((gj - fj) / (rtol * yj.abs())).powi(2);
             }
@@ -660,6 +691,395 @@ fn stiff_test(state: &mut [i64; 2], count: u64, h: f64, k6: &[f64], k7: &[f64], 
     false
 }
 
+// ------------------------------------------------------------------------------ conditions and events (C2)
+
+/// A function shaped like a right-hand side: out = f(t, y).
+pub type VecFn<'a> = &'a mut dyn FnMut(f64, &[f64], &mut [f64]);
+
+/// One `when lhs = rhs: …` event of a solve (D297).
+pub struct When<'a> {
+    /// g = lhs − rhs
+    pub g: EventFn<'a>,
+    /// the new state after the event (out has the state's length)
+    pub reset: VecFn<'a>,
+    /// 0: fires on every crossing; 1: when g becomes ≥ 0 (from below); 2: when g becomes ≤ 0 (from above)
+    pub dir: u8,
+    /// the text id of the event's description, for ZENO
+    pub text: f64,
+}
+
+/// Conditions and events that depend on the unknowns, for RK45 (spec C2):
+/// - **conditions** (D296): each `if` condition on the unknowns in the right side is frozen during a step: the right
+///   side reads its branch from a flag in the state (slot `slot0 + j`: 1 true, 0 false, 2 evaluate it as written),
+///   so the right side is smooth within the step. After each accepted step the conditions are evaluated on the
+///   step's dense output (`sw` writes each one's lhs − rhs); where one no longer agrees with its flag, the switch is
+///   located by root finding on the dense output, the step ends there and the solution restarts on the other branch.
+/// - **events** (D297): `when g = 0: …` located the same way; the state is replaced by the event's new state and the
+///   solution restarts from it.
+#[derive(Default)]
+pub struct Hooks<'a> {
+    pub sw: Option<VecFn<'a>>,
+    /// the comparison of each condition: 0 `>`, 1 `>=`, 2 `<`, 3 `<=`
+    pub sw_ops: Vec<u8>,
+    pub slot0: usize,
+    pub whens: Vec<When<'a>>,
+    /// |t0| + the length of the range (set by the solver): the scale of the small steps `sides` takes
+    pub tscale: f64,
+}
+
+/// What `Hooks` keeps while a solve runs.
+#[derive(Default)]
+pub struct HookState {
+    /// the sign of each event's g (0: not known yet, set at the end of the next step)
+    wsgn: Vec<f64>,
+    /// when each event last fired
+    wlast: Vec<f64>,
+    /// per condition: switches in a row that came very close together, and when it last switched
+    rapid: Vec<(u32, f64)>,
+    buf: Vec<f64>,
+}
+
+/// Which hook: a condition (its index) or an event.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Which {
+    Cond(usize),
+    When(usize),
+}
+
+/// A condition's flag while the solution slides along its surface g = 0 (D296).
+const SLIDING: f64 = 3.0;
+
+/// Conditions that switch more than this many times in a row, each within 10⁻⁹ of the range of the last switch
+/// (chattering, as in dry friction at rest), go back to being evaluated as written (the v1 behaviour).
+const CHATTER: u32 = 20;
+
+fn truth(op: u8, g: f64) -> bool {
+    match op {
+        0 => g > 0.0,
+        1 => g >= 0.0,
+        2 => g < 0.0,
+        _ => g <= 0.0,
+    }
+}
+
+fn sgn(v: f64) -> f64 {
+    if v > 0.0 { 1.0 } else if v < 0.0 { -1.0 } else { 0.0 }
+}
+
+/// The first point after `a` where `old(g)` stops holding, bracketed to rounding: (lo, hi) with old(g(lo)) and
+/// !old(g(hi)), lo and hi at most a few ulps apart. Illinois regula falsi with a bisection fallback; ga and gc are
+/// g(a) and g(c).
+fn bracket<G: FnMut(f64) -> f64, O: Fn(f64) -> bool>(mut g: G, old: O, mut a: f64, mut ga: f64, mut c: f64, mut gc: f64)
+                                                    -> (f64, f64) {
+    let mut side = 0;
+    for _ in 0..300 {
+        if (c - a).abs() <= 4e-16 * pymax(a.abs(), c.abs()) {
+            break;
+        }
+        let mut x = c - gc * (c - a) / (gc - ga);
+        if !(pymin(a, c) < x && x < pymax(a, c)) {
+            x = a + 0.5 * (c - a);
+            if x == a || x == c {
+                break;
+            }
+        }
+        let gx = g(x);
+        if old(gx) {
+            a = x;
+            ga = gx;
+            if side == -1 {
+                gc *= 0.5;
+            }
+            side = -1;
+        } else {
+            c = x;
+            gc = gx;
+            if side == 1 {
+                ga *= 0.5;
+            }
+            side = 1;
+        }
+    }
+    (a, c)
+}
+
+/// One accepted DOPRI5 step and its continuous extension (the 4th-order dense output).
+pub struct DenseStep<'s> {
+    t: f64,
+    h: f64,
+    y: &'s [f64],
+    yn: &'s [f64],
+    k: &'s [f64],
+    kn: &'s [f64],
+    r5: Vec<f64>,
+}
+
+impl<'s> DenseStep<'s> {
+    fn new(t: f64, y: &'s [f64], ks: &'s [Vec<f64>; 7], tn: f64, yn: &'s [f64]) -> Self {
+        let h = tn - t;
+        let r5 = (0..y.len())
+            .map(|j| {
+                let mut acc = D_DP[0] * ks[0][j];
+                for m in 2..7 {
+                    acc += D_DP[m] * ks[m][j];
+                }
+                h * acc
+            })
+            .collect();
+        DenseStep { t, h, y, yn, k: &ks[0], kn: &ks[6], r5 }
+    }
+
+    fn tn(&self) -> f64 {
+        self.t + self.h
+    }
+
+    fn state(&self, x: f64) -> Vec<f64> {
+        let th = (x - self.t) / self.h;
+        (0..self.y.len()).map(|j| dense(self.y[j], self.yn[j], self.k[j], self.kn[j], self.r5[j], self.h, th)).collect()
+    }
+}
+
+impl<'a> Hooks<'a> {
+    pub fn active(&self) -> bool {
+        self.sw.is_some() || !self.whens.is_empty()
+    }
+
+    /// The right side as the solver sees it: `f`, except while a condition slides along its surface (flag 3):
+    /// then Filippov's convex combination α f_true + (1 − α) f_false of the two branches that keeps g at 0.
+    fn rhs(&mut self, f: &mut dyn FnMut(f64, &[f64], &mut [f64]), t: f64, y: &[f64], out: &mut [f64]) {
+        let j = match self.sw.as_ref() {
+            Some(_) => (0..self.sw_ops.len()).find(|&j| y[self.slot0 + j] == SLIDING),
+            None => None,
+        };
+        let Some(j) = j else {
+            f(t, y, out);
+            if !all_finite(out) && self.sw.is_some() {
+                // a branch that can't be evaluated past its switch (like (y² − 1)^(3/2) for y < 1): the conditions
+                // are evaluated as written for this call, as without freezing
+                let mut yl = y.to_vec();
+                for j in 0..self.sw_ops.len() {
+                    yl[self.slot0 + j] = 2.0;
+                }
+                f(t, &yl, out);
+            }
+            return;
+        };
+        let (dt, df, ft, ff) = self.sides(f, j, t, y);
+        let a = if df - dt != 0.0 { (df / (df - dt)).clamp(0.0, 1.0) } else { 0.5 };
+        for i in 0..out.len() {
+            out[i] = a * ft[i] + (1.0 - a) * ff[i];
+        }
+    }
+
+    /// At (t, y): dg/dt along each branch of condition j (true, false), and the right side of each branch.
+    fn sides(&mut self, f: &mut dyn FnMut(f64, &[f64], &mut [f64]), j: usize, t: f64, y: &[f64])
+             -> (f64, f64, Vec<f64>, Vec<f64>) {
+        let n = y.len();
+        let m = self.sw_ops.len();
+        let sw = self.sw.as_mut().unwrap();
+        let mut g0 = vec![0.0; m];
+        let mut g1 = vec![0.0; m];
+        sw(t, y, &mut g0);
+        let dt = 1e-8 * pymax(self.tscale, t.abs());
+        let mut side = |flag: f64| -> (f64, Vec<f64>) {
+            let mut ys = y.to_vec();
+            ys[self.slot0 + j] = flag;
+            let mut fs = vec![0.0; n];
+            f(t, &ys, &mut fs);
+            let ya: Vec<f64> = ys.iter().zip(&fs).map(|(a, b)| a + dt * b).collect();
+            sw(t + dt, &ya, &mut g1);
+            ((g1[j] - g0[j]) / dt, fs)
+        };
+        let (dtr, ftr) = side(1.0);
+        let (dfa, ffa) = side(0.0);
+        (dtr, dfa, ftr, ffa)
+    }
+
+    /// Does the flow point into the surface of condition j from both sides (a sliding mode)? The true side is
+    /// g > 0 for `>` and `>=`, g < 0 for `<` and `<=`. Positive while it slides.
+    fn slide_margin(&self, j: usize, dtr: f64, dfa: f64) -> f64 {
+        let s = if self.sw_ops[j] <= 1 { 1.0 } else { -1.0 };
+        pymin(-s * dtr, s * dfa)
+    }
+
+    /// At the start: each condition's flag from its value at (t0, y0) (a flag of 2 stays: evaluated as written),
+    /// and each event's sign.
+    fn begin(&mut self, t0: f64, y: &mut [f64]) -> HookState {
+        let m = self.sw_ops.len();
+        let mut st = HookState { wsgn: vec![0.0; self.whens.len()], wlast: vec![f64::NAN; self.whens.len()],
+                                 rapid: vec![(0, f64::NAN); m], buf: vec![0.0; m] };
+        self.set_flags(t0, y, &mut st.buf);
+        for (i, w) in self.whens.iter_mut().enumerate() {
+            st.wsgn[i] = sgn((w.g)(t0, y));
+        }
+        st
+    }
+
+    fn set_flags(&mut self, t: f64, y: &mut [f64], buf: &mut [f64]) {
+        if let Some(sw) = self.sw.as_mut() {
+            sw(t, y, buf);
+            for (j, &op) in self.sw_ops.iter().enumerate() {
+                let s = self.slot0 + j;
+                if y[s] != 2.0 {
+                    y[s] = if truth(op, buf[j]) { 1.0 } else { 0.0 };
+                }
+            }
+        }
+    }
+
+    /// After an accepted step: the first condition that no longer agrees with its flag, or event that fired, with
+    /// the bracket (lo, hi) of where; None if nothing happened (then the events' unknown signs are set).
+    fn first_crossing(&mut self, st: &mut HookState, dn: &DenseStep<'_>, dirn: f64,
+                      f: &mut dyn FnMut(f64, &[f64], &mut [f64])) -> Option<(Which, f64, f64)> {
+        let (t, tn) = (dn.t, dn.tn());
+        let mut best: Option<(Which, f64, f64)> = None;
+        let better = |w: Which, lo: f64, hi: f64, best: &mut Option<(Which, f64, f64)>| {
+            if best.as_ref().is_none_or(|b| dirn * lo < dirn * b.1) {
+                *best = Some((w, lo, hi));
+            }
+        };
+        // a condition sliding along its surface: the slide ends where the flow stops pointing into it
+        for j in 0..self.sw_ops.len() {
+            if self.sw.is_none() || dn.y[self.slot0 + j] != SLIDING {
+                continue;
+            }
+            let mut margin = |x: f64, me: &mut Self| -> f64 {
+                let s = dn.state(x);
+                let (a, b, _, _) = me.sides(f, j, x, &s);
+                me.slide_margin(j, a, b)
+            };
+            let mn = margin(tn, self);
+            if mn > 0.0 {
+                continue;
+            }
+            let ma = margin(t, self);
+            let (lo, hi) = bracket(|x| margin(x, self), |v| v > 0.0, t, ma, tn, mn);
+            better(Which::Cond(j), lo, hi, &mut best);
+        }
+        if let Some(sw) = self.sw.as_mut() {
+            let m = self.sw_ops.len();
+            let mut gn = vec![0.0; m];
+            sw(tn, dn.yn, &mut gn);
+            let mut ga = vec![0.0; m];
+            let mut have_a = false;
+            for j in 0..m {
+                let flag = dn.y[self.slot0 + j];
+                if flag == 2.0 || flag == SLIDING {
+                    continue;
+                }
+                let op = self.sw_ops[j];
+                let want = flag == 1.0;
+                if truth(op, gn[j]) == want {
+                    continue;
+                }
+                if !have_a {
+                    sw(t, dn.y, &mut ga);
+                    have_a = true;
+                }
+                let buf = &mut st.buf;
+                let (lo, hi) = bracket(|x| {
+                                           let s = dn.state(x);
+                                           sw(x, &s, buf);
+                                           buf[j]
+                                       },
+                                       |g| truth(op, g) == want, t, ga[j], tn, gn[j]);
+                better(Which::Cond(j), lo, hi, &mut best);
+            }
+        }
+        let mut gns = vec![0.0; self.whens.len()];
+        for (i, w) in self.whens.iter_mut().enumerate() {
+            let gn = (w.g)(tn, dn.yn);
+            gns[i] = gn;
+            let s = st.wsgn[i];
+            if s == 0.0 || gn != gn {
+                continue;
+            }
+            let fired = match w.dir {
+                1 => s < 0.0 && gn >= 0.0,
+                2 => s > 0.0 && gn <= 0.0,
+                _ => gn == 0.0 || gn * s < 0.0,
+            };
+            if !fired {
+                if gn * s < 0.0 {
+                    st.wsgn[i] = sgn(gn); // crossed the other way: not this event's direction
+                }
+                continue;
+            }
+            let ga = (w.g)(t, dn.y);
+            let g = &mut w.g;
+            let (lo, hi) = bracket(|x| g(x, &dn.state(x)), |v| v * s > 0.0, t, ga, tn, gn);
+            better(Which::When(i), lo, hi, &mut best);
+        }
+        if best.is_none() {
+            for (i, &gn) in gns.iter().enumerate() {
+                if st.wsgn[i] == 0.0 {
+                    st.wsgn[i] = sgn(gn);
+                }
+            }
+        }
+        best
+    }
+
+    /// The state after a condition switches (its flag flipped, or evaluated as written from now on when it
+    /// chatters) or an event fires (its new state, with the flags recomputed); an event that fires again ever
+    /// faster is an error (ZENO).
+    fn fire(&mut self, st: &mut HookState, which: Which, t: f64, y: &[f64], scale: f64,
+            f: &mut dyn FnMut(f64, &[f64], &mut [f64])) -> Result<Vec<f64>, Fail> {
+        let mut out = y.to_vec();
+        match which {
+            Which::Cond(j) => {
+                let s = self.slot0 + j;
+                let (dtr, dfa, _, _) = self.sides(f, j, t, y);
+                let sgn_true = if self.sw_ops[j] <= 1 { 1.0 } else { -1.0 };
+                out[s] = if self.slide_margin(j, dtr, dfa) > 0.0 {
+                    SLIDING // both branches push the solution back onto the surface: it slides along it
+                } else if y[s] == SLIDING {
+                    if sgn_true * dtr >= 0.0 { 1.0 } else { 0.0 } // leaves to the side the flow goes to
+                } else if y[s] == 1.0 {
+                    0.0
+                } else {
+                    1.0
+                };
+                let (cnt, last) = st.rapid[j];
+                let close = (t - last).abs() <= 1e-9 * scale;
+                st.rapid[j] = (if close { cnt + 1 } else { 0 }, t);
+                if st.rapid[j].0 >= CHATTER {
+                    out[s] = 2.0;
+                }
+            }
+            Which::When(i) => {
+                let last = st.wlast[i];
+                if (t - last).abs() <= 1e-9 * scale {
+                    return Err(Fail::new(err::ZENO, t, self.whens[i].text));
+                }
+                st.wlast[i] = t;
+                (self.whens[i].reset)(t, y, &mut out);
+                if !all_finite(&out) {
+                    return Err(Fail::new(err::ODE_NAN, t, -1.0));
+                }
+                let mut buf = std::mem::take(&mut st.buf);
+                self.set_flags(t, &mut out, &mut buf);
+                st.buf = buf;
+            }
+        }
+        Ok(out)
+    }
+
+    /// The events' signs after a restart. The one that fired is at 0 there (up to rounding), so its sign is the one
+    /// it takes a little later, after an Euler step of dt (a small fraction of the step): the direction the solution
+    /// leaves in (a ball that bounced moves up). 0 if that isn't clear either: then set at the end of the next step.
+    fn resign(&mut self, st: &mut HookState, which: Which, t: f64, y: &[f64], k: &[f64], dt: f64) {
+        for (i, w) in self.whens.iter_mut().enumerate() {
+            st.wsgn[i] = if which == Which::When(i) {
+                let ya: Vec<f64> = y.iter().zip(k).map(|(a, b)| a + dt * b).collect();
+                sgn((w.g)(t + dt, &ya))
+            } else {
+                sgn((w.g)(t, y))
+            };
+        }
+    }
+}
+
 /// Adaptive Dormand–Prince 5(4) from t0 to t1 (either direction): v1's `dp45` (`fm_dp45`).
 /// A stiffness warning (kind 2, a = step count) is added to `Sol::warnings`.
 pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
@@ -678,7 +1098,7 @@ pub fn dp45<F: FnMut(f64, &[f64], &mut [f64])>(
 /// `dp45` into a solution the caller owns, so the warnings raised before a failure (a stiffness warning, then
 /// "too many steps") are still there when it returns an error, as v1 shows them.
 pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
-    mut f: F,
+    f: F,
     y0: &[f64],
     t0: f64,
     t1: f64,
@@ -686,8 +1106,50 @@ pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
     opts: OdeOpts<'_>,
     sol: &mut Sol,
 ) -> Result<(), Fail> {
+    dp45_hooks(f, y0, t0, t1, ev, opts, sol, &mut Hooks::default())
+}
+
+/// `dp45_into` with conditions and events on the unknowns (D296, D297): see `Hooks`.
+#[allow(clippy::too_many_arguments)]
+pub fn dp45_hooks<F: FnMut(f64, &[f64], &mut [f64])>(
+    f: F,
+    y0: &[f64],
+    t0: f64,
+    t1: f64,
+    ev: Option<EventFn<'_>>,
+    opts: OdeOpts<'_>,
+    sol: &mut Sol,
+    hooks: &mut Hooks<'_>,
+) -> Result<(), Fail> {
+    if !hooks.active() {
+        return dp45_core(f, y0, t0, t1, ev, opts, sol, None);
+    }
+    // the solver calls the right side through the hooks (a condition sliding along its surface, D296)
+    let raw = std::cell::RefCell::new(f);
+    let hk = std::cell::RefCell::new(hooks);
+    let fw = |t: f64, y: &[f64], out: &mut [f64]| {
+        let mut rf = raw.borrow_mut();
+        hk.borrow_mut().rhs(&mut *rf, t, y, out);
+    };
+    dp45_core(fw, y0, t0, t1, ev, opts, sol, Some((&hk, &raw)))
+}
+
+type RawRhs<'r> = &'r std::cell::RefCell<dyn FnMut(f64, &[f64], &mut [f64]) + 'r>;
+
+#[allow(clippy::too_many_arguments)]
+fn dp45_core<'r, 'h: 'r, F: FnMut(f64, &[f64], &mut [f64])>(
+    mut f: F,
+    y0: &[f64],
+    t0: f64,
+    t1: f64,
+    ev: Option<EventFn<'_>>,
+    opts: OdeOpts<'_>,
+    sol: &mut Sol,
+    hk: Option<(&'r std::cell::RefCell<&'r mut Hooks<'h>>, RawRhs<'r>)>,
+) -> Result<(), Fail> {
     let f = &mut f;
     let n = y0.len();
+    let nerr = if opts.nerr > 0 && opts.nerr <= n { opts.nerr } else { n };
     let rtol = opts.rtol;
     let zeros = vec![0.0; n];
     let atol: &[f64] = opts.atol.unwrap_or(&zeros);
@@ -702,8 +1164,15 @@ pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
     let mut t = t0;
     let mut count: u64 = 0;
     let mut k: [Vec<f64>; 7] = std::array::from_fn(|_| vec![0.0; n]);
+    let mut hs_state = match hk {
+        Some((h, _)) => {
+            h.borrow_mut().tscale = aspan + t0.abs();
+            h.borrow_mut().begin(t0, &mut y)
+        }
+        None => HookState::default(),
+    };
     k[0] = start(f, t0, &y, tname)?;
-    let mut hv = first_step(f, t0, &y, &k[0], dirn, aspan, rtol);
+    let mut hv = first_step(f, t0, &y, &k[0], dirn, aspan, rtol, nerr);
     sol.push(t0, &y, &k[0]);
     let mut event = ev.map(|g| Event::new(g, t0, &y));
     let (mut rej, mut first_rej) = (0u32, 0.0f64);
@@ -727,7 +1196,7 @@ pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
         let land = hv >= rstop;
         let h = if land { rstop } else { hv };
         if h < 1e-15 * (t.abs() + aspan) {
-            return Err(Fail::new(step_small_kind(y0, &y), t, tname));
+            return Err(Fail::new(step_small_kind(&y0[..nerr], &y[..nerr]), t, tname));
         }
         let tn = if land { stop } else { t + dirn * h };
         let hs = if land { stop - t } else { dirn * h };
@@ -751,7 +1220,7 @@ pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
             f(ts, &tmp, &mut rest[0]);
         }
         let mut errsum = 0.0f64;
-        for j in 0..n {
+        for j in 0..nerr {
             let mut e = 0.0f64;
             for m in 0..7 {
                 if E_DP[m] != 0.0 {
@@ -763,13 +1232,45 @@ pub fn dp45_into<F: FnMut(f64, &[f64], &mut [f64])>(
             let r = e / sc;
             errsum += r * r;
         }
-        let errn = (errsum / n as f64).sqrt();
+        let errn = (errsum / nerr as f64).sqrt();
         let fac = 0.9 * pymax(errn, 1e-10).powf(-0.2);
         let fac = pymin(5.0, pymax(0.2, fac));
         let stalled = rej >= 4 && errn >= 0.5 * first_rej;
         if errn <= 1.0 || stalled {
             if stiff[0] >= 0 && stiff_test(&mut stiff, count, hs, &k[5], &k[6], &tmp6, &ynew) {
                 sol.warnings.push((warn::STIFF, count as f64));
+            }
+            if let Some((hkc, raw)) = hk {
+                let dn = DenseStep::new(t, &y, &k, tn, &ynew);
+                let crossing = hkc.borrow_mut().first_crossing(&mut hs_state, &dn, dirn, &mut *raw.borrow_mut());
+                if let Some((which, lo, hi)) = crossing {
+                    // the step ends where a condition or event happens (D296, D297)
+                    let ylo = dn.state(lo);
+                    if let Some(e) = event.as_mut() {
+                        if e.check_dense(f, sol, &dn, lo, &ylo) {
+                            return Ok(());
+                        }
+                    }
+                    let mut klo = vec![0.0; n];
+                    f(lo, &ylo, &mut klo);
+                    sol.push(lo, &ylo, &klo);
+                    let yhi = dn.state(hi);
+                    y = hkc.borrow_mut().fire(&mut hs_state, which, hi, &yhi, aspan + t0.abs(), &mut *raw.borrow_mut())?;
+                    t = hi;
+                    f(t, &y, &mut k[0]);
+                    if !all_finite(&k[0]) {
+                        return Err(Fail::new(err::ODE_NAN, t, tname));
+                    }
+                    sol.push(t, &y, &k[0]);
+                    hkc.borrow_mut().resign(&mut hs_state, which, t, &y, &k[0], dirn * 1e-3 * h);
+                    if let Some(e) = event.as_mut() {
+                        e.resign(t, &y);
+                    }
+                    hv = h;
+                    rej = 0;
+                    probed = false;
+                    continue;
+                }
             }
             if let Some(e) = event.as_mut() {
                 let (k0, k6) = (k[0].clone(), k[6].clone());
@@ -845,5 +1346,47 @@ mod tests {
         let sol = rk4(|_t, y, o| { o[0] = y[1]; o[1] = -y[0]; }, &[1.0, 0.0], 0.0, 10.0, 0.001, Some(&mut g), OdeOpts::default()).unwrap();
         let te = *sol.t.last().unwrap();
         assert!((te - std::f64::consts::FRAC_PI_2).abs() < 1e-9, "{te}");
+    }
+
+    #[test]
+    fn when_bounce_located_on_dense_output() {
+        // y'' = -g from 10 m, y' → -0.9 y' at y = 0: the impacts at t1 = √(2h/g), t1 + 2·0.9·v1/g, …
+        let g0 = 9.81;
+        let mut g = |_t: f64, y: &[f64]| y[0];
+        let mut reset = |_t: f64, y: &[f64], o: &mut [f64]| {
+            o[0] = y[0];
+            o[1] = -0.9 * y[1];
+        };
+        let mut hooks = Hooks::default();
+        hooks.whens.push(When { g: &mut g, reset: &mut reset, dir: 0, text: -1.0 });
+        let mut sol = Sol::new(2);
+        let opts = OdeOpts { rtol: 1e-9, ..Default::default() };
+        dp45_hooks(|_t, y, o| { o[0] = y[1]; o[1] = -g0; }, &[10.0, 0.0], 0.0, 6.0, None, opts, &mut sol, &mut hooks)
+            .unwrap();
+        let (t1, v1) = ((20.0f64 / g0).sqrt(), (2.0 * g0 * 10.0f64).sqrt());
+        let t2 = t1 + 2.0 * 0.9 * v1 / g0;
+        let tau = 5.0 - t2;
+        let exact = 0.81 * v1 * tau - 0.5 * g0 * tau * tau;
+        let got = sol.eval(0, 5.0, false, None).unwrap();
+        assert!((got - exact).abs() < 1e-9, "{got} {exact}");
+    }
+
+    #[test]
+    fn frozen_condition_switch_located() {
+        // x'' = -k x with k = 4 for x > 0, 100 for x < 0 (flag in slot 2): one period is π/2 + π/10
+        let mut sw = |_t: f64, y: &[f64], o: &mut [f64]| o[0] = y[0];
+        let mut hooks = Hooks { sw: Some(&mut sw), sw_ops: vec![0], slot0: 2, ..Default::default() };
+        let mut sol = Sol::new(3);
+        let opts = OdeOpts { rtol: 1e-10, nerr: 2, ..Default::default() };
+        let rhs = |_t: f64, y: &[f64], o: &mut [f64]| {
+            let pos = if y[2] == 2.0 { y[0] > 0.0 } else { y[2] == 1.0 };
+            o[0] = y[1];
+            o[1] = if pos { -4.0 * y[0] } else { -100.0 * y[0] };
+            o[2] = 0.0;
+        };
+        dp45_hooks(rhs, &[1.0, 0.0, 0.0], 0.0, 5.0, None, opts, &mut sol, &mut hooks).unwrap();
+        let p = std::f64::consts::FRAC_PI_2 + std::f64::consts::PI / 10.0;
+        let got = sol.eval(0, 2.0 * p, false, None).unwrap();
+        assert!((got - 1.0).abs() < 1e-9, "{got}");
     }
 }

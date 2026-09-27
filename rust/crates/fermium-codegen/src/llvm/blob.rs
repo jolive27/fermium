@@ -227,7 +227,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
     }
     w.u(ode_sites.len() as u64);
     for OdeSite { method, rtol, atol, tname, evtext, tdep, tfmt, env_kinds, nstates, grid, eig_method, order, pmethod,
-                  bc, is_complex, xname, pde_line } in ode_sites {
+                  bc, is_complex, xname, pde_line, sw_ops, sw_slot0, nuser, whens } in ode_sites {
         w.s(method);
         w.f(*rtol);
         w.b(atol.is_some());
@@ -253,6 +253,15 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.b(*is_complex);
         w.u(*xname as u64);
         w.u(u64::from(*pde_line));
+        w.u(sw_ops.len() as u64);
+        sw_ops.iter().for_each(|o| w.u(u64::from(*o)));
+        w.u(*sw_slot0 as u64);
+        w.u(*nuser as u64);
+        w.u(whens.len() as u64);
+        for (d, tx) in whens {
+            w.u(u64::from(*d));
+            w.u(*tx as u64);
+        }
     }
     w.u(msum_sites.len() as u64);
     msum_sites.iter().for_each(|n| w.mnode(n));
@@ -487,8 +496,14 @@ pub fn read(bytes: &[u8]) -> RR<Blob> {
         let is_complex = r.b()?;
         let xname = r.u()? as usize;
         let pde_line = r.u()? as u32;
+        let k = r.n()?;
+        let sw_ops = (0..k).map(|_| r.u().map(|x| x as u8)).collect::<RR<_>>()?;
+        let sw_slot0 = r.u()? as usize;
+        let nuser = r.u()? as usize;
+        let k = r.n()?;
+        let whens = (0..k).map(|_| Ok((r.u()? as u8, r.u()? as usize))).collect::<RR<Vec<_>>>()?;
         t.ode_sites.push(OdeSite { method, rtol, atol, tname, evtext, tdep, tfmt, env_kinds, nstates, grid, eig_method,
-                                   order, pmethod, bc, is_complex, xname, pde_line });
+                                   order, pmethod, bc, is_complex, xname, pde_line, sw_ops, sw_slot0, nuser, whens });
     }
     let n = r.n()?;
     t.msum_sites = (0..n).map(|_| r.mnode()).collect::<RR<_>>()?;

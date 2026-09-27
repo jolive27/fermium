@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "events_zeno.fm, line 4: the event (when y = 0 m) happens again and again near t = 27.1 s, ever faster (like a ball bouncing ever lower, which bounces infinitely often before it comes to rest); end the range before that time, or stop the solve with until\n    solve y'' = -g\n",
+ "exit": 1
+}

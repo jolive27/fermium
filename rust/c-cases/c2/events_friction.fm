@@ -1,0 +1,24 @@
+# Dry (Coulomb) friction on a spring (spec §C2): the friction force flips with the sign of the velocity. Each
+# half swing loses 2 μg/ω² of amplitude, and the mass sticks once the spring can't beat friction. The switches
+# are located at each turning point; at rest both branches push the velocity back to 0 (a sliding mode), so the
+# solution slides along x' = 0 (Filippov's convex combination of the two branches) and the mass stays put.
+ω = 2 /s
+μg = 0.5 m/s²
+solve x'' = -ω² x + (if x' > 0 m/s then -μg else μg)
+  with x(0 s) = 1.1 m, x'(0 s) = 0 m/s
+  for t from 0 s to 12 s
+half = π/ω
+print x(half) to 9 digits, x(2*half) to 9 digits, x(3*half) to 9 digits, x(4*half) to 9 digits
+print abs(x(4*half) - 0.1 m) < 1e-8 m
+print abs(x(12 s) - 0.1 m) < 1e-6 m, abs(x'(12 s)) < 1e-6 m/s
+
+# stick-slip on a conveyor belt moving at vb: the block rides with the belt (sliding along x' = vb) until the
+# spring force reaches the friction force at x = μg/ω², then swings harmonically about that point
+vb = 0.1 m/s
+solve y'' = -ω² y + (if y' < vb then μg else -μg)
+  with y(0 s) = 0 m, y'(0 s) = 0.1 m/s
+  for t from 0 s to 6 s
+ts = μg/ω²/vb
+print y(1 s) to 9 digits, y'(1 s) to 9 digits
+print y(ts + π/(2*ω)) to 9 digits, μg/ω² + vb/ω to 9 digits
+print y(ts + π/ω) to 9 digits, y'(ts + π/ω) to 9 digits

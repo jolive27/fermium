@@ -1,0 +1,36 @@
+# A ball dropped from 10 m that bounces with a coefficient of restitution of 0.9 (spec §C2, when events).
+# Each impact is located on the solver's dense output, so the solution matches the analytic one closely.
+g = 9.81 m/s²
+ε = 0.9
+h0 = 10 m
+solve y'' = -g
+  with y(0 s) = h0, y'(0 s) = 0 m/s
+  for t from 0 s to 12 s
+  when y = 0 m: y' = -ε y'
+
+# analytic: the n-th impact at t_n, leaving with speed e^n v1
+v1 = √(2*g*h0)
+exact(τ) =
+    tn = √(2*h0/g)
+    v = v1
+    while τ > tn + 2*ε*v/g
+        v = ε v
+        tn = tn + 2*v/g
+    if τ < tn
+        return h0 - g τ²/2
+    u = ε v
+    u (τ - tn) - g (τ - tn)²/2
+worst = 0 m
+for τ in linspace(0.1 s, 11.9 s, 200)
+    worst = max(worst, abs(y(τ) - exact(τ)))
+print "largest error:", worst < 1e-7 m
+print y(5 s) to 8 digits, exact(5 s) to 8 digits
+print y'(11 s) to 8 digits
+
+# the third impact, located by until in a second solve that starts from the second bounce
+t2 = √(2*h0/g) + 2*ε*v1/g
+solve z'' = -g
+  with z(t2) = 0 m, z'(t2) = ε² v1
+  for t from t2 to 20 s
+  until z = 0 m
+print times(z)[end] to 10 digits, t2 + 2*ε²*v1/g to 10 digits

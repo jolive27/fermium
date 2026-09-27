@@ -342,6 +342,18 @@ pub enum StmtKind {
     ImportC { lang: String, lib: String, sigs: Vec<CSig> },
 }
 
+/// An event of a solve (spec C2, D297): `when y = 0 m: y' = -0.9 y'`. `op` is `=` (either crossing), `<`, `<=`
+/// (when lhs − rhs falls through 0), `>` or `>=` (when it rises through 0); `assigns` are the new values of
+/// unknowns and their derivatives, all computed from the state just before the event.
+#[derive(Clone, Debug)]
+pub struct When {
+    pub lhs: Expr,
+    pub op: String,
+    pub rhs: Expr,
+    pub assigns: Vec<Equation>,
+    pub span: Span,
+}
+
 /// `solve …` (ODEs, eigenvalue problems, PDEs).
 #[derive(Clone, Debug)]
 pub struct Solve {
@@ -355,6 +367,8 @@ pub struct Solve {
     pub tolerance: Option<Expr>,
     /// The stop condition `until lhs = rhs` (D39).
     pub until: Option<Equation>,
+    /// `when lhs = rhs: x' = -0.9 x'` events (spec C2, D297).
+    pub whens: Vec<When>,
     /// `absolute a[, b …]` (D160).
     pub absolute: Option<Vec<Expr>>,
     /// `lowest N` / `grid N` of an eigenvalue problem or a PDE, and a PDE's second range (D82, D83).

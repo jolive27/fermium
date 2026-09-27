@@ -74,7 +74,7 @@ impl From<Diagnostic> for SErr {
 
 type SResult<T> = Result<T, SErr>;
 
-fn primes(k: usize) -> String {
+pub(crate) fn primes(k: usize) -> String {
     "'".repeat(k)
 }
 
@@ -204,7 +204,7 @@ pub(crate) fn normalize_derivs(e: &A::Expr, tvar: &str) -> A::Expr {
 }
 
 /// `0.5 b''` with b an unknown: read as 0.5 · b'' (M9).
-fn unit_primes(e: &A::Expr, unknowns: &[String]) -> A::Expr {
+pub(crate) fn unit_primes(e: &A::Expr, unknowns: &[String]) -> A::Expr {
     let e = C::map_children(e, &mut |c| unit_primes(c, unknowns));
     if let K::Prime { target, order } = &e.kind {
         if let K::Quantity { value, unit, bracket: false } = &target.kind {
@@ -277,7 +277,7 @@ pub(crate) fn is_const(v: &I::Expr) -> Option<f64> {
     }
 }
 
-fn vec_n(t: &Ty) -> usize {
+pub(crate) fn vec_n(t: &Ty) -> usize {
     match t {
         Ty::Vec { n, .. } => *n,
         Ty::Complex(_) => 2,
@@ -285,7 +285,7 @@ fn vec_n(t: &Ty) -> usize {
     }
 }
 
-fn dim_of(t: &Ty) -> DExpr {
+pub(crate) fn dim_of(t: &Ty) -> DExpr {
     ty_dim(t).unwrap_or_else(DExpr::fresh)
 }
 
@@ -665,6 +665,20 @@ impl Checker {
             self.module.lambdas[lam].locals.push(sym);
             self.bind(lctx.scope, &nm, Binding::Sym(sym));
         }
+        // conditions on the unknowns (D296): frozen during each RK45 step, their switches located by the solver
+        let mut sw = crate::events::Switches::default();
+        let eqs: Vec<A::Equation> = if method == "rk45" {
+            let dep: std::collections::HashSet<String> = names.iter().cloned().collect();
+            eqs.iter()
+                .map(|q| {
+                    let l = self.sw_rewrite(&q.lhs, &dep, &mut vec![], &mut sw, lam, &mut lctx, ctx, 0);
+                    let r = self.sw_rewrite(&q.rhs, &dep, &mut vec![], &mut sw, lam, &mut lctx, ctx, 0);
+                    eq(l, r, q.span)
+                })
+                .collect()
+        } else {
+            eqs
+        };
         for q in &eqs {
             let mut lv = self.expr(&q.lhs, &mut lctx)?;
             let mut rv = self.expr(&q.rhs, &mut lctx)?;
@@ -780,6 +794,10 @@ impl Checker {
                 body.push(v);
             }
         }
+        let nuser: usize = state_syms.iter().map(|&s| vec_n(&self.module.syms[s].ty)).sum();
+        for _ in &sw.syms {
+            body.push(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line)); // a flag is constant
+        }
         self.module.lambdas[lam].body = body;
         let mut event = None;
         let mut evtext: i64 = -1;
@@ -788,6 +806,27 @@ impl Checker {
             event = Some(ev);
             evtext = txt as i64;
         }
+        let mut whens = vec![];
+        for w in &sv.whens {
+            if method != "rk45" {
+                return Err(self
+                    .err("when works with the adaptive solver (rk45) for now", w.span,
+                         Some(format!("remove {} to use it", if step.is_some() { "step …" } else { "using …" })))
+                    .into());
+            }
+            whens.push(self.check_when(w, &orders, &layout, &state_syms, lam, &mut lctx, &t)?);
+        }
+        let switch = if sw.syms.is_empty() {
+            None
+        } else {
+            let name = self.fresh_name("conditions");
+            let l = &self.module.lambdas[lam];
+            let lm = I::Lambda { kind: I::LambdaKind::Ode, name, params: l.params.clone(),
+                                 captures: l.captures.clone(), locals: l.locals.clone(), body: sw.gs.clone(),
+                                 state: l.state.clone(), col_syms: vec![], param_syms: vec![] };
+            self.module.lambdas.push(lm);
+            Some(self.module.lambdas.len() - 1)
+        };
         self.solve.infos.push(SolInfo { names: names.clone(), t: t.clone(), ..Default::default() });
         let info_id = self.solve.infos.len() - 1;
         let sol_name = self.fresh_name("__sol");
@@ -842,8 +881,17 @@ impl Checker {
         let tfmt = self.fmt_of(&tdim, t0.hint.clone().or(t1.hint.clone()));
         // does the right side depend on t itself (not only through the unknowns)? (D40)
         let tdep = eqs.iter().any(|q| free_names(&q.lhs).contains(&t) || free_names(&q.rhs).contains(&t));
-        let y0v: Vec<I::Expr> = layout.iter().map(|(x, k)| y0[find_y0(&y0, x, *k).unwrap()].1.clone()).collect();
-        let x = I::SolveExtra { rtol, atol, event, evtext, tname, tfmt, tdep, line: s.span.line, ..Default::default() };
+        let mut y0v: Vec<I::Expr> = layout.iter().map(|(x, k)| y0[find_y0(&y0, x, *k).unwrap()].1.clone()).collect();
+        for _ in &sw.syms {
+            y0v.push(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line)); // set by the solver
+        }
+        let atol = atol.map(|mut a| {
+            a.extend(std::iter::repeat_n((0.0, 0), sw.syms.len()));
+            a
+        });
+        let nuser = if sw.syms.is_empty() { 0 } else { nuser };
+        let x = I::SolveExtra { rtol, atol, event, evtext, tname, tfmt, tdep, line: s.span.line, sw_ops: sw.ops.clone(),
+                                sw_slot0: nuser, nuser, switch, whens, ..Default::default() };
         if let Some(tops) = tops_ir.as_ref() {
             // the singular-mass-matrix error shows t like the solve's other errors
             set_sing_fmt(&mut self.module.lambdas[lam].body, tfmt);

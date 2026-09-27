@@ -115,6 +115,9 @@ pub(crate) fn describe_error(module: &Module, kind: i64, a: f64, b: f64, fmt: us
         E::ODE_SINGULAR => format!("{}{}: the matrix of their coefficients is singular (a zero mass or length?)",
                                    text(module, b), fv(a)),
         E::NO_EVENT => format!("{}{}; make the range longer", text(module, b), fv(a)),
+        E::ZENO => format!("{}{}, ever faster (like a ball bouncing ever lower, which bounces infinitely often before \
+                            it comes to rest); end the range before that time, or stop the solve with until",
+                           text(module, b), fv(a)),
         _ => "runtime error".into(),
     }
 }
@@ -347,7 +350,20 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             .map(|a| a.iter().cycle().take(n * (1 + nsrc)).copied().collect::<Vec<f64>>());
         let rtol = if nsrc > 0 { x.rtol / ((1 + nsrc) as f64).sqrt() } else { x.rtol };
         let opts = ode::OdeOpts { rtol, atol: atol.as_deref(), tname: x.tname as f64, evtext: x.evtext as f64,
-                                  tdep: x.tdep };
+                                  tdep: x.tdep, nerr: if nsrc == 0 { x.nuser } else { 0 } };
+        // conditions on the unknowns (D296): with sensitivities (C7) they are evaluated as written (flag 2)
+        let mut y0 = std::borrow::Cow::Borrowed(y0);
+        if nsrc > 0 && x.switch.is_some() {
+            let v = y0.to_mut();
+            for j in 0..x.sw_ops.len() {
+                v[x.sw_slot0 + j] = 2.0;
+            }
+        }
+        if nsrc > 0 && !x.whens.is_empty() {
+            return Err(RunError { message: "a solve with when can't use uncertain values (±) yet".into(),
+                                  line: s.line, hint: Some("use propagate montecarlo around the solve".into()) });
+        }
+        let y0: &[f64] = &y0;
         let cell = RefCell::new((&mut *self, &mut *fr, None::<RunError>));
         let f = |t: f64, y: &[f64], out: &mut [f64]| {
             let mut g = cell.borrow_mut();
@@ -379,6 +395,45 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             out[0]
         };
         let ev: Option<ode::EventFn<'_>> = if evlam.is_some() { Some(&mut gfun) } else { None };
+        // the hooks of conditions and events on the unknowns (D296, D297): Ode lambdas called like the right side
+        let call = |l: usize, t: f64, y: &[f64], out: &mut [f64]| {
+            let mut g = cell.borrow_mut();
+            let (me, fr, err) = &mut *g;
+            if err.is_some() {
+                out.fill(f64::NAN);
+                return;
+            }
+            if let Err(e) = me.ode_call(&module.lambdas[l], t, y, out, fr) {
+                *err = Some(e);
+                out.fill(f64::NAN);
+            }
+        };
+        let hooked = nsrc == 0 && method.as_str() == "rk45" && (x.switch.is_some() || !x.whens.is_empty());
+        let mut swf = |t: f64, y: &[f64], out: &mut [f64]| call(x.switch.unwrap(), t, y, out);
+        let mut gfs: Vec<Box<dyn FnMut(f64, &[f64]) -> f64 + '_>> = x.whens.iter().map(|w| {
+            let l = w.g;
+            Box::new(move |t: f64, y: &[f64]| {
+                let mut o = [0.0];
+                call(l, t, y, &mut o);
+                o[0]
+            }) as Box<dyn FnMut(f64, &[f64]) -> f64 + '_>
+        }).collect();
+        let mut rfs: Vec<Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>> = x.whens.iter().map(|w| {
+            let l = w.reset;
+            Box::new(move |t: f64, y: &[f64], out: &mut [f64]| call(l, t, y, out))
+                as Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>
+        }).collect();
+        let mut hooks = ode::Hooks::default();
+        if hooked {
+            if x.switch.is_some() {
+                hooks.sw = Some(&mut swf);
+                hooks.sw_ops = x.sw_ops.clone();
+                hooks.slot0 = x.sw_slot0;
+            }
+            for ((w, g), r) in x.whens.iter().zip(gfs.iter_mut()).zip(rfs.iter_mut()) {
+                hooks.whens.push(ode::When { g: &mut **g, reset: &mut **r, dir: w.dir, text: w.text as f64 });
+            }
+        }
         let mut early: Vec<(i64, f64)> = vec![];
         let r = match method.as_str() {
             "radau" | "bdf" => {
@@ -388,7 +443,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "rk4" => ode::rk4(f, y0, t0, t1, h0.unwrap_or(f64::NAN), ev, opts),
             _ => {
                 let mut sv = ode::Sol::new(y0.len());
-                match ode::dp45_into(f, y0, t0, t1, ev, opts, &mut sv) {
+                match ode::dp45_hooks(f, y0, t0, t1, ev, opts, &mut sv, &mut hooks) {
                     Ok(()) => Ok(sv),
                     Err(fl) => {
                         early = sv.warnings; // a stiffness warning before "too many steps"
@@ -397,6 +452,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
         };
+        drop(hooks);
+        drop(gfs);
+        drop(rfs);
         let (_, _, err) = cell.into_inner();
         if let Some(e) = err {
             return Err(e);

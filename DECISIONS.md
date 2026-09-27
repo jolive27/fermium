@@ -1307,3 +1307,50 @@ derivative is the same transformation applied again.
 - **Alternatives:** dual numbers at run time (both back ends would need a dual type, and the LLVM back end's
 unboxed doubles would lose their speed); symbolic inlining of the body into one expression (blows up through
 loops, impossible through `while`); keeping the opt-in (v2.5 is where language changes land).
+
+## D296. `if` conditions on the unknowns of a solve: frozen during each step, switches located on the dense output (spec C2)
+- **What:** in an RK45 solve, each comparison `a < b` (`>`, `<=`, `>=`) in the equations that depends on the
+unknowns (also inside a one-line function the equation calls with them, which is inlined, and its `where`) is
+rewritten to read a branch flag from an extra state slot: 1 true, 0 false (derivative 0, so it is exactly
+constant within a step), 2 "evaluate as written". The checker also builds a lambda of each condition's a − b.
+The solver sets the flags at the start from the conditions; during a step the right side is the smooth branch
+of the flags; after each accepted step it evaluates the conditions on the step's dense output (DOPRI5's 4th-order
+interpolant), and where one no longer agrees with its flag it brackets the switch to rounding (Illinois regula
+falsi with a bisection fallback), ends the step there (a sample on each side of the switch), flips the flag and
+restarts. Sliding modes (Filippov): at a switch, dg/dt along both branches is estimated (a small Euler step of
+each); if both point into the surface, the flag becomes 3 and the solver's right side is α f_true + (1 − α)
+f_false with α making dg/dt = 0; the slide ends where one side's flow turns away (located the same way on the dense
+output), leaving to that side. Guards: a condition that still flips more than 20 times in a row, each within
+10⁻⁹ of the range of the last, is evaluated as written from then on; a stage whose frozen branch isn't finite (an
+expression undefined past the switch) is evaluated as written. The error control, first step and "step too small"
+look only at the user's slots (`OdeOpts.nerr`). Not covered: `step`/rk4, radau and bdf, sensitivity solves (C7),
+conditions in multi-line functions, and `abs`/`sign`/`min`/`max` (all evaluated as written, v1's behaviour).
+- **Why:** v1 evaluated the condition at every stage, so steps straddling a switch mixed the two branches and the
+error control could only shrink them; accuracy near the switch was that of the step it settled on (a piecewise
+spring lost 6×10⁻⁸ m over three periods at rtol 10⁻⁹; now 1.5×10⁻⁹) and friction at rest ("sticking") ended in
+"the step became too small". Freezing the branch (discontinuity locking) is what makes locating on the dense
+output exact: the interpolant is that of a smooth right side. Keeping the flags in the state makes them reach
+every place the right side is evaluated, in both back ends, with no new calling convention for compiled right
+sides. One golden (a white dwarf) moves by 2 units in its 8th digit towards the converged value (a documented
+divergence).
+- **Alternatives:** only locating the switch after the fact without freezing (the dense output of a step that
+straddles the switch is wrong, so the location is too); asking the user for an explicit event (the physics is
+already in the `if`); stiff-style restarts at every sign change of a live condition (chatters on sliding modes).
+
+## D297. `when lhs = rhs: x' = …` events that change the state in a solve (spec C2)
+- **What:** a solve clause `when lhs op rhs: target = value, …` (op `=` fires on every crossing of lhs − rhs,
+`<`/`<=` only when it falls through 0, `>`/`>=` only when it rises; targets are unknowns and their derivatives below
+the highest, values are computed from the state just before the event, units and shapes checked). The checker
+builds a g lambda and a new-state lambda with the right side's state; the solver (RK45 only: `step`, rk4, radau
+and bdf are a compile error) locates the crossing on the dense output like `until`, ends the step there, applies
+the new state (branch flags recomputed) and restarts; the solution keeps a sample on each side, so `y(t)` and plots
+show the jump. After an event its sign is taken from a small Euler step of the new state (a ball that bounced moves
+up), so the next crossing isn't missed however large the next step is. The same event firing again within 10⁻⁹ of
+the range is a Zeno point: an error naming the time. Several `when` and an `until` can be combined (the earliest
+wins). With uncertain values (±) a solve with `when` is an error (use `propagate montecarlo`).
+- **Why:** bounces, impacts, resets and thresholds are the most common discontinuities in physics ODEs; the
+alternative in v2.0 was a loop of solves with `until`, which is hard to read. Locating on the dense output makes
+the impact times exact to rounding (the bouncing-ball test agrees with the analytic bounces to 6×10⁻¹⁴ m).
+- **Alternatives:** `if y < 0 m then y' = …` inside the equations (mixes the model with state changes, and an `if` in
+the equations already means a piecewise right side, D296); `on`/`event` keywords (`when` reads like physics on
+paper and wasn't a keyword); allowing the highest derivative as a target (it follows from the equation).

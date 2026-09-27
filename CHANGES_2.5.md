@@ -1,7 +1,7 @@
 # What changes in Fermium 2.5 (in progress)
 
 Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Programs that ran with 2.0 print
-exactly the same: the conformance suite still holds every program to Fermium 1.5's output (3326 pass, 40
+the same, except the documented divergences below: the conformance suite still holds every program to Fermium 1.5's output (3325 pass, 41
 documented divergences). This file lists each Phase C item as it lands.
 
 ## C and Fortran interop (C3, DECISIONS D275)
@@ -69,6 +69,27 @@ root(a) =
 print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
 ```
 
-- Docs: docs/reference.md §8 *Derivatives of functions written over several lines*; tests: rust/c-cases/c2 (run
-  by `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
-  multi-line functions (C2)*.
+- **Conditions on the unknowns are located** (D296): an `if` in the equations of a solve that depends on the
+  unknowns (`M x'' = if x > 0 m then -k1 x else -k2 x`, or through a one-line function) is frozen during each RK45
+  step and its switch found by root finding on the dense output, so the tolerance holds across it (a piecewise
+  spring: 1.5×10⁻⁹ m after three periods instead of 6×10⁻⁸ m). Sliding modes (dry friction at rest, a block on a
+  conveyor belt) slide along the switching surface (Filippov), where 2.0 stopped with "the step became too small".
+  One conformance program (a white dwarf) changes by 2 units in its 8th digit, towards the converged value (a
+  documented divergence).
+- **`when` events** (D297): `when y = 0 m: y' = -0.9 y'` in a solve changes the state where the condition is met,
+  located on the dense output (a bouncing ball matches the analytic bounces to 10⁻¹³ m); `when y < 0 m` fires only
+  on the way down. An event that accumulates (a Zeno point) is an error naming the time. RK45 only; not with
+  uncertain values yet.
+
+```text
+g = 9.81 m/s²
+solve y'' = -g
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 12 s
+  when y = 0 m: y' = -0.9 y'
+```
+
+- Docs: docs/reference.md §8 *Derivatives of functions written over several lines* and §10 (*An `if` on the
+  unknowns*, *`when`*); DECISIONS D295–D297; tests: rust/c-cases/c2 (run by
+  `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
+  multi-line functions (C2)* and *v2.5: conditions on the unknowns in solve are located (C2)*.

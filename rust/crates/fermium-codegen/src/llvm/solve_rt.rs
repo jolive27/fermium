@@ -32,6 +32,20 @@ pub struct OdeSite {
     pub is_complex: bool,
     pub xname: usize,
     pub pde_line: u32,
+    /// conditions and events on the unknowns (D296, D297): the comparisons, the first flag's slot, the user's
+    /// slots, and per `when` its direction and text id; fm_ode gets their functions in `hooks`
+    pub sw_ops: Vec<u8>,
+    pub sw_slot0: usize,
+    pub nuser: usize,
+    pub whens: Vec<(u8, usize)>,
+}
+
+/// A compiled hook function and its env (fm_ode's `hooks`: the conditions' function if there are conditions,
+/// then each `when`'s g and new state).
+#[repr(C)]
+pub struct OdeHook {
+    pub f: OdeFn,
+    pub env: *mut u8,
 }
 
 /// A copy of the values the right side reads (eval_solve snapshot): the env the solution's x'(t) uses.
@@ -101,13 +115,50 @@ fn stopped(c: C) -> bool {
 #[allow(clippy::too_many_arguments)]
 #[no_mangle]
 pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<OdeFn>, evenv: *mut u8, y0: *const f64,
-                         n: i64, t0: f64, t1: f64, h0: f64, line: i32) -> i64 {
+                         n: i64, t0: f64, t1: f64, h0: f64, line: i32, hooks: *const OdeHook, nhooks: i64) -> i64 {
     let line = line.max(0) as u32;
     let s = unsafe { &(&(*c).ode_sites)[site as usize] };
     let y0 = unsafe { std::slice::from_raw_parts(y0, n as usize) }.to_vec();
     let atol = s.atol.as_ref().and_then(|spec| ode::abs_tolerances(spec, t0, t1));
     let opts = ode::OdeOpts { rtol: s.rtol, atol: atol.as_deref(), tname: s.tname as f64, evtext: s.evtext as f64,
-                              tdep: s.tdep };
+                              tdep: s.tdep, nerr: s.nuser };
+    let hk: &[OdeHook] = if nhooks > 0 { unsafe { std::slice::from_raw_parts(hooks, nhooks as usize) } } else { &[] };
+    let call = move |h: &OdeHook, t: f64, y: &[f64], out: &mut [f64]| {
+        if stopped(c) {
+            out.fill(f64::NAN);
+            return;
+        }
+        unsafe { (h.f)(t, y.as_ptr(), out.as_mut_ptr(), out.len() as i64, h.env) };
+        if stopped(c) {
+            out.fill(f64::NAN);
+        }
+    };
+    let nsw = if s.sw_ops.is_empty() { 0 } else { 1 };
+    let mut swf = |t: f64, y: &[f64], out: &mut [f64]| call(&hk[0], t, y, out);
+    let mut gfs: Vec<Box<dyn FnMut(f64, &[f64]) -> f64 + '_>> = (0..s.whens.len()).map(|i| {
+        let h = &hk[nsw + 2 * i];
+        Box::new(move |t: f64, y: &[f64]| {
+            let mut o = [0.0];
+            call(h, t, y, &mut o);
+            o[0]
+        }) as Box<dyn FnMut(f64, &[f64]) -> f64 + '_>
+    }).collect();
+    let mut rfs: Vec<Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>> = (0..s.whens.len()).map(|i| {
+        let h = &hk[nsw + 2 * i + 1];
+        Box::new(move |t: f64, y: &[f64], out: &mut [f64]| call(h, t, y, out))
+            as Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>
+    }).collect();
+    let mut hk_all = ode::Hooks::default();
+    if nhooks > 0 {
+        if nsw > 0 {
+            hk_all.sw = Some(&mut swf);
+            hk_all.sw_ops = s.sw_ops.clone();
+            hk_all.slot0 = s.sw_slot0;
+        }
+        for ((w, g), r) in s.whens.iter().zip(gfs.iter_mut()).zip(rfs.iter_mut()) {
+            hk_all.whens.push(ode::When { g: &mut **g, reset: &mut **r, dir: w.0, text: w.1 as f64 });
+        }
+    }
     let rhs = |t: f64, y: &[f64], out: &mut [f64]| {
         if stopped(c) {
             out.fill(f64::NAN);
@@ -139,7 +190,7 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
         "rk4" => ode::rk4(rhs, &y0, t0, t1, h0, evf, opts),
         _ => {
             let mut sv = ode::Sol::new(y0.len());
-            match ode::dp45_into(rhs, &y0, t0, t1, evf, opts, &mut sv) {
+            match ode::dp45_hooks(rhs, &y0, t0, t1, evf, opts, &mut sv, &mut hk_all) {
                 Ok(()) => Ok(sv),
                 Err(fl) => {
                     early = sv.warnings;

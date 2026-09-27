@@ -243,6 +243,17 @@ pub struct SolveExtra {
     pub xname: usize,
     /// the right side reads t itself (D40)
     pub tdep: bool,
+    /// conditions on the unknowns in the right side (spec C2, D296): a lambda whose outputs are each condition's
+    /// lhs − rhs, the comparison of each (0 `>`, 1 `>=`, 2 `<`, 3 `<=`), and the state slot of the first one's
+    /// branch flag (the right side reads the branch from the state: 1 true, 0 false, 2 evaluate the condition)
+    pub switch: Option<LambdaId>,
+    pub sw_ops: Vec<u8>,
+    pub sw_slot0: usize,
+    /// the state slots the error control and "the step became too small" look at (0: all): the user's unknowns,
+    /// not the branch flags
+    pub nuser: usize,
+    /// `when lhs = rhs: x' = …` events (spec C2, D297)
+    pub whens: Vec<WhenIr>,
     /// eigenvalue problems (method "eigen", D82): states, grid, 0 = matrix / 1 = shooting
     pub nstates: usize,
     pub grid: usize,
@@ -256,6 +267,17 @@ pub struct SolveExtra {
     pub is_complex: bool,
     /// the source line (PDE warnings)
     pub line: u32,
+}
+
+/// One `when` event of a solve (D297): g = lhs − rhs (an Ode lambda with one output), the new state (an Ode
+/// lambda with one output per state slot), which crossings fire it (0 either way, 1 when g becomes ≥ 0, 2 when it
+/// becomes ≤ 0), and the text id of its description (for the "events accumulate" error).
+#[derive(Clone, Debug)]
+pub struct WhenIr {
+    pub g: LambdaId,
+    pub reset: LambdaId,
+    pub dir: u8,
+    pub text: usize,
 }
 
 /// What the back ends need to run a parallel for (D152): the sums (added up block by block, in order), the lists

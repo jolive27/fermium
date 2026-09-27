@@ -186,7 +186,7 @@ const FRACS: [f64; 5] = [0.1, 0.33, 0.5, 0.77, 0.999];
 
 fn run(name: &str) -> Result<(Sol, f64), Fail> {
     let (method, mut f, y0, t0, t1, par, mut ev, tdep, atol) = case(name);
-    let opts = OdeOpts { rtol: par, atol: atol.as_deref(), tname: -1.0, evtext: -1.0, tdep };
+    let opts = OdeOpts { rtol: par, atol: atol.as_deref(), tname: -1.0, evtext: -1.0, tdep, nerr: 0 };
     let evr: Option<EventFn<'_>> = ev.as_mut().map(|b| &mut **b as EventFn<'_>);
     let sol = if method == "rk4" {
         rk4(&mut f, &y0, t0, t1, par, evr, opts)?

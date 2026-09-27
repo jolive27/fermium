@@ -1215,7 +1215,57 @@ impl Parser {
         s
     }
 
+    /// `when y = 0 m: y' = -0.9 y'` in a solve (spec C2, D297).
+    fn when_clause(&mut self, sv: &mut SolveState) -> R<When> {
+        let st = self.next();
+        let saved_known = self.known.clone();
+        let saved_unk = self.solve_unknowns.clone();
+        let mut k = saved_known.clone();
+        k.extend(sv.unknowns.iter().cloned());
+        k.extend(self.solve_independents.iter().cloned());
+        self.known = k;
+        self.solve_unknowns = sv.unknowns.clone();
+        let r = (|| -> R<When> {
+            let e = self.expr()?;
+            let (lhs, op, rhs) = if self.at_op("=") {
+                self.next();
+                (e, "=".to_string(), self.expr()?)
+            } else {
+                match e.kind {
+                    ExprKind::Compare { op, left, right, tol: None } if ["<", ">", "<=", ">="].contains(&op.as_str()) => {
+                        (*left, op, *right)
+                    }
+                    _ => {
+                        return Err(self.error("a when clause needs a condition like  when y = 0 m:  or  when y < 0 m:",
+                                              Some(st), Some("write e.g.  when y = 0 m: y' = -0.9 y'".into())))
+                    }
+                }
+            };
+            if !self.at_op(":") {
+                return Err(self.err_h(format!("expected ':' and what changes after the condition of when{}",
+                                              self.found()), "like  when y = 0 m: y' = -0.9 y'"));
+            }
+            self.next();
+            let mut assigns = vec![self.equation()?];
+            while self.at_op(",") || self.at_kw("and") {
+                self.next();
+                assigns.push(self.equation()?);
+            }
+            Ok(When { lhs, op, rhs, assigns, span: self.span_from(st) })
+        })();
+        self.known = saved_known;
+        self.solve_unknowns = saved_unk;
+        r
+    }
+
     fn solve_clause(&mut self, sv: &mut SolveState) -> R<bool> {
+        if self.tok().is_name("when") && !self.known.contains("when")
+            && !matches!(self.peek(1).kind, Kind::Newline | Kind::Eof) && !self.peek(1).is_op("=")
+        {
+            let w = self.when_clause(sv)?;
+            sv.whens.push(w);
+            return Ok(true);
+        }
         if self.at_kw("with") {
             self.next();
             let e = self.equation()?;
@@ -1386,7 +1436,7 @@ impl Parser {
     fn solve_stmt(&mut self) -> R<Stmt> {
         let t = self.next();
         let unknowns = self.solve_unknowns_scan();
-        let mut sv = SolveState::default();
+        let mut sv = SolveState { unknowns: unknowns.clone(), ..Default::default() };
         let mut eqs = vec![];
         if self.kind() != Kind::Newline {
             eqs.push(self.solve_equation(&unknowns)?);
@@ -1461,6 +1511,7 @@ impl Parser {
             method: sv.method,
             tolerance: sv.tol,
             until: sv.until,
+            whens: sv.whens,
             absolute: sv.abs,
             lowest: sv.lowest,
             grid: sv.grid,
@@ -2082,6 +2133,9 @@ pub struct SolveState {
     pub tol: Option<Expr>,
     pub abs: Option<Vec<Expr>>,
     pub until: Option<Equation>,
+    pub whens: Vec<When>,
+    /// the solve's unknowns (D211), for `when` clauses
+    pub unknowns: HashSet<String>,
     pub lowest: Option<Expr>,
     pub grid: Option<Expr>,
     pub var2: Option<String>,

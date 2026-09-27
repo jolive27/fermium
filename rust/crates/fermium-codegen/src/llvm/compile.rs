@@ -213,7 +213,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_root", Some(f), &[p, p, p, p, p, f, f, i, i32t], rt::fm_root as *const () as usize, false);
         {
             use crate::llvm::solve_rt as s;
-            self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t], s::fm_ode as *const () as usize, false);
+            self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t, p, i], s::fm_ode as *const () as usize,
+                         false);
             self.declare("fm_rk4_begin", Some(i32t), &[p, i, p, p, p, i, f, f, f, i32t, p, p],
                          s::fm_rk4_begin as *const () as usize, false);
             self.declare("fm_rk4_end", Some(i), &[p, i, p, p, p, i, i32t], s::fm_rk4_end as *const () as usize, false);

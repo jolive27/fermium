@@ -417,6 +417,13 @@ impl Printer {
                 x.push(("lowest", self.opt(sv.lowest.as_ref())));
                 x.push(("step2", self.opt(sv.step2.as_ref())));
                 x.push(("var2", opt_s(&sv.var2)));
+                if !sv.whens.is_empty() {
+                    // Fermium 2.5 (D297); not in the v1 oracle's tree
+                    x.push(("whens", PV::List(sv.whens.iter().map(|w| {
+                        PV::Tuple(vec![self.expr(&w.lhs), PV::S(q(&w.op)), self.expr(&w.rhs),
+                                       PV::List(w.assigns.iter().map(|e| self.equation(e)).collect())])
+                    }).collect())));
+                }
             }
             Fit { model, data, guesses } => {
                 f.push(("model", self.equation(model)));
@@ -621,6 +628,11 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
                     ex(e, live);
                 }
                 sv.until.iter().for_each(|e| eq(e, live));
+                for w in &sv.whens {
+                    ex(&w.lhs, live);
+                    ex(&w.rhs, live);
+                    w.assigns.iter().for_each(|e| eq(e, live));
+                }
                 sv.absolute.iter().flatten().for_each(|e| ex(e, live));
             }
             Fit { model, data, guesses } => {

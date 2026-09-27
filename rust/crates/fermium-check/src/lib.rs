@@ -12,6 +12,7 @@ pub mod builtins;
 pub mod calculus;
 pub mod calls;
 pub mod eigen;
+pub mod events;
 pub mod checker;
 pub mod clist;
 pub mod convert;
