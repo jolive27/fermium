@@ -240,10 +240,15 @@ impl Checker {
             if let Some(ex) = self.scopes[ctx.scope].names.get(&name).cloned() {
                 let redo = matches!(ex, Binding::CFunc(_)) && self.opts.repl;
                 if !redo {
+                    let hint = if fortran {
+                        Some(format!("rename your {name}, or use  bind(C, name=\"{}\")  with another name", r.symbol))
+                    } else if what == "C++" {
+                        Some(format!("call it by another name: add  as my_{name}  after its result"))
+                    } else {
+                        None
+                    };
                     return Err(self.err(format!("{name} already means something in this program, so it can't also be \
-                                                 the {what} function {name}"), s.span,
-                                        Some(format!("rename your {name}, or use  bind(C, name=\"{}\")  with another \
-                                                      name", r.symbol)).filter(|_| fortran)));
+                                                 the {what} function {name}"), s.span, hint));
                 }
             }
             if let Some(later) = self.mods.top_defs.get(&ctx.scope).and_then(|t| t.get(&name)).copied() {
