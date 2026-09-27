@@ -90,8 +90,10 @@ against:
   Command Line Tools' libSystem (written, not yet tested on a Mac).
 
 An executable prints exactly what `fermium run --backend llvm` prints (`rust/tools/aot_diff.py` checks it on the
-conformance programs). Mixed mode isn't available there yet: a program with a delegated construct (plot, fit,
-data, …) is refused with a message saying so, as are programs with uncertain values.
+conformance programs). Programs with plot, fit and load build: the executable carries the program and re-checks it
+for those statements. Refused, with a message saying so: programs with uncertain values (±, `propagate
+montecarlo`), and the v2.5 constructs that `fermium run` hands to the tree-walker (lists of vectors, N-d arrays,
+solves with list unknowns; C1).
 
 ## The crates
 
