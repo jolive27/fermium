@@ -26,7 +26,7 @@ elif ! command -v cargo >/dev/null 2>&1; then
 else
     echo "== Rust: build and cargo test (Fermium 2)"
     (cd rust && cargo build --profile fast && cargo test --profile fast \
-        && cargo test --profile fast -p fermium-pyapi -p fermium-wasm)
+        && cargo build --profile fast -p fermium-pyapi -p fermium-wasm && cargo test --profile fast -p fermium-pyapi -p fermium-wasm)
     echo "== conformance: the Rust binary against Fermium 1.5's outputs (never below conformance/RUST_FLOOR)"
     out="$(mktemp "${TMPDIR:-/tmp}/conformance-rust.XXXXXX.md")"
     python3 conformance/run --impl rust --bin rust/target/fast/fermium --out "$out" --min "$(cat conformance/RUST_FLOOR)"
