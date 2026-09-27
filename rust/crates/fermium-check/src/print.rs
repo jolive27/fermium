@@ -133,7 +133,16 @@ impl Checker {
         let ps = params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
         match body {
             A::FuncBody::Expr(b) => {
-                let src = crate::source::to_source(&self.body_expr(info).unwrap_or_else(|| b.clone()));
+                let body = self.body_expr(info).unwrap_or_else(|| b.clone());
+                let src = if self.calc.derived.values().any(|&d| d == info) {
+                    // a derivative prints its tidy form when that is at least a fifth shorter (like terms collected,
+                    // fractions put together: D298); it is evaluated as it is
+                    let plain = crate::source::to_source(&body);
+                    let tidy = crate::source::to_source(&fermium_sym::tidy(&body));
+                    if 5 * tidy.chars().count() <= 4 * plain.chars().count() { tidy } else { plain }
+                } else {
+                    crate::source::to_source(&body)
+                };
                 let f = &self.funcs[info];
                 let mut s = match &f.anon_label {
                     Some(l) => format!("{l} = {src}"),

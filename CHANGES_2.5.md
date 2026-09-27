@@ -1,8 +1,8 @@
 # What changes in Fermium 2.5 (in progress)
 
-Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Programs that ran with 2.0 print
-the same, except the documented divergences below: the conformance suite still holds every program to Fermium 1.5's output (3325 pass, 41
-documented divergences). This file lists each Phase C item as it lands.
+Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Programs that ran with 2.0 print the
+same, except the documented divergences below: the conformance suite still holds every program to Fermium 1.5's
+output (3324 pass, 42 documented divergences). This file lists each Phase C item as it lands.
 
 ## C and Fortran interop (C3, DECISIONS D275)
 
@@ -89,7 +89,12 @@ solve y'' = -g
   when y = 0 m: y' = -0.9 y'
 ```
 
+- **Printed derivatives are tidier** (D298): a derivative prints in its tidy form when that is at least a fifth
+  shorter: `g''(x) = 2 cos(x) - x sin(x)` (2.0: `cos(x) + (cos(x) - x sin(x))`), `E'(x) = x exp(x)` (2.0:
+  `(1 + x - 1)·exp(x)`), `q''(x) = 1/(1 + x²)^(3/2)`, `∂V/∂x = -x/(x² + y² + z²)^(3/2)`. Values are computed as
+  before. One conformance program prints `(1 - x²)/(1 + x²)²` instead of `(1 + x² - 2x²)/(1 + x²)²` (documented).
 - Docs: docs/reference.md §8 *Derivatives of functions written over several lines* and §10 (*An `if` on the
-  unknowns*, *`when`*); DECISIONS D295–D297; tests: rust/c-cases/c2 (run by
+  unknowns*, *`when`*); DECISIONS D295–D298; tests: rust/c-cases/c2 (run by
   `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
-  multi-line functions (C2)* and *v2.5: conditions on the unknowns in solve are located (C2)*.
+  multi-line functions (C2)* and *v2.5: conditions on the unknowns in solve are located (C2)* and *v2.5: printed derivatives in their tidy form
+  when it is clearly shorter (C2)*.

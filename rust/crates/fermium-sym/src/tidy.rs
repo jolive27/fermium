@@ -465,6 +465,16 @@ fn proportional_sum(t: &T) -> Option<T> {
     if n.is_empty() {
         return None;
     }
+    if n.len() == 1 {
+        if let Some(c) = n.get(&Vec::new()) {
+            // what is left is a number: c·B^min for each sum B (√Q − x²/√Q with Q = 1 + x² is 1/√Q; D298)
+            let mut items = vec![T::Num(*c)];
+            for (_, b, min) in &mins {
+                items.push(pow_q(b.clone(), *min)?);
+            }
+            return Some(mul_all(items));
+        }
+    }
     for (k, b, _) in &mins {
         let bp = poly_of(b, &mut vec![])?;
         let mut pj = bp.clone();

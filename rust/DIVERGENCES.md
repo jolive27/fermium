@@ -438,3 +438,11 @@ tolerance, towards the converged solution. The recorded program (a white dwarf w
 state, whose density is cut off by `ρ_of(y) = if y > 1 then … (y² − 1)^(3/2) else 0 kg/m³`) prints M = 0.51019701 M☉
 for x_c = 1 where v1 printed 0.51019703; the same solve with `tolerance 1e-13` gives 0.51019700 in both Fermium 1.5
 and 2.5, so the new value is the more accurate one (the other lines agree to their printed digits).
+
+## v2.5: printed derivatives in their tidy form when it is clearly shorter (C2)
+
+Spec C2 asks for better symbolic simplification. A printed derivative is shown in fermium-sym's tidy form (like
+terms collected, fractions put together) when that is at least a fifth shorter than v1's formula (DECISIONS
+D298); the computed values don't change. The recorded program, `f(x) = x / (1 + x^2)` then `print f'`, prints
+`f'(x) = (1 - x²)/(1 + x²)²` where v1 printed `f'(x) = (1 + x² - 2x²)/(1 + x²)²` (the same function: the like
+terms x² − 2x² collected).

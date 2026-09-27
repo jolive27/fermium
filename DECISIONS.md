@@ -1354,3 +1354,21 @@ the impact times exact to rounding (the bouncing-ball test agrees with the analy
 - **Alternatives:** `if y < 0 m then y' = …` inside the equations (mixes the model with state changes, and an `if` in
 the equations already means a piecewise right side, D296); `on`/`event` keywords (`when` reads like physics on
 paper and wasn't a keyword); allowing the highest derivative as a target (it follows from the equation).
+
+## D298. Printed derivatives use the canonical tidy form when it is shorter (spec C2, better symbolic simplification)
+- **What:** `print f'` (and `f''`, `d/dx f`, `∂/∂x f`) shows the derivative's formula after fermium-sym's `tidy`
+(the SymPy-style canonical form, with fractions put together and common factors taken out, v1's `sympy_tidy`)
+when that is at least a fifth shorter than the plainly simplified formula; otherwise the plain formula, as in v1. Only the printed
+text changes: the derivative is still evaluated from the plainly simplified formula, so no computed number moves.
+Examples: `g(x) = x sin(x)` gives `g''(x) = 2cos(x) - x sin(x)` (v1: `cos(x) + (cos(x) - x sin(x))`),
+`x exp(x) - exp(x)` gives `x exp(x)` (v1: `(1 + x - 1)·exp(x)`), `√(1 + x²)` gives `1/(x² + 1)^(3/2)` for the
+second derivative, and `1/√(x² + y² + z²)` gives `∂V/∂x = -x/(x² + y² + z²)^(3/2)`. Tidy itself gained one case: a sum that, shifted to the lowest power of the sums in it, is a plain number (√Q − x²/√Q with Q = 1 + x² is 1/√Q).
+- **Why:** v1's derivative simplifier works node by node, so like terms from the product rule were never
+collected and nested fractions never put together; readability of printed formulas is goal (2). v1 already used
+`tidy` for ∇ results, so the form is familiar and tested (its answers are checked numerically in fermium-sym's
+tests). Printing only keeps every number bit-identical.
+- **Alternatives:** a like-term collector inside `simplify` (would also change the evaluated expressions, and so
+the last digits of computed derivatives across the conformance suite); always the tidy form when it is shorter at all (in the conformance suite it changed three v1
+formulas, two of them only by reordering or 1-2 characters, e.g. `1/(4 √(1 - (x/4)²))` → `1/(4 √(1 - x²/16))`;
+the fifth threshold keeps those as v1 printed them and changes only `(1 + x² - 2x²)/(1 + x²)²` →
+`(1 - x²)/(1 + x²)²`, a documented divergence).

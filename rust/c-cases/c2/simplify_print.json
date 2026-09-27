@@ -1,0 +1,5 @@
+{
+ "stdout": "g''(x) = 2 cos(x) - x sin(x)\nE'(x) = x exp(x)\nq''(x) = 1/(1 + x²)^(3/2)\nu'(x) = x·(2 + x)/(1 + x)²\nf'(x) = (1 - x²)/(1 + x²)²\n∂V/∂x(x, y, z) = -x/(x² + y² + z²)^(3/2)\nh'(x) = -2x exp(-x²) h''(x) = (4x² - 2)·exp(-x²)\ny''(t) = -A ω² sin(ω t)   [m/s², for t in s]\ntrue true true\n",
+ "stderr": "",
+ "exit": 0
+}

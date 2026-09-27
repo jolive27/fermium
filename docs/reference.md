@@ -480,6 +480,10 @@ print v(0.1 s)
 
 - **Syntax:** `x'`, `x''`, `dx/dt`, `d²x/dt²`, `d/dt x` and `d²/dt² x` all differentiate a one-line function. The result is a new function, whose units are the numerator's units divided by the denominator's.
 - **Printing a function** shows its formula and units, for example `v(t) = -A ω sin(ω t)   [m/s, for t in s]`.
+  A derivative is shown in its tidy form (like terms collected, fractions put together, common factors taken out)
+  when that is at least a fifth shorter (Fermium 2.5, DECISIONS D298): `g(x) = x sin(x)` prints
+  `g''(x) = 2 cos(x) - x sin(x)` and `√(1 + x²)` has `1/(1 + x²)^(3/2)` as its second derivative. Only the printed
+  text changes; the derivative is computed as before.
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
 - **Functions defined by an integral** can be differentiated too, under the integral sign (the Leibniz rule): for `V(x, y, z) = ∫ … ds from a to b`, `∂/∂x V` is the function `∫ ∂/∂x(…) ds from a to b`. When a limit depends on the variable, its boundary term is added: `G(x) = ∫ x s² ds from 0 to x` gives `G'(x) = (∫ s² ds from 0 to x) + x³`. So `∇V`, `∇²V` and `x'` all work on such functions.
