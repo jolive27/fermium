@@ -12,15 +12,16 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 16 of the files completely** (208 templates) — the ones that hold the most common errors: unit and
+covers 17 of the files completely** (266 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
-numbers, and the statements (control flow, reassignment, list entries, `push`, local functions). The other files (`solve` for ODEs, `fit`, PDEs, eigenvalue problems, data tables, vectors and matrices,
+numbers, the statements (control flow, reassignment, list entries, `push`, local functions), and vectors and
+matrices (vecmat.rs). The other files (`solve` for ODEs, `fit`, PDEs, eigenvalue problems, data tables,
 complex numbers, arrays, modules, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 370 templates) are still to do; see §4.
+interop; about 310 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`.
+Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -33,13 +34,14 @@ message that are built in one place and raised in another: the "might not have a
 *Covered files* line above is the test's list. In a message, `…` stands for a part filled in from the program
 (a name, a unit, a dimension in words such as `length [m]`, a line number, a kind such as `a 3-D vector of …`).
 Errors raised in a covered file through a helper defined in another file (for example stmts.rs's `need_num`,
-"… must be a number, but it is …", used for the two sides of a comparison) are listed under the helper's file.
+"… must be a number, but it is …", used for the two sides of a comparison) are listed under the helper's file, and a template raised in several covered files (such as "can't add … to …") is
+listed once, under the first.
 
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 86 of the
-208. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 91 of the
+266. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -276,6 +278,65 @@ errors come first, and the rest are simply not written yet (§4).
 | 206 | `… must be a number, but it is …` | stmts.rs | `need_num`: an operand that must be a number (a comparison's side, an operator's operand, a built-in's argument) is a list, vector, text, … | C206 |
 | 207 | `… must be a number, but it is a function` | stmts.rs | the same where the operand is a function | — |
 | 208 | `… must be a number, but it is an ODE solution` | stmts.rs | the same where the operand is an ODE solution | — |
+| | **Vectors and matrices (vecmat.rs)** | | | |
+| 209 | `can't mix vectors and lists in arithmetic` | vecmat.rs | a vector and a list on the two sides of an arithmetic operator | C209 |
+| 210 | `can't … a vector and a single number` | vecmat.rs | adding or subtracting a vector and a single number | C210 |
+| 211 | `can't … a …-vector and a …-vector` | vecmat.rs | adding or subtracting vectors of different lengths | C211 |
+| 212 | `can't … these vectors: component … is … on one side and … on the other` | vecmat.rs | adding vectors whose components have different units, component by component | C212 |
+| 213 | `can't … vectors of … and …` | vecmat.rs | adding or subtracting vectors of different dimensions | C213 |
+| 214 | `can't take the dot product of a …-vector and a …-vector` | vecmat.rs | `·` (dot product) of vectors of different lengths | C214 |
+| 215 | `can't take the cross product of a …-vector and a …-vector` | vecmat.rs | `×` (cross product) of vectors of different lengths | C215 |
+| 216 | `the cross product needs 3-vectors (or 2-vectors), not 4-vectors` | vecmat.rs | `×` of two 4-vectors | C216 |
+| 217 | `× between a vector and a number: use * (or a space) to scale a vector` | vecmat.rs | `×` between a vector and a number | C217 |
+| 218 | `can't divide by a vector` | vecmat.rs | a number or vector divided by a vector | C218 |
+| 219 | `… needs all components of the vector in the same units, but this one has …` | vecmat.rs | a built-in that needs one unit for the whole vector (such as `norm`) given a vector with a different unit per component | C219 |
+| 220 | `can't mix matrices and lists in arithmetic` | vecmat.rs | a matrix and a list on the two sides of an arithmetic operator | C220 |
+| 221 | `can't … a matrix and a …` | vecmat.rs | adding or subtracting a matrix and a value of another kind (a number, a vector) | C221 |
+| 222 | `can't … a … and a …` | vecmat.rs | adding or subtracting a matrix and a matrix of another size | C222 |
+| 223 | `can't … matrices of … and …` | vecmat.rs | adding or subtracting matrices of different dimensions | C223 |
+| 224 | `× is the cross product of vectors; multiply matrices with * or a space: A B` | vecmat.rs | `×` between matrices | C224 |
+| 225 | `can't multiply a … times a …: the first needs as many columns as the second has rows` | vecmat.rs | a matrix product whose inner sizes differ | C225 |
+| 226 | `can't multiply a … times a …-vector: the matrix needs one column per component` | vecmat.rs | a matrix times a vector whose length isn't the number of columns | C226 |
+| 227 | `a vector times a matrix isn't defined here; write the matrix first (M v), or use transpose(M) v for the row-vector product` | vecmat.rs | a vector times a matrix | C227 |
+| 228 | `can't divide by a matrix` | vecmat.rs | a value divided by a matrix | C228 |
+| 229 | `every row of a matrix needs the same number of entries` | vecmat.rs | a matrix literal whose rows have different lengths | C229 |
+| 230 | `a matrix can have 1 to … rows and 1 to … columns (at most …×…), not …×…` | vecmat.rs | a matrix literal with too many rows or columns | — |
+| 231 | `all entries of a matrix need the same units; this one is … but the others are …` | vecmat.rs | a matrix literal whose entries have different dimensions | C231 |
+| 232 | `zeros(r, c) makes an r×c matrix; r and c must be fixed whole numbers from 1 to …, like zeros(8, 8)` | vecmat.rs | `zeros(r, c)` with sizes that aren't fixed whole numbers in range | C232 |
+| 233 | `zeros(1, 1) would be a single number; write 0` | vecmat.rs | `zeros(1, 1)` | C233 |
+| 234 | `… needs a square matrix, but this one is …×…` | vecmat.rs | a built-in that needs a square matrix (`det`, `inverse`, `trace`, …) given a non-square one | C234 |
+| 235 | `… needs a matrix, like [[1, 2], [3, 4]]` | vecmat.rs | a matrix built-in given something that isn't a matrix | C235 |
+| 236 | `transpose needs a matrix, like [[1, 2], [3, 4]]` | vecmat.rs | `transpose` of something that isn't a matrix | C236 |
+| 237 | `solve_linear(M, b) needs a matrix and a vector, like solve_linear(K, <1, 2> N)` | vecmat.rs | `solve_linear` whose arguments aren't a matrix and a vector | C237 |
+| 238 | `solve_linear(M, b) got a …×… matrix and a …-vector; b needs one component per row` | vecmat.rs | `solve_linear(M, b)` with b's length not the number of rows of M | C238 |
+| 239 | `… takes a matrix, like …(K), or two, like …(K, M) for K v = λ M v, but was given … arguments` | vecmat.rs | `eigenvalues`/`eigenvectors` with no argument or more than two | C239 |
+| 240 | `… needs a square matrix from 2×2 to …×…, not …×…` | vecmat.rs | `eigenvalues`/`eigenvectors` of a square matrix larger than the limit (a non-square one gets row 234's message) | — |
+| 241 | `…(K, M) needs K and M of the same size, but they are …×… and …×…` | vecmat.rs | `eigenvalues(K, M)` with K and M of different sizes | C241 |
+| 242 | `…(M, …) takes a matrix and a number` | vecmat.rs | `row`/`column` without exactly two arguments | C242 |
+| 243 | `…(M, k) needs a matrix, like [[1, 2], [3, 4]]` | vecmat.rs | `row`/`column` of something that isn't a matrix | C243 |
+| 244 | `a … of a …×… matrix has … entr…, so it isn't a vector; pick an entry with M[i, j]` | vecmat.rs | `row`/`column` of a matrix whose rows (columns) have a single entry or too many | C244 |
+| 245 | `this matrix has … …s, so there is no … …` | vecmat.rs | `row(M, i)`/`column(M, j)` with a fixed index outside the matrix | C245 |
+| 246 | `a matrix entry must be picked with fixed numbers, like M[1, 2]` | vecmat.rs | `M[i, j]` with an index that isn't a fixed number where one is needed | — |
+| 247 | `this vector has … components, so there is no component …` | vecmat.rs | `v[i]` with a fixed index outside the vector | C247 |
+| 248 | `a row of a …×… matrix isn't a vector; pick an entry with M[i, j]` | vecmat.rs | `M[i]` (one index) on a matrix whose rows can't be vectors | — |
+| 249 | `… is a matrix: set one entry at a time, like …[i, j] = …` | vecmat.rs | assigning a single number to a matrix variable's whole value by index form `M[i] = …` | C249 |
+| 250 | `… is a vector: set one component, like …[i] = …` | vecmat.rs | setting a vector variable with the wrong index form | C250 |
+| 251 | `the components of … have different units, so they can't be set one at a time; build the new vector, like … = <…>` | vecmat.rs | `v[i] = …` on a vector whose components have different units | C251 |
+| 252 | `the entries of … are …; can't put … in it` | vecmat.rs | storing a value of another dimension in a matrix entry or vector component | C252 |
+| 253 | `this vector already has units (a different unit on each component)` | vecmat.rs | a unit written after a vector whose components each already have a unit | C253 |
+| 254 | `°C/°F can't be used for matrices` | vecmat.rs | a matrix given the unit °C or °F | C254 |
+| 255 | `this already has units (…)` | vecmat.rs | a unit written after a value that already has one | — |
+| 256 | `this matrix already has units (…); write the unit once, after the ]]` | vecmat.rs | a unit written after a matrix whose entries already have one | C256 |
+| 257 | `°C/°F can't be used for vectors` | vecmat.rs | a vector given the unit °C or °F | C257 |
+| 258 | `a complex number's parts are .re and .im (not .…)` | vecmat.rs | `.x`-style access other than `.re`/`.im` on a complex number | C258 |
+| 259 | `a vector's components are .x, .y and .z (not .…)` | vecmat.rs | `.name` on a vector with a name other than x, y, z | C259 |
+| 260 | `this is a single number (…), not a vector, so it has no .…` | vecmat.rs | `.x`/`.y`/`.z` on a single number | C260 |
+| 261 | `'.…' only works on vectors (v.x) and data loaded from a file (data.…)` | vecmat.rs | `.name` on a value that is neither a vector nor loaded data | C261 |
+| 262 | `angle(a, b) needs two vectors, like angle(<1, 0> m, <1, 1> m)` | vecmat.rs | `angle(a, b)` whose arguments aren't two vectors | C262 |
+| 263 | `angle(a, b) needs two 2-vectors or two 3-vectors, but got a …-vector and a …-vector` | vecmat.rs | `angle(a, b)` of vectors of different or unsupported lengths | C263 |
+| 264 | `… needs a vector, like <3, 4> m` | vecmat.rs | `norm`, `unit` or `hat` of something that isn't a vector | C264 |
+| 265 | `cross(a, b) needs two vectors` | vecmat.rs | `cross(a, b)` whose arguments aren't two vectors | C265 |
+| 266 | `vec(...) takes 2 to … components` | vecmat.rs | `vec(…)` with fewer than 2 or too many components | C266 |
 
 ## 3. Examples
 
@@ -974,17 +1035,287 @@ z = f(1 m)
 b = [1, 2] < 3
 ```
 
+```fermium-error
+# C209
+v = <1, 2> m + [1, 2] m
+```
+
+```fermium-error
+# C210
+v = <1, 2> m + 1 m
+```
+
+```fermium-error
+# C211
+v = <1, 2> m + <1, 2, 3> m
+```
+
+```fermium-error
+# C212
+v = <1 m, 2 s> + <1 s, 2 s>
+```
+
+```fermium-error
+# C213
+v = <1, 2> m + <1, 2> s
+```
+
+```fermium-error
+# C214
+d = <1, 2> m · <1, 2, 3> m
+```
+
+```fermium-error
+# C215
+c = <1, 2> m × <1, 2, 3> m
+```
+
+```fermium-error
+# C216
+c = <1, 2, 3, 4> × <1, 2, 3, 4>
+```
+
+```fermium-error
+# C217
+c = <1, 2, 3> m × 2
+```
+
+```fermium-error
+# C218
+x = 1 / <1, 2> m
+```
+
+```fermium-error
+# C219
+n = norm(<1 m, 2 s>)
+```
+
+```fermium-error
+# C220
+m = [[1, 2], [3, 4]] + [1, 2]
+```
+
+```fermium-error
+# C221
+m = [[1, 2], [3, 4]] + 1
+```
+
+```fermium-error
+# C222
+m = [[1, 2], [3, 4]] + [[1, 2, 3], [4, 5, 6]]
+```
+
+```fermium-error
+# C223
+m = [[1, 2], [3, 4]] m + [[1, 2], [3, 4]] s
+```
+
+```fermium-error
+# C224
+m = [[1, 2], [3, 4]] × [[1, 2], [3, 4]]
+```
+
+```fermium-error
+# C225
+m = [[1, 2], [3, 4]] * [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+```
+
+```fermium-error
+# C226
+v = [[1, 2], [3, 4]] * <1, 2, 3>
+```
+
+```fermium-error
+# C227
+v = <1, 2> * [[1, 2], [3, 4]]
+```
+
+```fermium-error
+# C228
+m = 1 / [[1, 2], [3, 4]]
+```
+
+```fermium-error
+# C229
+m = [[1, 2], [3]]
+```
+
+```fermium-error
+# C231
+m = [[1 m, 2 s], [3 m, 4 m]]
+```
+
+```fermium-error
+# C232
+m = zeros(0, 3)
+```
+
+```fermium-error
+# C233
+m = zeros(1, 1)
+```
+
+```fermium-error
+# C234
+d = det([[1, 2, 3], [4, 5, 6]])
+```
+
+```fermium-error
+# C235
+d = det(3)
+```
+
+```fermium-error
+# C236
+t = transpose(3)
+```
+
+```fermium-error
+# C237
+x = solve_linear([[1, 2], [3, 4]], 3)
+```
+
+```fermium-error
+# C238
+x = solve_linear([[1, 2], [3, 4]], <1, 2, 3>)
+```
+
+```fermium-error
+# C239
+e = eigenvalues()
+```
+
+```fermium-error
+# C241
+e = eigenvalues([[1, 2], [2, 1]], [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+```
+
+```fermium-error
+# C242
+r = row([[1, 2], [3, 4]])
+```
+
+```fermium-error
+# C243
+r = row(3, 1)
+```
+
+```fermium-error
+# C244
+r = column([[1, 2]], 1)
+```
+
+```fermium-error
+# C245
+r = row([[1, 2], [3, 4]], 3)
+```
+
+```fermium-error
+# C247
+x = <1, 2>[3]
+```
+
+```fermium-error
+# C249
+M = [[1, 2], [3, 4]]
+M[1] = 5
+```
+
+```fermium-error
+# C250
+v = <1, 2>
+v[1, 2] = 5
+```
+
+```fermium-error
+# C251
+v = <1 m, 2 s>
+v[1] = 3 m
+```
+
+```fermium-error
+# C252
+M = [[1, 2], [3, 4]] m
+M[1, 1] = 5 s
+```
+
+```fermium-error
+# C253
+v = <1 m, 2 s> kg
+```
+
+```fermium-error
+# C254
+m = [[1, 2], [3, 4]] °C
+```
+
+```fermium-error
+# C256
+m = [[1 m, 2 m], [3 m, 4 m]] s
+```
+
+```fermium-error
+# C257
+v = <1, 2> °C
+```
+
+```fermium-error
+# C258
+z = (1 + 2i).x
+```
+
+```fermium-error
+# C259
+w = <1, 2>.w
+```
+
+```fermium-error
+# C260
+a = 3 m
+w = a.x
+```
+
+```fermium-error
+# C261
+s = [1, 2].x
+```
+
+```fermium-error
+# C262
+a = angle(1, 2)
+```
+
+```fermium-error
+# C263
+a = angle(<1, 0>, <1, 1, 0>)
+```
+
+```fermium-error
+# C264
+n = norm(3)
+```
+
+```fermium-error
+# C265
+c = cross(1, 2)
+```
+
+```fermium-error
+# C266
+v = vec(1)
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: vecmat.rs (64 templates), solve.rs (55), data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
+  covered, by size of their error set: solve.rs (55), data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
   pyinterop.rs (18), modules.rs (15), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 370 templates remain.
+  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 310 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (86). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (91). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -993,6 +1324,7 @@ b = [1, 2] < 3
   guards that no program reaches. In rows 80–167 (builtin.rs, lists.rs, uncertain.rs, calculus.rs, clist.rs), 50
   rows: mostly the rarer argument errors, `propagate montecarlo`'s block, the vector-calculus operators and the
   two-list forms of the Fourier built-ins. In rows 168–208 (stmts.rs), 15 rows: natural-units regions, arrays,
-  complex lists, ODE solutions and local-function limits.
+  complex lists, ODE solutions and local-function limits. In rows 209–266 (vecmat.rs), 5 rows: the size limits
+  and index forms that need large or run-time matrices.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
