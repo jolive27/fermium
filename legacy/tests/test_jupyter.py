@@ -48,10 +48,16 @@ def execute(kc, code):
             outs.append(("display", m["content"]["data"]))
         elif t == "status" and m["content"]["execution_state"] == "idle":
             break
-    while True:  # the reply to this request (never a stale one left from an earlier cell)
-        r = kc.get_shell_msg(timeout=60)
+    return reply_to(kc, msg_id)["status"], outs
+
+
+def reply_to(kc, msg_id, timeout=60):
+    """The shell reply to this request. Under load, start_new_kernel may resend its kernel_info_request, and the
+    extra kernel_info_reply (status "ok") waits in the shell queue: never take it for this request's reply."""
+    while True:
+        r = kc.get_shell_msg(timeout=timeout)
         if r["parent_header"].get("msg_id") == msg_id:
-            return r["content"]["status"], outs
+            return r["content"]
 
 
 def test_values_carry_over_between_cells(kernel):
@@ -82,15 +88,13 @@ def test_plots_are_inline(kernel):
 
 def test_backslash_completion(kernel):
     kc, _ = kernel
-    kc.complete("x = \\ome", 8)
-    reply = kc.get_shell_msg(timeout=10)["content"]
+    reply = reply_to(kc, kc.complete("x = \\ome", 8), timeout=10)
     assert reply["matches"] == ["ω"] and reply["cursor_start"] == 4
 
 
 def test_is_complete(kernel):
     kc, _ = kernel
-    kc.is_complete("if 1 > 0")
-    assert kc.get_shell_msg(timeout=10)["content"]["status"] == "incomplete"
+    assert reply_to(kc, kc.is_complete("if 1 > 0"), timeout=10)["status"] == "incomplete"
 
 
 def test_example_notebook_runs(jupyter_path, tmp_path):
