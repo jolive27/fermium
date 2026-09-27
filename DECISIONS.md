@@ -1261,8 +1261,10 @@ the same units, `*`/`/` multiply them); `size(A)`, `size(A, k)`, `sum`, `mean`, 
 shares the array, as lists do (D26). The parser now reads any number of indexes (`A[i, j, k]`, nested Index nodes as
 for `M[i, j]`), and `IndexAssign` keeps the ones after the second in a new field `rest` (empty for every program
 v1 accepts, so the AST dump and the formatter are unchanged for them). The tree-walker holds `Value::NdArr`
-(row-major); the LLVM back end holds arrays as Obj values and hands every construct that touches one to the
-tree-walker, and the collector counts an Obj's real size so arrays made in a loop are freed in time.
+(row-major); the LLVM back end holds arrays as Obj values: `A[i, j]` reads and writes (and the other array
+built-ins, `len`/`sum`/`mean` of a list of vectors, and `N(t)` of a list unknown) are calls through `fm_builtin` with
+the array as an argument (it is shared, so a write needs no copy back), and the other constructs that touch one are
+handed to the tree-walker; the collector counts an Obj's real size so arrays made in a loop are freed in time.
 - **Why:** spec C1 asks for N-dimensional arrays with units; physics grids (heat, diffusion, Poisson, lattice
 models) need more than 16×16 and more than 2 indexes. `fill(value, dims…)` reads like the notebook ("fill a 50×50
 grid with 300 K"), puts the unit in the value where the unit rule already applies, and is Julia's `fill(x, dims…)`.

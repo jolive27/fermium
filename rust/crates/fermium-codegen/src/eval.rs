@@ -572,9 +572,19 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     if self.unc_print(&v, *f) {
                         continue;
                     }
-                    if let Value::List(l) = v {
-                        let v = l.borrow().clone();
-                        self.printer.list(*f, &v)
+                    match v {
+                        Value::List(l) => {
+                            let v = l.borrow().clone();
+                            self.printer.list(*f, &v)
+                        }
+                        // a variable printed as [] before a push made it another kind of list (D281)
+                        Value::TextList(l) => {
+                            let v = l.borrow().clone();
+                            self.printer.textlist(&v)
+                        }
+                        Value::VList(l) if l.borrow().is_empty() => self.printer.list(*f, &[]),
+                        Value::CList(l) if l.borrow().is_empty() => self.printer.list(*f, &[]),
+                        _ => {}
                     }
                 }
                 PrintItem::Vec(e, f) => match self.eval(e, fr)? {
@@ -1202,6 +1212,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             return Ok(arr_new(shape, vec![x; total]));
         }
         let Value::NdArr(a) = &args[0] else { return self.err("this array has no value") };
+        if op == "set" {
+            // A[i, j, …] = x from compiled code: arr.set(A, x, i, j, …)
+            let ix: Vec<f64> = args[2..].iter().map(Value::num).collect();
+            let k = self.arr_offset(&a.borrow().shape, &ix)?;
+            let x = self.plain(&args[1])?;
+            a.borrow_mut().data[k] = x;
+            return Ok(Value::Void);
+        }
         let a = a.borrow();
         Ok(match op {
             "get" => {

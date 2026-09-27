@@ -546,9 +546,9 @@ print cube                             # [[[1.5, 1.5], [1.5, 1.5]], [[1.5, 0], [
   `copy`.
 - **Printing:** up to 64 entries in nested brackets with the unit once (like a matrix); a larger array as its shape
   and range.
-- **Speed:** the LLVM back end hands the statements and expressions that touch arrays to the tree-walker (the rest
-  of the program stays compiled), so array loops run at tree-walker speed for now; `fermium build` refuses programs
-  with arrays.
+- **Speed:** in compiled code each `A[i, j]` read or write is a call into the run time (the loop around it stays
+  compiled), and the other statements and expressions that touch arrays are handed to the tree-walker, so array loops
+  are not yet as fast as loops over lists; `fermium build` refuses programs with arrays.
 - **Not yet:** slices (`A[2, :]`), `end` in an array index, `for x in A`, plotting an array, arrays of vectors or
   complex numbers, and applying functions like `sin` to every entry.
 

@@ -184,11 +184,26 @@ fn tw_value(ty: &Ty) -> bool {
 /// An expression the tree-walker computes for the compiled code (D281): a list of vectors, matrices or complex
 /// numbers written out ([<1, 2> m, <3, 4> m], [1 + 2i, 3i]), and anything made directly from a list of vectors or
 /// matrices (ps[i], len(ps), 2 ps). (Built-ins on lists of complex numbers already go through fm_builtin.)
-pub(super) fn tree_walker_list(e: &Expr) -> bool {
+pub(super) fn tree_walker_list(m: &Module, e: &Expr) -> bool {
     match &e.kind {
         ExprKind::Var(_) => false,
+        // built-ins on arrays, lists of vectors and list unknowns' solutions take these values as Obj arguments
+        // through fm_builtin, which is much cheaper than handing the expression over (fm_interp)
+        ExprKind::Builtin(name, args) if name.starts_with("arr.") || name == "__sol_list"
+            || (matches!(name.as_str(), "len" | "sum" | "mean") && args.len() == 1 && matches!(args[0].ty, Ty::VList(_))) => {
+            args.iter().any(|a| retyped(m, a))
+        }
         ExprKind::List(_) => tw_list(&e.ty),
-        _ => tw_value(&e.ty) || expr_children(e).iter().any(|c| tw_value(&c.ty)),
+        _ => tw_value(&e.ty) || expr_children(e).iter().any(|c| tw_value(&c.ty) || retyped(m, c)),
+    }
+}
+
+/// A variable read before it became a list of vectors, complex numbers or text (`vel = []`, then `print vel`, then
+/// `push(vel, <1, 2> m/s)`): the read was checked as a list of numbers, but the slot holds the other kind (D281).
+fn retyped(m: &Module, e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Var(s) => matches!(e.ty, Ty::List(_)) && matches!(m.syms[*s].ty, Ty::VList(_) | Ty::ComplexList(_) | Ty::TextList),
+        _ => expr_children(e).iter().any(|c| retyped(m, c)),
     }
 }
 
@@ -200,10 +215,11 @@ pub(super) fn tree_walker_stmt(m: &Module, s: &Stmt) -> bool {
         StmtKind::Push(x, _) | StmtKind::Clear(x) => sym_tw(x),
         // (xs[i] = "text" too: the compiled code's text lists have no element store)
         StmtKind::IndexAssign(x, _, _) => sym_tw(x) || matches!(m.syms[*x].ty, Ty::TextList),
-        StmtKind::ForIn(_, l, _) => tw_list(&l.ty),
-        StmtKind::Print(items) => {
-            items.iter().any(|it| matches!(it, fermium_ir::PrintItem::VList(..) | fermium_ir::PrintItem::Array(..)))
-        }
+        StmtKind::ForIn(_, l, _) => tw_list(&l.ty) || retyped(m, l),
+        StmtKind::Print(items) => items.iter().any(|it| {
+            matches!(it, fermium_ir::PrintItem::VList(..) | fermium_ir::PrintItem::Array(..))
+                || fermium_ir::print_item_expr(it).is_some_and(|e| retyped(m, e))
+        }),
         _ => false,
     }
 }

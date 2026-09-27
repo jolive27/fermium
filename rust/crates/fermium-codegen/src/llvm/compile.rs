@@ -858,6 +858,19 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     fn stmt(&mut self, s: &Stmt) -> R<()> {
         self.set_line(s.line)?;
+        if let StmtKind::IndexAssign(sym, idx, value) = &s.kind {
+            if let (Ty::Array { .. }, ExprKind::List(ixs)) = (&self.m.syms[*sym].ty, &idx.kind) {
+                // A[i, j] = x on an array (D283): arr.set through fm_builtin (the array is shared, so no write-back)
+                let var = Expr { kind: ExprKind::Var(*sym), ty: self.m.syms[*sym].ty.clone(), sf: None, hint: None,
+                                 direct: 0, line: s.line, x: None };
+                let mut args = vec![var, value.clone()];
+                args.extend(ixs.iter().cloned());
+                let call = Expr { kind: ExprKind::Builtin("arr.set".into(), args.clone()), ty: Ty::Void, sf: None,
+                                  hint: None, direct: 0, line: s.line, x: None };
+                self.builtin(&call, "arr.set", &args)?;
+                return Ok(());
+            }
+        }
         if gc::tree_walker_stmt(self.m, s) {
             // pushing onto, setting, clearing, looping over or printing a list of vectors, matrices or complex
             // numbers: the tree-walker runs the statement (D281)
@@ -1408,7 +1421,7 @@ impl<'c, 'm> Gen<'c, 'm> {
     // ------------------------------------------------------------ expressions
     pub fn expr(&mut self, e: &Expr) -> R<Val<'c>> {
         self.set_line(e.line)?;
-        if gc::tree_walker_list(e) {
+        if gc::tree_walker_list(self.m, e) {
             // lists of vectors, matrices and complex numbers are the tree-walker's values (D281)
             return self.delegate_expr(e);
         }
