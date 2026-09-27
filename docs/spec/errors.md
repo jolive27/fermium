@@ -12,7 +12,7 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 27 of the files completely** (443 templates) — the ones that hold the most common errors: unit and
+covers 28 of the files completely** (481 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
@@ -20,10 +20,10 @@ numbers, the statements (control flow, reassignment, list entries, `push`, local
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
 `plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
 events in ODEs (`when`, events.rs) , eigenvalue problems (`solve … lowest N`, eigen.rs),
-natural-units regions (systems.rs), `analyze` (analyze.rs) and `parallel for` (parallel.rs). The other files (PDEs and the C, C++ and Python
-interop; about 130 templates) are still to do; see §4.
+natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) and PDEs (pde.rs). The other files (the C, C++ and Python
+interop; about 95 templates) are still to do; see §4.
 
-Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -42,8 +42,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 162 of the
-443. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 178 of the
+481. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -526,6 +526,45 @@ errors come first, and the rest are simply not written yet (§4).
 | 441 | `the sum … can't be read inside the parallel for: its value is only known after the loop` | parallel.rs | a reduction (`s += …`) read inside the `parallel for` | — |
 | 442 | `random numbers can't be drawn inside a parallel for: the iterations run in a different order each time, so the results would change from run to run` | parallel.rs | random numbers drawn inside a `parallel for` | C442 |
 | 443 | `… calls itself; a recursive function can't be used inside a parallel for` | parallel.rs | a recursive function called inside a `parallel for` | — |
+| | **PDEs (pde.rs)** | | | |
+| 444 | `the conditions of a PDE look like  …(…, 0 s) = …  (initial) and  …(0 m, …) = …  or  ∂…/∂…(0 m, …) = …  (boundaries)` | pde.rs | a PDE condition that is neither an initial nor a boundary condition | C444 |
+| 445 | `∂…/∂… at the start is given twice` | pde.rs | the initial velocity of a wave equation given twice | C445 |
+| 446 | `the initial value of … is given twice` | pde.rs | the initial value given twice | C446 |
+| 447 | `an initial condition gives …(…, start) (and for a wave ∂…/∂…(…, start))` | pde.rs | an initial condition not of the form `u(x, start)` (a fixed point like `u(0.5, 0)` gets row 453's message first) | — |
+| 448 | `the initial condition is at … but … is …` | pde.rs | an initial condition at a time of another dimension than the time variable | C448 |
+| 449 | `the initial condition must be at the start of the … range` | pde.rs | an initial condition at a time other than the start of the range | C449 |
+| 450 | `a boundary condition gives … or ∂…/∂… at an end, as a function of …` | pde.rs | a boundary condition that isn't a function of time at an end (a fixed time like `u(0, 0.5)` gets row 453's message first) | — |
+| 451 | `boundary conditions are at the ends of the range (… = … or …)` | pde.rs | a boundary condition at a point other than the ends of the range | C451 |
+| 452 | `two boundary conditions at the same end (… = …)` | pde.rs | two boundary conditions at the same end | C452 |
+| 453 | `write the initial condition as  …(…, …) = …  and the boundary conditions as  …(…, …) = …` | pde.rs | a PDE condition written with the variables in the wrong places | C453 |
+| 454 | `in this PDE, i is your own variable i, not the imaginary unit` | pde.rs | `i` used in a PDE where it is also the program's own variable | — |
+| 455 | `in a PDE the time step goes after the time range:  … from … to … step …` | pde.rs | `step` before the time range in a PDE | — |
+| 456 | `tolerance, absolute, until and lowest aren't used in a PDE; it takes  step,  grid N  and  using crank_nicolson / implicit / explicit` | pde.rs | `tolerance`, `absolute`, `until` or `lowest` on a PDE | C456 |
+| 457 | `a PDE solve has one equation, like  ∂u/∂t = D * ∂²u/∂x²` | pde.rs | a PDE `solve` with more than one equation | C457 |
+| 458 | `a PDE needs one unknown function with partial derivatives, like ∂u/∂… and ∂²u/∂…²…` | pde.rs | a PDE whose equation has no partial derivatives of one unknown function | — |
+| 459 | `a PDE needs a time derivative ∂…/∂… (or ∂²…/∂…²)` | pde.rs | a PDE without a time derivative | C459 |
+| 460 | `unknown method '…' for a PDE (use crank_nicolson, implicit or explicit)` | pde.rs | `using` names a method other than crank_nicolson, implicit and explicit | C460 |
+| 461 | `the wave equation (second order in t) is solved with its own explicit scheme; leave out using …` | pde.rs | a wave equation with `using` | C461 |
+| 462 | `a complex equation (with i) must be first order in t, like the Schrödinger equation` | pde.rs | a complex (Schrödinger-type) equation second order in time | — |
+| 463 | `the … range goes from … to …` | pde.rs | the two ends of a PDE range have different dimensions | C463 |
+| 464 | `missing the initial condition:  with …(…, …) = …` | pde.rs | a PDE without an initial condition | C464 |
+| 465 | `a wave equation also needs the initial velocity:  ∂…/∂…(…, …) = …  (0 for a string released at rest)` | pde.rs | a wave equation without the initial velocity | C465 |
+| 466 | `∂…/∂… at the start is only given for a wave equation (second order in …)` | pde.rs | an initial velocity for a PDE first order in time | C466 |
+| 467 | `missing a boundary condition at … = …: give …(…, …) = … (fixed value) or ∂…/∂…(…, …) = … (flux; 0 for an insulated end)` | pde.rs | a PDE without a boundary condition at one end | C467 |
+| 468 | `the initial value can't use …` | pde.rs | an initial value that uses a name it can't (the unknown, the time) | — |
+| 469 | `the initial value's units don't fit` | pde.rs | an initial value of another dimension than the unknown | — |
+| 470 | `the phase in exp(i …) must be a plain number, not …` | pde.rs | `exp(i …)` in an initial value with a phase that has units | — |
+| 471 | `can't solve this equation for ∂…/∂…: it must appear linearly (like ∂u/∂t = D * ∂²u/∂x²)` | pde.rs | a PDE not linear in the time derivative | C471 |
+| 472 | `∂…/∂… works out to … but should be …` | pde.rs | a term of a PDE works out to another dimension than the time derivative | — |
+| 473 | `the initial velocity can't use …` | pde.rs | an initial velocity that uses a name it can't | — |
+| 474 | `∂…/∂… at the start should be …, not …` | pde.rs | an initial velocity of the wrong dimension | — |
+| 475 | `a boundary value can't use … itself` | pde.rs | a boundary value that uses the unknown itself | C475 |
+| 476 | `… at the boundary should be …, not …` | pde.rs | a boundary value or flux of the wrong dimension | — |
+| 477 | `… is a solution of a PDE, a function of … and …: write …(…, …), like …(0.5 m, 1 s)` | pde.rs | a PDE solution used without its two arguments | C477 |
+| 478 | `of a PDE solution, ∂…/∂… and ∂…/∂… can be evaluated` | pde.rs | a derivative of a PDE solution other than the first ones in each variable | — |
+| 479 | `… is a function of … and …: write …(…, …)` | pde.rs | a derivative of a PDE solution used without its two arguments | — |
+| 480 | `…'s first argument is …, …, not …` | pde.rs | a PDE solution's first argument of the wrong dimension | — |
+| 481 | `…'s second argument is …, …, not …` | pde.rs | a PDE solution's second argument of the wrong dimension | C481 |
 
 ## 3. Examples
 
@@ -2088,16 +2127,128 @@ parallel for i from 1 to 3:
     xs[i] = rand()
 ```
 
+```fermium-error
+# C444
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0, v = 1 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C445
+solve ∂²u/∂t² = ∂²u/∂x² with u(x, 0) = 0, ∂u/∂t(x, 0) = 0, ∂u/∂t(x, 0) = 1, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C446
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(x, 0) = 1, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C453
+solve ∂u/∂t = ∂²u/∂x² with u(0.5, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C448
+solve ∂u/∂t = ∂²u/∂x² / (1 s) with u(x, 0 m) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 s to 1 s
+```
+
+```fermium-error
+# C449
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0.5) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C451
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0.5, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C452
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, ∂u/∂x(0, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C456
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1 tolerance 1e-8
+```
+
+```fermium-error
+# C457
+solve ∂u/∂t = ∂²u/∂x², ∂v/∂t = ∂²v/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C459
+solve 0 = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C460
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1 using rk4
+```
+
+```fermium-error
+# C461
+solve ∂²u/∂t² = ∂²u/∂x² with u(x, 0) = 0, ∂u/∂t(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1 using implicit
+```
+
+```fermium-error
+# C463
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 s to 1 m
+```
+
+```fermium-error
+# C464
+solve ∂u/∂t = ∂²u/∂x² with u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C465
+solve ∂²u/∂t² = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C466
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, ∂u/∂t(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C467
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C471
+solve (∂u/∂t)^2 = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C475
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = u(1, t), u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+```
+
+```fermium-error
+# C477
+solve ∂u/∂t = ∂²u/∂x² with u(x, 0) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 to 1
+a = u + 1
+```
+
+```fermium-error
+# C481
+solve ∂u/∂t = ∂²u/∂x² / (1 s) with u(x, 0 s) = 0, u(0, t) = 0, u(1, t) = 0 for x from 0 to 1, t from 0 s to 1 s
+a = u(0.5, 1 m)
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: pde.rs (31), cinterop.rs (25),
-  pyinterop.rs (18), plus cppinterop.rs's `cerr(…)` messages. About 130 templates remain.
+  covered, by size of their error set: cinterop.rs (25),
+  pyinterop.rs (18), plus cppinterop.rs's `cerr(…)` messages. About 95 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (162). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (178). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -2114,6 +2265,6 @@ parallel for i from 1 to 3:
   one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
   In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one; in rows 405–418
   (eigen.rs), 1 row; in rows 419–425 (systems.rs), 6; in rows 426–431 (analyze.rs), 4; in rows 432–443
-  (parallel.rs), 6.
+  (parallel.rs), 6; in rows 444–481 (pde.rs), 16.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
