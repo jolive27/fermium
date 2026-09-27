@@ -622,6 +622,13 @@ impl Checker {
         };
         self.data.sweeps.push((var, ctx.func, vec![]));
         let r = self.stmt(inner, ctx);
+        // "only set inside the for loop on line N": the program says sweep (red team 16 #14)
+        let tag = format!("inside the for loop on line {}", inner.span.line);
+        for x in self.extra.iter_mut() {
+            if let Some(m) = x.unset_msg.as_mut().filter(|m| m.contains(&tag)) {
+                *m = m.replace("the for loop", "the sweep");
+            }
+        }
         let (_, _, pids) = self.data.sweeps.pop().unwrap();
         let mut out = r?;
         if !pids.is_empty() {

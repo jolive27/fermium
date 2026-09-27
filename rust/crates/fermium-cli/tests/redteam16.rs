@@ -91,6 +91,14 @@ fn the_backend_is_named_before_the_program_runs_on_a_cache_hit() {
     assert_eq!(seen[1].matches("fermium: backend llvm").count(), 1, "{}", seen[1]);
 }
 
+#[test]
+fn a_variable_set_only_in_a_sweep_says_sweep() {
+    let (c, _, e) = run_src("sweepmsg", "sweep k in [1, 2, 4]\n    z = k * 2\nprint z\n");
+    assert_eq!(c, 1, "{e}");
+    assert!(e.contains("z might not have a value here: it is only set inside the sweep on line 1"), "{e}");
+    assert!(!e.contains("for loop"), "{e}");
+}
+
 // ---------------------------------------------------------------- #2: (u^a)^b keeps the sign of u (D331)
 
 #[test]
