@@ -1766,6 +1766,11 @@ reports medians.
 for bit possible, but the work would move out of the timed region: rejected as unfair to the comparison); not
 storing t (it is t0 + i·h except at the end; the solution object is shared with the tree-walker: a larger change);
 populate without huge pages (≈ 20 % of the gain).
+- **Changed at the v2.5 benchmark run (Sun 09:45 UTC): the default is now `p` (populate only).** In both full
+runs of benchmarks/run.py, spring_rk4 took 131 ms (8× Julia) every time it ran right after NumPy's 8-second
+benchmark. The huge-page request was slow after another process had churned through memory, with no compaction
+stall counted; populate alone took 28–33 ms after NumPy and alone, and Fermium 1.5 and Julia in the same position
+were unaffected. A consistent 30 ms beats a 25 ms best case with a 130 ms worst case. `h` stays available.
 
 ## D317. The compile cache: a program's machine code, reused while its text and its modules are unchanged
 - **What:** `fermium run` saves the machine code the JIT generated for a program, with what the run time reads

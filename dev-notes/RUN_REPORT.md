@@ -14,7 +14,7 @@ runs, understands calculus, and starts in about 12 ms. The run reached **Phase C
 Phase D was not started. Four independent red-team rounds tested v2.5 during the run; every high finding was
 fixed and has a test. The biggest gaps:
 - **There is still no download.** GitHub refused every tag push, so you build it once from source (below).
-- **The Julia goal is only half met** (faster on 3 of 7 compute benchmarks, level on 1).
+- **The Julia goal is only half met:** faster on 3 of 7 compute benchmarks, level on 1, and slower on 3.
 - **All of it is in draft pull requests** (#2 → #3 → #4) waiting for your review.
 
 ---
@@ -256,32 +256,35 @@ documented divergence, recorded only after its new output was checked against an
 
 ### Speed of v2.5 (the C6 goal)
 
-A quiet-machine run of `benchmarks/run.py --interleave -r 7` on the v2.5.0 release build (Sun 09:36 UTC, load
-0.7; `benchmarks/RESULTS.md`, the second of two full runs, which agreed). Inner = the computation alone, the
-fair comparison with Julia (Julia's JIT compile time is excluded).
+A quiet-machine run of `benchmarks/run.py --interleave -r 7` on the v2.5.0 release build (Sun 09:52 UTC, load
+0.9–1.3; `benchmarks/RESULTS.md`). Inner = the computation alone, the fair comparison with Julia (Julia's JIT
+compile time is excluded).
 
 | Benchmark | Fermium 1.5 | Fermium 2.0 (Sat) | Fermium 2.5 | Julia | 2.5 vs Julia |
 |---|---:|---:|---:|---:|---|
-| nbody (per 1M steps) | 66.1 ms | 66.3 ms | 58.9 ms | 67.4 ms | **0.87× (faster)** |
-| forces, 4 threads | 5.21 ms | 11.00 ms | 2.70 ms | 6.53 ms | **0.41× (faster)** |
-| forces, 1 thread | 19.1 ms | 20.3 ms | 9.24 ms | 17.8 ms | **0.52× (faster)** |
-| unit_loop | 10.0 ms | 6.12 ms | 6.35 ms | 6.20 ms | 1.02× (level; 0.99× in the first run) |
-| spring_adaptive | 555 µs | 696 µs | 808 µs | 619 µs | 1.31× slower |
-| blackbody | 2.56 ms | 3.54 ms | 3.55 ms | 2.02 ms | 1.76× slower |
-| spring_rk4 | 35.0 ms | 34.3 ms | 131 ms (24 ms alone) | 15.8 ms | 8.3× slower in the run (1.5× alone) |
-| startup (whole process) | 173 ms | 17.7 ms | 11.6 ms | 267 ms | 23× faster to start |
+| nbody (per 1M steps) | 70.5 ms | 66.3 ms | 57.2 ms | 66.3 ms | **0.86× (faster)** |
+| forces, 4 threads | 5.87 ms | 11.00 ms | 2.86 ms | 9.78 ms | **0.29× (faster)**; Julia was 6.2–6.5 ms in two earlier runs, so ≈ 0.45× |
+| forces, 1 thread | 20.0 ms | 20.3 ms | 9.26 ms | 18.5 ms | **0.50× (faster)** |
+| unit_loop | 6.27 ms | 6.12 ms | 6.28 ms | 6.29 ms | 1.00× (level) |
+| spring_adaptive | 556 µs | 696 µs | 734 µs | 630 µs | 1.16× slower |
+| spring_rk4 | 35.1 ms | 34.3 ms | 30.8 ms | 15.8 ms | 1.95× slower |
+| blackbody | 2.65 ms | 3.54 ms | 4.05 ms | 2.05 ms | 1.98× slower |
+| startup (whole process) | 178 ms | 17.7 ms | 14.6 ms | 288 ms | 20× faster to start |
 
 - **The goal, "beat Julia on at least half of the benchmark rows": not met by a strict reading.** Fermium is
-  clearly faster on 3 of the 7 compute rows and level on a 4th (unit_loop, 0.99× and 1.02× in two runs).
-- **spring_rk4 is an honest anomaly.** On this machine single runs take either 22–35 ms or 60–130 ms, in bursts.
-  Both full runs caught the slow mode (median 131 ms), while spring_rk4 run alone gives 24 ms (1.5× Julia) and
-  20 back-to-back runs gave 27–33 ms. The suspected cause is C6's huge-page prefault of the large trajectory
-  arrays stalling in the kernel's memory compaction. It's in BACKLOG with a way to measure it. I did not pick
-  the fast number for the table.
-- The Fermium 2.0 and 1.5 columns come from Saturday's run and this run respectively; loads differed, so small
-  differences are noise. Every language printed the same answers (the ✓ column in RESULTS.md).
-- Whole programs, including start-up and compiling, take 12–26 ms with the JIT cache warm (Fermium's "Wall"
-  column), against Julia's 0.9–2.6 s.
+  clearly faster on 3 of the 7 compute rows and level on a 4th (unit_loop). It is slower on 3: spring_adaptive,
+  spring_rk4 and blackbody. The blackbody row moved between runs (1.76× and 1.98×), so treat differences under
+  about 10–15 % as noise.
+- **A bug found by this measurement, and fixed.** In the first two full runs spring_rk4 took 131 ms (8× Julia),
+  but only when it ran right after NumPy's 8-second benchmark. The cause was C6's default of asking the kernel
+  for huge pages for the solver's 40 MB trajectory arrays: after another process has churned through memory,
+  that request was slow every time. Fermium 1.5 and Julia in the same position were unaffected. The default is now
+  "populate only" (`FERMIUM_PREFAULT=p`, D316), which takes 28–33 ms after NumPy and alone. The table above is the
+  run after that fix; the earlier runs are described in the commit history.
+- The Fermium 2.0 column is Saturday's run; the other columns are this run. Every language printed the same
+  answers (the ✓ column in RESULTS.md).
+- Whole programs, including start-up and compiling, take 14–72 ms with the JIT cache warm (Fermium's "Wall"
+  column), against Julia's 0.9–2.8 s.
 
 ### The v2.5 tag
 
@@ -411,9 +414,9 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
    "install nothing" goal. *Next:* push the `v2.5` tag yourself (one command above) and check the workflow's first run.
 2. **macOS is tested only by CI**, never on a real Mac. `fermium build` executables and C++ interop on macOS
    have never been run by a person.
-3. **Performance is uneven** (C6). Fermium is faster than Julia on nbody and forces, but 1.3–1.8× slower on
-   spring_adaptive and blackbody. spring_rk4 has an unexplained slow mode (BACKLOG). *Next:* the spring_rk4
-   investigation, then batching the integrand for blackbody (BACKLOG, "High value").
+3. **Performance is uneven** (C6). Fermium is faster than Julia on nbody and forces, but 1.2–2× slower on
+   spring_adaptive, spring_rk4 and blackbody. *Next:* batching the integrand for blackbody, and the RK4
+   trajectory storage (BACKLOG, "High value").
 4. **Parts of v2.5 run in the interpreter.** Programs with ± values, lists of vectors, N-d arrays or list
    unknowns run those parts in the tree-walker (slower), and `fermium build` refuses them.
 5. **Open v1 behaviour kept on purpose for parity:** √ or log of a negative number at run time gives NaN

@@ -326,8 +326,11 @@ fn prefault(p: *mut f64, n: usize) {
         extern "C" {
             fn madvise(addr: *mut std::ffi::c_void, len: usize, advice: i32) -> i32;
         }
-        // FERMIUM_PREFAULT: 0 = off, p = populate only, h = huge pages and populate (the default); experiments
-        let mode = std::env::var("FERMIUM_PREFAULT").unwrap_or_else(|_| "h".into());
+        // FERMIUM_PREFAULT: 0 = off, p = populate only (the default), h = huge pages and populate. Huge pages were
+        // the default until the v2.5 benchmark run: right after another process had churned through memory
+        // (benchmarks/run.py runs NumPy just before Fermium), asking for them made spring_rk4 take 130 ms
+        // instead of 30 ms, every time; populate alone stays at 31-33 ms either way (D316)
+        let mode = std::env::var("FERMIUM_PREFAULT").unwrap_or_else(|_| "p".into());
         let bytes = n * 8;
         if bytes < (4 << 20) || mode == "0" {
             return;
