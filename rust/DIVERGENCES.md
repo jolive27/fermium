@@ -254,6 +254,13 @@ or a quantity found by cancellation). What differs, in the browser only:
   to corners); log axes have no minor ticks; `plot … animate` without a .gif path writes PNG frames (v1 did so
   only without pillow).
 - A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
+- File formats (red team 13 #3): the extension of `to "<path>"` decides, in any case, as with matplotlib, and
+  a path without one gets `.png` added. v2 writes png, svg and gif; every other extension is refused with
+  v1's line `(plot not saved: Format 'txt' is not supported (supported formats: gif, png, svg))`, which lists
+  the formats v2 writes (v1 listed matplotlib's, and also wrote pdf, eps, ps, jpg, tif, webp, avif, svgz,
+  pgf, raw and rgba). Before, v2 wrote PNG bytes to any path (`notes.txt`, `prog.fm`, `c.pdf`). A refused
+  plot makes no folder (v1 made the folder before matplotlib refused). v1 printed `plot saved to …/noext`
+  for a path without an extension although matplotlib wrote `noext.png`; v2 prints the file it wrote.
 - Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
   deflate (round trip), LZW (round trip), labels and number format.
 

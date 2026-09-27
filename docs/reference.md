@@ -762,7 +762,11 @@ plot data.T vs data.L to "pendulum.png"
   - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines. Uncertain values (§21) are drawn with error bars.
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
-  - `... to "file.png"` chooses the file name.
+  - `... to "file.png"` chooses the file name. The extension picks the format: `.png`, `.svg` or `.gif` (in
+    any case); a name without an extension gets `.png` added. Any other extension (`.txt`, `.pdf`, `.fm`) is
+    refused with `(plot not saved: Format 'txt' is not supported (supported formats: gif, png, svg))` and
+    nothing is written, so a typo can't overwrite your program or your notes. Folders in the path are made if
+    they don't exist.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables. The same holds after the file name: `plot N vs t to "decay.png" title "Decay"`.
   - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
   - Several series: `plot a vs t, b vs t`. A fitted curve over the data is a formula series: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm` (dots for the data, a line for the formula with the fitted g).

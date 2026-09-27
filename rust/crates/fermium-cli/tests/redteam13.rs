@@ -94,3 +94,49 @@ fn a_tiny_float_exponent_rounds_like_python() {
     let (code, out, err) = run("tiny-float", "print (1 m)^1e-19\n");
     assert_eq!((code, out.as_str()), (0, "1\n"), "{err}");
 }
+
+// ---------------------------------------------------------------- #3: plot … to "<path>"
+
+#[test]
+fn plots_refuse_non_image_paths_and_write_nothing() {
+    let d = dir("plot");
+    std::fs::write(d.join("notes.txt"), "my notes\n").unwrap();
+    std::fs::write(d.join("prog.fm"), "plot sin(x) vs x from 0 to 1 to \"notes.txt\"\n\
+        plot sin(x) vs x from 0 to 1 to \"newdir/a/b.py\"\n\
+        plot sin(x) vs x from 0 to 1 to \"prog.fm\"\n\
+        plot sin(x) vs x from 0 to 1 to \"c.pdf\"\n\
+        print 1\n").unwrap();
+    let o = fermium(&["run", "prog.fm"], &d);
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let refused = |e: &str| format!("(plot not saved: Format '{e}' is not supported (supported formats: gif, png, svg))");
+    assert_eq!(out, format!("{}\n{}\n{}\n{}\n1\n", refused("txt"), refused("py"), refused("fm"), refused("pdf")));
+    assert_eq!(std::fs::read_to_string(d.join("notes.txt")).unwrap(), "my notes\n");
+    assert!(std::fs::read_to_string(d.join("prog.fm")).unwrap().starts_with("plot sin"));
+    assert!(!d.join("newdir").exists(), "no folder is made for a refused plot");
+    assert!(!d.join("c.pdf").exists());
+}
+
+#[test]
+fn plots_write_png_svg_and_gif_as_their_extension_says() {
+    let d = dir("plot-ok");
+    std::fs::write(d.join("prog.fm"), "plot sin(x) vs x from 0 to 1 to \"a.PNG\"\n\
+        plot sin(x) vs x from 0 to 1 to \"out/b.svg\"\n\
+        plot sin(x) vs x from 0 to 1 to \"c.gif\"\n\
+        plot sin(x) vs x from 0 to 1 to \"noext\"\n").unwrap();
+    let o = fermium(&["run", "prog.fm"], &d);
+    let out = String::from_utf8_lossy(&o.stdout).into_owned();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let abs = std::fs::canonicalize(&d).unwrap();
+    let saved: Vec<String> = ["a.PNG", "out/b.svg", "c.gif", "noext.png"]
+        .iter()
+        .map(|f| format!("plot saved to {}", abs.join(f).display()))
+        .collect();
+    assert_eq!(out, saved.join("\n") + "\n");
+    assert_eq!(&std::fs::read(d.join("a.PNG")).unwrap()[..8], b"\x89PNG\r\n\x1a\n");
+    assert!(std::fs::read_to_string(d.join("out/b.svg")).unwrap().starts_with("<?xml"));
+    assert_eq!(&std::fs::read(d.join("c.gif")).unwrap()[..6], b"GIF89a");
+    // like matplotlib: a path without an extension gets .png (it doesn't overwrite a file named `noext`)
+    assert_eq!(&std::fs::read(d.join("noext.png")).unwrap()[..8], b"\x89PNG\r\n\x1a\n");
+    assert!(!d.join("noext").exists());
+}
