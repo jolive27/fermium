@@ -83,7 +83,10 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
         eprintln!("{}", e.format(Some(&src), Some(&name)));
         ExitCode::from(1)
     };
-    let base = base_dir.map(str::to_string).unwrap_or_else(|| {
+    // `--base-dir .` is made absolute too: modules resolve against the absolute folder, and the compile cache's
+    // key must name that folder, not the literal "." (red team 16, D330)
+    let base = base_dir.map(|b| std::path::absolute(b).map_or(b.to_string(), |p| p.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| {
         // `fermium run prog.fm` has an empty parent: the current folder, absolute (like v1's os.path.abspath), so
         // `use python` finds a .py file beside the program
         let dir = std::path::Path::new(file).parent().filter(|p| !p.as_os_str().is_empty())

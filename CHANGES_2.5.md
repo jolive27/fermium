@@ -263,3 +263,13 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
   so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
   absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1
   conformance suite is unchanged.
+
+## Red team 16 fixes (DECISIONS D330–D337)
+- The compile cache's key holds `$HOME` and the current folder, and `--base-dir .` is made absolute: `import "~/m.fm"`
+  under another `$HOME`, or the same program run with `--base-dir .` from another folder, no longer runs stale code.
+- `(u^a)^b` is merged into `u^(ab)` only when that holds for every real u: `d/dx (x²)^(3/2)` is `3x (x²)^(1/2)`
+  (was `3x²`, wrong for x < 0), and `d/dx (x²)^(1/2)` is `x/(x²)^(1/2)` (was 1).
+- Differentiating a recursive function is a one-line error (*can't differentiate f: it calls itself*), not a stack
+  overflow.
+- AD of a multi-line function with an accumulator that starts at a constant with units (`E = 0 J`, `p = 0 kg m/s`)
+  works; it was refused with a unit clash.

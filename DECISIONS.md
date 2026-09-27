@@ -1911,3 +1911,34 @@ rad vs plain, and none otherwise (J vs N m). In the REPL, where every input is l
 - **Why:** the reviewer's cases; a wrong example in a hint is worse than none.
 - **Alternatives:** a table of named pairs (the kinds already are one); numbering REPL inputs (a larger change to
 the REPL's diagnostics).
+
+## D330. The compile cache's key holds $HOME, the current folder and an absolute program folder (red team 16 #1)
+- **What:** `import "~/m.fm"` expands `~` with `$HOME`, and relative paths resolve against the current folder, so the
+JIT cache key (D317) now includes `HOME` and the current folder; `fermium run --base-dir .` makes the folder absolute
+before it is used (for the key and for module resolution alike). Audit of the other inputs: the checker reads
+`CXX`/`CXXFLAGS`/`PATH`/`FERMIUM_CXX_TIMEOUT` only for C++ imports (never cached), `current_dir` for data files
+(never cached) and module paths (now keyed); codegen's switches were already keyed; `FERMIUM_THREADS`,
+`FERMIUM_PREFAULT` and `FERMIUM_GC_*` are read at run time, not compile time.
+- **Why:** a different `$HOME` or `--base-dir .` from another folder served the other program's machine code.
+- **Alternatives:** recording the unexpanded spec and its expansion as a dependency line (finer, but every future
+environment input would need its own line; the key is the simpler invariant).
+
+## D331. (u^a)^b is merged into u^(ab) only when b is an integer or a is not (red team 16 #2)
+- **What:** the simplifier merged `(x²)^(3/2)` into `x³` and `(x²)^(1/2)` into `x`, so f' printed `3x²` and
+evaluated wrongly for x < 0. Now it merges only when b is an integer, or a is not an integer (then u^a already
+needs u ≥ 0); otherwise the power stays and the derivative is `3x (x²)^(1/2)`.
+- **Why:** unit safety and correctness come before a shorter formula; (x²)^(1/2) is |x|.
+- **Alternatives:** rewriting to |x|^(ab) (SymPy leaves it unevaluated for real x too).
+
+## D332. Differentiating a recursive function is a one-line error (red team 16 #3)
+- **What:** the checker keeps the derivatives being made; one asked for again while it is made (a function that
+calls itself, directly or through another) stops with *can't differentiate f: it calls itself*.
+- **Why:** the derivative transformation recursed forever and overflowed the stack (exit 134), in `check` too.
+- **Alternatives:** differentiating the recursion as a recursive derivative function (needs a fixed point over the
+derivative's own definition; later if asked).
+
+## D333. A tangent that doesn't depend on x is a written 0 (red team 16 #4)
+- **What:** in AD of a multi-line function, the tangent of `E = 0 J` (and of a non-differentiated parameter) is a
+written `0`, which the checker lets take any unit, so `dE/dr = dE/dr + …` has the unit of E/r.
+- **Why:** a computed 0 is a plain number, and the accumulator's tangent then clashed with a force.
+- **Alternatives:** `0 * value / x` (right unit, but NaN at x = 0).

@@ -23,6 +23,8 @@ use crate::stmts::ty_dim;
 pub struct CalcState {
     /// (function, "i,order" or "veccalc,kind") → the derived function
     pub derived: HashMap<(FuncInfoId, String), FuncInfoId>,
+    /// the derivatives being made: one asked for again while it is made is a recursive function (D332)
+    pub busy: std::collections::HashSet<(FuncInfoId, String)>,
 }
 
 fn sup(n: i64) -> String {
@@ -208,6 +210,19 @@ impl Checker {
         if let Some(&d) = self.calc.derived.get(&key) {
             return Ok(d);
         }
+        // a function that calls itself would be differentiated forever (red team 16, D332)
+        if !self.calc.busy.insert(key.clone()) {
+            let dn = self.funcs[info].display_name.clone();
+            return Err(self.err(format!("can't differentiate {dn}: it calls itself"), node,
+                                Some("a recursive function has no derivative in Fermium; write it with a loop".into())));
+        }
+        let r = self.derived_info_new(info, i, order, node, key.clone());
+        self.calc.busy.remove(&key);
+        r
+    }
+
+    fn derived_info_new(&mut self, info: FuncInfoId, i: usize, order: i64, node: A::Span, key: (FuncInfoId, String))
+                        -> CResult<FuncInfoId> {
         let dn = self.funcs[info].display_name.clone();
         let multi = !self.funcs[info].one_liner();
         let fdef = self.funcs[info].fdef.clone().unwrap();

@@ -6,7 +6,8 @@
 //!
 //! An entry is found by a key made of everything the machine code depends on: this `fermium` binary (its
 //! version, size and modification time), LLVM's version, the computer's CPU and its features, the code
-//! generator's switches (environment variables), the program's file name, folder and text. It is used only if
+//! generator's switches (environment variables), $HOME and the current folder (module resolution reads both),
+//! the program's file name, folder (absolute) and text. It is used only if
 //! it is intact (magic, length and checksum), holds exactly the program's text, and every module file and
 //! fermium.toml the compilation read is unchanged (same contents) and every one it looked for and didn't find is
 //! still missing (a module file added where an import looked first would change what it finds).
@@ -68,6 +69,10 @@ pub fn key(source: &str, file_name: &str, base_dir: &str) -> String {
     for k in CODEGEN_ENV {
         env += &format!("{k}={:?};", std::env::var(k).ok());
     }
+    // the inputs module resolution reads besides the program's folder (red team 16, D330): `import "~/m.fm"`
+    // expands `~` with $HOME, and a relative path (file name, folder) is resolved against the current folder
+    env += &format!("HOME={:?};", std::env::var_os("HOME"));
+    env += &format!("CWD={:?};", std::env::current_dir().ok());
     let cpu = TargetMachine::get_host_cpu_name().to_string();
     let features = TargetMachine::get_host_cpu_features().to_string();
     let id = binary_id();

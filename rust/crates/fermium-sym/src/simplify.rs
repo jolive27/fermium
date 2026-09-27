@@ -284,7 +284,9 @@ pub fn simplify(e: &A::Expr) -> A::Expr {
                     }
                     if let (K::BinOp { op: aop, left: al, right: ar, .. }, Some(bv)) = (&a.kind, b.num_value()) {
                         if aop == "^" {
-                            if let Some(av) = ar.num_value() {
+                            // (u^a)^b = u^(ab) holds for every real u only when b is an integer, or when a is
+                            // not (u^a then needs u >= 0); (x²)^(1/2) is |x|, not x (red team 16, D331)
+                            if let Some(av) = ar.num_value().filter(|&av| bv == bv.trunc() || av != av.trunc()) {
                                 return simplify(&pw((**al).clone(), num(av * bv)));
                             }
                         }

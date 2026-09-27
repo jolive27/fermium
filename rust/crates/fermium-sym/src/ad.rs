@@ -71,7 +71,7 @@ pub fn ad_body(fname: &str, params: &[String], body: &[A::Stmt], var: &str, ctx:
     // parameters that are reassigned start with their tangent: 1 for var, 0 for the others
     for p in params {
         if let Some(Some(t)) = ad.tan.get(p) {
-            let v = num(if p == var { 1.0 } else { 0.0 });
+            let v = if p == var { num(1.0) } else { zero() };
             out.push(A::Stmt { kind: S::Assign { name: t.clone(), value: v, op: "=".into() },
                                span: body.first().map(|s| s.span).unwrap_or_default() });
         }
@@ -81,6 +81,13 @@ pub fn ad_body(fname: &str, params: &[String], body: &[A::Stmt], var: &str, ctx:
         ad.stmt(s, i + 1 == n, &mut out)?;
     }
     Ok(prune(out))
+}
+
+/// A written 0: the checker gives it whatever unit its first use asks for, so the tangent of an assignment that
+/// doesn't depend on x (`E = 0 J`) takes the unit of E/x later (red team 16, D333), where a computed 0 is a
+/// plain number.
+fn zero() -> A::Expr {
+    mk(K::Num { value: 0.0, sigfigs: None, digit: true })
 }
 
 /// Remove assignments to names that nothing reads (the derivative doesn't need the tangents of variables that
@@ -299,7 +306,7 @@ impl Ad<'_> {
                 Some(o) => add(o, term),
             });
         }
-        Ok(out.map(|o| simplify(&o)).unwrap_or_else(|| num(0.0)))
+        Ok(out.map(|o| simplify(&o)).unwrap_or_else(zero))
     }
 
     fn block(&mut self, body: &[A::Stmt]) -> SymResult<Vec<A::Stmt>> {
