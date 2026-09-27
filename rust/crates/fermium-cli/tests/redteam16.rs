@@ -71,6 +71,26 @@ fn a_relative_base_dir_is_keyed_by_the_folder_it_names() {
     assert!(o2.trim().starts_with('2'), "stale cache entry for another folder: {o2}");
 }
 
+#[test]
+fn the_backend_is_named_before_the_program_runs_on_a_cache_hit() {
+    // stdout and stderr into one file: the same order on the compiling run and on the cached one
+    let d = dir("binfo");
+    let cache = d.join("cache");
+    std::fs::write(d.join("p.fm"), "print 1 + 1\n").unwrap();
+    let mut seen = vec![];
+    for k in 0..2 {
+        let out = d.join(format!("out{k}.txt"));
+        let f = std::fs::File::create(&out).unwrap();
+        let st = Command::new(env!("CARGO_BIN_EXE_fermium")).args(["run", "p.fm"]).current_dir(&d)
+            .env("FERMIUM_CACHE_DIR", &cache).env("FERMIUM_BACKEND_INFO", "1").env_remove("FERMIUM_BACKEND")
+            .env_remove("FERMIUM_NO_CACHE").stdout(f.try_clone().unwrap()).stderr(f).status().unwrap();
+        assert!(st.success());
+        seen.push(std::fs::read_to_string(&out).unwrap());
+    }
+    assert_eq!(seen[0], seen[1], "cache hit prints in another order");
+    assert_eq!(seen[1].matches("fermium: backend llvm").count(), 1, "{}", seen[1]);
+}
+
 // ---------------------------------------------------------------- #2: (u^a)^b keeps the sign of u (D331)
 
 #[test]

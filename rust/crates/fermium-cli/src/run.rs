@@ -199,8 +199,11 @@ fn run_cached(dir: &std::path::Path, key: &str, src: &str, name: &str, time: boo
     let mut printer = fermium_codegen::printer::StdPrinter::new(&b.module, std::io::BufWriter::new(stdout.lock()));
     // the warnings are printed once the cached code is known to load (else the compilation prints them)
     let warnings = e.warnings.clone();
+    // and the back end is named before the program's output, as a compiled run does (its output is flushed after
+    // the name; red team 16 #16)
     let mut warn = move || {
         eprint!("{warnings}");
+        say_backend("llvm");
     };
     let r = match fermium_codegen::llvm::run_object(&b.module, b.tables, &e.object, &mut printer, &mut warn) {
         Ok(r) => r,
@@ -210,7 +213,6 @@ fn run_cached(dir: &std::path::Path, key: &str, src: &str, name: &str, time: boo
         fermium_codegen::eval::Printer::flush_partial(&mut printer);
     }
     drop(printer);
-    say_backend("llvm");
     if time {
         eprintln!("time: compiled program from the cache, run {:.1} ms (loading and running)",
                   t0.elapsed().as_secs_f64() * 1e3);

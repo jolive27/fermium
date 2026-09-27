@@ -283,3 +283,6 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
   docs/reference.md says how `fit` scales its standard errors; neutron_star_cooling uses the modified-Urca neutron
   branch's (n_p/n₀)^(1/3) with a proton fraction of 0.05 (was (n/n₀)^(2/3)), N₉ = 2.44 × 10⁴⁰ erg/s, 31 of 48 stars
   within a factor 3 (was 34); level_density's stale comment on the fixed fit bug is gone.
+- `FERMIUM_BACKEND_INFO=1` names the back end in the same place on a compile-cache hit as on a compiling run; the
+  `when` edge cases (event at the end time, a zero at t₀, `y' = 0` resets, two `when`s on one condition) are documented
+  in docs/reference.md.
