@@ -423,8 +423,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Value::List(l) => Ok(Value::Num(l.borrow().len() as f64)),
                 Value::TextList(l) => Ok(Value::Num(l.borrow().len() as f64)),
                 Value::CList(l) => Ok(Value::Num(l.borrow().len() as f64)),
+                Value::VList(l) => Ok(Value::Num(l.borrow().len() as f64)),
                 _ => return None,
             },
+            "sum" | "mean" if matches!(args[0], Value::VList(_)) => {
+                let Value::VList(l) = &args[0] else { unreachable!() };
+                let l = l.borrow();
+                if l.is_empty() {
+                    return Some(self.err(format!("the {name} of an empty list of vectors or matrices is undefined")));
+                }
+                let k = l[0].len();
+                let mut acc = vec![0.0; k];
+                for v in l.iter() {
+                    for (a, x) in acc.iter_mut().zip(v.iter()) {
+                        *a += x;
+                    }
+                }
+                if name == "mean" {
+                    let n = l.len() as f64;
+                    acc.iter_mut().for_each(|a| *a /= n);
+                }
+                Ok(Value::Vec(Rc::new(acc)))
+            }
             "sum" | "mean" | "std" | "min_list" | "max_list" | "first" | "last" => self.bi_reduce(name, &args[0]),
             "dot" if matches!(args[0], Value::List(_)) => self.bi_dot(args),
             "trapz" => self.bi_trapz(args),

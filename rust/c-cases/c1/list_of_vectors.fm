@@ -1,0 +1,20 @@
+# C1: lists of vectors — written out, grown with push, indexed, set, looped over, printed
+pos = [<1, 2> m, <3, 4> m]
+print pos, len(pos), pos[2], pos[end].y
+push(pos, <5, 6> m)
+pos[1] = <0, 0> m
+pos[2] += <1, 1> m
+for p in pos
+    print p, |p|
+print 2*pos, pos / 2
+print sum(pos), mean(pos)
+# a unit after the list applies to every element
+dirs = [<1, 0, 0>, <0, 1, 0>] km/s
+print dirs, dirs[2] in m/s
+# an empty list becomes a list of vectors when the first vector is pushed
+vel = []
+push(vel, <1, 0, 0> km/s)
+push(vel, <0, 2, 0> m/s)
+print vel, len(vel)
+clear(pos)
+print pos, len(pos)

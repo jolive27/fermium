@@ -286,6 +286,16 @@ impl Checker {
             let a0 = args[0].clone();
             return Ok(self.bi(name, args, Ty::Num(dimless), &[&a0], line));
         }
+        if matches!(name, "len" | "sum" | "mean") && n == 1 {
+            if let Ty::VList(el) = &args[0].ty {
+                // a list of vectors or matrices (D281): its length, or the vector (matrix) sum or mean
+                let (ty, hint) = if name == "len" { (Ty::Num(dimless.clone()), None) } else { ((**el).clone(), args[0].hint.clone()) };
+                let mut r = self.bi(name, args, ty, &[], line);
+                r.sf = None;
+                r.hint = hint;
+                return Ok(r);
+            }
+        }
         if name == "len" && n == 1 && matches!(args[0].ty, Ty::TextList) {
             let mut r = self.bi("len", args, Ty::Num(dimless), &[], line);
             r.sf = None;

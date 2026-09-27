@@ -185,6 +185,8 @@ pub enum PrintItem {
     MixedVec(Expr, Vec<usize>),
     Mat(Expr, usize),
     ComplexList(Expr, usize),
+    /// A list of vectors or matrices (the element format).
+    VList(Expr, usize),
     TextList(Expr),
     Bool(Expr),
     /// A constant text (index into the text table).
@@ -256,6 +258,9 @@ pub struct SolveExtra {
     pub is_complex: bool,
     /// the source line (PDE warnings)
     pub line: u32,
+    /// some unknowns are lists (spec C1, D282): their sizes come from the initial values when the solve runs
+    /// (the list unknowns' slots are last in the layout; `atol` then has one value per list slot)
+    pub lists: bool,
 }
 
 /// What the back ends need to run a parallel for (D152): the sums (added up block by block, in order), the lists
@@ -499,7 +504,8 @@ pub fn stmt_parts(s: &Stmt) -> (Vec<&Expr>, Vec<&Vec<Stmt>>) {
 pub fn print_item_expr(it: &PrintItem) -> Option<&Expr> {
     match it {
         PrintItem::Num(e, _) | PrintItem::List(e, _) | PrintItem::Complex(e, _) | PrintItem::Vec(e, _)
-        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::TextList(e)
+        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::VList(e, _)
+        | PrintItem::TextList(e)
         | PrintItem::Bool(e) | PrintItem::TextVar(e) | PrintItem::Data(e, _) => Some(e),
         PrintItem::Text(_) => None,
     }

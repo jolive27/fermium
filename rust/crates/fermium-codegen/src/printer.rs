@@ -79,6 +79,10 @@ impl<W: Write> Printer for StdPrinter<W> {
         let s = format_clist(v, &f.rdim, f.hint.as_ref(), f.sf, f.direct, Some(v.len()));
         self.line.push(s);
     }
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>) {
+        let s = fermium_units::quantity::format_vlist(v, k, cols, &self.fmts[fmt]);
+        self.line.push(s);
+    }
     fn boolean(&mut self, b: bool) {
         self.line.push(if b { "true" } else { "false" }.into());
     }

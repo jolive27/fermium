@@ -1187,3 +1187,65 @@ the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` expe
 - **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
 - **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
 - **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
+
+## D280. The LLVM back end frees lists: a mark-and-sweep collector with frame epochs (spec C1, memory)
+- **What:** the compiled code's lists, text lists and Obj values (the tree-walker's values it holds: lists of
+complex numbers or vectors, data sets) are registered when made and freed by a collector (`llvm/rt.rs`, memory
+section; code generation in `llvm/gc.rs`). Roots are variable slots: fm_main registers the module's list variables
+and its own slots, and every compiled function whose loops may make lists registers its list slots on entry
+(`fm_gc_enter`: an array of slot addresses on its stack) and unregisters on each return. Collections happen only at
+safe points, the top of an iteration of such a loop when the allocator has set a flag (`gc_flag`, one load and a
+cold branch), where the function holds no list in a register (a `for … in` keeps its copy of the list in a hidden
+registered slot). A collection frees only lists made after the innermost registered frame was entered (its
+epoch): a caller in the middle of an expression may hold a temporary (`f(2 xs, g(y))` while g loops), and those
+are all older. The main program's frame has epoch 0. A function without such loops is never interrupted by a
+collection, so it needs no frame; nothing is collected while a parallel for runs. A collection runs after as many
+allocations (or bytes) as were live after the last one, at least 20 000 lists or 64 MB. `FERMIUM_GC_STATS=1`
+reports collections and peak memory; `FERMIUM_GC_STRESS=1` collects at every safe point (the whole conformance
+suite agrees with the tree-walker under it: `rust/tools/llvm_diff.py --bin` a wrapper that sets it).
+- **Why:** the tree-walker's lists were already reference counted (DIVERGENCES "Lists are freed"), but the LLVM
+back end kept every list until the program ended, like v1's compiled code: a loop making 3×10⁶ small lists
+reached 300 MB (now 52 MB; `memory_loop.fm`, 10⁶ lists of 100 numbers, peaks at ~76 MB instead of ~800 MB).
+- **Alternatives:** reference counting in the generated code (retain/release on every store, argument and
+temporary: much more code in compile.rs, and a cost on every list operation); a conservative scan of the machine
+stack (not portable, and LLVM may keep only derived pointers); an arena per statement (lists stored in variables
+outlive statements). Text ids (strings made at run time) are still kept until the end (a smaller, separate leak).
+
+## D281. Lists of vectors, matrices, complex numbers and text (spec C1)
+- **What:** a list may hold vectors (all the same length and units: `[<1, 2> m, <3, 4> m]`, type `VList`), matrices
+(same size and units: `[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or `[A, B]`), complex numbers (`[1 + 2i, 3i]`,
+the existing `ComplexList`) and text. For each: written out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` (and `+=`),
+`len`, `for x in xs`, `clear`, `print`; a unit after the list applies to every element; a list of vectors or
+matrices times or over a number; `sum` and `mean` of a list of vectors or matrices. A variable set to `[]` becomes
+the kind of the first value pushed (`vel = []` then `push(vel, <1, 0> m/s)`), checked from then on (units per
+element type, sizes). The tree-walker holds these as values (`Value::VList`, `CList`, `TextList`); the LLVM back end
+holds lists of vectors and complex numbers as Obj values and hands the statements and expressions that use them to
+the tree-walker (mixed mode), so the rest of the program stays compiled (N-body code over lists of vectors runs
+compiled apart from those accesses).
+- **Why:** reaction networks and N-body problems are written as loops over lists of state vectors; before this,
+users kept one list per component.
+- **Kept from v1:** a list mixing real and complex numbers (`[1i, 2]`) is still the error "a list element must be
+a number, but it is a complex number" (conformance golden ae4d6aeeae8f); write `2 + 0i`. A list of vectors with a
+different unit per component is refused (put each component in its own list).
+- **Alternatives:** a general `List(Ty)` of any element type (nested lists, lists of lists): more checker
+surface than C1 needs; N-dimensional arrays (D283) cover grids. Compiling list-of-vector operations in LLVM
+natively (a flat buffer with a stride) is the performance follow-up.
+
+## D282. `solve` with a list of unknowns (spec C1)
+- **What:** an unknown whose initial value is a list of numbers or of vectors (one unit for all elements) is a list
+unknown: its state variables in the right-hand side are lists (`List`, `VList`), and its size is the initial value's
+length when the solve runs. The checker puts list unknowns' state slots last in the layout (`SolveExtra::lists`),
+so the other unknowns keep offsets known at compile time; a list unknown's `SolView` holds positions in the layout
+(`SolView::list`) and `N(t)` becomes the built-in `__sol_list(solution, slot, t, derivative?, k, format)`, which
+finds the offset from the sizes stored with the solution (`SolData::lens`). The tree-walker flattens the initial
+values, records each list state variable's size for the right side's evaluations, and checks that the right side
+returns as many numbers as the unknowns hold. `absolute` gives one value per unknown's units; a list unknown's value
+is repeated over its elements. The LLVM back end hands the whole `solve` statement to the tree-walker (mixed mode)
+and gets the solution back as a handle into the tree-walker's table (`from_value` of kind H); `N(t)` is then a
+built-in call, so the rest of the program stays compiled.
+- **Why:** spec C1: reaction networks and N-body problems written as loops. One equation per species (the radon
+chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
+- **Alternatives:** unrolling at compile time (needs the length at compile time, which a list built by `push` in a
+loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
+tree-walker speed now); allowing `N[end]`, `values(N)` and `plot N` (a list per step; left out for now, with a clear
+error).

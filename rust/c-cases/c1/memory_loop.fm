@@ -1,0 +1,25 @@
+# C1 memory: lists made and dropped a million times stay in bounded memory (800 MB if none were freed)
+total = 0
+for i from 1 to 1000000
+    xs = zeros(100) + i
+    total += xs[100]
+print total
+
+# in a function, with temporaries (2 grid + 1) that nothing keeps
+spread(n) =
+    s = 0
+    for k from 1 to n
+        grid = linspace(0, k, 50)
+        s += sum(2 grid + 1)
+    return s
+print spread(200000)
+
+# text lists and lists of vectors
+names = ["a"]
+for i from 1 to 200000
+    names = ["x", "y", "z"]
+print names
+pos = [<0, 0> m]
+for i from 1 to 20000
+    pos = [<1, 2> m, <3, 4> m]
+print pos

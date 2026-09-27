@@ -70,6 +70,9 @@ impl<P: Printer + ?Sized> Printer for &mut P {
     fn clist(&mut self, fmt: usize, v: &[(f64, f64)]) {
         (**self).clist(fmt, v)
     }
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>) {
+        (**self).vlist(fmt, v, k, cols)
+    }
     fn boolean(&mut self, b: bool) {
         (**self).boolean(b)
     }

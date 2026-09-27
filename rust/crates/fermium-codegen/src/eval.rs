@@ -20,6 +20,8 @@ pub enum Value {
     Vec(Rc<Vec<f64>>),
     TextList(Rc<RefCell<Vec<Rc<str>>>>),
     CList(Rc<RefCell<Vec<(f64, f64)>>>),
+    /// A list of vectors or matrices (spec C1, D281), shared like a list.
+    VList(Rc<RefCell<Vec<Rc<Vec<f64>>>>>),
     /// An opaque handle (solutions, data tables) owned by the runtime.
     Handle(usize),
     /// An uncertain number, 5.0 ± 0.2 (D120; eval_unc.rs).
@@ -88,6 +90,8 @@ pub trait Printer {
     fn mat(&mut self, fmt: usize, v: &[f64], r: usize, c: usize);
     fn complex(&mut self, fmt: usize, re: f64, im: f64);
     fn clist(&mut self, fmt: usize, v: &[(f64, f64)]);
+    /// A list of vectors (cols None; k components each) or of matrices (k entries, cols per row), flattened.
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>);
     fn boolean(&mut self, b: bool);
     fn text(&mut self, s: &str);
     fn textlist(&mut self, v: &[Rc<str>]);
@@ -355,6 +359,37 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     l.borrow_mut()[k] = v;
                     return Ok(Flow::Normal);
                 }
+                if let Value::VList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    if let Value::Vec(v) = self.eval(value, fr)? {
+                        l.borrow_mut()[k] = v;
+                    }
+                    return Ok(Flow::Normal);
+                }
+                if let Value::TextList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    if let Value::Str(t) = self.eval(value, fr)? {
+                        l.borrow_mut()[k] = t;
+                    }
+                    return Ok(Flow::Normal);
+                }
+                if let Value::CList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    l.borrow_mut()[k] = match self.eval(value, fr)? {
+                        Value::Vec(z) if z.len() == 2 => (z[0], z[1]),
+                        v => (v.num(), 0.0),
+                    };
+                    return Ok(Flow::Normal);
+                }
                 let Value::List(l) = lst else {
                     return self.err("not yet supported by the Rust back end: setting an element of this value");
                 };
@@ -374,7 +409,19 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::Push(sym, e) => {
                 let v = self.eval(e, fr)?;
-                match (self.get(*sym, fr)?, v) {
+                let cur = self.get(*sym, fr)?;
+                // `ps = []` then push(ps, <1, 2> m): the empty list becomes a list of the pushed kind (D281)
+                let cur = match (&cur, &self.module.syms[*sym].ty) {
+                    (Value::List(l), ty @ (Ty::VList(_) | Ty::ComplexList(_) | Ty::TextList)) if l.borrow().is_empty() => {
+                        let nv = empty_of(ty);
+                        self.set(*sym, nv.clone(), fr);
+                        nv
+                    }
+                    _ => cur,
+                };
+                match (cur, v) {
+                    (Value::VList(l), Value::Vec(v)) => l.borrow_mut().push(v),
+                    (Value::CList(l), Value::Num(x)) => l.borrow_mut().push((x, 0.0)),
                     (Value::List(l), Value::Num(x)) => l.borrow_mut().push(x),
                     (Value::List(l), Value::List(ys)) => {
                         let ys = ys.borrow().clone();
@@ -397,6 +444,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::UList(l) => l.borrow_mut().clear(),
                     Value::TextList(l) => l.borrow_mut().clear(),
                     Value::CList(l) => l.borrow_mut().clear(),
+                    Value::VList(l) => l.borrow_mut().clear(),
                     _ => return self.err("not yet supported by the Rust back end: clearing this value"),
                 }
             }
@@ -447,6 +495,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::Vec(v) => v.iter().map(|x| Value::Num(*x)).collect(),
                     // for z in fft(xs): each z a complex number (D243)
                     Value::CList(l) => l.borrow().iter().map(|z| Value::Vec(Rc::new(vec![z.0, z.1]))).collect(),
+                    Value::VList(l) => l.borrow().iter().map(|v| Value::Vec(v.clone())).collect(),
                     _ => vec![],
                 };
                 for v in items {
@@ -541,6 +590,21 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::UVec(_) => return self.err(crate::eval_unc::GENERIC),
                     _ => {}
                 },
+                PrintItem::VList(e, f) => {
+                    let (k, cols) = match &e.ty {
+                        Ty::VList(el) => match &**el {
+                            Ty::Vec { n, .. } => (*n, None),
+                            Ty::Mat { r, c, .. } => (r * c, Some(*c)),
+                            _ => (1, None),
+                        },
+                        _ => (1, None),
+                    };
+                    let flat: Vec<f64> = match self.eval(e, fr)? {
+                        Value::VList(l) => l.borrow().iter().flat_map(|v| v.iter().copied()).collect(),
+                        _ => vec![],
+                    };
+                    self.printer.vlist(*f, &flat, k, cols)
+                }
                 PrintItem::ComplexList(e, f) => {
                     if let Value::CList(l) = self.eval(e, fr)? {
                         let v = l.borrow().clone();
@@ -710,6 +774,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 Value::TextList(Rc::new(RefCell::new(out)))
             }
+            ExprKind::List(items) if matches!(e.ty, Ty::VList(_)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for it in items {
+                    match self.eval(it, fr)? {
+                        Value::Vec(v) => out.push(v),
+                        _ => return self.err("not yet supported by the Rust back end: this list of vectors"),
+                    }
+                }
+                Value::VList(Rc::new(RefCell::new(out)))
+            }
+            ExprKind::List(items) if matches!(e.ty, Ty::ComplexList(_)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for it in items {
+                    match self.eval(it, fr)? {
+                        Value::Vec(z) if z.len() == 2 => out.push((z[0], z[1])),
+                        Value::Num(x) => out.push((x, 0.0)),
+                        _ => return self.err("not yet supported by the Rust back end: this list of complex numbers"),
+                    }
+                }
+                Value::CList(Rc::new(RefCell::new(out)))
+            }
             ExprKind::List(items) => {
                 let mut out = Vec::with_capacity(items.len());
                 let mut uout: Option<Vec<Value>> = None;
@@ -775,6 +860,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         let n = l.borrow().len();
                         let k = self.elem_index(i, n)?;
                         l.borrow()[k].clone()
+                    }
+                    Value::VList(l) => {
+                        let n = l.borrow().len();
+                        let k = self.elem_index(i, n)?;
+                        Value::Vec(l.borrow()[k].clone())
                     }
                     _ => return self.err("not yet supported by the Rust back end: indexing this value"),
                 }
@@ -858,6 +948,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             (Value::Vec(v), Value::Num(y)) => Value::Vec(Rc::new(v.iter().map(|x| f(*x, y)).collect())),
             (Value::Num(x), Value::Vec(v)) => Value::Vec(Rc::new(v.iter().map(|y| f(x, *y)).collect())),
             (Value::Vec(a), Value::Vec(b)) => Value::Vec(Rc::new(a.iter().zip(b.iter()).map(|(x, y)| f(*x, *y)).collect())),
+            // a list of vectors or matrices times or over a number (D281)
+            (Value::VList(l), Value::Num(y)) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                .map(|v| Rc::new(v.iter().map(|x| f(*x, y)).collect())).collect()))),
+            (Value::Num(x), Value::VList(l)) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                .map(|v| Rc::new(v.iter().map(|y| f(x, *y)).collect())).collect()))),
             _ => Value::Num(f64::NAN),
         })
     }
@@ -939,6 +1034,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         {
             return self.unc_apply(name, args);
         }
+        if name == "__sol_list" && args.len() == 6 {
+            return self.sol_list_at(args);
+        }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
                      Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {
             if let Some(r) = area(self, name, args) {
@@ -953,6 +1051,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "len" => match &args[0] {
                 Value::List(l) => Value::Num(l.borrow().len() as f64),
                 Value::TextList(l) => Value::Num(l.borrow().len() as f64),
+                Value::VList(l) => Value::Num(l.borrow().len() as f64),
                 Value::Vec(v) => Value::Num(v.len() as f64),
                 _ => Value::Num(0.0),
             },
@@ -992,5 +1091,15 @@ pub fn func_in_module(func: &fermium_ir::Func) -> bool {
         Some(s) if s.line != 0 => s.line > MODLINE_MAX,
         Some(Stmt { kind: StmtKind::Return(Some(e)), .. }) => e.line > MODLINE_MAX,
         _ => false,
+    }
+}
+
+/// The empty value of a list type (a list variable set to [] and then pushed a vector, a complex number or text).
+pub fn empty_of(ty: &Ty) -> Value {
+    match ty {
+        Ty::VList(_) => Value::VList(Rc::new(RefCell::new(vec![]))),
+        Ty::ComplexList(_) => Value::CList(Rc::new(RefCell::new(vec![]))),
+        Ty::TextList => Value::TextList(Rc::new(RefCell::new(vec![]))),
+        _ => Value::List(Rc::new(RefCell::new(vec![]))),
     }
 }

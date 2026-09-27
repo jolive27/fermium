@@ -75,9 +75,48 @@ impl Checker {
         if matches!(a.ty, Ty::Str) || matches!(b.ty, Ty::Str) {
             return self.text_op(e, op, implicit, left, right, a, b).map(Checked::Val);
         }
+        if matches!(a.ty, Ty::VList(_)) || matches!(b.ty, Ty::VList(_)) {
+            return self.vlist_arith(op, a, b, e, left, right).map(Checked::Val);
+        }
         self.need_numlike(&a, left, "this value", true)?;
         self.need_numlike(&b, right, "this value", true)?;
         self.arith(op, a, b, e).map(Checked::Val)
+    }
+
+    /// A list of vectors or matrices times or over a number (2 rs, rs / 2, [<1, 2>, <3, 4>] m): each element
+    /// scaled (D281).
+    fn vlist_arith(&mut self, op: &str, a: I::Expr, b: I::Expr, e: &A::Expr, left: &A::Expr, right: &A::Expr)
+                   -> CResult<I::Expr> {
+        let op = if op == "×" { "*" } else { op };
+        let list_first = matches!(a.ty, Ty::VList(_));
+        let (l, k, knode) = match (&a.ty, &b.ty) {
+            (Ty::VList(_), Ty::Num(_)) if matches!(op, "*" | "/") => (a, b, right),
+            (Ty::Num(_), Ty::VList(_)) if op == "*" => (b, a, left),
+            _ => {
+                return Err(self.err(format!("a list of vectors or matrices can only be multiplied or divided by a number \
+                                             (here {} {op} {})", self.type_desc(&a.ty), self.type_desc(&b.ty)),
+                                    e.span, Some("to work on each element, loop over the list:  for r in rs".into())));
+            }
+        };
+        let _ = knode;
+        let Ty::VList(el) = &l.ty else { unreachable!() };
+        let (de, dk) = (ty_dim(el).unwrap(), ty_dim(&k.ty).unwrap());
+        let d = if op == "*" { de.mul(&dk) } else { de.div(&dk) };
+        let elem = match &**el {
+            Ty::Vec { n, .. } => Ty::Vec { n: *n, dim: Some(d), dims: None },
+            Ty::Mat { r, c, .. } => Ty::Mat { r: *r, c: *c, dim: d },
+            other => other.clone(),
+        };
+        let hint = if op == "*" { self.keep_hint(&l, &k) } else if self.dimless(&k) { l.hint.clone() } else { None };
+        let sf = minsf(&[&l, &k]);
+        let direct = if op == "*" && k.hint.is_some() && matches!(k.kind, I::ExprKind::Const(_)) { l.direct } else { 0 };
+        let bop = if op == "*" { I::BinOp::Mul } else { I::BinOp::Div };
+        let (x, y) = if list_first { (l, k) } else { (k, l) };
+        let mut r = bin(bop, x, y, Ty::VList(Box::new(elem)), e.span.line);
+        r.hint = hint;
+        r.sf = sf;
+        r.direct = direct;
+        Ok(r)
     }
 
     /// "3p" + "1/2" joins two texts (D216); a number must be turned into text first: str(x).

@@ -448,7 +448,7 @@ fn encode_stmt(s: &mut I::Stmt, k: usize) {
                 match it {
                     I::PrintItem::Num(e, _) | I::PrintItem::List(e, _) | I::PrintItem::Complex(e, _)
                     | I::PrintItem::Vec(e, _) | I::PrintItem::MixedVec(e, _) | I::PrintItem::Mat(e, _)
-                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
+                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::VList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
                     | I::PrintItem::TextVar(e) | I::PrintItem::Data(e, _) => encode_expr(e, k),
                     I::PrintItem::Text(_) => {}
                 }
@@ -630,7 +630,7 @@ fn for_each_stmt_expr(s: &I::Stmt, f: &mut dyn FnMut(&I::Expr)) {
                 match it {
                     I::PrintItem::Num(e, _) | I::PrintItem::List(e, _) | I::PrintItem::Complex(e, _)
                     | I::PrintItem::Vec(e, _) | I::PrintItem::MixedVec(e, _) | I::PrintItem::Mat(e, _)
-                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
+                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::VList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
                     | I::PrintItem::TextVar(e) | I::PrintItem::Data(e, _) => f(e),
                     I::PrintItem::Text(_) => {}
                 }

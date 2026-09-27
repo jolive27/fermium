@@ -123,6 +123,7 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     let main = unsafe { ee.get_function::<unsafe extern "C" fn()>("fm_main") }.map_err(|e| e.to_string())?;
     let t2 = std::time::Instant::now();
     unsafe { main.call() };
+    ctx.report_gc();
     if timing {
         eprintln!("llvm: codegen+opt {:.2} ms, jit {:.2} ms, run {:.2} ms, {} integrand evaluations",
                   (t1 - t0).as_secs_f64() * 1e3, (t2 - t1).as_secs_f64() * 1e3, t2.elapsed().as_secs_f64() * 1e3,

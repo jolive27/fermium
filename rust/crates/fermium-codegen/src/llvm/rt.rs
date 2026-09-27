@@ -86,6 +86,9 @@ impl Printer for PrinterRef<'_> {
     fn clist(&mut self, fmt: usize, v: &[(f64, f64)]) {
         unsafe { (*self.0).clist(fmt, v) }
     }
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>) {
+        unsafe { (*self.0).vlist(fmt, v, k, cols) }
+    }
     fn boolean(&mut self, b: bool) {
         unsafe { (*self.0).boolean(b) }
     }
@@ -111,6 +114,7 @@ impl Printer for NullPrinter {
     fn mat(&mut self, _: usize, _: &[f64], _: usize, _: usize) {}
     fn complex(&mut self, _: usize, _: f64, _: f64) {}
     fn clist(&mut self, _: usize, _: &[(f64, f64)]) {}
+    fn vlist(&mut self, _: usize, _: &[f64], _: usize, _: Option<usize>) {}
     fn boolean(&mut self, _: bool) {}
     fn text(&mut self, _: &str) {}
     fn textlist(&mut self, _: &[Rc<str>]) {}
@@ -164,12 +168,17 @@ pub struct Ctx<'m> {
     pub err: i32,
     /// the program line that called into a module's code (D185), set by the compiled code (offset 4)
     pub call_line: u32,
+    /// set when enough lists were made since the last collection: the compiled code's loops then call fm_gc
+    /// (offset 8; see the memory section below)
+    pub gc_flag: i32,
     pub module: &'m Module,
     printer: *mut (dyn Printer + 'm),
     pub error: Option<RunError>,
     pub texts: Vec<Rc<str>>,
-    lists: Vec<*mut FmList>,
-    tlists: Vec<*mut FmTList>,
+    /// every list the compiled code made, with its allocation number (freed by fm_gc when unreachable)
+    lists: Vec<(*mut FmList, u64)>,
+    tlists: Vec<(*mut FmTList, u64)>,
+    pub gc: Gc,
     pub interp: Interpreter<'m, PrinterRef<'m>>,
     pub builtins: Vec<BuiltinSite>,
     pub mvec_fmts: Vec<Vec<usize>>,
@@ -177,8 +186,9 @@ pub struct Ctx<'m> {
     pub sols: Vec<super::solve_rt::CSol>,
     /// constructs run by the tree-walker for the compiled code (mixed mode, native::delegate)
     pub interp_sites: Vec<super::delegate::InterpSite>,
-    /// values of kind Obj
-    pub objs: Vec<Value>,
+    /// values of kind Obj (None: a free place, reused), with their allocation numbers
+    pub objs: Vec<Option<(Value, u64)>>,
+    obj_free: Vec<usize>,
     /// the module's nodes by position (executables' tree-walker constructs, native::delegate)
     pub nodes: Vec<super::delegate::NodeRef>,
     /// printed measured sums (spec B2 decimal-place rule): the shape of each sum
@@ -198,8 +208,10 @@ impl<'m> Ctx<'m> {
             printer: printer as *mut _,
             error: None,
             texts: module.tables.texts.iter().map(|s| Rc::from(s.as_str())).collect(),
+            gc_flag: 0,
             lists: vec![],
             tlists: vec![],
+            gc: Gc::default(),
             interp: Interpreter::new(module, PrinterRef(printer as *mut _)),
             builtins: vec![],
             mvec_fmts: vec![],
@@ -207,6 +219,7 @@ impl<'m> Ctx<'m> {
             sols: vec![],
             interp_sites: vec![],
             objs: vec![],
+            obj_free: vec![],
             nodes: vec![],
             msum_sites: vec![],
             quad_sf: None,
@@ -230,6 +243,7 @@ impl<'m> Ctx<'m> {
     pub fn run(&mut self, set_ctx: impl FnOnce(*mut u8), main: unsafe extern "C" fn()) -> Result<(), RunError> {
         set_ctx(self as *mut Ctx as *mut u8);
         unsafe { main() };
+        self.report_gc();
         match self.error.take() {
             Some(e) => Err(self.locate(e)),
             None => Ok(()),
@@ -238,7 +252,8 @@ impl<'m> Ctx<'m> {
 
     /// An Obj value.
     pub fn obj(&self, i: i64) -> Value {
-        usize::try_from(i).ok().and_then(|i| self.objs.get(i)).cloned().unwrap_or(Value::Void)
+        usize::try_from(i).ok().and_then(|i| self.objs.get(i)).and_then(|o| o.as_ref()).map(|o| o.0.clone())
+            .unwrap_or(Value::Void)
     }
 
     pub(super) fn printer_mut(&mut self) -> &mut (dyn Printer + 'm) {
@@ -270,15 +285,37 @@ impl<'m> Ctx<'m> {
     }
 
     fn new_list(&mut self, v: Vec<f64>) -> *mut FmList {
+        let bytes = 8 * v.capacity() as u64;
         let p = Box::into_raw(Box::new(FmList::from_vec(v)));
-        self.lists.push(p);
+        let n = self.gc.made(bytes);
+        self.lists.push((p, n));
+        self.gc_flag |= self.gc.due() as i32;
         p
     }
 
     fn new_tlist(&mut self, v: Vec<i64>) -> *mut FmTList {
+        let bytes = 8 * v.capacity() as u64;
         let p = Box::into_raw(Box::new(FmTList(v)));
-        self.tlists.push(p);
+        let n = self.gc.made(bytes);
+        self.tlists.push((p, n));
+        self.gc_flag |= self.gc.due() as i32;
         p
+    }
+
+    /// Keep a Value for the compiled code (kind Obj); its index.
+    pub(super) fn new_obj(&mut self, v: Value) -> usize {
+        let n = self.gc.made(64);
+        self.gc_flag |= self.gc.due() as i32;
+        match self.obj_free.pop() {
+            Some(i) => {
+                self.objs[i] = Some((v, n));
+                i
+            }
+            None => {
+                self.objs.push(Some((v, n)));
+                self.objs.len() - 1
+            }
+        }
     }
 
     /// A value of the compiled code as the tree-walker's Value (lists are copied).
@@ -348,11 +385,19 @@ impl<'m> Ctx<'m> {
                     *o.add(i) = src.get(i).copied().unwrap_or(f64::NAN);
                 }
             }
-            Kind::H => *out = u64::MAX,
-            Kind::Obj => {
-                self.objs.push(v);
-                *out = (self.objs.len() - 1) as u64;
+            // a solution the tree-walker made (a solve with a list of unknowns, D282): shared with its table
+            Kind::H => {
+                *out = match v {
+                    Value::Handle(h) if h < self.interp.solve.sols.len() => {
+                        let sol = self.interp.solve.sols[h].clone();
+                        let grid = sol.grid;
+                        self.sols.push(super::solve_rt::CSol { interp_h: h, sol, rhs: None, grid, check: None });
+                        (self.sols.len() - 1) as u64
+                    }
+                    _ => u64::MAX,
+                }
             }
+            Kind::Obj => *out = self.new_obj(v) as u64,
             Kind::Void => {}
         }
     }
@@ -379,10 +424,10 @@ impl Ctx<'_> {
 
 impl Drop for Ctx<'_> {
     fn drop(&mut self) {
-        for &p in &self.lists {
+        for &(p, _) in &self.lists {
             unsafe { drop(Box::from_raw(p)) }
         }
-        for &p in &self.tlists {
+        for &(p, _) in &self.tlists {
             unsafe { drop(Box::from_raw(p)) }
         }
     }
@@ -592,6 +637,16 @@ pub(super) fn fm_list_from(c: C, v: Vec<f64>) -> *mut FmList {
 #[no_mangle]
 pub extern "C" fn fm_list_new(c: C, cap: i64) -> *mut FmList {
     locked(c, |c| c.new_list(Vec::with_capacity(cap.max(0) as usize)))
+}
+/// An empty list stored in a variable that holds a list of vectors, matrices or complex numbers (D281): the
+/// tree-walker's empty list, which becomes the right kind when something is pushed onto it.
+#[no_mangle]
+pub extern "C" fn fm_list_obj(c: C, l: *const FmList) -> i64 {
+    let v = match unsafe { l.as_ref() } {
+        Some(l) => unsafe { l.as_slice().to_vec() },
+        None => vec![],
+    };
+    locked(c, |c| c.new_obj(Value::List(Rc::new(RefCell::new(v)))) as i64)
 }
 #[no_mangle]
 pub extern "C" fn fm_list_push(l: *mut FmList, x: f64) {
@@ -810,6 +865,15 @@ fn par_threads() -> usize {
 /// reported is the first one in iteration order, as the tree-walker (which runs the blocks in order) reports it.
 #[no_mangle]
 pub extern "C" fn fm_par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st: f64, part: *mut f64, nr: i64) {
+    // no collections while the blocks run (see the memory section)
+    let par: *const std::sync::atomic::AtomicUsize = unsafe { &(*c).gc.par };
+    unsafe { (*par).fetch_add(1, std::sync::atomic::Ordering::SeqCst) };
+    par_run(c, f, env, n, lo, st, part, nr);
+    unsafe { (*par).fetch_sub(1, std::sync::atomic::Ordering::SeqCst) };
+}
+
+#[allow(clippy::too_many_arguments)]
+fn par_run(c: C, f: ParBody, env: *mut u8, n: i64, lo: f64, st: f64, part: *mut f64, nr: i64) {
     let blocks = fermium_ir::par_blocks(n.max(0) as usize);
     let flag = unsafe { &*(c as *const std::sync::atomic::AtomicI32) };
     let serial = |from: usize| {
@@ -1023,5 +1087,184 @@ mod tests {
                 assert!(a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan()), "{name}({x})");
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------- memory: lists are collected (spec C1)
+//
+// The compiled code's lists (and text lists, and Obj values) are freed when no variable can reach them any more:
+// a mark-and-sweep collector (DECISIONS D280). Its roots are the variable slots of the functions running now: each
+// compiled function that has list slots, or loops that make lists, registers them on entry (fm_gc_enter: an array
+// of slot addresses on its stack and their kinds) and unregisters on every return (fm_gc_leave); fm_main
+// registers the module's variables. Collections happen only at safe points — the top of a loop iteration in such
+// a function, when `gc_flag` is set — where the function holds no list in a register: every list it can still use
+// is in a registered slot (a `for x in xs` keeps its copy of xs in a hidden slot). A caller further up may be in
+// the middle of an expression holding a temporary list (f(2 xs, g(y)) with g looping), so a collection in a frame
+// only frees lists made after that frame was entered (its epoch): those can only be reached from this frame's
+// slots or deeper ones, which no longer exist. The main program's frame has epoch 0, so its loops free everything
+// unreachable. Nothing is collected while a parallel for runs (its threads make and share lists without frames).
+
+/// One registered frame: `n` slot addresses and their kinds (1 list, 2 text list, 3 Obj index).
+#[derive(Clone, Copy)]
+pub struct GcFrame {
+    slots: *const *const u64,
+    kinds: *const u8,
+    n: usize,
+    epoch: u64,
+}
+
+pub struct Gc {
+    /// the next allocation number
+    seq: u64,
+    frames: Vec<GcFrame>,
+    made: u64,
+    bytes: u64,
+    next_count: u64,
+    next_bytes: u64,
+    /// the fewest allocations between collections (FERMIUM_GC_STRESS=1: 1, collecting at every safe point after
+    /// any allocation, which tests find use-after-free bugs with)
+    min_count: u64,
+    /// parallel for loops running (their threads call functions without frames)
+    pub par: std::sync::atomic::AtomicUsize,
+    /// collections run and values freed (FERMIUM_GC_STATS=1 prints them at the end)
+    pub runs: u64,
+    pub freed: u64,
+}
+
+const GC_MIN_COUNT: u64 = 20_000;
+const GC_MIN_BYTES: u64 = 64 << 20;
+
+impl Default for Gc {
+    fn default() -> Gc {
+        let min_count = if std::env::var_os("FERMIUM_GC_STRESS").is_some() { 1 } else { GC_MIN_COUNT };
+        Gc { seq: 0, frames: vec![], made: 0, bytes: 0, next_count: min_count, next_bytes: GC_MIN_BYTES, min_count,
+             par: std::sync::atomic::AtomicUsize::new(0), runs: 0, freed: 0 }
+    }
+}
+
+impl Gc {
+    fn made(&mut self, bytes: u64) -> u64 {
+        self.made += 1;
+        self.bytes += bytes;
+        self.seq += 1;
+        self.seq - 1
+    }
+    fn due(&self) -> bool {
+        self.made >= self.next_count || self.bytes >= self.next_bytes
+    }
+    fn in_par(&self) -> bool {
+        self.par.load(std::sync::atomic::Ordering::SeqCst) != 0
+    }
+}
+
+/// Register a frame's slots (see above); nothing while a parallel for runs.
+#[no_mangle]
+pub extern "C" fn fm_gc_enter(c: C, slots: *const *const u64, kinds: *const u8, n: i64) {
+    let g = unsafe { &mut (*c).gc };
+    if !g.in_par() {
+        let epoch = g.seq;
+        g.frames.push(GcFrame { slots, kinds, n: n.max(0) as usize, epoch });
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fm_gc_leave(c: C) {
+    let g = unsafe { &mut (*c).gc };
+    if !g.in_par() {
+        g.frames.pop();
+    }
+}
+
+/// A safe point with gc_flag set: collect what the innermost frame may free.
+#[no_mangle]
+pub extern "C" fn fm_gc(c: C) {
+    let c = unsafe { &mut *c };
+    if c.gc.in_par() {
+        return;
+    }
+    c.gc_flag = 0;
+    let Some(top) = c.gc.frames.last().copied() else { return };
+    unsafe { c.collect(top.epoch) };
+}
+
+impl Ctx<'_> {
+    /// Free the lists, text lists and Obj values made at or after `epoch` that no registered slot holds.
+    unsafe fn collect(&mut self, epoch: u64) {
+        use std::collections::HashSet;
+        let (mut lists, mut objs) = (HashSet::new(), HashSet::new());
+        for f in &self.gc.frames {
+            for i in 0..f.n {
+                let p = *f.slots.add(i);
+                if p.is_null() {
+                    continue;
+                }
+                let v = *p;
+                if *f.kinds.add(i) == 3 {
+                    objs.insert(v);
+                } else {
+                    lists.insert(v);
+                }
+            }
+        }
+        let (mut live, mut bytes, mut freed) = (0u64, 0u64, 0u64);
+        self.lists.retain(|&(p, n)| {
+            if n >= epoch && !lists.contains(&(p as u64)) {
+                drop(Box::from_raw(p));
+                freed += 1;
+                false
+            } else {
+                live += 1;
+                bytes += 8 * (*p).cap as u64;
+                true
+            }
+        });
+        self.tlists.retain(|&(p, n)| {
+            if n >= epoch && !lists.contains(&(p as u64)) {
+                drop(Box::from_raw(p));
+                freed += 1;
+                false
+            } else {
+                live += 1;
+                bytes += 8 * (*p).0.capacity() as u64;
+                true
+            }
+        });
+        for (i, o) in self.objs.iter_mut().enumerate() {
+            if let Some((_, n)) = o {
+                if *n >= epoch && !objs.contains(&(i as u64)) {
+                    *o = None;
+                    self.obj_free.push(i);
+                    freed += 1;
+                } else {
+                    live += 1;
+                    bytes += 64;
+                }
+            }
+        }
+        let g = &mut self.gc;
+        g.runs += 1;
+        g.freed += freed;
+        g.made = 0;
+        g.bytes = 0;
+        g.next_count = if g.min_count == 1 { 1 } else { g.min_count.max(live) };
+        g.next_bytes = GC_MIN_BYTES.max(bytes);
+    }
+
+    /// FERMIUM_GC_STATS=1: say how many collections ran (stderr; tests read it).
+    pub fn report_gc(&self) {
+        if std::env::var_os("FERMIUM_GC_STATS").is_some() {
+            let (runs, freed, held) = self.gc_stats();
+            // the peak resident memory, where the system says (Linux)
+            let peak = std::fs::read_to_string("/proc/self/status").ok()
+                .and_then(|s| s.lines().find(|l| l.starts_with("VmHWM:"))
+                    .and_then(|l| l.split_whitespace().nth(1).and_then(|k| k.parse::<u64>().ok())))
+                .map(|kb| format!(", peak memory {} MB", kb / 1024)).unwrap_or_default();
+            eprintln!("fermium: gc: {runs} collections, {freed} values freed, {held} lists held at the end{peak}");
+        }
+    }
+
+    /// (FERMIUM_GC_STATS) collections run, values freed, lists still held.
+    pub fn gc_stats(&self) -> (u64, u64, usize) {
+        (self.gc.runs, self.gc.freed, self.lists.len() + self.tlists.len())
     }
 }
