@@ -1788,3 +1788,215 @@ in /tmp/claude-0/redteam12/{out,out2}/. Load average 5–7.7 the whole time (oth
 - #7: fixed. `make install` runs from rust/.
 - #2, #8: added to BACKLOG for v2.5 (a new warning is a language change).
 - #9: noted (Julia's blackbody times 1001 integrals against 1000, 0.1 % in Fermium's favour); it doesn't change any ratio's first two digits.
+
+## Round 13 (2026-09-27 01:25 UTC): student tools, modules/stdlib, pathological inputs, security basics
+
+Independent reviewer. Binary: `origin/claude/v2.5` (16e73ac), built with
+`CARGO_TARGET_DIR=/tmp/claude-0/rt13-target cargo build --release -p fermium-cli` (`fermium 2.0.0 (Rust)`, with
+`fermium build`). Oracle: `fermium-legacy`. Programs and outputs: /tmp/claude-0/redteam13/{mod,rob,fmt,repl,lsp,jup,build,sec,out}/.
+Rounds 10–12 covered physics, back-end agreement, loop optimisations and docs; this round covers the tools, modules,
+robustness and security.
+
+**High**
+- **#1 Panic (exit 101, Rust backtrace) when a unit's rational power overflows 64 bits.** Reproducers:
+  `print √(√(…√(1 m)…))` nested 64 deep (rob/pk1.fm; 62 deep prints `1 m^(1/4611686018427387904)`), or
+  `x = 1 m` / `z = (x^(1/4294967296))^(1/4294967296)` (rob/pe_s4.fm). This prints
+  `thread '<unnamed>' panicked at …num-rational-0.4.2/src/lib.rs:137:13: denominator == 0` with the backtrace
+  `num_rational::Ratio<T>::reduce ← fermium_ir::types::DExpr::pow ← fermium_check::arith::…::power`.
+  - Affected: `fermium run`, `fermium check` and the REPL. The REPL session dies and every definition is lost.
+  - Survives it: the language server (it publishes "internal error in Fermium: panic: denominator == 0") and
+    Jupyter (the cell errors and the kernel lives).
+  - v1 (Python Fractions) prints `1 m^(1/18446744073709551616)`.
+  - Contrived input, but the brief asked for any panic to be reported as high.
+
+**Medium**
+- **#2 The same 64-bit unit powers wrap silently, which gets past the unit check** (the same root cause as #1:
+  unchecked i64 arithmetic in `DExpr` and `Ratio<i64>`).
+  - `x = 1 m` / `y = (x^4294967296)^4294967296` / `print y + 1` prints **2** with no error (rob/pe_s3.fm): 2⁶⁴
+    wraps to 0, so y is a plain number.
+  - Doubling generic functions `f_i(x) = f_{i-1}(x) f_{i-1}(x)`:
+    - `f63(1 m)` shows `1/m⁻⁹²²³³⁷²⁰³⁶⁸⁵⁴⁷⁷⁵⁸⁰⁸`;
+    - `f64(1 m) + 1` passes the check and prints `1` (rob/pe64.fm).
+  - `cbrt` applied 40 times gives `1 1/m^(1/6289078614652622815)`, with the wrong sign (rob/pk9.fm).
+  - `print 1 m^1e300` saturates to `m⁹²²³³⁷²⁰³⁶⁸⁵⁴⁷⁷⁵⁸⁰⁷` (pk7.fm).
+  - v1 is exact in every case, e.g. `can't add … [m¹⁸⁴⁴⁶⁷⁴⁴⁰⁷³⁷⁰⁹⁵⁵¹⁶¹⁶] to a plain number`.
+  - Fix for #1 and #2: use checked_mul and checked_add in the dimension and exponent code, and on overflow give a
+    one-line error ("this power of a unit is too large for Fermium").
+  - Separately, `(1 m)^1e-19` is `m^(1/10000)` in v2 and dimensionless `1` in v1. Both are wrong: an exponent
+    that isn't a simple fraction should be an error.
+- **#3 `plot … to "<path>"` overwrites any file with PNG bytes, whatever its extension, and creates folders.**
+  - sec/prog/p.fm: `plot sin(x) vs x from 0 to 1 to "../victim/notes.txt"` replaced a text file with a PNG, and
+    `to "/abs/newdir/a/b/c.svg"` created the folders.
+  - v1 refuses non-image extensions: *plot not saved: Format 'txt' is not supported*.
+  - In v2 a typo or a downloaded program can clobber `prog.fm`, a `.py` or a dotfile. vfs.rs `write` does
+    `create_dir_all` and then `fs::write`.
+  - v1 and v2 both accept `../` and absolute paths.
+  - Suggest: accept only .png/.svg/.gif (v1's rule, and frame folders for animations), and perhaps warn when the
+    path leaves the program's folder.
+- **#4 The Unicode singletons OHM SIGN U+2126, KELVIN SIGN U+212A and ANGSTROM SIGN U+212B are rejected; v1 accepts
+  them** (v1 NFC-normalises; these three have canonical decompositions).
+  - `R = 5 Ω` (U+2126, what Word, PDFs and some keyboards produce) gives *'Ω' isn't a unit Fermium knows*.
+  - `print 5 kΩ`, `print 300 K` (Kelvin sign), `print 1 Å` (Angstrom sign) and `Ωx = 2` / `print Ωx` also fail.
+    v1 prints `5 Ω`, `300 K`, `1 Å` and `2`.
+  - Reproducers: rob/ohm1–3.fm, r19, n_kelvin_sign, n_angstrom_sign, n_ohm_var, n_kelvin_var.
+  - Not in DIVERGENCES, and no conformance case has these characters.
+  - The micro sign µ (U+00B5) does work.
+  - Fix: NFC-normalise the source (or add the three to the look-alike table).
+- **#5 A Jupyter interrupt doesn't stop a running cell, and the user docs don't say so.**
+  - `for i from 1 to 10^11` in a cell, then `km.interrupt_kernel()`: no shell reply within 30 s, and later cells
+    stay stuck behind it (jup/drive2.py).
+  - DIVERGENCES (lines 388–390) documents this.
+  - But Lesson 0:228, Lesson 4:173, TROUBLESHOOTING:456 and reference:1198 all tell the student that Ctrl+C stops
+    a stuck program. In a notebook the only way out is to restart the kernel.
+  - Related (v1-shared): in the REPL, Ctrl+C during a running line exits the whole REPL (exit 130,
+    `stopped by Ctrl+C`), which loses all definitions. TROUBLESHOOTING:456 says "you get the prompt back".
+
+**Low**
+- **#6 Docs that disagree with the binary:**
+  - reference.md:926–927 says `fermium build` *refuses a program that uses Python*.
+    - v2 builds build/b_py.fm and 42_python_interop.fm, and the executables run.
+    - The executable finds `blackbody_py.py` in the build-time folder, stored as an absolute path, not next to the
+      executable or in the working folder. A planted module in the working folder was *not* loaded (good).
+    - If that folder moves, the executable prints its first results and then fails at line 24 with
+      *No module named 'blackbody_py'*. The start-up re-check doesn't notice.
+  - reference.md:1250 says uncertainties don't work in the REPL or Jupyter. In v2 they do
+    (`L = 1.20 ± 0.01 m` / `print L - L` → `0 ± 0 m`; v1 refuses). This is an undocumented divergence.
+  - reference.md:1252 says `fermium build` writes plots as SVG. The executables write PNG, exactly as `run` does.
+  - `fermium --help` says build is *"(not yet in this version)"*, while `doctor` says it works (main.rs:25).
+- **#7 `fermium build` can overwrite the program's source (v1-shared).**
+  - `fermium build noext` (a source file without `.fm`) replaces the source with the ELF executable.
+  - So does `fermium build -o prog.fm prog.fm`. There is no warning in either case.
+  - Suggest refusing when the output path is the input path.
+- **#8 Language-server hover after the first error (v1-shared).**
+  - Checking stops at the first error, so a later `c = 3 kg` hovers as *speed of light in vacuum*.
+  - Names with subscripts (`E₀`) never hover, even when there's no error.
+  - Only one diagnostic is published at a time.
+- **#9 The REPL and Jupyter overflow the stack earlier than `run` does.**
+  - `f(n) = if n <= 0 then 0 else 1 + f(n - 1)`; `f(100000)` fails in the REPL and in Jupyter with *ran out of
+    stack* (80 000 works).
+  - `fermium run` and v1's REPL give 100000.
+  - Not in DIVERGENCES.
+- **#10 The "nested too deeply" error lost v1's detail and hint** (parser.rs:167).
+  - v1: *…to compile (very long or deeply nested expressions)*, hint *split the expression into several lines with
+    names*. v2 prints only the first half.
+  - Seen with 5000 parentheses, 10 000 unary minuses, 2000 nested lists, and 3000 nested calls.
+  - Not in DIVERGENCES; no conformance case covers it.
+- **#11 An error inside a stdlib function gives a different, ambiguous hint.** `stats.linear_slope_error([1, 2, 3], 5)`:
+  - v2 appends a second "this happened when calling stats.linear_slope_error on line 2".
+  - That puts "line 29" (of stats.fm) and "line 2" (of the program) side by side with nothing saying which file
+    each is in.
+  - v1 gives one clause. Undocumented.
+- **#12 Compile time grows faster than linear under `--backend auto`** (v1 is worse in both cases).
+  - A list literal of 20 000 numbers takes 3.4 s; 200 000 takes over 40 s (killed). The interpreter needs
+    0.05 s and `check` 0.09 s for 20 000 (rob/sz*.fm).
+  - A chain of 800 one-line functions (`h_i(x) = h_{i-1}(x) + 1`) takes 46 s.
+  - Suggest giving huge literals to the interpreter.
+- **#13 `linspace(0, 1, 10^9)` is within the 10⁹ cap, but the process is OOM-killed** (exit 137, no message, 15 GB
+  machine).
+- **#14 (local multi-user) The build's temporary folder has a predictable name.** link.rs uses
+  `/tmp/fermium-build-<pid>`; `create_dir_all` accepts a folder that already exists, and `fs::write` follows
+  symlinks. Use a randomly named folder created exclusively.
+- **#15 v1-shared input and UX nits:**
+  - `ϕ = 1 m` / `φ = 2 m` / `print ϕ + φ` prints `4 m`: ϕ is silently folded into φ. Cyrillic `а` gets a warning.
+  - `˚C` (macOS Option-K), `ºC`, `℃`, `𝜋` and `ℓ` aren't mapped. `𝑥` isn't folded to x.
+  - REPL `:foo` gives *didn't expect ':' here* instead of "unknown command".
+  - Mixed tab and space indentation gives *didn't expect '' here*.
+  - `2^10000` prints `∞` with no warning.
+  - `import mechanics as m`, then `1 m`, says *m is also your variable m* (m is a module).
+- **#16 v1-shared stdlib output:**
+  - `nuclear.semf_binding_per_nucleon(56, 26)` prints `1.417×10⁻¹² J`, not ~8.85 MeV.
+  - `astro.luminosity_distance` prints metres (2.0×10²⁶ m), while `comoving_distance` prints Mpc.
+  - `stats.weighted_mean([1, 2] m, [0.1, 0.2] s)` accepts σ in other units than x.
+- **#17 fmt (v1-shared, cosmetic):**
+  - pretty→ascii→pretty isn't the identity on 7 examples: `√A`→`√(A)`, `ε_0`→`ε₀`, `∇φ(…)`→`grad(φ)(…)`,
+    `∂T/∂t`→`∂ T/∂t`. All still run identically.
+  - `--ascii` leaves `kΩ` without a warning; it warns for `θ0`, `ξ0` and `dφ`.
+  - fmt converts CRLF to LF and drops the BOM, but `--fix` keeps the BOM.
+- **#18 Info (security):**
+  - `load` errors echo the file's lines: as root, `load "/etc/shadow"` printed a shadow entry. `check` and the
+    language server read load headers too.
+  - `fermium check` runs a `use python` module's top-level code (verified with a
+    marker file; fmt doesn't). This is documented under "Trust", but worth a line in the editor docs.
+  - A `fermium.toml` in any parent folder can silently replace a stdlib module. Modules can't contain
+    `use python` (verified), so this is wrong physics, not code execution.
+  - Executables embed the absolute build path and the program source.
+  - Nothing else runs shell commands: `Command::new` is only `python3` (to find libpython and for the Jupyter
+    install's sys.prefix) and `xcrun` on macOS.
+
+**What checked out**
+- **stdlib, 67 functions × {right units, wrong units}** (mod/g*.fm, b*.fm): v2 is byte for byte v1 on 133 of 134
+  runs; the one exception is #11.
+  - Wrong units give v1's messages.
+  - Values checked by hand: range 40.8 m, T(60°) 2.15 s, r_s(M☉) 2.95 km, Wien 502 nm, L☉ 3.83×10²⁶ W,
+    B(⁵⁶Fe) 495.4 MeV, Q(²³⁸U α) 4.27 MeV, box 0.376 eV, H n=2 −3.40 eV, He⁺ −54.4 eV,
+    v_esc 11.19 km/s, remaining 886.
+  - `1 h` in `bateman_daughter` warns that h is Planck's constant.
+- **Local modules** (mod/loc, mod/m2; 30 programs, all identical to v1):
+  - import by name and by path (`"lib/my-springs.fm" as sp`) and nested relative imports;
+  - fermium.toml `[paths]`;
+  - cycles of 2 and 3 modules and a self-import;
+  - a module that prints, `_private` names, name clashes (define vs import, import vs import, a module name
+    reassigned), duplicate imports and misspelled modules (with a close-name hint);
+  - `/etc/passwd` imported as a module fails cleanly;
+  - a unit error inside a module points at the module line;
+  - module functions differentiated.
+- **REPL** (piped sessions, repl/s1–s3): definitions, errors and recovery, `:vars`, `:help`, `\omega` `\int` `\^2`
+  `\sqrt` `\hbar` `\times` expansion, multi-line `for`/`if`, CRLF and BOM input, a 50 000-term line, invalid UTF-8.
+  Byte for byte v1 (except that ± works, #6).
+- **fmt**: `--pretty`, `--ascii` and `--fix` on all 31 examples plus 116 bootcamp programs (conformance cases whose
+  origin is `bootcamp/`), in their own folders:
+  - pretty and ascii are idempotent on every one;
+  - every formatted program runs identically (stdout and exit code; the only stderr differences are the echoed
+    source line);
+  - `--fix` is idempotent and keeps behaviour;
+  - fmt refuses input it can't parse.
+- **Language server** (lsp/drive.py):
+  - initialize and capabilities;
+  - an error on open is underlined with the right UTF-16 range, also after astral characters;
+  - hover gives units (`g`: acceleration [m/s²], `ω`: frequency [1/s], shown in rad/s);
+  - `\ome` completes to ω with a textEdit;
+  - fixing the error clears the diagnostics;
+  - out-of-range positions, unknown URIs, an unknown method (−32601), bad JSON (−32700), incremental edits with
+    ranges inside a surrogate pair, past the end, reversed or negative, 20 000 nested parentheses, and a
+    shutdown/exit sequence all leave the server alive. v1 answered "Invalid Params" to one of these.
+- **Jupyter** (`fermium jupyter install` into a scratch JUPYTER_DATA_DIR, driven with jupyter_client 8.10):
+  - cells with results, unit errors (status error, then the kernel recovers), `import`, and ± all work;
+  - plots come back as image/png or image/svg+xml display_data;
+  - empty and comment-only cells are fine;
+  - completion `\ome` gives ω, and is_complete works;
+  - the kernel survives the panic in #1.
+- **`fermium build`**, 15 programs: examples 01, 03, 06, 08, 13, 17, 18, 26, 28, 40, 41 and 42, a run-time index
+  error, modules, and `use python`.
+  - Each executable's output (stdout, stderr and exit code, run from the program's folder) is identical to
+    `fermium run`.
+  - It refuses ± and programs with unit errors, with clear messages.
+- **Robustness** (rob/r01–r45, p01–p19): no hang or crash except #1, #12 and #13.
+  - Handled cleanly:
+    - empty, blank-only and comment-only files;
+    - CRLF, lone CR, BOM, BOM+CRLF, tabs;
+    - a 200 000-character line and a 100 000-character name (v1 crashes: *LLVM IR parsing error*);
+    - 50 000 lines, 1000-deep nested `if`, 5000 functions;
+    - 100 000-deep recursion; infinite self-recursion is refused at compile time, and mutual infinite
+      recursion gives *ran out of stack* (v1 hangs);
+    - a 40th derivative, 1e400, a null byte, invalid UTF-8, zero-width space, NBSP, fullwidth digits,
+      combining accents (clear "unexpected character" messages);
+    - an RTL override in a comment;
+    - `zeros(10^15)` and `linspace(…, 10^12)` refused with a message.
+  - Slow but finite: symbolic 6th and 7th derivatives of `exp(sin x cos x x^x)` take 9 s and 60 s (v1 39 s for
+    the 6th). The values are right (mpmath: 129.2, 715.6).
+- **Security:**
+  - `import "../../etc/passwd"` and absolute imports only parse the file;
+  - a module can't `use python`;
+  - `use python` puts only the program's folder on sys.path (bridge `_import`);
+  - built executables don't pick up modules from the working folder;
+  - the Jupyter kernel's temporary stderr file has a random name;
+  - `fermium check` writes no files.
+- **Not tested:** the wasm playground, macOS, VS Code itself (only the server).
+
+
+**Round 13 status (01:35 UTC):** every finding is assigned to one fix agent (branch claude/v2.5-rt13):
+- #1–#2: overflow-checked unit exponents become a one-line error (no panic, no silent wrap).
+- #3: plot paths limited to image formats, as in v1.
+- #4: v1's Unicode normalisation table ported.
+- #5: Jupyter interrupt handled, or the docs corrected.
+- Lows: stale docs, `--help`, build refusing to overwrite its own source, the "nested too deeply" hint, a secure temp folder.
