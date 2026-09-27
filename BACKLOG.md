@@ -12,6 +12,7 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 - [ ] `sqrt(-1)` → NaN and `factorial(-1)` → ∞ silently: a runtime warning or error?
 - [x] A23 (plot axes with mixed units), A24 (CSV traceback noise), A37 (decay below 1e-300).
 - [x] A50 (push on a loaded column).
+- [ ] `fit` reports a wrong standard error for a parameter with a tiny SI value (found in research/level_density, C8; Fermium 1.5 does the same): `xs = [10, 20, 30, 40, 50]`, `ys = [1.3, 2.4, 3.9, 5.1, 6.2] [1/MeV]`, `k = 8 MeV`, `fit y = x / k to table(x = xs, y = ys)` gives `k = 1.273×10⁻¹² J (standard error 1.7×10⁻¹⁰ J)`, i.e. 7.95 ± 1000 MeV; the plain-number fit `fit y * 1 MeV = x / q` gives 7.948 ± 0.089. The value is right, the error (and `err(k)`) is not: probably an absolute finite-difference step in the Jacobian. Also: the report is in J, not in the unit of the starting value.
 
 ## High value
 - [ ] Re-run the benchmarks; the adaptive spring disagreed with Julia at 00:09 (before the A15 error-norm change). Update RESULTS.md and the README table.
@@ -59,3 +60,4 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 - [ ] A function whose last line is `if c then a else b` "never returns a value" (pulsar_spindown).
 - [ ] A negative plot axis range (`y from -22 to -9`) is refused as "not constants" (pulsar_spindown).
 - [ ] `10^list` is an error ("the exponent must be a number"); element-wise exponentiation needs a loop (mass_luminosity).
+- [ ] A superscript can't end a function name: `σ²(U, a, A) = …` is a parse error (level_density).

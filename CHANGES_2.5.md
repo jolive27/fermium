@@ -159,6 +159,9 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
 - [supernova_hubble](research/supernova_hubble/): Pantheon+ — flat ΛCDM Ωm, matter-only and empty universes, curvature.
 - [white_dwarf_cooling](research/white_dwarf_cooling/): Gaia EDR3 white dwarfs within 100 pc (VizieR TAP) — Mestel cooling derived with units, luminosity function and its cut-off.
 - [neutron_star_cooling](research/neutron_star_cooling/): Ioffe table of 48 thermally emitting neutron stars — one-zone modified-Urca + envelope cooling model.
+- [level_density](research/level_density/): RIPL-3 s-wave resonance spacings — Bethe Fermi-gas level density, a ≈ A/8 and the shell dips.
+- Found on the way: `fit` reports a wrong standard error for a parameter with a tiny SI value (e.g. a fit parameter in MeV);
+  the fitted value is right. Logged under "Bugs first" in BACKLOG.md (not fixed here; Fermium 1.5 does the same).
 - Tests: `rust/crates/fermium-cli/tests/research_c8.rs` runs every one with the `fermium` binary (in a copy of its folder,
   so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
   absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1
