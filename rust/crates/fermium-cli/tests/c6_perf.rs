@@ -217,8 +217,12 @@ fn the_loop_vectorizer_takes_guarded_sums_only_with_if_conversion_and_ordered_re
     // ifconv.fm's `for j … if j != i … u += …; v -= …` loop, among others
     let with = vectorized("ifconv.fm", remarks);
     assert!(with >= 1, "no loop vectorized");
-    // without in-order reductions none of its sums can be vectorized
-    assert!(vectorized("ifconv.fm", "-pass-remarks=loop-vectorize") < with);
+    // without in-order reductions none of its sums can be vectorized: on x86-64. AArch64's LLVM target enables
+    // in-order (strict) floating-point reductions by default, so there the flag changes nothing (the sums are
+    // still added in program order either way; the output checks above hold on both)
+    if cfg!(target_arch = "x86_64") {
+        assert!(vectorized("ifconv.fm", "-pass-remarks=loop-vectorize") < with);
+    }
     // element-by-element loops and plain in-order sums
     assert!(vectorized("elementwise.fm", remarks) >= 3);
 }
