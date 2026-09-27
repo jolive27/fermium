@@ -12,18 +12,18 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 23 of the files completely** (404 templates) — the ones that hold the most common errors: unit and
+covers 24 of the files completely** (418 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
 numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
-`plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) and
-events in ODEs (`when`, events.rs). The other files (PDEs, eigenvalue problems,
+`plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
+events in ODEs (`when`, events.rs) and eigenvalue problems (`solve … lowest N`, eigen.rs). The other files (PDEs,
 parallel loops, `analyze` and the C, C++ and Python
-interop; about 170 templates) are still to do; see §4.
+interop; about 155 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -42,8 +42,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 145 of the
-404. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 146 of the
+418. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -483,6 +483,21 @@ errors come first, and the rest are simply not written yet (§4).
 | 402 | `can't set … here: …` | events.rs | a `when` action that sets something other than an unknown or one of its lower derivatives | C402 |
 | 403 | `… is set twice in this when` | events.rs | the same unknown set twice in one `when` | C403 |
 | 404 | `… is … but this is …` | events.rs | a `when` action's value has another dimension than the value it sets | C404 |
+| | **Eigenvalue problems (eigen.rs)** | | | |
+| 405 | `… must be a whole number from … to …` | eigen.rs | `lowest N` or `grid N` outside its allowed range | C405 |
+| 406 | `step, tolerance, absolute and until are for initial-value problems; an eigenvalue problem (lowest N) takes  grid N  and  using matrix / using shooting` | eigen.rs | `step`, `tolerance`, `absolute` or `until` on an eigenvalue problem | C406 |
+| 407 | `an eigenvalue problem (lowest N) has one equation, like  -ħ²/(2m) * ψ'' + V(x) ψ = E ψ` | eigen.rs | an eigenvalue problem with more than one equation | C407 |
+| 408 | `an eigenvalue problem needs one unknown function with a second derivative, like ψ''` | eigen.rs | an eigenvalue problem whose equation has no derivative of an unknown function | C408 |
+| 409 | `an eigenvalue problem needs the second derivative …'' (this equation has …)` | eigen.rs | an eigenvalue problem whose equation has a derivative of another order | C409 |
+| 410 | `unknown method '…' for an eigenvalue problem (use matrix or shooting)` | eigen.rs | `using` names a method other than `matrix` and `shooting` | C410 |
+| 411 | `the boundary conditions of an eigenvalue problem look like  …(a) = 0, …(b) = 0 (the ends of the range)` | eigen.rs | a boundary condition not of the form `ψ(a) = 0` | C411 |
+| 412 | `only … = 0 at the ends is supported for now (a wall, or far enough out that … has died away)` | eigen.rs | a boundary condition with a value other than 0 | C412 |
+| 413 | `the boundary condition is at … but … is …` | eigen.rs | a boundary condition at a value of another dimension than the variable's | C413 |
+| 414 | `the boundary conditions must be at the ends of the range (… = start and … = end)` | eigen.rs | a boundary condition at a point other than the ends of the range | C414 |
+| 415 | `an eigenvalue problem needs … at both ends:  with …(…) = 0, …(…) = 0` | eigen.rs | an eigenvalue problem without a condition at each end | C415 |
+| 416 | `an eigenvalue problem needs an unknown constant, like E in  … = E …; every name here already has a value (use a new name for the eigenvalue)` | eigen.rs | an eigenvalue problem where every name already has a value (no eigenvalue to find) | C416 |
+| 417 | `this equation has … undefined names (…); an eigenvalue problem has exactly one unknown constant (the eigenvalue)` | eigen.rs | an eigenvalue problem with more than one undefined name | C417 |
+| 418 | `…'' works out to … but should be …` | eigen.rs | the second-derivative term works out to another dimension than the equation needs | — |
 
 ## 3. Examples
 
@@ -1918,17 +1933,83 @@ solve y'' = -9.8 m/s^2 with y(0) = 1 m, y'(0) = 0 m/s for t from 0 s to 1 s
   when y = 0 m: y' = 1 m
 ```
 
+```fermium-error
+# C405
+solve -ψ'' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 0
+```
+
+```fermium-error
+# C406
+solve -ψ'' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 tolerance 1e-8 lowest 3
+```
+
+```fermium-error
+# C407
+solve -ψ'' = E ψ, -φ'' = E φ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C408
+solve -ψ = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C409
+solve -ψ''' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C410
+solve -ψ'' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 using rk4 lowest 3
+```
+
+```fermium-error
+# C411
+solve -ψ'' = E ψ with ψ'(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C412
+solve -ψ'' = E ψ with ψ(0) = 1, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C413
+solve -ψ'' = E ψ/(1 m^2) with ψ(0 s) = 0, ψ(1 m) = 0 for x from 0 m to 1 m lowest 3
+```
+
+```fermium-error
+# C414
+solve -ψ'' = E ψ with ψ(0.5) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C415
+solve -ψ'' = E ψ with ψ(0) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C416
+E = 2
+solve -ψ'' = E ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
+```fermium-error
+# C417
+solve -ψ'' = E F ψ with ψ(0) = 0, ψ(1) = 0 for x from 0 to 1 lowest 3
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
   covered, by size of their error set: pde.rs (31), cinterop.rs (25),
-  pyinterop.rs (18), eigen.rs (14), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), plus cppinterop.rs's `cerr(…)` messages. About 170 templates remain.
+  pyinterop.rs (18), parallel.rs (12), systems.rs (8),
+  analyze.rs (6), plus cppinterop.rs's `cerr(…)` messages. About 155 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (145). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (146). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -1943,6 +2024,7 @@ solve y'' = -9.8 m/s^2 with y(0) = 1 m, y'(0) = 0 m/s for t from 0 s to 1 s
   In rows 324–358 (data.rs), 17 rows: data files with bad headers, `fit` models and guesses, PDE-solution plots
   and `sweep`. In rows 359–373 (modules.rs), 12 rows: they need module files next to the program, which a
   one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
-  In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one.
+  In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one; in rows 405–418
+  (eigen.rs), 1 row.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
