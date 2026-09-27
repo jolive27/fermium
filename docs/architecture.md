@@ -117,6 +117,14 @@ legacy/ is removed after the next phase, those two inputs (the stdlib and `units
   differences (no C library, a small stack, an in-memory file system) are in `rust/DIVERGENCES.md`.
 - **Python** (`use python` and `fermium2`): the binary loads libpython with dlopen the first time a program says
   `use python` (`fermium-check/src/pyinterop.rs`, `eval_py.rs`); `fermium-pyapi` is the other direction.
+- **C and Fortran** (`import c` / `import fortran`, D275): `fermium-check/src/cinterop.rs` dlopens the library
+  when the program is checked, looks up every symbol and checks each call's units; a call is the IR built-in
+  `ccall` over `tables.ccalls` (like `pycall`). `fermium-runtime/src/cffi.rs` calls through the C ABI without
+  libffi: the arguments (doubles, ints, pointers) are split into the platform's integer and floating-point
+  registers and 8-byte stack slots, and the function pointer is called as a Rust `extern "C" fn` taking all of
+  them (x86-64 System V and AArch64). The tree-walker converts values in `eval_c.rs`; the LLVM back end emits a
+  direct call when every argument and the result are doubles, and otherwise (and in `fermium build`
+  executables, which carry the library's path) goes through the built-in callback into `eval_c.rs`.
 
 ## Conformance: the scoreboard
 

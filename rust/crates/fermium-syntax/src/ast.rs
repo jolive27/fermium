@@ -260,6 +260,48 @@ pub struct PySig {
     pub span: Span,
 }
 
+/// One parameter of a C or Fortran function (`import c`, D275).
+#[derive(Clone, Debug)]
+pub enum CParamKind {
+    /// a double, in the unit if one is given: `m [kg]`
+    Num(Option<UnitExpr>),
+    /// a C `int` (Fortran `integer`): `n: int`
+    Int,
+    /// an array of doubles: `x: list [m]`
+    List(Option<UnitExpr>),
+    /// the length of a list parameter, passed as an int and filled in by Fermium: `n: len(x)`
+    Len(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct CParam {
+    pub name: String,
+    pub kind: CParamKind,
+    pub span: Span,
+}
+
+/// What a C or Fortran function returns.
+#[derive(Clone, Debug)]
+pub enum CRetDecl {
+    /// a double in this unit: `-> [MeV]`
+    Unit(UnitExpr),
+    /// a plain double: `-> number`
+    Number,
+    /// a C `int`: `-> int`
+    Int,
+}
+
+/// `kinetic_energy(m [kg], v [km/s]) -> [J]` in an `import c` block; `bind(C[, name="…"])` for Fortran.
+#[derive(Clone, Debug)]
+pub struct CSig {
+    pub name: String,
+    pub params: Vec<CParam>,
+    pub ret: CRetDecl,
+    /// None: no bind; Some(None): `bind(C)`; Some(Some(n)): `bind(C, name="n")`
+    pub bind: Option<Option<String>>,
+    pub span: Span,
+}
+
 #[derive(Clone, Debug)]
 pub struct Stmt {
     pub kind: StmtKind,
@@ -296,6 +338,8 @@ pub enum StmtKind {
     Import { module: String, is_path: bool, alias: Option<String>, names: Option<Vec<(String, Option<String>)>> },
     /// `use python numpy as np` (D140).
     UsePython { module: String, alias: Option<String>, sigs: Vec<PySig> },
+    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275).
+    ImportC { lang: String, lib: String, sigs: Vec<CSig> },
 }
 
 /// `solve …` (ODEs, eigenvalue problems, PDEs).
@@ -346,6 +390,7 @@ impl StmtKind {
             StmtKind::Units { .. } => "Units",
             StmtKind::Import { .. } => "Import",
             StmtKind::UsePython { .. } => "UsePython",
+            StmtKind::ImportC { .. } => "ImportC",
         }
     }
 }

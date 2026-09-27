@@ -94,6 +94,7 @@ impl Checker {
                     return self.call_user(info, a, e).map(Checked::Val);
                 }
                 Binding::Local(lf) => return self.call_local(lf, e, ctx).map(Checked::Val),
+                Binding::CFunc(c) => return self.c_call(c, e, ctx), // a C or Fortran function (D275)
                 Binding::Sol(view) => return self.sol_eval(view, e, ctx).map(Checked::Val),
                 Binding::Sym(_) | Binding::Const(_) => {
                     if let Some(&later) = self.future_funcs.get(fname) {

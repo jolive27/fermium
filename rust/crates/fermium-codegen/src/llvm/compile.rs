@@ -1704,6 +1704,11 @@ impl<'c, 'm> Gen<'c, 'm> {
         for a in args {
             vals.push(self.expr(a)?);
         }
+        if name == "ccall" {
+            if let Some(v) = self.ccall_direct(args, &vals)? {
+                return Ok(v);
+            }
+        }
         let all_num = !vals.is_empty() && vals.iter().all(|v| matches!(v.k, Kind::F | Kind::B));
         // plain math on numbers, compiled in place (the functions eval.rs's fallback uses)
         if all_num {
@@ -1843,6 +1848,42 @@ impl<'c, 'm> Gen<'c, 'm> {
                 Val { k: ret, v: Some(v) }
             }
         })
+    }
+}
+
+impl<'c, 'm> Gen<'c, 'm> {
+    /// A C function whose arguments and result are all doubles (`import c`, D275), called directly from the
+    /// compiled code: each argument ÷ its unit's factor, the result × the result's factor, exactly as eval_c.rs
+    /// does. Only in the JIT, where the function's address is known now; executables (`fermium build`) and every
+    /// other signature go through the built-in callback. None: not this case.
+    fn ccall_direct(&mut self, args: &[Expr], vals: &[Val<'c>]) -> R<Option<Val<'c>>> {
+        if self.aot.is_some() {
+            return Ok(None);
+        }
+        let Some(ExprKind::Const(id)) = args.first().map(|a| &a.kind) else { return Ok(None) };
+        let Some(site) = self.m.tables.ccalls.get(*id as usize) else { return Ok(None) };
+        if site.by_ref || site.map || site.rint || site.params.iter().any(|p| p.kind != fermium_ir::CParamKind::Num)
+            || vals.len() != site.params.len() + 1 || vals[1..].iter().any(|v| v.k != Kind::F)
+        {
+            return Ok(None);
+        }
+        let Ok(Some(addr)) = fermium_runtime::cffi::symbol(&site.lib, &site.symbol) else { return Ok(None) };
+        let facs: Vec<f64> = site.params.iter().map(|p| p.fac).collect();
+        let rfac = site.rfac;
+        let mut cargs: Vec<BasicMetadataValueEnum> = Vec::with_capacity(facs.len());
+        for (v, fac) in vals[1..].iter().zip(&facs) {
+            let x = v.v.unwrap().into_float_value();
+            let x = if *fac != 1.0 { bl!(self.b.build_float_div(x, self.fconst(*fac), "c.arg")) } else { x };
+            cargs.push(x.into());
+        }
+        let f64t = self.f64t();
+        let ptys: Vec<BasicMetadataTypeEnum> = facs.iter().map(|_| f64t.into()).collect();
+        let fty = f64t.fn_type(&ptys, false);
+        let fp = self.cx.i64_type().const_int(addr as u64, false).const_to_pointer(self.ptrt());
+        let r = bl!(self.b.build_indirect_call(fty, fp, &cargs, "c.call")).try_as_basic_value().left()
+            .ok_or("a C call without a value")?.into_float_value();
+        let r = if rfac != 1.0 { bl!(self.b.build_float_mul(r, self.fconst(rfac), "c.res")) } else { r };
+        Ok(Some(fv(r)))
     }
 }
 

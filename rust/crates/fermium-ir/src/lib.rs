@@ -334,6 +334,52 @@ pub struct Tables {
     pub pycalls: Vec<PyCallSite>,
     /// the program's folder, put on Python's sys.path when a module is imported
     pub py_base_dir: String,
+    /// calls of C and Fortran functions (`import c`, C3, D275), indexed by the first argument of the `ccall`
+    /// built-in
+    pub ccalls: Vec<CCallSite>,
+}
+
+/// How a C or Fortran function's parameter is passed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CParamKind {
+    /// a double: SI value / the declared unit's factor
+    #[default]
+    Num,
+    /// a C int (a whole number)
+    Int,
+    /// a pointer to the elements of a list, each / the factor
+    List,
+    /// the length of the list parameter `len_of`, as an int
+    Len,
+}
+
+/// One parameter of a C call site.
+#[derive(Clone, Debug, Default)]
+pub struct CParam {
+    pub name: String,
+    pub kind: CParamKind,
+    pub fac: f64,
+    /// for Len: the index (among the parameters) of the list it measures
+    pub len_of: usize,
+}
+
+/// A call site of a C or Fortran function: where it is, how each parameter is passed, and the result.
+/// The IR built-in `ccall` gets the site's index, then one argument per parameter that isn't a `len`.
+#[derive(Clone, Debug, Default)]
+pub struct CCallSite {
+    /// the library's path as dlopen'ed at check time (absolute when the program's folder is known)
+    pub lib: String,
+    pub symbol: String,
+    /// the name as written in the program (for messages)
+    pub display: String,
+    /// Fortran: every argument by reference
+    pub by_ref: bool,
+    pub params: Vec<CParam>,
+    /// the result is an int (else a double)
+    pub rint: bool,
+    pub rfac: f64,
+    /// some number parameter gets a list: the call is made per element and gives a list
+    pub map: bool,
 }
 
 /// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
