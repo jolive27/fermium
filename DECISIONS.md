@@ -1288,3 +1288,42 @@ propagated) and `interp` (segment chosen by the values) now work; the other list
 - **Why:** spec C7. Plain 6-figure entries follow v1's rule for lists of uncertain values, so a list and a vector
 look alike.
 - **Alternatives:** a common exponent for the whole vector (harder to read when entries differ in size).
+
+## D285. Multiple dispatch (C5): versions chosen at compile time by arity, dimensions and kinds
+- **What:** a second top-level definition of a function name with a different signature adds a *version*
+  (`energy(m [kg], v [m/s])`, `energy(λ [m])`, `energy(f [Hz])`); a call uses the version its checked argument
+  types fit. A parameter can now also name a kind, `r: vector [m]` (`number`, `vector`, `list`, `complex`),
+  in the `x: list [m]` syntax of `import c` (D275). Fit: the same number of arguments; a `[unit]` needs that
+  dimension (a number, list or complex; a vector only with `: vector`, every component); a kind needs that kind (a
+  list also fits `: number`, element by element); an unannotated parameter takes anything; a function argument
+  fits only an unannotated parameter the body calls, and a value never fits a parameter the body surely calls.
+  *Specificity* per parameter: 0 unannotated, +1 for a kind, +1 for a unit (a list in a `: number` slot scores
+  the kind 0). The chosen version must be at least as specific as every other fitting version in every parameter
+  and more specific in one; otherwise the call is ambiguous: a compile-time error naming two such versions with
+  their lines. No fit: a one-line error (`no version of energy takes (time [s])`, or `energy takes 1 or 2
+  arguments`) whose hint lists every version with its line. A *same signature* (arity, kinds, dimensions of the
+  units) replaces the earlier version, which is exactly v1's redefinition (`f(x) = 2 x` then `f(x) = 3 x`).
+- **Mechanism:** `FuncInfo.versions` (fermium-check `dispatch.rs`): each new definition gets a new list, a
+  snapshot of the versions visible there, so a function passed or bound earlier keeps what it meant. `call_user`
+  and `instantiate` call `pick_version` first; the chosen version is instantiated exactly like any function
+  (one IR function per version and argument types), so the IR, both back ends and `fermium build` are
+  unchanged and the choice costs nothing at run time. Inside a generic function the argument types are concrete
+  per instance, so each instance chooses again. When a dimension isn't known yet (the generic check of a function
+  never called), several fitting versions give "can't tell which version", which that check ignores. `f'`,
+  `d/dx f` and `∂/∂x f` of a function with versions are a new function whose versions are the derivatives of
+  the versions that have that parameter (or one parameter for `'`); plotting, `∫`, passing to functions and
+  `module.name` go through the same calls. Every version is checked when never called (`check_uncalled`) and
+  gets its module's name. The LSP records each call's choice (`Checker.dispatch_sites`), so hover over a call
+  shows the version used there; `print f` and the REPL's `vars` list all versions.
+- **Why:** it is Julia's core idea (spec C5), and in a units language the dimension is the natural thing to
+  dispatch on: the photon energy from a wavelength or a frequency is one name, as on paper. Choosing at compile
+  time keeps the zero-cost promise and needs no run-time type tags. Before C5, a redefinition silently replaced
+  the function; no conformance program depends on that for a *different* signature (the full suite is
+  unchanged, 3334 + 32), and keeping the replacement for the same signature keeps every v1 program the same.
+- **Alternatives:** Julia's rule of the most specific *type* with a type lattice (Fermium has only a handful of
+  kinds, and dimensions are exact, so per-parameter scores suffice); detecting ambiguity when the definitions are
+  made (it would reject pairs that no call ever makes ambiguous; the call-time error names both anyway);
+  run-time dispatch (not needed: every type is known at compile time); letting a unit annotation outrank a kind
+  (arbitrary; equal scores are reported as ambiguous instead). Not yet: differentiating a formula that calls a
+  function with versions, versions added to an imported function (still "defined again" as before), the Python
+  API's `fermium.compile` (checks arguments against the last version), and Fermium 1.5.

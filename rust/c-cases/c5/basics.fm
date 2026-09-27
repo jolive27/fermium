@@ -1,0 +1,19 @@
+# one name, several versions: chosen by the number of arguments and their units
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+
+print energy(2 kg, 3 m/s)
+print energy(500 nm)
+print energy(1 GHz)
+
+# a version is picked inside a generic function, where the argument's unit is only known per call
+photon(x) = energy(x) in eV
+print photon(500 nm)
+print photon(100 THz)
+
+# checked per call: a generic function that is never called doesn't have to choose
+unused(x) = energy(x)
+
+# applied to each element of a list
+print energy([400, 500, 600] nm) in eV

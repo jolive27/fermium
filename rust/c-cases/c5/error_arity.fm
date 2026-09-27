@@ -1,0 +1,3 @@
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+print energy(1 kg, 2 m/s, 3 s)

@@ -126,6 +126,15 @@ impl Checker {
     }
 
     pub fn describe_function(&mut self, info: FuncInfoId) -> String {
+        if self.funcs[info].versions.len() > 1 {
+            // one line per version (C5)
+            return self.versions_of(info).into_iter().map(|v| self.describe_version(v)).collect::<Vec<_>>().join("\n");
+        }
+        self.describe_version(info)
+    }
+
+    /// `describe_function` of one version.
+    pub fn describe_version(&mut self, info: FuncInfoId) -> String {
         let f = &self.funcs[info];
         let Some(A::Stmt { kind: A::StmtKind::FuncDef { params, body, .. }, .. }) = &f.fdef else {
             return format!("{}: a function", f.display_name);

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_kind.fm, line 2: speed expects v to be a vector, but got a number, speed [m/s]\n    print speed(3 m/s)\n          ^^^^^^^^^^^^\n",
+ "exit": 1
+}

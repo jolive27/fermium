@@ -381,9 +381,13 @@ impl Checker {
             anon_label: None,
             parent: None,
             eval_body: None,
+            versions: vec![],
         };
         self.funcs.push(info);
         let id = self.funcs.len() - 1;
+        if let Some(Binding::Func(prev)) = self.scopes[ctx.scope].names.get(name.as_str()).cloned() {
+            self.add_version(prev, id); // multiple dispatch (C5, D285)
+        }
         self.bind(ctx.scope, name, Binding::Func(id));
         // every where-binding in the body, at any depth: f(x) = 2 x where x = 5 s ignores the argument (A31)
         let pnames: HashSet<&str> = params.iter().map(|p| p.name.as_str()).collect();
@@ -421,7 +425,7 @@ impl Checker {
             return Err(self.err(format!("'where' isn't supported on a function defined inside another function; \
                                          define the helper value first, then {name}(…) = …"), s.span, None));
         }
-        if params.iter().any(|p| p.unit.is_some()) {
+        if params.iter().any(|p| p.unit.is_some() || p.kind.is_some()) {
             return Err(self.err("a function defined inside another function takes its parameters' units from each \
                                  call; leave out the [unit]", s.span, None));
         }

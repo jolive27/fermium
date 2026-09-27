@@ -1,0 +1,11 @@
+# derivatives, integrals and plots of a function with several versions
+U(x [m]) = ½ (4 N/m) x²
+U(x [m], k [N/m]) = ½ k x²
+print U'(2 m)
+print (d/dx U)(3 m)
+print (∂/∂k U)(2 m, 10 N/m)
+print ∫ U(x) dx from 0 m to 1 m
+
+# passed to a function: the version is chosen inside, per call
+force(V, x) = -V'(x)
+print force(U, 1 m)

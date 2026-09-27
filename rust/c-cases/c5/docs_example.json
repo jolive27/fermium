@@ -1,0 +1,5 @@
+{
+ "stdout": "9 J\n2.48 eV\n6.63\u00d710\u207b\u00b2\u2075 J\n[3.10, 2.48, 2.07] eV\n9 J 2.48 eV 6.63\u00d710\u207b\u00b2\u2075 J\n2 m 5 m 3\n12.5 J 12.5 J\n1 0\n6\n2.48 eV 0.414 eV\nenergy(m, v) = 0.5\u00b7m v\u00b2   [J, for m in kg, for v in m/s]\nenergy(\u03bb) = h c/\u03bb   [J, for \u03bb in m]\nenergy(f) = h f   [J, for f in 1/s]\n",
+ "stderr": "",
+ "exit": 0
+}
