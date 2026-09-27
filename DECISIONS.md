@@ -2085,15 +2085,16 @@ a different citation (the neutron-branch form is the standard one).
 ## D353. Specification draft 0.4: the checker's error set, for the files covered, held by a test (spec D1)
 - **What:** a new chapter docs/spec/errors.md: the compile-time errors raised after parsing, as a normative table
   (message template with `…` for filled parts, the source file, a meaning, an example tag), grouped by category.
-  It is complete for 10 of fermium-check's ~40 source files (arith.rs, calls.rs, checker.rs, convert.rs,
-  dispatch.rs, exprs.rs, names.rs, print.rs, rng.rs, units.rs: 79 templates, which hold the most common errors:
-  unit mismatch, undefined names, arity, argument kinds, dispatch, `in`, temperatures). The test
+  It is complete for 15 of fermium-check's ~40 source files (arith.rs, builtin.rs, calculus.rs, calls.rs,
+  checker.rs, clist.rs, convert.rs, dispatch.rs, exprs.rs, lists.rs, names.rs, print.rs, rng.rs, uncertain.rs,
+  units.rs: 167 templates, which hold the most common errors: unit mismatch, undefined names, arity, argument
+  kinds, dispatch, `in`, temperatures, built-in arguments, lists, uncertainties, calculus). The test
   `spec_checker_errors` (fermium-check/tests/spec_errors.rs) extracts from those files the first literal of each
-  `err(…)` / `Diagnostic::error(…)`, the `format!` of each `unify_or(…, |c| format!(…))` and the `format!` literals
-  of a `let msg = …` raised by the next `err(msg`, plus the stored `unset_msg` messages (any checker file) and
+  `err(…)` / `Diagnostic::error(…)`, the message of each `unify_or(…, |c| …)` closure and the literals that start a
+  `format!(` or a `{ … }` branch of a `let msg = …` raised by the next `err(msg`, plus the stored `unset_msg` messages (any checker file) and
   fermium-units' `overflow_message`, and requires the table to list exactly those; the covered-file list in the
   chapter must equal the test's. Each ```fermium-error example tagged `# C<n>` is parsed, checked with
-  `api::check_keep`, and must be rejected with a message matching row n (53 of 79 rows have one); the existing
+  `api::check_keep`, and must be rejected with a message matching row n (96 of 167 rows have one); the existing
   `spec_examples_run` also runs them through `fermium run`.
 - **Why:** the checker holds about 580 error templates, too many to list and exemplify in one step; covering whole
   files keeps the "exactly these" check meaningful (a file is either fully listed or not claimed), and picking
@@ -2103,6 +2104,6 @@ a different citation (the neutron-branch form is the standard one).
 - **Alternatives:** a single table of all ~580 templates without examples (not reviewable in the time, and an
   untested meaning column); per-row message constants in the checker source (a large refactor of working code
   for documentation); running the binary only (can't tell parser from checker errors).
-- **Limits:** the other ~30 files (about 500 templates) are errors.md §4's TODO; an error raised in a covered file
+- **Limits:** the other ~25 files (about 410 templates) are errors.md §4's TODO; an error raised in a covered file
   through a helper in an uncovered file (e.g. `need_num`) belongs to the helper's file; the extraction is textual,
   so a message built a new way must be added to the extractor; hints are not listed.

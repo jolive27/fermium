@@ -4,8 +4,9 @@
 use std::path::Path;
 
 /// The checker source files errors.md covers completely (errors.md §1 says which are still to do).
-const COVERED: &[&str] = &["arith.rs", "calls.rs", "checker.rs", "convert.rs", "dispatch.rs", "exprs.rs",
-                           "names.rs", "print.rs", "rng.rs", "units.rs"];
+const COVERED: &[&str] = &["arith.rs", "builtin.rs", "calculus.rs", "calls.rs", "checker.rs", "clist.rs",
+                           "convert.rs", "dispatch.rs", "exprs.rs", "lists.rs", "names.rs", "print.rs", "rng.rs",
+                           "uncertain.rs", "units.rs"];
 
 /// The Rust string literal at the start of `s` (which starts with '"'): its value and its length in bytes.
 fn rust_literal(s: &str) -> (String, usize) {
@@ -80,9 +81,9 @@ fn src_of(crate_dir: &str, f: &str) -> String {
 }
 
 /// Every error message template of the covered files: the first literal argument of each `.err(…)` and
-/// `Diagnostic::error(…)`, the `format!` in each `unify_or(…, |c| format!(…))`, the `format!` literals of a
-/// `let msg = …;` that the next lines raise with `err(msg`; plus the stored "might not have a value" messages
-/// (`unset_msg = Some(format!(…))`, any checker file, raised in exprs.rs) and the unit-power overflow message
+/// `Diagnostic::error(…)`, the message of each `unify_or(…, |c| …)` closure, the literals that start a
+/// `format!(` or a `{ … }` branch of a `let msg = …;` that the next lines raise with `err(msg`; plus the stored
+/// "might not have a value" messages (`unset_msg = Some(format!(…))`, any checker file, raised in exprs.rs) and the unit-power overflow message
 /// (fermium-units exact.rs `overflow_message`, raised in checker.rs).
 fn checker_templates() -> Vec<String> {
     let mut out: Vec<String> = vec![];
@@ -109,8 +110,12 @@ fn checker_templates() -> Vec<String> {
             let rest = &s[pos..];
             match op {
                 "unify_or(" => {
-                    if let Some(j) = rest.find("|c|").filter(|j| *j < 200) {
-                        out.extend(first_literal(&rest[j + 3..]));
+                    // the message closure `|c| …`: its body starts after the second '|'
+                    let head = &rest[..rest.len().min(200)];
+                    if let Some(j) = head.find('|') {
+                        if let Some(k) = head[j + 1..].find('|') {
+                            out.extend(first_literal(&rest[j + 1 + k + 1..]));
+                        }
                     }
                 }
                 "let msg = " => {
@@ -119,10 +124,13 @@ fn checker_templates() -> Vec<String> {
                     if !after.contains("err(msg") {
                         continue; // a warning's message
                     }
-                    let mut j = 0;
-                    while let Some(k) = rest[j..end].find("format!(") {
-                        j += k + 8;
-                        out.extend(first_literal(&rest[j..]));
+                    // the literals that start a `format!(` or a `{ … }` branch
+                    for (k, _) in rest[..end].match_indices('"') {
+                        let before = rest[..k].trim_end();
+                        if (before.ends_with("format!(") || before.ends_with('{'))
+                            && !rest[..k].ends_with('\\') {
+                            out.extend(first_literal(&rest[k..]));
+                        }
                     }
                 }
                 _ => out.extend(first_literal(rest)),

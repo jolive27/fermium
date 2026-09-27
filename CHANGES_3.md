@@ -25,12 +25,14 @@ Changes on the branch `claude/v3` (spec Phase D). Draft; items are added as they
   must fail with that row's message (grammar.md §3, `spec_syntax_errors`); conformance cases named for each point
   of the unit rule, tested to exist with the expected outcome (units.md §2.3, `spec_unit_rule_cases`).
 - `docs/spec/` draft 0.4 (DECISIONS D353): the checker's compile-time errors, a new chapter
-  [errors.md](docs/spec/errors.md): a normative table of 79 message templates in 11 categories (units and
+  [errors.md](docs/spec/errors.md): a normative table of 167 message templates in 17 categories (units and
   dimensions, absolute temperatures, units as values, names, functions as values, arity and arguments, returns
-  and recursion, dispatch, kinds in operators, conversions and printing, random numbers), complete for 10 of the
-  checker's source files (arith, calls, checker, convert, dispatch, exprs, names, print, rng, units), tested equal
-  to the templates extracted from those files, with a `fermium-error` example for 53 rows that the checker must
+  and recursion, dispatch, kinds in operators, conversions and printing, random numbers, built-in arguments,
+  lists and indexing, uncertainties, calculus, complex lists and Fourier transforms), complete for 15 of the
+  checker's source files (arith, builtin, calculus, calls, checker, clist, convert, dispatch, exprs, lists, names,
+  print, rng, uncertain, units), tested equal to the templates extracted from those files, with a
+  `fermium-error` example for 96 rows that the checker must
   reject with that row's message (`cargo test -p fermium-check --test spec_errors`).
 - Not yet specified: the full clause grammar of `plot`, `analyze`, `propagate` and the interop signatures; the
-  rest of the checker's error set (about 500 templates in ~30 files, errors.md §4); the numerical methods in one place; a cross-reference to conformance cases beyond the unit
+  rest of the checker's error set (about 410 templates in ~25 files, errors.md §4); the numerical methods in one place; a cross-reference to conformance cases beyond the unit
   rule.

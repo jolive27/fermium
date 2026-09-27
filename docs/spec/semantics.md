@@ -642,5 +642,5 @@ size(A, 1) ⇒ number [1]
 - ~~Uncertainty propagation as a formal model~~ (done in 0.2: §2.3, the linear model and the kernels' ±1σ test).
   Still open: `propagate montecarlo` and `analyze` as formal models.
 - The interop type mappings (`use python`, `import c/cpp/fortran`).
-- The checker's error set (0.4: errors.md, complete for 10 of the checker's source files, 79 templates; its §4
-  lists the files still to do, about 500 templates, and the 26 rows without an example).
+- The checker's error set (0.4: errors.md, complete for 15 of the checker's source files, 167 templates; its §4
+  lists the files still to do, about 410 templates, and the 71 rows without an example).
