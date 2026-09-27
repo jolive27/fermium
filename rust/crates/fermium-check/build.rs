@@ -8,7 +8,12 @@ fn main() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let root = manifest.join("../../..");
     let candidates = [root.join("stdlib"), root.join("fermium/stdlib"), root.join("legacy/fermium/stdlib")];
-    let dir = candidates.iter().find(|d| d.is_dir());
+    // the first folder that holds modules (an empty leftover folder must not win and embed nothing)
+    let has_modules = |d: &PathBuf| {
+        fs::read_dir(d).map(|rd| rd.flatten().any(|e| e.path().extension().is_some_and(|x| x == "fm"))).unwrap_or(false)
+    };
+    let dir = candidates.iter().find(|d| has_modules(d));
+    assert!(dir.is_some(), "the standard library (*.fm) wasn't found in any of {candidates:?}");
     let mut entries = vec![];
     if let Some(dir) = dir {
         println!("cargo:rerun-if-changed={}", dir.display());
