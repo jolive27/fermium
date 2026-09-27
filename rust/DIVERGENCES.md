@@ -346,6 +346,9 @@ failed input leaving no names behind (D220: the checker is rolled back to a copy
 session of tests/test_repl.py plus 30 more) print exactly what v1 prints
 (`cargo test -p fermium-repl`, fixtures from rust/tools/repl_sessions.py). Differences:
 
+- Uncertainties work in the REPL and in the Jupyter kernel (`L = 1.20 ± 0.01 m`, then `print L - L` prints
+  `0 ± 0 m`, correlations kept from one input to the next); v1 refused `±` there (red team 13 #6).
+
 - Line editing and history are a small editor of Fermium's own over the terminal (termios through the libc
   crate) instead of GNU readline/libedit: arrows, Home/End, Ctrl-A/E/K/U/W/L, Up/Down history saved in
   `~/.fermium_history` (v1's file; a libedit file from macOS is read too), at most 1000 entries kept.
@@ -417,6 +420,16 @@ in the API for calling Fermium from Python (D142), which no conformance case cov
 - It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
   (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
   faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.
+
+## fermium build (red team 13 #6, #7, #14)
+
+- A program that uses Python builds (v1 refused it: *an executable doesn't carry Python*). The executable
+  loads libpython like `fermium run` and imports the program's own modules from the program's folder at build
+  time, stored as an absolute path.
+- `fermium build noext` and `fermium build -o prog.fm prog.fm` are refused (*fermium build would overwrite the
+  program … with the executable*); v1 overwrote the source.
+- The linker's temporary folder is created exclusively, with a random name and owner-only permissions, instead
+  of `/tmp/fermium-build-<pid>`.
 
 ## Unit powers are exact fractions of 64-bit whole numbers (red team 13 #1, #2)
 

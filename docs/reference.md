@@ -768,7 +768,7 @@ plot data.T vs data.L to "pendulum.png"
     nothing is written, so a typo can't overwrite your program or your notes. Folders in the path are made if
     they don't exist.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables. The same holds after the file name: `plot N vs t to "decay.png" title "Decay"`.
-  - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
+  - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. Plots in `fermium build` executables support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
   - Several series: `plot a vs t, b vs t`. A fitted curve over the data is a formula series: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm` (dots for the data, a line for the formula with the fitted g).
   - **Labels** (DECISIONS D253): an axis is labelled with the plotted name and its unit, `T [s]`; a column of loaded data is named without the data set (`T`, not `data.T`). With several series, the y axis lists the named ones (`ys [s], zs [s]`) and leaves a formula next to them to the legend.
 
@@ -927,8 +927,12 @@ print np.sum([1, 2, 3.5]), np.linspace(0, 1, 5)
   result of the wrong kind (None, text, a complex number, a list where a number was expected, a table).
 - **Cost:** each call goes from compiled code to Python and back (about 10 µs on the test machine, plus the function's
   own time), so a Python function in a tight loop is much slower than the same formula in Fermium.
-- **`fermium build`** refuses a program that uses Python: *fermium build can't compile a call into Python
-  (np.sqrt): an executable doesn't carry Python*. `fermium run`, the REPL and Jupyter all support it.
+- **`fermium build`** builds a program that uses Python, as do `fermium run`, the REPL and Jupyter. The
+  executable doesn't carry Python: it loads the Python installed on the machine it runs on (with the modules the
+  program uses, like NumPy). A module of your own (`use python blackbody_py`) is imported from the program's
+  folder at build time, stored in the executable as an absolute path, not from the folder the executable is
+  in or is run from; if that folder moves, the executable stops at the first call into the module with
+  *No module named 'blackbody_py'*. Build again after moving it.
 - **Trust:** `use python` imports and runs Python code, exactly like `import` in a Python script, when the
   program is checked (also by `fermium check` and the editor's language server).
 
@@ -1250,10 +1254,10 @@ These are known and not yet fixed. None of them is silent about units.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
-- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, don't work in the REPL or Jupyter, and can't go directly into vectors, integrals or ODEs (use `propagate montecarlo`). `fit` doesn't weight points by their uncertainties.
+- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, and can't go directly into vectors, integrals or ODEs (use `propagate montecarlo`). `fit` doesn't weight points by their uncertainties.
 - **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
   has imported even if the file changes (restart the REPL to see the change).
-- **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
+- **`fermium build`** executables write plots exactly as `fermium run` does (PNG, or SVG/GIF when the file name says so), and read data files relative to the folder the program is run in (§17).
 
 ## 20. Numerics: random numbers, Fourier transforms, eigenstates, PDEs
 
@@ -1453,4 +1457,4 @@ print x2
 
 ### How it runs
 
-A program that uses `±`, `value`/`uncertainty`/`rel` or `propagate montecarlo` is run by Fermium's reference interpreter instead of native code (the uncertain values are Python objects with a value and one entry per error source). It is slower than native code, `fermium build` refuses such a program, and the REPL and the Jupyter kernel don't support uncertainties yet. See DECISIONS.md D120–D124.
+A program that uses `±`, `value`/`uncertainty`/`rel` or `propagate montecarlo` is run by Fermium's reference interpreter instead of native code (each uncertain value carries its value and one entry per error source). It is slower than native code and `fermium build` refuses such a program; the REPL and the Jupyter kernel support uncertainties (`L = 1.20 ± 0.01 m`, then `print L - L` gives `0 ± 0 m`). See DECISIONS.md D120–D124.

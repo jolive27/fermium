@@ -161,3 +161,37 @@ fn ohm_kelvin_and_angstrom_signs_read_as_v1_reads_them() {
     assert_eq!(code, 1);
     assert!(err.starts_with("prog.fm, line 1: '\u{ba}C' isn't a unit Fermium knows"), "{err}");
 }
+
+// ---------------------------------------------------------------- lows: build, help, deep nesting
+
+#[test]
+fn build_refuses_to_overwrite_its_own_source() {
+    for (tag, file, args) in [("noext", "noext", vec!["build", "noext"]),
+                              ("same", "prog.fm", vec!["build", "-o", "prog.fm", "prog.fm"]),
+                              ("dotted", "prog.fm", vec!["build", "-o", "./prog.fm", "prog.fm"])] {
+        let d = dir(&format!("build-{tag}"));
+        std::fs::write(d.join(file), "print 1\n").unwrap();
+        let o = fermium(&args, &d);
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(1), "{err}");
+        assert!(err.contains("fermium build would overwrite the program") && err.contains("-o NAME"), "{err}");
+        assert_eq!(std::fs::read_to_string(d.join(file)).unwrap(), "print 1\n", "the source is untouched");
+    }
+}
+
+#[test]
+fn help_describes_build_as_available() {
+    let o = fermium(&["--help"], &dir("help"));
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("build               compile a program into a standalone executable\n"), "{out}");
+    assert!(!out.contains("not\n") && !out.contains("yet in this version"), "{out}");
+}
+
+#[test]
+fn deep_nesting_keeps_v1s_detail_and_hint() {
+    let src = format!("x = {}1{}\nprint x\n", "(".repeat(5000), ")".repeat(5000));
+    let (code, out, err) = run("deep", &src);
+    assert_eq!((code, out.as_str()), (1, ""));
+    assert_eq!(err, "this program is nested too deeply for Fermium to compile (very long or deeply nested \
+                     expressions)\n  hint: split the expression into several lines with names\n");
+}

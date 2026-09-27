@@ -43,11 +43,39 @@ fn find_lib(name: &str, dirs: &[&str]) -> Option<PathBuf> {
 
 /// Link `obj` (the program) with the run time into the executable `out`.
 pub fn link_executable(obj: &[u8], rt: &RuntimeFiles, out: &str) -> Result<(), String> {
-    let tmp = std::env::temp_dir().join(format!("fermium-build-{}", std::process::id()));
-    std::fs::create_dir_all(&tmp).map_err(|e| format!("can't make a temporary folder: {e}"))?;
+    let tmp = make_temp_dir().map_err(|e| format!("can't make a temporary folder: {e}"))?;
     let r = link_in(&tmp, obj, rt, out);
     let _ = std::fs::remove_dir_all(&tmp);
     r
+}
+
+/// A new, private temporary folder with an unpredictable name (red team 13 #14: `/tmp/fermium-build-<pid>` was
+/// predictable, and create_dir_all accepted a folder, or a symlink to one, that someone else had made). The
+/// folder is created exclusively (an existing name is never reused) and, on Unix, readable only by its owner.
+pub fn make_temp_dir() -> std::io::Result<PathBuf> {
+    use std::hash::{BuildHasher, Hasher};
+    let base = std::env::temp_dir();
+    let mut last = None;
+    for attempt in 0u32..64 {
+        // RandomState's keys come from the operating system's random source
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u32(std::process::id());
+        h.write_u32(attempt);
+        h.write_u128(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+        let p = base.join(format!("fermium-build-{:016x}", h.finish()));
+        let mut b = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            b.mode(0o700);
+        }
+        match b.create(&p) {
+            Ok(()) => return Ok(p),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| std::io::Error::other("no free name")))
 }
 
 fn link_in(tmp: &Path, obj: &[u8], rt: &RuntimeFiles, out: &str) -> Result<(), String> {
@@ -107,4 +135,23 @@ fn link_in(tmp: &Path, obj: &[u8], rt: &RuntimeFiles, out: &str) -> Result<(), S
     }
     args.extend([need("libc.so.6")?, s("--pop-state"), c("libc_nonshared.a")?, c("crtendS.o")?, c("crtn.o")?]);
     lld(&args)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn temp_folders_are_new_private_and_unpredictable() {
+        let a = super::make_temp_dir().unwrap();
+        let b = super::make_temp_dir().unwrap();
+        assert_ne!(a, b);
+        assert!(a.file_name().unwrap().to_string_lossy().starts_with("fermium-build-"));
+        assert_ne!(a.file_name().unwrap().to_string_lossy(), format!("fermium-build-{}", std::process::id()));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&a).unwrap().permissions().mode() & 0o777, 0o700);
+        }
+        let _ = std::fs::remove_dir(&a);
+        let _ = std::fs::remove_dir(&b);
+    }
 }
