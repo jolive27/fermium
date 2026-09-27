@@ -239,3 +239,183 @@ fn spec_conformance_counts() {
     }
     assert!(bad.is_empty(), "docs/spec/README.md vs conformance/cases:\n{}", bad.join("\n"));
 }
+
+/// The Rust string literal at the start of `s` (which starts with '"'): its value and its length in bytes.
+fn rust_literal(s: &str) -> (String, usize) {
+    let b: Vec<char> = s.chars().collect();
+    let (mut i, mut out, mut len) = (1, String::new(), 1);
+    while b[i] != '"' {
+        if b[i] == '\\' {
+            let n = b[i + 1];
+            len += 1 + n.len_utf8();
+            i += 2;
+            if n == '\n' {
+                while matches!(b[i], ' ' | '\t' | '\n') {
+                    len += 1;
+                    i += 1;
+                }
+                continue;
+            }
+            match n {
+                'n' => out.push('\n'),
+                '"' | '\\' | '\'' => out.push(n),
+                _ => {
+                    out.push('\\');
+                    out.push(n)
+                }
+            }
+            continue;
+        }
+        out.push(b[i]);
+        len += b[i].len_utf8();
+        i += 1;
+    }
+    (out, len + 1)
+}
+
+/// A message template with each `{…}` placeholder (and each run of them) written as one `…`.
+fn template(t: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in t.chars() {
+        match c {
+            '{' => {
+                depth += 1;
+                if !out.ends_with('…') {
+                    out.push('…');
+                }
+            }
+            '}' if depth > 0 => depth -= 1,
+            '…' if out.ends_with('…') => {}
+            _ if depth > 0 => {}
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Every error message template the front end can produce (grammar.md §3): the first literal argument of each
+/// error-constructing call in the lexer, the parser, the expression parser and the unit rule.
+fn syntax_error_templates() -> Vec<String> {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let openers = [".err(", ".err_h(", ".error(", "Diagnostic::error(", "message: ", "let msg = ", "fn exp_too_large("];
+    let mut out: Vec<String> = vec![];
+    for f in ["lexer.rs", "parser.rs", "expr.rs", "unitrule.rs"] {
+        let s = std::fs::read_to_string(src.join(f)).unwrap();
+        let mut pos = 0;
+        while let Some((at, op)) = openers.iter().filter_map(|o| s[pos..].find(o).map(|i| (pos + i, *o))).min() {
+            pos = at + op.len();
+            let mut rest = &s[pos..];
+            if op == "let msg = " {
+                if rest.starts_with("exp_too_large") {
+                    continue;
+                }
+                // every literal up to the ';' that ends the statement
+                let mut j = 0;
+                while !rest[j..].starts_with(';') {
+                    if rest[j..].starts_with('"') {
+                        let (v, n) = rust_literal(&rest[j..]);
+                        out.push(template(&v));
+                        j += n;
+                    } else {
+                        j += rest[j..].chars().next().unwrap().len_utf8();
+                    }
+                }
+                continue;
+            }
+            if op == "message: " {
+                let (w, e) = (rest.find("Severity::Warning"), rest.find("Severity::Error"));
+                if w.is_some_and(|w| e.is_none_or(|e| w < e)) {
+                    continue; // a warning, not an error
+                }
+            }
+            if op == "fn exp_too_large(" {
+                rest = &rest[rest.find("format!(").unwrap()..];
+            }
+            rest = rest.trim_start();
+            if let Some(r) = rest.strip_prefix("format!(") {
+                rest = r.trim_start();
+            }
+            if rest.starts_with('"') {
+                out.push(template(&rust_literal(rest).0));
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// Does `msg` match `tpl`, where each `…` in tpl stands for any text?
+fn matches_template(msg: &str, tpl: &str) -> bool {
+    let parts: Vec<&str> = tpl.split('…').collect();
+    if parts.len() == 1 {
+        return msg == tpl;
+    }
+    let (first, last) = (parts[0], parts[parts.len() - 1]);
+    if !msg.starts_with(first) || !msg[first.len()..].ends_with(last) {
+        return false;
+    }
+    let mut rest = &msg[first.len()..msg.len() - last.len()];
+    for p in &parts[1..parts.len() - 1] {
+        match rest.find(p) {
+            Some(i) => rest = &rest[i + p.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
+/// grammar.md §3 lists exactly the front end's error messages, and each example fails with its row's message.
+#[test]
+fn spec_syntax_errors() {
+    let text = std::fs::read_to_string(spec_dir().join("grammar.md")).unwrap();
+    let s = text.find("## 3. Syntax errors").expect("grammar.md has §3 Syntax errors");
+    let sect = &text[s..s + text[s..].find("\n## 4.").unwrap()];
+    let mut rows: Vec<(usize, String, String)> = vec![]; // (number, template, example tag)
+    for line in sect.lines().filter(|l| l.starts_with("| ") && l.contains('`')) {
+        let cells: Vec<&str> = line.split(" | ").collect();
+        let n: usize = cells[0].trim_start_matches("| ").parse().expect("a row number");
+        let tpl = line.split('`').nth(1).unwrap().replace("\\|", "|");
+        let tag = cells.last().unwrap().trim_end_matches(" |").trim().to_string();
+        assert_eq!(n, rows.len() + 1, "grammar.md §3: rows are numbered 1, 2, …");
+        rows.push((n, tpl, tag));
+    }
+    let want = syntax_error_templates();
+    assert!(want.len() >= 100, "found only {} message templates in the front end", want.len());
+    let got: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
+    let missing: Vec<&String> = want.iter().filter(|t| !got.contains(t)).collect();
+    let extra: Vec<&String> = got.iter().filter(|t| !want.contains(t)).collect();
+    let mut bad = vec![];
+    if !missing.is_empty() || !extra.is_empty() {
+        bad.push(format!("not in the table: {missing:#?}\nnot in the source: {extra:#?}"));
+    }
+    // the examples in this section
+    let mut seen = vec![];
+    let mut lines = sect.lines();
+    while let Some(l) = lines.next() {
+        if l != "```fermium-error" {
+            continue;
+        }
+        let code: String = lines.by_ref().take_while(|l| !l.starts_with("```")).map(|l| format!("{l}\n")).collect();
+        let tag = code.lines().next().unwrap_or("").trim_start_matches("# ").to_string();
+        let Some(row) = rows.iter().find(|r| r.2 == tag) else {
+            bad.push(format!("example {tag}: no row has it in the Example column"));
+            continue;
+        };
+        seen.push(tag.clone());
+        match fermium_syntax::parse(&code, &[]) {
+            Ok(_) => bad.push(format!("example {tag} parses, but should fail with: {}", row.1)),
+            Err(e) if !matches_template(&e.message, &row.1) => {
+                bad.push(format!("example {tag} fails with\n    {}\nnot\n    {}", e.message, row.1))
+            }
+            Err(_) => {}
+        }
+    }
+    for r in &rows {
+        if r.2 != "—" && !seen.contains(&r.2) {
+            bad.push(format!("row {} names example {} but there is none", r.0, r.2));
+        }
+    }
+    assert!(bad.is_empty(), "grammar.md §3:\n{}", bad.join("\n"));
+}

@@ -665,9 +665,584 @@ option      = "log" [ "x" | "y" ] | "points" | "dots" | "markers" | "title" STR 
 - Interop signature blocks: `f(x [m], n: int) -> [J]` per line, with `: list`, `bind(C, name="…")`, and for C++
   qualified names `ns::Class::f(…) -> […] [as name]` (C3/C4, D275, D290); `use python numpy as np: …` (D140).
 
-## 3. TODO for this chapter
+## 3. Syntax errors
+
+A program that doesn't match the grammar is rejected before it runs with one of the errors below: one line
+`<file>, line N: <message>`, a caret under the place, and usually a hint (semantics.md §5). This table is
+normative and complete for the front end (`rust/crates/fermium-syntax`: the lexer, the parser, the expression
+parser and the unit-after-number rule); errors about names, types and units come later, from the checker, and
+are not listed here. In a message, `…` stands for a part filled in from the program (a name, a number, a
+quoted piece of the source, or an optional hint such as "but found 'x'"). The test `spec_syntax_errors`
+(fermium-syntax) extracts every message template from the source (the first argument of each error-constructing
+call: `err`, `err_h`, `error`, `Diagnostic::error`, an error `Diagnostic { message: … }`, a `let msg = …` that
+is then raised, and `exp_too_large`) and checks that the table lists exactly those templates. The column
+*Example* names the ```fermium-error example below (its first line is the comment `# E<n>`); the same test
+parses each example and checks that it fails with a message matching that row, and with `FERMIUM_BIN` set
+spec_examples_run checks that `fermium run` rejects it with a one-line error. Rows marked — have no example
+yet (35 of the 115: mostly the signature lines of the interop blocks); see §4.
+
+| # | Message | Raised in | Example |
+|---|---|---|---|
+| 1 | `'/… …' is ambiguous: implicit multiplication binds tighter than '/', so this would divide by all of '… …'` | expr.rs | — |
+| 2 | `'within' needs a tolerance after it, like  x ≈ 0 m/s within 1e-9 m/s` | expr.rs | E2 |
+| 3 | `'… within …' is true only when … is exactly 0: a percentage of 0 is 0` | expr.rs | E3 |
+| 4 | `'… …' is ambiguous: right after a number, … is the unit 1…, but … is also your variable …` | expr.rs | E4 |
+| 5 | `'…' after … is read as a variable, and you haven't defined …` | expr.rs | — |
+| 6 | `'…' is true only when … is exactly 0: ≈ allows a difference of 10⁻⁶ × the larger size, which is 0 here` | expr.rs | E6 |
+| 7 | `'…/… …' is ambiguous: is it (…/…)·… or …/(… …)?` | expr.rs | — |
+| 8 | `a chain of comparisons can only use <, <=, > and >= (like a < x < b), or only ==` | expr.rs | E8 |
+| 9 | `a tolerance can't be negative` | expr.rs | E9 |
+| 10 | `a value can only have one ±; to add a second (independent) uncertainty, write  (a ± b) ± c` | expr.rs | E10 |
+| 11 | `a vector needs 2 to 16 components, not …` | expr.rs | E11 |
+| 12 | `didn't expect '…' here` | expr.rs, parser.rs | E12 |
+| 13 | `expected ')' to close '('…` | expr.rs | E13 |
+| 14 | `expected ')' to close this sum…` | expr.rs | E14 |
+| 15 | `expected ',' or ')' in the list of arguments…` | expr.rs | E15 |
+| 16 | `expected ',' or ')' in this table…` | expr.rs | E16 |
+| 17 | `expected ',' or ']' in this list…` | expr.rs | E17 |
+| 18 | `expected '>' to close this vector (written <x, y> or <x, y, z>)…` | expr.rs | E18 |
+| 19 | `expected 'else' (an if-expression needs an else part) but the line ended` | expr.rs | E19 |
+| 20 | `expected 'for' in this sum (write: Σ(k² for k from 1 to 10))…` | expr.rs | — |
+| 21 | `expected a file name in quotes after load, like load "data.csv"` | expr.rs | E21 |
+| 22 | `the column … appears twice in this table` | expr.rs | E22 |
+| 23 | `the order of a derivative must be a whole number like d²/dt²` | expr.rs | E23 |
+| 24 | `the orders don't match in this derivative (d….../d...…)` | expr.rs | — |
+| 25 | `the orders don't match: d…/d…` | expr.rs | E25 |
+| 26 | `the orders don't match: ∂…/∂…` | expr.rs | — |
+| 27 | `this '(' is never closed` | expr.rs | E27 |
+| 28 | `this integral is missing its 'dx' (the variable to integrate over)` | expr.rs | E28 |
+| 29 | `this line ended before the expression was complete` | expr.rs | E29 |
+| 30 | `two exponents in a row` | expr.rs | E30 |
+| 31 | `unexpected '='` | expr.rs | E31 |
+| 32 | `± needs a value on its left, like  L = 1.20 ± 0.01 m` | expr.rs, parser.rs | E32 |
+| 33 | `± needs the uncertainty after it, like  L = 1.20 ± 0.01 m` | expr.rs | E33 |
+| 34 | `∇ needs the name of a function after it, like ∇φ, ∇·E, ∇×B or ∇²φ…` | expr.rs | E34 |
+| 35 | `can't read the power of ten in this number` | lexer.rs | E35 |
+| 36 | `can't read the power of ten in this number (write e.g. 3×10^8)` | lexer.rs | E36 |
+| 37 | `can't read the superscript exponent '…'` | lexer.rs | E37 |
+| 38 | `the number … is too large (bigger than about 1.8×10³⁰⁸)` | lexer.rs | E38 |
+| 39 | `this line's indentation doesn't match any block above it` | lexer.rs | E39 |
+| 40 | `this number has two decimal points: …...` | lexer.rs | E40 |
+| 41 | `this text (string) is missing its closing quote "` | lexer.rs | E41 |
+| 42 | `unexpected character '…' (…)` | lexer.rs | E42 |
+| 43 | `'…' is a reserved word in Fermium, so it can't be a variable name` | parser.rs | E43 |
+| 44 | `'…' is given twice in this solve` | parser.rs | E44 |
+| 45 | `'…' sets physical constants to 1: that's natural units` | parser.rs | E45 |
+| 46 | `'…': Fermium gives one variable a value at a time` | parser.rs | E46 |
+| 47 | `Fermium doesn't use '…': a function is written like a formula` | parser.rs | E47 |
+| 48 | `a parameter can be marked  : int  (a whole number), : list  or  : len(x), not : …` | parser.rs | — |
+| 49 | `a parameter can be marked  : int  (a whole number), not : …` | parser.rs | — |
+| 50 | `a parameter can be marked  : number,  : vector,  : list  or  : complex, not : …` | parser.rs | E50 |
+| 51 | `a slice xs[a:b] can be read but not assigned to; set the elements one at a time, like  for i from a to b  then  xs[i] = ...` | parser.rs | E51 |
+| 52 | `a when clause needs a condition like  when y = 0 m:  or  when y < 0 m:` | parser.rs | E52 |
+| 53 | `a … function's signature needs its result after ->…` | parser.rs | — |
+| 54 | `as renames C++ functions; a … function is called by its own name` | parser.rs | — |
+| 55 | `bind(C) is for Fortran functions; a C function is found by its own name` | parser.rs | — |
+| 56 | `can't change …: a module's names can't be changed from outside it` | parser.rs | E56 |
+| 57 | `can't store a value in …: it is read as … (π is always the number π, even written next to a letter)` | parser.rs | E57 |
+| 58 | `can't store a value in …: the left side of = must be a variable name` | parser.rs | E58 |
+| 59 | `expected ',' or ')' in the list of parameters…` | parser.rs | E59 |
+| 60 | `expected ':' and the signatures of the … functions after the … name…` | parser.rs | — |
+| 61 | `expected ':' and what changes after the condition of when…` | parser.rs | E61 |
+| 62 | `expected '=' in this equation…` | parser.rs | E62 |
+| 63 | `expected 'depends on' after the quantity to analyze…` | parser.rs | — |
+| 64 | `expected 'import' after 'from …'…` | parser.rs | E64 |
+| 65 | `expected 'on' after 'depends'…` | parser.rs | E65 |
+| 66 | `expected 'vs' after the quantity to plot; a title goes after the series, like  plot y vs x, title "Orbit"  (or  with title "Orbit")` | parser.rs | E66 |
+| 67 | `expected 'with ...' or 'for ...' here…` | parser.rs | — |
+| 68 | `expected '…'…` | parser.rs | E68 |
+| 69 | `expected C in bind( )…` | parser.rs | — |
+| 70 | `expected a Python function's signature, like  energy(m [kg], v [m/s]) -> [J]…` | parser.rs | — |
+| 71 | `expected a file name in quotes after 'to', like "orbit.png"` | parser.rs | E71 |
+| 72 | `expected a message in quotes after the comma` | parser.rs | E72 |
+| 73 | `expected a name after ::…` | parser.rs | — |
+| 74 | `expected a … function's signature, like  energy(m [kg], v [m/s]) -> [J]…` | parser.rs | — |
+| 75 | `expected an indented block here` | parser.rs | E75 |
+| 76 | `expected an indented block: the signatures of the … functions, one per line` | parser.rs | — |
+| 77 | `expected header "….hpp" after the C++ library's name…` | parser.rs | — |
+| 78 | `expected name="…" after bind(C,…` | parser.rs | — |
+| 79 | `expected one signature per line…` | parser.rs | — |
+| 80 | `expected the axis label in quotes, like  … "mass fraction"` | parser.rs | E80 |
+| 81 | `expected the end of the indented 'with' line…` | parser.rs | — |
+| 82 | `expected the header's name in quotes after header…` | parser.rs | — |
+| 83 | `expected the result's unit in brackets, or list / number, after ->…` | parser.rs | — |
+| 84 | `expected the result's unit in brackets, or number / int, after ->…` | parser.rs | — |
+| 85 | `expected the signatures of the Python functions, indented on the next lines` | parser.rs | — |
+| 86 | `expected the symbol's name in quotes…` | parser.rs | — |
+| 87 | `expected the title in quotes, like title "Decay of Ba-137m"` | parser.rs | E87 |
+| 88 | `expected …` | parser.rs | E88 |
+| 89 | `give the Python module … a short name with as` | parser.rs | — |
+| 90 | `import one module per line` | parser.rs | E90 |
+| 91 | `natural units set constants to 1, like  units natural(ħ = c = 1)` | parser.rs | E91 |
+| 92 | `parallel for works with a range of numbers: write  parallel for i from 1 to n` | parser.rs | E92 |
+| 93 | `plot options are:  with log y,  with log x,  with log,  with points,  with title "...",  with xlabel "...",  with ylabel "...",  with y from a to b,  with x from a to b,  with reversed x,  with animate over t` | parser.rs | E93 |
+| 94 | `solve needs a range for the independent variable` | parser.rs | E94 |
+| 95 | `this line is indented but isn't inside a block` | parser.rs | E95 |
+| 96 | `this program is nested too deeply for Fermium to compile (very long or deeply nested expressions)` | parser.rs | — |
+| 97 | `this solve has no equation` | parser.rs | E97 |
+| 98 | `write  propagate montecarlo 100000 samples  and put the formulas on the indented lines below it` | parser.rs | E98 |
+| 99 | `write  with animate over t  (the variable that changes from frame to frame)` | parser.rs | E99 |
+| 100 | `write  with reversed x  (or  reversed y)` | parser.rs | E100 |
+| 101 | `… is a Fermium keyword, so it can't be the name of a … function` | parser.rs | — |
+| 102 | `… is a Fermium keyword, so the program needs another name for the C++ function …` | parser.rs | — |
+| 103 | `… is …, so it can't be the name of a function or variable; pick another name` | parser.rs | E103 |
+| 104 | `'… …' is ambiguous: after a list, … is a unit (…), but … is also your variable …` | unitrule.rs | E104 |
+| 105 | `'… …' is ambiguous: right after a number, … is a unit (…), but … is also …` | unitrule.rs | E105 |
+| 106 | `'… …' is ambiguous: right after a number, … is one unit (… is … there), but … is also …` | unitrule.rs | — |
+| 107 | `'… …' is ambiguous: right after a number, … is one unit, but … is also the … from 'where'` | unitrule.rs | E107 |
+| 108 | `'…/h' isn't a unit: in Fermium h is Planck's constant, not the hour` | unitrule.rs | E108 |
+| 109 | `'…/h': h is your variable here, and the hour is written hr` | unitrule.rs | E109 |
+| 110 | `'…/h': in Fermium h is Planck's constant, not the hour, so this would divide by Planck's constant` | unitrule.rs | E110 |
+| 111 | `a unit's exponent must be a fraction of whole numbers, like m^(1/2)` | unitrule.rs | E111 |
+| 112 | `expected a number after ^ in this unit` | unitrule.rs | E112 |
+| 113 | `expected a number in the unit's exponent` | unitrule.rs | — |
+| 114 | `expected a unit name…` | unitrule.rs | — |
+| 115 | `this unit's power is too large to track exactly (…)` | unitrule.rs | E115 |
+
+Examples:
+
+```fermium-error
+# E2
+x = 1 m
+print x ≈ 1 m within
+```
+
+```fermium-error
+# E3
+x = 1 m
+print x ≈ 0 m within 1 %
+```
+
+```fermium-error
+# E4
+m = 2
+print 0.3 /(m s²)
+```
+
+```fermium-error
+# E6
+x = 1 m
+print x ≈ 0 m
+```
+
+```fermium-error
+# E8
+print 1 < 2 == 2
+```
+
+```fermium-error
+# E9
+x = 1 m
+print x ≈ 1 m within -1 m
+```
+
+```fermium-error
+# E10
+L = 1.0 ± 0.1 ± 0.2 m
+```
+
+```fermium-error
+# E11
+v = <1>
+```
+
+```fermium-error
+# E12
+print )
+```
+
+```fermium-error
+# E13
+print (1 + 2
+print 3
+```
+
+```fermium-error
+# E14
+print Σ(k for k from 1 to 3
+```
+
+```fermium-error
+# E15
+print sin(1 then)
+```
+
+```fermium-error
+# E16
+t = table(a = [1, 2] b = [3, 4])
+```
+
+```fermium-error
+# E17
+xs = [1, 2 3
+```
+
+```fermium-error
+# E18
+v = <1, 2
+```
+
+```fermium-error
+# E19
+x = if 2 > 1 then 1
+```
+
+```fermium-error
+# E21
+d = load data
+```
+
+```fermium-error
+# E22
+t = table(a = [1, 2], a = [3, 4])
+```
+
+```fermium-error
+# E23
+f(t) = t²
+print d^1.5/dt^1.5 f(t)
+```
+
+```fermium-error
+# E25
+f(t) = t²
+print d²/dt f(t)
+```
+
+```fermium-error
+# E27
+print (1 2
+```
+
+```fermium-error
+# E28
+print ∫ x² from 0 to 1
+```
+
+```fermium-error
+# E29
+x = 1 +
+```
+
+```fermium-error
+# E30
+print 2² ³
+```
+
+```fermium-error
+# E31
+print 1 + = 2
+```
+
+```fermium-error
+# E32
+L = ± 0.01 m
+```
+
+```fermium-error
+# E33
+L = 1.20 ±
+```
+
+```fermium-error
+# E34
+print ∇(1)
+```
+
+```fermium-error
+# E35
+x = 3×10⁻
+```
+
+```fermium-error
+# E36
+x = 3×10^-
+```
+
+```fermium-error
+# E37
+x = 2⁻
+```
+
+```fermium-error
+# E38
+x = 1e999
+```
+
+```fermium-error
+# E39
+if 1 > 0:
+    x = 1
+  y = 2
+```
+
+```fermium-error
+# E40
+x = 1.2.3
+```
+
+```fermium-error
+# E41
+print "hello
+```
+
+```fermium-error
+# E42
+x = 1 ¤ 2
+```
+
+```fermium-error
+# E43
+for = 3
+```
+
+```fermium-error
+# E44
+solve x' = -x with x(0) = 1 for t from 0 to 1 tolerance 1e-8 tolerance 1e-9
+```
+
+```fermium-error
+# E45
+ħ = c = 1
+```
+
+```fermium-error
+# E46
+a = b = 1
+```
+
+```fermium-error
+# E47
+def f(x):
+    return x
+```
+
+```fermium-error
+# E50
+f(x : banana) = x
+print f(1)
+```
+
+```fermium-error
+# E51
+xs = [1, 2, 3]
+xs[1:2] = 0
+```
+
+```fermium-error
+# E52
+solve y'' = -9.8 m/s²
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 1 s
+  when y + 1 m: y' = 0 m/s
+```
+
+```fermium-error
+# E56
+import constants as k
+k.x = 1
+```
+
+```fermium-error
+# E57
+πr = 3
+```
+
+```fermium-error
+# E58
+1 + x = 3
+```
+
+```fermium-error
+# E59
+f(x y) = x
+print f(1)
+```
+
+```fermium-error
+# E61
+solve y'' = -9.8 m/s²
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 1 s
+  when y = 0 m y' = 0 m/s
+```
+
+```fermium-error
+# E62
+solve x' with x(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# E64
+from constants take c
+```
+
+```fermium-error
+# E65
+analyze pendulum: T [s] depends L [m]
+```
+
+```fermium-error
+# E66
+xs = [1, 2]
+plot xs "x"
+```
+
+```fermium-error
+# E68
+for i from 1 3:
+    print i
+```
+
+```fermium-error
+# E71
+xs = [1, 2]
+plot xs vs xs to orbit
+```
+
+```fermium-error
+# E72
+assert 1 > 0, 3
+```
+
+```fermium-error
+# E75
+if 1 > 0:
+print 1
+```
+
+```fermium-error
+# E80
+xs = [1, 2]
+plot xs vs xs with xlabel mass
+```
+
+```fermium-error
+# E87
+xs = [1, 2]
+plot xs vs xs with title decay
+```
+
+```fermium-error
+# E88
+analyze pendulum: 3 depends on L [m]
+```
+
+```fermium-error
+# E90
+import a, b
+```
+
+```fermium-error
+# E91
+units natural(ħ = 2)
+```
+
+```fermium-error
+# E92
+xs = [1, 2]
+parallel for x in xs:
+    print x
+```
+
+```fermium-error
+# E93
+xs = [1, 2]
+plot xs vs xs with banana
+```
+
+```fermium-error
+# E94
+solve x' = -x with x(0) = 1
+```
+
+```fermium-error
+# E95
+x = 1
+    y = 2
+```
+
+```fermium-error
+# E97
+solve
+    with x(0) = 1
+    for t from 0 to 1
+```
+
+```fermium-error
+# E98
+propagate montecarlo 1000 samples banana
+```
+
+```fermium-error
+# E99
+xs = [1, 2]
+plot xs vs xs with animate t
+```
+
+```fermium-error
+# E100
+xs = [1, 2]
+plot xs vs xs with reversed z
+```
+
+```fermium-error
+# E103
+integral(b) = b
+```
+
+```fermium-error
+# E104
+s = 2
+xs = [1, 2] s
+```
+
+```fermium-error
+# E105
+km = 2
+print 3 km
+```
+
+```fermium-error
+# E107
+print 3 m s where s = 2
+```
+
+```fermium-error
+# E108
+v = 3 [km/h]
+```
+
+```fermium-error
+# E109
+h = 2
+v = 3 km/h
+```
+
+```fermium-error
+# E110
+v = 3 km/h
+```
+
+```fermium-error
+# E111
+x = 3 [m^(3/0)]
+```
+
+```fermium-error
+# E112
+x = 3 m^
+```
+
+```fermium-error
+# E115
+x = 3 m^99999999999999999999
+```
+
+## 4. TODO for this chapter
 
 - ~~The `solve` clause-ordering rules~~ (done in 0.2: §2.3). Still open: where `lowest`, `grid` and `when` may go.
 - ~~A normative list of which tokens start a term for implicit multiplication~~ (done in 0.2: §2.4, "Which
   tokens start an implicit product").
-- The exact error set of the parser (each message is fixed by conformance/ today).
+- ~~The exact error set of the parser~~ (done in 0.3: §3, tested equal to the templates in the source). Still
+  open: examples for the 35 rows marked —, and the checker's error set (semantics.md).
