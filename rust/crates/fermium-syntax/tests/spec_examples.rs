@@ -240,6 +240,48 @@ fn spec_conformance_counts() {
     assert!(bad.is_empty(), "docs/spec/README.md vs conformance/cases:\n{}", bad.join("\n"));
 }
 
+/// units.md §2.3 names conformance cases for each point of the unit rule: they exist, a case marked † expects an
+/// error (exit 1) and an unmarked one runs (exit 0), and each point names at least two.
+#[test]
+fn spec_unit_rule_cases() {
+    let text = std::fs::read_to_string(spec_dir().join("units.md")).unwrap();
+    let s = text.find("### 2.3 The rule in the conformance suite").expect("units.md has §2.3");
+    let sect = &text[s..s + text[s..].find("\n## 3.").unwrap()];
+    let cases = spec_dir().join("../../conformance/cases");
+    let mut bad = vec![];
+    let mut points = 0;
+    for line in sect.lines().filter(|l| l.starts_with("| ") && l.contains('`')) {
+        let cells: Vec<&str> = line.split(" | ").collect();
+        let (point, ids) = (cells[0].trim_start_matches("| "), cells[1]);
+        let pieces: Vec<&str> = ids.split('`').collect();
+        let mut n = 0;
+        for k in (1..pieces.len()).step_by(2) {
+            let id = pieces[k];
+            let rejected = pieces.get(k + 1).is_some_and(|after| after.starts_with('†'));
+            n += 1;
+            let (fm, json) = (cases.join(format!("{id}.fm")), cases.join(format!("{id}.json")));
+            let Ok(j) = std::fs::read_to_string(&json) else {
+                bad.push(format!("{point}: conformance/cases/{id}.json doesn't exist"));
+                continue;
+            };
+            if !fm.exists() {
+                bad.push(format!("{point}: conformance/cases/{id}.fm doesn't exist"));
+            }
+            let exit1 = j.contains("\"exit\": 1");
+            if rejected != exit1 {
+                let mark = if rejected { "is marked †" } else { "isn't marked †" };
+                bad.push(format!("{point}: {id} {mark} but its expected exit is {}", if exit1 { 1 } else { 0 }));
+            }
+        }
+        if n < 2 {
+            bad.push(format!("{point}: names fewer than two cases"));
+        }
+        points += 1;
+    }
+    assert!(points >= 7, "units.md §2.3 should cover the 7 points of the unit rule");
+    assert!(bad.is_empty(), "units.md §2.3:\n{}", bad.join("\n"));
+}
+
 /// The Rust string literal at the start of `s` (which starts with '"'): its value and its length in bytes.
 fn rust_literal(s: &str) -> (String, usize) {
     let b: Vec<char> = s.chars().collect();

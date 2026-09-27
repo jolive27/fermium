@@ -123,6 +123,27 @@ KE = ½ m v² where m = 2 kg, v = 3 m/s
 print KE
 ```
 
+### 2.3 The rule in the conformance suite
+
+Each point of §2.1 is exercised by conformance cases (`conformance/cases/<area>/<id>.fm`, with the expected
+output or error in `<id>.json`). A case marked † is rejected (it fixes the error message, line and hint); the
+others run. The test `spec_unit_rule_cases` (fermium-syntax, spec_examples.rs) checks that every case named
+here exists, that a † case expects exit status 1 and an unmarked one exit status 0, and that each point names at
+least two cases. The cases were found by searching the suite (for bracketed units, ambiguity errors, reciprocal
+units and so on); the list is a sample per point, not every case that touches the rule.
+
+| Point | Cases | What they show |
+|---|---|---|
+| 1. Explicit positions | `units-and-printing/18c0fb712e8e` `units-and-printing/8a86ba904bf6` `functions/d36d73b0c8d0` `functions/5e2a39655be4` `algebraic-solve/ac80efbda03e` | `2 [g]` with your own `g`; a parameter `f(x [m])`, `f(v [km/hr]) = v in m/s`; `E_F in eV` |
+| 2. Right after a digit literal | `appendix1/e16d45c1bc01`† `control-flow/e3a63b0ef7a5`† `derivatives/18111d3c54ef`† `eigen/4435c8db4f8e`† `functions/de882b62bcd1`† | `3 m` with your `m`; `1.2 T` with your `T`; `2 s` inside `d/ds`; `2 u` with the unknown `u` of a solve; `0.1 m where m = 2 kg` |
+| 3. Continuing a unit | `units-and-printing/0195dbe7a69d`† `units-and-printing/17dd076cb393`† `units-and-printing/2af19670012c`† `ode/974c4321eaae`† `units-and-printing/69bccdb179c1` `units-and-printing/693f5900886a` | a later name that is your variable asks (`2 N·m`, `3 V V`, `2 m L^2`, `9.81 m/s²`); the unit ends at `c` (`2 kg c^2`) and at `*` (`2.0 m * 3.14159`) |
+| 4. Reciprocal units | `complex/cfdb3ff210f1` `ode/0ccf2c1f48a6` `integrals/726e73d7389d` `units-and-printing/0492695b3ef2`† | `2 /s`, `0.400 /m`, `3 /m`; a bracket after `/` mixing your `m` and units asks (`0.300 /(m s²)`) |
+| 5. Everywhere else a variable | `units-and-printing/0687e86ad7eb`† `units-and-printing/1a80b90c5ca3`† `units-and-printing/4379cfa2e14b` `units-and-printing/23d47e9a143b` `units-and-printing/2b1441db47e9`† `units-and-printing/acbffc635708`† `units-and-printing/31693ddc45a8`† | `5 N*m`: after `*`, `m` isn't defined; a unit name used as a variable; `½ kg` and `(1/2) kg` read the unit; `(51 - 33 (N - Z)/A) MeV` and a unit after your variable ask for brackets |
+| 6. Spacing never changes the reading | `units-and-printing/4a4e3b22b148`† `units-and-printing/0fb552a3e1c3`† `units-and-printing/ceec0948bde5`† `units-and-printing/67f7c6c1878d`† | `20 m/s/g`, `20 m/s/ g`, `20 m/s /g` and `20 m/s / g` with your `g` all ask the same question |
+| 7. Lists and vectors | `data/808a09920673` `functions/c7cca1347b5e` `derivatives/1747ec255d51` `complex/fb6d3cb37085` `lists/524c496d8d32`† `lists/e8f38e80de3a`† | `[1, 2, 3, 4] s`; `<cos(t), sin(t), t> m`; `<1, 2> m`; after a list, a unit that is your variable asks |
+| `h` is Planck's constant | `units-and-printing/c447e3ac2c8a`† `units-and-printing/841d21cca7c3`† | `36 km/h` and `[km/h]` are errors that name Planck's constant (D180) |
+| §2.2 `where` | `appendix1/0b10742d96bd` `functions/ff91eff4de42`† | `ω₀ = √(k/m) where k = 50 N/m, m = 0.5 kg` runs; `E = 0.5 m v^2 where m = 2 kg` asks (right after a number, `m` is the unit) |
+
 ## 3. The unit catalogue
 
 The catalogue (`fermium-units/src/db.rs`, the generated table `fermium-syntax/src/tables.rs`) maps each unit name to
@@ -363,3 +384,5 @@ x = 2 s
 - The rules for `Hz`/`rad/s`/`rev`, `Gy`/`Sv`, `J`/`N m` warnings (D27, D95, D306, D324) as a table.
 - ~~Units of the built-in functions~~ (done in 0.2: semantics.md §7). Still open: the units of `fit` results.
 - Mixed-unit vectors (one dimension per component).
+- ~~A link from the unit rule to the conformance cases~~ (done in 0.3: §2.3, a sample of cases per point, tested
+  to exist with the expected outcome). Still open: the same for §4–§7.
