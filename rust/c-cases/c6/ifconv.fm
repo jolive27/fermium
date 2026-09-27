@@ -3,7 +3,8 @@
 N = 40
 xs = zeros(N)
 for k from 1 to N
-    xs[k] = sin(k) * 3
+    # no libm here: the near-zero sum u below would magnify a last-bit difference in sin between C libraries
+    xs[k] = 3 (mod(5 k + 7, 13) / 6.5 - 1)
 last = -1
 s = -0.0
 t = 0

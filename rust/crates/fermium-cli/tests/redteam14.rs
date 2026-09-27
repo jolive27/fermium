@@ -236,10 +236,14 @@ fn check_does_not_load_the_library_but_still_finds_a_missing_function() {
     std::fs::write(d.join("bad.fm"), "import c \"libevil.so\":\n    fooo(x) -> number\nprint 1\n").unwrap();
     let o = fermium(&["check", "ok.fm"], &d, "");
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    let o = fermium(&["check", "bad.fm"], &d, "");
-    assert_eq!(o.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&o.stderr).contains("the C library libevil.so has no function fooo"),
-            "{}", String::from_utf8_lossy(&o.stderr));
+    // the missing function is found by reading the ELF symbol table (D305); on Mach-O that check is left to the
+    // run, so `check` passes there
+    if cfg!(target_os = "linux") {
+        let o = fermium(&["check", "bad.fm"], &d, "");
+        assert_eq!(o.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&o.stderr).contains("the C library libevil.so has no function fooo"),
+                "{}", String::from_utf8_lossy(&o.stderr));
+    }
     std::fs::write(d.join("gone.fm"), "import c \"./libnothere.so\":\n    foo(x) -> number\nprint 1\n").unwrap();
     let o = fermium(&["check", "gone.fm"], &d, "");
     assert_eq!(o.status.code(), Some(1));
