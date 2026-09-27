@@ -2146,3 +2146,11 @@ AD against finite differences (1e-9); 254 printed derivatives numerically equal 
 
 Status: #3 and #4 fixed by the coordinator (D326 reworked: steps scale with a parameter whose starting value is
 tiny in SI; ordinary fits keep v1's steps; tests/fit_errors.rs). The other items are in an agent (claude/v2.5-rt16).
+
+Status (claude/v2.5-rt16): fixed #1/#2 (D330: HOME and the current folder in the cache key, `--base-dir` made
+absolute), #5 (D331: (u^a)^b merged only when b is an integer or a isn't; no conformance golden changed), #6 (D333),
+#7 (D332), #8 (D334: `--pretty` keeps `*` before a unit name after a unit; the new corpus round-trip test also found
+`--ascii` turning `25 ħ / √…` into the unit `hbar`, fixed), #9 (D335: Monte Carlo, the warning names the moving event),
+#10–#12 (D336; the ns_cooling numbers changed: N₉ 2.44×10⁴⁰ erg/s, 31 of 48 within a factor 3), #13 documented,
+#16 fixed, #14 partly (the sweep message; nested sweep figures and a warning for `sweep c` not done). #15 not
+done. Tests: rust/crates/fermium-cli/tests/redteam16.rs, rust/crates/fermium-fmt/tests/roundtrip.rs.
