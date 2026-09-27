@@ -12,15 +12,15 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 15 of the files completely** (167 templates) — the ones that hold the most common errors: unit and
+covers 16 of the files completely** (208 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
-operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, and random
-numbers. The other files (`solve` for ODEs, `fit`, PDEs, eigenvalue problems, data tables, vectors and matrices,
-complex numbers, arrays, statements, modules, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 410 templates) are still to do; see §4.
+operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
+numbers, and the statements (control flow, reassignment, list entries, `push`, local functions). The other files (`solve` for ODEs, `fit`, PDEs, eigenvalue problems, data tables, vectors and matrices,
+complex numbers, arrays, modules, parallel loops, `analyze`, events and the C, C++ and Python
+interop; about 370 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `uncertain.rs`, `units.rs`.
+Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -32,14 +32,14 @@ message that are built in one place and raised in another: the "might not have a
 `exact.rs`, raised in checker.rs). It checks that the table lists exactly those templates, and that the
 *Covered files* line above is the test's list. In a message, `…` stands for a part filled in from the program
 (a name, a unit, a dimension in words such as `length [m]`, a line number, a kind such as `a 3-D vector of …`).
-Errors raised in a covered file through a helper defined in an uncovered file (for example `need_num`'s
-"… must be a number, but it is …", used for the two sides of a comparison) belong to the helper's file.
+Errors raised in a covered file through a helper defined in another file (for example stmts.rs's `need_num`,
+"… must be a number, but it is …", used for the two sides of a comparison) are listed under the helper's file.
 
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 71 of the
-167. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 86 of the
+208. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -178,7 +178,7 @@ errors come first, and the rest are simply not written yet (§4).
 | 116 | `a list can hold numbers or text, but not both` | lists.rs | `[1, "a"]` | C116 |
 | 117 | `all elements of a list must be the same kind of value: this one is … but the first is …` | lists.rs | a list mixing numbers, vectors, … | — |
 | 118 | `all elements of a list need the same units; this one is … but earlier ones are …` | lists.rs | a list mixing dimensions | C118 |
-| 119 | `a list of vectors needs one unit for all components; this is …` | lists.rs | a list of vectors of mixed dimensions | — |
+| 119 | `a list of vectors needs one unit for all components; this is …` | lists.rs, stmts.rs | a list of vectors of mixed dimensions | — |
 | 120 | `a list of complex numbers can't hold …` | lists.rs | a non-number in a list of complex numbers | — |
 | 121 | `a matrix is written as a list of rows, like [[1, 2], [3, 4]]; lists of lists aren't supported otherwise` | lists.rs | nested lists that aren't a matrix | — |
 | 122 | `a list index must be a plain number (1, 2, 3, ...), not …` | lists.rs | an index with units | C122 |
@@ -230,6 +230,52 @@ errors come first, and the rest are simply not written yet (§4).
 | 165 | `…: … must be a list, not …` | clist.rs | a two-argument transform given a non-list | — |
 | 166 | `… doesn't work on a list of complex numbers` | clist.rs | a real-only list built-in on complex lists | — |
 | 167 | `… takes … argument…: …` | clist.rs | a transform with the wrong number of arguments | — |
+| | **Statements: control flow (stmts.rs)** | | | |
+| 168 | `a condition must be true or false, but this is …` | stmts.rs | an `if`/`while` condition that isn't a boolean | C168 |
+| 169 | `break can only be used inside a loop` | stmts.rs | `break` outside a loop | C169 |
+| 170 | `continue can only be used inside a loop` | stmts.rs | `continue` outside a loop | C170 |
+| 171 | `return can only be used inside a function` | stmts.rs | `return` at the top level | C171 |
+| 172 | `return needs a value` | stmts.rs | a bare `return` | C172 |
+| 173 | `can't loop over …; 'for x in ...' needs a list` | stmts.rs | `for x in v` where v isn't a list | C173 |
+| 174 | `the range goes from … to …; both ends need the same units` | stmts.rs | `for i from a to b` with a, b of different dimensions | C174 |
+| 175 | `the step is … but the range is …` | stmts.rs | a loop step of another dimension than the range | C175 |
+| 176 | `this range is …, so it needs a step with units` | stmts.rs | a loop over a dimensioned range without a step | C176 |
+| 177 | `… was set outside this … region, so it can't be changed here (its units mean something different there)` | stmts.rs | assigning, inside a natural-units region, a variable set outside it (units.md §6) | — |
+| | **Statements: variables keep their kind and units (stmts.rs)** | | | |
+| 178 | `… is …; it can't now hold …` | stmts.rs | reassigning a variable with a value of another dimension (semantics.md §2.2) | C178 |
+| 179 | `… holds …; it can't now hold …` | stmts.rs | reassigning a variable with a value of another kind | C179 |
+| 180 | `… holds a …-vector; it can't now hold a …-vector` | stmts.rs | reassigning a vector with one of another length | C180 |
+| 181 | `… holds a …×… matrix; it can't now hold a …×… matrix` | stmts.rs | reassigning a matrix with one of another size | C181 |
+| 182 | `… holds a …-dimensional array; it can't now hold a …-dimensional one` | stmts.rs | reassigning an array with one of another rank | — |
+| 183 | `… needs a value before you can use … on it` | stmts.rs | `x += …` etc. on a variable with no value yet | — |
+| 184 | `this doesn't produce a value to store` | stmts.rs | assigning the result of a statement-like call | — |
+| 185 | `can't store an ODE solution in a variable this way` | stmts.rs | assigning an ODE solution other than with `solve` | — |
+| 186 | `… is already defined here` | stmts.rs | a second definition of a local function in the same body | C186 |
+| | **Statements: lists, entries and push (stmts.rs)** | | | |
+| 187 | `… isn't a list, so you can't set …[...]` | stmts.rs | `x[i] = …` on a non-list | C187 |
+| 188 | `… is a list of …; can't put … in it` | stmts.rs | storing a value of another dimension in a list entry | C188 |
+| 189 | `… is …; can't put … in it` | stmts.rs | storing a value of the wrong kind in an entry | — |
+| 190 | `…[i, j] = … sets an entry of a matrix, but … is …` | stmts.rs | `x[i, j] = …` on a non-matrix | C190 |
+| 191 | `…[i, j, k] = … sets an entry of an array of 3 or more dimensions, but … isn't one` | stmts.rs | `x[i, j, k] = …` on a non-array | C191 |
+| 192 | `push needs a list variable and a value: push(xs, x)` | stmts.rs | `push` with the wrong number of arguments | C192 |
+| 193 | `push needs a list as its first argument, not …` | stmts.rs | `push` onto a non-list | C193 |
+| 194 | `can't add … to a list of …` | stmts.rs | `push` of a value of another dimension | C194 |
+| 195 | `can't add … to a list of complex numbers of …` | stmts.rs | the same for a list of complex numbers | — |
+| 196 | `this list holds text, so you can only push text onto it` | stmts.rs | `push` of a number onto a list of text | C196 |
+| 197 | `this list holds complex numbers, so you can't push … onto it` | stmts.rs | `push` of a non-number onto a complex list | — |
+| 198 | `… is …, so you can't push … onto it` | stmts.rs | `push` of a value of the wrong kind | — |
+| 199 | `clear needs a list variable: clear(xs)` | stmts.rs | `clear` without a list variable | C199 |
+| 200 | `clear empties a list, and … is …` | stmts.rs | `clear` of a non-list | C200 |
+| | **Statements: functions (stmts.rs)** | | | |
+| 201 | `functions must be defined at the top level of the program (not inside a block)` | stmts.rs | a function definition inside `if`, a loop, … | — |
+| 202 | `a function defined inside another function must fit on one line, like  …(x) = …  (define a longer one at the top level)` | stmts.rs | a multi-line local function | — |
+| 203 | `a function defined inside another function takes its parameters' units from each call; leave out the [unit]` | stmts.rs | a `[unit]` annotation on a local function's parameter | C203 |
+| 204 | `'where' isn't supported on a function defined inside another function; define the helper value first, then …(…) = …` | stmts.rs | `where` on a local function | — |
+| 205 | `a function can't return the ODE solution … yet; return a number made from it instead, like …(…), ∫ …(…) d… or a root found with solve` | stmts.rs | returning an ODE solution | — |
+| | **Values that must be numbers (stmts.rs helpers, used by many files)** | | | |
+| 206 | `… must be a number, but it is …` | stmts.rs | `need_num`: an operand that must be a number (a comparison's side, an operator's operand, a built-in's argument) is a list, vector, text, … | C206 |
+| 207 | `… must be a number, but it is a function` | stmts.rs | the same where the operand is a function | — |
+| 208 | `… must be a number, but it is an ODE solution` | stmts.rs | the same where the operand is an ODE solution | — |
 
 ## 3. Examples
 
@@ -770,18 +816,175 @@ solve x = 2 m for x from 0 m to 3 s
 z = fft(3)
 ```
 
+```fermium-error
+# C168
+if 3 m
+    print(1)
+```
+
+```fermium-error
+# C169
+break
+```
+
+```fermium-error
+# C170
+continue
+```
+
+```fermium-error
+# C171
+return 3
+```
+
+```fermium-error
+# C172
+f(x) =
+    return
+y = f(1)
+```
+
+```fermium-error
+# C173
+x = 3
+for i in x
+    print(i)
+```
+
+```fermium-error
+# C174
+for i from 1 m to 5 s
+    print(i)
+```
+
+```fermium-error
+# C175
+for i from 1 m to 5 m step 1 s
+    print(i)
+```
+
+```fermium-error
+# C176
+for i from 1 m to 5 m
+    print(i)
+```
+
+```fermium-error
+# C178
+x = 3 m
+x = 2 s
+```
+
+```fermium-error
+# C179
+x = 3
+x = "a"
+```
+
+```fermium-error
+# C180
+v = vec(1, 2)
+v = vec(1, 2, 3)
+```
+
+```fermium-error
+# C181
+A = [[1, 2], [3, 4]]
+A = [[1, 2, 3], [4, 5, 6]]
+```
+
+```fermium-error
+# C186
+f(x) =
+    g(y) = y
+    g(y) = 2 y
+    return g(x)
+z = f(1)
+```
+
+```fermium-error
+# C187
+x = 3
+x[1] = 2
+```
+
+```fermium-error
+# C188
+xs = [1 m, 2 m]
+xs[1] = 3 s
+```
+
+```fermium-error
+# C190
+x = 3
+x[1, 2] = 2
+```
+
+```fermium-error
+# C191
+x = 3
+x[1, 2, 3] = 2
+```
+
+```fermium-error
+# C192
+xs = [1]
+push(xs)
+```
+
+```fermium-error
+# C193
+x = 3
+push(x, 3)
+```
+
+```fermium-error
+# C194
+xs = [1 m, 2 m]
+push(xs, 3 s)
+```
+
+```fermium-error
+# C196
+xs = ["a"]
+push(xs, 3)
+```
+
+```fermium-error
+# C199
+clear()
+```
+
+```fermium-error
+# C200
+x = 3
+clear(x)
+```
+
+```fermium-error
+# C203
+f(x) =
+    g(y [m]) = y
+    return g(x)
+z = f(1 m)
+```
+
+```fermium-error
+# C206
+b = [1, 2] < 3
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: vecmat.rs (64 templates), solve.rs (55), stmts.rs (37, including the
-  `need_num` helpers used by many covered files), data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
+  covered, by size of their error set: vecmat.rs (64 templates), solve.rs (55), data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
   pyinterop.rs (18), modules.rs (15), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 410 templates remain.
+  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 370 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (71). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (86). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -789,6 +992,7 @@ z = fft(3)
   `print` of a value with no printed form (74), and the Rust-only limit (79). Rows 67 and 68 are internal
   guards that no program reaches. In rows 80–167 (builtin.rs, lists.rs, uncertain.rs, calculus.rs, clist.rs), 50
   rows: mostly the rarer argument errors, `propagate montecarlo`'s block, the vector-calculus operators and the
-  two-list forms of the Fourier built-ins.
+  two-list forms of the Fourier built-ins. In rows 168–208 (stmts.rs), 15 rows: natural-units regions, arrays,
+  complex lists, ODE solutions and local-function limits.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
