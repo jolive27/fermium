@@ -1,0 +1,15 @@
+Binding energies (Fortran SEMF, stdlib SEMF, measured AME2020):
+   O-16 125.97 MeV 125.97 MeV 127.62 MeV
+   Ca-40 344.58 MeV 344.58 MeV 342.05 MeV
+   Fe-56 495.38 MeV 495.38 MeV 492.26 MeV
+   Pb-208 1634.3 MeV 1634.3 MeV 1636.4 MeV
+   U-238 1814.7 MeV 1814.7 MeV 1801.7 MeV
+B/A of Fe-56: 8.846 MeV
+S_n of Pb-208: 6.91 MeV  (measured 7.37 MeV)
+most stable Z for A = 56, 208: 25 82
+all five at once: [126, 345, 495, 1630, 1810] MeV
+kT = 1.35 keV  E_G = 493.1 keV
+Gamow peak E0 = 6.09 keV  width Δ = 6.63 keV
+E0 from Fermium's formula: 6.09 keV
+maximum of the integrand at 6.09 keV
+area: 8.30×10⁻⁶ keV  Gaussian approximation: 8.05×10⁻⁶ keV

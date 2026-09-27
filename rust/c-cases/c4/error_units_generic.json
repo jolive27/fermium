@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_units_generic.fm, line 3: kinetic_energy expects v in km/s (declared on line 2), but got time [s]\n    f(x) = kinetic_energy(1 kg, x)\n                                ^\n  hint: pass a speed, like  1 km/s; this happened when calling f on line 5 (with x = time [s])\n",
+ "exit": 1
+}

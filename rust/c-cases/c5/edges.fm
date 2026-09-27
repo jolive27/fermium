@@ -1,0 +1,26 @@
+# versions over several lines, with where, recursion and a function parameter
+travel(d [m], v [m/s]) = d / v
+travel(d [m], v [m/s], a [m/s²]) =
+    # time to cover d from speed v at constant acceleration a
+    disc = v² + 2 a d
+    return (√(disc) - v) / a
+print travel(100 m, 10 m/s)
+print travel(100 m, 10 m/s, 2 m/s²)
+
+fall(h [m]) = √(2 h / g) where g = 9.81 m/s²
+fall(h [m], planet_g [m/s²]) = √(2 h / planet_g)
+print fall(20 m), fall(20 m, 1.62 m/s²)
+
+count(n: number) = if n <= 0 then 0 else 1 + count(n - 1)
+count(xs: list) = len(xs)
+print count(5), count([1, 2, 3])
+
+# a version that takes a function, and one that takes a number
+apply(F, x) = F(x)
+apply(x [m]) = 2 x
+sq(y) = y²
+print apply(sq, 3 m), apply(3 m)
+
+# a generic function that is never called doesn't need to choose a version
+unused(x) = travel(x, 2 m/s) + fall(x)
+print travel(1 km, 20 m/s) in min

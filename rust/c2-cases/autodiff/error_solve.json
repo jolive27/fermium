@@ -1,5 +1,0 @@
-{
- "stdout": "",
- "stderr": "error_solve.fm, line 2: can't differentiate fall automatically: it uses solve\n        solve y'' = -9.81 m/s² with y(0 s) = h, y'(0 s) = 0 m/s for t from 0 s to 1 s\n        ^\n  hint: automatic differentiation goes through assignments, if, for and while; use a finite difference, (f(x + h) - f(x - h)) / (2h); (needed for the derivative of fall on line 4)\n",
- "exit": 1
-}

@@ -4,6 +4,7 @@
 //! Everything in [`numerics`] works on plain `f64` values, slices and closures: the checker has
 //! already verified and erased the units.
 
+pub mod cffi;
 pub mod data;
 pub mod format;
 pub mod numerics;

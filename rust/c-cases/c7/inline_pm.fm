@@ -1,0 +1,13 @@
+# C7: a ± written inside an integrand or a right side is one measurement for the whole integral or solve
+print ∫ (1.0 ± 0.1) x dx from 0 to 1
+solve y' = -(0.50 ± 0.02) y with y(0) = 1.00 for t from 0 to 2
+print y(2)
+# a measured value used as a loop bound can't be linearized: Monte Carlo (the number of terms changes)
+m = 3 ± 0.5
+f(x) =
+    s = 0
+    for i from 1 to m
+        s = s + x^i
+    s
+seed(2)
+print ∫ f(x) dx from 0 to 1

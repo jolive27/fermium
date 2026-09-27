@@ -1,0 +1,88 @@
+# White dwarf cooling: Mestel's theory, derived with units, against the Gaia EDR3 white dwarfs within 100 pc
+# (Gentile Fusillo et al. 2021; see SOURCE.md). Run from this folder:  fermium run wd_cooling.fm
+
+wd = load "wd.csv"                # T [K], logg (cgs), M [Msun], GMAG, plx [mas]  (pure-hydrogen atmosphere fits)
+n = len(wd.T)
+print n, "white dwarfs within 100 pc with hydrogen-atmosphere fits"
+
+# 1. radius from mass and surface gravity, luminosity from Stefan–Boltzmann
+L = []
+logL = []
+for i from 1 to n
+    g_s = 10^wd.logg[i] * 1 cm/s²
+    R = √(G wd.M[i] / g_s)
+    Li = 4π R² σ wd.T[i]^4
+    push(L, Li)
+    push(logL, log10(Li / L☉))
+print "log L/L☉ from", min(logL) to 3 digits, "to", max(logL) to 3 digits, "  median mass", sort(wd.M)[(n + 1) / 2] to 3 digits
+
+# 2. Mestel (1952): a degenerate isothermal core under a thin radiative envelope with Kramers opacity
+#    κ = κ₀ ρ (T/1 K)^(−3.5),  κ₀ = 4.34×10²⁴ cm⁵ g⁻² × Z (1 + X)   (bound–free; Schwarzschild, Clayton)
+Z = 0.02
+X = 0
+μ = 4/3                           # ionised helium envelope
+μ_e = 2                           # carbon–oxygen core
+A_ion = 14                        # mean ion mass number of a C/O core (half and half by mass)
+κ₀ = 4.34e24 [cm^5/g^2] * Z (1 + X)
+# envelope: dP/dT = 64πσ G M T³/(3κL) with ρ = μ m_u P/(k_B T) integrates to P² = (2/8.5) C T⁵ (T/1 K)^3.5
+ρ_env(T, Lum, Mass) =
+    C = 64π σ G Mass k_B / (3 κ₀ Lum μ m_u)
+    P = √((2/8.5) C T^5 (T / 1 K)^3.5)
+    μ m_u P / (k_B T)
+# the envelope ends where the electrons become degenerate: ideal-gas pressure = degenerate-electron pressure
+K_e = (3π²)^(2/3) ħ² / (5 m_e)
+ρ_deg(T) = (k_B T (μ_e m_u)^(5/3) / (μ m_u K_e))^(3/2)
+# ρ_env ∝ L^(−1/2), so matching the two densities at the core temperature T_c gives L(T_c)
+L_of_T(Tc, Mass) = 1 L☉ * (ρ_env(Tc, 1 L☉, Mass) / ρ_deg(Tc))²
+print "Mestel: L = C M T_c^3.5 with C =", L_of_T(1e7 K, 1 M☉) / (1 M☉ * 1e7^3.5) in W/kg to 3 digits, "per K^3.5"
+solve L_of_T(Tc, 0.6 M☉) = 1e-3 L☉ for Tc from 1e5 K to 1e9 K
+print "core temperature of a 0.6 M☉ white dwarf at L = 10⁻³ L☉:", Tc in K to 3 digits
+# cooling: the ions' heat (3/2) k_B T per ion is radiated away:  t = (3/5) k_B M T_c / (A m_u L) = (2/5) U/L
+t_cool(Lum, Mass) =
+    solve L_of_T(Tc2, Mass) = Lum for Tc2 from 1e4 K to 1e10 K
+    (3/5) k_B Mass Tc2 / (A_ion m_u Lum)
+for lg in [-1, -2, -3, -4, -4.5]
+    print "  0.6 M☉ at log L/L☉ =", lg, ": Mestel cooling age", t_cool(10^lg * L☉, 0.6 M☉) in Gyr to 3 digits
+print "  t ∝ L^(−5/7): t(10⁻⁴)/t(10⁻³) =", t_cool(1e-4 L☉, 0.6 M☉) / t_cool(1e-3 L☉, 0.6 M☉) to 4 digits, " (10^(5/7) =", 10^(5/7) to 4 digits, ")"
+
+# 3. the luminosity function: the number of white dwarfs per 0.25 dex in L (a volume-limited sample within 100 pc)
+nb = 24
+lo = -5.5
+counts = zeros(nb)
+for i from 1 to n
+    k = floor((logL[i] - lo) / 0.25) + 1
+    if k >= 1 and k <= nb
+        counts[k] += 1
+centres = []
+for k from 1 to nb
+    push(centres, lo + 0.25 (k - 0.5))
+V_100 = (4π/3) (100 pc)³
+print "log L/L☉    N     per pc³ per dex"
+for k from 1 to nb
+    print centres[k] to 4 digits, " ", counts[k], " ", counts[k] / (0.25 V_100) in 1/pc³ to 3 digits
+
+# Mestel with a constant birth rate: dN/dlog L ∝ t_cool ∝ L^(−5/7), a slope of −0.714 in log N
+xs = []
+ys = []
+for k from 1 to nb
+    if centres[k] > -3.25 and centres[k] < -1.25 and counts[k] > 0
+        push(xs, centres[k])
+        push(ys, log10(counts[k]))
+s_lf = -0.7
+c_lf = 1
+fit y = s_lf x + c_lf to table(x = xs, y = ys)
+print "luminosity-function slope for −3.25 < log L < −1.25:", s_lf to 3 digits, "±", err(s_lf) to 2 digits, "  (Mestel: −5/7 = −0.714)"
+
+# the faint-end cut-off: the faintest bin still holding a tenth of the peak count
+peak = max(counts)
+kpk = argmax(counts)
+kcut = kpk
+for k from 1 to kpk
+    if counts[kpk - k + 1] >= peak / 10
+        kcut = kpk - k + 1
+Lcut = 10^(centres[kcut] - 0.125) * L☉
+print "peak of the luminosity function at log L/L☉ =", centres[kpk] to 3 digits, "; it falls below a tenth of the peak below log L/L☉ =", centres[kcut] - 0.125 to 3 digits
+print "Mestel cooling age of a 0.6 M☉ white dwarf at the cut-off:", t_cool(Lcut, 0.6 M☉) in Gyr to 3 digits
+
+plot counts vs centres with points, log y, xlabel "log10(L / Lsun)", ylabel "N per 0.25 dex", title "White dwarf luminosity function within 100 pc (Gaia EDR3)" to "luminosity_function.png"
+plot t_cool(10^x * L☉, 0.6 M☉) in Gyr vs x from -5 to -0.5 with log y, xlabel "log10(L / Lsun)", title "Mestel cooling age of a 0.6 Msun C/O white dwarf" to "mestel_age.png"

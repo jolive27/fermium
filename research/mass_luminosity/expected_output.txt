@@ -1,0 +1,40 @@
+774 stars in 387 eclipsing binaries; M from 0.106 M☉ to 27.3 M☉
+log(4πR²σT⁴/L☉) − catalogue log L: 625 stars, mean -0.00064  std 0.020
+4π R☉² σ (5772 K)⁴ / L☉ = 1.0000
+main-sequence stars (log g ≥ 3.9): 576
+mass range          N     α (Fermium)       β (Fermium)       α (Eker 2018)   β (Eker 2018)   rms
+fit y = α x + β   (27 data points from table(x = xs, y = ys))
+  α = 1.810   (standard error 0.36)
+  β = -0.9844   (standard error 0.19)
+  rms residual = 0.232
+0.179 – 0.450 M☉  27   1.810 ± 0.36   -0.984 ± 0.19   2.028   -0.976   0.24
+fit y = α x + β   (50 data points from table(x = xs, y = ys))
+  α = 5.023   (standard error 0.47)
+  β = 0.03709   (standard error 0.10)
+  rms residual = 0.163
+0.450 – 0.720 M☉  50   5.023 ± 0.47   0.0371 ± 0.10   4.572   -0.102   0.16
+fit y = α x + β   (101 data points from table(x = xs, y = ys))
+  α = 3.904   (standard error 0.51)
+  β = 0.06085   (standard error 0.037)
+  rms residual = 0.250
+0.720 – 1.05 M☉  101   3.904 ± 0.51   0.0608 ± 0.037   5.743   -0.00700   0.25
+fit y = α x + β   (312 data points from table(x = xs, y = ys))
+  α = 3.993   (standard error 0.072)
+  β = 0.07982   (standard error 0.013)
+  rms residual = 0.116
+1.05 – 2.40 M☉  312   3.993 ± 0.072   0.0798 ± 0.013   4.329   0.0100   0.12
+fit y = α x + β   (38 data points from table(x = xs, y = ys))
+  α = 4.082   (standard error 0.16)
+  β = 0.002467   (standard error 0.098)
+  rms residual = 0.138
+2.40 – 7.00 M☉  38   4.082 ± 0.16   0.00247 ± 0.098   3.967   0.0930   0.14
+fit y = α x + β   (42 data points from table(x = xs, y = ys))
+  α = 2.997   (standard error 0.14)
+  β = 0.9140   (standard error 0.16)
+  rms residual = 0.123
+7.00 – 31.0 M☉  42   2.997 ± 0.14   0.914 ± 0.16   2.865   1.10   0.12
+fit y = a1 x + b1   (576 data points from table(x = xs_all, y = ys_all))
+  a1 = 3.786   (standard error 0.025)
+  b1 = 0.07748   (standard error 0.010)
+  rms residual = 0.229
+data − Eker 2018 relation: 570 stars, mean 0.042  rms 0.184

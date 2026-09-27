@@ -1,0 +1,65 @@
+# The cosmic microwave background is a blackbody: the COBE/FIRAS monopole spectrum (Fixsen et al. 1996,
+# Table 4; file from NASA LAMBDA, see SOURCE.md) fitted with Planck's law.
+# Run from this folder:  fermium run firas.fm
+
+firas = load "firas.csv"          # sigma [1/cm], I_MJy, r_kJy, s_kJy, g_kJy (see prepare.py)
+MJy = 1e-20 W/(m² Hz)             # Fermium has no jansky; 1 Jy = 10⁻²⁶ W m⁻² Hz⁻¹
+kJy = 1e-23 W/(m² Hz)
+
+# Planck's law per unit frequency, written with the wavenumber σ = ν/c that FIRAS reports
+B(σ, T) = 2h c σ³ / (exp(h c σ / (k_B T)) - 1)
+# with a chemical potential μ (a Bose–Einstein spectrum: energy injected at z ≳ 10⁵)
+B_μ(σ, T, μ) = 2h c σ³ / (exp(h c σ / (k_B T) + μ) - 1)
+
+# the data as lists with units
+σs = firas.sigma
+I = firas.I_MJy * MJy
+δI = firas.s_kJy * kJy
+gal = firas.g_kJy * kJy
+n = len(σs)
+print "FIRAS monopole:", n, "frequencies from", σs[1], "to", σs[n], "=", c σs[1] in GHz, "to", c σs[n] in GHz
+
+# 1. a weighted least-squares fit of T alone: divide both sides by the 1σ uncertainty
+#    (fit itself does not weight, but its left side can be a formula of the columns)
+data = table(σ = σs, I = I, δI = δI, gal = gal)
+T = 2.7 K
+fit I / δI = B(σ, T) / δI to data
+χ2(T) = Σ(((I[i] - B(σs[i], T)) / δI[i])² for i from 1 to n)
+print "T_CMB =", T to 7 digits, "±", err(T) to 2 digits, "  χ² =", χ2(T) to 4 digits, "for", n - 1, "degrees of freedom"
+
+# 2. T, a chemical potential μ and the amplitude G₀ of the Galactic model spectrum together (as Fixsen et al. do)
+T2 = 2.725 K
+μ = 0
+G₀ = 0
+fit I / δI = (B_μ(σ, T2, μ) + G₀ gal) / δI to data
+print "with μ and Galaxy: T =", T2 to 7 digits, "±", err(T2) to 2 digits, "  μ =", μ to 2 digits, "±", err(μ) to 2 digits, "  G₀ =", G₀ to 2 digits, "±", err(G₀) to 2 digits
+
+# 3. what the temperature implies
+peak(σ) = B(σ, T)
+solve peak'(σp) = 0 W/(m² Hz) * 1 cm for σp from 1 /cm to 20 /cm
+print "peak of I_ν:", σp to 5 digits, "=", c σp in GHz to 5 digits, "  (Wien: 2.8214 k_B T / h =", 2.821439 k_B T / h in GHz to 5 digits, ")"
+# energy density u = (4π/c) ∫ I_ν dν and photon number density n = (4π/c) ∫ I_ν/(hν) dν, integrated over the fitted law
+u = 4π ∫ B(σ, T) dσ from 0 /cm to 60 /cm
+nγ = 4π ∫ B(σ, T) / (h c σ) dσ from 0 /cm to 60 /cm
+print "energy density u =", u in eV/cm³ to 5 digits, "  (4σ_SB T⁴/c =", 4σ T^4 / c in eV/cm³ to 5 digits, ")"
+print "photon number density n_γ =", nγ in 1/cm³ to 5 digits
+print "mean photon energy u/n_γ =", u / nγ / (k_B T) to 5 digits, "k_B T  (2.701 for a blackbody)"
+H₀ = 100 km/s/Mpc                 # Ω_γ h²: the photon density in units of the critical density for h = 1
+ρ_crit = 3 H₀² / (8π G)
+print "Ω_γ h² =", u / (ρ_crit c²) to 4 digits
+
+# 4. the residuals from the fitted blackbody, in units of their uncertainty
+resid = []
+for i from 1 to n
+    push(resid, (I[i] - B(σs[i], T)) / kJy)
+# the uncertainty-weighted rms residual, against the peak intensity (Fixsen et al.: below 50 parts per million)
+w = Σ(1 / (δI[i] / kJy)² for i from 1 to n)
+rms = √(Σ((resid[i] / (δI[i] / kJy))² for i from 1 to n) / w)
+print "weighted rms residual:", rms to 3 digits, "kJy/sr =", rms kJy / max(I) * 1e6 to 3 digits, "ppm of the peak", max(I) / MJy to 5 digits, "MJy/sr"
+dev = 0
+for i from 1 to n
+    dev = max(dev, abs(resid[i] * kJy / δI[i]))
+print "largest |residual|/σ:", dev to 3 digits
+
+plot firas.I_MJy vs firas.sigma, B(σ, T) / MJy vs σ from 2 /cm to 22 /cm, ylabel "I_ν [MJy/sr]", title "COBE/FIRAS monopole (dots) and Planck's law for the fitted T" to "spectrum.png"
+plot resid vs σs with points, ylabel "residual [kJy/sr]", title "FIRAS - blackbody; 1σ errors 10 kJy/sr (low σ) to 282 kJy/sr (highest)" to "residuals.png"

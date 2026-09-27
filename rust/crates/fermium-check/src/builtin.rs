@@ -86,6 +86,20 @@ impl Checker {
             args.push(v);
         }
         let n = args.len();
+        if name == "fill" {
+            return self.array_fill(e, args, eargs); // N-dimensional arrays (D283)
+        }
+        if args.first().is_some_and(|a| matches!(a.ty, Ty::Array { .. })) {
+            return self.array_call(name, args, e);
+        }
+        if name == "copy" {
+            return Err(self.err("copy(A) is a new array with the same entries (made with fill(value, n1, n2, …))",
+                                e.span, None));
+        }
+        if name == "size" {
+            return Err(self.err("size(A) is the shape of an array (made with fill(value, n1, n2, …)); for a list use \
+                                 len(xs)", e.span, None));
+        }
         if name == "str" {
             // str(x): a number as text, as print shows it (its unit and digits), for labels (D216)
             if n != 1 {
@@ -285,6 +299,16 @@ impl Checker {
             self.u.unify(&d, &dimless);
             let a0 = args[0].clone();
             return Ok(self.bi(name, args, Ty::Num(dimless), &[&a0], line));
+        }
+        if matches!(name, "len" | "sum" | "mean") && n == 1 {
+            if let Ty::VList(el) = &args[0].ty {
+                // a list of vectors or matrices (D281): its length, or the vector (matrix) sum or mean
+                let (ty, hint) = if name == "len" { (Ty::Num(dimless.clone()), None) } else { ((**el).clone(), args[0].hint.clone()) };
+                let mut r = self.bi(name, args, ty, &[], line);
+                r.sf = None;
+                r.hint = hint;
+                return Ok(r);
+            }
         }
         if name == "len" && n == 1 && matches!(args[0].ty, Ty::TextList) {
             let mut r = self.bi("len", args, Ty::Num(dimless), &[], line);

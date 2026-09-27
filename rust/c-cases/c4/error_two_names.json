@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_two_names.fm, line 3: energy has two signatures in this import\n        phys::energy(m [kg], v [m/s]) -> [J]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: give each overload its own name after its result, like  … -> [J] as energy_2\n",
+ "exit": 1
+}

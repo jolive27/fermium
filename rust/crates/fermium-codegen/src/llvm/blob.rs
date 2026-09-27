@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use fermium_ir::serde_like::Json;
-use fermium_ir::{Fmt, Func, Hint, Module, PyCallSite, Tables, Ty};
+use fermium_ir::{CCallSite, CParam, CParamKind, Fmt, Func, Hint, Module, PyCallSite, Tables, Ty};
 use num_rational::Rational64;
 
 use super::rt::{BuiltinSite, Kind, MNode};
@@ -151,7 +151,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
     w.0.extend_from_slice(MAGIC);
     w.s(source);
     w.s(file_name);
-    let Tables { fmts, texts, plots, loads, fits, pycalls, py_base_dir } = &module.tables;
+    let Tables { fmts, texts, plots, loads, fits, pycalls, py_base_dir, ccalls } = &module.tables;
     w.u(fmts.len() as u64);
     for Fmt { dim, hint, sf, direct, echo, nat } in fmts {
         w.dim(dim);
@@ -184,6 +184,24 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.b(*declared);
     }
     w.s(py_base_dir);
+    w.u(ccalls.len() as u64);
+    for CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map, cpp } in ccalls {
+        w.s(lib);
+        w.s(symbol);
+        w.s(display);
+        w.b(*by_ref);
+        w.u(params.len() as u64);
+        for CParam { name, kind, fac, len_of } in params {
+            w.s(name);
+            w.u(*kind as u64);
+            w.f(*fac);
+            w.u(*len_of as u64);
+        }
+        w.b(*rint);
+        w.f(*rfac);
+        w.b(*map);
+        w.b(*cpp);
+    }
     w.b(module.uses_uncertainty);
     w.u(module.funcs.len() as u64);
     for f in &module.funcs {
@@ -210,7 +228,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
     }
     w.u(ode_sites.len() as u64);
     for OdeSite { method, rtol, atol, tname, evtext, tdep, tfmt, env_kinds, nstates, grid, eig_method, order, pmethod,
-                  bc, is_complex, xname, pde_line } in ode_sites {
+                  bc, is_complex, xname, pde_line, sw_ops, sw_slot0, nuser, whens } in ode_sites {
         w.s(method);
         w.f(*rtol);
         w.b(atol.is_some());
@@ -236,6 +254,15 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.b(*is_complex);
         w.u(*xname as u64);
         w.u(u64::from(*pde_line));
+        w.u(sw_ops.len() as u64);
+        sw_ops.iter().for_each(|o| w.u(u64::from(*o)));
+        w.u(*sw_slot0 as u64);
+        w.u(*nuser as u64);
+        w.u(whens.len() as u64);
+        for (d, tx) in whens {
+            w.u(u64::from(*d));
+            w.u(*tx as u64);
+        }
     }
     w.u(msum_sites.len() as u64);
     msum_sites.iter().for_each(|n| w.mnode(n));
@@ -404,6 +431,25 @@ pub fn read(bytes: &[u8]) -> RR<Blob> {
         tables.pycalls.push(PyCallSite { module, func, display, facs, ints, pnames, rlist, rfac, declared });
     }
     tables.py_base_dir = r.s()?;
+    let n = r.n()?;
+    for _ in 0..n {
+        let (lib, symbol, display, by_ref) = (r.s()?, r.s()?, r.s()?, r.b()?);
+        let k = r.n()?;
+        let mut params = vec![];
+        for _ in 0..k {
+            let name = r.s()?;
+            let kind = match r.u()? {
+                0 => CParamKind::Num,
+                1 => CParamKind::Int,
+                2 => CParamKind::List,
+                _ => CParamKind::Len,
+            };
+            let (fac, len_of) = (r.f()?, r.u()? as usize);
+            params.push(CParam { name, kind, fac, len_of });
+        }
+        let (rint, rfac, map, cpp) = (r.b()?, r.f()?, r.b()?, r.b()?);
+        tables.ccalls.push(CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map, cpp });
+    }
     let uses_uncertainty = r.b()?;
     let n = r.n()?;
     let mut funcs = vec![];
@@ -451,8 +497,14 @@ pub fn read(bytes: &[u8]) -> RR<Blob> {
         let is_complex = r.b()?;
         let xname = r.u()? as usize;
         let pde_line = r.u()? as u32;
+        let k = r.n()?;
+        let sw_ops = (0..k).map(|_| r.u().map(|x| x as u8)).collect::<RR<_>>()?;
+        let sw_slot0 = r.u()? as usize;
+        let nuser = r.u()? as usize;
+        let k = r.n()?;
+        let whens = (0..k).map(|_| Ok((r.u()? as u8, r.u()? as usize))).collect::<RR<Vec<_>>>()?;
         t.ode_sites.push(OdeSite { method, rtol, atol, tname, evtext, tdep, tfmt, env_kinds, nstates, grid, eig_method,
-                                   order, pmethod, bc, is_complex, xname, pde_line });
+                                   order, pmethod, bc, is_complex, xname, pde_line, sw_ops, sw_slot0, nuser, whens });
     }
     let n = r.n()?;
     t.msum_sites = (0..n).map(|_| r.mnode()).collect::<RR<_>>()?;

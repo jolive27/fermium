@@ -1,0 +1,23 @@
+# Printed derivatives (spec §C2, D298): the tidy form (like terms collected, fractions put together) is shown when
+# it is at least a fifth shorter than the plainly simplified one; the values are computed as before.
+g(x) = x sin(x)
+print g''
+E(x) = x exp(x) - exp(x)
+print E'
+q(x) = √(1 + x^2)
+print q''
+u(x) = x^2 / (1 + x)
+print u'
+f(x) = x / (1 + x^2)
+print f'
+V(x, y, z) = 1/√(x^2 + y^2 + z^2)
+print ∂/∂x V
+# already short: printed as before
+h(x) = exp(-x^2)
+print h', h''
+A = 2 m
+ω = 3 /s
+y(t) = A sin(ω t)
+print y''
+# the values don't depend on the printed form
+print g''(0.7) ≈ 2 cos(0.7) - 0.7 sin(0.7), q''(2) ≈ 1/5^1.5, E'(1.5) ≈ 1.5 exp(1.5)

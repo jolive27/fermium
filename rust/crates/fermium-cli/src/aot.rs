@@ -31,6 +31,13 @@ pub fn build_file(file: &str, output: Option<&str>) -> ExitCode {
     let out = output.map(str::to_string).unwrap_or_else(|| {
         path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "a.out".into())
     });
+    // `fermium build noext` and `build -o prog.fm prog.fm` replaced the source with the executable (red team 13 #7)
+    if let (Ok(a), Ok(b)) = (std::fs::canonicalize(path), std::fs::canonicalize(&out)) {
+        if a == b {
+            return error(&src, &name, format!("fermium build would overwrite the program {out} with the executable"),
+                         None, Some("choose another name for the executable with  -o NAME".into()));
+        }
+    }
     let fail = |e: &Diagnostic, warnings: &[Diagnostic]| {
         for w in warnings {
             eprintln!("{}", w.format(Some(&src), None));
@@ -44,7 +51,10 @@ pub fn build_file(file: &str, output: Option<&str>) -> ExitCode {
     };
     let base = path.parent().map(|p| p.to_string_lossy().into_owned()).filter(|p| !p.is_empty())
         .unwrap_or(".".into());
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    // absolute, so an executable finds the program's own Python modules (use python) in the folder it was built
+    // from, wherever it is run; a relative "." made it import from whatever folder it was run in (red team 13 #6)
+    let base = std::fs::canonicalize(&base).map(|p| p.to_string_lossy().into_owned()).unwrap_or(base);
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: false };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,
         Err((e, d)) => {

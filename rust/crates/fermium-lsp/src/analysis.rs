@@ -28,7 +28,7 @@ pub struct Analysis {
 fn check(source: &str, base_dir: &str) -> Result<(Checker, Diagnostics), fermium_syntax::Diagnostic> {
     let mut d = Diagnostics::new();
     let prog = fermium_syntax::parse_with(source, &[], &mut d)?;
-    let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: String::new() };
+    let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: String::new(), no_load: true };
     match check_keep(&prog, opts) {
         Ok(mut ck) => {
             d.warnings.append(&mut ck.diags.warnings);
@@ -229,6 +229,26 @@ pub fn hover_in(mut ck: Option<&mut Checker>, source: &str, line: usize, ch: usi
                 let sym = &ck.module.syms[id];
                 return Some(format!("**{name}**: {}", ck.type_text(&sym.ty, sym.hint.as_ref())));
             }
+            Binding::Func(f) if ck.funcs[f].versions.len() > 1 => {
+                // multiple dispatch (C5): at a call, the version(s) the call chose; elsewhere, every version
+                let (l1, c1) = (line as u32 + 1, ch as u32 + 1);
+                let mut chosen: Vec<usize> = vec![];
+                for (sp, v) in &ck.dispatch_sites {
+                    if sp.line == l1 && sp.col <= c1 && c1 < sp.col + sp.length.max(1) && !chosen.contains(v)
+                        && ck.funcs[*v].display_name == ck.funcs[f].display_name
+                    {
+                        chosen.push(*v);
+                    }
+                }
+                let n = ck.versions_of(f).len();
+                if chosen.is_empty() {
+                    return Some(format!("```fermium\n{}\n```\n{name} has {n} versions; each call uses the one its \
+                                         arguments fit best", ck.describe_function(f)));
+                }
+                let text = chosen.iter().map(|&v| ck.describe_version(v)).collect::<Vec<_>>().join("\n");
+                let what = if chosen.len() == 1 { "the version this call uses" } else { "the versions this call uses" };
+                return Some(format!("```fermium\n{text}\n```\n{what} ({name} has {n} versions)"));
+            }
             Binding::Func(f) => return Some(format!("```fermium\n{}\n```", ck.describe_function(f))),
             Binding::Module(m) => {
                 let (mname, display, names) = ck.module_names(m)?;
@@ -381,6 +401,21 @@ mod tests {
         let mut an = analyze(src, ".");
         assert!(hover_text(&mut an, src, 0, 4).unwrap().starts_with("**h**: Planck constant"));
         assert_eq!(hover_text(&mut an, src, 1, 7).as_deref(), Some("**km**: unit of length [m], = 1000 m"));
+    }
+
+    #[test]
+    fn hover_shows_the_version_a_call_chose() {
+        // multiple dispatch (C5): at a call, the version its arguments picked; at the definition, all of them
+        let src = "energy(m [kg], v [m/s]) = ½ m v²\nenergy(λ [m]) = h c / λ\nprint energy(500 nm)\n\
+                   print energy(2 kg, 3 m/s)\n";
+        let mut an = analyze(src, ".");
+        assert!(an.problems.is_empty(), "{:?}", an.problems);
+        let h = hover_text(&mut an, src, 2, 8).unwrap();
+        assert!(h.contains("energy(λ) = h c/λ   [J, for λ in m]") && !h.contains("½") && h.contains("the version this call uses"), "{h}");
+        let h = hover_text(&mut an, src, 3, 8).unwrap();
+        assert!(h.contains("energy(m, v) = 0.5·m v²   [J, for m in kg, for v in m/s]") && !h.contains("λ"), "{h}");
+        let h = hover_text(&mut an, src, 0, 1).unwrap();
+        assert!(h.contains("0.5·m v²") && h.contains("h c/λ") && h.contains("energy has 2 versions"), "{h}");
     }
 
     #[test]

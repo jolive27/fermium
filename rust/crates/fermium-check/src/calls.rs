@@ -94,6 +94,7 @@ impl Checker {
                     return self.call_user(info, a, e).map(Checked::Val);
                 }
                 Binding::Local(lf) => return self.call_local(lf, e, ctx).map(Checked::Val),
+                Binding::CFunc(c) => return self.c_call(c, e, ctx), // a C or Fortran function (D275)
                 Binding::Sol(view) => return self.sol_eval(view, e, ctx).map(Checked::Val),
                 Binding::Sym(_) | Binding::Const(_) => {
                     if let Some(&later) = self.future_funcs.get(fname) {
@@ -184,13 +185,13 @@ impl Checker {
         let body = crate::ast_ext::mk(A::ExprKind::Call { func: Box::new(crate::ast_ext::mk(A::ExprKind::Name { name: name.into() }, z)),
                                                     args: vec![x] }, z);
         let fd = A::Stmt { kind: A::StmtKind::FuncDef { name: name.into(),
-                                                        params: vec![A::Param { name: "x".into(), unit: None, span: z }],
+                                                        params: vec![A::Param { name: "x".into(), unit: None, kind: None, span: z }],
                                                         body: A::FuncBody::Expr(body), where_: vec![] },
                            span: z };
         self.funcs.push(FuncInfo { name: format!("builtin.{name}"), fdef: Some(fd), scope: self.root,
                                    instances: HashMap::new(), display_name: name.into(), checked_generic: false,
                                    stable: false, nat: None, module: None, anon_label: None, parent: None,
-                                   eval_body: None });
+                                   eval_body: None, versions: vec![] });
         let id = self.funcs.len() - 1;
         self.builtin_infos.insert(name.to_string(), id);
         id
@@ -261,19 +262,24 @@ impl Checker {
     }
 
     pub fn call_user(&mut self, info: FuncInfoId, args: Vec<Checked>, node: &A::Expr) -> CResult<I::Expr> {
+        let info = self.pick_version(info, &args, node)?; // multiple dispatch (C5)
         let nparams = self.func_params(info).len();
         if args.len() != nparams {
             let dn = &self.funcs[info].display_name;
             return Err(self.err(format!("{dn} takes {nparams} argument{} but was given {}",
                                         if nparams != 1 { "s" } else { "" }, args.len()), node.span, None));
         }
+        // a parameter declared `: list` takes the list whole, whatever the body does with it (red team 14 #4)
+        let params = self.func_params(info);
+        let declared_list = params.iter().any(|p| p.kind.as_deref() == Some("list"));
         let list_args: Vec<usize> = args
             .iter()
             .enumerate()
             .filter(|(_, a)| matches!(a, Checked::Val(v) if matches!(v.ty, Ty::List(_))))
             .map(|(i, _)| i)
+            .filter(|&i| params.get(i).is_none_or(|p| p.kind.as_deref() != Some("list")))
             .collect();
-        if !list_args.is_empty() && !self.takes_lists(info) {
+        if !list_args.is_empty() && !declared_list && !self.takes_lists(info) {
             // f(xs, ys): element by element, lists of the same length (D191)
             let mut scalar_args = args.clone();
             for &j in &list_args {
@@ -281,7 +287,7 @@ impl Checker {
                 let d = ty_dim(&v.ty).unwrap();
                 scalar_args[j] = Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(d), node.span.line));
             }
-            let call = self.instantiate(info, scalar_args, node, true)?;
+            let call = self.instantiate_one(info, scalar_args, node, true)?;
             let Ty::Num(rd) = &call.ty else {
                 let what = if matches!(call.ty, Ty::Vec { .. }) { "a vector" } else { "something other than a number" };
                 return Err(self.err(format!("{} returns {what}, so it can't be applied to each element of a list \
@@ -299,7 +305,7 @@ impl Checker {
             r.sf = call.sf;
             return Ok(r);
         }
-        self.instantiate(info, args, node, true)
+        self.instantiate_one(info, args, node, true)
     }
 
     pub fn func_params(&self, info: FuncInfoId) -> Vec<A::Param> {
@@ -332,6 +338,17 @@ impl Checker {
                 A::ExprKind::Call { func, args } => {
                     if let A::ExprKind::Name { name: fname } = &func.kind {
                         let f = fname.as_str();
+                        // passed on to a function whose parameter there is declared `: list` (red team 15 #4)
+                        if !names.contains(&f) {
+                            if let Some((Binding::Func(g), _)) = self.lookup(self.funcs[info].scope, f) {
+                                let declared = |k: usize| self.versions_of(g).iter().any(|&v| {
+                                    self.func_params(v).get(k).is_some_and(|p| p.kind.as_deref() == Some("list"))
+                                });
+                                if args.iter().enumerate().any(|(k, a)| is_param(a) && declared(k)) {
+                                    return true;
+                                }
+                            }
+                        }
                         if LIST_FUNCS.contains(&f) || matches!(f, "push" | "append" | "max" | "min" | "dot") {
                             for a in args {
                                 if is_param(a) {
@@ -371,8 +388,16 @@ impl Checker {
         stmts_use(&stmts, &names)
     }
 
+    /// Instantiate the version of `info` that these arguments choose (multiple dispatch, C5).
     pub fn instantiate(&mut self, info: FuncInfoId, fargs: Vec<Checked>, node: &A::Expr, cache: bool)
                        -> CResult<I::Expr> {
+        let info = self.pick_version(info, &fargs, node)?;
+        self.instantiate_one(info, fargs, node, cache)
+    }
+
+    /// The instance of this one version for the arguments' types.
+    pub fn instantiate_one(&mut self, info: FuncInfoId, fargs: Vec<Checked>, node: &A::Expr, cache: bool)
+                           -> CResult<I::Expr> {
         if self.funcs[info].module.is_some() && !self.in_module_call.contains(&info) {
             return self.module_call(info, fargs, node, cache); // a module's function (D101)
         }
@@ -506,10 +531,40 @@ impl Checker {
                         let sym = self.new_sym(&p.name, ty.clone(), &fctx);
                         self.module.funcs[inst].locals.retain(|s| *s != sym);
                         self.extra[sym].assigned = true;
+                        if let Some(k) = &p.kind {
+                            // r: vector [m] (C5): the kind this version takes
+                            let ok = match k.as_str() {
+                                "number" => matches!(ty, Ty::Num(_)),
+                                "list" => matches!(ty, Ty::List(_) | Ty::ComplexList(_)),
+                                "vector" => matches!(ty, Ty::Vec { .. }),
+                                _ => matches!(ty, Ty::Complex(_)),
+                            };
+                            if !ok {
+                                let what = match k.as_str() {
+                                    "number" => "a number",
+                                    "list" => "a list",
+                                    "vector" => "a vector",
+                                    _ => "a complex number",
+                                };
+                                let got = match &v.ty {
+                                    Ty::Num(_) if !self.type_desc(&v.ty).starts_with("a ") => {
+                                        format!("a number, {}", self.type_desc(&v.ty))
+                                    }
+                                    t => self.type_desc(t),
+                                };
+                                return Err(self.err(format!("{display} expects {} to be {what}, but got {got}", p.name),
+                                                    node.span, None));
+                            }
+                        }
                         if let Some(uexpr) = &p.unit {
                             let u = self.resolve_unit(uexpr)?;
                             let ok = match &ty {
                                 Ty::Num(d) | Ty::List(d) | Ty::Complex(d) => self.u.unify(d, &DExpr::of(u.dim)),
+                                Ty::ComplexList(d) if p.kind.is_some() => self.u.unify(d, &DExpr::of(u.dim)),
+                                // r: vector [m]: every component in metres (C5)
+                                Ty::Vec { .. } if p.kind.is_some() => crate::vecmat::comp_dims(&ty)
+                                    .iter()
+                                    .all(|d| self.u.unify(d, &DExpr::of(u.dim))),
                                 _ => false,
                             };
                             if !ok {
@@ -517,7 +572,9 @@ impl Checker {
                                                             self.desc(&DExpr::of(u.dim)), self.type_desc(&v.ty)),
                                                     node.span, None));
                             }
-                            self.module.syms[sym].hint = Some(crate::exprs::hint_of(&u));
+                            if matches!(ty, Ty::Num(_) | Ty::List(_) | Ty::Complex(_)) {
+                                self.module.syms[sym].hint = Some(crate::exprs::hint_of(&u));
+                            }
                         }
                         self.module.funcs[inst].params.push(sym);
                         self.bind(scope, &p.name, Binding::Sym(sym));

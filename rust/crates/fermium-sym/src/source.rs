@@ -132,7 +132,7 @@ pub fn canonical_unit_name(u: &A::UnitExpr) -> String {
             }
         }
         match order.iter().position(|x| *x == nm) {
-            Some(i) => exps[i] += f.exp,
+            Some(i) => exps[i] = fermium_units::exact::add_or_record(exps[i], f.exp, None),
             None => {
                 order.push(nm);
                 exps.push(f.exp);

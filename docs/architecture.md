@@ -30,7 +30,8 @@ source text ──► fermium-syntax ──► AST ──► fermium-check ─�
    (`fermium-codegen/src/eval.rs` and `eval_*.rs`) runs the IR directly. Both call the same runtime
    (`fermium-runtime`: numerics, plots, data) and print through the same printer (`fermium-codegen/src/printer.rs`
    over `fermium-units`' number formatting), so the back end never changes what a program prints. The CLI's
-   choice: programs with uncertain values (±) run in the tree-walker (as in v1, D122); otherwise LLVM compiles
+   choice: programs with uncertain values (±) run in the tree-walker (as in v1, D122; integrals and ODEs with
+   uncertain inputs, Fermium 2.5: `eval_unc_kern.rs`, D276–D278); otherwise LLVM compiles
    the program if it can, in mixed mode (next section), and the tree-walker runs whatever LLVM rejects.
    `fermium run --backend llvm|interp` or `FERMIUM_BACKEND` forces one; `FERMIUM_BACKEND_INFO=1` says which ran.
 
@@ -56,6 +57,21 @@ that statement or expression:
 back ends and requires identical output wherever LLVM compiles the program (at the mixed-mode merge: 2524 of
 2614 compiled, 2521 identical, the other 3 time out or run out of stack in the tree-walker).
 
+### Memory: the compiled code's collector
+
+The tree-walker's lists are reference counted (`Rc`). The compiled code's lists (`rt::FmList`), text lists, texts made
+at run time and Obj
+values (the tree-walker's values it holds: data sets, lists of vectors and complex numbers, arrays) are registered in
+the run-time context when made and freed by a mark-and-sweep collector (DECISIONS D280; `llvm/rt.rs`, memory
+section, and `llvm/gc.rs`). Roots are the variable slots of the running functions: `fm_main` and every function whose
+loops may make lists register an array of their slot addresses on entry (`fm_gc_enter`) and drop it on return.
+Collections happen only at the top of such loops' iterations (one flag load), and free only what was made after the
+innermost frame was entered, so temporaries held by callers mid-expression are safe. `FERMIUM_GC_STRESS=1` collects
+at every safe point (run `rust/tools/llvm_diff.py` with a wrapper binary that sets it); `FERMIUM_GC_STATS=1` prints
+the collections and the peak memory. Lists of vectors, matrices and complex numbers, arrays (D281, D283) and solves
+with list unknowns (D282) are mixed-mode constructs: the statements and expressions that touch them run in the
+tree-walker.
+
 ### `fermium build`: executables linked with the built-in lld
 
 `fermium build prog.fm [-o prog]` (`fermium-cli/src/aot.rs`) compiles the program with the LLVM back end into
@@ -74,8 +90,10 @@ against:
   Command Line Tools' libSystem (written, not yet tested on a Mac).
 
 An executable prints exactly what `fermium run --backend llvm` prints (`rust/tools/aot_diff.py` checks it on the
-conformance programs). Mixed mode isn't available there yet: a program with a delegated construct (plot, fit,
-data, …) is refused with a message saying so, as are programs with uncertain values.
+conformance programs). Programs with plot, fit and load build: the executable carries the program and re-checks it
+for those statements. Refused, with a message saying so: programs with uncertain values (±, `propagate
+montecarlo`), and the v2.5 constructs that `fermium run` hands to the tree-walker (lists of vectors, N-d arrays,
+solves with list unknowns; C1).
 
 ## The crates
 
@@ -117,6 +135,14 @@ legacy/ is removed after the next phase, those two inputs (the stdlib and `units
   differences (no C library, a small stack, an in-memory file system) are in `rust/DIVERGENCES.md`.
 - **Python** (`use python` and `fermium2`): the binary loads libpython with dlopen the first time a program says
   `use python` (`fermium-check/src/pyinterop.rs`, `eval_py.rs`); `fermium-pyapi` is the other direction.
+- **C and Fortran** (`import c` / `import fortran`, D275): `fermium-check/src/cinterop.rs` dlopens the library
+  when the program is checked, looks up every symbol and checks each call's units; a call is the IR built-in
+  `ccall` over `tables.ccalls` (like `pycall`). `fermium-runtime/src/cffi.rs` calls through the C ABI without
+  libffi: the arguments (doubles, ints, pointers) are split into the platform's integer and floating-point
+  registers and 8-byte stack slots, and the function pointer is called as a Rust `extern "C" fn` taking all of
+  them (x86-64 System V and AArch64). The tree-walker converts values in `eval_c.rs`; the LLVM back end emits a
+  direct call when every argument and the result are doubles, and otherwise (and in `fermium build`
+  executables, which carry the library's path) goes through the built-in callback into `eval_c.rs`.
 
 ## Conformance: the scoreboard
 
@@ -164,6 +190,40 @@ v1's arithmetic exactly: IEEE helpers in `eval.rs` (`fdiv`, `powc` with real odd
 of operations in the numerics (each `fermium-runtime` module documents its agreement with v1 in `NUMERICS.md`),
 the C library for the libm functions v1's compiled code called, and v1's own algorithms elsewhere. `parallel
 for` adds sums in fixed blocks (`par_blocks`) so results don't depend on the number of threads (D152).
+
+## Performance (spec C6, DECISIONS D310–D318)
+
+Speed never buys a different number: no fast-math or reassociation flags anywhere, and every optimization below
+has a switch that turns it off, so `rust/crates/fermium-cli/tests/c6_perf.rs` can show each one prints the same
+as the tree-walker and as Fermium 1.5 (`rust/c-cases/c6/*.fm`).
+
+- **Pass pipeline** (`llvm/mod.rs`): `default<O2>` for this computer's CPU and features (the JIT's code runs only
+  here), with the SLP vectorizer on and LLVM's `-force-ordered-reductions` (`LLVM_OPTIONS`), which lets the loop
+  vectorizer take a loop with an in-order floating-point sum: terms several at a time, added in the original order
+  (D311). `FERMIUM_LLVM_ARGS` replaces the LLVM options, `FERMIUM_LLVM_PASSES` the pipeline,
+  `FERMIUM_LLVM_NOVEC` / `FERMIUM_LLVM_NOSLP` turn the vectorizers off; `FERMIUM_LLVM_ARGS="-force-ordered-reductions
+  -pass-remarks=loop-vectorize -pass-remarks-analysis=loop-vectorize"` prints which loops were vectorized and why
+  the others weren't. `FERMIUM_DUMP_LLVM_OPT=1` prints the optimized IR, `FERMIUM_LLVM_TIME=1` the compile, JIT and
+  run times.
+- **Loops** (`llvm/hoist.rs`): list headers read once per loop and index checks proven before a versioned loop
+  (D273); in the proven copy, an `if` that only assigns numbers is compiled with selects (if-conversion,
+  `FERMIUM_NO_IFCONV`), sums as `v + (c ? e : −0)`, and scratch variables (never read before being set again)
+  without a select (D312). Loops that only read lists have no collector safe point (`gc.rs`, D313).
+- **Calls**: functions that call no function have no stack check (D314); `exp`, `log`, `sin`, `cos` are LLVM
+  intrinsics, i.e. direct calls to the C library (D315, `FERMIUM_NO_MATH_INTRINSICS`).
+- **Memory**: a compiled RK4 solve's sample arrays are mapped at once, with huge pages where Linux has them
+  (`solve_rt.rs prefault`, D316, `FERMIUM_PREFAULT`).
+- **The compile cache** (`llvm/cache.rs`, `jit_cache.cpp`, `fermium-cli/src/run.rs run_cached`, D317): the JIT's
+  object file and the run time's tables (the `fermium build` blob format) saved in `<cache>/jit/<key>.fmc`, used
+  again while the program's text and every module file it read or looked for are unchanged. A cached compilation
+  reads the context pointer from the global `fm_ctx` (`Gen::new_reloc`), so its machine code holds no address of
+  the process. `FERMIUM_NO_CACHE=1` turns it off. The cache folders (`jit/`, and `cpp/` for C4) are made and
+  checked by `fermium-check/src/cachedir.rs`: owner-only (0700), and not used when another user owns them or
+  group or others can write them (D320).
+
+`benchmarks/run.py` measures the benchmark programs against Julia (benchmarks/README.md); on a shared machine
+compare two binaries with interleaved runs (A B A B …) and look at minimums and medians of many runs, or at
+instruction counts (`valgrind --tool=callgrind`: the JIT's code appears as unnamed addresses).
 
 ## Tests
 

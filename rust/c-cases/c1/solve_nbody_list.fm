@@ -1,0 +1,31 @@
+# C1: N-body as a loop — r is a list of unknown vectors; three equal masses on a circle (Lagrange's solution)
+G_N = 6.674e-11 N m²/kg²
+M = 1e30 kg
+R = 1e11 m
+n = 3
+ω = sqrt(G_N M / (sqrt(3) R^3))
+r0 = []
+v0 = []
+for k from 1 to n
+    φ = 2π (k - 1) / n
+    push(r0, R <cos(φ), sin(φ)>)
+    push(v0, ω R <-sin(φ), cos(φ)>)
+
+accel(r) =
+    a = []
+    for i from 1 to len(r)
+        ai = <0, 0> m/s²
+        for j from 1 to len(r)
+            if j != i
+                d = r[j] - r[i]
+                ai += G_N M d / |d|^3
+        push(a, ai)
+    return a
+
+T = 2π / ω
+solve r'' = accel(r) with r(0 s) = r0, r'(0 s) = v0 for t from 0 s to T tolerance 1e-10
+print T in yr
+# after one period every body is back where it started, at the same speed
+print |r(T)[1] - r0[1]| / R < 1e-6, |r(T)[2]| / R to 6 digits
+print |r'(T)[3]| / (ω R) to 6 digits
+print len(r(T / 2))

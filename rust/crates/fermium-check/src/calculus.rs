@@ -18,18 +18,13 @@ use crate::builtins::is_builtin;
 use crate::checker::*;
 use crate::stmts::ty_dim;
 
-/// Phase C (v2.5) calculus, opt-in with the environment variable FERMIUM_C2=1 until the language change is adopted
-/// (spec §C2): derivatives of multi-line functions by automatic differentiation (fermium-sym ad.rs).
-pub fn c2_enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("FERMIUM_C2").map(|v| !v.is_empty() && v != "0").unwrap_or(false))
-}
-
 /// Checker state for calculus (Python keeps it on FuncInfo.derived).
 #[derive(Clone, Debug, Default)]
 pub struct CalcState {
     /// (function, "i,order" or "veccalc,kind") → the derived function
     pub derived: HashMap<(FuncInfoId, String), FuncInfoId>,
+    /// the derivatives being made: one asked for again while it is made is a recursive function (D332)
+    pub busy: std::collections::HashSet<(FuncInfoId, String)>,
 }
 
 fn sup(n: i64) -> String {
@@ -67,7 +62,7 @@ fn new_fdef(name: &str, params: Vec<A::Param>, body: A::Expr, span: A::Span) -> 
 }
 
 fn param(n: &str) -> A::Param {
-    A::Param { name: n.to_string(), unit: None, span: A::Span::default() }
+    A::Param { name: n.to_string(), unit: None, kind: None, span: A::Span::default() }
 }
 
 /// The differentiator's view of names in a scope (Python Checker._diffctx).
@@ -79,17 +74,18 @@ struct DC<'a> {
 impl C::DiffContext for DC<'_> {
     fn user_function(&mut self, fname: &str) -> C::SymResult<Option<(Vec<String>, A::Expr)>> {
         if let Some((Binding::Func(b), _)) = self.ck.lookup(self.scope, fname) {
-            if !self.ck.funcs[b].one_liner() {
-                if c2_enabled() {
-                    // differentiated by derived_info (automatic differentiation); the body isn't needed here
-                    let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
-                    return Ok(Some((params, C::build::num(0.0))));
-                }
+            if self.ck.funcs[b].versions.len() > 1 {
                 return Err(C::build::ferr0(
-                    format!("can't differentiate through {fname}: it's defined over several lines"),
-                    Some(format!("symbolic derivatives need one-line functions: write {fname} on one line (with  \
-                                  where  for helper names), or use a finite difference, (f(x + h) - f(x - h)) / (2h)")),
+                    format!("can't differentiate through {fname}: it has several versions, and which one is used \
+                             depends on the arguments"),
+                    Some(format!("differentiate the version you need, like {fname}'(x), or give it its own name")),
                 ));
+            }
+            if !self.ck.funcs[b].one_liner() {
+                // Fermium 2.5 (spec §C2): differentiated by derived_info (automatic differentiation); the body
+                // isn't needed here
+                let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
+                return Ok(Some((params, C::build::num(0.0))));
             }
             let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
             return Ok(Some((params, self.ck.body_expr(b).unwrap())));
@@ -135,7 +131,7 @@ impl Checker {
     fn new_func_info(&mut self, name: String, fdef: A::Stmt, scope: ScopeId) -> FuncInfoId {
         self.funcs.push(FuncInfo { name: name.clone(), fdef: Some(fdef), scope, instances: HashMap::new(),
                                    display_name: name, checked_generic: false, stable: false, nat: None, module: None,
-                                   anon_label: None, parent: None, eval_body: None });
+                                   anon_label: None, parent: None, eval_body: None, versions: vec![] });
         self.funcs.len() - 1
     }
 
@@ -155,6 +151,13 @@ impl Checker {
         }
         let t = self.expr_any(target, ctx)?;
         match t {
+            Checked::Func { info, .. } if self.funcs[info].versions.len() > 1 => {
+                // U' of a function with several versions: the derivative of each one-parameter version (C5)
+                let d = self.derived_versions(info, &|ps: &[String]| (ps.len() == 1).then_some(0), order, e.span,
+                                              &format!("{}' needs a version with one parameter",
+                                                       self.funcs[info].display_name))?;
+                Ok(self.func_ref(d))
+            }
             Checked::Func { info, .. } => {
                 if self.func_params(info).len() != 1 {
                     let dn = self.funcs[info].display_name.clone();
@@ -170,23 +173,63 @@ impl Checker {
         }
     }
 
+    /// The derivative of a function with several versions (C5): the derivative of each version `sel` picks a
+    /// parameter of, as a new function with those versions; made once per function, selector message and order.
+    pub fn derived_versions(&mut self, info: FuncInfoId, sel: &dyn Fn(&[String]) -> Option<usize>, order: i64,
+                            node: A::Span, none_msg: &str) -> CResult<FuncInfoId> {
+        let key = (info, format!("versions,{none_msg},{order}"));
+        if let Some(&d) = self.calc.derived.get(&key) {
+            return Ok(d);
+        }
+        let mut ds = vec![];
+        for v in self.versions_of(info) {
+            let ps: Vec<String> = self.func_params(v).iter().map(|p| p.name.clone()).collect();
+            if let Some(i) = sel(&ps) {
+                ds.push(self.derived_info(v, i, order, node)?);
+            }
+        }
+        let d = match ds.len() {
+            0 => return Err(self.err(none_msg.to_string(), node, None)),
+            1 => ds[0],
+            _ => {
+                // a fresh function whose versions are the derivatives (the derivatives themselves stay shared)
+                let mut f = self.funcs[*ds.last().unwrap()].clone();
+                f.instances = HashMap::new();
+                f.versions = ds;
+                self.funcs.push(f);
+                self.funcs.len() - 1
+            }
+        };
+        self.calc.derived.insert(key, d);
+        Ok(d)
+    }
+
     /// The function ∂ᵒʳᵈᵉʳf/∂(param i)ᵒʳᵈᵉʳ, made once (Python derived_info).
     pub fn derived_info(&mut self, info: FuncInfoId, i: usize, order: i64, node: A::Span) -> CResult<FuncInfoId> {
         let key = (info, format!("{i},{order}"));
         if let Some(&d) = self.calc.derived.get(&key) {
             return Ok(d);
         }
+        // a function that calls itself would be differentiated forever (red team 16, D332)
+        if !self.calc.busy.insert(key.clone()) {
+            let dn = self.funcs[info].display_name.clone();
+            return Err(self.err(format!("can't differentiate {dn}: it calls itself"), node,
+                                Some("a recursive function has no derivative in Fermium; write it with a loop".into())));
+        }
+        let r = self.derived_info_new(info, i, order, node, key.clone());
+        self.calc.busy.remove(&key);
+        r
+    }
+
+    fn derived_info_new(&mut self, info: FuncInfoId, i: usize, order: i64, node: A::Span, key: (FuncInfoId, String))
+                        -> CResult<FuncInfoId> {
         let dn = self.funcs[info].display_name.clone();
         let multi = !self.funcs[info].one_liner();
-        if multi && !c2_enabled() {
-            return Err(self.err(format!("can only differentiate one-line functions like f(x) = ..., and {dn} is \
-                                         defined over several lines"), node, None));
-        }
         let fdef = self.funcs[info].fdef.clone().unwrap();
         let (_, params, fbody) = fdef_parts(&fdef);
         let pname = params[i].name.clone();
         let pnames: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        // one-line: the symbolic derivative; several lines (spec §C2, opt-in): automatic differentiation
+        // one-line: the symbolic derivative; several lines (spec §C2, Fermium 2.5): automatic differentiation
         let mut body = if multi { C::build::num(0.0) } else { self.body_expr(info).unwrap() };
         let mut block = match fbody {
             A::FuncBody::Block(b) => b.clone(),
@@ -271,6 +314,15 @@ impl Checker {
                 None => self.lookup(ctx.scope, op.name().unwrap()).map(|x| x.0),
             };
             match b {
+                Some(Binding::Func(b)) if self.funcs[b].versions.len() > 1 => {
+                    // d/dx of a function with several versions: of each version that has x, or one parameter (C5)
+                    let sel = |ps: &[String]| {
+                        ps.iter().position(|p| p == var).or(if ps.len() == 1 && !partial { Some(0) } else { None })
+                    };
+                    let msg = format!("no version of {} has a parameter called {var}", self.funcs[b].display_name);
+                    let d = self.derived_versions(b, &sel, order, e.span, &msg)?;
+                    return Ok(self.func_ref(d));
+                }
                 Some(Binding::Func(b)) => {
                     let params: Vec<String> = self.func_params(b).iter().map(|p| p.name.clone()).collect();
                     let i = if let Some(i) = params.iter().position(|p| p == var) {
@@ -298,7 +350,13 @@ impl Checker {
                     let inner_e = match b {
                         Some(Binding::Func(b)) => {
                             let params: Vec<String> = self.func_params(b).iter().map(|p| p.name.clone()).collect();
-                            if !params.iter().any(|p| p == var) && !(params.len() == 1 && !partial) {
+                            // with several versions, any version that has the parameter will do: the call then
+                            // chooses among their derivatives, as (∂/∂y f)(1, 3) does (red team 14 #8)
+                            let some_version = self.versions_of(b).into_iter().any(|v| {
+                                let ps = self.func_params(v);
+                                ps.iter().any(|p| p.name == var) || (ps.len() == 1 && !partial)
+                            });
+                            if !some_version {
                                 let ops = if partial { "∂/∂" } else { "d/d" };
                                 let argsrc = oargs.iter().map(C::to_source).collect::<Vec<_>>().join(", ");
                                 return Err(self.err(
@@ -411,7 +469,7 @@ impl Checker {
             return Ok(d);
         }
         let multi = !self.funcs[b].one_liner();
-        if multi && !(c2_enabled() && matches!(kind, "grad" | "lap")) {
+        if multi && !matches!(kind, "grad" | "lap") {
             return Err(self.err(format!("{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and \
                                          {name} is defined over several lines"), span, None));
         }
@@ -433,7 +491,7 @@ impl Checker {
         }
         let scope = self.funcs[b].scope;
         let body = if multi {
-            // several lines (spec §C2, opt-in): the partial derivatives are the functions ∂f/∂x made by automatic
+            // several lines (spec §C2, Fermium 2.5): the partial derivatives are the functions ∂f/∂x made by automatic
             // differentiation (derived_info), called at the coordinates
             let f = C::build::name(&self.funcs[b].name);
             C::build::call_e(f, allp.iter().map(|p| C::build::name(p)).collect())
@@ -1129,7 +1187,7 @@ impl Checker {
             let ds = dims(&args);
             let span = self.funcs[base].fdef.as_ref().map(|f| f.span).unwrap_or_default();
             let node = mk(A::ExprKind::Name { name: String::new() }, span);
-            if let Ok(call) = self.instantiate(base, args, &node, false) {
+            if let Ok(call) = self.instantiate_one(base, args, &node, false) {
                 if let Ty::Num(cd) = &call.ty {
                     let res = self.u.norm(&cd.div(&ds[i].pow(Rational64::from_integer(order as i64))));
                     let pds: Vec<DExpr> = ds.iter().map(|d| self.u.norm(d)).collect();
@@ -1151,7 +1209,7 @@ impl Checker {
         let ds = dims(&args);
         let span = self.funcs[info].fdef.as_ref().map(|f| f.span).unwrap_or_default();
         let node = mk(A::ExprKind::Name { name: String::new() }, span);
-        let Ok(call) = self.instantiate(info, args, &node, false) else { return String::new() };
+        let Ok(call) = self.instantiate_one(info, args, &node, false) else { return String::new() };
         let Ty::Num(cd) = &call.ty else { return String::new() };
         let res = self.u.norm(cd);
         if !res.is_concrete() {

@@ -46,7 +46,7 @@ pub fn kind_of(ty: &Ty) -> R<Kind> {
         Ty::Complex(_) => Kind::V(2),
         Ty::Void => Kind::Void,
         Ty::Sol(_) => Kind::H,
-        Ty::Data(_) | Ty::ComplexList(_) => Kind::Obj,
+        Ty::Data(_) | Ty::ComplexList(_) | Ty::VList(_) | Ty::Array { .. } => Kind::Obj,
     })
 }
 
@@ -104,9 +104,29 @@ pub struct Gen<'c, 'm> {
     proven: std::collections::HashSet<(SymId, SymId)>,
     /// lists whose elements have a TBAA type of their own (consts::owned_lists)
     owned: std::collections::HashSet<SymId>,
+    /// variables whose value never outlives the block that set it (hoist::scratch_vars, D312)
+    scratch: std::collections::HashSet<SymId>,
+    /// the JIT with the compile cache: the global the context pointer is read from (new_reloc)
+    pub ctx_global: Option<GlobalValue<'c>>,
     /// compiling for an executable (`fermium build`): the context is the global fm_ctx (set by the run time),
     /// not an address known now
     aot: Option<GlobalValue<'c>>,
+    /// memory (gc.rs): the function being compiled registers its list slots; its hidden slots; the block after
+    /// its entry block; which user functions may make lists; fm_main's entry, start and state, closed last
+    gc_frame: bool,
+    gc_roots: Vec<(PointerValue<'c>, u8)>,
+    start_bb: Option<BasicBlock<'c>>,
+    alloc_funcs: Vec<bool>,
+    main_gc: Option<MainGc<'c>>,
+}
+
+/// fm_main's frame is registered after every function is compiled (they may add module variables).
+struct MainGc<'c> {
+    entry: BasicBlock<'c>,
+    start: BasicBlock<'c>,
+    locals: HashMap<SymId, (PointerValue<'c>, Kind)>,
+    roots: Vec<(PointerValue<'c>, u8)>,
+    ctx_ptr: PointerValue<'c>,
 }
 
 macro_rules! bl {
@@ -122,6 +142,17 @@ impl<'c, 'm> Gen<'c, 'm> {
         let gv = g.lm.add_global(g.ptrt(), None, "fm_ctx");
         gv.set_linkage(Linkage::External);
         g.aot = Some(gv);
+        g
+    }
+
+    /// For the JIT with the compile cache (D317): as new, but the context pointer is read from the global
+    /// `fm_ctx` (mapped at load time), so the machine code has no address of this process in it and can be saved
+    /// and loaded by a later run.
+    pub fn new_reloc(cx: &'c Context, m: &'m Module) -> Gen<'c, 'm> {
+        let mut g = Gen::new(cx, m, 0);
+        let gv = g.lm.add_global(g.ptrt(), None, "fm_ctx");
+        gv.set_linkage(Linkage::External);
+        g.ctx_global = Some(gv);
         g
     }
 
@@ -149,7 +180,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                           overrides: HashMap::new(), par_count: 0, aot: None,
                           hoisted: HashMap::new(), int_vars: HashMap::new(),
                           node_ids: HashMap::new(), consts: HashMap::new(), fixed: HashMap::new(),
-                          proven: std::collections::HashSet::new(), owned: std::collections::HashSet::new() };
+                          proven: std::collections::HashSet::new(), owned: std::collections::HashSet::new(),
+                          scratch: hoist::scratch_vars(m), ctx_global: None,
+                          gc_frame: false, gc_roots: vec![], start_bb: None, alloc_funcs: vec![], main_gc: None };
         g.declare_runtime();
         g
     }
@@ -213,7 +246,8 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_root", Some(f), &[p, p, p, p, p, f, f, i, i32t], rt::fm_root as *const () as usize, false);
         {
             use crate::llvm::solve_rt as s;
-            self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t], s::fm_ode as *const () as usize, false);
+            self.declare("fm_ode", Some(i), &[p, i, p, p, p, p, p, i, f, f, f, i32t, p, i], s::fm_ode as *const () as usize,
+                         false);
             self.declare("fm_rk4_begin", Some(i32t), &[p, i, p, p, p, i, f, f, f, i32t, p, p],
                          s::fm_rk4_begin as *const () as usize, false);
             self.declare("fm_rk4_end", Some(i), &[p, i, p, p, p, i, i32t], s::fm_rk4_end as *const () as usize, false);
@@ -241,6 +275,10 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.declare("fm_powf", Some(f), &[f, f], rt::fm_powf as *const () as usize, true);
         self.declare("fm_list_powf", Some(p), &[p, p, f], rt::fm_list_powf as *const () as usize, false);
         self.declare("fm_tlist_new", Some(p), &[p], rt::fm_tlist_new as *const () as usize, false);
+        self.declare("fm_gc_enter", None, &[p, p, p, i], rt::fm_gc_enter as *const () as usize, false);
+        self.declare("fm_gc_leave", None, &[p], rt::fm_gc_leave as *const () as usize, false);
+        self.declare("fm_gc", None, &[p], rt::fm_gc as *const () as usize, false);
+        self.declare("fm_list_obj", Some(i), &[p, p], rt::fm_list_obj as *const () as usize, false);
         self.declare("fm_tlist_clear", None, &[p], rt::fm_tlist_clear as *const () as usize, false);
         self.declare("fm_powc", Some(f), &[f, f], rt::fm_powc as *const () as usize, true);
         self.declare("fm_atan2", Some(f), &[f, f], rt::fm_atan2 as *const () as usize, true);
@@ -526,6 +564,18 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     fn store_var(&mut self, sym: SymId, v: Val<'c>) -> R<()> {
         let (p, k) = self.slot(sym)?;
+        // `ps = []` for a variable that becomes a list of vectors, complex numbers or text (D281)
+        let v = match (v.k, k) {
+            (Kind::L, Kind::Obj) => {
+                let ctx: BasicValueEnum = self.ctx_ptr.into();
+                Val { k, v: self.call("fm_list_obj", &[ctx, v.v.unwrap()])? }
+            }
+            (Kind::L, Kind::TL) => {
+                let ctx: BasicValueEnum = self.ctx_ptr.into();
+                Val { k, v: self.call("fm_tlist_new", &[ctx])? }
+            }
+            _ => v,
+        };
         let v = self.coerce(v, k)?;
         if let Some(x) = v.v {
             self.st(p, x, "var")?;
@@ -685,10 +735,27 @@ impl<'c, 'm> Gen<'c, 'm> {
             self.funcs.push(fv);
         }
         self.owned = consts::owned_lists(m);
+        self.alloc_funcs = gc::alloc_funcs(m);
         // main first: the module constants it finds (consts) are known in the functions too
         self.compile_main()?;
         for fid in 0..m.funcs.len() {
             self.compile_func(fid)?;
+        }
+        // fm_main registers the module's variables and its own slots (gc.rs)
+        if let Some(mg) = self.main_gc.take() {
+            self.gc_frame = true;
+            self.locals = mg.locals;
+            self.gc_roots = mg.roots;
+            self.ctx_ptr = mg.ctx_ptr;
+            let mut globals: Vec<_> = self.globals.iter().filter_map(|(s, (p, k))| Self::gc_code(*k).map(|c| (*s, *p, c)))
+                .collect();
+            globals.sort_by_key(|x| x.0);
+            let extra: Vec<_> = globals.into_iter().map(|(_, p, c)| (p, c)).collect();
+            let r = self.close_entry(mg.entry, mg.start, &extra);
+            self.locals.clear();
+            self.gc_roots.clear();
+            self.gc_frame = false;
+            r?;
         }
         Ok(())
     }
@@ -709,13 +776,20 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.err_bb = Some(err);
         self.b.position_at_end(entry);
         self.known_line = None;
-        if let Some(g) = self.aot {
+        if let Some(g) = self.aot.or(self.ctx_global) {
             let p = bl_unwrap(self.b.build_load(self.ptrt(), g.as_pointer_value(), "ctx")).into_pointer_value();
             self.ctx_ptr = p;
         }
+        // the entry block keeps only the slots (and, closed by finish_fn, the frame's registration): the body
+        // starts in the next block
+        self.gc_roots.clear();
+        let start = self.cx.insert_basic_block_after(entry, "start");
+        self.start_bb = Some(start);
+        self.b.position_at_end(start);
     }
 
     fn ret_default(&mut self) -> R<()> {
+        self.gc_leave()?;
         match self.default_of(self.ret_kind) {
             Some(v) => bl!(self.b.build_return(Some(&v))),
             None => bl!(self.b.build_return(None)),
@@ -728,7 +802,15 @@ impl<'c, 'm> Gen<'c, 'm> {
             self.ret_default()?;
         }
         self.b.position_at_end(self.err_bb.unwrap());
-        self.ret_default()
+        self.ret_default()?;
+        let entry = self.fnv().get_first_basic_block().unwrap();
+        let start = self.start_bb.take().unwrap();
+        if self.fnv().get_name().to_bytes() == b"fm_main" && self.gc_frame {
+            self.main_gc = Some(MainGc { entry, start, locals: self.locals.clone(), roots: self.gc_roots.clone(),
+                                         ctx_ptr: self.ctx_ptr });
+            return Ok(());
+        }
+        self.close_entry(entry, start, &[])
     }
 
     fn frame_addr(&mut self) -> R<IntValue<'c>> {
@@ -743,13 +825,18 @@ impl<'c, 'm> Gen<'c, 'm> {
         let f = &self.m.funcs[fid];
         let fv = self.funcs[fid];
         self.begin_fn(fv, kind_of(&f.ret_ty)?);
-        // runaway recursion: a clear error before the stack overflows (v1 stack_check; off while stackbase is 0)
-        let sp = self.frame_addr()?;
-        let base = bl!(self.b.build_load(self.cx.i64_type(), self.stackbase_g.as_pointer_value(), "base")).into_int_value();
-        let used = bl!(self.b.build_int_sub(base, sp, "used"));
-        let ok = bl!(self.b.build_int_compare(IntPredicate::SLE, used, self.i64c(STACK_LIMIT as i64), "stackok"));
-        let (fa, zero) = (self.fconst(fid as f64), self.fconst(0.0));
-        self.guard(ok, rt::E_DEEP, fa, zero)?;
+        self.gc_frame = self.alloc_funcs[fid] && gc::has_alloc_loop(self.m, &f.body, &self.alloc_funcs);
+        // runaway recursion: a clear error before the stack overflows (v1 stack_check; off while stackbase is 0).
+        // A function that calls no function (a leaf, D314) can't be part of a recursion: no check, so it inlines
+        // into its callers as plain arithmetic (the check would also name it as the function that "called itself")
+        if !hoist::is_leaf(self.m, &f.body) {
+            let sp = self.frame_addr()?;
+            let base = bl!(self.b.build_load(self.cx.i64_type(), self.stackbase_g.as_pointer_value(), "base")).into_int_value();
+            let used = bl!(self.b.build_int_sub(base, sp, "used"));
+            let ok = bl!(self.b.build_int_compare(IntPredicate::SLE, used, self.i64c(STACK_LIMIT as i64), "stackok"));
+            let (fa, zero) = (self.fconst(fid as f64), self.fconst(0.0));
+            self.guard(ok, rt::E_DEEP, fa, zero)?;
+        }
         for (i, p) in f.params.iter().enumerate() {
             let k = kind_of(&self.m.syms[*p].ty)?;
             let v = fv.get_nth_param(i as u32).unwrap();
@@ -771,6 +858,7 @@ impl<'c, 'm> Gen<'c, 'm> {
     fn compile_main(&mut self) -> R<()> {
         let fv = self.lm.add_function("fm_main", self.cx.void_type().fn_type(&[], false), Some(Linkage::External));
         self.begin_fn(fv, Kind::Void);
+        self.gc_frame = true;
         let sp = self.frame_addr()?;
         bl!(self.b.build_store(self.stackbase_g.as_pointer_value(), sp));
         let main = &self.m.main;
@@ -791,6 +879,24 @@ impl<'c, 'm> Gen<'c, 'm> {
 
     fn stmt(&mut self, s: &Stmt) -> R<()> {
         self.set_line(s.line)?;
+        if let StmtKind::IndexAssign(sym, idx, value) = &s.kind {
+            if let (Ty::Array { .. }, ExprKind::List(ixs)) = (&self.m.syms[*sym].ty, &idx.kind) {
+                // A[i, j] = x on an array (D283): arr.set through fm_builtin (the array is shared, so no write-back)
+                let var = Expr { kind: ExprKind::Var(*sym), ty: self.m.syms[*sym].ty.clone(), sf: None, hint: None,
+                                 direct: 0, line: s.line, x: None };
+                let mut args = vec![var, value.clone()];
+                args.extend(ixs.iter().cloned());
+                let call = Expr { kind: ExprKind::Builtin("arr.set".into(), args.clone()), ty: Ty::Void, sf: None,
+                                  hint: None, direct: 0, line: s.line, x: None };
+                self.builtin(&call, "arr.set", &args)?;
+                return Ok(());
+            }
+        }
+        if gc::tree_walker_stmt(self.m, s) {
+            // pushing onto, setting, clearing, looping over or printing a list of vectors, matrices or complex
+            // numbers: the tree-walker runs the statement (D281)
+            return self.delegate_stmt(s);
+        }
         match &s.kind {
             StmtKind::Assign(sym, e) => {
                 let v = self.expr(e)?;
@@ -844,6 +950,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                 };
             }
             StmtKind::If(c, then, other) => {
+                if self.if_converted(c, then, other)? {
+                    return Ok(());
+                }
                 let cv = self.expr(c)?;
                 let t = self.truth(cv)?;
                 let (tb, eb, join) = (self.new_bb("then"), self.new_bb("else"), self.new_bb("endif"));
@@ -868,6 +977,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                 let t = self.truth(cv)?;
                 bl!(self.b.build_conditional_branch(t, bodyb, exit));
                 self.goto(bodyb);
+                self.safe_point(body)?;
                 self.loops.push((head, exit));
                 self.block(body)?;
                 self.loops.pop();
@@ -890,6 +1000,7 @@ impl<'c, 'm> Gen<'c, 'm> {
                     None => None,
                 };
                 // a function returns its value (no conversion: the checker made it the function's type)
+                self.gc_leave()?;
                 match (self.ret_kind, v) {
                     (Kind::Void, _) => bl!(self.b.build_return(None)),
                     (k, Some(v)) => {
@@ -917,6 +1028,8 @@ impl<'c, 'm> Gen<'c, 'm> {
                 self.guard(t, rt::E_ASSERT, a, z)?;
             }
             StmtKind::Plot(..) | StmtKind::Fit { .. } | StmtKind::Animate { .. } => self.delegate_stmt(s)?,
+            // a list of unknowns (D282): the tree-walker solves it; the solution comes back as a handle
+            StmtKind::Solve { x, .. } if x.lists => self.delegate_stmt(s)?,
             StmtKind::Solve { .. } => self.solve_stmt(s)?,
             StmtKind::Propagate { .. } => return Err("propagate isn't compiled yet".into()),
         }
@@ -1107,6 +1220,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         let more = bl!(self.b.build_int_compare(IntPredicate::SLT, i, count, "more"));
         bl!(self.b.build_conditional_branch(more, bodyb, exit));
         self.goto(bodyb);
+        self.safe_point(body)?;
         set(self, i)?;
         self.loops.push((next, exit));
         self.block(body)?;
@@ -1130,6 +1244,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         match v.k {
             Kind::L => {
                 let cp = self.call("fm_list_copy", &[ctx.into(), v.v.unwrap()])?.unwrap().into_pointer_value();
+                self.gc_root(cp.into(), Kind::L)?;
                 let (data, len) = self.list_parts(cp)?;
                 self.counted_loop(len, body, |g, i| {
                     let ep = unsafe { bl!(g.b.build_gep(g.f64t(), data, &[i], "ep")) };
@@ -1139,6 +1254,7 @@ impl<'c, 'm> Gen<'c, 'm> {
             }
             Kind::TL => {
                 let cp = self.call("fm_tlist_copy", &[ctx.into(), v.v.unwrap()])?.unwrap();
+                self.gc_root(cp, Kind::TL)?;
                 let len = self.call("fm_tlist_len", &[cp])?.unwrap().into_int_value();
                 self.counted_loop(len, body, |g, i| {
                     let id = g.call("fm_tlist_at", &[cp, i.into()])?.unwrap();
@@ -1296,6 +1412,9 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                     self.call("fm_print_tlist", &[ctx, v.v.unwrap()])?;
                 }
+                PrintItem::VList(..) | PrintItem::Array(..) => {
+                    return Err("print of a list of vectors or an array (the tree-walker prints it)".into())
+                }
                 PrintItem::ComplexList(e, f) => {
                     let v = self.expr(e)?;
                     if v.k != Kind::Obj {
@@ -1326,6 +1445,10 @@ impl<'c, 'm> Gen<'c, 'm> {
     // ------------------------------------------------------------ expressions
     pub fn expr(&mut self, e: &Expr) -> R<Val<'c>> {
         self.set_line(e.line)?;
+        if gc::tree_walker_list(self.m, e) {
+            // lists of vectors, matrices and complex numbers are the tree-walker's values (D281)
+            return self.delegate_expr(e);
+        }
         let ctx: BasicValueEnum = self.ctx_ptr.into();
         Ok(match &e.kind {
             ExprKind::Const(x) => fv(self.fconst(*x)),
@@ -1704,11 +1827,29 @@ impl<'c, 'm> Gen<'c, 'm> {
         for a in args {
             vals.push(self.expr(a)?);
         }
+        if name == "ccall" {
+            if let Some(v) = self.ccall_direct(args, &vals)? {
+                return Ok(v);
+            }
+        }
         let all_num = !vals.is_empty() && vals.iter().all(|v| matches!(v.k, Kind::F | Kind::B));
         // plain math on numbers, compiled in place (the functions eval.rs's fallback uses)
         if all_num {
             let x = self.to_f(vals[0])?;
             if vals.len() == 1 {
+                // the C library's own exp, log, sin and cos through LLVM's intrinsics (D315): the very functions
+                // the shims call (Rust's f64::exp is llvm.exp too), so the same numbers, but called directly, and
+                // known to LLVM as pure (hoisted out of loops, computed once when repeated)
+                let intr = match name {
+                    "exp" => Some("llvm.exp"),
+                    "ln" | "log" => Some("llvm.log"),
+                    "sin" => Some("llvm.sin"),
+                    "cos" => Some("llvm.cos"),
+                    _ => None,
+                };
+                if let (Some(i), false) = (intr, self.aot.is_some() || std::env::var_os("FERMIUM_NO_MATH_INTRINSICS").is_some()) {
+                    return Ok(fv(self.intrinsic(i, &[x])?));
+                }
                 if SHIM1.contains(&name) {
                     let sym = format!("fm_{name}");
                     let f = self.externs.iter().find(|(k, _)| **k == sym).map(|(k, _)| *k).unwrap();
@@ -1846,6 +1987,42 @@ impl<'c, 'm> Gen<'c, 'm> {
     }
 }
 
+impl<'c, 'm> Gen<'c, 'm> {
+    /// A C function whose arguments and result are all doubles (`import c`, D275), called directly from the
+    /// compiled code: each argument ÷ its unit's factor, the result × the result's factor, exactly as eval_c.rs
+    /// does. Only in the JIT, where the function's address is known now; executables (`fermium build`) and every
+    /// other signature go through the built-in callback. None: not this case.
+    fn ccall_direct(&mut self, args: &[Expr], vals: &[Val<'c>]) -> R<Option<Val<'c>>> {
+        if self.aot.is_some() {
+            return Ok(None);
+        }
+        let Some(ExprKind::Const(id)) = args.first().map(|a| &a.kind) else { return Ok(None) };
+        let Some(site) = self.m.tables.ccalls.get(*id as usize) else { return Ok(None) };
+        if site.by_ref || site.map || site.rint || site.cpp || site.params.iter().any(|p| p.kind != fermium_ir::CParamKind::Num)
+            || vals.len() != site.params.len() + 1 || vals[1..].iter().any(|v| v.k != Kind::F)
+        {
+            return Ok(None);
+        }
+        let Ok(Some(addr)) = fermium_runtime::cffi::symbol(&site.lib, &site.symbol) else { return Ok(None) };
+        let facs: Vec<f64> = site.params.iter().map(|p| p.fac).collect();
+        let rfac = site.rfac;
+        let mut cargs: Vec<BasicMetadataValueEnum> = Vec::with_capacity(facs.len());
+        for (v, fac) in vals[1..].iter().zip(&facs) {
+            let x = v.v.unwrap().into_float_value();
+            let x = if *fac != 1.0 { bl!(self.b.build_float_div(x, self.fconst(*fac), "c.arg")) } else { x };
+            cargs.push(x.into());
+        }
+        let f64t = self.f64t();
+        let ptys: Vec<BasicMetadataTypeEnum> = facs.iter().map(|_| f64t.into()).collect();
+        let fty = f64t.fn_type(&ptys, false);
+        let fp = self.cx.i64_type().const_int(addr as u64, false).const_to_pointer(self.ptrt());
+        let r = bl!(self.b.build_indirect_call(fty, fp, &cargs, "c.call")).try_as_basic_value().left()
+            .ok_or("a C call without a value")?.into_float_value();
+        let r = if rfac != 1.0 { bl!(self.b.build_float_mul(r, self.fconst(rfac), "c.res")) } else { r };
+        Ok(Some(fv(r)))
+    }
+}
+
 fn bl_unwrap<T>(r: Result<T, inkwell::builder::BuilderError>) -> T {
     r.expect("LLVM builder")
 }
@@ -1886,3 +2063,5 @@ mod lam;
 mod ode;
 #[path = "consts.rs"]
 mod consts;
+#[path = "gc.rs"]
+mod gc;

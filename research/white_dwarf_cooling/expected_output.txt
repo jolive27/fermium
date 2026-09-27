@@ -1,0 +1,42 @@
+16281 white dwarfs within 100 pc with hydrogen-atmosphere fits
+log L/L☉ from -5.16 to 1.27   median mass 0.631 Msun
+Mestel: L = C M T_c^3.5 with C = 1.44×10⁻³¹ W/kg per K^3.5
+core temperature of a 0.6 M☉ white dwarf at L = 10⁻³ L☉: 9.05×10⁶ K
+  0.6 M☉ at log L/L☉ = -1 : Mestel cooling age 0.0119 Gyr
+  0.6 M☉ at log L/L☉ = -2 : Mestel cooling age 0.0615 Gyr
+  0.6 M☉ at log L/L☉ = -3 : Mestel cooling age 0.319 Gyr
+  0.6 M☉ at log L/L☉ = -4 : Mestel cooling age 1.65 Gyr
+  0.6 M☉ at log L/L☉ = -4.5 : Mestel cooling age 3.76 Gyr
+  t ∝ L^(−5/7): t(10⁻⁴)/t(10⁻³) = 5.179  (10^(5/7) = 5.179 )
+log L/L☉    N     per pc³ per dex
+-5.375   0   0 1/pc³
+-5.125   1   9.55×10⁻⁷ 1/pc³
+-4.875   15   1.43×10⁻⁵ 1/pc³
+-4.625   76   7.26×10⁻⁵ 1/pc³
+-4.375   713   0.000681 1/pc³
+-4.125   3472   0.00332 1/pc³
+-3.875   3725   0.00356 1/pc³
+-3.625   2725   0.00260 1/pc³
+-3.375   1628   0.00155 1/pc³
+-3.125   1204   0.00115 1/pc³
+-2.875   865   0.000826 1/pc³
+-2.625   560   0.000535 1/pc³
+-2.375   391   0.000373 1/pc³
+-2.125   333   0.000318 1/pc³
+-1.875   246   0.000235 1/pc³
+-1.625   171   0.000163 1/pc³
+-1.375   85   8.12×10⁻⁵ 1/pc³
+-1.125   43   4.11×10⁻⁵ 1/pc³
+-0.8750   11   1.05×10⁻⁵ 1/pc³
+-0.6250   8   7.64×10⁻⁶ 1/pc³
+-0.3750   2   1.91×10⁻⁶ 1/pc³
+-0.1250   2   1.91×10⁻⁶ 1/pc³
+0.1250   0   0 1/pc³
+0.3750   1   9.55×10⁻⁷ 1/pc³
+fit y = s_lf x + c_lf   (8 data points from table(x = xs, y = ys))
+  s_lf = -0.6057   (standard error 0.036)
+  c_lf = 1.191   (standard error 0.084)
+  rms residual = 0.0510
+luminosity-function slope for −3.25 < log L < −1.25: -0.606 ± 0.036   (Mestel: −5/7 = −0.714)
+peak of the luminosity function at log L/L☉ = -3.88 ; it falls below a tenth of the peak below log L/L☉ = -4.50
+Mestel cooling age of a 0.6 M☉ white dwarf at the cut-off: 3.76 Gyr

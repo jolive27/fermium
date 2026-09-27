@@ -1,0 +1,14 @@
+# C1: lists of matrices — rotation matrices built in a loop, and a written-out list of stiffness matrices
+rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+Rs = []
+for k from 0 to 2
+    push(Rs, rot(k * 30°))
+print len(Rs)
+v = <1, 0> m
+for R in Rs
+    print R v
+Ks = [[[2, -1], [-1, 2]], [[1, 0], [0, 1]]] N/m
+print Ks
+print Ks[1] <1, 2> cm in N, det(Ks[1])
+Ks[2] = [[3, 0], [0, 3]] N/m
+print sum(Ks)

@@ -62,6 +62,11 @@ pub struct PlotInfo {
     pub full: String,
     pub options: PlotOptions,
     pub series: Vec<PlotSeriesInfo>,
+    /// a plot inside a `sweep` (D299): the Plot statement's expression holding the sweep variable, its print
+    /// format (usize::MAX: text), and its name; the curves are kept until the sweep ends
+    pub sweep: Option<(usize, usize, String)>,
+    /// the statement after a sweep: save the collected figures of these plots
+    pub flush: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +111,8 @@ pub struct DataTables {
     pub anims: Vec<AnimInfo>,
     /// the load statements' entries, in order: (path as written, absolute path, the column units)
     pub loads: Vec<(String, String, Vec<Unit>)>,
+    /// the sweeps being checked (D299), innermost last: the variable, the function it is in, its plots
+    pub sweeps: Vec<(String, Owner, Vec<usize>)>,
 }
 
 fn hint_unit(h: &I::Hint) -> Unit {
@@ -579,9 +586,58 @@ impl Checker {
         };
         let full = join(&self.opts.base_dir, &out);
         let options = self.plot_options(options, &series, ctx)?;
-        self.data.plots.push(PlotInfo { full, options, series });
+        // inside a sweep (D299): the sweep variable's value labels this iteration's curves
+        let mut sweep = None;
+        if let Some((var, owner, _)) = self.data.sweeps.last().cloned() {
+            if owner == ctx.func {
+                if let Some((Binding::Sym(sym), _)) = self.lookup(ctx.scope, &var) {
+                    let node = crate::ast_ext::name(&var, s.span);
+                    let v = self.var_ref(sym, ctx, &node)?;
+                    let fmt = match &v.ty {
+                        Ty::Num(_) => Some(self.fmt(&v)),
+                        Ty::Str => Some(usize::MAX),
+                        _ => None,
+                    };
+                    if let Some(fmt) = fmt {
+                        exprs.push(v);
+                        sweep = Some((exprs.len() - 1, fmt, var));
+                    }
+                }
+            }
+        }
+        let swept = sweep.is_some();
+        self.data.plots.push(PlotInfo { full, options, series, sweep, flush: vec![] });
         let pid = self.data.plots.len() - 1;
+        if swept {
+            self.data.sweeps.last_mut().unwrap().2.push(pid);
+        }
         Ok(vec![I::Stmt { kind: I::StmtKind::Plot(pid, exprs), line: s.span.line }])
+    }
+
+    /// `sweep k in […]` + a block (D299): the for loop, then a statement that saves the figures its plots collected.
+    pub fn s_sweep(&mut self, s: &A::Stmt, inner: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
+        let var = match &inner.kind {
+            A::StmtKind::For { var, .. } | A::StmtKind::ForIn { var, .. } => var.clone(),
+            _ => return Err(self.err("sweep needs a loop like  sweep k in [1, 2, 4]", s.span, None)),
+        };
+        self.data.sweeps.push((var, ctx.func, vec![]));
+        let r = self.stmt(inner, ctx);
+        // "only set inside the for loop on line N": the program says sweep (red team 16 #14)
+        let tag = format!("inside the for loop on line {}", inner.span.line);
+        for x in self.extra.iter_mut() {
+            if let Some(m) = x.unset_msg.as_mut().filter(|m| m.contains(&tag)) {
+                *m = m.replace("the for loop", "the sweep");
+            }
+        }
+        let (_, _, pids) = self.data.sweeps.pop().unwrap();
+        let mut out = r?;
+        if !pids.is_empty() {
+            self.data.plots.push(PlotInfo { full: String::new(), options: PlotOptions::default(), series: vec![],
+                                            sweep: None, flush: pids });
+            let pid = self.data.plots.len() - 1;
+            out.push(I::Stmt { kind: I::StmtKind::Plot(pid, vec![]), line: s.span.line });
+        }
+        Ok(out)
     }
 
     fn plot_options(&mut self, options: &[(String, A::PlotOpt)], series: &[PlotSeriesInfo], ctx: &mut Ctx)
@@ -906,14 +962,25 @@ impl Checker {
                 ])
             }).collect();
             let o = &p.options;
-            Json::Obj(vec![
+            let mut j = Json::Obj(vec![
                 ("full".into(), Json::Str(p.full.clone())), ("series".into(), Json::List(series)),
                 ("logx".into(), Json::Bool(o.logx)), ("logy".into(), Json::Bool(o.logy)),
                 ("revx".into(), Json::Bool(o.revx)), ("revy".into(), Json::Bool(o.revy)),
                 ("title".into(), opt_str(&o.title)), ("xlabel".into(), opt_str(&o.xlabel)),
                 ("ylabel".into(), opt_str(&o.ylabel)), ("xlim".into(), lim_json(&o.xlim)),
                 ("ylim".into(), lim_json(&o.ylim)), ("equal".into(), Json::Bool(equal)),
-            ])
+            ]);
+            if let Json::Obj(kv) = &mut j {
+                if let Some((e, f, n)) = &p.sweep {
+                    kv.push(("sweep".into(), Json::Obj(vec![("expr".into(), Json::Num(*e as f64)),
+                                                            ("fmt".into(), Json::Num(*f as f64)),
+                                                            ("name".into(), Json::Str(n.clone()))])));
+                }
+                if !p.flush.is_empty() {
+                    kv.push(("flush".into(), Json::List(p.flush.iter().map(|x| Json::Num(*x as f64)).collect())));
+                }
+            }
+            j
         }).collect();
         // animations follow the plots in the same table, marked "anim" (the Animate statement's id counts from 0)
         for a in &t.anims {

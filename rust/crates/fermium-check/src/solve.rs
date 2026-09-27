@@ -74,7 +74,7 @@ impl From<Diagnostic> for SErr {
 
 type SResult<T> = Result<T, SErr>;
 
-fn primes(k: usize) -> String {
+pub(crate) fn primes(k: usize) -> String {
     "'".repeat(k)
 }
 
@@ -204,7 +204,7 @@ pub(crate) fn normalize_derivs(e: &A::Expr, tvar: &str) -> A::Expr {
 }
 
 /// `0.5 b''` with b an unknown: read as 0.5 · b'' (M9).
-fn unit_primes(e: &A::Expr, unknowns: &[String]) -> A::Expr {
+pub(crate) fn unit_primes(e: &A::Expr, unknowns: &[String]) -> A::Expr {
     let e = C::map_children(e, &mut |c| unit_primes(c, unknowns));
     if let K::Prime { target, order } = &e.kind {
         if let K::Quantity { value, unit, bracket: false } = &target.kind {
@@ -277,7 +277,7 @@ pub(crate) fn is_const(v: &I::Expr) -> Option<f64> {
     }
 }
 
-fn vec_n(t: &Ty) -> usize {
+pub(crate) fn vec_n(t: &Ty) -> usize {
     match t {
         Ty::Vec { n, .. } => *n,
         Ty::Complex(_) => 2,
@@ -285,7 +285,7 @@ fn vec_n(t: &Ty) -> usize {
     }
 }
 
-fn dim_of(t: &Ty) -> DExpr {
+pub(crate) fn dim_of(t: &Ty) -> DExpr {
     ty_dim(t).unwrap_or_else(DExpr::fresh)
 }
 
@@ -471,7 +471,12 @@ impl Checker {
                 .into());
         }
         if method == "rk4" && step.is_none() {
-            return Err(self.err("the rk4 method needs a fixed step:  for t from 0 s to 5 s step 0.01 s", s.span, None).into());
+            // the program's own range (red team 14 #9e: it always said 0 s to 5 s), with a step in the end's unit
+            let (lo, hi) = (crate::source::to_source(&sv.lo), crate::source::to_source(&sv.hi));
+            let unit = hi.split_once(' ').filter(|(n, _)| n.parse::<f64>().is_ok()).map(|(_, u)| format!(" {u}"))
+                .unwrap_or_default();
+            return Err(self.err(format!("the rk4 method needs a fixed step:  for {} from {lo} to {hi} step 0.01{unit}",
+                                        sv.var), s.span, None).into());
         }
 
         // state layout: for each unknown x of order n: x, x', ..., x^(n-1)
@@ -491,6 +496,7 @@ impl Checker {
         let mut y0: Vec<((String, usize), I::Expr)> = vec![];
         let mut shape: Vec<(String, usize)> = vec![];
         let mut is_c: Vec<bool> = names.iter().map(|x| force.contains(x)).collect();
+        let mut listy: Vec<Option<Ty>> = vec![None; names.len()];
         for ic in &initial {
             let mut lhs = ic.lhs.clone();
             if let K::BinOp { op, left, right, .. } = &ic.lhs.kind {
@@ -533,11 +539,25 @@ impl Checker {
                     .into());
             }
             let v = self.expr(&ic.rhs, ctx)?;
-            self.need_numlike(&v, &ic.rhs, "an initial value", true)?;
-            if matches!(v.ty, Ty::List(_)) {
+            if let Some(lt) = list_unknown_ty(&v.ty) {
+                // a list of unknowns (spec C1, D282): N(0) = [1e6, 0, 0], r(0) = [<1, 0> AU, <0, 1> AU]
+                if let Some(prev) = &listy[di(&x)] {
+                    if std::mem::discriminant(prev) != std::mem::discriminant(&lt) || vec_n(&list_elem(prev)) != vec_n(&list_elem(&lt)) {
+                        return Err(self.err(format!("the initial values of {x} don't match: {} and {}", self.type_desc(prev),
+                                                    self.type_desc(&v.ty)), ic.rhs.span, None).into());
+                    }
+                }
+                listy[di(&x)] = Some(lt);
+            } else if matches!(v.ty, Ty::VList(_)) {
                 return Err(self
-                    .err("an initial value must be a number or a vector like <1, 0> m, not a list", ic.rhs.span, None)
+                    .err("an unknown can be a list of numbers or of vectors (with one unit), not a list of matrices",
+                         ic.rhs.span, None)
                     .into());
+            } else if listy[di(&x)].is_some() {
+                return Err(self.err(format!("the initial values of {x} don't match: one is a list, another isn't"),
+                                    ic.rhs.span, None).into());
+            } else {
+                self.need_numlike(&v, &ic.rhs, "an initial value", true)?;
             }
             if matches!(v.ty, Ty::Mat { .. }) {
                 return Err(self
@@ -554,7 +574,7 @@ impl Checker {
                 is_c[di(&x)] = true;
             }
             let n_here = match &v.ty {
-                Ty::Vec { n, .. } => *n,
+                Ty::Vec { n, .. } if listy[di(&x)].is_none() => *n,
                 _ => 1,
             };
             let have = match shape.iter().find(|s| s.0 == x) {
@@ -570,6 +590,10 @@ impl Checker {
                     .err(format!("the initial values of {x} don't match: one is a {have}-vector, another a {what}"),
                          ic.rhs.span, None)
                     .into());
+            }
+            if is_c[di(&x)] && listy[di(&x)].is_some() {
+                return Err(self.err(format!("{x} can't be both complex and a list (lists of complex unknowns aren't \
+                                             supported yet)"), ic.rhs.span, None).into());
             }
             let want = dims[di(&x)].div(&tpow(k));
             let vd = dim_of(&v.ty);
@@ -624,6 +648,11 @@ impl Checker {
             }
         }
         let find_y0 = |y0: &Vec<((String, usize), I::Expr)>, x: &str, k: usize| y0.iter().position(|e| e.0 .0 == x && e.0 .1 == k);
+        let any_list = listy.iter().any(|l| l.is_some());
+        if any_list {
+            // the list unknowns' slots go last, so the others keep offsets known now (D282)
+            layout.sort_by_key(|(x, _)| listy[di(x)].is_some());
+        }
         let missing: Vec<String> = layout
             .iter()
             .filter(|(x, k)| find_y0(&y0, x, *k).is_none())
@@ -646,6 +675,9 @@ impl Checker {
             if is_c[di(x)] {
                 return Ty::Complex(d);
             }
+            if let Some(lt) = &listy[di(x)] {
+                return with_list_dim(lt, d);
+            }
             let n = shape_of(shape, x);
             if n > 1 { Ty::Vec { n, dim: Some(d), dims: None } } else { Ty::Num(d) }
         };
@@ -665,11 +697,28 @@ impl Checker {
             self.module.lambdas[lam].locals.push(sym);
             self.bind(lctx.scope, &nm, Binding::Sym(sym));
         }
+        // conditions on the unknowns (D296): frozen during each RK45 step, their switches located by the solver
+        let mut sw = crate::events::Switches::default();
+        // (not with a list of unknowns, D282, whose state has a length known only when the program runs)
+        let eqs: Vec<A::Equation> = if method == "rk45" && !any_list {
+            let dep: std::collections::HashSet<String> = names.iter().cloned().collect();
+            eqs.iter()
+                .map(|q| {
+                    let l = self.sw_rewrite(&q.lhs, &dep, &mut vec![], &mut sw, lam, &mut lctx, ctx, 0);
+                    let r = self.sw_rewrite(&q.rhs, &dep, &mut vec![], &mut sw, lam, &mut lctx, ctx, 0);
+                    eq(l, r, q.span)
+                })
+                .collect()
+        } else {
+            eqs
+        };
         for q in &eqs {
             let mut lv = self.expr(&q.lhs, &mut lctx)?;
             let mut rv = self.expr(&q.rhs, &mut lctx)?;
-            self.need_numlike(&lv, &q.lhs, "the left side", true)?;
-            self.need_numlike(&rv, &q.rhs, "the right side", true)?;
+            if !(any_list && matches!(lv.ty, Ty::VList(_)) && matches!(rv.ty, Ty::VList(_))) {
+                self.need_numlike(&lv, &q.lhs, "the left side", true)?;
+                self.need_numlike(&rv, &q.rhs, "the right side", true)?;
+            }
             if matches!(lv.ty, Ty::Complex(_)) || matches!(rv.ty, Ty::Complex(_)) {
                 let mut present = vec![];
                 find_derivs(&q.lhs, &mut present, &[]);
@@ -713,6 +762,10 @@ impl Checker {
                     .cloned()
                     .collect(),
             );
+        }
+        if any_list && tops_in.iter().any(|ts| ts.len() > 1) {
+            return Err(self.err("with a list of unknowns, write each equation for one highest derivative, like  N' = …",
+                                s.span, None).into());
         }
         let coupled = if tops_in.iter().any(|ts| ts.len() > 1) {
             Some(self.mass_matrix(&eqs, &tops_in, &names, &orders, &shape, &t)?)
@@ -765,7 +818,22 @@ impl Checker {
                     return Err(SErr::NeedComplex(vec![x.clone()]));
                 }
                 let n = ord(x);
-                if vec_n(&v.ty) != shape_of(&shape, x) {
+                if let Some(lt) = &listy[di(x)] {
+                    // the right side of a list unknown's equation is a list of the same kind (D282)
+                    let ok = match (lt, &v.ty) {
+                        (Ty::List(_), Ty::List(_)) => true,
+                        (Ty::VList(a), Ty::VList(b)) => vec_n(a) == vec_n(b) && matches!(&**b, Ty::Vec { .. }),
+                        _ => false,
+                    };
+                    if !ok {
+                        let what = match lt {
+                            Ty::VList(el) => format!("a list of {}-vectors", vec_n(el)),
+                            _ => "a list of numbers".into(),
+                        };
+                        return Err(self.err(format!("{x} is {what}, so {x}{} must be {what} too (here it is {})",
+                                                    primes(n), self.type_desc(&v.ty)), s.span, None).into());
+                    }
+                } else if vec_n(&v.ty) != shape_of(&shape, x) {
                     let what = if shape_of(&shape, x) == 1 { "a number" } else { "a vector" };
                     return Err(self.err(format!("{x}{} must be {what} like {x}", primes(n)), s.span, None).into());
                 }
@@ -780,6 +848,10 @@ impl Checker {
                 body.push(v);
             }
         }
+        let nuser: usize = state_syms.iter().map(|&s| vec_n(&self.module.syms[s].ty)).sum();
+        for _ in &sw.syms {
+            body.push(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line)); // a flag is constant
+        }
         self.module.lambdas[lam].body = body;
         let mut event = None;
         let mut evtext: i64 = -1;
@@ -788,23 +860,59 @@ impl Checker {
             event = Some(ev);
             evtext = txt as i64;
         }
+        let mut whens = vec![];
+        for w in &sv.whens {
+            if method != "rk45" {
+                return Err(self
+                    .err("when works with the adaptive solver (rk45) for now", w.span,
+                         Some(format!("remove {} to use it", if step.is_some() { "step …" } else { "using …" })))
+                    .into());
+            }
+            if any_list {
+                return Err(self.err("when doesn't work with a list of unknowns yet", w.span,
+                                    Some("write the unknowns separately, or stop the solve with until".into()))
+                    .into());
+            }
+            whens.push(self.check_when(w, &orders, &layout, &state_syms, lam, &mut lctx, &t)?);
+        }
+        let switch = if sw.syms.is_empty() {
+            None
+        } else {
+            let name = self.fresh_name("conditions");
+            let l = &self.module.lambdas[lam];
+            let lm = I::Lambda { kind: I::LambdaKind::Ode, name, params: l.params.clone(),
+                                 captures: l.captures.clone(), locals: l.locals.clone(), body: sw.gs.clone(),
+                                 state: l.state.clone(), col_syms: vec![], param_syms: vec![] };
+            self.module.lambdas.push(lm);
+            Some(self.module.lambdas.len() - 1)
+        };
         self.solve.infos.push(SolInfo { names: names.clone(), t: t.clone(), ..Default::default() });
         let info_id = self.solve.infos.len() - 1;
         let sol_name = self.fresh_name("__sol");
         let sol_sym = self.new_sym(&sol_name, Ty::Sol(info_id), ctx);
         self.extra[sol_sym].assigned = true;
         let mut base = 0;
+        let slot_of = |x: &str, k: usize| layout.iter().position(|(y, j)| y == x && *j == k).unwrap();
         let sfs: Vec<u32> = y0.iter().filter_map(|(_, v)| v.sf).chain([t0.sf, t1.sf].into_iter().flatten()).collect();
         for (i, x) in names.iter().enumerate() {
             let n = ord(x);
             let w = shape_of(&shape, x);
             let hints: Vec<Option<I::Hint>> = (0..n).map(|k| y0[find_y0(&y0, x, k).unwrap()].1.hint.clone()).collect();
-            let view = SolView { sol_sym, comp: base, top: base + (n - 1) * w, dim: dims[i].clone(), tdim: tdim.clone(),
+            let list = listy[i].clone();
+            let (comp, top, w) = match &list {
+                // positions in the layout, not offsets (D282)
+                Some(_) => (slot_of(x, 0), slot_of(x, n - 1), 1),
+                None => (base, base + (n - 1) * w, w),
+            };
+            let view = SolView { sol_sym, comp, top, dim: dims[i].clone(), tdim: tdim.clone(),
                                  tname: t.clone(), name: x.clone(), n: w, stride: w, cplx: is_c[i], hint: hints[0].clone(),
-                                 hints, thint: t0.hint.clone().or(t1.hint.clone()), sf: sfs.iter().min().copied() };
+                                 hints, thint: t0.hint.clone().or(t1.hint.clone()), sf: sfs.iter().min().copied(),
+                                 list: list.clone() };
             self.sols.push(view);
             self.bind(ctx.scope, x, Binding::Sol(self.sols.len() - 1));
-            base += n * w;
+            if list.is_none() {
+                base += n * w;
+            }
         }
         self.solve.infos[info_id].slots = base;
         let mut rtol = 1e-9;
@@ -842,8 +950,20 @@ impl Checker {
         let tfmt = self.fmt_of(&tdim, t0.hint.clone().or(t1.hint.clone()));
         // does the right side depend on t itself (not only through the unknowns)? (D40)
         let tdep = eqs.iter().any(|q| free_names(&q.lhs).contains(&t) || free_names(&q.rhs).contains(&t));
-        let y0v: Vec<I::Expr> = layout.iter().map(|(x, k)| y0[find_y0(&y0, x, *k).unwrap()].1.clone()).collect();
-        let x = I::SolveExtra { rtol, atol, event, evtext, tname, tfmt, tdep, line: s.span.line, ..Default::default() };
+        let mut y0v: Vec<I::Expr> = layout.iter().map(|(x, k)| y0[find_y0(&y0, x, *k).unwrap()].1.clone()).collect();
+        for _ in &sw.syms {
+            // 2: evaluated as written, until the RK45 solver sets the flag from the condition at the start (so a
+            // probe of the right side outside the solver, like the uncertainty kernels', sees the condition itself)
+            y0v.push(ir(I::ExprKind::Const(2.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line));
+        }
+        let atol = atol.map(|mut a| {
+            a.extend(std::iter::repeat_n((0.0, 0), sw.syms.len()));
+            a
+        });
+        let nuser = if sw.syms.is_empty() { 0 } else { nuser };
+        let x = I::SolveExtra { rtol, atol, event, evtext, tname, tfmt, tdep, line: s.span.line, sw_ops: sw.ops.clone(),
+                                sw_slot0: nuser, nuser, switch, whens, lists: any_list,
+                                ..Default::default() };
         if let Some(tops) = tops_ir.as_ref() {
             // the singular-mass-matrix error shows t like the solve's other errors
             set_sing_fmt(&mut self.module.lambdas[lam].body, tfmt);
@@ -1092,7 +1212,7 @@ impl Checker {
         let nv = SolView { sol_sym: v.sol_sym, comp: v.comp + order_u * v.stride, top: v.top, dim: v.dim.div(&tp),
                            tdim: v.tdim.clone(), tname: v.tname.clone(), name: format!("{}{}", v.name, primes(order_u)),
                            n: v.n, stride: v.stride, cplx: v.cplx, hint: v.hints.get(total).cloned().flatten(),
-                           hints: v.hints.clone(), thint: v.thint.clone(), sf: v.sf };
+                           hints: v.hints.clone(), thint: v.thint.clone(), sf: v.sf, list: v.list.clone() };
         self.sols.push(nv);
         Checked::Sol(self.sols.len() - 1)
     }
@@ -1100,6 +1220,9 @@ impl Checker {
     /// r.x, z.re, x.t / x.times, x.values of a solution (Python e_Field, the SolRef part).
     pub fn sol_field(&mut self, e: &A::Expr, vid: SolViewId, name: &str, ctx: &mut Ctx) -> CResult<Checked> {
         let v = self.sols[vid].clone();
+        if v.list.is_some() && !matches!(name, "t" | "time" | "times") {
+            return Err(self.list_sol_error(&v, e));
+        }
         if (matches!(name, "x" | "y" | "z") && v.n > 1 && !v.cplx) || (matches!(name, "re" | "im") && v.cplx) {
             let k = match name {
                 "x" | "re" => 0,
@@ -1112,7 +1235,7 @@ impl Checker {
             let nv = SolView { sol_sym: v.sol_sym, comp: v.comp + k, top: v.top + k, dim: v.dim.clone(),
                                tdim: v.tdim.clone(), tname: v.tname.clone(), name: format!("{}.{name}", v.name), n: 1,
                                stride: v.stride, cplx: false, hint: v.hint.clone(), hints: vec![], thint: v.thint.clone(),
-                               sf: v.sf };
+                               sf: v.sf, list: None };
             self.sols.push(nv);
             return Ok(Checked::Sol(self.sols.len() - 1));
         }
@@ -1140,6 +1263,9 @@ impl Checker {
     /// All computed values of a solution component, as a list (Python sol_values).
     pub fn sol_values(&mut self, vid: SolViewId, e: &A::Expr) -> CResult<I::Expr> {
         let v = self.sols[vid].clone();
+        if v.list.is_some() {
+            return Err(self.list_sol_error(&v, e));
+        }
         if v.cplx {
             return Err(self.err(format!("{} is complex, and lists of complex numbers aren't supported yet", v.name), e.span,
                                 Some(format!("use its real or imaginary part, {n}.re or {n}.im (plot {n}.re vs {t}), or \
@@ -1157,6 +1283,20 @@ impl Checker {
     /// r[end], x[3] of a solution: an element of its values (Python e_Index, the SolRef part).
     pub fn sol_index(&mut self, vid: SolViewId, e: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
         let v = self.sols[vid].clone();
+        if v.list.is_some() {
+            if !matches!(index.kind, K::End) {
+                return Err(self.list_sol_error(&v, e));
+            }
+            // N[end]: the list at the last time (D282)
+            let line = e.span.line;
+            let sol = self.var_ref(v.sol_sym, ctx, e)?;
+            let I::ExprKind::Var(sym) = sol.kind else { unreachable!() };
+            let ts = ir(I::ExprKind::SolList { sol: sym, comp: 0, what: 1 }, Ty::List(v.tdim.clone()), line);
+            let n = ir(I::ExprKind::Builtin("len".into(), vec![ts.clone()]), Ty::Num(DExpr::of(DIMLESS)), line);
+            let t = ir(I::ExprKind::Index(Box::new(ts), Box::new(n)), Ty::Num(v.tdim.clone()), line);
+            let tfmt = self.fmt_of(&v.tdim, v.thint.clone());
+            return self.list_sol_at(&v, sol, t, tfmt, e);
+        }
         let line = e.span.line;
         let index_of = |c: &mut Checker, vals: &I::Expr, ctx: &mut Ctx| -> CResult<I::Expr> {
             if matches!(index.kind, K::End) {
@@ -1220,6 +1360,15 @@ impl Checker {
         let sol = self.var_ref(view.sol_sym, ctx, e)?;
         let I::ExprKind::Var(sol_sym) = sol.kind else { unreachable!() };
         let tfmt = self.fmt_of(&view.tdim, view.thint.clone());
+        if let Some(lt) = &view.list {
+            // N(t) of a list unknown: the list at t (D282)
+            if matches!(t.ty, Ty::List(_)) {
+                return Err(self.err(format!("{} is a list of unknowns, so it takes one time, not a list of times",
+                                            view.name), e.span, None));
+            }
+            let _ = lt;
+            return self.list_sol_at(&view, sol, t, tfmt, e);
+        }
         let tsf = t.sf;
         let mut r = self.sol_eval_node(&view, sol_sym, &t, e, tfmt)?;
         r.sf = match view.sf {
@@ -1260,6 +1409,36 @@ impl Checker {
         } else {
             Err(self.err(format!("can't take that many derivatives of the solution {}", view.name), e.span, None))
         }
+    }
+
+    /// N(t) or N'(t) of a list unknown: `__sol_list(solution, slot, t, derivative?, k, tfmt)` (D282).
+    fn list_sol_at(&mut self, view: &SolView, sol: I::Expr, t: I::Expr, tfmt: usize, e: &A::Expr) -> CResult<I::Expr> {
+        let lt = view.list.clone().unwrap();
+        let (slot, dy) = if view.comp <= view.top {
+            (view.comp, 0.0)
+        } else if view.comp == view.top + 1 {
+            (view.top, 1.0)
+        } else {
+            return Err(self.err(format!("can't take that many derivatives of the solution {}", view.name), e.span,
+                                None));
+        };
+        let k = match &lt {
+            Ty::VList(el) => vec_n(el),
+            _ => 0,
+        };
+        let line = e.span.line;
+        let c = |x: f64| ir(I::ExprKind::Const(x), Ty::Num(DExpr::of(DIMLESS)), line);
+        let args = vec![sol, c(slot as f64), t, c(dy), c(k as f64), c(tfmt as f64)];
+        let mut r = ir(I::ExprKind::Builtin("__sol_list".into(), args), with_list_dim(&lt, view.dim.clone()), line);
+        r.hint = view.hint.clone();
+        r.sf = view.sf;
+        Ok(r)
+    }
+
+    /// A list unknown used as something other than N(t) or N[end] (D282).
+    fn list_sol_error(&self, v: &SolView, e: &A::Expr) -> fermium_syntax::diag::Diagnostic {
+        self.err(format!("{n} is a list of unknowns: use its value at a time, like {n}({t}) (a list) or {n}({t})[i], \
+                          or its last value {n}[end]", n = v.name, t = v.tname), e.span, None)
     }
 
     /// The unknowns of a solution, for messages.
@@ -1304,5 +1483,29 @@ mod tests {
             let got = fermium_sym::isolate(&parse_expr(l), &parse_expr(r), &t).unwrap();
             assert_eq!(fermium_sym::to_source_p(&got, false), want);
         }
+    }
+}
+
+/// The type of a list unknown from its initial value: a list of numbers or of vectors (D282).
+fn list_unknown_ty(t: &Ty) -> Option<Ty> {
+    match t {
+        Ty::List(_) => Some(t.clone()),
+        Ty::VList(el) if matches!(&**el, Ty::Vec { dims: None, .. }) => Some(t.clone()),
+        _ => None,
+    }
+}
+
+fn list_elem(t: &Ty) -> Ty {
+    match t {
+        Ty::VList(el) => (**el).clone(),
+        _ => Ty::Num(DExpr::of(DIMLESS)),
+    }
+}
+
+/// A list type like `lt` with the dimension d (of a derivative).
+fn with_list_dim(lt: &Ty, d: DExpr) -> Ty {
+    match lt {
+        Ty::VList(el) => Ty::VList(Box::new(Ty::Vec { n: vec_n(el), dim: Some(d), dims: None })),
+        _ => Ty::List(d),
     }
 }

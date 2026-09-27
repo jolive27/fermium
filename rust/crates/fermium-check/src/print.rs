@@ -55,6 +55,14 @@ impl Checker {
                         I::PrintItem::Mat(v, f)
                     }
                     Ty::TextList => I::PrintItem::TextList(v),
+                    Ty::VList(_) => {
+                        let f = self.fmt(&v);
+                        I::PrintItem::VList(v, f)
+                    }
+                    Ty::Array { .. } => {
+                        let f = self.fmt(&v);
+                        I::PrintItem::Array(v, f)
+                    }
                     Ty::ComplexList(_) => {
                         let f = self.fmt(&v);
                         I::PrintItem::ComplexList(v, f)
@@ -126,6 +134,15 @@ impl Checker {
     }
 
     pub fn describe_function(&mut self, info: FuncInfoId) -> String {
+        if self.funcs[info].versions.len() > 1 {
+            // one line per version (C5)
+            return self.versions_of(info).into_iter().map(|v| self.describe_version(v)).collect::<Vec<_>>().join("\n");
+        }
+        self.describe_version(info)
+    }
+
+    /// `describe_function` of one version.
+    pub fn describe_version(&mut self, info: FuncInfoId) -> String {
         let f = &self.funcs[info];
         let Some(A::Stmt { kind: A::StmtKind::FuncDef { params, body, .. }, .. }) = &f.fdef else {
             return format!("{}: a function", f.display_name);
@@ -133,7 +150,16 @@ impl Checker {
         let ps = params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ");
         match body {
             A::FuncBody::Expr(b) => {
-                let src = crate::source::to_source(&self.body_expr(info).unwrap_or_else(|| b.clone()));
+                let body = self.body_expr(info).unwrap_or_else(|| b.clone());
+                let src = if self.calc.derived.values().any(|&d| d == info) {
+                    // a derivative prints its tidy form when that is at least a fifth shorter (like terms collected,
+                    // fractions put together: D298); it is evaluated as it is
+                    let plain = crate::source::to_source(&body);
+                    let tidy = crate::source::to_source(&fermium_sym::tidy(&body));
+                    if 5 * tidy.chars().count() <= 4 * plain.chars().count() { tidy } else { plain }
+                } else {
+                    crate::source::to_source(&body)
+                };
                 let f = &self.funcs[info];
                 let mut s = match &f.anon_label {
                     Some(l) => format!("{l} = {src}"),

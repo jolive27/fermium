@@ -1,0 +1,23 @@
+# C1: an N-body step written as loops over lists of vectors (Earth, Moon and a satellite, leapfrog)
+G_N = 6.674e-11 N m²/kg²
+mass = [5.97e24, 7.35e22, 1000] kg
+r = [<0, 0> m, <3.84e8, 0> m, <4.2e7, 0> m]
+v = [<0, 0> m/s, <0, 1022> m/s, <0, 3075> m/s]
+
+accel(r, i) =
+    a = <0, 0> m/s²
+    for j from 1 to len(r)
+        if j != i
+            d = r[j] - r[i]
+            a += G_N mass[j] d / |d|^3
+    return a
+
+dt = 10 s
+for n from 1 to 200
+    for i from 1 to len(r)
+        v[i] += accel(r, i) dt
+    for i from 1 to len(r)
+        r[i] += v[i] dt
+print r[3]
+print sum(v) in m/s
+print mean(r)

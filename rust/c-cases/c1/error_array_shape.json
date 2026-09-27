@@ -1,0 +1,5 @@
+{
+ "stdout": "12 m\n",
+ "stderr": "error_array_shape.fm, line 4: these two arrays have different shapes (3×4 and 4×3)\n    print A + B\n",
+ "exit": 1
+}

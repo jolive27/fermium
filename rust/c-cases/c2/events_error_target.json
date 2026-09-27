@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "events_error_target.fm, line 5: can't set y'' here: when can set y, y' (the highest derivative follows from the equation)\n      when y = 0 m: y'' = 0 m/s²\n                    ^^^^^^^^^^^^\n  hint: write e.g.  when y = 0 m: y' = -0.9 y'\n",
+ "exit": 1
+}

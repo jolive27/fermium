@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_units.fm, line 5: kinetic_energy expects v in km/s (declared on line 3), but got time [s]\n    print kinetic_energy(2 kg, 3 s)\n                               ^^^\n  hint: pass a speed, like  1 km/s\n",
+ "exit": 1
+}

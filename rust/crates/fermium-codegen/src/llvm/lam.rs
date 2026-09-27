@@ -27,6 +27,9 @@ pub(super) struct Saved<'c> {
     ctx_ptr: PointerValue<'c>,
     hoisted: HashMap<SymId, (PointerValue<'c>, IntValue<'c>)>,
     int_vars: HashMap<SymId, IntValue<'c>>,
+    gc_frame: bool,
+    gc_roots: Vec<(PointerValue<'c>, u8)>,
+    start_bb: Option<BasicBlock<'c>>,
 }
 
 /// Every variable an expression uses (lambda bodies included), and every variable its where-bindings make.
@@ -71,6 +74,9 @@ impl<'c, 'm> Gen<'c, 'm> {
             ctx_ptr: self.ctx_ptr,
             hoisted: std::mem::take(&mut self.hoisted),
             int_vars: std::mem::take(&mut self.int_vars),
+            gc_frame: std::mem::replace(&mut self.gc_frame, false),
+            gc_roots: std::mem::take(&mut self.gc_roots),
+            start_bb: self.start_bb.take(),
         }
     }
 
@@ -87,6 +93,9 @@ impl<'c, 'm> Gen<'c, 'm> {
         self.ctx_ptr = s.ctx_ptr;
         self.hoisted = s.hoisted;
         self.int_vars = s.int_vars;
+        self.gc_frame = s.gc_frame;
+        self.gc_roots = s.gc_roots;
+        self.start_bb = s.start_bb;
     }
 
     /// Is this variable one of the current function's own (a local, or living in an override)?

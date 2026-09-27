@@ -97,6 +97,16 @@ fn tidy_nested_cancellation() {
     assert_eq!(to_source(&tidy(&lap)), "-G M m/(x² + y²)^(3/2)", "{:?}", lap);
 }
 
+#[test]
+fn tidy_constant_over_a_power_of_a_sum() {
+    // (√Q − x²/√Q)/Q with Q = 1 + x² is Q^(-3/2): the numerator shifted to √Q's lowest power is a number (D298)
+    let q2 = diff(&dx("√(1 + x^2)"), "x", &mut Plain).unwrap();
+    assert_eq!(to_source(&q2), "(√(1 + x²) - x²/√(1 + x²))/(1 + x²)");
+    assert_eq!(to_source(&tidy(&q2)), "1/(1 + x²)^(3/2)");
+    assert_eq!(to_source(&tidy(&dx("x exp(x) - exp(x)"))), "x exp(x)");
+    assert_eq!(to_source(&tidy(&diff(&dx("x sin(x)"), "x", &mut Plain).unwrap())), "2 cos(x) - x sin(x)");
+}
+
 fn integ(s: &str, var: &str, positive: &[&str]) -> Result<String, String> {
     let p: Vec<String> = positive.iter().map(|x| x.to_string()).collect();
     integrate(&body(s), var, &p).map(|e| to_source(&e)).map_err(|d| d.message)

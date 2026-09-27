@@ -176,7 +176,7 @@ pub fn split_plots(parts: &Parts) -> (Parts, Vec<String>) {
     (out, plots)
 }
 
-/// The notebook's rendering of a plot file: PNG as base64, SVG as text.
+/// The notebook's rendering of a plot file: PNG and GIF as base64, SVG as text.
 pub fn plot_data(path: &str) -> Option<Json> {
     let name = std::path::Path::new(path).file_name()?.to_string_lossy().into_owned();
     let plain = ("text/plain", Json::from(format!("<plot {name}>")));
@@ -188,6 +188,10 @@ pub fn plot_data(path: &str) -> Option<Json> {
     if lower.ends_with(".png") {
         let png = std::fs::read(path).ok()?;
         return Some(Json::obj(vec![("image/png", Json::from(base64(&png))), plain]));
+    }
+    if lower.ends_with(".gif") {
+        let gif = std::fs::read(path).ok()?;
+        return Some(Json::obj(vec![("image/gif", Json::from(base64(&gif))), plain]));
     }
     None
 }

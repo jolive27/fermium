@@ -1,0 +1,5 @@
+# when needs the adaptive solver (D297)
+solve y'' = -9.81 m/s²
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 3 s step 1 ms
+  when y = 0 m: y' = -0.9 y'

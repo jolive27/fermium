@@ -254,6 +254,13 @@ or a quantity found by cancellation). What differs, in the browser only:
   to corners); log axes have no minor ticks; `plot … animate` without a .gif path writes PNG frames (v1 did so
   only without pillow).
 - A GIF uses one 256-colour palette (the most frequent colours; antialiasing blends map to the nearest).
+- File formats (red team 13 #3): the extension of `to "<path>"` decides, in any case, as with matplotlib, and
+  a path without one gets `.png` added. v2 writes png, svg and gif; every other extension is refused with
+  v1's line `(plot not saved: Format 'txt' is not supported (supported formats: gif, png, svg))`, which lists
+  the formats v2 writes (v1 listed matplotlib's, and also wrote pdf, eps, ps, jpg, tif, webp, avif, svgz,
+  pgf, raw and rgba). Before, v2 wrote PNG bytes to any path (`notes.txt`, `prog.fm`, `c.pdf`). A refused
+  plot makes no folder (v1 made the folder before matplotlib refused). v1 printed `plot saved to …/noext`
+  for a path without an extension although matplotlib wrote `noext.png`; v2 prints the file it wrote.
 - Tests: `tests/plot.rs` (files, messages, PNG/GIF structure; decoded by PIL once by hand), unit tests for
   deflate (round trip), LZW (round trip), labels and number format.
 
@@ -262,7 +269,9 @@ or a quantity found by cancellation). What differs, in the browser only:
 v1's compiled code never freed lists (a documented trap: a long loop that builds lists grows without bound).
 In the Rust implementation a list is a reference-counted value (`Rc<RefCell<Vec<f64>>>` in the tree-walker),
 freed when the last variable holding it goes away; list aliasing semantics (D26: `ys = xs` shares the list) are
-unchanged, so no program prints anything different.
+unchanged, so no program prints anything different. Since v2.5 the LLVM back end (and `fermium build` executables)
+free lists too: a mark-and-sweep collector over the variables of the running functions (DECISIONS D280; test:
+`rust/c-cases/c1/memory_loop.fm`, 10⁶ lists of 100 numbers in bounded memory).
 
 ## parallel for: the first failing iteration's error is reported
 
@@ -328,7 +337,7 @@ arguments), `run`, `fmt`, every `-h`, a bad subcommand and a missing file argume
   small function). A program the tree-walker runs (one with ±, or a construct the LLVM back end doesn't
   compile yet) has 1.9 GB but bigger frames: a one-line recursive function stops at about 500 000 calls deep
   (v1's compiled code goes past 10⁶). Red team 10 #5; making the tree-walker's frames smaller is open.
-- `fermium --version` prints `fermium 2.0.0 (Rust)`.
+- `fermium --version` prints `fermium 2.5.0 (Rust)` (2.0.0 at the v2.0 cutover).
 
 ## The REPL (fermium-repl)
 
@@ -338,6 +347,9 @@ terminal; indentation, `else`/`elif` and unfinished input continue one from a pi
 failed input leaving no names behind (D220: the checker is rolled back to a copy). 53 scripted sessions (every
 session of tests/test_repl.py plus 30 more) print exactly what v1 prints
 (`cargo test -p fermium-repl`, fixtures from rust/tools/repl_sessions.py). Differences:
+
+- Uncertainties work in the REPL and in the Jupyter kernel (`L = 1.20 ± 0.01 m`, then `print L - L` prints
+  `0 ± 0 m`, correlations kept from one input to the next); v1 refused `±` there (red team 13 #6).
 
 - Line editing and history are a small editor of Fermium's own over the terminal (termios through the libc
   crate) instead of GNU readline/libedit: arrows, Home/End, Ctrl-A/E/K/U/W/L, Up/Down history saved in
@@ -410,3 +422,69 @@ in the API for calling Fermium from Python (D142), which no conformance case cov
 - It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
   (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
   faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.
+
+## v2.5: uncertainties everywhere (C7)
+
+Spec C7 extends uncertain values (±) to vectors, lists, `solve` (parameters and starting values) and integrals, with
+linear propagation (DECISIONS D276–D279). v1 stopped these programs with a "can't use uncertain values (±) yet"
+error; v2.5 computes them. For example, `solve x' = -k x / (1 s)` with k = 1.0 ± 0.1 now prints x(1 s) = 0.368 ± 0.037 m
+(e⁻¹, and |∂x/∂k|·0.1 = e⁻¹·0.1), and `∫ exp(-k x) dx from 0 to 1` prints 0.632 ± 0.026. Each recorded output was
+checked against the analytic derivative. Programs that still can't propagate (see rust/c-cases/c7/still_errors.fm)
+keep v1's error.
+
+## fermium build (red team 13 #6, #7, #14)
+
+- A program that uses Python builds (v1 refused it: *an executable doesn't carry Python*). The executable
+  loads libpython like `fermium run` and imports the program's own modules from the program's folder at build
+  time, stored as an absolute path.
+- `fermium build noext` and `fermium build -o prog.fm prog.fm` are refused (*fermium build would overwrite the
+  program … with the executable*); v1 overwrote the source.
+- The linker's temporary folder is created exclusively, with a random name and owner-only permissions, instead
+  of `/tmp/fermium-build-<pid>`.
+
+## Unit powers are exact fractions of 64-bit whole numbers (red team 13 #1, #2)
+
+v1 keeps a unit's power as a Python `Fraction`, which never overflows: `print √(√(…√(1 m)…))` nested 64 deep
+prints `1 m^(1/18446744073709551616)`. v2 keeps each power as a fraction of two 64-bit integers. Every power
+the checker works out from a program (powers and roots, √ ∛ cbrt, products and quotients, generic functions,
+derivatives and integrals of units, solve/fit and the unifier, `units natural`, `analyze`, and exponents
+written in a unit such as `m^1e300`) is computed exactly in 128 bits and kept only if it fits. One that
+doesn't fit is an error before the program runs, at the expression that made it:
+
+    prog.fm, line 2: this unit's power is too large to track exactly (m^(1/18446744073709551616))
+        z = (x^(1/4294967296))^(1/4294967296)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      hint: Fermium keeps a unit's power as an exact fraction of 64-bit whole numbers; raise a plain number to
+      the power instead, and attach the unit afterwards
+
+Before this fix the arithmetic wrapped silently (`y = (x^4294967296)^4294967296` became a plain number and
+`y + 1` printed 2) or panicked ("denominator == 0", which ended a REPL session). So programs whose unit powers
+pass 2⁶³ (or have a denominator past 2⁶³) are refused where v1 runs them; no conformance case has one. A
+written exponent is a float, as in v1: `(1 m)^4611686018427387903` is m^4611686018427387904.
+
+## v2.5: derivatives of multi-line functions (C2)
+
+Spec C2 differentiates functions written over several lines by automatic differentiation (forward mode as a
+source transformation, DECISIONS D295). v1 stopped `f'`, `d/dx f`, `∇φ` and `∇²φ` of such a function, and of a
+one-line function that calls one, with "can't differentiate through g: it's defined over several lines" (or "can
+only differentiate one-line functions …"); v2.5 computes them. The recorded programs: `g(t) = (a = 2 s; t²/a)`,
+`f(t) = g(t) + 1 s`, `print f'(5 s)` prints 5 (2t/a = 10 s / 2 s), and `F(x) = (a = 2; x²/a)`, `N(T) = F(T) + 1`,
+`dN = d/dT N`, `print dN(3)` prints 3 (2·3/2). `∇·` and `∇×` of a multi-line function keep v1's error.
+
+## v2.5: conditions on the unknowns in solve are located (C2)
+
+Spec C2 locates the switches of `if` conditions that depend on the unknowns of an RK45 solve (DECISIONS D296): the
+condition is frozen during each step and its switch found on the dense output, where v1 evaluated it at every
+stage and let the error control shrink the steps around the jump. Results change at the level of the solver's
+tolerance, towards the converged solution. The recorded program (a white dwarf with the full Fermi-gas equation of
+state, whose density is cut off by `ρ_of(y) = if y > 1 then … (y² − 1)^(3/2) else 0 kg/m³`) prints M = 0.51019701 M☉
+for x_c = 1 where v1 printed 0.51019703; the same solve with `tolerance 1e-13` gives 0.51019700 in both Fermium 1.5
+and 2.5, so the new value is the more accurate one (the other lines agree to their printed digits).
+
+## v2.5: printed derivatives in their tidy form when it is clearly shorter (C2)
+
+Spec C2 asks for better symbolic simplification. A printed derivative is shown in fermium-sym's tidy form (like
+terms collected, fractions put together) when that is at least a fifth shorter than v1's formula (DECISIONS
+D298); the computed values don't change. The recorded program, `f(x) = x / (1 + x^2)` then `print f'`, prints
+`f'(x) = (1 - x²)/(1 + x²)²` where v1 printed `f'(x) = (1 + x² - 2x²)/(1 + x²)²` (the same function: the like
+terms x² − 2x² collected).

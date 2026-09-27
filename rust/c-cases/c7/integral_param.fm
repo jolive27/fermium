@@ -1,0 +1,20 @@
+# C7: an uncertain parameter under the integral sign, against the analytic result and Monte Carlo
+k = 0.80 ± 0.05 1/m
+I = ∫ exp(-k x) dx from 0 m to 2 m
+print I
+print (1 - exp(-k 2 m)) / k
+print I - (1 - exp(-k 2 m)) / k
+seed(7)
+propagate montecarlo 20000 samples
+    J = ∫ exp(-k x) dx from 0 m to 2 m
+print J
+print abs(uncertainty(I) / uncertainty(J) - 1) < 0.03
+# a user function reading the measured value, an infinite range: ∫₀^∞ e^(−k x) dx = 1/k
+f(x) = exp(-k x)
+print ∫ f(x) dx from 0 m to ∞, 1 / k
+# a planet's mass from a density profile ρ(r) = ρ₀ (1 − r/R), with ρ₀ and R measured
+ρ₀ = 1.30e4 ± 0.05e4 kg/m³
+R = 6.37e6 ± 0.01e6 m
+M = ∫ 4π r² ρ₀ (1 - r / R) dr from 0 m to R
+print M, π ρ₀ R³ / 3
+print M / (π ρ₀ R³ / 3)

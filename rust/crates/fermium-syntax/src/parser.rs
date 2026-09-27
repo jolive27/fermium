@@ -164,8 +164,11 @@ impl Parser {
     /// Run a recursive step with the nesting depth checked.
     pub fn nested<T>(&mut self, f: impl FnOnce(&mut Self) -> R<T>) -> R<T> {
         if self.depth >= MAX_DEPTH {
-            return Err(Diagnostic { message: "this program is nested too deeply for Fermium to compile".into(),
-                                    line: None, col: None, length: 1, hint: None,
+            // v1's message and hint (driver.run_source; red team 13 #10)
+            return Err(Diagnostic { message: "this program is nested too deeply for Fermium to compile (very long or \
+                                              deeply nested expressions)".into(),
+                                    line: None, col: None, length: 1,
+                                    hint: Some("split the expression into several lines with names".into()),
                                     severity: crate::diag::Severity::Error, fix: vec![] });
         }
         self.depth += 1;
@@ -550,6 +553,12 @@ impl Parser {
                 return Ok(s);
             }
         }
+        if tt.is_name("import") && (nx.is_name("c") || nx.is_name("fortran")) && self.peek(2).kind == Kind::Str {
+            return self.import_c_stmt(end_line); // import c "libphys.so": … (C3, D275)
+        }
+        if tt.is_name("import") && nx.is_name("cpp") && (self.peek(2).kind == Kind::Str || self.peek(2).is_name("header")) {
+            return self.import_c_stmt(end_line); // import cpp "libphys.so" header "phys.hpp": … (C4, D290)
+        }
         if (tt.is_name("import") || tt.is_kw("from")) && matches!(nx.kind, Kind::Name | Kind::Str) {
             let s = self.import_stmt()?;
             if end_line {
@@ -559,6 +568,14 @@ impl Parser {
         }
         if tt.is_name("use") && nx.is_name("python") {
             return self.use_python_stmt(end_line);
+        }
+        if tt.is_name("sweep") && !self.known.contains("sweep") && nx.kind == Kind::Name
+            && (self.peek(2).is_kw("in") || self.peek(2).is_kw("from"))
+        {
+            // sweep k in [...]: a for loop whose plots collect one curve per value (spec C2, D299)
+            let s = self.for_stmt()?;
+            let span = s.span;
+            return Ok(Stmt { kind: StmtKind::Sweep { body: vec![s] }, span });
         }
         if tt.is_name("parallel") && nx.is_kw("for") {
             self.next();
@@ -622,9 +639,14 @@ impl Parser {
                         self.next();
                         let idx = self.expr()?;
                         let mut idx2 = None;
+                        let mut rest = vec![];
                         if self.at_op(",") {
                             self.next();
                             idx2 = Some(self.expr()?);
+                        }
+                        while self.at_op(",") {
+                            self.next();
+                            rest.push(self.expr()?);
                         }
                         if self.at_op(":") {
                             return Err(self.err("a slice xs[a:b] can be read but not assigned to; set the elements \
@@ -641,6 +663,7 @@ impl Parser {
                                 value: val,
                                 op,
                                 index2: idx2,
+                                rest,
                             },
                             name,
                         );
@@ -844,11 +867,38 @@ impl Parser {
         while !self.at_op(")") {
             let pt = self.expect_name("a parameter name")?;
             let mut unit = None;
+            let mut kind = None;
+            if self.at_op(":") {
+                // r: vector [m] — the kind of argument this version takes (C5, multiple dispatch)
+                self.next();
+                let kt = self.expect_name("number, vector, list or complex after ':'")?;
+                let k = self.toks[kt].s().to_string();
+                if !matches!(k.as_str(), "number" | "vector" | "list" | "complex") {
+                    let raw = self.toks[kt].raw.clone();
+                    let pn = self.toks[pt].raw.clone();
+                    // red team 14 #9a: `n: int` gave the hint `n [int]`
+                    let near = ["number", "vector", "list", "complex"].into_iter().find(|w| close_word(&raw, w));
+                    let hint = if raw == "int" || raw == "integer" || raw == "float" || raw == "real" {
+                        format!("a Fermium function takes any number, so write just  {pn}  (or  {pn}: number); \
+                                 : int  is for the signatures of  import c  and  use python")
+                    } else if let Some(w) = near {
+                        format!("did you mean  {pn}: {w} ?")
+                    } else {
+                        format!("give a unit in brackets instead:  {pn} [{raw}]")
+                    };
+                    return Err(self.error(
+                        format!("a parameter can be marked  : number,  : vector,  : list  or  : complex, not : {raw}"),
+                        Some(kt),
+                        Some(hint),
+                    ));
+                }
+                kind = Some(k);
+            }
             if self.at_op("[") {
                 unit = Some(self.bracket_unit()?);
             }
             let pn = self.toks[pt].s().to_string();
-            params.push(Param { name: pn.clone(), unit, span: self.span_from(pt) });
+            params.push(Param { name: pn.clone(), unit, kind, span: self.span_from(pt) });
             self.known.insert(pn);
             if self.at_op(",") {
                 self.next();
@@ -1212,7 +1262,57 @@ impl Parser {
         s
     }
 
+    /// `when y = 0 m: y' = -0.9 y'` in a solve (spec C2, D297).
+    fn when_clause(&mut self, sv: &mut SolveState) -> R<When> {
+        let st = self.next();
+        let saved_known = self.known.clone();
+        let saved_unk = self.solve_unknowns.clone();
+        let mut k = saved_known.clone();
+        k.extend(sv.unknowns.iter().cloned());
+        k.extend(self.solve_independents.iter().cloned());
+        self.known = k;
+        self.solve_unknowns = sv.unknowns.clone();
+        let r = (|| -> R<When> {
+            let e = self.expr()?;
+            let (lhs, op, rhs) = if self.at_op("=") {
+                self.next();
+                (e, "=".to_string(), self.expr()?)
+            } else {
+                match e.kind {
+                    ExprKind::Compare { op, left, right, tol: None } if ["<", ">", "<=", ">="].contains(&op.as_str()) => {
+                        (*left, op, *right)
+                    }
+                    _ => {
+                        return Err(self.error("a when clause needs a condition like  when y = 0 m:  or  when y < 0 m:",
+                                              Some(st), Some("write e.g.  when y = 0 m: y' = -0.9 y'".into())))
+                    }
+                }
+            };
+            if !self.at_op(":") {
+                return Err(self.err_h(format!("expected ':' and what changes after the condition of when{}",
+                                              self.found()), "like  when y = 0 m: y' = -0.9 y'"));
+            }
+            self.next();
+            let mut assigns = vec![self.equation()?];
+            while self.at_op(",") || self.at_kw("and") {
+                self.next();
+                assigns.push(self.equation()?);
+            }
+            Ok(When { lhs, op, rhs, assigns, span: self.span_from(st) })
+        })();
+        self.known = saved_known;
+        self.solve_unknowns = saved_unk;
+        r
+    }
+
     fn solve_clause(&mut self, sv: &mut SolveState) -> R<bool> {
+        if self.tok().is_name("when") && !self.known.contains("when")
+            && !matches!(self.peek(1).kind, Kind::Newline | Kind::Eof) && !self.peek(1).is_op("=")
+        {
+            let w = self.when_clause(sv)?;
+            sv.whens.push(w);
+            return Ok(true);
+        }
         if self.at_kw("with") {
             self.next();
             let e = self.equation()?;
@@ -1383,7 +1483,7 @@ impl Parser {
     fn solve_stmt(&mut self) -> R<Stmt> {
         let t = self.next();
         let unknowns = self.solve_unknowns_scan();
-        let mut sv = SolveState::default();
+        let mut sv = SolveState { unknowns: unknowns.clone(), ..Default::default() };
         let mut eqs = vec![];
         if self.kind() != Kind::Newline {
             eqs.push(self.solve_equation(&unknowns)?);
@@ -1458,6 +1558,7 @@ impl Parser {
             method: sv.method,
             tolerance: sv.tol,
             until: sv.until,
+            whens: sv.whens,
             absolute: sv.abs,
             lowest: sv.lowest,
             grid: sv.grid,
@@ -1640,6 +1741,267 @@ impl Parser {
         Ok(self.stmt(StmtKind::UsePython { module, alias, sigs }, t))
     }
 
+    /// import c "libphys.so": / import fortran "libnuclear.so":  then one signature per line (C3, D275).
+    fn import_c_stmt(&mut self, end_line: bool) -> R<Stmt> {
+        let t = self.next();
+        let lt = self.next();
+        let lang = self.toks[lt].s().to_string();
+        let what = lang_name(&lang);
+        let mut lib = String::new();
+        if self.kind() == Kind::Str {
+            let st = self.next();
+            lib = self.toks[st].s().to_string();
+        }
+        let example = match lang.as_str() {
+            "c" => "like\n    import c \"libphys.so\":\n        kinetic_energy(m [kg], v [m/s]) -> [J]",
+            "cpp" => "like\n    import cpp \"libphys.so\" header \"phys.hpp\":\n        phys::kinetic_energy(m [kg], v [m/s]) \
+                      -> [J]",
+            _ => "like\n    import fortran \"libnuclear.so\":\n        binding_energy(Z: int, A: int) -> [MeV]",
+        };
+        let mut header = None;
+        if lang == "cpp" {
+            if !self.tok().is_name("header") {
+                return Err(self.err_h(format!("expected header \"….hpp\" after the C++ library's name{}", self.found()),
+                                      example));
+            }
+            self.next();
+            if self.kind() != Kind::Str {
+                return Err(self.err_h(format!("expected the header's name in quotes after header{}", self.found()),
+                                      example));
+            }
+            let ht = self.next();
+            header = Some(self.toks[ht].s().to_string());
+        }
+        if !self.at_op(":") {
+            let after = if lang == "cpp" { "header's" } else { "library's" };
+            return Err(self.err_h(format!("expected ':' and the signatures of the {what} functions after the \
+                                           {after} name{}", self.found()), example));
+        }
+        self.next();
+        let mut sigs = vec![];
+        if self.kind() != Kind::Newline {
+            sigs.push(self.c_signature(&lang)?);
+            while self.at_op(";") {
+                self.next();
+                sigs.push(self.c_signature(&lang)?);
+            }
+            if end_line {
+                self.end_statement()?;
+            }
+        } else {
+            self.next();
+            self.skip_newlines();
+            if self.kind() != Kind::Indent {
+                return Err(self.err_h(format!("expected an indented block: the signatures of the {what} functions, \
+                                               one per line"), example));
+            }
+            self.next();
+            while !self.at_kind(&[Kind::Dedent, Kind::Eof]) {
+                sigs.push(self.c_signature(&lang)?);
+                if self.kind() == Kind::Newline {
+                    self.next();
+                } else if !self.at_kind(&[Kind::Dedent, Kind::Eof]) {
+                    return Err(self.err(format!("expected one signature per line{}", self.found())));
+                }
+                self.skip_newlines();
+            }
+            if self.kind() == Kind::Dedent {
+                self.next();
+            }
+        }
+        for g in &sigs {
+            self.known.insert(g.name.clone());
+        }
+        Ok(self.stmt(StmtKind::ImportC { lang, lib, header, sigs }, t))
+    }
+
+    /// kinetic_energy(m [kg], v [km/s]) -> [J];  sum_sq(x: list [m], n: len(x)) -> [m²];
+    /// neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
+    fn c_signature(&mut self, lang: &str) -> R<CSig> {
+        let what = lang_name(lang);
+        let nt = self.i;
+        let ntt = self.tok().clone();
+        if lang == "cpp" && matches!(ntt.kind, Kind::Name | Kind::Kw) && (self.peek(1).is_op("(") || self.peek(1).is_op(":")) {
+            return self.cpp_signature();
+        }
+        if ntt.kind == Kind::Kw && self.peek(1).is_op("(") {
+            let hint = if lang == "c" {
+                format!("give it another name in a small C wrapper, like  double my_{0}(double x) {{ return {0}(x); }}",
+                        ntt.raw)
+            } else {
+                format!("declare it under another name with its symbol:  my_{0}(…) -> [J] bind(C, name=\"{0}_\")",
+                        ntt.raw)
+            };
+            return Err(self.error(format!("{} is a Fermium keyword, so it can't be the name of a {what} function",
+                                          ntt.raw), None, Some(hint)));
+        }
+        if ntt.kind != Kind::Name {
+            return Err(self.err(format!(
+                "expected a {what} function's signature, like  energy(m [kg], v [m/s]) -> [J]{}", self.found())));
+        }
+        self.next();
+        let fname = ntt.s().to_string();
+        self.c_signature_rest(lang, nt, fname, ntt.raw.clone(), None)
+    }
+
+    /// A C++ function's signature (C4, D290): `phys::Particle::rest_energy(m [kg]) -> [J]`, optionally renamed with
+    /// `as name` after the result (two overloads of one function need two names in the program).
+    fn cpp_signature(&mut self) -> R<CSig> {
+        let nt = self.i;
+        let mut parts: Vec<(String, usize)> = vec![];
+        loop {
+            let pt = self.i;
+            if !matches!(self.kind(), Kind::Name | Kind::Kw) {
+                return Err(self.err(format!("expected a name after ::{}", self.found())));
+            }
+            self.next();
+            parts.push((self.toks[pt].s().to_string(), pt));
+            if self.at_op(":") && self.peek(1).is_op(":") {
+                self.next();
+                self.next();
+                continue;
+            }
+            break;
+        }
+        let (last, lt) = parts.last().cloned().unwrap();
+        let qual = parts.iter().map(|p| p.0.as_str()).collect::<Vec<_>>().join("::");
+        let raw = self.toks[lt].raw.clone();
+        let mut sig = self.c_signature_rest("cpp", nt, last.clone(), raw.clone(), Some(qual))?;
+        if sig.name == last && self.toks[lt].kind == Kind::Kw {
+            return Err(self.error(format!("{raw} is a Fermium keyword, so the program needs another name for the C++ \
+                                           function {}", sig.cpp_name.as_deref().unwrap_or("")), Some(lt),
+                                  Some(format!("rename it after the result, like  … -> [J] as my_{raw}"))));
+        }
+        sig.span = self.span_from(nt);
+        Ok(sig)
+    }
+
+    /// The rest of a signature, from its ( on.
+    fn c_signature_rest(&mut self, lang: &str, nt: usize, fname: String, raw: String, cpp_name: Option<String>)
+                        -> R<CSig> {
+        let what = lang_name(lang);
+        struct Raw {
+            raw: String,
+        }
+        let ntt = Raw { raw };
+        self.expect_op("(", Some(&format!("after {0} (write the signature like  {0}(x [m]) -> [J])", ntt.raw)))?;
+        let mut params = vec![];
+        while !self.at_op(")") {
+            let p0 = self.i;
+            let pt = self.expect_name("a parameter name")?;
+            let pname = self.toks[pt].s().to_string();
+            let kind = if self.at_op("[") {
+                CParamKind::Num(Some(self.bracket_unit()?))
+            } else if self.at_op(":") {
+                self.next();
+                let kt = self.expect_name("int, list or len(…) after ':'")?;
+                match self.toks[kt].s() {
+                    "int" => CParamKind::Int,
+                    "list" => CParamKind::List(if self.at_op("[") { Some(self.bracket_unit()?) } else { None }),
+                    "len" => {
+                        self.expect_op("(", Some("after len (like  n: len(x))"))?;
+                        let lt = self.expect_name("the name of a list parameter inside len( )")?;
+                        self.expect_op(")", None)?;
+                        CParamKind::Len(self.toks[lt].s().to_string())
+                    }
+                    _ => {
+                        let unit = self.toks[kt].raw.clone();
+                        let pn = self.toks[pt].raw.clone();
+                        // red team 14 #9a: `x: vector` gave the hint `x [vector]`
+                        let hint = if matches!(unit.as_str(), "number" | "vector" | "complex" | "float" | "double") {
+                            format!("a foreign function takes doubles, ints and arrays of doubles: write  {pn}  for a \
+                                     number (a double),  {pn}: int  or  {pn}: list")
+                        } else {
+                            format!("give a unit in brackets instead:  {pn} [{unit}]")
+                        };
+                        return Err(self.error(
+                            format!("a parameter can be marked  : int  (a whole number), : list  or  : len(x), not : \
+                                     {unit}"),
+                            Some(kt),
+                            Some(hint),
+                        ));
+                    }
+                }
+            } else {
+                CParamKind::Num(None)
+            };
+            params.push(CParam { name: pname, kind, span: self.span_from(p0) });
+            if self.at_op(",") {
+                self.next();
+            } else if !self.at_op(")") {
+                return Err(self.err(format!("expected ',' or ')' in the list of parameters{}", self.found())));
+            }
+        }
+        self.expect_op(")", None)?;
+        if !(self.at_op("-") && self.peek(1).is_op(">")) {
+            return Err(self.err_h(
+                format!("a {what} function's signature needs its result after ->{}", self.found()),
+                format!("like  {}(…) -> [J]   (-> number or -> int for a plain number; functions that return \
+                         nothing aren't supported yet)", ntt.raw),
+            ));
+        }
+        self.next();
+        self.next();
+        let ret = if self.at_op("[") {
+            CRetDecl::Unit(self.bracket_unit()?)
+        } else if self.tok().is_name("number") {
+            self.next();
+            CRetDecl::Number
+        } else if self.tok().is_name("int") {
+            self.next();
+            CRetDecl::Int
+        } else {
+            return Err(self.err_h(
+                format!("expected the result's unit in brackets, or number / int, after ->{}", self.found()),
+                format!("like  {}(x [m]) -> [J]   or  -> int", ntt.raw),
+            ));
+        };
+        let mut fname = fname;
+        if self.tok().is_name("as") {
+            let at = self.next();
+            if lang != "cpp" {
+                return Err(self.error(format!("as renames C++ functions; a {what} function is called by its own name"),
+                                      Some(at), Some("remove  as …".into())));
+            }
+            let nt2 = self.expect_name("the function's name in the program after as")?;
+            fname = self.toks[nt2].s().to_string();
+        }
+        let mut bind = None;
+        if self.tok().is_name("bind") {
+            let bt = self.next();
+            if lang != "fortran" {
+                return Err(self.error("bind(C) is for Fortran functions; a C function is found by its own name",
+                                      Some(bt), Some("remove bind(…)".into())));
+            }
+            self.expect_op("(", Some("after bind (like  bind(C)  or  bind(C, name=\"f\"))"))?;
+            let ct = self.i;
+            if !(self.kind() == Kind::Name && self.tok().raw == "C") {
+                return Err(self.error(format!("expected C in bind( ){}", self.found()), Some(ct),
+                                      Some("write  bind(C)  or  bind(C, name=\"f\")".into())));
+            }
+            self.next();
+            let mut name = None;
+            if self.at_op(",") {
+                self.next();
+                if !self.tok().is_name("name") {
+                    return Err(self.err_h(format!("expected name=\"…\" after bind(C,{}", self.found()),
+                                          "write  bind(C, name=\"f\")"));
+                }
+                self.next();
+                self.expect_op("=", Some("after name (like  bind(C, name=\"f\"))"))?;
+                if self.kind() != Kind::Str {
+                    return Err(self.err_h(format!("expected the symbol's name in quotes{}", self.found()),
+                                          "write  bind(C, name=\"f\")"));
+                }
+                let q = self.next();
+                name = Some(self.toks[q].s().to_string());
+            }
+            self.expect_op(")", None)?;
+            bind = Some(name);
+        }
+        Ok(CSig { name: fname, params, ret, bind, cpp_name, span: self.span_from(nt) })
+    }
+
     /// f(x [m], xs [s], n: int) -> list [J]   (the result part is optional).
     fn py_signature(&mut self) -> R<PySig> {
         let nt = self.i;
@@ -1722,7 +2084,7 @@ impl Parser {
         } else {
             raw.push((v.clone(), r));
         }
-        Ok(Param { name: v, unit, span: self.span_from(nt) })
+        Ok(Param { name: v, unit, kind: None, span: self.span_from(nt) })
     }
 
     /// analyze [title:] T [unit] depends on a [unit], b, c  (D70)
@@ -1901,10 +2263,47 @@ pub struct SolveState {
     pub tol: Option<Expr>,
     pub abs: Option<Vec<Expr>>,
     pub until: Option<Equation>,
+    pub whens: Vec<When>,
+    /// the solve's unknowns (D211), for `when` clauses
+    pub unknowns: HashSet<String>,
     pub lowest: Option<Expr>,
     pub grid: Option<Expr>,
     pub var2: Option<String>,
     pub lo2: Option<Expr>,
     pub hi2: Option<Expr>,
     pub step2: Option<Expr>,
+}
+
+/// "C", "C++" or "Fortran" for the word after import.
+fn lang_name(lang: &str) -> &'static str {
+    match lang {
+        "c" => "C",
+        "cpp" => "C++",
+        _ => "Fortran",
+    }
+}
+
+/// Is `a` one or two edits (or a swap) away from `b`? For "did you mean" hints.
+fn close_word(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.to_lowercase().chars().collect(), b.chars().collect());
+    if a == b {
+        return false;
+    }
+    let mut d: Vec<Vec<usize>> = vec![vec![0; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for j in 0..=b.len() {
+        d[0][j] = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let c = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            d[i][j] = (d[i - 1][j] + 1).min(d[i][j - 1] + 1).min(d[i - 1][j - 1] + c);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                d[i][j] = d[i][j].min(d[i - 2][j - 2] + 1);
+            }
+        }
+    }
+    d[a.len()][b.len()] <= 2 && a.len() >= 3
 }

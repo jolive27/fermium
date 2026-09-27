@@ -1,0 +1,2 @@
+speed(v: vector [m/s]) = |v|
+print speed(3 m/s)

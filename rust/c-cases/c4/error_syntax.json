@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_syntax.fm, line 1: expected header \"….hpp\" after the C++ library's name but found ':'\n    import cpp \"libphys4.so\":\n                            ^\n  hint: like\n    import cpp \"libphys.so\" header \"phys.hpp\":\n        phys::kinetic_energy(m [kg], v [m/s]) -> [J]\n",
+ "exit": 1
+}

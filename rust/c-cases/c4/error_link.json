@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_link.fm, line 2: the C++ library libphys4.so has no definition of phys::detail::declared_only(double)\n        phys::detail::declared_only(x) -> number\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: the header declares it: check that the library is built from the same sources (nm -DC libphys4.so lists the functions it defines)\n",
+ "exit": 1
+}

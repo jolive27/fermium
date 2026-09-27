@@ -20,6 +20,10 @@ pub enum Value {
     Vec(Rc<Vec<f64>>),
     TextList(Rc<RefCell<Vec<Rc<str>>>>),
     CList(Rc<RefCell<Vec<(f64, f64)>>>),
+    /// A list of vectors or matrices (spec C1, D281), shared like a list.
+    VList(Rc<RefCell<Vec<Rc<Vec<f64>>>>>),
+    /// An N-dimensional array (D283): its shape and its entries, the last index fastest.
+    NdArr(Rc<RefCell<NdArray>>),
     /// An opaque handle (solutions, data tables) owned by the runtime.
     Handle(usize),
     /// An uncertain number, 5.0 ± 0.2 (D120; eval_unc.rs).
@@ -27,7 +31,7 @@ pub enum Value {
     /// A list holding uncertain numbers (and plain ones, as `Num`).
     UList(Rc<RefCell<Vec<Value>>>),
     /// A vector or matrix with uncertain components (v1's tuple of UFloat values): elementwise arithmetic,
-    /// components, vdot and cross work; printing it stops with VEC_UNC (eval_unc.rs).
+    /// components, norm, unit, vdot, cross, det, inverse and printing work (eval_unc.rs; printing: C7).
     UVec(Rc<Vec<Value>>),
     /// All the samples of a number at once, inside `propagate montecarlo` (v1's NumPy arrays, D123).
     Arr(Rc<Vec<f64>>),
@@ -88,6 +92,8 @@ pub trait Printer {
     fn mat(&mut self, fmt: usize, v: &[f64], r: usize, c: usize);
     fn complex(&mut self, fmt: usize, re: f64, im: f64);
     fn clist(&mut self, fmt: usize, v: &[(f64, f64)]);
+    /// A list of vectors (cols None; k components each) or of matrices (k entries, cols per row), flattened.
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>);
     fn boolean(&mut self, b: bool);
     fn text(&mut self, s: &str);
     fn textlist(&mut self, v: &[Rc<str>]);
@@ -355,6 +361,49 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     l.borrow_mut()[k] = v;
                     return Ok(Flow::Normal);
                 }
+                if let Value::VList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    if let Value::Vec(v) = self.eval(value, fr)? {
+                        l.borrow_mut()[k] = v;
+                    }
+                    return Ok(Flow::Normal);
+                }
+                if let Value::NdArr(a) = &lst {
+                    // A[i, j, …] = value (D283): the indexes come as a list
+                    let ix = match self.eval(idx, fr)? {
+                        Value::List(l) => l.borrow().clone(),
+                        v => vec![v.num()],
+                    };
+                    let k = self.arr_offset(&a.borrow().shape, &ix)?;
+                    let v = self.eval(value, fr)?;
+                    let x = self.plain(&v)?;
+                    a.borrow_mut().data[k] = x;
+                    return Ok(Flow::Normal);
+                }
+                if let Value::TextList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    if let Value::Str(t) = self.eval(value, fr)? {
+                        l.borrow_mut()[k] = t;
+                    }
+                    return Ok(Flow::Normal);
+                }
+                if let Value::CList(l) = &lst {
+                    let i = self.eval(idx, fr)?;
+                    let i = self.plain(&i)?;
+                    let n = l.borrow().len();
+                    let k = self.elem_index(i, n)?;
+                    l.borrow_mut()[k] = match self.eval(value, fr)? {
+                        Value::Vec(z) if z.len() == 2 => (z[0], z[1]),
+                        v => (v.num(), 0.0),
+                    };
+                    return Ok(Flow::Normal);
+                }
                 let Value::List(l) = lst else {
                     return self.err("not yet supported by the Rust back end: setting an element of this value");
                 };
@@ -374,7 +423,19 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             StmtKind::Push(sym, e) => {
                 let v = self.eval(e, fr)?;
-                match (self.get(*sym, fr)?, v) {
+                let cur = self.get(*sym, fr)?;
+                // `ps = []` then push(ps, <1, 2> m): the empty list becomes a list of the pushed kind (D281)
+                let cur = match (&cur, &self.module.syms[*sym].ty) {
+                    (Value::List(l), ty @ (Ty::VList(_) | Ty::ComplexList(_) | Ty::TextList)) if l.borrow().is_empty() => {
+                        let nv = empty_of(ty);
+                        self.set(*sym, nv.clone(), fr);
+                        nv
+                    }
+                    _ => cur,
+                };
+                match (cur, v) {
+                    (Value::VList(l), Value::Vec(v)) => l.borrow_mut().push(v),
+                    (Value::CList(l), Value::Num(x)) => l.borrow_mut().push((x, 0.0)),
                     (Value::List(l), Value::Num(x)) => l.borrow_mut().push(x),
                     (Value::List(l), Value::List(ys)) => {
                         let ys = ys.borrow().clone();
@@ -397,6 +458,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::UList(l) => l.borrow_mut().clear(),
                     Value::TextList(l) => l.borrow_mut().clear(),
                     Value::CList(l) => l.borrow_mut().clear(),
+                    Value::VList(l) => l.borrow_mut().clear(),
                     _ => return self.err("not yet supported by the Rust back end: clearing this value"),
                 }
             }
@@ -447,6 +509,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::Vec(v) => v.iter().map(|x| Value::Num(*x)).collect(),
                     // for z in fft(xs): each z a complex number (D243)
                     Value::CList(l) => l.borrow().iter().map(|z| Value::Vec(Rc::new(vec![z.0, z.1]))).collect(),
+                    Value::VList(l) => l.borrow().iter().map(|v| Value::Vec(v.clone())).collect(),
                     _ => vec![],
                 };
                 for v in items {
@@ -509,19 +572,29 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     if self.unc_print(&v, *f) {
                         continue;
                     }
-                    if let Value::List(l) = v {
-                        let v = l.borrow().clone();
-                        self.printer.list(*f, &v)
+                    match v {
+                        Value::List(l) => {
+                            let v = l.borrow().clone();
+                            self.printer.list(*f, &v)
+                        }
+                        // a variable printed as [] before a push made it another kind of list (D281)
+                        Value::TextList(l) => {
+                            let v = l.borrow().clone();
+                            self.printer.textlist(&v)
+                        }
+                        Value::VList(l) if l.borrow().is_empty() => self.printer.list(*f, &[]),
+                        Value::CList(l) if l.borrow().is_empty() => self.printer.list(*f, &[]),
+                        _ => {}
                     }
                 }
                 PrintItem::Vec(e, f) => match self.eval(e, fr)? {
                     Value::Vec(v) => self.printer.vec(*f, &v),
-                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    Value::UVec(v) => self.unc_print_vec(&v, &[*f], None),
                     _ => {}
                 },
                 PrintItem::MixedVec(e, fs) => match self.eval(e, fr)? {
                     Value::Vec(v) => self.printer.mixed_vec(fs, &v),
-                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    Value::UVec(v) => self.unc_print_vec(&v, fs, None),
                     _ => {}
                 },
                 PrintItem::Mat(e, f) => {
@@ -531,7 +604,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     };
                     match self.eval(e, fr)? {
                         Value::Vec(v) => self.printer.mat(*f, &v, r, c),
-                        Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                        Value::UVec(v) => self.unc_print_vec(&v, &[*f], Some((r, c))),
                         _ => {}
                     }
                 }
@@ -541,6 +614,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     Value::UVec(_) => return self.err(crate::eval_unc::GENERIC),
                     _ => {}
                 },
+                PrintItem::Array(e, f) => {
+                    if let Value::NdArr(a) = self.eval(e, fr)? {
+                        let s = crate::printer::format_array(self.module, *f, &a.borrow());
+                        self.printer.text(&s)
+                    }
+                }
+                PrintItem::VList(e, f) => {
+                    let (k, cols) = match &e.ty {
+                        Ty::VList(el) => match &**el {
+                            Ty::Vec { n, .. } => (*n, None),
+                            Ty::Mat { r, c, .. } => (r * c, Some(*c)),
+                            _ => (1, None),
+                        },
+                        _ => (1, None),
+                    };
+                    let flat: Vec<f64> = match self.eval(e, fr)? {
+                        Value::VList(l) => l.borrow().iter().flat_map(|v| v.iter().copied()).collect(),
+                        _ => vec![],
+                    };
+                    self.printer.vlist(*f, &flat, k, cols)
+                }
                 PrintItem::ComplexList(e, f) => {
                     if let Value::CList(l) = self.eval(e, fr)? {
                         let v = l.borrow().clone();
@@ -603,7 +697,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Str(s) => Value::Str(s.as_str().into()),
             ExprKind::Var(sym) => {
                 let v = self.get(*sym, fr)?;
-                if crate::eval_unc::mc_active() { crate::eval_unc::mc_sample(&v) } else { v }
+                if crate::eval_unc::mc_active() {
+                    crate::eval_unc::mc_sample(&v)
+                } else {
+                    if crate::eval_unc::is_unc(&v) {
+                        crate::eval_unc_kern::kernel_seen(&v); // the sources a kernel reads (D300)
+                    }
+                    v
+                }
             }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
@@ -647,6 +748,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Value::Num(x) => Value::Num(-x),
                 Value::List(l) => Value::List(Rc::new(RefCell::new(l.borrow().iter().map(|x| -x).collect()))),
                 Value::Vec(v) => Value::Vec(Rc::new(v.iter().map(|x| -x).collect())),
+                Value::NdArr(a) => {
+                    let a = a.borrow();
+                    Value::NdArr(Rc::new(RefCell::new(NdArray { shape: a.shape.clone(), data: a.data.iter().map(|x| -x).collect() })))
+                }
+                Value::VList(l) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                    .map(|v| Rc::new(v.iter().map(|x| -x).collect())).collect()))),
                 v => v,
             },
             ExprKind::Cmp(op, a, b) => {
@@ -710,6 +817,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 Value::TextList(Rc::new(RefCell::new(out)))
             }
+            ExprKind::List(items) if matches!(e.ty, Ty::VList(_)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for it in items {
+                    match self.eval(it, fr)? {
+                        Value::Vec(v) => out.push(v),
+                        _ => return self.err("not yet supported by the Rust back end: this list of vectors"),
+                    }
+                }
+                Value::VList(Rc::new(RefCell::new(out)))
+            }
+            ExprKind::List(items) if matches!(e.ty, Ty::ComplexList(_)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for it in items {
+                    match self.eval(it, fr)? {
+                        Value::Vec(z) if z.len() == 2 => out.push((z[0], z[1])),
+                        Value::Num(x) => out.push((x, 0.0)),
+                        _ => return self.err("not yet supported by the Rust back end: this list of complex numbers"),
+                    }
+                }
+                Value::CList(Rc::new(RefCell::new(out)))
+            }
             ExprKind::List(items) => {
                 let mut out = Vec::with_capacity(items.len());
                 let mut uout: Option<Vec<Value>> = None;
@@ -740,16 +868,32 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Vec(items) => {
                 let mut out = Vec::with_capacity(items.len());
+                let mut uout: Option<Vec<Value>> = None;
                 for it in items {
-                    match self.eval(it, fr)? {
+                    let v = self.eval(it, fr)?;
+                    // a vector or matrix with uncertain components (Fermium 2.5, C7: v1 stopped here)
+                    if uout.is_none() && matches!(v, Value::Unc(_) | Value::UVec(_)) {
+                        uout = Some(out.iter().map(|x| Value::Num(*x)).collect());
+                    }
+                    if let Some(u) = uout.as_mut() {
+                        match v {
+                            Value::Num(_) | Value::Unc(_) => u.push(v),
+                            Value::Vec(w) => u.extend(w.iter().map(|x| Value::Num(*x))),
+                            Value::UVec(w) => u.extend(w.iter().cloned()),
+                            _ => return self.err("not yet supported by the Rust back end: this vector"),
+                        }
+                        continue;
+                    }
+                    match v {
                         Value::Num(x) => out.push(x),
                         Value::Vec(v) => out.extend(v.iter()),
-                        // interp.e_IVec: float() of an uncertain value
-                        Value::Unc(_) => return self.err(crate::eval_unc::GENERIC),
                         _ => return self.err("not yet supported by the Rust back end: this vector"),
                     }
                 }
-                Value::Vec(Rc::new(out))
+                match uout {
+                    Some(u) => crate::eval_unc::make_vec(u),
+                    None => Value::Vec(Rc::new(out)),
+                }
             }
             ExprKind::VecElem(v, k) => match self.eval(v, fr)? {
                 Value::Vec(v) => Value::Num(v[*k]),
@@ -775,6 +919,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         let n = l.borrow().len();
                         let k = self.elem_index(i, n)?;
                         l.borrow()[k].clone()
+                    }
+                    Value::VList(l) => {
+                        let n = l.borrow().len();
+                        let k = self.elem_index(i, n)?;
+                        Value::Vec(l.borrow()[k].clone())
                     }
                     _ => return self.err("not yet supported by the Rust back end: indexing this value"),
                 }
@@ -814,7 +963,26 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 let vals = self.eval_args(args, fr)?;
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
+                    if crate::eval_unc_kern::kernel_pm_active() {
+                        // a kernel's ±1σ test or Monte Carlo: the ± written inside it is the measurement its
+                        // linear pass made (one source), sampled like any other input (red team 14 #1)
+                        if let Some(v) = crate::eval_unc_kern::kernel_pm_get(e as *const Expr as usize) {
+                            return Ok(crate::eval_unc::mc_sample(&v));
+                        }
+                    }
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
+                }
+                if (name == "pm" || name == "pm_rel") && crate::eval_unc_kern::kernel_pm_active() {
+                    // a ± written inside an integrand or a right side: one measurement per kernel (C7)
+                    let key = e as *const Expr as usize;
+                    if let Some(v) = crate::eval_unc_kern::kernel_pm_get(key) {
+                        crate::eval_unc_kern::kernel_seen(&v);
+                        return Ok(v);
+                    }
+                    let v = self.builtin_slice(name, &vals)?;
+                    crate::eval_unc_kern::kernel_pm_put(key, v.clone());
+                    crate::eval_unc_kern::kernel_seen(&v);
+                    return Ok(v);
                 }
                 let r = self.builtin_slice(name, &vals);
                 crate::varmap::give_args(vals);
@@ -858,6 +1026,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             (Value::Vec(v), Value::Num(y)) => Value::Vec(Rc::new(v.iter().map(|x| f(*x, y)).collect())),
             (Value::Num(x), Value::Vec(v)) => Value::Vec(Rc::new(v.iter().map(|y| f(x, *y)).collect())),
             (Value::Vec(a), Value::Vec(b)) => Value::Vec(Rc::new(a.iter().zip(b.iter()).map(|(x, y)| f(*x, *y)).collect())),
+            (Value::NdArr(a), Value::NdArr(b)) => {
+                let (a, b) = (a.borrow(), b.borrow());
+                if a.shape != b.shape {
+                    return self.err(format!("these two arrays have different shapes ({} and {})", shape_text(&a.shape),
+                                            shape_text(&b.shape)));
+                }
+                arr_new(a.shape.clone(), a.data.iter().zip(b.data.iter()).map(|(x, y)| f(*x, *y)).collect())
+            }
+            (Value::NdArr(a), Value::Num(y)) => {
+                let a = a.borrow();
+                arr_new(a.shape.clone(), a.data.iter().map(|x| f(*x, y)).collect())
+            }
+            (Value::Num(x), Value::NdArr(a)) => {
+                let a = a.borrow();
+                arr_new(a.shape.clone(), a.data.iter().map(|y| f(x, *y)).collect())
+            }
+            // a list of vectors or matrices times or over a number (D281)
+            (Value::VList(l), Value::Num(y)) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                .map(|v| Rc::new(v.iter().map(|x| f(*x, y)).collect())).collect()))),
+            (Value::Num(x), Value::VList(l)) => Value::VList(Rc::new(RefCell::new(l.borrow().iter()
+                .map(|v| Rc::new(v.iter().map(|y| f(x, *y)).collect())).collect()))),
             _ => Value::Num(f64::NAN),
         })
     }
@@ -929,6 +1118,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         if name == "pycall" {
             return self.pycall(args); // a Python function (D140, eval_py.rs)
         }
+        if name == "ccall" {
+            return self.ccall(args); // a C or Fortran function (D275, eval_c.rs)
+        }
         if !self.builtins.is_empty() {
             if let Some(f) = self.builtins.get(name) {
                 return f(args).map_err(|m| RunError { message: m, line: self.line, hint: None });
@@ -938,6 +1130,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             && args.iter().any(crate::eval_unc::is_unc)
         {
             return self.unc_apply(name, args);
+        }
+        if name == "__sol_list" && args.len() == 6 {
+            return self.sol_list_at(args);
+        }
+        if let Some(op) = name.strip_prefix("arr.") {
+            return self.array_builtin(op, args);
         }
         for area in [Self::builtin_core, Self::builtin_vecmat, Self::builtin_calculus, Self::builtin_m3,
                      Self::builtin_complex, Self::builtin_data, Self::builtin_uncertain] {
@@ -953,6 +1151,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "len" => match &args[0] {
                 Value::List(l) => Value::Num(l.borrow().len() as f64),
                 Value::TextList(l) => Value::Num(l.borrow().len() as f64),
+                Value::VList(l) => Value::Num(l.borrow().len() as f64),
                 Value::Vec(v) => Value::Num(v.len() as f64),
                 _ => Value::Num(0.0),
             },
@@ -993,4 +1192,128 @@ pub fn func_in_module(func: &fermium_ir::Func) -> bool {
         Some(Stmt { kind: StmtKind::Return(Some(e)), .. }) => e.line > MODLINE_MAX,
         _ => false,
     }
+}
+
+/// The empty value of a list type (a list variable set to [] and then pushed a vector, a complex number or text).
+pub fn empty_of(ty: &Ty) -> Value {
+    match ty {
+        Ty::VList(_) => Value::VList(Rc::new(RefCell::new(vec![]))),
+        Ty::ComplexList(_) => Value::CList(Rc::new(RefCell::new(vec![]))),
+        Ty::TextList => Value::TextList(Rc::new(RefCell::new(vec![]))),
+        _ => Value::List(Rc::new(RefCell::new(vec![]))),
+    }
+}
+
+/// An N-dimensional array's shape and entries (row-major: the last index runs fastest; D283).
+#[derive(Clone, Debug, PartialEq)]
+pub struct NdArray {
+    pub shape: Vec<usize>,
+    pub data: Vec<f64>,
+}
+
+pub fn arr_new(shape: Vec<usize>, data: Vec<f64>) -> Value {
+    Value::NdArr(Rc::new(RefCell::new(NdArray { shape, data })))
+}
+
+/// 50×50
+pub fn shape_text(shape: &[usize]) -> String {
+    shape.iter().map(|n| n.to_string()).collect::<Vec<_>>().join("×")
+}
+
+impl<'m, P: Printer> Interpreter<'m, P> {
+    /// The position of entry [i, j, …] (1-based, checked against the shape).
+    pub(crate) fn arr_offset(&self, shape: &[usize], ix: &[f64]) -> Result<usize, RunError> {
+        let mut k = 0usize;
+        for (d, (&n, &i)) in shape.iter().zip(ix.iter()).enumerate() {
+            if i.is_nan() || (i.is_finite() && i != i.trunc()) {
+                let shown = if i.is_nan() { "NaN".to_string() } else { fermium_units::numfmt::format_number6(i) };
+                return self.err(format!("an array index must be a whole number (1, 2, 3, ...), not {shown}"));
+            }
+            if !(i >= 1.0 && i <= n as f64 && i == i.trunc()) {
+                let shown = if i == i.trunc() && i.is_finite() { format!("{}", i as i64) } else { format!("{i}") };
+                return self.err(format!("index {shown} is out of range for dimension {} of this {} array (valid \
+                                         indexes there are 1 to {n})", d + 1, shape_text(shape)));
+            }
+            k = k * n + (i as usize - 1);
+        }
+        Ok(k)
+    }
+
+    /// arr.fill, arr.get, arr.size, arr.sum, … (D283).
+    pub(crate) fn array_builtin(&mut self, op: &str, args: &[Value]) -> Result<Value, RunError> {
+        if op == "fill" {
+            let x = self.plain(&args[0])?;
+            let mut shape = vec![];
+            for a in &args[1..] {
+                let n = a.num();
+                if !(n >= 0.0 && n == n.trunc()) {
+                    return self.err(format!("an array size must be a whole number 0 or more, not {}", py_num(n)));
+                }
+                shape.push(n as usize);
+            }
+            let total = shape.iter().try_fold(1usize, |acc, &n| acc.checked_mul(n)).unwrap_or(usize::MAX);
+            if total > 1_000_000_000 {
+                return self.err(format!("not enough memory for a {} array (the most is 10⁹ entries)", shape_text(&shape)));
+            }
+            if shape.len() == 1 {
+                return Ok(Value::List(Rc::new(RefCell::new(vec![x; total]))));
+            }
+            return Ok(arr_new(shape, vec![x; total]));
+        }
+        let Value::NdArr(a) = &args[0] else { return self.err("this array has no value") };
+        if op == "set" {
+            // A[i, j, …] = x from compiled code: arr.set(A, x, i, j, …)
+            let ix: Vec<f64> = args[2..].iter().map(Value::num).collect();
+            let k = self.arr_offset(&a.borrow().shape, &ix)?;
+            let x = self.plain(&args[1])?;
+            a.borrow_mut().data[k] = x;
+            return Ok(Value::Void);
+        }
+        let a = a.borrow();
+        Ok(match op {
+            "get" => {
+                let ix: Vec<f64> = args[1..].iter().map(Value::num).collect();
+                let k = self.arr_offset(&a.shape, &ix)?;
+                Value::Num(a.data[k])
+            }
+            "size" if args.len() == 2 => {
+                let k = args[1].num();
+                if !(k >= 1.0 && k <= a.shape.len() as f64 && k == k.trunc()) {
+                    return self.err(format!("size(A, k): this array has {} dimensions, so k is 1 to {}", a.shape.len(),
+                                            a.shape.len()));
+                }
+                Value::Num(a.shape[k as usize - 1] as f64)
+            }
+            "size" => Value::List(Rc::new(RefCell::new(a.shape.iter().map(|&n| n as f64).collect()))),
+            "sum" => Value::Num(a.data.iter().sum()),
+            "mean" => {
+                if a.data.is_empty() {
+                    return self.err("the mean of an empty array is undefined");
+                }
+                Value::Num(a.data.iter().sum::<f64>() / a.data.len() as f64)
+            }
+            "max" | "min" => {
+                if a.data.is_empty() {
+                    return self.err(format!("the {op} of an empty array is undefined"));
+                }
+                let mut r = a.data[0];
+                for &x in &a.data[1..] {
+                    if x.is_nan() || r.is_nan() {
+                        r = f64::NAN;
+                    } else if (op == "max" && x > r) || (op == "min" && x < r) {
+                        r = x;
+                    }
+                }
+                Value::Num(r)
+            }
+            "abs" => arr_new(a.shape.clone(), a.data.iter().map(|x| x.abs()).collect()),
+            // B = A shares the array (as lists do, D26); copy(A) is a new one
+            "copy" => arr_new(a.shape.clone(), a.data.clone()),
+            _ => return self.err(format!("the built-in {op} isn't supported on arrays")),
+        })
+    }
+}
+
+fn py_num(x: f64) -> String {
+    if x == x.trunc() && x.is_finite() { format!("{}", x as i64) } else { format!("{x}") }
 }

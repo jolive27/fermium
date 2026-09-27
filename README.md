@@ -138,30 +138,31 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 
 ## Speed
 
-Fermium 2 (the Rust binary), measured 26 Sep 2026 on one 4-core machine (Intel Xeon @ 2.10 GHz, a shared VM:
-load average 1.4–2.9 during the run, part of one core busy with another job the whole time), median of 7
-interleaved runs. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md);
-`python benchmarks/run.py --interleave --langs fermium,fermium-1.5,julia,python,numpy` reproduces every number.
+Fermium 2.5 (the Rust binary, release build), measured 27 Sep 2026 09:52 UTC on one 4-core machine (Intel Xeon
+@ 2.10 GHz, a shared VM, load average 0.9–1.3 during the run), median of 7 interleaved runs. The full table,
+methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md);
+`python benchmarks/run.py --interleave -r 7 --langs fermium,fermium-1.5,julia,python,numpy` reproduces every number.
 The Fermium 1.5 column (the Python implementation, LLVM through llvmlite) is from the same run, for reference;
 the back end's own measurements and what is still slower are in
 [rust/crates/fermium-codegen/PERF.md](rust/crates/fermium-codegen/PERF.md). Ratios near 1 move by 5–10% from run
 to run on this machine.
 
-| Benchmark | Fermium 2 (compute) | Fermium 1.5 (compute) | Julia (compute) | Pure Python |
+| Benchmark | Fermium 2.5 (compute) | Fermium 1.5 (compute) | Julia (compute) | Pure Python |
 |---|---|---|---|---|
-| N-body, 1M steps | 1.01× Julia | 0.98× Julia | 1× | ~54× Julia |
-| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | **1.89× Julia** (slower) | 1.95× Julia | 1× | ~21× Julia |
-| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 1.03× Julia (1.2× slower than Fermium 1.5) | 0.87× Julia | 1× | ~21× Julia |
-| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | **1.50× Julia** (slower; 1.1–1.4× Fermium 1.5) | 1.34× Julia | 1× | ~20× Julia |
-| Loop with units | 0.98× Julia | 1.04× Julia | 1× | ~83× Julia |
-| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 1.00× Julia (**1.6× slower than Fermium 1.5**; noisy on this machine, see PERF.md) | 0.61× Julia | 1× | ~52× Julia's 1-thread time (Python runs one thread) |
-| the same, 1 thread | 1.13× Julia | 1.06× Julia | 1× | |
+| N-body, 1M steps | **0.86× Julia** (faster) | 1.06× Julia | 1× | ~54× Julia |
+| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | **1.95× Julia** (slower) | 2.22× Julia | 1× | ~24× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 1.16× Julia (1.3× slower than Fermium 1.5) | 0.88× Julia | 1× | ~22× Julia |
+| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | **1.98× Julia** (slower; 1.5× Fermium 1.5) | 1.29× Julia | 1× | ~21× Julia |
+| Loop with units | 1.00× Julia | 1.00× Julia | 1× | ~74× Julia |
+| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | **0.29× Julia** (faster; Julia's 4-thread time was noisy in this run: 6.2–9.8 ms across three runs, Fermium 2.7–2.9 ms) | 0.60× Julia | 1× | ~93× Julia's 4-thread time (Python runs one thread) |
+| the same, 1 thread | **0.50× Julia** (faster) | 1.08× Julia | 1× | |
 
-Counting startup and compilation, Fermium 2 finishes every benchmark program far sooner than Julia (24–133 ms
-against 0.8–2.5 s for the whole process) and than Fermium 1.5 (0.16–0.41 s), because it starts in milliseconds
-and compiles quickly, while Julia spends that time loading its runtime and packages, running the untimed warm-up
-call each benchmark makes, and JIT-compiling. A program that computes one number takes 18 ms in Fermium 2,
-0.16 s in Fermium 1.5 and 0.25 s in Julia (the `startup` row in RESULTS.md).
+Counting startup and compilation, Fermium 2.5 finishes every benchmark program far sooner than Julia (14–72 ms
+against 0.9–2.8 s for the whole process) and than Fermium 1.5 (0.18–0.43 s), because it starts in milliseconds,
+compiles quickly and reuses its compiled code on a repeat run (the JIT cache, D317), while Julia spends that time
+loading its runtime and packages, running the untimed warm-up call each benchmark makes, and JIT-compiling. A
+program that computes one number takes 15 ms in Fermium 2.5, 0.18 s in Fermium 1.5 and 0.29 s in Julia (the
+`startup` row in RESULTS.md).
 
 ## Gauntlet
 

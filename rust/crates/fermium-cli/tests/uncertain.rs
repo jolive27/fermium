@@ -79,8 +79,10 @@ fn sums_of_fit_parameters_print_like_v1() {
 }
 
 /// Where v1's interpreter needs a plain number (Python's int()/float() of a UFloat: an index, a slice, a loop
-/// bound, the span of Σ) an uncertain value stops with the plain-number error; an integral or a root with an
-/// uncertain limit calls the function at an uncertain point (the kernel check). Expected outputs from v1.
+/// bound, the span of Σ) an uncertain value stops with the plain-number error; a root with an uncertain limit calls
+/// the function at an uncertain point (the kernel check). Expected outputs from v1, except the integrals and ODEs
+/// with uncertain inputs, which work from Fermium 2.5 (spec C7, D276–D278; v1 stopped with "can't use uncertain
+/// values (±) yet"): their outputs are checked against the analytic results in the comments.
 #[test]
 fn uncertain_values_where_plain_numbers_are_needed() {
     let generic = "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the \
@@ -95,24 +97,24 @@ fn uncertain_values_where_plain_numbers_are_needed() {
     }
     let kernel = |what: &str| format!("prog.fm, line 2: {what} can't use uncertain values (±) yet; put it inside a  \
                                        propagate montecarlo  block, or use value(x)");
-    assert_eq!(error_of("kint", "L = 0.5 ± 0.005\nprint ∫ x^2 dx from 0 to L\n"), kernel("an integral"));
+    // C7: ∫₀^L x² dx = L³/3 = 0.0417, σ = L² σ_L = 0.00125
+    assert_eq!(stdout_of("kint", "L = 0.5 ± 0.005\nprint ∫ x^2 dx from 0 to L\n"), "0.0417 ± 0.0013\n");
     assert_eq!(error_of("kroot", "a = 1.0 ± 0.1\nsolve x^2 = 2 for x from a to 3\nprint x\n"), kernel("solve … for x"));
     // an integrand that doesn't use x: the limits' uncertainty propagates (linear in b - a, as v1's quad)
     assert_eq!(stdout_of("kconst", "L = 0.5 ± 0.005\nprint ∫ 1 dx from 0 to L\nf(x) = if x < 1 then 1 else 2\n\
                                     print ∫ f(x) dx from L to 3\n"),
                "0.5000 ± 0.0050\n4.5000 ± 0.0090\n");
-    // an ODE whose end is uncertain: v1's steppers make the state uncertain
-    assert_eq!(error_of("kode", "T = 1.0 ± 0.1\nsolve y' = -y with y(0) = 1 for t from 0 to T\nprint y(0.5)\n"),
-               "prog.fm, line 2: a differential equation (solve) can't use uncertain values (±) yet; put the solve \
-                inside a  propagate montecarlo  block, or use value(x)");
+    // an ODE whose end is uncertain (v1: an error): the solution doesn't depend on the end (C7)
+    assert_eq!(stdout_of("kode", "T = 1.0 ± 0.1\nsolve y' = -y with y(0) = 1 for t from 0 to T\nprint y(0.5)\n"),
+               "0.61\n");
     // a solution at an uncertain time: the interpolant's slope carries t's uncertainty; y' there calls the right side
     let sol = "solve y' = -y with y(0) = 1 for t from 0 to 2\nT = 1.0 ± 0.1\nprint y(T)\nprint y([0.5, T])\n";
     assert_eq!(stdout_of("ksol", sol), "0.368 ± 0.037\n[0.606531, 0.368 ± 0.037]\n");
     assert_eq!(error_of("ksoldy", "solve y' = -y with y(0) = 1 for t from 0 to 2\nT = 1.0 ± 0.1\nprint y'(T)\n"),
                "prog.fm, line 3: a differential equation (solve) can't use uncertain values (±) yet; put the solve \
                 inside a  propagate montecarlo  block, or use value(x)");
-    // an integrand that errors over an infinite range stops at once
-    assert_eq!(error_of("kinf", "I = 2.0 ± 0.02\nprint ∫ I / (1 + z²) dz from -∞ to ∞\n"), kernel("an integral"));
+    // an uncertain integrand over an infinite range (v1: an error): π I = 6.283 ± 0.063 (C7)
+    assert_eq!(stdout_of("kinf", "I = 2.0 ± 0.02\nprint ∫ I / (1 + z²) dz from -∞ to ∞\n"), "6.283 ± 0.063\n");
 }
 
 /// Complex numbers with uncertain parts (v1's (re, im) tuples of UFloat in cplx.py's kernels): arithmetic, conj
@@ -132,11 +134,12 @@ fn complex_numbers_with_uncertain_parts() {
         assert_eq!(error_of(&format!("cgen{k}"), &format!("L = 0.5 ± 0.005\nZ = (1 + 1i) * L\nprint {what}\n")),
                    format!("prog.fm, line 3: {generic}"), "{what}");
     }
-    // a complex ODE with an uncertain coefficient: the right side is uncertain; the error names the solve's line
-    let ode = "E = 1.0 ± 0.01\nsolve 1i ψ' = E ψ\n  with ψ(0) = 1\n  for t from 0 to 1\nprint ψ(1)\n";
-    assert_eq!(error_of("code", ode),
-               "prog.fm, line 2: a differential equation (solve) can't use uncertain values (±) yet; put the solve \
-                inside a  propagate montecarlo  block, or use value(x)");
+    // a complex ODE with an uncertain coefficient (v1: an error; C7): ψ = e^(−iEt), so at t = 1 the real part is
+    // cos(1) ± sin(1)·0.01 and the imaginary part −sin(1) ± cos(1)·0.01; printing the complex value itself needs
+    // plain parts, as above
+    let ode = "E = 1.0 ± 0.01\nsolve 1i ψ' = E ψ\n  with ψ(0) = 1\n  for t from 0 to 1\nprint re(ψ(1)), im(ψ(1))\n";
+    assert_eq!(stdout_of("code", ode), "0.5403 ± 0.0084 -0.8415 ± 0.0054\n");
+    assert_eq!(error_of("code2", &ode.replace("re(ψ(1)), im(ψ(1))", "ψ(1)")), format!("prog.fm, line 5: {generic}"));
 }
 
 #[test]
@@ -157,8 +160,9 @@ fn sums_in_a_program_with_uncertainties_print_like_v1() {
     assert_eq!(stdout_of("sums", src), "5.73 m\n11.115 m\n-6.6150 m\n2.23 ± 0.10 m\n1.00 ± 0.10 m\n");
 }
 
-/// Vectors and matrices with uncertain components exist (v1's tuples of UFloat): their components, vdot, cross
-/// and matrix products work; printing one stops with v1's message, on the line of the print.
+/// Vectors and matrices with uncertain components (v1's tuples of UFloat): their components, vdot, cross and
+/// matrix products work as in v1. v1 stopped when printing one or taking norm/unit; from Fermium 2.5 those work
+/// too (spec C7, D279).
 #[test]
 fn vectors_of_uncertain_values() {
     let pre = "L = 1.20 ± 0.01 m\nv = <1, 2> * L\nM = [[1, 2], [3, 4]] * L\nw = <1, 2, 3> * L\nu = <1 m, 2 m>\n\
@@ -170,29 +174,23 @@ fn vectors_of_uncertain_values() {
                "1.200 ± 0.010 m\n3.600 ± 0.030 m\n-2.400 ± 0.020 m\n0 ± 0 m\n1 ± 0\n7.20 ± 0.12 m²\n0 ± 0 m²\n\
                 3.600 ± 0.030 m\n2.400 ± 0.020 m\n8.400 ± 0.070 m\n31.68 ± 0.53 m²\n3.600 ± 0.030 m\n\
                 1.200 ± 0.010 m\n");
-    let vec_msg = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain numbers \
-                   one at a time, or use value(x) to drop the uncertainty";
-    for (k, what) in ["v", "M", "u", "v + v", "M * <1, 1>"].iter().enumerate() {
-        assert_eq!(error_of(&format!("vecerr{k}"), &format!("{pre}print {what}\n")),
-                   format!("prog.fm, line 7: {vec_msg}"), "{what}");
-    }
-    let generic = "this operation needs a plain number, but got an uncertain value (±); write value(x) to drop the \
-                   uncertainty, or put the calculation in a  propagate montecarlo  block";
-    for (k, what) in ["norm(v)", "unit(v)"].iter().enumerate() {
-        assert_eq!(error_of(&format!("vecgen{k}"), &format!("{pre}print {what}\n")),
-                   format!("prog.fm, line 7: {generic}"), "{what}");
-    }
+    // |v| = √5 L; unit(v) doesn't depend on L at all
+    let src = format!("{pre}print v\nprint M\nprint u\nprint v + v\nprint M * <1, 1>\nprint norm(v)\nprint unit(v)\n");
+    assert_eq!(stdout_of("vecprint", &src),
+               "<1.200 ± 0.010, 2.400 ± 0.020> m\n[[1.200 ± 0.010, 2.400 ± 0.020], [3.600 ± 0.030, 4.800 ± 0.040]] m\n\
+                <1.200 ± 0.010, 2> m\n<2.400 ± 0.020, 4.800 ± 0.040> m\n<3.600 ± 0.030, 8.400 ± 0.070> m\n\
+                2.683 ± 0.022 m\n<0.447 ± 0, 0.894 ± 0>\n");
 }
 
-/// std of uncertain values: v1's math.sqrt of a UFloat needs a plain number (sum, mean, min and max work).
+/// std of uncertain values: v1's math.sqrt of a UFloat needed a plain number (sum, mean, min and max worked); from
+/// Fermium 2.5 it is the spread with its uncertainty propagated (C7, D279): s = 1, ∂s/∂xᵢ = (xᵢ − x̄)/((n − 1) s),
+/// so σ_s = 0.1 √(1/2).
 #[test]
-fn std_of_uncertain_values_needs_plain_numbers() {
+fn std_of_uncertain_values() {
     let pre = "x = [1.0, 2.0, 3.0] ± 0.1\n";
     assert_eq!(stdout_of("reduce", &format!("{pre}print mean(x)\nprint sum(x)\nprint max(x)\n")),
                "2.000 ± 0.058\n6.00 ± 0.17\n3.00 ± 0.10\n");
-    assert_eq!(error_of("std", &format!("{pre}print std(x)\n")),
-               "prog.fm, line 2: this operation needs a plain number, but got an uncertain value (±); write value(x) \
-                to drop the uncertainty, or put the calculation in a  propagate montecarlo  block");
+    assert_eq!(stdout_of("std", &format!("{pre}print std(x)\n")), "1.000 ± 0.071\n");
 }
 
 /// det, inverse, solve_linear, eigenvalues and eigenvectors of matrices of uncertain values: v1's interpreter

@@ -15,7 +15,7 @@ Every program example on this page is tested: `legacy/tests/test_docs.py` runs e
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules) and [Python interop](#python-interop)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules), [Python interop](#python-interop), [C and Fortran interop](#c-and-fortran-interop-fermium-25) and [C++ interop](#c-interop-fermium-25)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -187,6 +187,63 @@ print force(spring, 3 m)
   `V(x)`, a number means `V × x` as usual, with a warning.
 - Not yet: `x -> x²` (anonymous functions), passing an ODE solution, printing a function parameter.
 
+### Several versions of one function (Fermium 2.5)
+
+*Multiple dispatch* (spec §C5, DECISIONS D285): define the same name again with different parameters, and each
+call uses the version that fits its arguments: their number, their units and their kind.
+
+```text
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(2 kg, 3 m/s)                # 9 J
+print energy(500 nm) in eV               # 2.48 eV: the photon version
+print energy(1 GHz)                      # 6.63×10⁻²⁵ J
+print energy([400, 500, 600] nm) in eV   # each element: [3.10, 2.48, 2.07] eV
+
+size(x: number) = abs(x)                 # a kind: number, vector, list or complex
+size(r: vector) = |r|
+size(xs: list) = len(xs)
+kinetic(p: vector [kg m/s], M [kg]) = (p · p) / (2 M)     # a kind and a unit together
+kinetic(p [kg m/s], M [kg]) = p² / (2 M)
+```
+
+- **Which version:** the arguments must fit a version's parameters: the same number of them, the unit's
+  dimension where a parameter has `[unit]` (any unit of that dimension: `500 nm` fits `λ [m]`), and the kind
+  where it has `: number`, `: vector`, `: list` or `: complex`. A parameter without annotations takes anything,
+  as before. A list fits a number parameter element by element (the function is applied to each element).
+- **The most specific version wins:** an annotated parameter beats an unannotated one (a unit and a kind
+  together beat either alone), so `describe(x) = 0` and `describe(x [m]) = 1` give `describe(5 m)` = 1 and
+  `describe(5 s)` = 0. The chosen version must be at least as specific as every other fitting version in each
+  parameter.
+- **Errors, before the program runs:** no fitting version is a one-line error listing the versions with their
+  lines (`no version of energy takes (time [s])`; hint: `the versions of energy are energy(m [kg], v [m/s])
+  (line 1), energy(λ [m]) (line 2), …`); the wrong number of arguments says `energy takes 1 or 2 arguments`; two
+  versions that fit equally well are ambiguous, naming both (`the call of area is ambiguous: both area(x [m], y)
+  (line 1) and area(x, y [m]) (line 2) fit these arguments`).
+- **Resolved at compile time:** the choice is made from the checked types (units are compile-time), so it costs
+  nothing at run time; in a generic function, `photon(x) = energy(x) in eV`, each call of `photon` chooses
+  again with its own argument's units. A generic function that is never called doesn't have to choose.
+- **Redefinition:** a definition replaces every earlier version it *covers*: the same number of parameters, each
+  at least as broad as the earlier one's (unannotated covers anything; `[m]` covers `[km]` and `: number [m]`; a
+  kind covers the same kind). So the same signature replaces, as in Fermium 1.5 (`f(x) = 2 x` then `f(x) = 3 x`
+  gives `f(2)` = 6), and so does a less specific definition written later: `force(x [m]) = 3 N/m x` then
+  `force(x) = 5 N/m x` gives `force(1 m)` = 5 N, as in Fermium 1.5. A *more specific* definition written later
+  adds a version (`describe(x) = 0` then `describe(x [m]) = 1`): write the general version first. Replacing a
+  version whose units have the same dimension but mean something else (`E(f [Hz])` then `E(ω [rad/s])`: Hz and
+  rad/s are both 1/s, so they can't be two versions) prints a warning. Only top-level definitions of the same file (or module) become versions; an imported name can't be
+  redefined (as before).
+- **With the rest of the language:** versions can be one-line or several lines, use `where`, call themselves and
+  take functions. `energy'` is the derivative of each one-parameter version and `d/dx U` (or `∂/∂x U`) of each
+  version with a parameter x, chosen per call again; `∫ U(x) dx …`, `plot U vs x from 0 m to 2 m`, passing
+  `U` to a function (`force(U, 1 m)`) and a module's versions (`photons.energy(500 nm)`) all choose by the
+  arguments. The editor's hover over a call shows the version that call uses; `print energy` and the REPL's
+  `vars` list every version.
+- **Not yet:** differentiating a formula that calls a function with several versions (`g(x) = energy(x)`, then
+  `g'`: an error that says so; differentiate `energy` itself), adding versions to an imported function,
+  versions in the Python API (`fermium.compile` uses the last one), and Fermium 1.5 (`fermium-legacy`: a second
+  definition replaces the first).
+
 ## 6. Conditions and loops
 
 ```fermium
@@ -345,7 +402,7 @@ print 2 v + <1, 1> m/s
 - **A unit after a vector:** `<3, 4> m/s`, `<0, 0> /s` and `<1, 2> 1/s` all work, as after a number.
 - **Units** are checked as for numbers: adding a velocity vector to an acceleration vector is an error.
 - **In `solve`:** unknowns can be vectors, in 2-D or 3-D (see §10 and `examples/26_orbit_3d.fm`).
-- **Not yet:** lists of vectors (push the components into separate lists instead).
+- **Lists of vectors:** in Fermium 2.5, see [Lists of vectors, matrices, complex numbers and text](#lists-of-vectors-matrices-complex-numbers-and-text-fermium-25) (Fermium 1.5: push the components into separate lists instead).
 
 **A different unit on each component.** A state vector such as position and velocity keeps one unit per component:
 
@@ -442,7 +499,7 @@ print (230 + 0i) [V] / Z                # the current, in A
 - **Arithmetic:** `+ - * /` between complex and real numbers; `z^n` for a whole number n (repeated multiplication), `z^p` for another fixed number p (the principal value, units to the power p), and `z^w`, `2^(1i)` with a complex or variable exponent (plain numbers only). `exp ln log sqrt sin cos tan sinh cosh tanh` take complex plain numbers (`sqrt` keeps units to the power ½; √z also works); these are the principal branches (the cut of `ln` and `sqrt` is the negative real axis).
 - **Parts:** `abs(z)` or `|z|` and `re(z)`, `im(z)` (also `z.re`, `z.im`) keep the units; `arg(z)` is the angle from −π to π; `conj(z)` is the complex conjugate.
 - **Comparisons:** `==`, `!=` and `≈` work; `<`, `>`, `<=`, `>=` are an error (complex numbers aren't ordered; compare `|z|` or `re(z)`).
-- **Lists:** `fft(xs)` gives a list of complex numbers; what works on one is listed under Fourier transforms (§20). Other lists, vectors and matrices hold real numbers.
+- **Lists:** `fft(xs)` gives a list of complex numbers; what works on one is listed under Fourier transforms (§20). In Fermium 2.5 a list of complex numbers can also be written out (`[1 + 2i, 3i]`) or grown with `push` ([below](#lists-of-vectors-matrices-complex-numbers-and-text-fermium-25)). Vectors and matrices hold real numbers.
 - **A variable keeps its kind:** `z = 0` then `z += 1i` is an error; start with `z = 0i`.
 
 ```fermium
@@ -463,7 +520,101 @@ print g'(0 m)
 
 - **Differential equations:** an unknown is complex when its initial value is (`ψ(0) = 1 + 0i`), or when the equation is (`𝑖ħ ψ' = E ψ` with `ψ(0) = 1` is complex). It takes two real state slots (real and imaginary parts), so `rk45`, `rk4`, `radau`/`bdf`, `until` and backward ranges work unchanged. `ψ(t)` and `ψ'(t)` are complex; `ψ.re` and `ψ.im` are real solutions (for `plot ψ.re vs t`, `max(ψ.im)`, `values(ψ.re)`).
 - **Integrals and sums** of a complex expression are computed part by part, each with its own adaptive quadrature. **Derivatives** of functions with complex values work (`𝑖` is a constant to the differentiator), and indefinite integrals hand `𝑖` to SymPy as its imaginary unit.
-- **Not yet:** lists, vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+- **Not yet:** vectors and matrices of complex numbers (a complex unknown can't be a vector), `values(ψ)` and `plot ψ` of a whole complex solution (use `ψ.re`, `ψ.im`), `∛` of a complex number, and ordering comparisons.
+
+### Lists of vectors, matrices, complex numbers and text (Fermium 2.5)
+
+In the Rust compiler (spec §C1; Fermium 1.5 refuses these), a list can hold vectors, matrices, complex numbers or
+text as well as numbers. The examples are tested in `rust/c-cases/c1/` on both back ends.
+
+```text
+pos = [<1, 2> m, <3, 4> m]
+print pos, len(pos), pos[2], pos[end].y   # [<1, 2>, <3, 4>] m 2 <3, 4> m 4 m
+push(pos, <5, 6> m)
+pos[2] += <1, 1> m
+for p in pos
+    print p, |p|
+print 2*pos, sum(pos), mean(pos)
+dirs = [<1, 0, 0>, <0, 1, 0>] km/s        # a unit after the list: every element
+vel = []
+push(vel, <1, 0, 0> km/s)                 # [] becomes a list of 3-vectors of speed
+
+rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+Rs = []
+for k from 0 to 2
+    push(Rs, rot(k * 30°))                # a list of 2×2 matrices
+Ks = [[[2, -1], [-1, 2]], [[1, 0], [0, 1]]] N/m
+
+Zs = [100 Ω + 160i Ω, 100 Ω - 320i Ω]    # complex numbers sharing one unit
+names = []
+push(names, "hydrogen")
+names[1] = "H"
+```
+
+- **Elements are all the same kind:** vectors of one length, or matrices of one size, sharing one unit
+  (`[<1, 2> m, <3, 4> s]` is an error: "all elements of a list need the same units"). A vector with a different unit
+  on each component can't go in a list; a list mixing real and complex numbers is still an error (write `2 + 0i`).
+- **What works:** writing the list out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` and `+=`, `len`, `for x in xs`,
+  `clear`, `print` (the unit once, at the end: `[<1, 2>, <3, 4>] m`; more than 12 elements show the first 5 and last
+  3), multiplying or dividing by a number, and `sum` and `mean` (a vector or matrix). Lists can be function arguments:
+  an N-body acceleration is a loop over `r[j] - r[i]` (`rust/c-cases/c1/nbody_lists.fm`).
+- **`[]` then `push`:** a variable set to the empty list takes the kind of the first value pushed onto it, and is
+  checked from then on (pushing a 3-vector onto a list of 2-vectors, or metres onto a list of speeds, is an error).
+- **Speed:** the LLVM back end hands the statements that touch these lists to the tree-walker (the rest of the
+  program stays compiled), so a hot loop over a list of vectors runs at tree-walker speed for now.
+- **Not yet:** lists of lists (other than matrices), arithmetic between two lists of vectors (`a + b`), slices.
+
+### Arrays of 2, 3 or 4 dimensions (Fermium 2.5)
+
+In the Rust compiler (spec §C1), `fill(value, n1, n2, …)` makes an array: a grid of n1×n2(×n3×n4) numbers that share
+the value's unit. It is for fields on a grid (a temperature on a plate, a density in a box); matrices (§7) stay the
+small, fixed-size objects of linear algebra. Tested in `rust/c-cases/c1/array_heat_2d.fm` on both back ends.
+
+```text
+n = 21
+h = 0.2 m / (n - 1)
+α = 1e-4 m²/s
+dt = 0.2 h^2 / α
+θ = fill(300 K, n, n)                  # a 21×21 plate at 300 K
+θ[11, 11] = 400 K                      # a hot spot
+for k from 1 to 50
+    θn = copy(θ)
+    for i from 2 to n - 1
+        for j from 2 to n - 1
+            θn[i, j] = θ[i, j] + (α dt / h^2) (θ[i+1, j] + θ[i-1, j] + θ[i, j+1] + θ[i, j-1] - 4 θ[i, j])
+    θ = θn
+print θ[11, 11] to 6 digits            # 300.790 K (NumPy gives the same)
+print sum(θ - 300 K), max(θ), size(θ)  # 89.9 K 301 K [21, 21]
+print θ                                # 21×21 array, from 300 K to 301 K
+cube = fill(1.5 J, 2, 2, 2)
+cube[2, 1, 2] = 0 J
+print cube                             # [[[1.5, 1.5], [1.5, 1.5]], [[1.5, 0], [1.5, 1.5]]] J
+```
+
+- **Making one:** `fill(value, n1, n2)` (2-D), `fill(value, n1, n2, n3)` (3-D), up to 4 sizes; the value's unit is
+  every entry's unit (`fill(0 m, 2, 3)`). One size gives a list. At most 10⁹ entries.
+- **Entries:** `A[i, j]`, `A[i, j, k]` (from 1; an index out of range stops the program, naming the dimension), and
+  `A[i, j] = x`, `+=`, `-=`, …; the value must have the array's units ("A is an array of temperature [K]; can't put
+  length [m] in it"). An array takes exactly as many indexes as it has dimensions.
+- **Arithmetic** entry by entry: `A + B`, `A - B` (same units; the same shape, checked when the program runs), `A * B`,
+  `A / B`, a number times or over an array, `A + 1 K`, `-A`. Units work as for numbers.
+- **Functions:** `size(A)` (the shape, a list), `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, and `copy(A)`: like a
+  list, `B = A` shares the array, so a time step that reads the old grid while writing the new one starts with
+  `copy`.
+- **Printing:** up to 64 entries in nested brackets with the unit once (like a matrix); a larger array as its shape
+  and range.
+- **Speed:** in compiled code each `A[i, j]` read or write is a call into the run time (the loop around it stays
+  compiled), and the other statements and expressions that touch arrays are handed to the tree-walker, so array loops
+  are not yet as fast as loops over lists; `fermium build` refuses programs with arrays.
+- **Not yet:** slices (`A[2, :]`), `end` in an array index, `for x in A`, plotting an array, arrays of vectors or
+  complex numbers, and applying functions like `sin` to every entry.
+
+### Memory
+
+Lists (and arrays and texts made while the program runs) are freed when nothing can reach them any more, with both
+back ends: the tree-walker counts references, and compiled code (the LLVM back end and `fermium build` executables)
+runs a collector at the top of loop iterations that make them (DECISIONS D280). A loop that makes a million lists of 100 numbers stays under 100 MB (it would need
+800 MB if none were freed). `FERMIUM_GC_STATS=1 fermium run prog.fm` reports the collections and the peak memory.
 
 ## 8. Derivatives
 
@@ -480,6 +631,10 @@ print v(0.1 s)
 
 - **Syntax:** `x'`, `x''`, `dx/dt`, `d²x/dt²`, `d/dt x` and `d²/dt² x` all differentiate a one-line function. The result is a new function, whose units are the numerator's units divided by the denominator's.
 - **Printing a function** shows its formula and units, for example `v(t) = -A ω sin(ω t)   [m/s, for t in s]`.
+  A derivative is shown in its tidy form (like terms collected, fractions put together, common factors taken out)
+  when that is at least a fifth shorter (Fermium 2.5, DECISIONS D298): `g(x) = x sin(x)` prints
+  `g''(x) = 2 cos(x) - x sin(x)` and `√(1 + x²)` has `1/(1 + x²)^(3/2)` as its second derivative. Only the printed
+  text changes; the derivative is computed as before.
 - **Formulas:** `d/dt (formula)` also works on a formula in `t`. The derivatives are exact and symbolic (sum, product, quotient and chain rules, and all the standard functions), then simplified.
 - **Partial derivatives:** `∂/∂x f` (ASCII `partial/partial x f`) differentiates a function of several variables with respect to one parameter.
 - **Functions defined by an integral** can be differentiated too, under the integral sign (the Leibniz rule): for `V(x, y, z) = ∫ … ds from a to b`, `∂/∂x V` is the function `∫ ∂/∂x(…) ds from a to b`. When a limit depends on the variable, its boundary term is added: `G(x) = ∫ x s² ds from 0 to x` gives `G'(x) = (∫ s² ds from 0 to x) + x³`. So `∇V`, `∇²V` and `x'` all work on such functions.
@@ -494,12 +649,12 @@ print ∂/∂x V
 
 - **Sums** written in one line with `Σ(… for k from a to b)` are differentiated term by term (§9), so `f'` and `∇²φ` of a Fourier series work.
 
-### Preview (Fermium 2.5): derivatives of functions written over several lines
+### Derivatives of functions written over several lines (Fermium 2.5)
 
-Opt-in in the Rust compiler with the environment variable `FERMIUM_C2=1` (spec §C2; without it, and in
-Fermium 1.5, differentiating a multi-line function is an error). The derivative is computed by automatic
-differentiation: exact to rounding, like the symbolic one, but through assignments, `if`/`else`, `for` and
-`while` loops.
+New in Fermium 2.5 (spec §C2, DECISIONS D295; in Fermium 1.5 and 2.0, differentiating a multi-line function is an
+error). The derivative is computed by automatic differentiation: exact to rounding, like the symbolic one, but
+through assignments, `if`/`else`, `for` and `while` loops. (The example is a `text` block because the docs'
+`fermium` blocks also run with Fermium 1.5.)
 
 ```text
 root(a) =
@@ -509,6 +664,7 @@ root(a) =
     r
 print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
 
+k = 8.99e9 N m²/C² * 1 nC
 φ(x, y, z) =
     r = √(x² + y² + z²)
     k / r
@@ -711,8 +867,110 @@ solve u' = u / (1 s)
 print "u halves at", times(u)[end]
 ```
 
-- **An `if` on t** (a force that switches on at 0.3 s, a potential step in x): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it. A jump that depends on the unknowns instead (`if x > 0 m`) is not located this way.
+- **An `if` on t** (a force that switches on at 0.3 s): the adaptive solver finds the switch to rounding precision and restarts there, so the requested tolerance holds across it.
+- **An `if` on the unknowns** (Fermium 2.5, spec §C2, DECISIONS D296): a condition that depends on the unknowns, like a wall spring that acts only for `x < 0 m`, is located accurately too. During each RK45 step the condition keeps the value it had at the start of the step (so the right side is smooth within the step); after the step it is evaluated on the solver's dense output, and where it changes, the switch is found by root finding on that interpolant (regula falsi, to rounding), the step ends there and the solution restarts on the other branch. This works for the comparisons `<`, `>`, `<=`, `>=` written in the equation, or in a one-line function the equation calls with the unknowns (`F(x) = if x > 0 m then …`, including its `where`). Where both branches push the solution back onto the switching surface (a sliding mode: dry friction on a mass at rest, a block riding a conveyor belt), the solution slides along the surface: the right side is Filippov's convex combination of the two branches that keeps the condition's two sides equal, until the flow on one side turns away, which is located the same way (stick–slip works). A condition that still switches back and forth at one point more than 20 times in a row is evaluated as written from then on. A branch that can't be evaluated just past its switch (like `(y² - 1)^(3/2)` for y < 1) is evaluated as written for those stages. Not located: conditions inside functions written over several lines, `abs`, `sign`, `min` and `max`, solves with `step`, `using rk4`, `radau` or `bdf`, and solves with uncertain values (±, C7) (evaluated as written, as in Fermium 1.5 and 2.0).
+
+```text
+M = 2 kg
+k1 = 8 N/m
+k2 = 200 N/m
+solve M x'' = if x > 0 m then -k1 x else -k2 x
+  with x(0 s) = 0.5 m, x'(0 s) = 0 m/s
+  for t from 0 s to 20 s
+T = π/√(k1/M) + π/√(k2/M)      # half a period on each side
+print x(3 T)                    # 0.500 m (to 10⁻⁹ m)
+```
+
+- `x'(t)` of the highest derivative while a solution slides evaluates the condition as written (the sliding combination isn't stored).
+- **Events that change the state, `when`** (Fermium 2.5, spec §C2, DECISIONS D297): `when lhs = rhs: x' = …` on a line of its own in a solve replaces unknowns (or their derivatives below the highest) at the moment the two sides cross, then continues from the new state. The crossing is located on the dense output like `until`; the new values are all computed from the state just before the event. `when y = 0 m` fires on every crossing, `when y < 0 m` (or `<=`) only when y − 0 m falls through zero, `when y > 0 m` (or `>=`) only when it rises through it. Several assignments are separated by commas, and a solve can have several `when` lines and an `until`. A bouncing ball:
+
+```text
+g = 9.81 m/s²
+solve y'' = -g
+  with y(0 s) = 10 m, y'(0 s) = 0 m/s
+  for t from 0 s to 12 s
+  when y = 0 m: y' = -0.9 y'
+print y(5 s)       # 6.44 m: within 10⁻¹³ m of the analytic bounces
+```
+
+  - An event that fires again and again ever faster (the ball above bounces infinitely often before t ≈ 27.1 s, a Zeno point) stops the solve with an error that names the time: end the range before it, or stop with `until`.
+  - `when` needs the adaptive solver (rk45): with `step`, `using rk4`, `radau` or `bdf` it is an error. With uncertain values (±, §21), a solve with `when` gets its uncertainty from Monte Carlo (whole solves with sampled inputs, with a warning), since the event time moves with the inputs.
+  - The solution keeps both sides of each event: `y(t)` just before and just after it are the values before and after the change, and `plot y vs t` shows the jump.
+  - Edge cases (as the solver behaves today, red team 16): an event exactly at the end time is found but its change isn't applied (the solution ends with the values before it); a condition that is already zero at the start time is not an event (only a crossing after t₀ counts, so a ball started at `y(0 s) = 0 m` with `when y = 0 m` falls through the floor); a reset that leaves the unknowns at the crossing with nothing to take them back (`y' = 0 m/s` for a perfectly inelastic floor under gravity) doesn't hold them there: the solution continues below (to keep it at rest, stop the solve with `until`, or model the floor in the equation); two `when`s on the same condition both see the crossing and keep firing, which is reported as an event that recurs ever faster: write each condition once.
+- **Parameter sweeps, `sweep`** (Fermium 2.5, spec §C2, DECISIONS D299): `sweep k in [1, 2, 4] N/m` (or
+  `sweep L from 0.5 m to 2 m step 0.5 m`) followed by a block is a `for` loop whose plots draw one curve per value
+  into one figure, labelled with the value (`k = 2 N/m`; with several curves per plot, `x, k = 2 N/m`). The figure is
+  saved once, when the sweep ends ("plot saved to …" appears then). Everything else in the block works as in a `for`
+  loop: print, collect results with `push`, `break`.
+
+```text
+M = 1 kg
+sweep k in [1, 2, 4] N/m
+    solve M x'' = -k x
+      with x(0 s) = 1 m, x'(0 s) = 0 m/s
+      for t from 0 s to 3 s
+    print k, x(3 s)
+    plot x vs t           # one figure, three curves: k = 1 N/m, k = 2 N/m, k = 4 N/m
+```
+
+  - Only plots written directly in the sweep's block (also inside `if` or an inner loop there) collect; a plot in a
+    function called from it saves its own figure as usual. In nested sweeps a plot belongs to the innermost one,
+    whose figure is saved each time that inner sweep ends: with the same file name every time, so only the last
+    outer value's figure is left (a known limitation: a plot's file name must be written in quotes, so it can't
+    change with the outer value; for now write one sweep per outer value, each plotting `to` its own file).
+  - `sweep` stays an ordinary name: once it is your variable, `sweep …` isn't a sweep.
 - **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
+
+### A list of unknowns: reaction networks and N-body problems (Fermium 2.5)
+
+In the Rust compiler (spec §C1), an unknown can be a whole list, sized by its initial value when the program runs,
+so a network of any size, or N bodies, is written with loops instead of one equation per species or body. Tested
+in `rust/c-cases/c1/solve_*.fm` on both back ends.
+
+```text
+half = [3.098, 26.8, 19.9, 0.1643] min     # Po-218 → Pb-214 → Bi-214 → Po-214
+λ = ln(2) / half
+rates(N) =
+    dN = -λ * N
+    for i from 2 to len(N)
+        dN[i] += λ[i-1] N[i-1]
+    return dN
+solve N' = rates(N) with N(0 min) = [1e6, 0, 0, 0] for t from 0 min to 60 min using radau
+print N(60 min)                           # [1.48, 2.40×10⁵, 2.68×10⁵, 2220]
+print N(10 min)[3], N'(10 min)
+
+M = 1 M☉                                  # two light bodies around a fixed Sun-mass centre
+r0 = [<1, 0> AU, <0, 1.5> AU]
+v0 = [<0, 29.8> km/s, <-24.3, 0> km/s]
+T = 1 yr
+accel(r) =                                # r: a list of position vectors
+    a = []
+    for i from 1 to len(r)
+        ai = <0, 0> m/s²
+        for j from 1 to len(r)
+            if j != i
+                d = r[j] - r[i]
+                ai += G (M / 1e6) d / |d|^3   # the bodies' pull on each other
+        ai += -G M r[i] / |r[i]|^3               # and the centre's
+        push(a, ai)
+    return a
+solve r'' = accel(r) with r(0 s) = r0, r'(0 s) = v0 for t from 0 s to T
+print r(T)[1], r'(T)[2]              # <1.0, -0.0099> AU and body 2's velocity
+```
+
+- **The unknown:** its initial value is a list of numbers (`N(0) = [1e6, 0, 0]`) or of vectors (`r(0) = r0` with r0
+  a list of 2- or 3-vectors). All its elements share one unit, checked like any unknown: the right side of `N' = …`
+  must be a list of numbers in N's units per time. `x` and `x'` of a second-order list unknown must have the same
+  length, and so must the list the right side returns (else a run-time error saying how many numbers it gave).
+- **Afterwards:** `N(t)` is the list at a time, `N(t)[i]` one element, `N'(t)` the list of derivatives (from the
+  right side), `N[end]` the list at the end (or where `until` stopped), `times(N)` the solver's times. `values(N)`,
+  `plot N` and `N(ts)` with a list of times are errors for a list unknown (use `N(t)` in a loop).
+- **With other unknowns:** ordinary unknowns can be in the same `solve` (`x' = -k * x` next to `T' = …`). `until` can
+  test an element (`until x[3] = 0.01 m`); `absolute` takes one value per unknown's units, used for every element of a
+  list unknown; `rk45`, `rk4` with a step, `radau` and `bdf` all work.
+- **Not yet:** complex list unknowns, lists of matrices as unknowns, equations whose highest derivatives are coupled
+  (write `N' = …` explicitly). The LLVM back end hands such a `solve` to the tree-walker (the rest of the program
+  stays compiled), and `fermium build` refuses the program.
 
 ### Equations: solve … for x from a to b
 
@@ -757,14 +1015,18 @@ plot data.T vs data.L to "pendulum.png"
 - **`fit y = model to data`:** nonlinear least squares. The left side can also be a formula of a column, for a linearised fit: `fit T^2 = k L to data`.
   - **Parameters:** the names that are not columns, constants or functions. If there are none, the names that already have values are fitted, starting from those values.
   - **Starting guesses:** set them with `with a = 2 m`.
-  - **Report:** each parameter with units, a standard error, and the rms residual. Afterwards the parameters are ordinary variables (in a program that uses `±`, uncertain values with the fit's covariance, §21), and `err(g)` is g's standard error (same units; NaN if it couldn't be estimated), so it can be carried into later results: `print err(g)/g`. Values are shown to the second digit of their standard error.
+  - **Report:** each parameter with units, a standard error, and the rms residual. The standard errors come from the covariance (JᵀJ)⁻¹ scaled by χ²/dof (the residual sum of squares over the degrees of freedom), so they are scaled by √(χ²/dof), as SciPy's `curve_fit` does by default (`absolute_sigma=False`): in a χ² fit (both sides divided by the errors) whose χ²/dof is far from 1, the errors taken at face value are the printed ones divided by √(χ²/dof). Afterwards the parameters are ordinary variables (in a program that uses `±`, uncertain values with the fit's covariance, §21), and `err(g)` is g's standard error (same units; NaN if it couldn't be estimated), so it can be carried into later results: `print err(g)/g`. Values are shown to the second digit of their standard error.
 - **Plots:** each form saves a PNG with labelled axes (units included) and prints where it was saved, as a full path (`plot saved to /Users/ada/lab/pendulum.png`), so the file can be found whatever folder the program was run from. The file name is relative to the program's folder.
   - `plot ys vs xs` (lists). Columns from `load` are drawn as markers, everything else as lines. Uncertain values (§21) are drawn with error bars.
   - `plot x vs t` (an ODE solution)
   - `plot f(x) vs x from 0 m to 1 m` (a formula)
-  - `... to "file.png"` chooses the file name.
+  - `... to "file.png"` chooses the file name. The extension picks the format: `.png`, `.svg` or `.gif` (in
+    any case); a name without an extension gets `.png` added. Any other extension (`.txt`, `.pdf`, `.fm`) is
+    refused with `(plot not saved: Format 'txt' is not supported (supported formats: gif, png, svg))` and
+    nothing is written, so a typo can't overwrite your program or your notes. Folders in the path are made if
+    they don't exist.
   - Options go after `with`: `with log y`, `with log x`, `with log` (both axes), `with title "Decay of Ba-137m"`. Separate several options with commas. After the last series, `with` may be left out: `plot N vs t, title "Decay"` and `plot N vs t title "Decay"` are the same as `with title "Decay"` (and `, log y` and `, points` likewise), unless the word is one of your variables. The same holds after the file name: `plot N vs t to "decay.png" title "Decay"`.
-  - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. `fermium build`'s SVG plots support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
+  - **Axes** (DECISIONS D161): `with y from 1e-12 to 1` and `x from 0.01 MeV to 10 MeV` fix an axis range (constants in the axis's units, smaller value first; checked); `xlabel "T [MeV]"` and `ylabel "mass fraction"` replace the names on the axes (the unit is still added in brackets, unless the label already has a `[`: `xlabel "temperature"` shows `temperature [MeV]`); `reversed x` (or `reversed y`) makes the axis decrease to the right (up), like the classic BBN figure with the temperature falling to the right: `plot D vs T, log, y from 1e-12 to 1e-3, reversed x, xlabel "T [MeV]"`. `y from …` also works without `with` even when you have a variable y. Plots in `fermium build` executables support them too. A PDE's plot (`plot u vs x`) takes only `title` and `animate`.
   - Several series: `plot a vs t, b vs t`. A fitted curve over the data is a formula series: `plot data.T vs data.L, 2π √(L / g) vs L from 20 cm to 120 cm` (dots for the data, a line for the formula with the fitted g).
   - **Labels** (DECISIONS D253): an axis is labelled with the plotted name and its unit, `T [s]`; a column of loaded data is named without the data set (`T`, not `data.T`). With several series, the y axis lists the named ones (`ys [s], zs [s]`) and leaves a formula next to them to the legend.
 
@@ -923,8 +1185,12 @@ print np.sum([1, 2, 3.5]), np.linspace(0, 1, 5)
   result of the wrong kind (None, text, a complex number, a list where a number was expected, a table).
 - **Cost:** each call goes from compiled code to Python and back (about 10 µs on the test machine, plus the function's
   own time), so a Python function in a tight loop is much slower than the same formula in Fermium.
-- **`fermium build`** refuses a program that uses Python: *fermium build can't compile a call into Python
-  (np.sqrt): an executable doesn't carry Python*. `fermium run`, the REPL and Jupyter all support it.
+- **`fermium build`** builds a program that uses Python, as do `fermium run`, the REPL and Jupyter. The
+  executable doesn't carry Python: it loads the Python installed on the machine it runs on (with the modules the
+  program uses, like NumPy). A module of your own (`use python blackbody_py`) is imported from the program's
+  folder at build time, stored in the executable as an absolute path, not from the folder the executable is
+  in or is run from; if that folder moves, the executable stops at the first call into the module with
+  *No module named 'blackbody_py'*. Build again after moving it.
 - **Trust:** `use python` imports and runs Python code, exactly like `import` in a Python script, when the
   program is checked (also by `fermium check` and the editor's language server).
 
@@ -1015,6 +1281,167 @@ itself `use python`. One difference: Fermium 2 runs these programs with its tree
 the LLVM back end, so a loop-heavy function is about as fast as pure Python rather than ~10× faster
 (rust/DIVERGENCES.md). Tests: `rust/crates/fermium-pyapi/python/test_fermium2.py` (run by `cargo test -p
 fermium-pyapi`).
+
+## C and Fortran interop (Fermium 2.5)
+
+Fermium can call functions in C and Fortran shared libraries (`.so` on Linux, `.dylib` on macOS) through the
+C ABI. C and Fortran know nothing about units, so, as with `use python`, **the import declares the unit each
+function works in, and every call is checked against it before the program runs**.
+
+```text
+import c "libphys.so":
+    kinetic_energy(m [kg], v [km/s]) -> [J]
+    twice(n: int) -> int
+    sum_sq(x: list [m], n: len(x)) -> [m²]
+import fortran "libnuclear.so":
+    binding_energy(Z: int, A: int) -> [MeV]                      # the symbol binding_energy_
+    neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
+
+print kinetic_energy(2 kg, 3000 m/s)     # C gets m = 2 and v = 3 (km/s); its result is read as joules
+print binding_energy(26, 56)             # Fortran gets pointers to the ints 26 and 56
+print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
+```
+
+- **The signatures** are those of `use python` (a unit in brackets for each parameter that has one; `n: int`
+  for a C `int` or a Fortran `integer`; no unit for a plain number), plus `x: list [m]` (an array of doubles)
+  and `n: len(x)` (its length, filled in by Fermium: `sum_sq` is called with one argument). The result is
+  required: `-> [unit]` (a `double` in that unit), `-> number` (a plain `double`) or `-> int`. Writing
+  `m: kg` is an error that points to `m [kg]`.
+- **Calling:** the functions are called by their bare name, like Fermium functions. Each argument must have
+  the declared dimension (`kinetic_energy(2 kg, 3 s)` is a compile-time error: *kinetic_energy expects v in
+  km/s (declared on line 2), but got time [s]*, with a caret and a hint), also inside generic functions,
+  which are checked per call. A value is passed as its SI value ÷ the declared unit's factor, and the result
+  is multiplied back, so `v [km/s]` receives 3 for `3000 m/s`. An `int` argument must be a whole number
+  (`twice(2.5)` stops with *twice: n must be a whole number (it is passed as an int), not 2.5*).
+- **Lists:** a list passed to a number parameter makes one call per element and gives a list
+  (`kinetic_energy(1 kg, [1, 2, 3] km/s)`). A `list` parameter passes a pointer to the elements (each ÷ the
+  unit's factor) and its `len` the count; lists without a `len` of their own must have the length of the one
+  that has it (*dot: y has 3 elements, but x has 2; they are passed with one length (n)*).
+- **The library** is opened when the program is checked for a run, relative to the program's folder (a bare name
+  the folder doesn't have, like `libm.so.6`, is looked up by the system). A missing library or function is a
+  compile error with a hint: how to build the library, or, for a misspelt function, `nm -D` (and, when the
+  other spelling of a Fortran name is there, which one: *the library has cstyle without the trailing underscore
+  (a bind(C) function): add bind(C) after the result*).
+- **Fortran:** every argument is passed by reference. The symbol is the name in lowercase with a trailing
+  underscore (gfortran's and flang's default; write the functions outside modules, or use `bind(C)`);
+  `bind(C)` after the result means the lowercase name without the underscore, and `bind(C, name="…")` the
+  exact name. Fortran `real(8)` is a `double`, `integer` an `int`.
+- **Names:** Greek letters and subscripts in a name map to its ASCII spelling (`δ_e` → the symbol `delta_e`,
+  `v₀` → `v_0`), so `fermium fmt --pretty` and `--ascii` keep calling the same function. A Fermium keyword
+  (`solve`, `for`, …) can't be a function's name.
+- **Speed:** in `fermium run`, a function whose arguments and result are all doubles is called directly from
+  the compiled code (about 5 ns per call on the test machine); other signatures go through the run time
+  (about 0.5 µs). **`fermium build`** executables work too; they open the library by the path it had
+  when the program was built.
+- **Trust:** as in C, the declaration is the contract. Fermium can't check that `kinetic_energy` really
+  takes two doubles, or that a Fortran array is as long as the length passed; a wrong declaration is
+  undefined behaviour, exactly as a wrong prototype in C. Loading a library runs its initialisers, so
+  `fermium run` and `fermium build` load it but `fermium check` and the editor's language server don't: they
+  read the function names from the library file (ELF on Linux; elsewhere, or for a library the system finds by
+  a bare name, a misspelt function is reported when the program runs). C++ wrappers are still compiled by
+  `fermium check`, but not loaded. Arguments must be plain numbers: an uncertain value (±) is an error
+  (*sq is a C function, which takes plain numbers, but got an uncertain value (±)*; write `value(x)`, or call it
+  inside `propagate montecarlo`, where it gets one sample at a time), as for `use python`. In a
+  `parallel for`, a function called directly may run on several threads at once, so it must be thread-safe.
+- **Not yet supported:** output arrays (a function that writes into an array), `float` and `long`
+  parameters, structs, strings, callbacks (passing a Fermium function to C), functions that return nothing,
+  `import c` inside a module or a call inside `units natural`, and the browser playground (which can't load
+  native libraries). Up to 16 parameters. Linux and macOS on x86-64 and AArch64 (tested on x86-64 Linux).
+
+The worked example `examples/c_interop/` calls a Fortran semi-empirical mass formula (compared with the
+standard library's `semf_binding` and measured binding energies) and a C routine for the Gamow peak of
+p + p in the Sun's core (about 6 keV at 15.7 MK); its first lines say how to build the two libraries.
+
+## C++ interop (Fermium 2.5)
+
+C++ functions are called through a small `extern "C"` wrapper that Fermium writes, compiles with the system's
+C++ compiler and caches; from there on a C++ function is called exactly like a C one (the section above), with
+its units checked at every call before the program runs.
+
+```text
+import cpp "libkinematics.so" header "kinematics.hpp":
+    kin::gamma(p [MeV/c], m [MeV/c²]) -> number                          # a function in a namespace
+    kin::TwoBody::momentum(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV/c] # a static member function
+    kin::invariant_mass(E [MeV], p [MeV/c]) -> [MeV/c²] as mass_of          # one overload …
+    kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass  # … another
+import cpp header "cmath":                                               # header only: no library
+    std::tgamma(x) -> number
+
+print momentum(139.57 MeV/c², m_μ, 0 MeV/c²)      # 29.8 MeV/c: π⁺ → μ⁺ ν (29.79 with to 4 digits)
+print tgamma(5)                                    # 24
+```
+
+- **The import** names the shared library (relative to the program's folder, as for `import c`) and the
+  header that declares the functions (relative to the program's folder; a name the folder doesn't have, like
+  `cmath`, `math.h` or `Eigen/Dense`, is looked up where the compiler looks for installed headers, with no
+  folder of the program's on that search: add folders with `CPATH`). Without a library
+  (`import cpp header "…":`) only what the header defines itself can be called: inline functions,
+  templates, and the standard library's functions.
+- **The signatures** are those of `import c`, with the C++ name qualified by its namespaces and classes
+  (`kin::TwoBody::momentum`). The program calls the function by the last part of the name (`momentum`), or by
+  the name after `as` at the end of the signature. A Fermium keyword needs `as` (`phys::solve(…) -> [J] as
+  solve_it`).
+- **Overloads and templates:** each signature picks exactly one C++ function: the one whose C++ type is the
+  declared signature's, with a number (`[unit]` or plain) as `double`, `: int` and `len(…)` as `int`, a `: list`
+  as `const double *` (or `double *`), and the result as `double` (`-> [unit]`, `-> number`) or `int`
+  (`-> int`). So `kin::invariant_mass(E [MeV], p [MeV/c])` is `double(double, double)`, whatever other
+  overloads there are, and a function template's arguments are deduced from it (`phys::cube(x [m]) -> [m³]`
+  is `cube<double>`). Two overloads used in one program need two names: `as`.
+- **Static member functions** are imported by their qualified name. An ordinary (non-static) member
+  function needs an object and can't be imported: the error says so; add a free function to the library.
+- **Exceptions:** a C++ exception is caught in the wrapper, and the program stops with a run-time error that
+  carries its message (*momentum: the C++ function kin::TwoBody::momentum threw an exception: the decay is
+  kinematically forbidden (M < m1 + m2)*), after what it printed before.
+- **Errors at compile time** are one line with a caret on the signature, translated from the compiler's
+  output: *the header phys.hpp declares no function phys::energyy*; *no overload of phys::energy has the C++
+  type double(double, int)*; *phys::Particle::rest_energy is a member function, which needs an object*; *the
+  C++ library libphys.so has no definition of phys::f(double)* (declared in the header but not in the
+  library); *can't find the header nothere.hpp*; *import cpp needs a C++ compiler, and none was found*. Other
+  compiler errors (for example, a header that doesn't compile) give the first error and the path of a log with
+  the compiler's full output.
+- **The compiler** is `$CXX` if it is set (it may carry arguments, like `ccache g++`), else the first of
+  `c++`, `g++` and `clang++` on the `PATH`; `$CXXFLAGS` is added to its command line (`-std=c++17 -O2` by
+  default). A compile that takes longer than `$FERMIUM_CXX_TIMEOUT` seconds (120 by default) is stopped with
+  an error. The compiled wrapper is kept in the `cpp` folder of Fermium's cache (`$FERMIUM_CACHE_DIR`, else
+  `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`; on macOS `~/Library/Caches/fermium`), named by the
+  SHA-256 of everything that changes what the compiler makes: the wrapper's source (the header's name and the
+  signatures), the header's path and text, the include folders, `$CXX`, `$CXXFLAGS`, `$CPATH`,
+  `$CPLUS_INCLUDE_PATH` (and the compiler's other search variables) and the library's path. Next to it is a
+  manifest: which compiler made it (its file, size and date), every file the compiler read (system headers
+  too), the library's size and date, and the wrapper's own SHA-256. The wrapper is used again only while all of
+  these still match; otherwise it is made again. With the cache filled, no compiler is needed.
+- **Names:** Greek letters and subscripts map to ASCII as for `import c` (`phys::λ_max` is
+  `phys::lambda_max`), so `fmt --pretty` and `--ascii` round-trip.
+- **Speed:** C++ calls go through the run time (about 0.6 µs per call on the test machine), because the
+  wrapper is asked after each call whether the function threw; a C function of doubles is called directly
+  (about 5 ns). `fermium build` executables work, and load the wrapper from the cache by the path it had
+  when the program was built (clearing the cache breaks them until the program is built again).
+- **Trust:** the compiler checks the declaration against the header (a wrong parameter type is a compile
+  error, unlike `import c`), but not array lengths. Compiling a wrapper only compiles the header, which runs
+  nothing; loading the libraries runs their initialisers, so only `fermium run` and `fermium build` load them.
+  `fermium check` and the editor's language server compile the wrapper (so C++ errors show while you edit) but
+  don't load it or the library (DECISIONS D305). Everything in the cache folder (C++ wrappers in `cpp/`, and the machine
+  code `fermium run` saves for a program in `jit/`, D317) is code that a later run loads, so Fermium keeps it
+  private: it makes the folders readable and writable by you alone (0700), and refuses a
+  cache folder that another user owns or that group or others can write (a one-line warning, then the program
+  runs without the cache). A wrapper is reused only for exactly the inputs it was made from (above), so one
+  program's folder can't change what another program loads: a file in the program's folder is on the include
+  path only for a header of the program's own, never for a system header like `<cstdio>` (DECISIONS D320).
+- **Not yet supported:** ordinary member functions and objects (classes, `std::vector`, `std::string`),
+  references (`const double &`), `float`/`long` and other types beyond `double`, `int` and arrays of doubles,
+  functions returning nothing, template arguments written in the signature (`f<double>`: only deduced ones),
+  choosing between two overloads that differ only in `const double *` and `double *` (a `: list` parameter
+  fits either, so the import stops with *more than one overload … has the C++ type*), operators and names that
+  are C++ keywords (`phys::new`),
+  more than one header per import, `import cpp` in a module or calls inside `units natural`, and the browser
+  playground. Tested on x86-64 Linux with g++ (every test). On macOS (arm64, Apple clang) the continuous
+  integration runs the same tests; a wrapper names the library by its absolute path (`install_name_tool`,
+  then an ad-hoc signature), and the macOS linker's messages are read as on Linux (checked against captured
+  output), but the macOS fixes have not yet been confirmed by a macOS run.
+
+The worked example `examples/cpp_interop/` calls a small C++ kinematics library: daughter momenta in two-body
+decays (π⁺ → μ⁺ ν: 29.79 MeV/c, as the PDG gives), decay lengths βγcτ, and the invariant mass of the Λ rebuilt
+from its decay products through three overloads of one function; its first lines say how to build the library.
 
 ## 12. Symbols and ASCII spellings
 
@@ -1195,7 +1622,7 @@ prog.fm, line 3: can't add length [m] to time [s]
   hint: both sides of + and - must have the same units
 ```
 
-Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. **Control+C** stops a running program (it prints `stopped by Ctrl+C`). See `bootcamp/TROUBLESHOOTING.md` for the common ones.
+Runtime problems (an index out of range, asking an ODE solution for a time outside its range) stop the program with a one-line message. **Control+C** stops a running program (it prints `stopped by Ctrl+C`); in the REPL it ends the session, so its names are lost. In the Jupyter kernel an interrupt doesn't stop a running cell yet: restart the kernel (Kernel → Restart Kernel), which forgets the notebook's names (rust/DIVERGENCES.md, "The Jupyter kernel"). See `bootcamp/TROUBLESHOOTING.md` for the common ones.
 
 ## 17. Tools
 
@@ -1246,10 +1673,10 @@ These are known and not yet fixed. None of them is silent about units.
 - **Derivatives** (`x'`, `d/dt`, `∂/∂x`) only work on one-line functions and formulas (a series can be one line with `Σ`, §9).
 - A jump in an ODE that depends on the unknowns (`if x > 0 m`) isn't located like a jump in t, so it can cost accuracy.
 - **Lists of vectors, matrices or complex numbers** don't exist yet, nor vectors of complex numbers (§7). `eigenvalues` needs a symmetric matrix (or the pair K, M).
-- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, don't work in the REPL or Jupyter, and can't go directly into vectors, integrals or ODEs (use `propagate montecarlo`). `fit` doesn't weight points by their uncertainties.
+- **Uncertainties** (`±`, §21) run in the reference interpreter (slower than native code), can't be built with `fermium build`, and can't go directly into `solve … for x`, eigenvalue problems or PDEs (use `propagate montecarlo`); vectors, lists, integrals and ODEs take them directly since Fermium 2.5 (§21). `fit` doesn't weight points by their uncertainties.
 - **Modules** are read again by each compilation (no cached compiled modules), and the REPL keeps a module it
   has imported even if the file changes (restart the REPL to see the change).
-- **`fermium build`** writes plots as SVG (not PNG), and reads data files relative to the folder the program is run in (§17).
+- **`fermium build`** executables write plots exactly as `fermium run` does (PNG, or SVG/GIF when the file name says so), and read data files relative to the folder the program is run in (§17).
 
 ## 20. Numerics: random numbers, Fourier transforms, eigenstates, PDEs
 
@@ -1437,7 +1864,7 @@ print "Monte Carlo:", R
 - At 45° the slope of the range is zero, so the linear rule ignores the angle; the simulation shows the range getting shorter and more spread out.
 - The samples come from the seeded generator of §20: the same program gives the same numbers, and `seed(n)` before the block changes them. Correlated inputs (say g and a later formula that uses g) are sampled consistently, and the results stay linked to the inputs, so later formulas keep the correlations.
 - Only formulas (`name = …`, `if`, loops, `solve`) go in the block: no `print`, `plot` or `fit`. A block that needs one sample at a time (an `if` on a sampled value, an integral, an ODE) runs more slowly, with a default of 10 000 samples.
-- **Integrals, `solve` (ODEs and equations) and vectors** can't take uncertain values directly; they stop with a message that points here. Inside `propagate montecarlo` they work:
+- **Integrals, ODEs and vectors** take uncertain values directly in Fermium 2.5 (next section). In Fermium 1.5, and still for `solve … for x`, eigenvalue problems and PDEs, they stop with a message that points here. Inside `propagate montecarlo` they all work:
 
 ```fermium
 k = 0.50 ± 0.05 1/s
@@ -1447,6 +1874,34 @@ propagate montecarlo 2000 samples
 print x2
 ```
 
+### Vectors, integrals and differential equations (Fermium 2.5)
+
+In the Rust compiler from Fermium 2.5 (spec C7); Fermium 1.5 stops with the messages above. The program (a
+`text` block, since the docs' `fermium` blocks also run with Fermium 1.5; it is `rust/c-cases/c7/doc_example.fm`)
+
+```text
+v = <3.0 ± 0.1, 4.0 ± 0.1> m/s
+print v, |v|, unit(v)
+a = 2.0 ± 0.1 m
+print ∫ x² dx from 0 m to a          # σ = a² σ_a
+k = 0.50 ± 0.02 1/s
+solve y' = -k y with y(0 s) = 1.00 m for t from 0 s to 4 s
+print y(2 s)                          # σ = t y σ_k
+```
+
+prints
+
+```
+<3.00 ± 0.10, 4.00 ± 0.10> m/s 5.00 ± 0.10 m/s <0.600 ± 0.016, 0.800 ± 0.012>
+2.67 ± 0.40 m³
+0.368 ± 0.015 m
+```
+
+- **Vectors and matrices** of uncertain values print with one unit (`<1.00 ± 0.10, 2.00 ± 0.20> m`, `[[2.00 ± 0.10, -1], [-1, 2.00 ± 0.10]] N/m`; a state vector with a unit per component). `|v|`, `unit`, `·`, `×`, `abs`, components, `det`, `inverse`, `solve_linear` and matrix products propagate with the correlations (`K inverse(K)` is exactly the identity). Lists of uncertain values work in every list function, including `std` (the spread, with its uncertainty) and `interp`.
+- **Integrals** whose integrand reads a measured value, or whose limits are measured, are propagated exactly: the derivative is taken under the integral sign (one more quadrature per error source) and through the limits (f(b)·σ_b). `∫ x² dx from 0 to a` minus `a³/3` is exactly `0 ± 0`.
+- **Differential equations** with a measured starting value, start time or parameter solve the sensitivities ∂y/∂(each source) alongside y with the same solver (the variational equations), so `y(t)`, `y'(t)` and `values(y)` are uncertain values that keep their correlations with the inputs. The stopping time of `until`, `max`/`min` of a solution and plots use the nominal solution.
+- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part, or the gap between either one-sided change and the first-order prediction, is more than 10 % of the change's typical size), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. This also catches a jump at a measured value, where the derivative is 0 almost everywhere but the result moves: `∫ (if x < a then 1 else 0) dx from 0 to 2` with `a = 1.0 ± 0.1` is `1.00 ± 0.10`. The value shown is the one at the measured inputs (as for the linear rule); the spread and the links to the inputs come from the samples, and all values of one Monte Carlo solution share the same samples, so `x(2) - x(1)^2` for x' = −k x is 0 in value. Arithmetic on Monte Carlo results is first order, like all arithmetic on uncertain values: the σ of `x(2) - x(1)^2` is the linearisation of the square around the values, not a new Monte Carlo run (write the whole expression inside `propagate montecarlo` for that). For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 and D300–D304 have the details.
+
 ### How it runs
 
-A program that uses `±`, `value`/`uncertainty`/`rel` or `propagate montecarlo` is run by Fermium's reference interpreter instead of native code (the uncertain values are Python objects with a value and one entry per error source). It is slower than native code, `fermium build` refuses such a program, and the REPL and the Jupyter kernel don't support uncertainties yet. See DECISIONS.md D120–D124.
+A program that uses `±`, `value`/`uncertainty`/`rel` or `propagate montecarlo` is run by Fermium's reference interpreter instead of native code (each uncertain value carries its value and one entry per error source). It is slower than native code and `fermium build` refuses such a program; the REPL and the Jupyter kernel support uncertainties (`L = 1.20 ± 0.01 m`, then `print L - L` gives `0 ± 0 m`). See DECISIONS.md D120–D124.

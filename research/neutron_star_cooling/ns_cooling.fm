@@ -1,0 +1,89 @@
+# Neutron star cooling: a one-zone model (degenerate-neutron heat capacity, modified-Urca neutrinos, photons through a
+# heat-blanketing envelope) against the thermal luminosities of 48 neutron stars (Potekhin et al. 2020, Ioffe table;
+# see SOURCE.md). Run from this folder:  fermium run ns_cooling.fm
+
+ns = load "ns.csv"                # group, agetype, t [yr], L [erg/s], Lmin [erg/s], Lmax [erg/s]
+n = len(ns.t)
+print n, "neutron stars with measured thermal luminosities, ages", min(ns.t) to 3 digits, "to", max(ns.t) to 3 digits
+
+M_ns = 1.4 M☉
+R_ns = 12 km
+r_g = 2 G M_ns / c²
+red = √(1 - r_g / R_ns)                                  # gravitational redshift factor
+g_s = G M_ns / (R_ns² red)                               # surface gravity
+print "compactness r_g/R =", r_g / R_ns to 3 digits, "  redshift factor", red to 4 digits, "  surface gravity", g_s in cm/s² to 3 digits
+
+# heat capacity of a degenerate neutron gas at the star's mean density: C = (π²/2) N k_B (k_B T / E_F)
+N_n = M_ns / m_n
+n_n = N_n / ((4π/3) R_ns³)
+E_F = ħ² (3π² n_n)^(2/3) / (2 m_n)
+C_v(T) = (π²/2) N_n k_B² T / E_F
+print "mean neutron density", n_n in 1/fm³ to 3 digits, " (nuclear density n₀ = 0.16 fm⁻³)  E_F =", E_F in MeV to 3 digits
+print "heat capacity C = C₉ T₉ with C₉ =", C_v(1e9 K) in erg/K to 3 digits
+
+# modified Urca neutrino emissivity, neutron branch (Friman & Maxwell 1979; Yakovlev et al. 2001, Phys. Rep. 354, 1),
+# n + n → n + p + e + ν̄ and its inverse, with bare nucleon masses and α_n β_n ≈ 1:
+#   Q = 8.1×10²¹ erg cm⁻³ s⁻¹ (n_p/n₀)^(1/3) T₉⁸
+# the proton density from a proton fraction x_p = 0.05 (typical of realistic equations of state at 1-2 n₀)
+n₀ = 0.16 /fm³
+x_p = 0.05
+L_ν(T) = 8.1e21 erg/(cm³ s) * (x_p n_n / n₀)^(1/3) (T / 1e9 K)^8 * (4π/3) R_ns³
+print "neutrino luminosity L_ν = N₉ T₉⁸ with N₉ =", L_ν(1e9 K) in erg/s to 3 digits
+
+# the heat-blanketing envelope: T_s = 0.87×10⁶ K (g/10¹⁴ cm s⁻²)^(1/4) (T_b/10⁸ K)^0.55 (Gudmundsson, Pethick & Epstein 1983)
+T_s(Tb) = 0.87e6 K * (g_s / (1e14 cm/s²))^(1/4) (Tb / 1e8 K)^0.55
+L_γ(Tb) = 4π R_ns² σ T_s(Tb)^4
+L_obs(Tb) = red² L_γ(Tb)                                # the luminosity seen from far away
+
+# the neutrino era alone has a closed form: C₉ T₉ dT₉/dt = −N₉ T₉⁸  ⇒  T₉ = (C₉ / (6 N₉ t))^(1/6)
+C9 = C_v(1e9 K) * 1e9 K
+N9 = L_ν(1e9 K)
+T_analytic(t) = 1e9 K * (C9 / (6 N9 t))^(1/6)
+
+# cooling, with t the time seen from far away (dt_local = red dt)
+solve
+    T' = -red (L_ν(T) + L_γ(T)) / C_v(T)
+    with T(1 yr) = 3e9 K
+    for t from 1 yr to 3e7 yr using radau tolerance 1e-9
+print "T(100 yr) =", T(100 yr) in K to 4 digits, "  neutrino-era closed form:", T_analytic(100 yr) in K to 4 digits
+print "T(1000 yr) =", T(1000 yr) in K to 4 digits, "  closed form:", T_analytic(1000 yr) in K to 4 digits
+solve L_ν(T(tx)) = L_γ(T(tx)) for tx from 10 yr to 1e7 yr
+print "photon luminosity overtakes neutrinos at t =", tx in yr to 3 digits, " (T =", T(tx) in K to 3 digits, ")"
+for tt in [1e2, 1e3, 1e4, 1e5, 1e6] yr
+    print "  t =", tt, ": T_core =", T(tt) in K to 3 digits, "  T_s∞ =", red T_s(T(tt)) in K to 3 digits, "  L∞ =", L_obs(T(tt)) in erg/s to 3 digits
+
+# the observed stars against the model
+print "star-by-star (group 1 CCO, 2 pulsar, 3 high-B, 4 XINS):  age, L_obs, L_model, L_obs/L_model"
+lr = []
+inside = 0
+for i from 1 to n
+    Lm = L_obs(T(ns.t[i]))
+    push(lr, log10(ns.L[i] / Lm))
+    if Lm >= ns.Lmin[i] / 3 and Lm <= ns.Lmax[i] * 3
+        inside += 1
+for i from 1 to n
+    print "  ", ns.group[i], " ", ns.t[i], " ", ns.L[i] to 3 digits, " ", L_obs(T(ns.t[i])) in erg/s to 3 digits, " ", 10^lr[i] to 3 digits
+srt = sort(lr)
+print "log₁₀(L_obs/L_model): median", (srt[n / 2] + srt[n / 2 + 1]) / 2 to 3 digits, ";", inside, "of", n, "stars within a factor 3 of their error range"
+g_mean(k) =
+    s = 0
+    m = 0
+    for i from 1 to n
+        if ns.group[i] == k
+            s += lr[i]
+            m += 1
+    <m, s / m>
+for k from 1 to 4
+    gm = g_mean(k)
+    print "  group", k, ":", gm.x, "stars, mean log₁₀(L_obs/L_model) =", gm.y to 3 digits
+# the characteristic age P/2Ṗ overestimates the true age when the field decays: stars dated by t* only
+agree = 0
+nstar = 0
+for i from 1 to n
+    if ns.agetype[i] == 1
+        nstar += 1
+        if abs(lr[i]) < log10(3)
+            agree += 1
+print "stars with an independent age t*:", nstar, ", of which", agree, "have L_obs within a factor 3 of the model"
+
+plot ns.L vs ns.t, L_obs(T(t)) in erg/s vs t from 100 yr to 3e7 yr with log, points, y from 1e28 erg/s to 1e35 erg/s, xlabel "age [yr]", ylabel "thermal luminosity L_inf [erg/s]", title "Neutron star cooling: modified Urca + photons (1.4 Msun, 12 km) and 48 stars" to "cooling_curve.png"

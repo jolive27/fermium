@@ -1,5 +1,4 @@
-//! Derivatives of multi-line functions by automatic differentiation (spec §C2; Phase C groundwork, opt-in with
-//! `FERMIUM_C2=1` until the v2.5 language change is adopted, so the v1 conformance suite stays identical).
+//! Derivatives of multi-line functions by automatic differentiation (spec §C2, Fermium 2.5; DECISIONS D295).
 //!
 //! Forward mode as a source transformation: each local variable `y` that depends on the variable of
 //! differentiation `x` gets a tangent `dy/dx`, assigned just before `y` is (from the values before the
@@ -72,7 +71,7 @@ pub fn ad_body(fname: &str, params: &[String], body: &[A::Stmt], var: &str, ctx:
     // parameters that are reassigned start with their tangent: 1 for var, 0 for the others
     for p in params {
         if let Some(Some(t)) = ad.tan.get(p) {
-            let v = num(if p == var { 1.0 } else { 0.0 });
+            let v = if p == var { num(1.0) } else { zero() };
             out.push(A::Stmt { kind: S::Assign { name: t.clone(), value: v, op: "=".into() },
                                span: body.first().map(|s| s.span).unwrap_or_default() });
         }
@@ -82,6 +81,13 @@ pub fn ad_body(fname: &str, params: &[String], body: &[A::Stmt], var: &str, ctx:
         ad.stmt(s, i + 1 == n, &mut out)?;
     }
     Ok(prune(out))
+}
+
+/// A written 0: the checker gives it whatever unit its first use asks for, so the tangent of an assignment that
+/// doesn't depend on x (`E = 0 J`) takes the unit of E/x later (red team 16, D333), where a computed 0 is a
+/// plain number.
+fn zero() -> A::Expr {
+    mk(K::Num { value: 0.0, sigfigs: None, digit: true })
 }
 
 /// Remove assignments to names that nothing reads (the derivative doesn't need the tangents of variables that
@@ -113,10 +119,11 @@ fn collect_reads(body: &[A::Stmt], out: &mut HashSet<String>) {
                     }
                 }
             }
-            S::IndexAssign { target, index, value, index2, .. } => {
+            S::IndexAssign { target, index, value, index2, rest, .. } => {
                 out.insert(target.clone());
                 expr_reads(index, out);
                 expr_reads(value, out);
+                rest.iter().for_each(|e| expr_reads(e, out));
                 if let Some(i) = index2 {
                     expr_reads(i, out);
                 }
@@ -299,7 +306,7 @@ impl Ad<'_> {
                 Some(o) => add(o, term),
             });
         }
-        Ok(out.map(|o| simplify(&o)).unwrap_or_else(|| num(0.0)))
+        Ok(out.map(|o| simplify(&o)).unwrap_or_else(zero))
     }
 
     fn block(&mut self, body: &[A::Stmt]) -> SymResult<Vec<A::Stmt>> {
@@ -324,9 +331,12 @@ impl Ad<'_> {
                 }
                 out.push(s.clone());
             }
-            S::IndexAssign { target, index, value, index2, .. } => {
+            S::IndexAssign { target, index, value, index2, rest, .. } => {
                 let mut names = free_names(value);
                 names.extend(free_names(index));
+                for r in rest {
+                    names.extend(free_names(r));
+                }
                 if let Some(i2) = index2 {
                     names.extend(free_names(i2));
                 }
@@ -394,6 +404,7 @@ impl Ad<'_> {
                     S::Plot { .. } => "plot",
                     S::Fit { .. } => "fit",
                     S::Propagate { .. } => "propagate",
+                    S::Sweep { .. } => "sweep",
                     S::Units { .. } => "a units block",
                     _ => "a statement",
                 };

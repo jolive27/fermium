@@ -53,7 +53,8 @@ fn calls(m: &Module, s: &Stmt) -> bool {
     }
     let lam = |l: usize| m.lambdas[l].body.iter().any(|b| expr(m, b));
     let own = match &s.kind {
-        StmtKind::Solve { rhs, x, .. } => lam(*rhs) || x.event.is_some_and(lam),
+        StmtKind::Solve { rhs, x, .. } => lam(*rhs) || x.event.is_some_and(lam) || x.switch.is_some_and(lam)
+            || x.whens.iter().any(|w| lam(w.g) || lam(w.reset)),
         StmtKind::Fit { model, .. } => lam(*model),
         _ => false,
     };

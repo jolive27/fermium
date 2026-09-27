@@ -1,0 +1,57 @@
+# C and Fortran interop: a Fortran mass formula and a C Gamow-peak routine, with the units checked
+#
+# Build the two libraries first, in this folder:
+#     gfortran -O2 -shared -fPIC -o libnuclear.so nuclear.f90
+#     cc -O2 -shared -fPIC -o libstellar.so stellar.c -lm
+# then:  fermium run c_interop.fm   (the output is in expected_output.txt)
+#
+# C and Fortran know nothing about units, so the import block declares the unit each function
+# works in. Every call is checked against it when the program is checked: gamow_peak(1, 1, μ, 1.35 keV)
+# is a compile-time error (T must be a temperature). Values cross the boundary in the declared
+# units (15.7 MK is passed as 1.57×10⁷, since T is declared in K) and come back converted to SI.
+import fortran "libnuclear.so":
+    binding_energy(Z: int, A: int) -> [MeV]                       # the symbol binding_energy_
+    binding_per_nucleon(Z: int, A: int) -> [MeV] bind(C)          # the symbol binding_per_nucleon
+    neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
+    most_stable_z(A: int) -> int
+import c "libstellar.so":
+    gamow_energy(Z1: int, Z2: int, μ [u]) -> [keV]
+    gamow_peak(Z1: int, Z2: int, μ [u], T [K]) -> [keV]
+    gamow_width(Z1: int, Z2: int, μ [u], T [K]) -> [keV]
+    gamow_integrand(E [keV], Z1: int, Z2: int, μ [u], T [K]) -> number
+    trapezoid(x: list [keV], y: list, n: len(x)) -> [keV]
+from nuclear import semf_binding
+
+# 1. The semi-empirical mass formula in Fortran, against Fermium's own stdlib and measured values
+print "Binding energies (Fortran SEMF, stdlib SEMF, measured AME2020):"
+names = ["O-16", "Ca-40", "Fe-56", "Pb-208", "U-238"]
+Zs = [8, 20, 26, 82, 92]
+As = [16, 40, 56, 208, 238]
+measured = [127.62, 342.05, 492.26, 1636.4, 1801.7] MeV
+for i from 1 to len(Zs)
+    B = binding_energy(Zs[i], As[i])
+    print "  ", names[i], B to 5 digits, semf_binding(As[i], Zs[i]) to 5 digits, measured[i] to 5 digits
+print "B/A of Fe-56:", binding_per_nucleon(26, 56) to 4 digits
+print "S_n of Pb-208:", neutron_separation(82, 208) to 3 digits, " (measured 7.37 MeV)"
+print "most stable Z for A = 56, 208:", most_stable_z(56), most_stable_z(208)   # dB/dZ = 0 without pairing: 25.3, not iron's 26
+print "all five at once:", binding_energy(Zs, As)            # lists map elementwise
+
+# 2. The Gamow peak of p + p in the Sun's core, in C
+T_core = 15.7 MK
+μ_pp = m_p m_p / (m_p + m_p)
+E0 = gamow_peak(1, 1, μ_pp, T_core)
+Δ = gamow_width(1, 1, μ_pp, T_core)
+kT = k_B T_core
+print "kT =", kT in keV to 3 digits, " E_G =", gamow_energy(1, 1, μ_pp) in keV to 4 digits
+print "Gamow peak E0 =", E0 in keV to 3 digits, " width Δ =", Δ in keV to 3 digits
+E0_fm = (gamow_energy(1, 1, μ_pp) kT² / 4)^(1/3)                  # the same formula in Fermium
+print "E0 from Fermium's formula:", E0_fm in keV to 3 digits
+
+# the integrand on a grid (a list for the number parameter E: one call per element), its maximum,
+# and its area by the trapezoidal rule in C against the Gaussian approximation (a few % low: the window is skewed)
+Es = linspace(0.5 keV, 40 keV, 3951)
+f = gamow_integrand(Es, 1, 1, μ_pp, T_core)
+print "maximum of the integrand at", Es[argmax(f)] in keV to 3 digits
+area = trapezoid(Es, f)
+gauss = √π Δ exp(-3 E0 / kT) / 2
+print "area:", area in keV to 3 digits, " Gaussian approximation:", gauss in keV to 3 digits

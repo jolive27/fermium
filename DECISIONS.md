@@ -1187,3 +1187,821 @@ the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` expe
 - **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
 - **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
 - **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.
+
+## D275. C and Fortran interop (C3): use python's signatures, a trampoline without libffi, checked at compile time
+- **What:** `import c "libphys.so":` and `import fortran "libnuclear.so":` followed by one signature per line, in
+the syntax of `use python` (D140): `kinetic_energy(m [kg], v [km/s]) -> [J]`, `twice(n: int) -> int`, plus
+`x: list [m]` with `n: len(x)` for arrays of doubles, and `bind(C)` / `bind(C, name="…")` after a Fortran
+function's result. The spec's `m: kg` form gets the existing error pointing to `m [kg]`. Functions are called by
+their bare name; each argument's dimension is checked at every call (generic functions per call); values cross
+as SI ÷ the declared unit's factor, the result is multiplied back. The result must be declared (`-> [unit]`,
+`-> number`, `-> int`). Fortran passes everything by reference; the default symbol is lowercase plus a trailing
+underscore (gfortran, flang), `bind(C)` is lowercase without it, `bind(C, name=…)` is exact. Greek letters and
+subscripts in a name map to ASCII (`δ_e` → `delta_e`, `v₀` → `v_0`) so `fmt --pretty/--ascii` round-trips keep
+the symbol. The library is dlopen'd at check time relative to the program's folder (a bare name it doesn't have
+is left to the system's search), and every symbol is looked up then: a missing library or symbol is a compile
+error with a hint (naming the other Fortran underscore spelling when the library has it). Run time:
+`fermium-runtime/src/cffi.rs` classifies the arguments (double / int / pointer) into the platform's registers and
+8-byte stack slots and calls the function pointer as an `extern "C" fn` taking every integer register, every
+floating-point register and ten stack slots (x86-64 SysV: 6 + 8; AArch64: 8 + 8; up to 16 arguments; Apple's
+AArch64 packs small stack arguments, so a spilled `int` is refused there). The tree-walker converts in
+`eval_c.rs`; the LLVM JIT calls the function directly when every argument and the result are doubles (≈5 ns per
+call), otherwise through the built-in callback (≈0.5 µs); `fermium build` executables use the callback and the
+library's path as resolved at build time. A list passed to a number parameter maps elementwise.
+- **Why:** one signature language for every foreign function (the user learns it once), with the unit check
+where the value crosses the boundary, which is the whole point of C3. Resolving the library at check time makes
+a typo a compile error, like a misspelt Python function. Only doubles, ints and pointers are needed for the
+physics routines this is for, and for those the C ABI is simple enough to reach from Rust alone, so there is no
+libffi dependency (the binary stays one file with no shared-library dependencies beyond libc).
+- **Alternatives:** libffi (general, but a C dependency to build and ship on every platform); generating and
+  compiling a C shim per program (needs a C compiler at run time, which Fermium 2 has avoided since B7); the
+  spec's `m: kg` parameter syntax (rejected: it would give two spellings of the same thing, and `: int` already
+  means a type after the colon); passing Fortran's hidden string lengths or `value` arguments (not needed yet).
+  Known gaps: output arrays, `float`/`long`, structs, strings, callbacks, void functions, `import c` in modules or
+  calls inside `units natural`, the playground.
+
+## D276. Uncertain values through integrals: exact derivatives under the integral sign and by the limits (spec C7)
+- **What:** `∫ f dx from a to b` whose integrand reads uncertain values, or whose limits are uncertain, gives an
+uncertain value instead of v1's "an integral can't use uncertain values (±) yet". Linear propagation with exact
+derivatives: each uncertain value carries its contributions c_k = ∂x/∂z_k (one per independent source k), and the
+tree-walker's arithmetic on those values is forward-mode differentiation, so the integrand evaluated at a plain x
+gives ∂f/∂z_k there. Then ∂I/∂z_k = ∫ ∂f/∂z_k dx (one extra quadrature per source, rtol 10⁻¹⁰, an absolute
+tolerance of 10⁻¹² × the largest |∂f/∂z_k| at a, b and the midpoint × the width) + f(b) ∂b/∂z_k − f(a) ∂a/∂z_k.
+Correlations are kept: `∫ x² dx from 0 to a` minus `a³/3` is exactly 0 ± 0. An integrand that doesn't depend on x
+with uncertain limits keeps v1's path (the result is linear in b − a). A `±` written inside the integrand (or an
+ODE's right side) is one measurement for the whole kernel: its value is kept per IR node while the kernel runs
+(otherwise each evaluation would be a new independent source). Code: `fermium-codegen/src/eval_unc_kern.rs`.
+- **Why:** exact (no step to choose), cheap (K + 1 quadratures for K sources), and it reuses the propagation every
+operator already has. Differentiation under the integral sign needs f and ∂f/∂z continuous in x on the range,
+which holds for the integrands the quadrature handles anyway.
+- **Alternatives:** central differences in each source with a step (rejected: a step to choose, and the adaptive
+quadrature's node changes make the difference noisy); a vector quadrature of (f, ∂f/∂z_1, …) on one set of nodes
+(the runtime's quadrature is scalar; left for later); always Monte Carlo (slow, and noisy where linear is exact).
+
+## D277. Uncertain values through ODEs: the sensitivity (variational) equations solved alongside, by the same solver
+- **What:** `solve` with uncertain starting values, an uncertain start time, or a right side that reads uncertain
+values solves the state y (n components) together with S_k = ∂y/∂z_k for each source k: dS_k/dt = J S_k + ∂f/∂z_k.
+The right side is evaluated once per step stage on uncertain numbers whose contributions are the S_k, which gives
+f and J S_k + ∂f/∂z_k at once (forward-mode differentiation; no Jacobian is formed). S_k(t₀) = ∂y₀/∂z_k −
+f(t₀, y₀) ∂t₀/∂z_k. The augmented system (n(1 + K) components) goes through the chosen solver (RK45, RK4, Radau,
+BDF) with its step control over all components; the relative tolerance is divided by √(1 + K) because the error norm
+is an RMS over all components, so the nominal part keeps its accuracy. `y(t)` is the interpolated value with the
+interpolated S_k as contributions (correlations kept: `x(1 s) / x0` is exactly ± 0 for x' = −x); `y'(t)` evaluates
+the augmented right side at the interpolated state; `values(y)` is a list of uncertain values; an uncertain query
+time adds the slope times its uncertainty. The event time of `until` stays a plain number (the nominal crossing),
+and `max`/`min` of a solution and plots use the nominal solution. An uncertain end time is used at its value.
+- **Why:** the textbook method (it is what "linear error propagation through an ODE" means), accurate to the
+solver's tolerance, and one solve instead of 2K + 1 finite-difference solves.
+- **Alternatives:** finite differences of whole solves (step choice, adaptive-step noise); forming ∂f/∂y by finite
+differences (a step again); Monte Carlo only (see D278).
+
+## D278. When linear propagation isn't valid: a ±1σ test per source, then Monte Carlo (integrals and ODEs)
+- **What:** after the linear result, each source k is moved to z_k = +1 and −1 (every uncertain input read as its
+value ± its contribution c_k, through the Monte Carlo sampler with fixed streams) and the kernel recomputed with
+plain numbers. With y₀ the linear result's value, d₁ = (y₊ − y₋)/2 and d₂ = (y₊ + y₋ − 2 y₀)/2, linear
+propagation is accepted when |d₂| ≤ 0.1 |d₁| (the second-order change over ±1σ is at most 10 % of the first-order
+one) or |d₂| is below the kernel's own accuracy (10³ × the quadrature's error estimate; 100 × rtol × the component's
+largest |y| for an ODE, at 8 times across the solution). Otherwise the result comes from Monte Carlo, with a
+warning: 10 000 samples for an integral, 2 000 whole solves for an ODE (each sample draws every source from the
+program's seeded random numbers, so a run is reproducible and `seed(n)` changes it). The result is linked to the
+sources by the same regression as `propagate montecarlo` (value at z = 0, one contribution per source, the
+nonlinear rest as a new source; for an ODE the same new source at each (component, t) asked twice). A kernel whose
+integrand or right side needs a plain number (an uncertain loop bound, an index) goes to Monte Carlo directly.
+Kernels nested inside another kernel's linear pass (an integral inside an ODE's right side) propagate linearly
+without their own test.
+- **Why:** first-order propagation is wrong exactly where the slope vanishes or the function bends strongly over
+±1σ (a peak centred in an integration range, a decay rate known to ±40 %). Testing at ±1σ is the scale the result
+describes; it costs 2K extra kernel runs. The test misses cross terms between sources (∂²/∂z_i∂z_j) and nonlinearity
+between the 8 test times of an ODE.
+- **Alternatives:** always Monte Carlo (slow, noisy); only a warning pointing at `propagate montecarlo` (the user
+asked for a result); a second-order (Hessian) correction (needs second derivatives; doesn't cover strongly
+non-Gaussian outputs).
+
+## D279. Vectors, matrices and lists of uncertain values print and work in every operation (spec C7)
+- **What:** `<1.0 ± 0.1, 2.0 ± 0.2> m` is a vector of uncertain values (v1: "needs a plain number"). Printing: one
+unit for the vector or matrix, each uncertain entry rounded as a single uncertain number (σ to 2 figures), plain
+entries with up to 6 figures as in lists of uncertain values; a state vector prints each component with its unit;
+an entry whose value and σ are both below 10⁻¹⁴ of the largest entry is rounding noise and prints `0 ± 0` (D197).
+`norm`/`|v|`, `unit`, `abs`, `≈` (on values), `len`, components, `·`, `×`, `det`, `inverse`, `solve_linear`,
+matrix products and transposes propagate with correlations. For lists, `std` (the spread, with its uncertainty
+propagated) and `interp` (segment chosen by the values) now work; the other list functions already did.
+- **Why:** spec C7. Plain 6-figure entries follow v1's rule for lists of uncertain values, so a list and a vector
+look alike.
+- **Alternatives:** a common exponent for the whole vector (harder to read when entries differ in size).
+
+## D285. Multiple dispatch (C5): versions chosen at compile time by arity, dimensions and kinds
+- **What:** a second top-level definition of a function name with a different signature adds a *version*
+  (`energy(m [kg], v [m/s])`, `energy(λ [m])`, `energy(f [Hz])`); a call uses the version its checked argument
+  types fit. A parameter can now also name a kind, `r: vector [m]` (`number`, `vector`, `list`, `complex`),
+  in the `x: list [m]` syntax of `import c` (D275). Fit: the same number of arguments; a `[unit]` needs that
+  dimension (a number, list or complex; a vector only with `: vector`, every component); a kind needs that kind (a
+  list also fits `: number`, element by element); an unannotated parameter takes anything; a function argument
+  fits only an unannotated parameter the body calls, and a value never fits a parameter the body surely calls.
+  *Specificity* per parameter: 0 unannotated, +1 for a kind, +1 for a unit (a list in a `: number` slot scores
+  the kind 0). The chosen version must be at least as specific as every other fitting version in every parameter
+  and more specific in one; otherwise the call is ambiguous: a compile-time error naming two such versions with
+  their lines. No fit: a one-line error (`no version of energy takes (time [s])`, or `energy takes 1 or 2
+  arguments`) whose hint lists every version with its line. A *same signature* (arity, kinds, dimensions of the
+  units) replaces the earlier version, which is exactly v1's redefinition (`f(x) = 2 x` then `f(x) = 3 x`).
+- **Mechanism:** `FuncInfo.versions` (fermium-check `dispatch.rs`): each new definition gets a new list, a
+  snapshot of the versions visible there, so a function passed or bound earlier keeps what it meant. `call_user`
+  and `instantiate` call `pick_version` first; the chosen version is instantiated exactly like any function
+  (one IR function per version and argument types), so the IR, both back ends and `fermium build` are
+  unchanged and the choice costs nothing at run time. Inside a generic function the argument types are concrete
+  per instance, so each instance chooses again. When a dimension isn't known yet (the generic check of a function
+  never called), several fitting versions give "can't tell which version", which that check ignores. `f'`,
+  `d/dx f` and `∂/∂x f` of a function with versions are a new function whose versions are the derivatives of
+  the versions that have that parameter (or one parameter for `'`); plotting, `∫`, passing to functions and
+  `module.name` go through the same calls. Every version is checked when never called (`check_uncalled`) and
+  gets its module's name. The LSP records each call's choice (`Checker.dispatch_sites`), so hover over a call
+  shows the version used there; `print f` and the REPL's `vars` list all versions.
+- **Why:** it is Julia's core idea (spec C5), and in a units language the dimension is the natural thing to
+  dispatch on: the photon energy from a wavelength or a frequency is one name, as on paper. Choosing at compile
+  time keeps the zero-cost promise and needs no run-time type tags. Before C5, a redefinition silently replaced
+  the function; no conformance program depends on that for a *different* signature (the full suite is
+  unchanged, 3334 + 32), and keeping the replacement for the same signature keeps every v1 program the same.
+- **Alternatives:** Julia's rule of the most specific *type* with a type lattice (Fermium has only a handful of
+  kinds, and dimensions are exact, so per-parameter scores suffice); detecting ambiguity when the definitions are
+  made (it would reject pairs that no call ever makes ambiguous; the call-time error names both anyway);
+  run-time dispatch (not needed: every type is known at compile time); letting a unit annotation outrank a kind
+  (arbitrary; equal scores are reported as ambiguous instead). Not yet: differentiating a formula that calls a
+  function with versions, versions added to an imported function (still "defined again" as before), the Python
+  API's `fermium.compile` (checks arguments against the last version), and Fermium 1.5.
+
+## D280. The LLVM back end frees lists: a mark-and-sweep collector with frame epochs (spec C1, memory)
+- **What:** the compiled code's lists, text lists, texts made at run time and Obj values (the tree-walker's values it holds: lists of
+complex numbers or vectors, data sets) are registered when made and freed by a collector (`llvm/rt.rs`, memory
+section; code generation in `llvm/gc.rs`). Roots are variable slots: fm_main registers the module's list variables
+and its own slots, and every compiled function whose loops may make lists registers its list slots on entry
+(`fm_gc_enter`: an array of slot addresses on its stack) and unregisters on each return. Collections happen only at
+safe points, the top of an iteration of such a loop when the allocator has set a flag (`gc_flag`, one load and a
+cold branch), where the function holds no list in a register (a `for … in` keeps its copy of the list in a hidden
+registered slot). A collection frees only lists made after the innermost registered frame was entered (its
+epoch): a caller in the middle of an expression may hold a temporary (`f(2 xs, g(y))` while g loops), and those
+are all older. The main program's frame has epoch 0. A function without such loops is never interrupted by a
+collection, so it needs no frame; nothing is collected while a parallel for runs. A collection runs after as many
+allocations (or bytes) as were live after the last one, at least 20 000 lists or 64 MB. `FERMIUM_GC_STATS=1`
+reports collections and peak memory; `FERMIUM_GC_STRESS=1` collects at every safe point (the whole conformance
+suite agrees with the tree-walker under it: `rust/tools/llvm_diff.py --bin` a wrapper that sets it).
+- **Why:** the tree-walker's lists were already reference counted (DIVERGENCES "Lists are freed"), but the LLVM
+back end kept every list until the program ended, like v1's compiled code: a loop making 3×10⁶ small lists
+reached 300 MB (now 52 MB; `memory_loop.fm`, 10⁶ lists of 100 numbers, peaks at ~76 MB instead of ~800 MB).
+- **Alternatives:** reference counting in the generated code (retain/release on every store, argument and
+temporary: much more code in compile.rs, and a cost on every list operation); a conservative scan of the machine
+stack (not portable, and LLVM may keep only derived pointers); an arena per statement (lists stored in variables
+outlive statements). Texts made at run time (`"run " + str(i)`) are collected the same way: text-id slots are roots
+(kind 4), the ids in surviving text lists are marked, and a freed id is reused (the module's own texts are never
+freed); 2×10⁶ labels in a loop stay at ~55 MB.
+
+## D281. Lists of vectors, matrices, complex numbers and text (spec C1)
+- **What:** a list may hold vectors (all the same length and units: `[<1, 2> m, <3, 4> m]`, type `VList`), matrices
+(same size and units: `[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or `[A, B]`), complex numbers (`[1 + 2i, 3i]`,
+the existing `ComplexList`) and text. For each: written out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` (and `+=`),
+`len`, `for x in xs`, `clear`, `print`; a unit after the list applies to every element; a list of vectors or
+matrices times or over a number; `sum` and `mean` of a list of vectors or matrices. A variable set to `[]` becomes
+the kind of the first value pushed (`vel = []` then `push(vel, <1, 0> m/s)`), checked from then on (units per
+element type, sizes). The tree-walker holds these as values (`Value::VList`, `CList`, `TextList`); the LLVM back end
+holds lists of vectors and complex numbers as Obj values and hands the statements and expressions that use them to
+the tree-walker (mixed mode), so the rest of the program stays compiled (N-body code over lists of vectors runs
+compiled apart from those accesses).
+- **Why:** reaction networks and N-body problems are written as loops over lists of state vectors; before this,
+users kept one list per component.
+- **Kept from v1:** a list mixing real and complex numbers (`[1i, 2]`) is still the error "a list element must be
+a number, but it is a complex number" (conformance golden ae4d6aeeae8f); write `2 + 0i`. A list of vectors with a
+different unit per component is refused (put each component in its own list).
+- **Alternatives:** a general `List(Ty)` of any element type (nested lists, lists of lists): more checker
+surface than C1 needs; N-dimensional arrays (D283) cover grids. Compiling list-of-vector operations in LLVM
+natively (a flat buffer with a stride) is the performance follow-up.
+
+## D282. `solve` with a list of unknowns (spec C1)
+- **What:** an unknown whose initial value is a list of numbers or of vectors (one unit for all elements) is a list
+unknown: its state variables in the right-hand side are lists (`List`, `VList`), and its size is the initial value's
+length when the solve runs. The checker puts list unknowns' state slots last in the layout (`SolveExtra::lists`),
+so the other unknowns keep offsets known at compile time; a list unknown's `SolView` holds positions in the layout
+(`SolView::list`) and `N(t)` becomes the built-in `__sol_list(solution, slot, t, derivative?, k, format)`, which
+finds the offset from the sizes stored with the solution (`SolData::lens`). The tree-walker flattens the initial
+values, records each list state variable's size for the right side's evaluations, and checks that the right side
+returns as many numbers as the unknowns hold. `absolute` gives one value per unknown's units; a list unknown's value
+is repeated over its elements. The LLVM back end hands the whole `solve` statement to the tree-walker (mixed mode)
+and gets the solution back as a handle into the tree-walker's table (`from_value` of kind H); `N(t)` is then a
+built-in call, so the rest of the program stays compiled.
+- **Why:** spec C1: reaction networks and N-body problems written as loops. One equation per species (the radon
+chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
+- **Alternatives:** unrolling at compile time (needs the length at compile time, which a list built by `push` in a
+loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
+tree-walker speed now); `values(N)` and `plot N` (a list per step; left out for now, with a clear error; `N[end]` is
+`N` at the last time).
+
+## D283. N-dimensional arrays: `fill(value, n1, n2, …)`, `A[i, j, k]`, entry-by-entry arithmetic (spec C1)
+- **What:** a new type `Array { rank, dim }` (2 ≤ rank ≤ 4; every entry shares one unit; the shape is a run-time
+fact, the rank a compile-time one). `fill(value, n1, …, nr)` makes one (the value's unit is the array's; one size
+gives a list), `A[i, j, …]` reads an entry and `A[i, j, …] = x` (or `+=`) sets one, with exactly `rank` indexes;
+`+ - * /` work entry by entry with numbers and arrays of the same rank (same shape checked when it runs; `+`/`-` need
+the same units, `*`/`/` multiply them); `size(A)`, `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, `copy`. `B = A`
+shares the array, as lists do (D26). The parser now reads any number of indexes (`A[i, j, k]`, nested Index nodes as
+for `M[i, j]`), and `IndexAssign` keeps the ones after the second in a new field `rest` (empty for every program
+v1 accepts, so the AST dump and the formatter are unchanged for them). The tree-walker holds `Value::NdArr`
+(row-major); the LLVM back end holds arrays as Obj values: `A[i, j]` reads and writes (and the other array
+built-ins, `len`/`sum`/`mean` of a list of vectors, and `N(t)` of a list unknown) are calls through `fm_builtin` with
+the array as an argument (it is shared, so a write needs no copy back), and the other constructs that touch one are
+handed to the tree-walker; the collector counts an Obj's real size so arrays made in a loop are freed in time.
+- **Why:** spec C1 asks for N-dimensional arrays with units; physics grids (heat, diffusion, Poisson, lattice
+models) need more than 16×16 and more than 2 indexes. `fill(value, dims…)` reads like the notebook ("fill a 50×50
+grid with 300 K"), puts the unit in the value where the unit rule already applies, and is Julia's `fill(x, dims…)`.
+- **Alternatives:** growing matrices past 16×16 (they are straight-line code for linear algebra, D195, and their
+products and inverses mean something an array's don't); `zeros(n1, n2, n3) K` (zeros(r, c) is already a matrix; a
+unit after a call isn't the unit rule); `A[i][j][k]` only (kept working, but `A[i, j, k]` is what physicists write);
+NumPy-style broadcasting, slices and vectorized functions (next steps; each needs its own unit rules).
+
+## D290. C++ interop (C4): a generated extern "C" wrapper per import, compiled by the system's C++ compiler and cached
+- **What:** `import cpp "libphys.so" header "phys.hpp":` followed by `import c` signatures whose names may be
+qualified (`phys::Particle::compton_wavelength(m [kg]) -> [m]`) and may end with `as name`; `import cpp header
+"cmath":` without a library for header-only code. At check time Fermium writes one C++ file per import: for each
+signature an `extern "C"` function `fermium_cpp_k` taking C types (`double`, `int`, `double *`) that converts
+`&phys::f` to the function-pointer type of the declared signature (`double (*)(double, int)`, the result `double`
+or `int`) by passing it to a helper overloaded on that type (one helper per `const double *`/`double *` spelling
+of the lists, up to three lists), calls it inside `try`, and on an exception keeps "the C++ function phys::f threw
+an exception: what()" in a thread-local buffer and returns 0. `int fermium_cpp_error(char *, int)` hands the
+message over and clears it. The file is compiled by `$CXX`, else the first of c++, g++, clang++ that runs, with
+`-std=c++17 -O2 -fPIC -shared -MMD`, `-I` the program's and the header's folders, the library by its path with
+an rpath, `-Wl,--no-undefined` on Linux, then `$CXXFLAGS`. The result goes to `$FERMIUM_CACHE_DIR/cpp` (else
+`$XDG_CACHE_HOME/fermium/cpp`, `~/.cache/fermium/cpp`, macOS `~/Library/Caches/fermium/cpp`) as `w<FNV-1a 64 of
+the source, the named header's text, the library path, $CXX, $CXXFLAGS>.so`, written under a temporary name and
+renamed (parallel runs don't see half a file); it is reused while no file in its `-MMD` list and not the library
+is newer than it. Each signature then becomes a C3 function of the wrapper (`CFuncRef` with lang "C++"): units
+checked at every call, lists, elementwise maps, `fermium build`. `CCallSite.cpp` marks the call sites: after each
+call, eval_c.rs asks `fermium_cpp_error` and turns a message into a run-time error at the call's line, so the
+LLVM back end sends C++ calls through its callback (≈0.6 µs a call) instead of calling directly. Compiler errors
+are translated into one line on the signature they concern (the error's line in the generated file says which):
+undeclared name → "the header declares no function", a pointer-to-member in the output → "a member function,
+which needs an object", no conversion → "no overload of phys::f has the C++ type double(double, int)", ambiguous,
+missing header, undefined reference at link time → "the C++ library has no definition of phys::f(double)" (or,
+with no library, "defined nowhere"); anything else gives the first error and the path of a log with the full
+output.
+- **Why:** spec C4 ("through generated C wrappers"). The function-pointer conversion makes the declared signature
+choose among overloads exactly as C++ would for `static_cast<double(*)(double)>(&f)`, deduces template
+arguments, works for static member functions, and lets the compiler check the declaration against the header,
+which C3 can't. Mangled names are compiler-specific, so calling C++ symbols without a compiler would tie Fermium
+to one ABI's mangling and still not handle inline functions or templates. Catching exceptions in the wrapper is
+required: unwinding through Rust's frames is undefined behaviour. The cache keeps the check fast (a hit needs no
+compiler: ≈40 ms for a program); `-MMD` makes edits to included headers count. The error message crosses as a
+buffer through the existing C3 call machinery, so no new runtime entry points or dependencies were needed.
+- **Alternatives:** calling the function directly in the wrapper (`return phys::f(a0, a1)`: overload resolution
+with implicit conversions would silently pick `f(int)` for a double, or `f(float)`); `static_cast` to one
+pointer type (can't accept either `const double *` or `double *` for a list); parsing the header (libclang: a
+large native dependency); a C++ compiler at run time instead of check time (errors would come late); the
+direct LLVM call with an error flag checked after it (faster, but a new runtime path in the JIT and the AOT
+runtime; left for later); a per-program wrapper instead of per import (fewer files, but more recompiles).
+Known gaps: non-static member functions and objects, references, `float`/`long`/structs/strings/`std::vector`,
+`void` results, explicit template arguments, several headers per import, `import cpp` in modules, calls inside
+`units natural`, the playground; macOS linking is written but untested; `fermium build` executables load the
+wrapper from the cache by its build-time path.
+
+## D295. Derivatives of multi-line functions by automatic differentiation, on by default in v2.5 (spec C2)
+- **What:** `f'`, `f''`, `d/dx f`, `∂/∂v E`, `∇φ` and `∇²φ` of a function written over several lines (and of a
+one-line function or formula that calls one) are computed by forward-mode automatic differentiation as a source
+transformation (`fermium-sym/src/ad.rs`): each local that depends on the variable gets a tangent, assigned just
+before the local by the chain rule with fermium-sym's symbolic partial derivatives; `if`/`else` differentiate
+branch by branch, loops run the same iterations, a loop counter is a constant, `print` is dropped. Lists whose
+elements depend on the variable, `solve`, `plot`, `fit` and `propagate` inside the function are compile errors
+naming the statement; `∇·` and `∇×` still need a one-line vector formula. The groundwork was opt-in
+(`FERMIUM_C2=1`); v2.5 is the language change, so it is now always on, like C5 and C7. The two v1 goldens that
+pinned "can't differentiate through g: it's defined over several lines" are documented divergences
+(rust/DIVERGENCES.md, *v2.5: derivatives of multi-line functions (C2)*), their new outputs checked analytically.
+- **Why:** physicists write helper variables and loops; refusing their derivatives pushed them to finite
+differences, which lose half the digits. A source transformation keeps the result exact to rounding, reuses the
+one-line differentiator and both back ends (the derivative is an ordinary multi-line function), and a second
+derivative is the same transformation applied again.
+- **Alternatives:** dual numbers at run time (both back ends would need a dual type, and the LLVM back end's
+unboxed doubles would lose their speed); symbolic inlining of the body into one expression (blows up through
+loops, impossible through `while`); keeping the opt-in (v2.5 is where language changes land).
+
+## D296. `if` conditions on the unknowns of a solve: frozen during each step, switches located on the dense output (spec C2)
+- **What:** in an RK45 solve, each comparison `a < b` (`>`, `<=`, `>=`) in the equations that depends on the
+unknowns (also inside a one-line function the equation calls with them, which is inlined, and its `where`) is
+rewritten to read a branch flag from an extra state slot: 1 true, 0 false (derivative 0, so it is exactly
+constant within a step), 2 "evaluate as written". The checker also builds a lambda of each condition's a − b.
+The solver sets the flags at the start from the conditions; during a step the right side is the smooth branch
+of the flags; after each accepted step it evaluates the conditions on the step's dense output (DOPRI5's 4th-order
+interpolant), and where one no longer agrees with its flag it brackets the switch to rounding (Illinois regula
+falsi with a bisection fallback), ends the step there (a sample on each side of the switch), flips the flag and
+restarts. Sliding modes (Filippov): at a switch, dg/dt along both branches is estimated (a small Euler step of
+each); if both point into the surface, the flag becomes 3 and the solver's right side is α f_true + (1 − α)
+f_false with α making dg/dt = 0; the slide ends where one side's flow turns away (located the same way on the dense
+output), leaving to that side. Guards: a condition that still flips more than 20 times in a row, each within
+10⁻⁹ of the range of the last, is evaluated as written from then on; a stage whose frozen branch isn't finite (an
+expression undefined past the switch) is evaluated as written. The error control, first step and "step too small"
+look only at the user's slots (`OdeOpts.nerr`). Not covered: `step`/rk4, radau and bdf, sensitivity solves (C7),
+conditions in multi-line functions, and `abs`/`sign`/`min`/`max` (all evaluated as written, v1's behaviour).
+- **Why:** v1 evaluated the condition at every stage, so steps straddling a switch mixed the two branches and the
+error control could only shrink them; accuracy near the switch was that of the step it settled on (a piecewise
+spring lost 6×10⁻⁸ m over three periods at rtol 10⁻⁹; now 1.5×10⁻⁹) and friction at rest ("sticking") ended in
+"the step became too small". Freezing the branch (discontinuity locking) is what makes locating on the dense
+output exact: the interpolant is that of a smooth right side. Keeping the flags in the state makes them reach
+every place the right side is evaluated, in both back ends, with no new calling convention for compiled right
+sides. One golden (a white dwarf) moves by 2 units in its 8th digit towards the converged value (a documented
+divergence).
+- **Alternatives:** only locating the switch after the fact without freezing (the dense output of a step that
+straddles the switch is wrong, so the location is too); asking the user for an explicit event (the physics is
+already in the `if`); stiff-style restarts at every sign change of a live condition (chatters on sliding modes).
+
+## D297. `when lhs = rhs: x' = …` events that change the state in a solve (spec C2)
+- **What:** a solve clause `when lhs op rhs: target = value, …` (op `=` fires on every crossing of lhs − rhs,
+`<`/`<=` only when it falls through 0, `>`/`>=` only when it rises; targets are unknowns and their derivatives below
+the highest, values are computed from the state just before the event, units and shapes checked). The checker
+builds a g lambda and a new-state lambda with the right side's state; the solver (RK45 only: `step`, rk4, radau
+and bdf are a compile error) locates the crossing on the dense output like `until`, ends the step there, applies
+the new state (branch flags recomputed) and restarts; the solution keeps a sample on each side, so `y(t)` and plots
+show the jump. After an event its sign is taken from a small Euler step of the new state (a ball that bounced moves
+up), so the next crossing isn't missed however large the next step is. The same event firing again within 10⁻⁹ of
+the range is a Zeno point: an error naming the time. Several `when` and an `until` can be combined (the earliest
+wins). With uncertain values (±) a solve with `when` goes to C7's Monte Carlo (D278), with its warning: the
+linear sensitivity solve would need the jump of the sensitivities at a moving event time (a saltation matrix).
+In the sensitivity solve itself (C7, D277) the conditions of D296 are evaluated as written; a flag starts at 2
+("as written") in the program and the RK45 solver sets it from the condition at the start, so any evaluation of
+the right side outside the solver (C7's probes) sees the condition itself.
+- **Why:** bounces, impacts, resets and thresholds are the most common discontinuities in physics ODEs; the
+alternative in v2.0 was a loop of solves with `until`, which is hard to read. Locating on the dense output makes
+the impact times exact to rounding (the bouncing-ball test agrees with the analytic bounces to 6×10⁻¹⁴ m).
+- **Alternatives:** `if y < 0 m then y' = …` inside the equations (mixes the model with state changes, and an `if` in
+the equations already means a piecewise right side, D296); `on`/`event` keywords (`when` reads like physics on
+paper and wasn't a keyword); allowing the highest derivative as a target (it follows from the equation).
+
+## D298. Printed derivatives use the canonical tidy form when it is shorter (spec C2, better symbolic simplification)
+- **What:** `print f'` (and `f''`, `d/dx f`, `∂/∂x f`) shows the derivative's formula after fermium-sym's `tidy`
+(the SymPy-style canonical form, with fractions put together and common factors taken out, v1's `sympy_tidy`)
+when that is at least a fifth shorter than the plainly simplified formula; otherwise the plain formula, as in v1. Only the printed
+text changes: the derivative is still evaluated from the plainly simplified formula, so no computed number moves.
+Examples: `g(x) = x sin(x)` gives `g''(x) = 2cos(x) - x sin(x)` (v1: `cos(x) + (cos(x) - x sin(x))`),
+`x exp(x) - exp(x)` gives `x exp(x)` (v1: `(1 + x - 1)·exp(x)`), `√(1 + x²)` gives `1/(x² + 1)^(3/2)` for the
+second derivative, and `1/√(x² + y² + z²)` gives `∂V/∂x = -x/(x² + y² + z²)^(3/2)`. Tidy itself gained one case: a sum that, shifted to the lowest power of the sums in it, is a plain number (√Q − x²/√Q with Q = 1 + x² is 1/√Q).
+- **Why:** v1's derivative simplifier works node by node, so like terms from the product rule were never
+collected and nested fractions never put together; readability of printed formulas is goal (2). v1 already used
+`tidy` for ∇ results, so the form is familiar and tested (its answers are checked numerically in fermium-sym's
+tests). Printing only keeps every number bit-identical.
+- **Alternatives:** a like-term collector inside `simplify` (would also change the evaluated expressions, and so
+the last digits of computed derivatives across the conformance suite); always the tidy form when it is shorter at all (in the conformance suite it changed three v1
+formulas, two of them only by reordering or 1-2 characters, e.g. `1/(4 √(1 - (x/4)²))` → `1/(4 √(1 - x²/16))`;
+the fifth threshold keeps those as v1 printed them and changes only `(1 + x² - 2x²)/(1 + x²)²` →
+`(1 - x²)/(1 + x²)²`, a documented divergence).
+
+## D299. Parameter sweeps over solve: a `sweep` loop whose plots collect one curve per value (spec C2)
+- **What:** `sweep k in LIST` / `sweep k from a to b [step s]` + a block is parsed as the `for` loop it spells
+(AST `Sweep { body: [the loop] }`) and checked and run exactly like it; the difference is in its plots. A plot
+directly in the block (same function) gets the loop variable as an extra expression and its print format; at run
+time each iteration's curves are labelled `k = <value as print shows it>` (with the curve's own name in front when
+the plot has several curves) and kept; a statement after the loop saves each collected figure once. Both back ends
+(the LLVM back end hands plots to the tree-walker, which keeps the figures). The loop variable and results are the
+loop's, so collecting numbers (`push(periods, …)`) and printing work as in any loop.
+- **Why:** a sweep over a parameter of an ODE is a for loop around a solve, which already worked in v2.0 (`for k in
+[1, 2, 4] N/m`), but each plot then overwrote the previous figure; comparing curves for several parameter values
+is the point of a sweep. A keyword that reads like the physics ("sweep k in …") keeps the loop visible and costs
+nothing else to learn.
+- **Alternatives:** changing `for` so that plots in loops accumulate (would change v1 programs that save one figure
+per iteration on purpose, and their conformance output); a `solve … for k in […]` clause (mixes two ranges on one
+statement, and the results — values at times, event times — would need a new list-of-solutions type); a plot
+option (`plot x vs t for each k`) (the plot would have to know which loop it is in anyway).
+
+## D300. The ±1σ test also compares the linear prediction with the actual change, and kernels record every source they read (red team 14 #1)
+- **What:** D278's test accepted linear propagation when the second-order change d₂ was small next to the
+first-order one d₁. A jump at an uncertain value (`∫ (if x < a then 1 else 0) dx`, `sign(a - x)`, `floor(x + a)`,
+`solve x' = if t < a then 1 else 0`) has ∂f/∂a = 0 almost everywhere, so the linear contribution c is 0, while
+the result moves by d₁ = σ_a; and since the integrand returned a plain number, `a` wasn't even counted as a
+source. Now (1) while an integrand or right side is evaluated in the plain or linear pass, every uncertain
+variable it reads is recorded (`kernel_seen`, in the tree-walker's variable read, only for uncertain values and
+not inside Monte Carlo), so a kernel that reads `a` without returning an uncertain value goes to the uncertain
+path; an ODE whose right side reads a source only after t₀ (a branch not taken at the start) is solved again with
+that source's sensitivity; (2) linearity needs both one-sided changes to agree with the prediction:
+|y₊ − y₀ − c| and |y₀ − y₋ − c| and |d₂| all ≤ 10 % of s plus the kernel's noise, where s = max(|d₁|, |c|,
+scale). Otherwise Monte Carlo (both integrals and ODEs have it), with the usual warning. `∫ (if x < a then 1 else
+0) dx from 0 to 2`, a = 1.0 ± 0.1, is 1.00 ± 0.10 (NumPy Monte Carlo of clip(a, 0, 2): 1.00 ± 0.10); a ± written
+inside a kernel is now sampled as the source its linear pass made during the test (before, the test sampled a
+fresh zero stream for it, so the test compared nothing). A kernel that reads an uncertain value which doesn't move
+its result (a comparison far from where it switches) and never returns an uncertain value gives a plain number or
+a plain solution, as Fermium 1.5 does (`2`, not `2 ± 0`).
+- **Why:** the linear rule is only valid if it predicts the ±1σ change; comparing it with the change directly is
+the missing half of the test and costs nothing (the ±1σ runs were already made).
+- **Alternatives:** detecting discontinuities symbolically (branches, floor, sign, comparisons) and always going
+to Monte Carlo (misses user functions that hide them, and a far-away jump needn't matter); an error (the user
+asked for a result, and Monte Carlo is available on both paths).
+
+## D301. Foreign functions take plain numbers: ± is an error, as for `use python` in v1 (red team 14 #2)
+- **What:** a `use python` function given an uncertain value stops with v1's UncertainUse message ("this operation
+needs a plain number, but got an uncertain value (±); write value(x) …"), as `fermium-legacy` does; Fermium 2
+had passed the value alone. C, Fortran and C++ functions do the same with their own message (*sq is a C function,
+which takes plain numbers, but got an uncertain value (±)*, hint: value(x) or `propagate montecarlo`). Inside
+`propagate montecarlo` a C function is called once per sample (before, the first sample was passed for every
+sample, so the spread was lost silently); a C function with list parameters is refused there.
+- **Why:** unit safety and honesty first: dropping ± silently is the worst outcome, and an error matches v1 and
+the rest of the language's "needs a plain number" places.
+- **Alternatives:** linear propagation by numerical derivatives of the foreign function (a step to choose, the
+function may be noisy or not smooth, and it would differ from `use python`'s v1 behaviour).
+
+## D302. A later definition replaces every earlier version it covers (red team 14 #3)
+- **What:** D285 replaced only a version with the same signature, so `force(x [m]) = 3 N/m x` then
+`force(x) = 5 N/m x` kept both and `force(1 m)` still chose the annotated one (3 N) where Fermium 1.5 prints 5 N.
+Now a new top-level definition replaces every earlier version it *covers*: the same number of parameters, and
+each parameter at least as broad: unannotated covers anything; a kind covers the same kind with any unit or the
+same dimension; a unit alone covers the same dimension with any kind but `vector` (which needs `: vector`). A
+definition that doesn't cover an earlier version adds one, so a more specific definition written later still
+adds a version (`describe(x) = 0` then `describe(x [m]) = 1`). The REPL uses the same rule (it goes through
+the same checker).
+- **Why:** a v1 program only redefines functions to replace them; with this rule every v1 program behaves as
+in v1 (a v1 redefinition is always as broad as, or equivalent to, what it replaces unless it adds annotations),
+and the documented way to write versions (general first, specific later, or disjoint signatures) keeps working.
+- **Alternatives:** replace on the same arity only (would break `f(x: vector)` then `f(xs: list)`); warn instead
+of replacing (the v1 program still prints a different number).
+
+## D303. A declared `: list` parameter takes the list whole; `∂/∂y f(1, 3)` sees every version (red team 14 #4, #8)
+- **What:** `call_user` applied a function to each element of a list argument unless the body used the parameter
+as a list (`takes_lists`), so `s(x: list) = 2` then `s([1, 2])` failed with "s expects x to be a list, but got a
+plain number". An argument for a parameter declared `: list` is now never mapped over, and a function with such a
+parameter isn't mapped at all. `∂/∂y f(1, 3)` (read as `(∂/∂y f)(1, 3)`, D221) checked for the parameter y only
+in the last version of f; it now accepts any version that has it, and the call chooses among the derivatives.
+- **Why:** the declared kind is the user's statement of intent; dispatch (D285) already honoured it.
+- **Alternatives:** none considered.
+
+## D304. Monte Carlo ODE solutions: the nominal value, and one shared set of samples; turning points (red team 14 #6)
+- **What:** (1) a Monte Carlo solution's `x(t)` is the nominal solution's value (as a linear solve reports), with
+the spread and the per-source contributions from the regression on the samples; (2) the regression residual
+(the nonlinear part) of each value asked for is projected onto the residuals of the values asked for before (kept
+orthonormal over the samples, each an error source; up to 200 per solution, later ones independent), so values
+at different times, and closed forms built from them, stay linked through the same samples: for x' = −k x with
+k = 1.0 ± 0.4, `x(2) - x(1)^2` is 0.000 ± 0.064 (the σ is the linearization of the square; 0.029 ± 0.099 before),
+and asking twice gives the same value; (3) the ±1σ test of an ODE judges each component against its typical ±1σ
+change (the largest |d₁| or |c| over the 8 test times) instead of the change at that time, so a turning point
+(d₁ ≈ 0) no longer forces Monte Carlo. Decay with k = 1.0 ± 0.1 over 0–3 s and a pendulum with g, L known to
+0.5–1 % over a few periods stay linear, with no warning, matching the analytic σ.
+- **Why:** the value at the measured inputs is what every other path reports; a separate "nonlinear rest" source
+per (component, time) made arithmetic across times inconsistent; the per-time scale was the wrong yardstick.
+- **Alternatives:** storing the samples on every uncertain value (a different, much heavier representation);
+the Monte Carlo mean as the value (what `propagate montecarlo` reports, and still does).
+
+## D305. `fermium check` and the language server don't load foreign libraries (red team 14 #5)
+- **What:** `CheckOptions.no_load` (set by `fermium check` and the LSP): an `import c/fortran/cpp` library is
+not dlopen'ed; a library named by a path must exist, and each function's symbol is looked up in the file's ELF
+`.dynsym` (defined symbols; `cffi::file_has_symbol`, a small reader of 64-bit little-endian ELF). When the file
+can't be read that way (Mach-O, a bare name the system would find), the symbol check is left to the run. C++
+wrappers are still compiled (so their errors show in the editor) but not loaded. `fermium run` and
+`fermium build` load as before.
+- **Why:** loading a library runs its constructors, so opening a cloned .fm file in the editor ran code from the
+repository. Reading the symbol table keeps the useful "misspelt function" error without running anything.
+- **Alternatives:** skipping the symbol checks in check mode (loses the error in the editor); a Mach-O reader
+(later); not compiling C++ wrappers in check mode (safer against compiler bugs, but loses every C++ error in the
+editor; compilers are meant to take untrusted input).
+
+## D306. Replacing a version with same-dimension, different-meaning units warns (red team 14 #7)
+- **What:** when a definition replaces a version (D302) and a parameter's units differ in kind as in adding such
+values (Hz vs rad/s, Bq vs Hz or rad/s, Gy vs Sv, J vs N m; `units::unit_kind`), one warning: *E(ω [rad/s])
+replaces E(f [Hz]) (line 1): their units have the same dimensions, so they can't be two versions*, hint: another
+name, or convert inside one definition. `g(x [m])` then `g(y [km])` stays silent (an ordinary redefinition). No
+conformance program changes (the suite passes unchanged).
+- **Why:** Fermium treats rad as 1, so Hz and rad/s are one dimension; the new docs invite overloads by unit, and
+`E(1 GHz)` silently off by 2π is exactly the mistake the language exists to catch.
+- **Alternatives:** dispatching on the unit's spelling (would make units that are equal in SI behave
+differently); an error (v1 accepts the program).
+
+## D310. Performance (spec C6): faster compiled loops, bit for bit, and a compile cache
+- **What:** C6's changes to the LLVM back end and `fermium run`, each keeping every printed number bit for bit
+(conformance at its floor, `rust/tools/llvm_diff.py` without a new disagreement, `rust/c-cases/c6/*.fm` equal to
+Fermium 1.5's output with the tree-walker, with the LLVM back end, and with the LLVM back end with each change
+switched off in turn, and from the cache): the loop and SLP vectorizers on in-order sums (D311), if-conversion in
+compiled loops (D312), no collector safe point in loops that only read lists (D313), no stack check in leaf
+functions (D314), the C library's exp/log/sin/cos through LLVM intrinsics (D315), the samples of a compiled RK4
+solve mapped in one go (D316), and a compile cache for whole programs with their modules (D317).
+- **Measured:** A/B on this shared 4-core machine around 06:50 UTC (load average 2.4–3.1, 5 GB free), the
+v2.5 binary before C6 and the C6 binary run alternately, inner (compute-only) times, min / median of 11–15 runs.
+Such numbers move by 10–30 % between runs; the coordinator's quiet-machine run in benchmarks/RESULTS.md is the
+reference. forces (4 threads) 7.44 / 10.8 ms → 3.46 / 3.89 ms and forces (1 thread) 19.4 / 19.8 ms → 9.17 / 9.29
+ms (≈ 2.1–2.8×: the inner loop vectorized, D311–D313); spring_rk4 30.5 / 35.2 ms → 20.9 / 28.1 ms (D316; populate
+without huge pages 27.2 / 33.9, off 30.3 / 34.8); nbody 47.1 / 58.2 ms → 45.1 / 57.6 ms; blackbody 2.95 / 3.80 ms →
+2.83 / 3.46 ms; unit_loop 4.92 / 5.94 ms → 4.89 / 6.25 ms (unchanged within the noise); spring_adaptive 0.579 /
+0.649 ms → 0.669 / 0.750 ms (slower in each of three A/Bs, though the compiled code executes the same
+instructions under callgrind and the solver's Rust code is unchanged: code layout, not explained). Instructions
+executed by the compiled code (callgrind, deterministic): forces 304 M → 120 M, nbody 789 M → 623 M, blackbody's
+integrand 7.8 M → 6.0 M, unit_loop 52.5 M → 56.9 M (an in-order vectorized sum: more instructions, the same add
+chain), spring_rk4 and spring_adaptive unchanged. Against Julia's times in the last quiet run (RESULTS.md), these
+ratios suggest forces well below Julia on 1 and 4 threads, nbody and unit_loop at parity, spring_rk4 ≈ 1.5×,
+blackbody ≈ 1.4×, spring_adaptive ≈ 1.1×: the goal "faster than Julia on half the rows" is not clearly met (two
+clear wins, two ties of seven rows); the quiet run decides. Start-up: D317.
+- **Why:** spec C6 ("SIMD-friendly codegen and loop vectorization… Cache compiled modules"), within the priority
+order: every change is exact (no fast-math, no reassociation), so unit safety and the printed results don't move.
+- **Alternatives, and what was left:** D318.
+
+## D311. The vectorizers: SLP on, and in-order floating-point sums vectorized (`force-ordered-reductions`)
+- **What:** the pass pipeline (`default<O2>`) runs with SLP vectorization on (a PassBuilderOptions flag that LLVM's
+C API leaves off; clang turns it on at -O2) and with LLVM's option `-force-ordered-reductions`, set once per process
+through LLVMParseCommandLineOptions (`llvm::LLVM_OPTIONS`). With it the loop vectorizer takes a loop whose
+floating-point sum must keep its order (`s += f(j)`): the terms are computed several at a time (4 doubles with AVX2)
+and added one by one in the original order (`llvm.vector.reduce.fadd` without `reassoc`), so the sum is bit for bit
+the scalar loop's. Only sums made of `fadd` qualify, so where D312 applies a sum `v − e` is emitted as `v + (−e)`
+(the same number: IEEE subtraction is the addition of the negation). `FERMIUM_LLVM_ARGS` replaces the option list
+and `FERMIUM_LLVM_NOSLP=1` turns SLP off (experiments, and the tests that show each change keeps the results).
+- **Why:** the costly part of a loop like forces' (a √ and two divisions per pair) runs in vector registers while
+the sums stay exact. Julia doesn't vectorize these loops without `@simd`/`@fastmath` (which reassociate); Fermium
+does, exactly.
+- **Alternatives:** fast-math or `reassoc` flags (they change results: never); vectorizing only on request.
+
+## D312. If-conversion in compiled loops, and scratch variables
+- **What:** in the copy of a loop whose index checks were proven before it (D273's versioned loops), an `if` whose
+branches only assign numbers built from constants, numeric variables, + − × ÷, constant powers, a few pure
+built-ins (√, abs, floor, ceil, round, exp, sin, cos, tan, atan, sinh, cosh, tanh, asinh, expm1) and proven list
+reads is compiled without a branch (hoist::if_converted): both sides are computed whatever the condition, and a
+`select` keeps the right values. A sum `v = v + e` becomes `v + (c ? e : −0)` and `v = v − e` becomes
+`v + (c ? −e : −0)`: adding −0 gives v back exactly (±0, ±∞ and NaN included), and the sum stays an in-order
+reduction (D311). A *scratch* variable (hoist::scratch_vars: one whose every read, anywhere in the program, comes
+after an assignment to it earlier in the same run of statements, with no loop or `if` in between that could have
+set it) needs no select: nothing reads its value before it is set again. `FERMIUM_NO_IFCONV=1` switches this off.
+- **Why:** a branch in a loop body stops the loop vectorizer ("control flow cannot be substituted for a select").
+The select form is exact: nothing computed under a false condition is kept, and floating point doesn't trap (√ of
+a negative number is NaN in both forms, a division by zero ±∞ or NaN). forces' inner loop (`if j != i …`) is the
+case. The language already forbids reading, after an `if`, a variable set only inside it, which makes most such
+variables scratch variables.
+- **Alternatives:** masked loads (LLVM can't prove the list reads safe to speculate: their bounds are known only at
+run time); converting every `if` (slower when the branch is rarely taken and the loop doesn't vectorize: limited to
+the proven, check-free copies of loops, whose bodies are small).
+
+## D313. No collector safe point in loops that only read lists
+- **What:** gc.rs counted any expression of list type, even reading a list variable (`xs[i]`, `len(xs)`), as
+something that may allocate, so every loop over lists in `fm_main` had a safe point (a load, and a call to `fm_gc`
+when the collector asks). Reading a variable allocates nothing: an innermost loop that only reads lists now has no
+safe point, and a function whose loops only read lists needs no collector frame. Loops that contain other loops or
+write list elements keep theirs (a well-predicted branch per pass): without them LLVM turned nbody's loop nest into
+code ≈ 15 % slower (with or without vectorization, measured), so they stay until that is understood.
+- **Why:** the call in the loop body stopped the loop vectorizer (and register promotion) in forces' serial loop;
+no allocation can happen in such a loop, so the collector never needs to run there.
+
+## D314. No stack check in functions that call no function
+- **What:** a user function whose body calls no user function, directly or through a lambda (an integrand, sum,
+root, sample, a solve's right side), and has no statement the tree-walker runs (hoist::is_leaf), is compiled
+without the runaway-recursion check (its frame address compared with a limit).
+- **Why:** it can't be part of a recursion, and the check (a load, a compare and a branch to an error block) stayed
+in every inlined copy, e.g. in each of blackbody's 215 000 integrand calls. Runaway recursion is still caught in the
+recursive functions, and the message can no longer name a leaf as the function that "called itself".
+
+## D315. exp, log, sin and cos through LLVM's intrinsics
+- **What:** in the JIT, `exp`, `ln`/`log`, `sin` and `cos` of a number compile to `llvm.exp.f64` etc. instead of
+calls to the Rust shims `fm_exp`…; LLVM emits calls to the C library's `exp`/`log`/`sin`/`cos`, the very functions
+the shims call (Rust's `f64::exp` is `llvm.exp.f64` too), so the numbers are the same. `fermium build` keeps the
+shims. `FERMIUM_NO_MATH_INTRINSICS=1` switches this off.
+- **Why:** one call level less per evaluation, and LLVM knows the functions are pure (it computes a repeated one
+once and hoists one out of a loop).
+- **Alternatives:** vector math libraries (libmvec, SVML: different last bits, so never); an exp compiled into the
+module, as Julia does (a different function, with different last bits than the tree-walker's).
+
+## D316. The samples of a compiled RK4 solve are mapped in one go
+- **What:** fm_rk4_begin reserves the solution's arrays for all steps + 1 samples (t, y, y′: 40 MB for
+spring_rk4's 10⁶ steps of a 2-state system). For an array of 4 MiB or more it now asks Linux for huge pages
+(MADV_HUGEPAGE) and maps the pages at once (MADV_POPULATE_WRITE, Linux 5.14+). Advice only: an error, an older
+kernel or another system changes nothing. `FERMIUM_PREFAULT=0` (off) / `p` (populate only) / `h` (the default)
+for experiments.
+- **Why:** spring_rk4's steps take ≈ 15 ms; writing its samples into fresh memory took as long again, almost all
+of it page faults (one per 4 KiB page; measured with the stores left out: 15.5 ms against 33 ms). Julia's program
+stores nothing, which is most of why the row was 1.89×. The dense solution (x(t) between steps, x′(t), len(x)) is
+part of the language, so the samples stay.
+- **Caveat:** with the kernel's huge-page `defrag` setting `madvise` (this machine's), a huge-page request may
+compact memory first; on this loaded machine about one run in 20 took 100–250 ms longer. benchmarks/run.py
+reports medians.
+- **Alternatives:** storing fewer samples, or rebuilding them when the solution is first read (checkpointing; bit
+for bit possible, but the work would move out of the timed region: rejected as unfair to the comparison); not
+storing t (it is t0 + i·h except at the end; the solution object is shared with the tree-walker: a larger change);
+populate without huge pages (≈ 20 % of the gain).
+- **Changed at the v2.5 benchmark run (Sun 09:45 UTC): the default is now `p` (populate only).** In both full
+runs of benchmarks/run.py, spring_rk4 took 131 ms (8× Julia) every time it ran right after NumPy's 8-second
+benchmark. The huge-page request was slow after another process had churned through memory, with no compaction
+stall counted; populate alone took 28–33 ms after NumPy and alone, and Fermium 1.5 and Julia in the same position
+were unaffected. A consistent 30 ms beats a 25 ms best case with a 130 ms worst case. `h` stays available.
+
+## D317. The compile cache: a program's machine code, reused while its text and its modules are unchanged
+- **What:** `fermium run` saves the machine code the JIT generated for a program, with what the run time reads
+besides (native::blob, the format of `fermium build`'s executables), in `<cache>/jit/<key>.fmc`, beside C4's C++
+wrappers (`$FERMIUM_CACHE_DIR`, else `$XDG_CACHE_HOME/fermium`, else `~/.cache/fermium`). The key hashes this
+binary (version, size, modification time), LLVM's version, the CPU and its features, the code generator's
+switches, the program's file name, folder and text. An entry is used only if it is intact (magic, checksum), holds
+exactly the program's text, and every module file and fermium.toml the compilation read, and every one it looked
+for and didn't find, is as it was (contents hashed; a module file added where an import looked first would change
+what it finds). A hit parses, checks, generates and optimizes nothing: MCJIT loads the saved object through an
+`llvm::ObjectCache` (jit_cache.cpp; LLVM's C API has none) with the run time's callbacks mapped by name, and the
+program runs with the saved tables. The warnings of the check are saved and printed again. To make machine code
+movable between processes, a compilation for the cache reads the context pointer from the global `fm_ctx` (as
+`fermium build`'s code does) instead of a constant address (`Gen::new_reloc`). Direct calls to C functions and
+constructs the tree-walker runs hold addresses of the process, so programs with them, and programs that use
+Python, C or C++ or read data files when checked, are compiled every time. Writes are atomic (a temporary file
+renamed into place); a damaged entry is ignored and replaced; at most 400 entries are kept (the oldest go);
+`FERMIUM_NO_CACHE=1` turns it off; the LLVM dump switches bypass it.
+- **Why:** spec C6 "cache compiled modules". Fermium's modules are checked with the program that imports them
+(their functions are generic, instantiated with the caller's units) and compiled into one LLVM module, so the unit
+that can be cached is the program with its modules. What a run spends before the program starts is mostly LLVM:
+for a program that imports the six standard-library modules, parse 0.5 ms, check 5.5 ms, code generation and
+optimization 6 ms, JIT 8 ms (a moderately loaded machine); from the cache it runs in about 1 ms. Whole-process wall
+time, min / median of 15 alternating runs (load ≈ 3): benchmarks/fermium/startup.fm 14.2 / 15.8 ms compiled →
+7.6 / 8.7 ms cached; the standard-library program 24.9 / 27.5 → 7.8 / 8.9 ms; blackbody.fm 25.6 / 28.8 → 10.8 /
+12.1 ms; forces.fm 90.5 / 105 → 19.7 / 23.8 ms. What remains (≈ 7 ms) is starting the 100 MB binary and LLVM's
+initialization.
+- **Alternatives:** caching each module's checked form (saves only the checking, and the checked form is
+instantiated per caller); caching optimized LLVM bitcode (saves optimization, not code generation); ORC's object
+layers (not in LLVM 18's C API, and a larger change than MCJIT's ObjectCache); keying on modification times instead
+of contents (misses edits within one timestamp tick).
+
+## D318. What C6 tried and left
+- **Tried and dropped:** removing every safe point in loops over lists (nbody slower: D313 keeps the outer and
+writing loops'); `default<O3>` (D273: no gain).
+- **Left:** blackbody (≈ 1.5× Julia) spends its time in the quadrature's bookkeeping around each of its 215 000
+integrand calls and in glibc's exp; both programs evaluate about the same number of points (Julia 211 140, Fermium
+214 919). A batched integrand (the 15 Gauss–Kronrod nodes of a panel in one compiled call) would remove the call
+overhead and let the divisions vectorize; the adaptive algorithm must stay v1's (its results are the oracle's), so
+this is a change to fermium-runtime's quad and to the code generator (BACKLOG). spring_adaptive and unit_loop are
+at parity with Julia, bound by the ODE solver's bookkeeping and an in-order sum's latency.
+
+## D326. `fit`: steps that scale with a parameter that is tiny in SI (C8 finding; reworked after red team 16)
+
+- **What:** the finite-difference step for each parameter, in the iteration and for the covariance (the standard
+  errors, `err(x)`), is √ε·max(|p|, floor). The floor is 1, as in SciPy's default and v1, except for a parameter
+  whose starting value is nonzero and below 10⁻⁵ in SI: then it is that starting value's size.
+- **Why:** parameters are fitted in SI. A starting value such as `k = 8 MeV` (1.3×10⁻¹² J), `x0 = 0.1 fm` or
+  `τ = 3 ns` got steps of 1.5×10⁻⁸, up to 10⁴ times the parameter. The iteration stalled at the starting value
+  or stopped early (a fm Gaussian kept x0 = 0.1 fm; a ns decay gave τ = 3.014 ns where SciPy gives 2.964). The
+  standard errors were meaningless (8 ± 1000 MeV). Found by research/level_density (C8).
+- **First version, replaced:** only the covariance step became relative (√ε·|p|). Red team 16 showed two
+  problems with it: a parameter that ends near 0 (b = 2×10⁻¹⁶ in a straight-line fit) got NaN errors and a false
+  "may not have converged" warning, and tiny parameters still converged to the wrong point.
+- **Effect:** ordinary fits (starting values of 10⁻⁵ or more, or exactly 0) take exactly v1's steps. No
+  conformance output changed. The v1 fit fixture's `si_scale` case (τ = 1.3×10⁻⁶ s) now reaches the true
+  least-squares optimum, where v1 stopped short (a higher sum of squares). That case is compared with SciPy's
+  analytic-Jacobian optimum instead of v1: parameters agree to 6×10⁻¹¹, errors to 5×10⁻⁹.
+  Tests: tests/fit_errors.rs, and the red-team-16 programs (b → 0, fm Gaussian, ns decay).
+- **Limit:** a parameter that starts at exactly 0 but whose natural size is tiny in SI (a Gaussian centre
+  `x0 = 0 fm`) keeps the floor 1. It reports "standard error could not be estimated" and the warning, as v1
+  did. Give it a nonzero starting guess (`x0 = 0.01 fm`).
+- **Alternatives:** scaling every parameter by its starting value (changes v1's fitted digits for ordinary
+  fits); fixing Fermium 1.5 too (it is the frozen oracle whose outputs the goldens record).
+
+## D320. The C++ wrapper cache: a SHA-256 key of every compile input, a manifest checked on reuse, system headers without the program's folder, a private cache folder (red team 15 #1, #2)
+- **What:** (1) a header the program's folder has (or an absolute path) is included by its absolute path with
+`-I` the program's and the header's folders, as before; any other name (`cmath`, `math.h`, `Eigen/Dense`) is
+included as `<name>` with **no** folder of the program's on the include path, so a `cstdio` planted next to a
+program can't stand in for the real one, and installed headers are found where the compiler finds them (a
+missing one is the compiler's "not found", reported as "can't find the header" with a hint). (2) The cache key
+is the SHA-256 (in-tree, `sha256.rs`; the workspace had no hashing dependency) of the wrapper's source, whether
+the header is local or a system one, its absolute path and text, the `-I` folders, `CXX`, `CXXFLAGS`, `CPATH`,
+`CPLUS_INCLUDE_PATH`, `C_INCLUDE_PATH`, `LIBRARY_PATH`, `GCC_EXEC_PREFIX`, `COMPILER_PATH`, `SDKROOT`,
+`MACOSX_DEPLOYMENT_TARGET`, and the library as written and its path; 40 hex digits name the files. (3) Next to
+each wrapper a manifest records the compiler's identity (each word of the command resolved on the PATH, links
+followed, with its size and time), the SHA-256 of its `--version` output, the wrapper's size and SHA-256, the
+library's size and time, and every file of the compiler's `-MD` list (now `-MD`, so system headers count) with
+its size and time. A wrapper is reused only when the manifest is complete and all of it still matches; a
+compile writes the manifest last, after the wrapper. With no compiler on the PATH a wrapper whose manifest
+otherwise matches is still used (nothing else could be built, and the old test "a second run needs no compiler"
+holds). (4) The cache folders (`cpp/`, and `jit/` of C6) are made 0700; a folder owned by another user or
+writable by group or others is not used: one warning, then a fresh private folder in the temporary folder for
+this run (cachedir.rs). (5) The compiler runs in its own process group and is killed after
+`$FERMIUM_CXX_TIMEOUT` seconds (120 by default), with a one-line error.
+- **Why:** the old key (FNV-1a 64 of the source, the named header's text, the library path, `$CXX`,
+`$CXXFLAGS`) left out the program's folder, which was on the include path, so `fermium check` on one program
+planted a wrapper that another program with the same import loaded and ran; it also left out the include-path
+variables and the compiler, so a stale wrapper silently printed old constants. The compiler's own identity is
+checked in the manifest rather than hashed into the name so a cache hit spawns no process (≈25 ms per program).
+- **Alternatives:** running `c++ --version` (or the preprocessor) on every run to put its output or the resolved
+header list in the key (a process per import per run; the manifest catches the same changes); a content hash
+of every dependency on reuse (≈100 system headers per wrapper to read each run; size and time is what make and
+ninja trust); keeping `-I <program folder>` for system headers (what made the attack work); `-iquote` for the
+program's folders (would break headers that include their neighbours with `<…>`). Known limit: a file newly
+added to an include folder that shadows one the wrapper didn't read isn't noticed (the wrapper stays as it was,
+which runs nothing new).
+
+## D321. Passing a parameter on to a function's `: list` parameter makes it a list parameter (red team 15 #4)
+- **What:** `takes_lists` (is a list argument taken whole, or is the function applied to each element?) also
+counts a call in the body that passes a parameter, as is, to a user function whose parameter at that position is
+declared `: list` in any of its versions: `s(x: list) = 2`, `f(y) = s(y)`, `f([1, 2])` is 2, not `[2, 2]`.
+- **Why:** D303 made the declaration the user's statement of intent; a plain wrapper around such a function should
+keep it. Calls with the parameter inside an expression (`s(2 y)`) still count as element-wise.
+- **Alternatives:** inferring list-ness through any chain of calls (a fixed point over the call graph: more
+machinery for a rare case); requiring the wrapper to declare `: list` too (surprising after D303).
+
+## D322. A Monte Carlo integral shows the nominal value; -0.00 ± σ stays as in v1 (red team 15 #5)
+- **What:** an integral that falls back to Monte Carlo (D278, D300) reports the integral at the measured inputs
+(every source at z = 0, computed with plain numbers, no random numbers drawn), with the spread and per-source
+contributions from the regression on the samples, as D304 does for ODE solutions; before, it showed the
+regression's intercept (≈ the sample mean: 0.505 instead of 0.500 for ∫₀² x·[x < a] dx at a = 1.0 ± 0.1). A
+negative value that rounds to zero still prints `-0.00 ± 0.14`: Fermium 1.5 prints it so, and the v1 formatting
+fixture (fermium-units tests/parity.rs, 51 247 checks against Fermium 1.5) pins `(-0.0 ± 2.5)×10²⁵`, so
+normalizing it would break v1 parity; it was tried and reverted. Arithmetic
+on Monte Carlo results stays first order, as all uncertain arithmetic is (documented in reference §21).
+- **Why:** one rule for every result (the value at the measured inputs); v1 parity outranks the cosmetic
+"-0.00".
+- **Alternatives:** the sample mean everywhere (what `propagate montecarlo` reports, and still does); storing the
+samples with the value to make later arithmetic Monte Carlo too (a different, heavier representation).
+
+## D323. C++ usability: installed headers, a compile timeout, one-line exception messages, keyword names (red team 15 #6)
+- **What:** (1) a header the program's folder doesn't have is `#include <name>`d and found by the compiler on its
+own include path (`math.h`, `Eigen/Dense`); a header nobody has is the compiler's "No such file", reported as
+*can't find the header X* with a hint naming both places. Before, any name with a `/` or ending in `.h`/`.hpp`
+had to be in the program's folder. (2) The compiler runs in its own process group with a timeout
+(`$FERMIUM_CXX_TIMEOUT`, 120 s); on expiry the group is killed and the import is a one-line error, so `check` and
+the language server can't hang. (3) The wrapper turns control characters (line breaks, tabs, ESC, DEL) in an
+exception's `what()` into spaces before handing it over, so the message is one line and can't drive the
+terminal. (4) A name part that is a C++ keyword (`phys::new`, `operator`) is refused at the signature with a
+hint, before compiling. (5) macOS (PR #4's CI): the linker records a library by its install name, which for
+`c++ -shared -o libphys4.so` is the bare file name, so loading the wrapper failed ("Library not loaded:
+libphys4.so"); after linking, the wrapper's reference is changed to the library's absolute path
+(`otool -D` for the install name, `install_name_tool -change`, then `codesign --force --sign -`, since arm64
+refuses a modified binary with a stale signature). The linker's "Undefined symbols for architecture arm64:
+"phys::f(double)", referenced from:" is read as GNU ld's "undefined reference" (the same one-line errors); `-x
+none` is passed only before a library given by its path (clang warned about it after the last input), and the
+fallback message skips warning lines. Unit-tested with the captured macOS output; not yet run on macOS.
+Chosen over loading the library RTLD_GLOBAL first (dyld still resolves the wrapper's dependency by its install
+name) and `-undefined dynamic_lookup` (loses the link-time "no definition" error). Not done: telling `f(const double *)` from `f(double *)` apart when a header has both (a
+`: list` fits either; the import stops with *more than one overload has the C++ type*; documented).
+- **Why:** the reviewer's list; each was a raw compiler message, a hang, or terminal output from library code.
+- **Alternatives:** probing for headers with our own search (would disagree with the compiler's); a `: mutable
+list` spelling to choose `double *` (new syntax for a rare case; later if asked).
+
+## D324. The same-dimension warning knows Bq vs 1/s and rad/m vs 1/m, fits its hint to the pair, and has no line number in the REPL (red team 15 #7)
+- **What:** D306's classifier gives a bare inverse unit (`1/s`, `1/m`, `s⁻¹`, `s^-1`) the kind "plain", so
+`A(r [Bq])` then `A(k [1/s])` and `k(q [rad/m])` then `k(q [1/m])` warn; `Hz` then `1/s` doesn't (a hertz is one
+per second). The hint's example is ω = 2π f only for Hz vs rad/s, "an angle in rad counts as a plain number" for
+rad vs plain, and none otherwise (J vs N m). In the REPL, where every input is line 1, the message leaves out
+"(line N)".
+- **Why:** the reviewer's cases; a wrong example in a hint is worse than none.
+- **Alternatives:** a table of named pairs (the kinds already are one); numbering REPL inputs (a larger change to
+the REPL's diagnostics).
+
+## D330. The compile cache's key holds $HOME, the current folder and an absolute program folder (red team 16 #1, #2)
+- **What:** `import "~/m.fm"` expands `~` with `$HOME`, and relative paths resolve against the current folder, so the
+JIT cache key (D317) now includes `HOME` and the current folder; `fermium run --base-dir .` makes the folder absolute
+before it is used (for the key and for module resolution alike). Audit of the other inputs: the checker reads
+`CXX`/`CXXFLAGS`/`PATH`/`FERMIUM_CXX_TIMEOUT` only for C++ imports (never cached), `current_dir` for data files
+(never cached) and module paths (now keyed); codegen's switches were already keyed; `FERMIUM_THREADS`,
+`FERMIUM_PREFAULT` and `FERMIUM_GC_*` are read at run time, not compile time.
+- **Why:** a different `$HOME` or `--base-dir .` from another folder served the other program's machine code.
+- **Alternatives:** recording the unexpanded spec and its expansion as a dependency line (finer, but every future
+environment input would need its own line; the key is the simpler invariant).
+
+## D331. (u^a)^b is merged into u^(ab) only when b is an integer or a is not (red team 16 #5)
+- **What:** the simplifier merged `(x²)^(3/2)` into `x³` and `(x²)^(1/2)` into `x`, so f' printed `3x²` and
+evaluated wrongly for x < 0. Now it merges only when b is an integer, or a is not an integer (then u^a already
+needs u ≥ 0); otherwise the power stays and the derivative is `3x (x²)^(1/2)`.
+- **Why:** unit safety and correctness come before a shorter formula; (x²)^(1/2) is |x|.
+- **Alternatives:** rewriting to |x|^(ab) (SymPy leaves it unevaluated for real x too).
+
+## D332. Differentiating a recursive function is a one-line error (red team 16 #7)
+- **What:** the checker keeps the derivatives being made; one asked for again while it is made (a function that
+calls itself, directly or through another) stops with *can't differentiate f: it calls itself*.
+- **Why:** the derivative transformation recursed forever and overflowed the stack (exit 134), in `check` too.
+- **Alternatives:** differentiating the recursion as a recursive derivative function (needs a fixed point over the
+derivative's own definition; later if asked).
+
+## D333. A tangent that doesn't depend on x is a written 0 (red team 16 #6)
+- **What:** in AD of a multi-line function, the tangent of `E = 0 J` (and of a non-differentiated parameter) is a
+written `0`, which the checker lets take any unit, so `dE/dr = dE/dr + …` has the unit of E/r.
+- **Why:** a computed 0 is a plain number, and the accumulator's tangent then clashed with a force.
+- **Alternatives:** `0 * value / x` (right unit, but NaN at x = 0).
+
+## D334. `fmt` keeps a `*` where the other spelling would join a unit (red team 16 #8)
+- **What:** `--pretty` keeps `*` (not `·`) between a unit and a following unit name (`1.07 fm * A^(1/3)`: `fm·A`
+would be one unit), and `--ascii` writes `* hbar` where a symbol's ASCII spelling is a unit name right after a
+number or unit (`25 ħ / √(2μ|E|)` became `25 hbar / sqrt(…)`, read as the unit `hbar` and a different value). A test
+formats every program of research/, examples/ and rust/c-cases/ both ways and compares the parsed trees (positions
+and spelling-only facts aside). Fermium 1.5's formatter (the oracle, legacy/) is unchanged.
+- **Why:** `fmt` must change only spellings, never meaning.
+- **Alternatives:** bracketing the unit (`1.07 [fm] · A^(1/3)`: changes more text); re-parsing and comparing inside
+`fmt` itself (a safety net worth adding later; the corpus test covers the known forms).
+
+## D335. A solve with `when` takes Monte Carlo for every uncertain value it reads, the reset's too (red team 16 #9)
+- **What:** the sources of a `when`'s condition and reset are collected with the right side's, and a solve with
+`when` goes straight to Monte Carlo (as docs/reference.md already said). The fallback warning says why: *has a
+when event whose time moves with its uncertain inputs* (was "a plain number is needed (a loop bound, an index)",
+wrong here); rust/c-cases/c2/events_uncertain.json records the new text (that recorded warning was the wrong one).
+- **Why:** `k_e = 0.9 ± 0.01` used only in `when y = 0 m: y' = -k_e y'` was refused with v1's "can't use uncertain
+values" error.
+- **Alternatives:** sensitivities through the event (a saltation matrix at each event: exact for smooth crossings,
+more code; later if the Monte Carlo cost matters).
+
+## D336. Research corrections: fit's error scaling stated, the modified-Urca neutron branch (red team 16 #10–#12)
+- **What:** supernova_hubble's README explains that `fit` scales standard errors by √(χ²/dof) (SciPy's default) and
+gives the face-value errors (Ωm ± 0.018, ΩΛ > 0 at ≈ 6.1σ); docs/reference.md states the scaling. neutron_star_cooling
+now uses the neutron-branch emissivity 8.1×10²¹ (n_p/n₀)^(1/3) T₉⁸ (Yakovlev et al. 2001) with an assumed proton
+fraction x_p = 0.05, bare masses and α_nβ_n ≈ 1; expected_output.txt, the README table and the plot are regenerated.
+- **Why:** the reviewer's findings: the 9.2σ claim used errors shrunk by χ²/dof = 0.44, and the (n/n₀)^(2/3) form
+isn't the cited one.
+- **Alternatives:** a `fit` option for absolute errors (`absolute_sigma`); later if asked. Keeping (n/n₀)^(2/3) with
+a different citation (the neutron-branch form is the standard one).
+
+## D340. Gate C9: v2.5 is tagged locally and marked by the branch claude/v2.5-freeze; the owner pushes the tag
+
+- **What:** gate C9 (C1–C7 done, CI green, the suite grown with every feature) was met at `eb63425`: PR #4's CI
+  run 249 passed on Linux and macOS, and conformance is 3324 pass + 42 documented = 3366/3366, with 88 new v2.5
+  programs in `rust/c-cases/` plus a cargo test file per item. The tag was held back until the high-severity
+  findings of red teams 15 and 16 were fixed: a cache poisoning, and stale-cache wrong results. `v2.5` was then
+  created locally as an annotated tag on `eb63425`. Pushing it failed on every attempt: "the remote end hung up",
+  five tries with backoff, the same refusal as `v1.5` and `v2.0` (D263, D274). The branch `claude/v2.5-freeze`
+  marks the commit instead. The version is 2.5.0.
+- **For the owner:** `git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push origin v2.5` publishes
+  it, and the release workflow then builds the macOS and Linux binaries (that workflow has never run).
+- **Alternatives:** tagging at 0b19459 when CI first went green (before the round-16 fixes; rejected because the
+  JIT cache could print stale results); a GitHub release through the API (the same permission problem).
+- **Moved forward (Sun ~11:00 UTC):** after the gate, the benchmark runs found the huge-page slowdown (D316's
+  default changed to populate-only) and red team 17 found errors in RUN_REPORT, CHANGES_2.5 and the docs'
+  examples. A release built from eb63425 would miss the D316 fix, so `claude/v2.5-freeze` and the local `v2.5`
+  tag were moved to `2a2e334` after its CI passed (run 262, Linux and macOS). The branch only moved forward:
+  eb63425 is an ancestor. The tag push was refused again.

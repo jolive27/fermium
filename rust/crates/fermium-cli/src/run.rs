@@ -83,19 +83,40 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
         eprintln!("{}", e.format(Some(&src), Some(&name)));
         ExitCode::from(1)
     };
-    let (prog, pdiags) = match fermium_syntax::parse(&src, &[]) {
-        Ok(x) => x,
-        Err(e) => return fail(&e, &[]),
-    };
-    let t_parse = t0.elapsed();
-    let base = base_dir.map(str::to_string).unwrap_or_else(|| {
+    // `--base-dir .` is made absolute too: modules resolve against the absolute folder, and the compile cache's
+    // key must name that folder, not the literal "." (red team 16, D330)
+    let base = base_dir.map(|b| std::path::absolute(b).map_or(b.to_string(), |p| p.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| {
         // `fermium run prog.fm` has an empty parent: the current folder, absolute (like v1's os.path.abspath), so
         // `use python` finds a .py file beside the program
         let dir = std::path::Path::new(file).parent().filter(|p| !p.as_os_str().is_empty())
             .unwrap_or(std::path::Path::new("."));
         std::path::absolute(dir).unwrap_or(dir.to_path_buf()).to_string_lossy().into_owned()
     });
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    // the compile cache (D317): a program compiled by an earlier run runs from its saved machine code
+    // in a private folder only (D320): one that another user owns or can write isn't used
+    let cache = if !o.emit_llvm && backend != BackendChoice::Interp && !fermium_codegen::llvm::cache::off() {
+        match fermium_check::cachedir::private_dir("jit") {
+            Ok(dir) => Some((dir, fermium_codegen::llvm::cache::key(&src, &name, &base))),
+            Err((msg, hint)) => {
+                fermium_check::cachedir::warn_once(&msg, &hint);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    if let Some((dir, key)) = &cache {
+        if let Some(code) = run_cached(dir, key, &src, &name, o.time) {
+            return code;
+        }
+    }
+    let (prog, pdiags) = match fermium_syntax::parse(&src, &[]) {
+        Ok(x) => x,
+        Err(e) => return fail(&e, &[]),
+    };
+    let t_parse = t0.elapsed();
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: false };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,
         Err((e, d)) => {
@@ -105,8 +126,12 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
         }
     };
     let t_check = t0.elapsed() - t_parse;
+    let mut warnings = String::new();
     for w in pdiags.warnings.iter().chain(cdiags.warnings.iter()) {
-        eprintln!("{}", w.format(Some(&src), None));
+        let text = w.format(Some(&src), None);
+        eprintln!("{text}");
+        warnings += &text;
+        warnings.push('\n');
     }
     if o.emit_llvm {
         return match fermium_codegen::session::emit_llvm(&module) {
@@ -123,7 +148,17 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
     let t1 = std::time::Instant::now();
     let stdout = std::io::stdout();
     let mut printer = fermium_codegen::printer::StdPrinter::new(&module, std::io::BufWriter::new(stdout.lock()));
-    let r = run_module(&module, &mut printer, backend);
+    let deps = fermium_check::modules::deps();
+    let mut save = |c: fermium_codegen::llvm::Compiled| {
+        if let Some((dir, key)) = &cache {
+            fermium_codegen::llvm::cache::store(dir, key, &src, &deps.files, &warnings, &c.blob, &c.object);
+        }
+    };
+    let saver: Saver = match &cache {
+        Some(_) => Some((src.as_str(), name.as_str(), &mut save)),
+        None => None,
+    };
+    let r = run_module(&module, &mut printer, backend, saver);
     if matches!(r, Err(Stop::Error(_))) {
         fermium_codegen::eval::Printer::flush_partial(&mut printer);
     }
@@ -153,18 +188,64 @@ enum Stop {
     Error(RunError),
 }
 
-fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::eval::Printer, backend: BackendChoice)
-              -> Result<(), Stop> {
-    use fermium_codegen::Backend;
-    // FERMIUM_BACKEND_INFO=1: say which back end ran (stderr); =PATH: write its name to that file (tests)
-    let info = std::env::var("FERMIUM_BACKEND_INFO").ok();
-    let say = |what: &str| match info.as_deref() {
+/// Run a program from the compile cache, if it has an entry for this program whose dependencies are unchanged
+/// (D317); None when it hasn't (then nothing was printed or run).
+fn run_cached(dir: &std::path::Path, key: &str, src: &str, name: &str, time: bool) -> Option<ExitCode> {
+    use fermium_codegen::llvm::{blob, cache};
+    let t0 = std::time::Instant::now();
+    let e = cache::lookup(dir, key, src)?;
+    let b = blob::read(&e.blob).ok().filter(|b| !b.needs_ir())?;
+    let stdout = std::io::stdout();
+    let mut printer = fermium_codegen::printer::StdPrinter::new(&b.module, std::io::BufWriter::new(stdout.lock()));
+    // the warnings are printed once the cached code is known to load (else the compilation prints them)
+    let warnings = e.warnings.clone();
+    // and the back end is named before the program's output, as a compiled run does (its output is flushed after
+    // the name; red team 16 #16)
+    let mut warn = move || {
+        eprint!("{warnings}");
+        say_backend("llvm");
+    };
+    let r = match fermium_codegen::llvm::run_object(&b.module, b.tables, &e.object, &mut printer, &mut warn) {
+        Ok(r) => r,
+        Err(_) => return None,
+    };
+    if r.is_err() {
+        fermium_codegen::eval::Printer::flush_partial(&mut printer);
+    }
+    drop(printer);
+    if time {
+        eprintln!("time: compiled program from the cache, run {:.1} ms (loading and running)",
+                  t0.elapsed().as_secs_f64() * 1e3);
+    }
+    Some(match r {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            let d = Diagnostic { message: e.message, line: if e.line > 0 { Some(e.line) } else { None }, col: None,
+                                 length: 1, hint: e.hint, severity: fermium_syntax::Severity::Error, fix: vec![] };
+            eprintln!("{}", d.format(Some(src), Some(name)));
+            ExitCode::from(1)
+        }
+    })
+}
+
+/// FERMIUM_BACKEND_INFO=1: say which back end ran (stderr); =PATH: write its name to that file (tests)
+fn say_backend(what: &str) {
+    match std::env::var("FERMIUM_BACKEND_INFO").ok().as_deref() {
         Some("1") => eprintln!("fermium: backend {what}"),
         Some(path) => {
             let _ = std::fs::write(path, what);
         }
         None => {}
-    };
+    }
+}
+
+/// The compile cache's save callback for run_module (source, file name, callback).
+type Saver<'a> = Option<(&'a str, &'a str, &'a mut dyn FnMut(fermium_codegen::llvm::Compiled))>;
+
+fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::eval::Printer, backend: BackendChoice,
+              save: Saver) -> Result<(), Stop> {
+    use fermium_codegen::Backend;
+    let say = say_backend;
     // uncertain values (±, propagate montecarlo) run in the tree-walker, as v1 runs them in its interpreter (D122)
     let backend = if backend == BackendChoice::Auto && module.uses_uncertainty { BackendChoice::Interp } else { backend };
     if backend == BackendChoice::Interp {
@@ -172,7 +253,7 @@ fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::ev
     }
     if backend != BackendChoice::Interp {
         // run_module rejects a module it can't compile before running anything
-        match fermium_codegen::llvm::run_module(module, printer) {
+        match fermium_codegen::llvm::run_module_with(module, printer, save) {
             Ok(r) => {
                 say("llvm");
                 return r.map_err(Stop::Error);
@@ -191,7 +272,7 @@ fn run_module(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::ev
 /// Run a module with the default back end, without the FERMIUM_BACKEND_INFO report (`fermium doctor`).
 pub fn run_module_quiet(module: &fermium_ir::Module, printer: &mut dyn fermium_codegen::eval::Printer)
                         -> Result<(), RunError> {
-    match run_module(module, printer, BackendChoice::from_env()) {
+    match run_module(module, printer, BackendChoice::from_env(), None) {
         Ok(()) => Ok(()),
         Err(Stop::Error(e)) => Err(e),
         Err(Stop::Unsupported(why)) => Err(RunError { message: why, line: 0, hint: None }),

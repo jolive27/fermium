@@ -1,0 +1,27 @@
+# Which crossings fire a when (D297): x = cos(t) crosses 0 downwards at π/2 and upwards at 3π/2.
+# `when x < 0 m` fires only on the way down; `when x = 0 m` both ways. Here each firing doubles the speed.
+solve x'' = -x / (1 s²)
+  with x(0 s) = 1 m, x'(0 s) = 0 m/s
+  for t from 0 s to 10 s
+  when x < 0 m: x' = 2 x'
+solve u'' = -u / (1 s²)
+  with u(0 s) = 1 m, u'(0 s) = 0 m/s
+  for t from 0 s to 10 s
+  when u = 0 m: u' = 2 u'
+# down at π/2 (×2), up at 3π/2 (skipped), down at 5π/2 (×2): x(3π) = -4 m; u doubles three times: -8 m
+print x(3π * 1 s) to 9 digits, u(3π * 1 s) to 9 digits
+
+# a vector unknown: a ball thrown at 45° over a floor, 0.8 of the vertical speed kept at each bounce,
+# and a second when that stops the horizontal motion at a wall (two events in one solve, and until)
+g = 9.81 m/s²
+solve r'' = <0 m/s², -g>
+  with r(0 s) = <0, 0> m, r'(0 s) = <5, 5> m/s
+  for t from 0 s to 10 s
+  when r.y = 0 m: r' = <r'.x, -0.8 r'.y>
+  when r.x = 9 m: r' = <0 m/s, r'.y>
+  until t = 3 s
+# the first flight lasts 2·5/g; the second 0.8 times that
+t1 = 2*(5 m/s)/g
+print r(t1 + 0.4*t1).x to 9 digits, 5 m/s * 1.4 t1 to 9 digits
+print r(t1 + 0.4*t1).y to 9 digits, 4 m/s * 0.4 t1 - g (0.4 t1)²/2 to 9 digits
+print r(2.9 s).x to 9 digits

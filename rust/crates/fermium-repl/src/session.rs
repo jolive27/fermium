@@ -24,7 +24,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(base_dir: &str) -> Session {
-        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: true, source_name: String::new() };
+        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: true, source_name: String::new(), no_load: false };
         Session { checker: Checker::new(opts), state: ReplState::new(), known: vec![], programs: vec![], count: 0 }
     }
 
@@ -106,6 +106,11 @@ impl Session {
                         lines.push(format!("{name} = {s}"));
                     } else {
                         lines.push(format!("{name}: {}", ck.type_text(&sym.ty, sym.hint.as_ref())));
+                    }
+                }
+                Binding::Func(f) if ck.funcs[f].versions.len() > 1 => {
+                    for v in ck.versions_of(f) {
+                        lines.push(format!("{}: function", ck.version_sig(v))); // one line per version (C5)
                     }
                 }
                 Binding::Func(f) => {

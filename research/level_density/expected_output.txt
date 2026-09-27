@@ -1,0 +1,14 @@
+300 target nuclei, D0 from 0.000270 keV to 480 keV
+a from D0: median A/a = 7.90 MeV
+fit a·1 MeV = A/k_fit   (300 data points from table(A = Ac_list, a = as_fit))
+  k_fit = 8.275   (standard error 0.086)
+  rms residual = 3.22
+free Fermi gas: ε_F = 36.8 MeV  ⇒ a = A/(4ε_F/π²) = A/ 14.9 MeV  (empirical: A/8 MeV)
+  Z = 38 N = 50  (A = 88 ): a = 8.97 1/MeV  A/a = 9.81 MeV
+  Z = 50 N = 70  (A = 120 ): a = 14.3 1/MeV  A/a = 8.41 MeV
+  Z = 56 N = 82  (A = 138 ): a = 12.0 1/MeV  A/a = 11.5 MeV
+  Z = 82 N = 126  (A = 208 ): a = 8.19 1/MeV  A/a = 25.4 MeV
+  Z = 66 N = 98  (A = 164 ): a = 20.5 1/MeV  A/a = 7.98 MeV
+  Z = 68 N = 100  (A = 168 ): a = 20.8 1/MeV  A/a = 8.08 MeV
+  Z = 92 N = 147  (A = 239 ): a = 31.2 1/MeV  A/a = 7.67 MeV
+D0 predicted with a = A/( 8.27 MeV): log₁₀(D0_pred/D0_meas) mean 0.13  std 0.727   (D0 spans 6.25 decades)

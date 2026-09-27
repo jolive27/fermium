@@ -185,6 +185,37 @@ pub fn format_vec(p: &[f64], f: &PrintFmt) -> String {
     format!("<{}>{unit}", vals.join(", "))
 }
 
+/// A list of vectors or matrices (spec C1, D281): `[<1, 2>, <3, 4>] m`, `[[[1, 0], [0, 1]], …] N/m`. Every entry
+/// in one number style and the unit once, as for a matrix; `k` numbers per element (a vector of k components, or
+/// an r×c matrix with `cols` = c). More than 12 elements show the first 5 and the last 3, like a list.
+pub fn format_vlist(p: &[f64], k: usize, cols: Option<usize>, f: &PrintFmt) -> String {
+    let n = if k == 0 { 0 } else { p.len() / k };
+    let (vals, unit) = seq_values(f, p);
+    let elem = |i: usize| -> String {
+        let v = &vals[i * k..i * k + k];
+        match cols {
+            Some(c) if c > 0 => {
+                let rows: Vec<String> = v.chunks(c).map(|r| format!("[{}]", r.join(", "))).collect();
+                format!("[{}]", rows.join(", "))
+            }
+            _ => format!("<{}>", v.join(", ")),
+        }
+    };
+    let mut shown: Vec<String> = if n > 12 {
+        (0..5).chain(n - 3..n).map(elem).collect()
+    } else {
+        (0..n).map(elem).collect()
+    };
+    if n > 12 {
+        shown.insert(5, "…".into());
+    }
+    let mut s = format!("[{}]{unit}", shown.join(", "));
+    if n > 12 {
+        s.push_str(&format!("  ({n} {})", if cols.is_some() { "matrices" } else { "vectors" }));
+    }
+    s
+}
+
 /// A vector with a unit per component: `<1 m, 2 m/s>` (whole numbers bare only if every default one is).
 pub fn format_mvec(p: &[f64], fs: &[PrintFmt]) -> String {
     let mut xs = Vec::new();
@@ -332,4 +363,59 @@ pub fn format_uncertain_list(vals: &[(f64, Option<f64>)], un: &Unit) -> String {
     } else {
         format!("{s} {}", un.name)
     }
+}
+
+/// A vector or matrix with uncertain entries (Fermium 2.5, C7): each entry `(value, Some(σ))` or plain
+/// `(value, None)` in SI. One format for all entries: `<1.00 ± 0.10, 2.00 ± 0.20> m`, a matrix
+/// `[[1.00 ± 0.10, 2], [3, 4.00 ± 0.10]] N/m` (`shape` = rows, columns); one format per component (a state
+/// vector): `<1.00 ± 0.10 m, 2.0 ± 0.5 m/s>`. Uncertain entries round as a single uncertain number does (the
+/// uncertainty to 2 significant figures); plain entries as in a list of uncertain values (6 figures).
+pub fn format_uncertain_seq(vals: &[(f64, Option<f64>)], fmts: &[PrintFmt], shape: Option<(usize, usize)>) -> String {
+    // in one unit, an entry whose value and uncertainty are both below 10⁻¹⁴ of the largest entry is rounding
+    // noise (D197): 0 ± 0
+    let big = vals.iter().map(|(v, _)| v.abs()).fold(0.0, f64::max);
+    let denoised: Vec<(f64, Option<f64>)>;
+    let vals = if fmts.len() == 1 && big.is_finite() && big > 0.0 {
+        denoised = vals
+            .iter()
+            .map(|&(v, s)| {
+                if v.abs() < 1e-14 * big && s.is_none_or(|s| s < 1e-14 * big) { (0.0, s.map(|_| 0.0)) } else { (v, s) }
+            })
+            .collect();
+        &denoised[..]
+    } else {
+        vals
+    };
+    if fmts.len() > 1 && fmts.len() == vals.len() {
+        let parts: Vec<String> = vals
+            .iter()
+            .zip(fmts)
+            .map(|(&(v, s), f)| match s {
+                Some(s) => format_uncertain(v, s, &f.rdim, f.hint.as_ref()),
+                None => {
+                    let u = display_unit(&f.rdim, f.hint.as_ref());
+                    let t = format_number((v - u.offset) / u.factor, 6, true);
+                    if plain(&u.name) { t } else { format!("{t} {}", u.name) }
+                }
+            })
+            .collect();
+        return format!("<{}>", parts.join(", "));
+    }
+    let f = &fmts[0];
+    let u = display_unit(&f.rdim, f.hint.as_ref());
+    let parts: Vec<String> = vals
+        .iter()
+        .map(|&(v, s)| match s {
+            Some(s) => format_pm(v / u.factor, s / u.factor.abs()).0,
+            None => format_number(v / u.factor, 6, true),
+        })
+        .collect();
+    let body = match shape {
+        Some((r, c)) if r * c == parts.len() => {
+            let rows: Vec<String> = (0..r).map(|i| format!("[{}]", parts[i * c..i * c + c].join(", "))).collect();
+            format!("[{}]", rows.join(", "))
+        }
+        _ => format!("<{}>", parts.join(", ")),
+    };
+    if plain(&u.name) { body } else { format!("{body} {}", u.name) }
 }

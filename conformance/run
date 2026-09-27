@@ -300,15 +300,18 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
     ap.add_argument("--min", type=int, default=None,
                     help="exit 0 if at least this many pass (CI's ratchet for the Rust implementation)")
-    ap.add_argument("--skip-file", help="a file of case ids (one per line, # comments) not run here; they are listed in "
-                                        "the report (CI: the oracle's BLAS-kernel-dependent cases on another CPU type)")
+    ap.add_argument("--skip-file", action="append", default=[],
+                    help="a file of case ids (one per line, # comments) not run here; they are listed in the report "
+                         "(CI: the oracle's BLAS-kernel-dependent cases on another CPU type, and its thread-timing-"
+                         "dependent cases); may be given more than once")
     a = ap.parse_args()
     files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
     skipped = []
     if a.skip_file:
-        ids = {ln.split("#")[0].strip() for ln in open(a.skip_file, encoding="utf-8")} - {""}
+        ids = {ln.split("#")[0].strip() for sf in a.skip_file for ln in open(sf, encoding="utf-8")} - {""}
         skipped = sorted(os.path.basename(f)[:-3] for f in files if os.path.basename(f)[:-3] in ids)
         files = [f for f in files if os.path.basename(f)[:-3] not in ids]
+    skip_names = ", ".join(os.path.relpath(sf, ROOT) for sf in a.skip_file)
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=a.j) as ex:
         results = list(ex.map(one, [(a.impl, a.bin, f) for f in files], chunksize=4))
@@ -325,7 +328,7 @@ def main():
                 f"output the divergence describes): **{passed + documented} of {total} "
                 f"({100.0 * (passed + documented) / max(total, 1):.1f} %) pass or are documented.**" if documented else ""),
              "",
-             *([f"**{len(skipped)} cases not run here** (--skip-file {os.path.relpath(a.skip_file, ROOT)}): "
+             *([f"**{len(skipped)} cases not run here** (--skip-file {skip_names}): "
                 + " ".join(skipped), ""] if skipped else []),
              "The suite (conformance/cases, see conformance/MANIFEST.md) was harvested from Fermium 1.5: every program the",
              "test suite runs, every example, rosetta, gauntlet and research program, the benchmarks, and John's Appendix 1",

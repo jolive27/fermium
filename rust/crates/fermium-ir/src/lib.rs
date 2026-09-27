@@ -185,6 +185,10 @@ pub enum PrintItem {
     MixedVec(Expr, Vec<usize>),
     Mat(Expr, usize),
     ComplexList(Expr, usize),
+    /// A list of vectors or matrices (the element format).
+    VList(Expr, usize),
+    /// An N-dimensional array (D283).
+    Array(Expr, usize),
     TextList(Expr),
     Bool(Expr),
     /// A constant text (index into the text table).
@@ -243,6 +247,17 @@ pub struct SolveExtra {
     pub xname: usize,
     /// the right side reads t itself (D40)
     pub tdep: bool,
+    /// conditions on the unknowns in the right side (spec C2, D296): a lambda whose outputs are each condition's
+    /// lhs − rhs, the comparison of each (0 `>`, 1 `>=`, 2 `<`, 3 `<=`), and the state slot of the first one's
+    /// branch flag (the right side reads the branch from the state: 1 true, 0 false, 2 evaluate the condition)
+    pub switch: Option<LambdaId>,
+    pub sw_ops: Vec<u8>,
+    pub sw_slot0: usize,
+    /// the state slots the error control and "the step became too small" look at (0: all): the user's unknowns,
+    /// not the branch flags
+    pub nuser: usize,
+    /// `when lhs = rhs: x' = …` events (spec C2, D297)
+    pub whens: Vec<WhenIr>,
     /// eigenvalue problems (method "eigen", D82): states, grid, 0 = matrix / 1 = shooting
     pub nstates: usize,
     pub grid: usize,
@@ -256,6 +271,20 @@ pub struct SolveExtra {
     pub is_complex: bool,
     /// the source line (PDE warnings)
     pub line: u32,
+    /// some unknowns are lists (spec C1, D282): their sizes come from the initial values when the solve runs
+    /// (the list unknowns' slots are last in the layout; `atol` then has one value per list slot)
+    pub lists: bool,
+}
+
+/// One `when` event of a solve (D297): g = lhs − rhs (an Ode lambda with one output), the new state (an Ode
+/// lambda with one output per state slot), which crossings fire it (0 either way, 1 when g becomes ≥ 0, 2 when it
+/// becomes ≤ 0), and the text id of its description (for the "events accumulate" error).
+#[derive(Clone, Debug)]
+pub struct WhenIr {
+    pub g: LambdaId,
+    pub reset: LambdaId,
+    pub dir: u8,
+    pub text: usize,
 }
 
 /// What the back ends need to run a parallel for (D152): the sums (added up block by block, in order), the lists
@@ -334,6 +363,55 @@ pub struct Tables {
     pub pycalls: Vec<PyCallSite>,
     /// the program's folder, put on Python's sys.path when a module is imported
     pub py_base_dir: String,
+    /// calls of C and Fortran functions (`import c`, C3, D275), indexed by the first argument of the `ccall`
+    /// built-in
+    pub ccalls: Vec<CCallSite>,
+}
+
+/// How a C or Fortran function's parameter is passed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum CParamKind {
+    /// a double: SI value / the declared unit's factor
+    #[default]
+    Num,
+    /// a C int (a whole number)
+    Int,
+    /// a pointer to the elements of a list, each / the factor
+    List,
+    /// the length of the list parameter `len_of`, as an int
+    Len,
+}
+
+/// One parameter of a C call site.
+#[derive(Clone, Debug, Default)]
+pub struct CParam {
+    pub name: String,
+    pub kind: CParamKind,
+    pub fac: f64,
+    /// for Len: the index (among the parameters) of the list it measures
+    pub len_of: usize,
+}
+
+/// A call site of a C or Fortran function: where it is, how each parameter is passed, and the result.
+/// The IR built-in `ccall` gets the site's index, then one argument per parameter that isn't a `len`.
+#[derive(Clone, Debug, Default)]
+pub struct CCallSite {
+    /// the library's path as dlopen'ed at check time (absolute when the program's folder is known)
+    pub lib: String,
+    pub symbol: String,
+    /// the name as written in the program (for messages)
+    pub display: String,
+    /// Fortran: every argument by reference
+    pub by_ref: bool,
+    pub params: Vec<CParam>,
+    /// the result is an int (else a double)
+    pub rint: bool,
+    pub rfac: f64,
+    /// some number parameter gets a list: the call is made per element and gives a list
+    pub map: bool,
+    /// a generated C++ wrapper (C4, D290): after each call, `fermium_cpp_error` in the same library says whether the
+    /// C++ function threw
+    pub cpp: bool,
 }
 
 /// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
@@ -499,7 +577,8 @@ pub fn stmt_parts(s: &Stmt) -> (Vec<&Expr>, Vec<&Vec<Stmt>>) {
 pub fn print_item_expr(it: &PrintItem) -> Option<&Expr> {
     match it {
         PrintItem::Num(e, _) | PrintItem::List(e, _) | PrintItem::Complex(e, _) | PrintItem::Vec(e, _)
-        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::TextList(e)
+        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::VList(e, _) | PrintItem::Array(e, _)
+        | PrintItem::TextList(e)
         | PrintItem::Bool(e) | PrintItem::TextVar(e) | PrintItem::Data(e, _) => Some(e),
         PrintItem::Text(_) => None,
     }

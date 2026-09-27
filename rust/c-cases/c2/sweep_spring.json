@@ -1,0 +1,5 @@
+{
+ "stdout": "1 N/m -0.989992 m true\n2 N/m -0.452662 m true\n4 N/m 0.960170 m true\nplot saved to sweep_spring.svg\nplot saved to sweep_pendulum.svg\n[1.42, 2.01, 2.46, 2.84] s\ntrue\nplot saved to sweep_decay.svg\n6\n",
+ "stderr": "",
+ "exit": 0
+}

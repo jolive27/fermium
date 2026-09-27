@@ -11,9 +11,11 @@ mod eval_memo;
 mod eval_more;
 mod eval_par;
 mod eval_py;
+mod eval_c;
 mod eval_solve;
 mod eval_unc;
 mod eval_unc_la;
+mod eval_unc_kern;
 mod eval_vecmat;
 pub mod printer;
 pub mod varmap;
@@ -69,6 +71,9 @@ impl<P: Printer + ?Sized> Printer for &mut P {
     }
     fn clist(&mut self, fmt: usize, v: &[(f64, f64)]) {
         (**self).clist(fmt, v)
+    }
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>) {
+        (**self).vlist(fmt, v, k, cols)
     }
     fn boolean(&mut self, b: bool) {
         (**self).boolean(b)

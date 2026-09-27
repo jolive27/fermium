@@ -72,12 +72,14 @@ fn solve(cols: &[Dim], target: &Dim) -> Vec<R> {
         let p = (c..n).find(|&r| !a[r][c].is_zero()).expect("basis");
         a.swap(c, p);
         let piv = a[c][c];
-        a[c] = a[c].iter().map(|x| x / piv).collect();
+        // checked (red team 13): a huge exponent in the target is recorded, not wrapped
+        use crate::exact::{div_or_record, mul_or_record, sub_or_record};
+        a[c] = a[c].iter().map(|x| div_or_record(*x, piv, None)).collect();
         for r in 0..n {
             if r != c && !a[r][c].is_zero() {
                 let f = a[r][c];
                 let rc = a[c].clone();
-                a[r] = a[r].iter().zip(rc.iter()).map(|(x, y)| x - f * y).collect();
+                a[r] = a[r].iter().zip(rc.iter()).map(|(x, y)| sub_or_record(*x, mul_or_record(f, *y, None), None)).collect();
             }
         }
     }

@@ -79,6 +79,10 @@ impl<W: Write> Printer for StdPrinter<W> {
         let s = format_clist(v, &f.rdim, f.hint.as_ref(), f.sf, f.direct, Some(v.len()));
         self.line.push(s);
     }
+    fn vlist(&mut self, fmt: usize, v: &[f64], k: usize, cols: Option<usize>) {
+        let s = fermium_units::quantity::format_vlist(v, k, cols, &self.fmts[fmt]);
+        self.line.push(s);
+    }
     fn boolean(&mut self, b: bool) {
         self.line.push(if b { "true" } else { "false" }.into());
     }
@@ -97,4 +101,65 @@ impl<W: Write> Printer for StdPrinter<W> {
             self.end();
         }
     }
+}
+
+/// An N-dimensional array as print shows it (D283): nested brackets and the unit once, like a matrix, up to 64
+/// entries; a larger one as its shape and range: `50×50 array, from 250 K to 300 K`.
+pub fn format_array(module: &Module, fmt: usize, a: &crate::eval::NdArray) -> String {
+    let f = print_fmt(&module.tables.fmts[fmt]);
+    if a.data.len() <= 64 && !a.data.is_empty() && a.shape.len() >= 2 {
+        let r: usize = a.shape[..a.shape.len() - 1].iter().product();
+        let c = a.shape[a.shape.len() - 1];
+        let flat = format_mat(&a.data, r, c, &f);
+        if a.shape.len() == 2 {
+            return flat;
+        }
+        // regroup the rows: [[r1], [r2], …] → [[[r1], [r2]], …] for each leading index
+        let (body, unit) = match flat.rfind(']') {
+            Some(k) => (flat[1..k].to_string(), flat[k + 1..].to_string()),
+            None => return flat,
+        };
+        let rows: Vec<&str> = split_rows(&body);
+        let mut groups: Vec<String> = rows.iter().map(|s| s.to_string()).collect();
+        for &n in a.shape[1..a.shape.len() - 1].iter().rev() {
+            groups = groups.chunks(n).map(|g| format!("[{}]", g.join(", "))).collect();
+        }
+        return format!("[{}]{unit}", groups.join(", "));
+    }
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for &x in &a.data {
+        lo = lo.min(x);
+        hi = hi.max(x);
+    }
+    let shape = crate::eval::shape_text(&a.shape);
+    if a.data.is_empty() {
+        return format!("{shape} array (empty)");
+    }
+    format!("{shape} array, from {} to {}", format_value(lo, &f), format_value(hi, &f))
+}
+
+/// The top-level "[…]" groups of "[a, b], [c, d]".
+fn split_rows(s: &str) -> Vec<&str> {
+    let mut out = vec![];
+    let (mut depth, mut start) = (0i32, None);
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '[' => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(st) = start.take() {
+                        out.push(&s[st..=i]);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }

@@ -88,7 +88,7 @@ fn run(key: &str) -> Result<(Sol, f64), Fail> {
     let (name, method) = key.split_once('/').unwrap();
     let m = if method == "radau" { StiffMethod::Radau } else { StiffMethod::Bdf };
     let (mut f, y0, t0, t1, rtol, mut ev, atol) = case(name);
-    let opts = OdeOpts { rtol, atol: atol.as_deref(), tname: -1.0, evtext: -1.0, tdep: false };
+    let opts = OdeOpts { rtol, atol: atol.as_deref(), tname: -1.0, evtext: -1.0, tdep: false, nerr: 0 };
     let evr: Option<EventFn<'_>> = ev.as_mut().map(|b| &mut **b as EventFn<'_>);
     Ok((stiff_solve(&mut f, &y0, t0, t1, m, evr, opts)?, t0))
 }

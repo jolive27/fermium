@@ -1,0 +1,9 @@
+# the declared signature picks the overload; as names each one in the program
+import cpp "libphys4.so" header "phys.hpp":
+    phys::energy(m [kg]) -> [J] as rest_energy
+    phys::energy(m [kg], v [m/s]) -> [J] as moving_energy
+    phys::cube(x [m]) -> [m³]
+    phys::cube(n: int) -> int as cube_int
+print rest_energy(1 g) to 6 digits, rest_energy(1 g) == 1 g c²
+print moving_energy(1 g, 0 m/s) == rest_energy(1 g), moving_energy(1 g, 0.6 c) / rest_energy(1 g)
+print cube(2 m), cube(0.5 m), cube_int(3), cube_int(-2)     # a function template, deduced from the signature

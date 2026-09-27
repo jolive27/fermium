@@ -112,6 +112,8 @@ impl<'c, 'm> Gen<'c, 'm> {
             method: method.clone(), rtol: x.rtol, atol: x.atol.clone(), tname: x.tname, evtext: x.evtext, tdep: x.tdep,
             tfmt: x.tfmt, env_kinds: vec![], nstates: x.nstates, grid: x.grid, eig_method: x.eig_method, order: x.order,
             pmethod: x.pmethod, bc: x.bc, is_complex: x.is_complex, xname: x.xname, pde_line: x.line,
+            sw_ops: x.sw_ops.clone(), sw_slot0: x.sw_slot0, nuser: x.nuser,
+            whens: x.whens.iter().map(|w| (w.dir, w.text)).collect(),
         };
         let h = match method.as_str() {
             "eigen" => {
@@ -172,13 +174,36 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                     None => (self.ptrt().const_null().into(), self.ptrt().const_null().into()),
                 };
+                // the conditions' and events' functions (D296, D297), for RK45
+                let mut hookfs = vec![];
+                if method == "rk45" {
+                    if let Some(l) = x.switch {
+                        hookfs.push(self.ode_lambda(l)?);
+                    }
+                    for w in &x.whens {
+                        hookfs.push(self.ode_lambda(w.g)?);
+                        hookfs.push(self.ode_lambda(w.reset)?);
+                    }
+                }
+                let hookty = self.cx.struct_type(&[self.ptrt().into(), self.ptrt().into()], false);
+                let harr = hookty.array_type(hookfs.len().max(1) as u32);
+                let hp = self.alloca(harr.into(), "hooks")?;
+                for (i, (hf, henv, _)) in hookfs.iter().enumerate() {
+                    let at = unsafe { bl!(self.b.build_gep(harr, hp, &[self.i64c(0), self.i64c(i as i64)], "hk")) };
+                    let fa = bl!(self.b.build_struct_gep(hookty, at, 0, "hkf"));
+                    bl!(self.b.build_store(fa, self.fn_ptr(*hf)));
+                    let ea = bl!(self.b.build_struct_gep(hookty, at, 1, "hke"));
+                    bl!(self.b.build_store(ea, *henv));
+                }
+                let nh = self.i64c(hookfs.len() as i64);
                 let id = self.add_site(OdeSite { env_kinds: kinds, ..site });
                 let line = self.i32c(s.line as i64);
                 if method == "rk4" && x.event.is_none() && (1..=RK4_INLINE_MAX).contains(&n) {
                     self.rk4_inline(id, f, env, y0p, &ys, a, b, h0, line)?
                 } else {
                 self.call("fm_ode", &[ctx, self.i64c(id).into(), self.fn_ptr(f), env.into(), evf, evenv, y0p.into(),
-                                      self.i64c(n as i64).into(), a.into(), b.into(), h0.into(), line.into()])?.unwrap()
+                                      self.i64c(n as i64).into(), a.into(), b.into(), h0.into(), line.into(),
+                                      hp.into(), nh.into()])?.unwrap()
                 }
             }
         };

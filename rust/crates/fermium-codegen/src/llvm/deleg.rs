@@ -161,9 +161,36 @@ impl<'c, 'm> Gen<'c, 'm> {
                     }
                 }
             }
+            // lists of vectors, matrices and complex numbers (D281): what the statement sets goes back
+            StmtKind::Push(sym, _) | StmtKind::IndexAssign(sym, _, _) | StmtKind::Clear(sym) => writes.push(*sym),
+            StmtKind::ForIn(..) | StmtKind::Print(_) => {
+                let (_, blocks) = stmt_parts(s);
+                if blocks.iter().any(|b| has_jump(b)) {
+                    return Err("a return, break or continue in a loop the tree-walker runs".into());
+                }
+                let mut set = HashSet::new();
+                super::par::assigned(self.m, std::slice::from_ref(s), &mut set);
+                changed(std::slice::from_ref(s), &mut set);
+                let mut set: Vec<SymId> = set.into_iter().collect();
+                set.sort_unstable();
+                writes.extend(set);
+            }
+            StmtKind::Solve { x, .. } if x.lists => {}
             _ => return Err("this statement can't be handed to the tree-walker".into()),
         }
-        w.block(self.m, std::slice::from_ref(s));
+        if let StmtKind::Solve { sol, rhs, x, .. } = &s.kind {
+            // a solve with a list of unknowns (D282): its right side, stop condition and starting values
+            w.lambda(self.m, *rhs);
+            if let Some(ev) = x.event {
+                w.lambda(self.m, ev);
+            }
+            for e in stmt_parts(s).0 {
+                w.expr(self.m, e);
+            }
+            writes.push(*sol);
+        } else {
+            w.block(self.m, std::slice::from_ref(s));
+        }
         self.delegate(s as *const Stmt as usize, true, w, writes, Kind::Void).map(|_| ())
     }
 
@@ -240,5 +267,31 @@ impl<'c, 'm> Gen<'c, 'm> {
                 Val { k: ret, v: Some(v) }
             }
         })
+    }
+}
+
+/// Does a block (at any depth) return, or leave a loop it isn't in?
+fn has_jump(body: &[Stmt]) -> bool {
+    body.iter().any(|s| match &s.kind {
+        StmtKind::Return(_) | StmtKind::Break | StmtKind::Continue => true,
+        // a break inside an inner loop stays there; a return doesn't
+        StmtKind::While(_, b) | StmtKind::For { body: b, .. } | StmtKind::ForIn(_, _, b) => has_return(b),
+        _ => stmt_parts(s).1.iter().any(|b| has_jump(b)),
+    })
+}
+
+fn has_return(body: &[Stmt]) -> bool {
+    body.iter().any(|s| matches!(s.kind, StmtKind::Return(_)) || stmt_parts(s).1.iter().any(|b| has_return(b)))
+}
+
+/// The lists a block changes in place (push, xs[i] = …, clear): the tree-walker's copies go back.
+fn changed(body: &[Stmt], out: &mut HashSet<SymId>) {
+    for s in body {
+        if let StmtKind::Push(x, _) | StmtKind::IndexAssign(x, _, _) | StmtKind::Clear(x) = &s.kind {
+            out.insert(*x);
+        }
+        for b in stmt_parts(s).1 {
+            changed(b, out);
+        }
     }
 }

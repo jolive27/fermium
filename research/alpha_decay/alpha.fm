@@ -1,0 +1,98 @@
+# Alpha decay: Gamow's tunnelling theory and the Geiger–Nuttall law against NUBASE2020 half-lives
+# (103 even–even alpha emitters, Z = 84–104; Q values from the NUBASE2020 mass excesses; see SOURCE.md).
+# Run from this folder:  fermium run alpha.fm
+
+em = load "alpha.csv"             # Z, N, A, Q [MeV], T [s] (total half-life), b (alpha branch), logT (partial, log10 s)
+Zs = em.Z
+As = em.A
+Qs = em.Q
+logT = em.logT
+n = len(Qs)
+print n, "even–even alpha emitters, Q from", min(Qs), "to", max(Qs), ", log₁₀ T_α/s from", min(logT) to 3 digits, "to", max(logT) to 3 digits
+
+# Gamow (1928): an α particle of energy Q inside a nucleus of radius R tunnels through the Coulomb barrier
+# V(r) = 2 Z_d e²/(4π ε₀ r) of the daughter (Z_d = Z − 2) out to the turning point b where V(b) = Q.
+m_α4 = 4.001506 u
+r₀ = 1.2 fm
+V₀ = 35 MeV                        # depth of the square well inside (sets the α's speed there, as in Krane ch. 8)
+barrier(Zd, r) = 2 Zd e² / (4π ε₀ r)
+gamow_G(Z, A, Q) =
+    Zd = Z - 2
+    μ = m_α4 (A - 4) [u] / (m_α4 + (A - 4) [u])
+    R = r₀ ((A - 4)^(1/3) + 4^(1/3))
+    b = 2 Zd e² / (4π ε₀ Q)
+    √(2μ) / ħ * ∫ √(barrier(Zd, r) - Q) dr from R to b
+halflife(Z, A, Q) =
+    μ = m_α4 (A - 4) [u] / (m_α4 + (A - 4) [u])
+    R = r₀ ((A - 4)^(1/3) + 4^(1/3))
+    v = √(2 (Q + V₀) / μ)          # speed inside the well
+    f_hit = v / (2R)                # rate of hits on the barrier
+    ln(2) / (f_hit exp(-2 gamow_G(Z, A, Q)))
+
+# a check against the closed form of the WKB integral: G = (√(2μ Q)/ħ) b [acos(√x) − √(x(1 − x))], x = R/b
+Zc = 92
+Ac = 238
+Qc = 4.269784 MeV
+μc = m_α4 (Ac - 4) [u] / (m_α4 + (Ac - 4) [u])
+Rc = r₀ ((Ac - 4)^(1/3) + 4^(1/3))
+bc = 2 (Zc - 2) e² / (4π ε₀ Qc)
+xc = Rc / bc
+print "U-238: R =", Rc in fm to 4 digits, " b =", bc in fm to 4 digits, " G by ∫:", gamow_G(Zc, Ac, Qc) to 8 digits, " closed form:", √(2 μc Qc) / ħ * bc (acos(√xc) - √(xc (1 - xc))) to 8 digits
+
+# Gamow's half-lives against the measured ones
+calc = []
+dev = []
+for i from 1 to n
+    lc = log10(halflife(Zs[i], As[i], Qs[i]) / 1 s)
+    push(calc, lc)
+    push(dev, logT[i] - lc)
+print "Gamow model: log₁₀(T_measured/T_Gamow) mean", mean(dev) to 3 digits, " rms about the mean", std(dev) to 3 digits
+print "  (a mean > 0 is a preformation probability P = 10^(−mean) =", 10^(-mean(dev)) to 2 digits, "for the α inside the nucleus)"
+print "  range of half-lives covered:", max(logT) - min(logT) to 3 digits, "orders of magnitude"
+for i from 1 to n
+    if (Zs[i] == 84 and As[i] == 212) or (Zs[i] == 84 and As[i] == 210) or (Zs[i] == 88 and As[i] == 226) or (Zs[i] == 90 and As[i] == 232) or (Zs[i] == 92 and As[i] == 238) or (Zs[i] == 94 and As[i] == 238)
+        print "  Z =", Zs[i], "A =", As[i], ": Q =", Qs[i], "  log₁₀ T_α/s measured", logT[i] to 4 digits, "  Gamow", calc[i] to 4 digits
+
+# the Viola–Seaborg form of the Geiger–Nuttall law, log₁₀ T = (aZ + b)/√Q + cZ + d, with the coefficients of
+# Sobiczewski, Patyk & Ćwiok (1989): a = 1.66175, b = −8.5166, c = −0.20228, d = −33.9069 (Q in MeV, T in s)
+viola(Z, Q) = (1.66175 Z - 8.5166) / √(Q / 1 MeV) - 0.20228 Z - 33.9069
+dvs = []
+for i from 1 to n
+    push(dvs, logT[i] - viola(Zs[i], Qs[i]))
+print "Viola–Seaborg (Sobiczewski 1989 coefficients): mean deviation", mean(dvs) to 2 digits, " rms", √(mean(dvs²)) to 3 digits
+# above and below the N = 126 shell (Sobiczewski et al. fitted nuclei beyond N = 126)
+Ns = em.N
+split(devs, above) =
+    tot = 0
+    sq = 0
+    k = 0
+    for i from 1 to n
+        if (Ns[i] > 126) == above
+            tot += devs[i]
+            sq += devs[i]²
+            k += 1
+    <k, tot / k, √(sq / k)>
+hi = split(dvs, true)
+lo = split(dvs, false)
+print "  N > 126:", hi.x, "nuclei, mean", hi.y to 2 digits, " rms", hi.z to 3 digits, "   N ≤ 126:", lo.x, "nuclei, mean", lo.y to 2 digits, " rms", lo.z to 3 digits
+ghi = split(dev, true)
+glo = split(dev, false)
+print "Gamow model, log₁₀(T_meas/T_Gamow):  N > 126: mean", ghi.y to 3 digits, " rms", ghi.z to 3 digits, "   N ≤ 126: mean", glo.y to 3 digits, " rms", glo.z to 3 digits
+
+# the same form fitted to these data
+a = 1.6
+bb = -8
+cc = -0.2
+d = -34
+fit logT = (a Z + bb) / √(Q / 1 MeV) + cc Z + d to em
+dfit = []
+for i from 1 to n
+    push(dfit, logT[i] - ((a Zs[i] + bb) / √(Qs[i] / 1 MeV) + cc Zs[i] + d))
+print "Viola–Seaborg fitted here: rms", √(mean(dfit²)) to 3 digits
+
+# Geiger–Nuttall: log T against Z_d/√Q is a straight line
+x_gn = []
+for i from 1 to n
+    push(x_gn, (Zs[i] - 2) / √(Qs[i] / 1 MeV))
+plot logT vs x_gn with points, xlabel "Z_d / sqrt(Q/MeV)", ylabel "log10(T_alpha / s)", title "Geiger-Nuttall law: 103 even-even alpha emitters (NUBASE2020)" to "geiger_nuttall.png"
+plot calc vs logT with points, xlabel "log10 T measured", ylabel "log10 T Gamow", title "Gamow's tunnelling half-lives against NUBASE2020" to "gamow_vs_measured.png"

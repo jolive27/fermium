@@ -1,34 +1,39 @@
-//! Phase C (v2.5) groundwork, opt-in with FERMIUM_C2=1 (spec §C2): the programs in rust/c2-cases/<area>/*.fm run
-//! with both back ends and must print exactly their .json (stdout, stderr, exit), in the conformance suite's format.
-//! They are kept out of conformance/ because that suite pins Fermium 1.5's behaviour; without FERMIUM_C2 the
-//! v1 behaviour is unchanged (checked below).
+//! Phase C (v2.5) item C2, calculus reach (DECISIONS D295-D299): the programs in rust/c-cases/c2/*.fm run with
+//! both back-end settings (`interp` and `auto`) and must print exactly their .json (stdout, stderr, exit), in the
+//! conformance suite's format. The programs check the physics themselves against analytic results (the `true`
+//! lines): derivatives of multi-line functions by automatic differentiation, events in `solve` located on the
+//! dense output, the simplifier's printed derivatives and parameter sweeps over `solve`.
+//! `FERMIUM_BLESS=1` rewrites the .json files from the tree-walker's output (read them before committing).
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn cases() -> Vec<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c2-cases");
-    let mut out = vec![];
-    for area in std::fs::read_dir(&root).unwrap() {
-        for f in std::fs::read_dir(area.unwrap().path()).unwrap() {
-            let p = f.unwrap().path();
-            if p.extension().is_some_and(|e| e == "fm") {
-                out.push(p);
-            }
+/// the sweep program writes SVG files next to itself: the two tests that run it take turns
+static FILES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn remove_svgs() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2");
+    for f in std::fs::read_dir(&dir).unwrap() {
+        let p = f.unwrap().path();
+        if p.extension().is_some_and(|e| e == "svg") {
+            let _ = std::fs::remove_file(p);
         }
     }
+}
+
+fn cases() -> Vec<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2");
+    let mut out: Vec<PathBuf> = std::fs::read_dir(&root)
+        .unwrap()
+        .map(|f| f.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "fm"))
+        .collect();
     out.sort();
     out
 }
 
-fn field(json: &str, key: &str) -> String {
-    // the .json files are written by a script with one "key": value per line; values are JSON strings or numbers
-    let line = json.lines().find(|l| l.trim_start().starts_with(&format!("\"{key}\""))).expect(key);
-    let v = line.split_once(':').unwrap().1.trim().trim_end_matches(',');
-    if !v.starts_with('"') {
-        return v.to_string();
-    }
+fn unescape(v: &str) -> String {
     let mut out = String::new();
-    let mut it = v[1..v.len() - 1].chars();
+    let mut it = v.chars();
     while let Some(c) = it.next() {
         if c != '\\' {
             out.push(c);
@@ -48,42 +53,98 @@ fn field(json: &str, key: &str) -> String {
     out
 }
 
-fn run(p: &Path, backend: &str, c2: bool) -> (String, String, i32) {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_fermium"));
-    cmd.args(["run", p.file_name().unwrap().to_str().unwrap()]).current_dir(p.parent().unwrap())
-       .env("FERMIUM_BACKEND", backend);
-    if c2 {
-        cmd.env("FERMIUM_C2", "1");
-    } else {
-        cmd.env_remove("FERMIUM_C2");
+fn field(json: &str, key: &str) -> String {
+    // one "key": value per line; values are JSON strings or numbers
+    let line = json.lines().find(|l| l.trim_start().starts_with(&format!("\"{key}\""))).expect(key);
+    let v = line.split_once(':').unwrap().1.trim().trim_end_matches(',');
+    if !v.starts_with('"') {
+        return v.to_string();
     }
-    let o = cmd.output().unwrap();
-    (String::from_utf8_lossy(&o.stdout).into(), String::from_utf8_lossy(&o.stderr).into(), o.status.code().unwrap_or(-1))
+    unescape(&v[1..v.len() - 1])
+}
+
+fn escape(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn run(p: &Path, backend: &str) -> (String, String, i32) {
+    let o = Command::new(env!("CARGO_BIN_EXE_fermium"))
+        .args(["run", p.file_name().unwrap().to_str().unwrap()])
+        .current_dir(p.parent().unwrap())
+        .env("FERMIUM_BACKEND", backend)
+        .env_remove("FERMIUM_BACKEND_INFO")
+        .output()
+        .unwrap();
+    // "plot saved to <the case's folder>/x.svg": the folder differs from checkout to checkout
+    let dir = format!("{}/", p.parent().unwrap().canonicalize().unwrap().display());
+    let out = String::from_utf8_lossy(&o.stdout).replace(&dir, "");
+    (out, String::from_utf8_lossy(&o.stderr).into(), o.status.code().unwrap_or(-1))
 }
 
 #[test]
 fn c2_cases_print_their_expected_output() {
     let cases = cases();
     assert!(cases.len() >= 5);
+    let bless = std::env::var("FERMIUM_BLESS").is_ok_and(|v| v == "1");
+    let _files = FILES.lock().unwrap_or_else(|e| e.into_inner());
     let mut bad = vec![];
     for p in &cases {
-        let json = std::fs::read_to_string(p.with_extension("json")).unwrap();
+        let jp = p.with_extension("json");
+        if bless {
+            let (o, e, c) = run(p, "interp");
+            std::fs::write(&jp, format!("{{\n \"stdout\": \"{}\",\n \"stderr\": \"{}\",\n \"exit\": {c}\n}}\n",
+                                        escape(&o), escape(&e))).unwrap();
+        }
+        let json = std::fs::read_to_string(&jp).unwrap();
         let want = (field(&json, "stdout"), field(&json, "stderr"), field(&json, "exit").parse::<i32>().unwrap());
         for backend in ["interp", "auto"] {
-            let got = run(p, backend, true);
+            let got = run(p, backend);
             if got != want {
                 bad.push(format!("{} ({backend}):\n  want {want:?}\n  got  {got:?}", p.display()));
             }
         }
+        // the checks the programs print must all hold
+        if want.0.split_whitespace().any(|w| w == "false") {
+            bad.push(format!("{}: a check printed false:\n{}", p.display(), want.0));
+        }
     }
+    remove_svgs();
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
 #[test]
-fn without_the_opt_in_multi_line_derivatives_stay_v1_errors() {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c2-cases/autodiff/basics.fm");
-    let (out, err, code) = run(&p, "interp", false);
-    assert_eq!(code, 1, "{out}{err}");
-    assert!(err.contains("can only differentiate one-line functions like f(x) = ..., and speed is defined over \
-                          several lines"), "{err}");
+fn a_sweep_draws_one_curve_per_value_in_one_figure() {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2/sweep_spring.fm");
+    let _files = FILES.lock().unwrap_or_else(|e| e.into_inner());
+    for backend in ["interp", "auto"] {
+        let (out, err, code) = run(&p, backend);
+        assert_eq!(code, 0, "{out}{err}");
+        assert_eq!(out.matches("plot saved to sweep_spring.svg").count(), 1, "{out}");
+        let dir = p.parent().unwrap();
+        let svg = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let (spring, pend, decay) = (svg("sweep_spring.svg"), svg("sweep_pendulum.svg"), svg("sweep_decay.svg"));
+        for f in ["sweep_spring.svg", "sweep_pendulum.svg", "sweep_decay.svg"] {
+            let _ = std::fs::remove_file(dir.join(f));
+        }
+        for k in ["k = 1 N/m", "k = 2 N/m", "k = 4 N/m"] {
+            assert!(spring.contains(k), "{k} not in the legend ({backend})");
+        }
+        for l in ["L = 0.500 m", "L = 1 m", "L = 1.50 m", "L = 2 m"] {
+            assert!(pend.contains(l), "{l} not in the legend ({backend})");
+        }
+        for c in ["u, λ = 0.100 1/s", "w, λ = 0.400 1/s"] {
+            assert!(decay.contains(c), "{c} not in the legend ({backend})");
+        }
+    }
 }

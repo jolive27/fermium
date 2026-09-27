@@ -1,0 +1,15 @@
+# C7: an integral that isn't linear in its uncertain input over ±1σ falls back to Monte Carlo (with a warning).
+# At μ = 0 the peak sits in the middle of the range: the first derivative is 0, so the linear rule would say
+# ± 0; the true spread comes from the curvature.
+μ = 0.0 ± 0.3
+w = 1.00 ± 0.01
+seed(3)
+I = ∫ exp(-((x - μ) / w)²) dx from -1 to 1
+print I
+seed(3)
+propagate montecarlo 20000 samples
+    J = ∫ exp(-((x - μ) / w)²) dx from -1 to 1
+print J
+# the spread agrees with propagate montecarlo; the value is the integral at the measured inputs (μ = 0, w = 1),
+# as for the linear rule (D322), where propagate montecarlo reports the mean of its samples
+print abs(uncertainty(I) / uncertainty(J) - 1) < 0.05, abs(value(I) - ∫ exp(-x²) dx from -1 to 1) < 1e-9

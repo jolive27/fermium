@@ -1,0 +1,25 @@
+# A condition on the unknowns in the right side (spec §C2): a mass between a soft spring (x > 0) and a stiff
+# wall spring (x < 0). The switch at x = 0 is located on the dense output, so one full period is exact:
+# half a period on each side, π/ω₁ + π/ω₂.
+M = 2 kg
+k1 = 8 N/m
+k2 = 200 N/m
+solve M x'' = if x > 0 m then -k1 x else -k2 x
+  with x(0 s) = 0.5 m, x'(0 s) = 0 m/s
+  for t from 0 s to 20 s
+P = π/√(k1/M) + π/√(k2/M)
+print P to 8 digits
+print x(P) to 9 digits, x(3*P) to 9 digits
+print abs(x(3*P) - 0.5 m) < 1e-8 m
+# the turning point inside the wall: v at x = 0 is ω₁ x₀, so the depth is ω₁ x₀ / ω₂
+print min(x) to 7 digits, -√(k1/k2) * 0.5 m to 7 digits
+
+# the same through a one-line function, and with the condition inside a sum
+F(u) = if u > 0 m then -k1 u else -k2 u
+solve M q'' = F(q)
+  with q(0 s) = 0.5 m, q'(0 s) = 0 m/s
+  for t from 0 s to 20 s
+solve M r'' = -k1 r + (if r <= 0 m then (k1 - k2) r else 0 N)
+  with r(0 s) = 0.5 m, r'(0 s) = 0 m/s
+  for t from 0 s to 20 s
+print abs(q(3*P) - 0.5 m) < 1e-8 m, abs(r(3*P) - 0.5 m) < 1e-8 m

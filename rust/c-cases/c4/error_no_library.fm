@@ -1,0 +1,3 @@
+import cpp header "phys.hpp":
+    phys::twice(n: int) -> int
+print 1

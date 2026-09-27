@@ -1,0 +1,3 @@
+vel = []
+push(vel, <1, 0> m/s)
+push(vel, <0, 1> m)

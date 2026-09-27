@@ -1,0 +1,5 @@
+{
+ "stdout": "1 K\n",
+ "stderr": "error_array_range.fm, line 4: index 4 is out of range for dimension 1 of this 3×4 array (valid indexes there are 1 to 3)\n    print A[4, 1]\n",
+ "exit": 1
+}

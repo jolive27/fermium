@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_array_units.fm, line 2: A is an array of temperature [K]; can't put length [m] in it\n    A[1, 1] = 5 m\n              ^^^\n",
+ "exit": 1
+}

@@ -123,6 +123,9 @@ impl Checker {
         let A::ExprKind::BinOp { left, right, .. } = &e.kind else { unreachable!() };
         let line = e.span.line;
         let p = const_exponent(right);
+        if let Some(err) = self.take_overflow(right.span) {
+            return Err(err);
+        }
         if let (Some(p), true) = (p, is_c(&a)) {
             let pf = *p.numer() as f64 / *p.denom() as f64;
             let d = dim(&a).pow(p);

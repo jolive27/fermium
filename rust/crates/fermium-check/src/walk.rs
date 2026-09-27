@@ -36,7 +36,8 @@ pub fn stmt_blocks(s: &A::Stmt) -> Vec<&Vec<A::Stmt>> {
             }
             v
         }
-        K::For { body, .. } | K::ForIn { body, .. } | K::While { body, .. } | K::Propagate { body, .. } => vec![body],
+        K::For { body, .. } | K::ForIn { body, .. } | K::While { body, .. } | K::Propagate { body, .. }
+        | K::Sweep { body } => vec![body],
         K::FuncDef { body: A::FuncBody::Block(b), .. } => vec![b],
         K::Units { body: Some(b), .. } => vec![b],
         _ => vec![],
@@ -48,9 +49,12 @@ pub fn for_each_stmt_expr(s: &A::Stmt, f: &mut dyn FnMut(&A::Expr)) {
     use A::StmtKind as K;
     match &s.kind {
         K::Assign { value, .. } => f(value),
-        K::IndexAssign { index, index2, value, .. } => {
+        K::IndexAssign { index, index2, value, rest, .. } => {
             f(index);
             if let Some(i) = index2 {
+                f(i);
+            }
+            for i in rest {
                 f(i);
             }
             f(value);

@@ -32,6 +32,20 @@ pub struct OdeSite {
     pub is_complex: bool,
     pub xname: usize,
     pub pde_line: u32,
+    /// conditions and events on the unknowns (D296, D297): the comparisons, the first flag's slot, the user's
+    /// slots, and per `when` its direction and text id; fm_ode gets their functions in `hooks`
+    pub sw_ops: Vec<u8>,
+    pub sw_slot0: usize,
+    pub nuser: usize,
+    pub whens: Vec<(u8, usize)>,
+}
+
+/// A compiled hook function and its env (fm_ode's `hooks`: the conditions' function if there are conditions,
+/// then each `when`'s g and new state).
+#[repr(C)]
+pub struct OdeHook {
+    pub f: OdeFn,
+    pub env: *mut u8,
 }
 
 /// A copy of the values the right side reads (eval_solve snapshot): the env the solution's x'(t) uses.
@@ -101,13 +115,50 @@ fn stopped(c: C) -> bool {
 #[allow(clippy::too_many_arguments)]
 #[no_mangle]
 pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<OdeFn>, evenv: *mut u8, y0: *const f64,
-                         n: i64, t0: f64, t1: f64, h0: f64, line: i32) -> i64 {
+                         n: i64, t0: f64, t1: f64, h0: f64, line: i32, hooks: *const OdeHook, nhooks: i64) -> i64 {
     let line = line.max(0) as u32;
     let s = unsafe { &(&(*c).ode_sites)[site as usize] };
     let y0 = unsafe { std::slice::from_raw_parts(y0, n as usize) }.to_vec();
     let atol = s.atol.as_ref().and_then(|spec| ode::abs_tolerances(spec, t0, t1));
     let opts = ode::OdeOpts { rtol: s.rtol, atol: atol.as_deref(), tname: s.tname as f64, evtext: s.evtext as f64,
-                              tdep: s.tdep };
+                              tdep: s.tdep, nerr: s.nuser };
+    let hk: &[OdeHook] = if nhooks > 0 { unsafe { std::slice::from_raw_parts(hooks, nhooks as usize) } } else { &[] };
+    let call = move |h: &OdeHook, t: f64, y: &[f64], out: &mut [f64]| {
+        if stopped(c) {
+            out.fill(f64::NAN);
+            return;
+        }
+        unsafe { (h.f)(t, y.as_ptr(), out.as_mut_ptr(), out.len() as i64, h.env) };
+        if stopped(c) {
+            out.fill(f64::NAN);
+        }
+    };
+    let nsw = if s.sw_ops.is_empty() { 0 } else { 1 };
+    let mut swf = |t: f64, y: &[f64], out: &mut [f64]| call(&hk[0], t, y, out);
+    let mut gfs: Vec<Box<dyn FnMut(f64, &[f64]) -> f64 + '_>> = (0..s.whens.len()).map(|i| {
+        let h = &hk[nsw + 2 * i];
+        Box::new(move |t: f64, y: &[f64]| {
+            let mut o = [0.0];
+            call(h, t, y, &mut o);
+            o[0]
+        }) as Box<dyn FnMut(f64, &[f64]) -> f64 + '_>
+    }).collect();
+    let mut rfs: Vec<Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>> = (0..s.whens.len()).map(|i| {
+        let h = &hk[nsw + 2 * i + 1];
+        Box::new(move |t: f64, y: &[f64], out: &mut [f64]| call(h, t, y, out))
+            as Box<dyn FnMut(f64, &[f64], &mut [f64]) + '_>
+    }).collect();
+    let mut hk_all = ode::Hooks::default();
+    if nhooks > 0 {
+        if nsw > 0 {
+            hk_all.sw = Some(&mut swf);
+            hk_all.sw_ops = s.sw_ops.clone();
+            hk_all.slot0 = s.sw_slot0;
+        }
+        for ((w, g), r) in s.whens.iter().zip(gfs.iter_mut()).zip(rfs.iter_mut()) {
+            hk_all.whens.push(ode::When { g: &mut **g, reset: &mut **r, dir: w.0, text: w.1 as f64 });
+        }
+    }
     let rhs = |t: f64, y: &[f64], out: &mut [f64]| {
         if stopped(c) {
             out.fill(f64::NAN);
@@ -139,7 +190,7 @@ pub extern "C" fn fm_ode(c: C, site: i64, f: OdeFn, env: *mut u8, ev: Option<Ode
         "rk4" => ode::rk4(rhs, &y0, t0, t1, h0, evf, opts),
         _ => {
             let mut sv = ode::Sol::new(y0.len());
-            match ode::dp45_into(rhs, &y0, t0, t1, evf, opts, &mut sv) {
+            match ode::dp45_hooks(rhs, &y0, t0, t1, evf, opts, &mut sv, &mut hk_all) {
                 Ok(()) => Ok(sv),
                 Err(fl) => {
                     early = sv.warnings;
@@ -252,11 +303,56 @@ pub extern "C" fn fm_rk4_begin(c: C, site: i64, f: OdeFn, env: *mut u8, y0: *con
     sol.t.reserve_exact(total);
     sol.y.reserve_exact(total * n);
     sol.dy.reserve_exact(total * n);
+    prefault(sol.t.as_mut_ptr(), total);
+    prefault(sol.y.as_mut_ptr(), total * n);
+    prefault(sol.dy.as_mut_ptr(), total * n);
     unsafe {
         let (t, y, dy) = (sol.t.as_mut_ptr(), sol.y.as_mut_ptr(), sol.dy.as_mut_ptr());
         *plan = Rk4Plan { t, y, dy, h, steps: steps as i64, sol: Box::into_raw(Box::new(sol)) };
     }
     0
+}
+
+/// A large array about to be written from start to end (the samples of a compiled RK4 solve): its pages mapped in
+/// one go (D316). Touching fresh memory page by page costs a fault per 4 KiB page, which on this solver was as
+/// much time as the steps themselves; MADV_POPULATE_WRITE (Linux 5.14+) maps them in one system call, and
+/// MADV_HUGEPAGE asks for 2 MiB pages where the kernel has them. Advice only: an error (an older kernel, another
+/// system) changes nothing.
+fn prefault(p: *mut f64, n: usize) {
+    #[cfg(target_os = "linux")]
+    {
+        const MADV_HUGEPAGE: i32 = 14;
+        const MADV_POPULATE_WRITE: i32 = 23;
+        extern "C" {
+            fn madvise(addr: *mut std::ffi::c_void, len: usize, advice: i32) -> i32;
+        }
+        // FERMIUM_PREFAULT: 0 = off, p = populate only (the default), h = huge pages and populate. Huge pages were
+        // the default until the v2.5 benchmark run: right after another process had churned through memory
+        // (benchmarks/run.py runs NumPy just before Fermium), asking for them made spring_rk4 take 130 ms
+        // instead of 30 ms, every time; populate alone stays at 31-33 ms either way (D316)
+        let mode = std::env::var("FERMIUM_PREFAULT").unwrap_or_else(|_| "p".into());
+        let bytes = n * 8;
+        if bytes < (4 << 20) || mode == "0" {
+            return;
+        }
+        let page = 4096usize;
+        let start = (p as usize).div_ceil(page) * page;
+        let end = (p as usize + bytes) / page * page;
+        if end <= start {
+            return;
+        }
+        // SAFETY: [start, end) lies inside the allocation of n f64 behind p; advice doesn't change its contents
+        unsafe {
+            if mode.contains('h') {
+                madvise(start as *mut _, end - start, MADV_HUGEPAGE);
+            }
+            if !mode.contains('n') {
+                madvise(start as *mut _, end - start, MADV_POPULATE_WRITE);
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = (p, n);
 }
 
 /// The end of a compiled RK4 solve whose loop filled every sample (sol and steps: fm_rk4_begin's plan): ode::rk4's error estimate and warning, then
@@ -405,7 +501,7 @@ pub extern "C" fn fm_pde(c: C, site: i64, f: OdeFn, env: *mut u8, t0: f64, t1: f
 /// The tree-walker's copy of a solution (plots and the other constructs it runs read it; they don't ask for
 /// x'(t) or a PDE's grid check, which only the compiled code answers).
 fn mirror(c: &mut Ctx, sol: ode::Sol, grid: Option<(f64, f64)>) -> (usize, std::rc::Rc<crate::eval_solve::SolData>) {
-    let d = std::rc::Rc::new(crate::eval_solve::SolData { sol, rhs: None, grid, check: None });
+    let d = std::rc::Rc::new(crate::eval_solve::SolData { sol, rhs: None, grid, lens: None, check: None, unc: None });
     c.interp.solve.sols.push(d.clone());
     (c.interp.solve.sols.len() - 1, d)
 }

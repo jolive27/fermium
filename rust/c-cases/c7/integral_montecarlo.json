@@ -1,0 +1,5 @@
+{
+ "stdout": "1.494 ± 0.086\n1.430 ± 0.087\ntrue true\n",
+ "stderr": "warning: line 7: this integral is too far from linear in its uncertain inputs over ±1σ for first-order propagation; its uncertainty comes from Monte Carlo (10000 samples; see  propagate montecarlo  to set the number)\n",
+ "exit": 0
+}

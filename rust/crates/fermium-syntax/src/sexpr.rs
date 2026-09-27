@@ -319,7 +319,11 @@ impl Printer {
     }
 
     fn param(&self, p: &Param) -> PV {
-        Self::node("Param", p.span, vec![("name", s(&p.name)), ("unit", self.opt_unit(&p.unit))])
+        let mut f = vec![("name", s(&p.name)), ("unit", self.opt_unit(&p.unit))];
+        if let Some(k) = &p.kind {
+            f.push(("kind", s(k))); // C5; absent when not given, so v1's dumps are unchanged
+        }
+        Self::node("Param", p.span, f)
     }
 
     fn equation(&self, e: &Equation) -> PV {
@@ -343,17 +347,24 @@ impl Printer {
                 f.push(("samples", self.opt(samples.as_ref())));
                 f.push(("body", self.block(body)));
             }
+            Sweep { body } => {
+                // Fermium 2.5 (D299); not in the v1 oracle's tree
+                f.push(("body", self.block(body)));
+            }
             Assign { name, value, op } => {
                 f.push(("name", s(name)));
                 f.push(("value", self.expr(value)));
                 f.push(("op", s(op)));
             }
-            IndexAssign { target, index, value, op, index2 } => {
+            IndexAssign { target, index, value, op, index2, rest } => {
                 f.push(("target", s(target)));
                 f.push(("index", self.expr(index)));
                 f.push(("value", self.expr(value)));
                 f.push(("op", s(op)));
                 f.push(("index2", self.opt(index2.as_ref())));
+                if !rest.is_empty() {
+                    f.push(("rest", PV::List(rest.iter().map(|e| self.expr(e)).collect())));
+                }
             }
             FuncDef { name, params, body, where_ } => {
                 f.push(("name", s(name)));
@@ -417,6 +428,13 @@ impl Printer {
                 x.push(("lowest", self.opt(sv.lowest.as_ref())));
                 x.push(("step2", self.opt(sv.step2.as_ref())));
                 x.push(("var2", opt_s(&sv.var2)));
+                if !sv.whens.is_empty() {
+                    // Fermium 2.5 (D297); not in the v1 oracle's tree
+                    x.push(("whens", PV::List(sv.whens.iter().map(|w| {
+                        PV::Tuple(vec![self.expr(&w.lhs), PV::S(q(&w.op)), self.expr(&w.rhs),
+                                       PV::List(w.assigns.iter().map(|e| self.equation(e)).collect())])
+                    }).collect())));
+                }
             }
             Fit { model, data, guesses } => {
                 f.push(("model", self.equation(model)));
@@ -500,6 +518,11 @@ impl Printer {
                     .collect();
                 f.push(("sigs", PV::List(ss)));
             }
+            ImportC { lang, lib, sigs, .. } => {
+                f.push(("lang", s(lang)));
+                f.push(("lib", s(lib)));
+                f.push(("sigs", PV::List(sigs.iter().map(|g| s(&g.name)).collect())));
+            }
         }
         PV::Node(Box::new(NodeRepr { class: st.kind.class(), span: st.span, paren: false, fields: f, extras: x }))
     }
@@ -579,11 +602,13 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
                 samples.iter().for_each(|e| ex(e, live));
                 body.iter().for_each(|x| st(x, live));
             }
+            Sweep { body } => body.iter().for_each(|x| st(x, live)),
             Assign { value, .. } => ex(value, live),
-            IndexAssign { index, value, index2, .. } => {
+            IndexAssign { index, value, index2, rest, .. } => {
                 ex(index, live);
                 ex(value, live);
                 index2.iter().for_each(|e| ex(e, live));
+                rest.iter().for_each(|e| ex(e, live));
             }
             FuncDef { body, where_, .. } => {
                 match body {
@@ -616,6 +641,11 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
                     ex(e, live);
                 }
                 sv.until.iter().for_each(|e| eq(e, live));
+                for w in &sv.whens {
+                    ex(&w.lhs, live);
+                    ex(&w.rhs, live);
+                    w.assigns.iter().for_each(|e| eq(e, live));
+                }
                 sv.absolute.iter().flatten().for_each(|e| ex(e, live));
             }
             Fit { model, data, guesses } => {
@@ -646,7 +676,7 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
             ExprStmt { value } => ex(value, live),
             Assert { cond, .. } => ex(cond, live),
             Units { body, .. } => body.iter().flatten().for_each(|x| st(x, live)),
-            Analyze { .. } | Break | Continue | Import { .. } | UsePython { .. } => {}
+            Analyze { .. } | Break | Continue | Import { .. } | UsePython { .. } | ImportC { .. } => {}
         }
     }
     p.body.iter().for_each(|s| st(s, &mut live));

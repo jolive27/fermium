@@ -75,9 +75,51 @@ impl Checker {
         if matches!(a.ty, Ty::Str) || matches!(b.ty, Ty::Str) {
             return self.text_op(e, op, implicit, left, right, a, b).map(Checked::Val);
         }
+        if matches!(a.ty, Ty::VList(_)) || matches!(b.ty, Ty::VList(_)) {
+            return self.vlist_arith(op, a, b, e, left, right).map(Checked::Val);
+        }
+        if matches!(a.ty, Ty::Array { .. }) || matches!(b.ty, Ty::Array { .. }) {
+            return self.array_arith(op, a, b, e).map(Checked::Val);
+        }
         self.need_numlike(&a, left, "this value", true)?;
         self.need_numlike(&b, right, "this value", true)?;
         self.arith(op, a, b, e).map(Checked::Val)
+    }
+
+    /// A list of vectors or matrices times or over a number (2 rs, rs / 2, [<1, 2>, <3, 4>] m): each element
+    /// scaled (D281).
+    fn vlist_arith(&mut self, op: &str, a: I::Expr, b: I::Expr, e: &A::Expr, left: &A::Expr, right: &A::Expr)
+                   -> CResult<I::Expr> {
+        let op = if op == "×" { "*" } else { op };
+        let list_first = matches!(a.ty, Ty::VList(_));
+        let (l, k, knode) = match (&a.ty, &b.ty) {
+            (Ty::VList(_), Ty::Num(_)) if matches!(op, "*" | "/") => (a, b, right),
+            (Ty::Num(_), Ty::VList(_)) if op == "*" => (b, a, left),
+            _ => {
+                return Err(self.err(format!("a list of vectors or matrices can only be multiplied or divided by a number \
+                                             (here {} {op} {})", self.type_desc(&a.ty), self.type_desc(&b.ty)),
+                                    e.span, Some("to work on each element, loop over the list:  for r in rs".into())));
+            }
+        };
+        let _ = knode;
+        let Ty::VList(el) = &l.ty else { unreachable!() };
+        let (de, dk) = (ty_dim(el).unwrap(), ty_dim(&k.ty).unwrap());
+        let d = if op == "*" { de.mul(&dk) } else { de.div(&dk) };
+        let elem = match &**el {
+            Ty::Vec { n, .. } => Ty::Vec { n: *n, dim: Some(d), dims: None },
+            Ty::Mat { r, c, .. } => Ty::Mat { r: *r, c: *c, dim: d },
+            other => other.clone(),
+        };
+        let hint = if op == "*" { self.keep_hint(&l, &k) } else if self.dimless(&k) { l.hint.clone() } else { None };
+        let sf = minsf(&[&l, &k]);
+        let direct = if op == "*" && k.hint.is_some() && matches!(k.kind, I::ExprKind::Const(_)) { l.direct } else { 0 };
+        let bop = if op == "*" { I::BinOp::Mul } else { I::BinOp::Div };
+        let (x, y) = if list_first { (l, k) } else { (k, l) };
+        let mut r = bin(bop, x, y, Ty::VList(Box::new(elem)), e.span.line);
+        r.hint = hint;
+        r.sf = sf;
+        r.direct = direct;
+        Ok(r)
     }
 
     /// "3p" + "1/2" joins two texts (D216); a number must be turned into text first: str(x).
@@ -339,6 +381,9 @@ impl Checker {
             }
         }
         let pconst = const_exponent(right);
+        if let Some(err) = self.take_overflow(right.span) {
+            return Err(err);
+        }
         if let A::ExprKind::Name { name: n } = &left.kind {
             if n == "e" && pconst.is_none_or(|p| p <= Rational64::zero()) {
                 if matches!(self.lookup(ctx.scope, "e"), Some((Binding::Const(_), _))) {
@@ -401,7 +446,9 @@ impl Checker {
             }
         }
         let a = self.expr(q, ctx)?;
-        self.need_numlike(&a, q, "this value", true)?;
+        if !matches!(a.ty, Ty::Array { .. } | Ty::VList(_)) {
+            self.need_numlike(&a, q, "this value", true)?;
+        }
         if is_affine(&a.hint) {
             return Err(self.err(format!("can't negate an absolute temperature ({})", a.hint.as_ref().unwrap().name),
                                 e.span, Some("write the negative number directly, like -5 °C, or use K".into())));
@@ -595,21 +642,33 @@ pub fn const_value(x: &I::Expr) -> Option<f64> {
 /// Python Fraction(x).limit_denominator(max_den), as a Rational64 (None if it doesn't fit: red team 9 #10).
 pub fn limit_denominator(x: f64, max_den: i64) -> Option<Rational64> {
     let (p, q) = fermium_ir::pyfrac::limit_denominator(x, max_den)?;
-    Some(Rational64::new(i64::try_from(p).ok()?, i64::try_from(q).ok()?))
+    let (p, q) = (i64::try_from(p).ok()?, i64::try_from(q).ok()?);
+    // i64::MIN is refused too, so that negating the exponent can't overflow (red team 13)
+    (p != i64::MIN).then(|| Rational64::new(p, q))
 }
 
 /// Evaluate a compile-time constant exponent (Python const_value): a Fraction or None.
 pub fn const_exponent(e: &A::Expr) -> Option<Rational64> {
     match &e.kind {
-        A::ExprKind::Num { value, .. } => limit_denominator(*value, 10000),
+        A::ExprKind::Num { value, .. } => {
+            let r = limit_denominator(*value, 10000);
+            if r.is_none() && value.is_finite() {
+                // a written exponent too large for 64 bits (1e300): recorded, and reported by the caller (red team 13)
+                let text = if value.abs() < 1e21 { format!("{value:.0}") } else { format!("{value}") };
+                fermium_units::exact::overflow_record(format!("a power of {text}"));
+                return Some(Rational64::from_integer(1));
+            }
+            r
+        }
         A::ExprKind::Neg { operand: x } => const_exponent(x).map(|v| -v),
         A::ExprKind::BinOp { op, left, right, .. } if op != "^" => {
+            use fermium_units::exact::{add_or_record, div_or_record, mul_or_record, sub_or_record};
             let (a, b) = (const_exponent(left)?, const_exponent(right)?);
             match op.as_str() {
-                "+" => Some(a + b),
-                "-" => Some(a - b),
-                "*" | "×" => Some(a * b),
-                "/" => if b.is_zero() { None } else { Some(a / b) },
+                "+" => Some(add_or_record(a, b, None)),
+                "-" => Some(sub_or_record(a, b, None)),
+                "*" | "×" => Some(mul_or_record(a, b, None)),
+                "/" => if b.is_zero() { None } else { Some(div_or_record(a, b, None)) },
                 _ => None,
             }
         }

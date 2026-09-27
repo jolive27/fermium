@@ -1,0 +1,8 @@
+{
+ "id": "17352a90f469",
+ "section": "v2.5: printed derivatives in their tidy form when it is clearly shorter (C2)",
+ "stdout": "f'(x) = (1 - x²)/(1 + x²)²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

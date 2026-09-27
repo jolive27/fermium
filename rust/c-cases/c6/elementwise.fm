@@ -1,0 +1,28 @@
+# Element-by-element loops over lists (DECISIONS D311): the loop vectorizer takes them; the numbers are the
+# tree-walker's, bit for bit, including an in-order sum.
+N = 1003
+xs = zeros(N)
+ys = zeros(N)
+zs = zeros(N)
+for i from 1 to N
+    xs[i] = 1 / i
+    ys[i] = √i
+for i from 1 to N
+    zs[i] = 3 xs[i] + ys[i] / 7 - xs[i] ys[i]
+s = 0
+for i from 1 to N
+    s += zs[i] xs[i]
+print "zs[1], zs[N]", zs[1] to 17 digits, zs[N] to 17 digits
+print "s", s to 17 digits
+ws = xs * 2 + ys
+print "ws[500]", ws[500] to 17 digits
+# a maximum and a guarded sum
+big = 0
+t = 0
+for i from 1 to N
+    if zs[i] > big
+        big = zs[i]
+    if i != 17
+        t += zs[i]
+print "big", big to 17 digits
+print "t", t to 17 digits

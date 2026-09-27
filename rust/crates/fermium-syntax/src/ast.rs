@@ -216,6 +216,8 @@ impl ExprKind {
 pub struct Param {
     pub name: String,
     pub unit: Option<UnitExpr>,
+    /// `r: vector [m]`: the kind a version of a function takes (number, vector, list, complex; C5 dispatch)
+    pub kind: Option<String>,
     pub span: Span,
 }
 
@@ -260,6 +262,51 @@ pub struct PySig {
     pub span: Span,
 }
 
+/// One parameter of a C or Fortran function (`import c`, D275).
+#[derive(Clone, Debug)]
+pub enum CParamKind {
+    /// a double, in the unit if one is given: `m [kg]`
+    Num(Option<UnitExpr>),
+    /// a C `int` (Fortran `integer`): `n: int`
+    Int,
+    /// an array of doubles: `x: list [m]`
+    List(Option<UnitExpr>),
+    /// the length of a list parameter, passed as an int and filled in by Fermium: `n: len(x)`
+    Len(String),
+}
+
+#[derive(Clone, Debug)]
+pub struct CParam {
+    pub name: String,
+    pub kind: CParamKind,
+    pub span: Span,
+}
+
+/// What a C or Fortran function returns.
+#[derive(Clone, Debug)]
+pub enum CRetDecl {
+    /// a double in this unit: `-> [MeV]`
+    Unit(UnitExpr),
+    /// a plain double: `-> number`
+    Number,
+    /// a C `int`: `-> int`
+    Int,
+}
+
+/// `kinetic_energy(m [kg], v [km/s]) -> [J]` in an `import c` block; `bind(C[, name="…"])` for Fortran.
+#[derive(Clone, Debug)]
+pub struct CSig {
+    pub name: String,
+    pub params: Vec<CParam>,
+    pub ret: CRetDecl,
+    /// None: no bind; Some(None): `bind(C)`; Some(Some(n)): `bind(C, name="n")`
+    pub bind: Option<Option<String>>,
+    /// C++ (C4, D290): the qualified name as written (`phys::Particle::rest_energy`); `name` is then the last
+    /// component, or the `as` name after the result
+    pub cpp_name: Option<String>,
+    pub span: Span,
+}
+
 #[derive(Clone, Debug)]
 pub struct Stmt {
     pub kind: StmtKind,
@@ -273,7 +320,8 @@ pub enum StmtKind {
     /// `name = value`, `+=`, `-=`, `*=`, `/=`.
     Assign { name: String, value: Expr, op: String },
     /// `xs[i] = …`, `M[i, j] = …` (D195).
-    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr> },
+    /// `rest`: indexes after the second, `A[i, j, k] = …` (N-dimensional arrays, D283; empty otherwise)
+    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr>, rest: Vec<Expr> },
     FuncDef { name: String, params: Vec<Param>, body: FuncBody, where_: Vec<(String, Expr)> },
     Print { items: Vec<Expr> },
     Plot { series: Vec<PlotSeries>, out: Option<String>, options: Vec<(String, PlotOpt)> },
@@ -284,6 +332,9 @@ pub enum StmtKind {
     If { cond: Expr, then: Vec<Stmt>, other: Option<Vec<Stmt>> },
     For { var: String, lo: Expr, hi: Expr, step: Option<Expr>, body: Vec<Stmt>, parallel: bool },
     ForIn { var: String, iterable: Expr, body: Vec<Stmt> },
+    /// `sweep k in [1, 2, 4] N/m` (or `sweep k from a to b step s`) + a block: a for loop (`inner`, a For or ForIn)
+    /// whose plots collect one curve per value into one figure (spec C2, D299). `body` is that one loop statement.
+    Sweep { body: Vec<Stmt> },
     While { cond: Expr, body: Vec<Stmt> },
     Return { value: Option<Expr> },
     Break,
@@ -296,6 +347,21 @@ pub enum StmtKind {
     Import { module: String, is_path: bool, alias: Option<String>, names: Option<Vec<(String, Option<String>)>> },
     /// `use python numpy as np` (D140).
     UsePython { module: String, alias: Option<String>, sigs: Vec<PySig> },
+    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275);
+    /// `import cpp "libphys.so" header "phys.hpp":` (C4, D290: `lang` "cpp", `lib` may be empty, `header` set).
+    ImportC { lang: String, lib: String, header: Option<String>, sigs: Vec<CSig> },
+}
+
+/// An event of a solve (spec C2, D297): `when y = 0 m: y' = -0.9 y'`. `op` is `=` (either crossing), `<`, `<=`
+/// (when lhs − rhs falls through 0), `>` or `>=` (when it rises through 0); `assigns` are the new values of
+/// unknowns and their derivatives, all computed from the state just before the event.
+#[derive(Clone, Debug)]
+pub struct When {
+    pub lhs: Expr,
+    pub op: String,
+    pub rhs: Expr,
+    pub assigns: Vec<Equation>,
+    pub span: Span,
 }
 
 /// `solve …` (ODEs, eigenvalue problems, PDEs).
@@ -311,6 +377,8 @@ pub struct Solve {
     pub tolerance: Option<Expr>,
     /// The stop condition `until lhs = rhs` (D39).
     pub until: Option<Equation>,
+    /// `when lhs = rhs: x' = -0.9 x'` events (spec C2, D297).
+    pub whens: Vec<When>,
     /// `absolute a[, b …]` (D160).
     pub absolute: Option<Vec<Expr>>,
     /// `lowest N` / `grid N` of an eigenvalue problem or a PDE, and a PDE's second range (D82, D83).
@@ -337,6 +405,7 @@ impl StmtKind {
             StmtKind::If { .. } => "If",
             StmtKind::For { .. } => "For",
             StmtKind::ForIn { .. } => "ForIn",
+            StmtKind::Sweep { .. } => "Sweep",
             StmtKind::While { .. } => "While",
             StmtKind::Return { .. } => "Return",
             StmtKind::Break => "Break",
@@ -346,6 +415,7 @@ impl StmtKind {
             StmtKind::Units { .. } => "Units",
             StmtKind::Import { .. } => "Import",
             StmtKind::UsePython { .. } => "UsePython",
+            StmtKind::ImportC { .. } => "ImportC",
         }
     }
 }
