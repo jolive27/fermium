@@ -1,0 +1,35 @@
+1590 light curves with 0.01 < z < 2.26
+fit mb/dmb = (μ(z, zhel, Ωm, 1 - Ωm) + M_B)/dmb   (1590 data points from sne.csv)
+  Ωm = 0.3504   (standard error 0.012)
+  M_B = -19.3444   (standard error 0.0052)
+  rms residual = 0.662
+flat ΛCDM: Ωm = 0.3504 ± 0.012   χ² = 697.30 for 1588 degrees of freedom
+  deceleration parameter q₀ = Ωm/2 − ΩΛ = -0.474   acceleration began at z_t = (2ΩΛ/Ωm)^(1/3) − 1 = 0.548
+fit mb/dmb = (μ(z, zhel, 1, 0) + M_EdS)/dmb   (1590 data points from sne.csv)
+  M_EdS = -19.1706   (standard error 0.0047)
+  rms residual = 0.924
+Einstein–de Sitter (Ωm = 1): Δχ² = 661.3
+fit mb/dmb = (μ(z, zhel, 0, 0) + M_0)/dmb   (1590 data points from sne.csv)
+  M_0 = -19.2918   (standard error 0.0034)
+  rms residual = 0.679
+empty (Milne, Ωm = ΩΛ = 0): Δχ² = 35.82
+fit mb/dmb = (μ(z, zhel, Ωm2, ΩΛ2) + M_2)/dmb   (1590 data points from sne.csv)
+  Ωm2 = 0.2994   (standard error 0.046)
+  ΩΛ2 = 0.5789   (standard error 0.063)
+  M_2 = -19.3404   (standard error 0.0063)
+  rms residual = 0.662
+ΛCDM with curvature: Ωm = 0.299 ± 0.046   ΩΛ = 0.579 ± 0.063   Ω_k = 0.12
+  ΩΛ > 0 at 9.17 standard errors
+binned distance modulus minus the empty universe (mag):
+  z = 0.0154 : 0.0368 ± 0.022   flat ΛCDM: 0.00773   EdS: 0.165
+  z = 0.0249 : -0.00608 ± 0.015   flat ΛCDM: 0.0122   EdS: 0.160
+  z = 0.0378 : 0.0284 ± 0.014   flat ΛCDM: 0.0181   EdS: 0.153
+  z = 0.0633 : 0.0269 ± 0.020   flat ΛCDM: 0.0289   EdS: 0.139
+  z = 0.102 : 0.0533 ± 0.030   flat ΛCDM: 0.0430   EdS: 0.118
+  z = 0.151 : 0.0398 ± 0.016   flat ΛCDM: 0.0581   EdS: 0.0905
+  z = 0.218 : 0.0726 ± 0.012   flat ΛCDM: 0.0731   EdS: 0.0535
+  z = 0.310 : 0.0997 ± 0.013   flat ΛCDM: 0.0852   EdS: 0.00268
+  z = 0.419 : 0.0851 ± 0.016   flat ΛCDM: 0.0892   EdS: -0.0577
+  z = 0.582 : 0.0610 ± 0.020   flat ΛCDM: 0.0791   EdS: -0.146
+  z = 0.762 : 0.0176 ± 0.034   flat ΛCDM: 0.0517   EdS: -0.241
+  z = 1.39 : 0.00734 ± 0.062   flat ΛCDM: -0.109   EdS: -0.548

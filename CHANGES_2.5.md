@@ -229,3 +229,28 @@ sweep k in [1, 2, 4] N/m
   `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
   multi-line functions (C2)* and *v2.5: conditions on the unknowns in solve are located (C2)* and *v2.5: printed derivatives in their tidy form
   when it is clearly shorter (C2)*.
+
+## Research track (C8)
+
+New reproductions in nuclear physics and astrophysics, each with data downloaded from a cited source (raw file or the
+lines used kept in the folder, `SOURCE.md` with URL, date, citation and license, `prepare.py` to download and convert),
+compared with published values in its README, with a plot and an `expected_output.txt`. The table in
+[research/README.md](research/README.md) (rows 12 onwards) has the key numbers; each README has a "Friction" section, and
+the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
+
+- [cmb_firas](research/cmb_firas/): COBE/FIRAS monopole (NASA LAMBDA) — Planck fit, μ distortion, n_γ, Ω_γh².
+- [charge_radii](research/charge_radii/): IAEA / Angeli–Marinova 2013 charge radii — A^⅓ law, Fermi model, Ca and Pb shell effects.
+- [gamow_window](research/gamow_window/): Gamow peaks and non-resonant rates vs JINA REACLIB (via pynucastro's PyPI copy), AME2020 masses.
+- [alpha_decay](research/alpha_decay/): NUBASE2020 α emitters — Gamow's WKB half-lives, Viola–Seaborg (Sobiczewski 1989).
+- [pulsar_spindown](research/pulsar_spindown/): ATNF catalogue (VizieR) — dipole fields, ages, Crab braking index and birth period.
+- [mass_luminosity](research/mass_luminosity/): DEBCat eclipsing binaries — L = 4πR²σT⁴ vs Eker et al. 2018 six-piece MLR.
+- [supernova_hubble](research/supernova_hubble/): Pantheon+ — flat ΛCDM Ωm, matter-only and empty universes, curvature.
+- [white_dwarf_cooling](research/white_dwarf_cooling/): Gaia EDR3 white dwarfs within 100 pc (VizieR TAP) — Mestel cooling derived with units, luminosity function and its cut-off.
+- [neutron_star_cooling](research/neutron_star_cooling/): Ioffe table of 48 thermally emitting neutron stars — one-zone modified-Urca + envelope cooling model.
+- [level_density](research/level_density/): RIPL-3 s-wave resonance spacings — Bethe Fermi-gas level density, a ≈ A/8 and the shell dips.
+- Found on the way: `fit` reports a wrong standard error for a parameter with a tiny SI value (e.g. a fit parameter in MeV);
+  the fitted value is right. Logged under "Bugs first" in BACKLOG.md (not fixed here; Fermium 1.5 does the same).
+- Tests: `rust/crates/fermium-cli/tests/research_c8.rs` runs every one with the `fermium` binary (in a copy of its folder,
+  so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
+  absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1
+  conformance suite is unchanged.

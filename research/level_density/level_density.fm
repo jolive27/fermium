@@ -1,0 +1,70 @@
+# The nuclear level density at the neutron separation energy: Bethe's Fermi-gas formula against the measured
+# s-wave neutron resonance spacings D0 of 300 nuclei (RIPL-3, IAEA; see SOURCE.md).
+# Run from this folder:  fermium run level_density.fm
+
+res = load "d0.csv"               # Z, A (target), I0 (target spin), Bn [MeV], D0 [keV], dD [keV]
+n = len(res.A)
+print n, "target nuclei, D0 from", min(res.D0) to 3 digits, "to", max(res.D0) to 3 digits
+
+# Bethe (1936), with the spin distribution of Gilbert & Cameron (1965): at excitation U above the pairing shift,
+#   ρ(U, J, π) = ½ ρ(U) (2J + 1)/(2√(2π) σ³) exp(−(J + ½)²/(2σ²)),   ρ(U) = √π exp(2√(aU)) / (12 a^(1/4) U^(5/4)),
+#   σ² = 0.0888 √(aU) A^(2/3)
+# s-wave neutrons on a target of spin I₀ make compound states J = I₀ ± ½ of one parity:  1/D₀ = Σ_J ρ(Bn − δ, J, π)
+ρ_tot(U, a) = √π exp(2√(a U)) / (12 a^(1/4) U^(5/4))
+σsq(U, a, A) = 0.0888 √(a U) A^(2/3)
+ρ_J(U, a, A, spin) = ½ ρ_tot(U, a) (2 spin + 1) / (2√(2π) σsq(U, a, A)^(3/2)) * exp(-(spin + ½)² / (2 σsq(U, a, A)))
+inv_D0(U, a, A, I0) =
+    tot = ρ_J(U, a, A, I0 + ½)
+    if I0 > 0
+        tot += ρ_J(U, a, A, I0 - ½)
+    tot
+# the pairing shift of the compound nucleus (Z, A + 1): 12 MeV/√A for each even kind of nucleon
+δ(Z, Ac) =
+    N = Ac - Z
+    k = (if mod(Z, 2) == 0 then 1 else 0) + (if mod(N, 2) == 0 then 1 else 0)
+    k * 12 MeV / √Ac
+
+# 1. the level-density parameter a of each compound nucleus, from its measured D0
+as_fit = []
+Ac_list = []
+ratio = []
+for i from 1 to n
+    Ac = res.A[i] + 1
+    U = res.Bn[i] - δ(res.Z[i], Ac)
+    I0 = res.I0[i]
+    target = 1 / res.D0[i]
+    solve inv_D0(U, a_i, Ac, I0) = target for a_i from 1 /MeV to 60 /MeV
+    push(as_fit, a_i)
+    push(Ac_list, Ac)
+    push(ratio, Ac / (a_i * 1 MeV))
+print "a from D0: median A/a =", sort(ratio)[n / 2] to 3 digits, "MeV"
+
+# 2. a ∝ A: fit a = A/k
+tbl = table(A = Ac_list, a = as_fit)
+# (fitted as a plain number: a fit of k in MeV reports a wrong standard error; see the README)
+k_fit = 8
+fit a * 1 MeV = A / k_fit to tbl
+# the Fermi gas of free nucleons in a box: a = π²/(4 ε_F) A (Bohr & Mottelson), with ε_F from the nuclear density
+n₀ = 0.16 /fm³
+ε_F = ħ² (3π² n₀ / 2)^(2/3) / (2 m_n)          # neutrons and protons each fill half of n₀
+print "free Fermi gas: ε_F =", ε_F in MeV to 3 digits, " ⇒ a = A/(4ε_F/π²) = A/", 4 ε_F / π² in MeV to 3 digits, " (empirical: A/8 MeV)"
+
+# 3. shell effects: a is smallest at the magic numbers (N = 50, 82, 126 in the compound nucleus)
+for zn in [<38, 50>, <40, 50>, <50, 70>, <56, 82>, <58, 82>, <82, 126>, <82, 124>, <66, 98>, <68, 100>, <92, 147>]
+    for i from 1 to n
+        if res.Z[i] == zn.x and res.A[i] + 1 - zn.x == zn.y
+            print "  Z =", zn.x, "N =", zn.y, " (A =", res.A[i] + 1, "): a =", as_fit[i] in 1/MeV to 3 digits, " A/a =", ratio[i] to 3 digits, "MeV"
+
+# 4. with the single value a = A/k for every nucleus: predicted against measured D0
+lr = []
+for i from 1 to n
+    Ac = res.A[i] + 1
+    U = res.Bn[i] - δ(res.Z[i], Ac)
+    D0p = 1 / inv_D0(U, Ac / (k_fit * 1 MeV), Ac, res.I0[i])
+    push(lr, log10(D0p / res.D0[i]))
+print "D0 predicted with a = A/(", k_fit to 3 digits, "MeV): log₁₀(D0_pred/D0_meas) mean", mean(lr) to 2 digits, " std", std(lr) to 3 digits, "  (D0 spans", log10(max(res.D0) / min(res.D0)) to 3 digits, "decades)"
+
+aA = []
+for i from 1 to n
+    push(aA, as_fit[i] / Ac_list[i] * 1 MeV)
+plot aA vs Ac_list with points, xlabel "A (compound nucleus)", ylabel "a/A [1/MeV]", title "Level-density parameter from RIPL-3 D0: a/A with shell dips at N = 50, 82, 126" to "a_over_A.png"

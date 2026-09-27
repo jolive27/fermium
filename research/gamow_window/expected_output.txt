@@ -1,0 +1,16 @@
+reaction          T       E_G        E_0       Δ        τ = 3E_0/kT   N_A⟨σv⟩ (S const)   Gaussian approx.   REACLIB          ratio
+p(p,e+ν)d   15.7 MK   0.4931 MeV   6.088 keV   6.628 keV   13.50   8.893×10⁻²⁰ cm³/(mol s)   8.632×10⁻²⁰ cm³/(mol s)   9.700×10⁻²⁰ cm³/(mol s)   0.917
+3He(3He,2p)4He   15.7 MK   23.62 MeV   22.11 keV   12.63 keV   49.02   4.648×10⁻¹⁰ cm³/(mol s)   4.609×10⁻¹⁰ cm³/(mol s)   4.560×10⁻¹⁰ cm³/(mol s)   1.02
+3He(α,γ)7Be   15.7 MK   26.94 MeV   23.10 keV   12.91 keV   51.22   5.309×10⁻¹⁵ cm³/(mol s)   5.266×10⁻¹⁵ cm³/(mol s)   5.336×10⁻¹⁵ cm³/(mol s)   0.995
+7Be(p,γ)8B   15.7 MK   13.80 MeV   18.48 keV   11.55 keV   40.98   6.896×10⁻¹² cm³/(mol s)   6.828×10⁻¹² cm³/(mol s)   6.635×10⁻¹² cm³/(mol s)   1.04
+12C(p,γ)13N   15.7 MK   32.75 MeV   24.66 keV   13.34 keV   54.67   5.662×10⁻¹⁶ cm³/(mol s)   5.620×10⁻¹⁶ cm³/(mol s)   8.062×10⁻¹⁶ cm³/(mol s)   0.702
+14N(p,γ)15O   15.7 MK   45.08 MeV   27.43 keV   14.07 keV   60.82   1.580×10⁻¹⁸ cm³/(mol s)   1.569×10⁻¹⁸ cm³/(mol s)   1.699×10⁻¹⁸ cm³/(mol s)   0.930
+12C(α,γ)16O   200 MK   423.1 MeV   315.5 keV   170.3 keV   54.93   7.180×10⁻¹⁵ cm³/(mol s)   7.126×10⁻¹⁵ cm³/(mol s)   7.079×10⁻¹⁵ cm³/(mol s)   1.01
+14N + p at 15.7 MK: numerical peak 27.426 keV   formula E_0 = (√E_G k_B T/2)^(2/3): 27.426 keV
+1/e points: 21.11 keV and 35.24 keV  (width 14.13 keV )   Gaussian: E_0 ± Δ/2 = 20.39 keV and 34.46 keV
+14N(p,γ) at 10 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 0.902
+14N(p,γ) at 15.7 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 0.930
+14N(p,γ) at 20 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 0.946
+14N(p,γ) at 30 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 0.973
+14N(p,γ) at 40 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 0.992
+14N(p,γ) at 60 MK : ratio (S(0) = 1.66 keV b) / REACLIB = 1.01

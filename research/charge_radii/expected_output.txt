@@ -1,0 +1,25 @@
+908 nuclei from Z = 1 to Z = 96
+fit R = r_0 A^(1/3)   (834 data points from table(A = Ah, N = Nh, Z = Zh, R = Rh))
+  r_0 = 0.94869 fm   (standard error 0.00047 fm)
+  rms residual = 0.0702 fm
+fit R = r_1 A^(1/3)·(1 - b·(N - Z)/A)   (834 data points from table(A = Ah, N = Nh, Z = Zh, R = Rh))
+  r_1 = 0.9837 fm   (standard error 0.0012 fm)
+  b = 0.2181   (standard error 0.0070)
+  rms residual = 0.0485 fm
+fit R = p A^(1/3) + q   (834 data points from table(A = Ah, N = Nh, Z = Zh, R = Rh))
+  p = 0.8721 fm   (standard error 0.0025 fm)
+  q = 0.4006 fm   (standard error 0.013 fm)
+  rms residual = 0.0477 fm
+uniform-sphere radius parameter √(5/3) r₀ = 1.225 fm   (textbook R₀ ≈ 1.2 fm)
+Z = 20 N = 20 : measured 3.4776 fm   Fermi model 3.487 fm   r₀ A^(1/3) 3.244 fm
+Z = 20 N = 28 : measured 3.4771 fm   Fermi model 3.632 fm   r₀ A^(1/3) 3.448 fm
+Z = 40 N = 50 : measured 4.2694 fm   Fermi model 4.233 fm   r₀ A^(1/3) 4.251 fm
+Z = 50 N = 70 : measured 4.6519 fm   Fermi model 4.564 fm   r₀ A^(1/3) 4.679 fm
+Z = 82 N = 126 : measured 5.5012 fm   Fermi model 5.314 fm   r₀ A^(1/3) 5.621 fm
+Z = 92 N = 146 : measured 5.8571 fm   Fermi model 5.523 fm   r₀ A^(1/3) 5.879 fm
+Ca-40: 3.4776 fm   Ca-44: 3.5179 fm   Ca-48: 3.4771 fm   R(48) − R(40) = -0.00050 fm
+A^(1/3) law would give R(48) − R(40) = 0.203 fm
+odd–even staggering in Ca, R(N) − mean of neighbours:  N = 23: -0.018 fm   N = 25: -0.012 fm   N = 24: 0.023 fm
+Pb: d⟨r²⟩/dN for N = 120→126: 0.0561 fm²   N = 126→132: 0.104 fm²   ratio 1.86
+Ba: d⟨r²⟩/dN for N = 78→82: 0.0135 fm²   N = 82→86: 0.140 fm²
+A^(1/3) law at A = 208: d⟨r²⟩/dN = 0.101 fm²

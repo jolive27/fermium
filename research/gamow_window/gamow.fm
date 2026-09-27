@@ -1,0 +1,75 @@
+# The Gamow window of key stellar reactions, and the thermonuclear rate it gives, against the JINA REACLIB fits.
+# Masses from AME2020, S-factors from Solar Fusion II and deBoer et al. 2017 (see README and SOURCE.md).
+# Run from this folder:  fermium run gamow.fm
+
+rx = load "reaclib.csv"           # reaction, a0 … a6 (REACLIB fit sets; a reaction's rate is the sum of its sets)
+nuc = load "masses.csv"           # Z, A, M [u] (nuclear masses)
+
+# the REACLIB rate N_A⟨σv⟩ of reaction k, in cm³ mol⁻¹ s⁻¹
+reaclib(k, T) =
+    T9 = T / 1 GK
+    tot = 0 cm³/(mol s)
+    for i from 1 to len(rx.a0)
+        if rx.reaction[i] == k
+            tot += exp(rx.a0[i] + rx.a1[i] / T9 + rx.a2[i] T9^(-1/3) + rx.a3[i] T9^(1/3) + rx.a4[i] T9 + rx.a5[i] T9^(5/3) + rx.a6[i] ln(T9)) * 1 cm³/(mol s)
+    tot
+
+mass(z, a) =
+    out = 0 u
+    for i from 1 to len(nuc.M)
+        if nuc.Z[i] == z and nuc.A[i] == a
+            out = nuc.M[i]
+    out
+
+# the Gamow energy, peak and 1/e width for charges Z₁, Z₂ and reduced mass μ
+E_G(Z₁, Z₂, μ) = 2 μ c² (π α Z₁ Z₂)²
+E_0(Z₁, Z₂, μ, T) = (√(E_G(Z₁, Z₂, μ)) k_B T / 2)^(2/3)
+Δ(Z₁, Z₂, μ, T) = 4 √(E_0(Z₁, Z₂, μ, T) k_B T / 3)
+
+# the non-resonant rate with a constant S-factor:  N_A⟨σv⟩ = N_A √(8/(πμ)) (k_B T)^(−3/2) ∫ S e^(−E/k_BT − √(E_G/E)) dE
+rate(Z₁, Z₂, μ, S, T) =
+    EG = E_G(Z₁, Z₂, μ)
+    top = E_0(Z₁, Z₂, μ, T) + 15 Δ(Z₁, Z₂, μ, T)
+    N_A √(8 / (π μ)) (k_B T)^(-3/2) ∫ S exp(-E / (k_B T) - √(EG / E)) dE from 0 keV to top
+# the same in the Gaussian approximation of the window (Clayton; Rolfs & Rodney): τ = 3E₀/k_BT
+rate_gauss(Z₁, Z₂, μ, S, T) =
+    E0 = E_0(Z₁, Z₂, μ, T)
+    N_A √(2 / μ) Δ(Z₁, Z₂, μ, T) / (k_B T)^(3/2) * S exp(-3 E0 / (k_B T))
+
+names = ["p(p,e+ν)d", "3He(3He,2p)4He", "3He(α,γ)7Be", "7Be(p,γ)8B", "12C(p,γ)13N", "14N(p,γ)15O", "12C(α,γ)16O"]
+Z1 = [1, 2, 2, 1, 1, 1, 2]
+A1 = [1, 3, 4, 1, 1, 1, 4]
+Z2 = [1, 2, 2, 4, 6, 7, 6]
+A2 = [1, 3, 3, 7, 12, 14, 12]
+# S(0): Solar Fusion II (Adelberger et al. 2011) for the solar reactions; S(300 keV) of deBoer et al. (2017) for ¹²C(α,γ)
+S0 = [4.01e-22, 5.21e3, 0.56, 0.0208, 1.34, 1.66, 140] keV b
+Ts = [15.7, 15.7, 15.7, 15.7, 15.7, 15.7, 200] MK
+
+print "reaction          T       E_G        E_0       Δ        τ = 3E_0/kT   N_A⟨σv⟩ (S const)   Gaussian approx.   REACLIB          ratio"
+for k from 1 to 7
+    μ = mass(Z1[k], A1[k]) mass(Z2[k], A2[k]) / (mass(Z1[k], A1[k]) + mass(Z2[k], A2[k]))
+    T = Ts[k]
+    r = rate(Z1[k], Z2[k], μ, S0[k], T)
+    rg = rate_gauss(Z1[k], Z2[k], μ, S0[k], T)
+    rl = reaclib(k, T)
+    print names[k], " ", T in MK to 3 digits, " ", E_G(Z1[k], Z2[k], μ) in MeV to 4 digits, " ", E_0(Z1[k], Z2[k], μ, T) in keV to 4 digits, " ", Δ(Z1[k], Z2[k], μ, T) in keV to 4 digits, " ", 3 E_0(Z1[k], Z2[k], μ, T) / (k_B T) to 4 digits, " ", r in cm³/(mol s) to 4 digits, " ", rg in cm³/(mol s) to 4 digits, " ", rl in cm³/(mol s) to 4 digits, " ", r / rl to 3 digits
+
+# the Gamow peak found numerically for ¹⁴N + p at 15.7 MK: where the integrand is largest
+μN = mass(1, 1) mass(7, 14) / (mass(1, 1) + mass(7, 14))
+EGN = E_G(1, 7, μN)
+TN = 15.7 MK
+integrand(E) = exp(-E / (k_B TN) - √(EGN / E))
+solve integrand'(Ep) = 0 / keV for Ep from 5 keV to 100 keV
+print "14N + p at 15.7 MK: numerical peak", Ep in keV to 5 digits, "  formula E_0 = (√E_G k_B T/2)^(2/3):", E_0(1, 7, μN, TN) in keV to 5 digits
+# the 1/e points of the window, against E_0 ± Δ/2
+peakval = integrand(Ep)
+solve integrand(Elo) = peakval / exp(1) for Elo from 1 keV to Ep
+solve integrand(Ehi) = peakval / exp(1) for Ehi from Ep to 200 keV
+print "1/e points:", Elo in keV to 4 digits, "and", Ehi in keV to 4 digits, " (width", Ehi - Elo in keV to 4 digits, ")   Gaussian: E_0 ± Δ/2 =", E_0(1, 7, μN, TN) - Δ(1, 7, μN, TN) / 2 in keV to 4 digits, "and", E_0(1, 7, μN, TN) + Δ(1, 7, μN, TN) / 2 in keV to 4 digits
+
+# the ¹⁴N(p,γ)¹⁵O rate (the CNO cycle's bottleneck) from 10 to 60 MK: S-factor integral against REACLIB
+for T in [10, 15.7, 20, 30, 40, 60] MK
+    print "14N(p,γ) at", T in MK, ": ratio (S(0) = 1.66 keV b) / REACLIB =", rate(1, 7, μN, 1.66 keV b, T) / reaclib(6, T) to 3 digits
+
+plot exp(-E / (k_B TN)) vs E from 0.5 keV to 80 keV, exp(-√(EGN / E)) vs E from 0.5 keV to 80 keV, integrand(E) vs E from 0.5 keV to 80 keV with log y, y from 1e-45 to 1, ylabel "Boltzmann, tunnelling, product", title "Gamow window for 14N + p at 15.7 MK: peak at 27.4 keV" to "window_n14p.png"
+plot rate(1, 7, μN, 1.66 keV b, T) in cm³/(mol s) vs T in MK from 8 MK to 80 MK, reaclib(6, T) in cm³/(mol s) vs T in MK from 8 MK to 80 MK with log y, ylabel "N_A<σv> [cm³/(mol s)]", title "14N(p,γ)15O: Gamow-window integral (S = 1.66 keV b) and REACLIB" to "rate_n14p.png"

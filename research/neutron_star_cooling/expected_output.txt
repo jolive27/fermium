@@ -1,0 +1,68 @@
+48 neutron stars with measured thermal luminosities, ages 326 yr to 1.70×10⁷ yr
+compactness r_g/R = 0.345   redshift factor 0.8096   surface gravity 1.59×10¹⁴ cm/s²
+mean neutron density 0.230 1/fm³  (nuclear density n₀ = 0.16 fm⁻³)  E_F = 74.4 MeV
+heat capacity C = C₉ T₉ with C₉ = 1.31×10³⁹ erg/K
+neutrino luminosity L_ν = N₉ T₉⁸ with N₉ = 7.46×10⁴⁰ erg/s
+T(100 yr) = 3.241×10⁸ K   neutrino-era closed form: 3.124×10⁸ K
+T(1000 yr) = 2.202×10⁸ K   closed form: 2.128×10⁸ K
+photon luminosity overtakes neutrinos at t = 6.24×10⁴ yr  (T = 1.04×10⁸ K )
+  t = 100 yr : T_core = 3.24×10⁸ K   T_s∞ = 1.51×10⁶ K   L∞ = 8.16×10³³ erg/s
+  t = 1000 yr : T_core = 2.20×10⁸ K   T_s∞ = 1.22×10⁶ K   L∞ = 3.49×10³³ erg/s
+  t = 10000 yr : T_core = 1.49×10⁸ K   T_s∞ = 9.84×10⁵ K   L∞ = 1.47×10³³ erg/s
+  t = 100000 yr : T_core = 9.25×10⁷ K   T_s∞ = 7.58×10⁵ K   L∞ = 5.18×10³² erg/s
+  t = 1000000 yr : T_core = 2.16×10⁷ K   T_s∞ = 3.40×10⁵ K   L∞ = 2.10×10³¹ erg/s
+star-by-star (group 1 CCO, 2 pulsar, 3 high-B, 4 XINS):  age, L_obs, L_model, L_obs/L_model
+   1   4450 yr   5.00×10³³ erg/s   2.00×10³³ erg/s   2.50
+   1   3750 yr   5.00×10³² erg/s   2.13×10³³ erg/s   0.234
+   1   20500 yr   2.18×10³² erg/s   1.10×10³³ erg/s   0.198
+   1   7000 yr   1.31×10³³ erg/s   1.69×10³³ erg/s   0.777
+   1   15000 yr   3.67×10³³ erg/s   1.25×10³³ erg/s   2.93
+   1   800 yr   4.90×10³³ erg/s   3.79×10³³ erg/s   1.29
+   1   1608 yr   2.00×10³³ erg/s   2.93×10³³ erg/s   0.684
+   1   650 yr   1.18×10³⁴ erg/s   4.09×10³³ erg/s   2.89
+   1   4000 yr   1.08×10³⁴ erg/s   2.08×10³³ erg/s   5.18
+   1   3400 yr   8.40×10³³ erg/s   2.21×10³³ erg/s   3.79
+   1   6000 yr   1.04×10³⁴ erg/s   1.79×10³³ erg/s   5.82
+   1   326 yr   7.22×10³³ erg/s   5.27×10³³ erg/s   1.37
+   2   820 yr   1.90×10³² erg/s   3.75×10³³ erg/s   0.0506
+   2   750000 yr   1.50×10³¹ erg/s   4.52×10³¹ erg/s   0.332
+   2   30000 yr   1.09×10³³ erg/s   9.40×10³² erg/s   1.16
+   2   51700 yr   1.90×10³² erg/s   7.35×10³² erg/s   0.259
+   2   30000 yr   2.60×10³² erg/s   9.40×10³² erg/s   0.276
+   2   59200 yr   2.00×10³² erg/s   6.88×10³² erg/s   0.291
+   2   343000 yr   8.80×10³¹ erg/s   1.80×10³² erg/s   0.489
+   2   111000 yr   3.50×10³² erg/s   4.86×10³² erg/s   0.721
+   2   22000 yr   4.24×10³² erg/s   1.07×10³³ erg/s   0.395
+   2   1900000 yr   8.00×10²⁸ erg/s   1.95×10³⁰ erg/s   0.0411
+   2   535000 yr   1.00×10³² erg/s   9.14×10³¹ erg/s   1.09
+   2   7310 yr   3.60×10³² erg/s   1.66×10³³ erg/s   0.217
+   2   17500 yr   7.10×10³² erg/s   1.18×10³³ erg/s   0.603
+   2   114000 yr   1.10×10³² erg/s   4.78×10³² erg/s   0.230
+   2   386000 yr   3.10×10³² erg/s   1.54×10³² erg/s   2.02
+   2   233000 yr   2.60×10³¹ erg/s   2.75×10³² erg/s   0.0944
+   2   21400 yr   4.50×10³² erg/s   1.08×10³³ erg/s   0.415
+   2   1830000 yr   1.40×10³⁰ erg/s   2.30×10³⁰ erg/s   0.608
+   2   64000 yr   1.80×10³² erg/s   6.61×10³² erg/s   0.272
+   2   840000 yr   8.37×10³⁰ erg/s   3.41×10³¹ erg/s   0.245
+   2   17200 yr   5.00×10³² erg/s   1.19×10³³ erg/s   0.422
+   2   7700 yr   4.70×10³¹ erg/s   1.63×10³³ erg/s   0.0289
+   3   186000 yr   4.00×10³² erg/s   3.36×10³² erg/s   1.19
+   3   28600 yr   7.60×10³¹ erg/s   9.60×10³² erg/s   0.0792
+   3   5650 yr   1.90×10³³ erg/s   1.83×10³³ erg/s   1.04
+   3   1560 yr   9.00×10³³ erg/s   2.96×10³³ erg/s   3.04
+   3   33200 yr   4.00×10³² erg/s   9.00×10³² erg/s   0.445
+   3   120000 yr   3.00×10³³ erg/s   4.62×10³² erg/s   6.49
+   4   1880000 yr   6.00×10³⁰ erg/s   2.04×10³⁰ erg/s   2.94
+   4   850000 yr   1.90×10³² erg/s   3.31×10³¹ erg/s   5.75
+   4   1.70×10⁷ yr   2.00×10³¹ erg/s   2.29×10²³ erg/s   8.73×10⁷
+   4   550000 yr   3.30×10³² erg/s   8.69×10³¹ erg/s   3.80
+   4   2300000 yr   3.00×10³¹ erg/s   7.81×10²⁹ erg/s   38.4
+   4   440000 yr   5.92×10³¹ erg/s   1.27×10³² erg/s   0.466
+   4   420000 yr   6.32×10³¹ erg/s   1.36×10³² erg/s   0.464
+   4   3700000 yr   9.22×10³¹ erg/s   5.23×10²⁸ erg/s   1760
+log₁₀(L_obs/L_model): median -0.191 ; 34 of 48 stars within a factor 3 of their error range
+  group 1 : 12 stars, mean log₁₀(L_obs/L_model) = 0.169
+  group 2 : 22 stars, mean log₁₀(L_obs/L_model) = -0.524
+  group 3 : 6 stars, mean log₁₀(L_obs/L_model) = -0.0110
+  group 4 : 8 stars, mean log₁₀(L_obs/L_model) = 1.74
+stars with an independent age t*: 25 , of which 12 have L_obs within a factor 3 of the model
