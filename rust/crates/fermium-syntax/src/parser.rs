@@ -867,10 +867,21 @@ impl Parser {
                 let k = self.toks[kt].s().to_string();
                 if !matches!(k.as_str(), "number" | "vector" | "list" | "complex") {
                     let raw = self.toks[kt].raw.clone();
+                    let pn = self.toks[pt].raw.clone();
+                    // red team 14 #9a: `n: int` gave the hint `n [int]`
+                    let near = ["number", "vector", "list", "complex"].into_iter().find(|w| close_word(&raw, w));
+                    let hint = if raw == "int" || raw == "integer" || raw == "float" || raw == "real" {
+                        format!("a Fermium function takes any number, so write just  {pn}  (or  {pn}: number); \
+                                 : int  is for the signatures of  import c  and  use python")
+                    } else if let Some(w) = near {
+                        format!("did you mean  {pn}: {w} ?")
+                    } else {
+                        format!("give a unit in brackets instead:  {pn} [{raw}]")
+                    };
                     return Err(self.error(
                         format!("a parameter can be marked  : number,  : vector,  : list  or  : complex, not : {raw}"),
                         Some(kt),
-                        Some(format!("give a unit in brackets instead:  {} [{raw}]", self.toks[pt].raw)),
+                        Some(hint),
                     ));
                 }
                 kind = Some(k);
@@ -1836,11 +1847,19 @@ impl Parser {
                     }
                     _ => {
                         let unit = self.toks[kt].raw.clone();
+                        let pn = self.toks[pt].raw.clone();
+                        // red team 14 #9a: `x: vector` gave the hint `x [vector]`
+                        let hint = if matches!(unit.as_str(), "number" | "vector" | "complex" | "float" | "double") {
+                            format!("a foreign function takes doubles, ints and arrays of doubles: write  {pn}  for a \
+                                     number (a double),  {pn}: int  or  {pn}: list")
+                        } else {
+                            format!("give a unit in brackets instead:  {pn} [{unit}]")
+                        };
                         return Err(self.error(
                             format!("a parameter can be marked  : int  (a whole number), : list  or  : len(x), not : \
                                      {unit}"),
                             Some(kt),
-                            Some(format!("give a unit in brackets instead:  {} [{unit}]", self.toks[pt].raw)),
+                            Some(hint),
                         ));
                     }
                 }
@@ -2200,4 +2219,29 @@ fn lang_name(lang: &str) -> &'static str {
         "cpp" => "C++",
         _ => "Fortran",
     }
+}
+
+/// Is `a` one or two edits (or a swap) away from `b`? For "did you mean" hints.
+fn close_word(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.to_lowercase().chars().collect(), b.chars().collect());
+    if a == b {
+        return false;
+    }
+    let mut d: Vec<Vec<usize>> = vec![vec![0; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for j in 0..=b.len() {
+        d[0][j] = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let c = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            d[i][j] = (d[i - 1][j] + 1).min(d[i][j - 1] + 1).min(d[i - 1][j - 1] + c);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                d[i][j] = d[i][j].min(d[i - 2][j - 2] + 1);
+            }
+        }
+    }
+    d[a.len()][b.len()] <= 2 && a.len() >= 3
 }

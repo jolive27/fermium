@@ -307,6 +307,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let (a, b) = (va.num(), vb.num());
                 let line = self.line;
                 let mut error: Option<RunError> = None;
+                // an integrand that reads uncertain values without returning one (a jump at an uncertain point:
+                // `if x < a then 1 else 0`, sign, floor) still depends on them (red team 14 #1, D300)
+                let rec = self.module.uses_uncertainty.then(crate::eval_unc_kern::seen_begin);
                 let r = quad::quad(
                     |x| {
                         // after an error, zeros: the quadrature then ends at once (NaN can keep an infinite range
@@ -329,6 +332,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     xname.map(|i| i as f64).unwrap_or(-1.0),
                 );
                 self.line = line;
+                let seen = rec.map(crate::eval_unc_kern::seen_end).unwrap_or_default();
+                if error.is_none() && !seen.is_empty() {
+                    return self.integral_unc(*lam, &va, &vb, atol, name, &fail, fr);
+                }
                 if let Some(ex) = error {
                     if self.module.uses_uncertainty && crate::eval_unc::is_unc_error(&ex) {
                         // the integrand has uncertain inputs (C7)

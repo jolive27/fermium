@@ -17,7 +17,7 @@ pub fn cmd_check(file: &str) -> ExitCode {
     // imports are found next to the program (cli.py: the folder of the file's absolute path)
     let abs = std::path::absolute(file).unwrap_or_else(|_| file.into());
     let base = abs.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or(".".into());
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: true };
     let cdiags = match fermium_check::check(&prog, opts) {
         Ok((_, d)) => d,
         Err((e, _)) => {

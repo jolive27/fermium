@@ -106,7 +106,7 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
         Err(e) => return fail(&e, &[]),
     };
     let t_parse = t0.elapsed();
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: false };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,
         Err((e, d)) => {

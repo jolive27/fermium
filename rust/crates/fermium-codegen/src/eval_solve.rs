@@ -409,11 +409,17 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             return self.solve_ode_unc(s, &y0v, &vt0, t1, h0, fr);
         }
         let y0: Vec<f64> = y0v.iter().map(Value::num).collect();
-        let solv = match self.ode_core(s, &y0, t0, t1, h0, None, fr) {
+        // a right side that reads uncertain values without returning one (`if t < a then 1 else 0`) still
+        // depends on them (red team 14 #1, D300)
+        let rec = module.uses_uncertainty.then(crate::eval_unc_kern::seen_begin);
+        let r = self.ode_core(s, &y0, t0, t1, h0, None, fr);
+        let seen = rec.map(crate::eval_unc_kern::seen_end).unwrap_or_default();
+        let solv = match r {
             Err(e) if module.uses_uncertainty && crate::eval_unc::is_unc_error(&e) => {
                 // the right side reads uncertain values (C7)
                 return self.solve_ode_unc(s, &y0v, &vt0, t1, h0, fr);
             }
+            Ok(_) if !seen.is_empty() => return self.solve_ode_unc(s, &y0v, &vt0, t1, h0, fr),
             r => r?,
         };
         let snap = self.snapshot(*rhs, fr);

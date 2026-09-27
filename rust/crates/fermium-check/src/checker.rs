@@ -215,6 +215,9 @@ pub struct CheckOptions {
     pub base_dir: String,
     pub repl: bool,
     pub source_name: String,
+    /// only checking (`fermium check`, the language server): libraries named by `import c/fortran/cpp` are not
+    /// loaded (loading runs their code); their symbols are read from the file instead (D305)
+    pub no_load: bool,
 }
 
 #[derive(Clone)] // the REPL rolls a failed input back to a copy (D220)

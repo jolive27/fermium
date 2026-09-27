@@ -352,7 +352,13 @@ impl Checker {
                     let inner_e = match b {
                         Some(Binding::Func(b)) => {
                             let params: Vec<String> = self.func_params(b).iter().map(|p| p.name.clone()).collect();
-                            if !params.iter().any(|p| p == var) && !(params.len() == 1 && !partial) {
+                            // with several versions, any version that has the parameter will do: the call then
+                            // chooses among their derivatives, as (∂/∂y f)(1, 3) does (red team 14 #8)
+                            let some_version = self.versions_of(b).into_iter().any(|v| {
+                                let ps = self.func_params(v);
+                                ps.iter().any(|p| p.name == var) || (ps.len() == 1 && !partial)
+                            });
+                            if !some_version {
                                 let ops = if partial { "∂/∂" } else { "d/d" };
                                 let argsrc = oargs.iter().map(C::to_source).collect::<Vec<_>>().join(", ");
                                 return Err(self.err(

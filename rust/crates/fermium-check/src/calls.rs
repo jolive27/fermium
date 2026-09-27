@@ -269,13 +269,17 @@ impl Checker {
             return Err(self.err(format!("{dn} takes {nparams} argument{} but was given {}",
                                         if nparams != 1 { "s" } else { "" }, args.len()), node.span, None));
         }
+        // a parameter declared `: list` takes the list whole, whatever the body does with it (red team 14 #4)
+        let params = self.func_params(info);
+        let declared_list = params.iter().any(|p| p.kind.as_deref() == Some("list"));
         let list_args: Vec<usize> = args
             .iter()
             .enumerate()
             .filter(|(_, a)| matches!(a, Checked::Val(v) if matches!(v.ty, Ty::List(_))))
             .map(|(i, _)| i)
+            .filter(|&i| params.get(i).is_none_or(|p| p.kind.as_deref() != Some("list")))
             .collect();
-        if !list_args.is_empty() && !self.takes_lists(info) {
+        if !list_args.is_empty() && !declared_list && !self.takes_lists(info) {
             // f(xs, ys): element by element, lists of the same length (D191)
             let mut scalar_args = args.clone();
             for &j in &list_args {

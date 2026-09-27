@@ -224,9 +224,14 @@ kinetic(p [kg m/s], M [kg]) = p² / (2 M)
 - **Resolved at compile time:** the choice is made from the checked types (units are compile-time), so it costs
   nothing at run time; in a generic function, `photon(x) = energy(x) in eV`, each call of `photon` chooses
   again with its own argument's units. A generic function that is never called doesn't have to choose.
-- **Same signature = redefinition:** a definition with the same parameters (same number, units of the same
-  dimension, same kinds) replaces the earlier one, as in Fermium 1.5; `f(x) = 2 x` then `f(x) = 3 x` gives
-  `f(2)` = 6. Only top-level definitions of the same file (or module) become versions; an imported name can't be
+- **Redefinition:** a definition replaces every earlier version it *covers*: the same number of parameters, each
+  at least as broad as the earlier one's (unannotated covers anything; `[m]` covers `[km]` and `: number [m]`; a
+  kind covers the same kind). So the same signature replaces, as in Fermium 1.5 (`f(x) = 2 x` then `f(x) = 3 x`
+  gives `f(2)` = 6), and so does a less specific definition written later: `force(x [m]) = 3 N/m x` then
+  `force(x) = 5 N/m x` gives `force(1 m)` = 5 N, as in Fermium 1.5. A *more specific* definition written later
+  adds a version (`describe(x) = 0` then `describe(x [m]) = 1`): write the general version first. Replacing a
+  version whose units have the same dimension but mean something else (`E(f [Hz])` then `E(ω [rad/s])`: Hz and
+  rad/s are both 1/s, so they can't be two versions) prints a warning. Only top-level definitions of the same file (or module) become versions; an imported name can't be
   redefined (as before).
 - **With the rest of the language:** versions can be one-line or several lines, use `where`, call themselves and
   take functions. `energy'` is the derivative of each one-parameter version and `d/dx U` (or `∂/∂x U`) of each
@@ -1251,8 +1256,8 @@ print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
   (`kinetic_energy(1 kg, [1, 2, 3] km/s)`). A `list` parameter passes a pointer to the elements (each ÷ the
   unit's factor) and its `len` the count; lists without a `len` of their own must have the length of the one
   that has it (*dot: y has 3 elements, but x has 2; they are passed with one length (n)*).
-- **The library** is opened when the program is checked, relative to the program's folder (a bare name the
-  folder doesn't have, like `libm.so.6`, is looked up by the system). A missing library or function is a
+- **The library** is opened when the program is checked for a run, relative to the program's folder (a bare name
+  the folder doesn't have, like `libm.so.6`, is looked up by the system). A missing library or function is a
   compile error with a hint: how to build the library, or, for a misspelt function, `nm -D` (and, when the
   other spelling of a Fortran name is there, which one: *the library has cstyle without the trailing underscore
   (a bind(C) function): add bind(C) after the result*).
@@ -1269,8 +1274,13 @@ print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
   when the program was built.
 - **Trust:** as in C, the declaration is the contract. Fermium can't check that `kinetic_energy` really
   takes two doubles, or that a Fortran array is as long as the length passed; a wrong declaration is
-  undefined behaviour, exactly as a wrong prototype in C. Loading a library runs its initialisers when the
-  program is checked (also by `fermium check` and the editor's language server), like `use python`. In a
+  undefined behaviour, exactly as a wrong prototype in C. Loading a library runs its initialisers, so
+  `fermium run` and `fermium build` load it but `fermium check` and the editor's language server don't: they
+  read the function names from the library file (ELF on Linux; elsewhere, or for a library the system finds by
+  a bare name, a misspelt function is reported when the program runs). C++ wrappers are still compiled by
+  `fermium check`, but not loaded. Arguments must be plain numbers: an uncertain value (±) is an error
+  (*sq is a C function, which takes plain numbers, but got an uncertain value (±)*; write `value(x)`, or call it
+  inside `propagate montecarlo`, where it gets one sample at a time), as for `use python`. In a
   `parallel for`, a function called directly may run on several threads at once, so it must be thread-safe.
 - **Not yet supported:** output arrays (a function that writes into an array), `float` and `long`
   parameters, structs, strings, callbacks (passing a Fermium function to C), functions that return nothing,
@@ -1810,7 +1820,7 @@ prints
 - **Vectors and matrices** of uncertain values print with one unit (`<1.00 ± 0.10, 2.00 ± 0.20> m`, `[[2.00 ± 0.10, -1], [-1, 2.00 ± 0.10]] N/m`; a state vector with a unit per component). `|v|`, `unit`, `·`, `×`, `abs`, components, `det`, `inverse`, `solve_linear` and matrix products propagate with the correlations (`K inverse(K)` is exactly the identity). Lists of uncertain values work in every list function, including `std` (the spread, with its uncertainty) and `interp`.
 - **Integrals** whose integrand reads a measured value, or whose limits are measured, are propagated exactly: the derivative is taken under the integral sign (one more quadrature per error source) and through the limits (f(b)·σ_b). `∫ x² dx from 0 to a` minus `a³/3` is exactly `0 ± 0`.
 - **Differential equations** with a measured starting value, start time or parameter solve the sensitivities ∂y/∂(each source) alongside y with the same solver (the variational equations), so `y(t)`, `y'(t)` and `values(y)` are uncertain values that keep their correlations with the inputs. The stopping time of `until`, `max`/`min` of a solution and plots use the nominal solution.
-- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part is more than 10 % of the first-order part), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 have the details.
+- **When the linear rule isn't valid:** each error source is moved by ±1σ and the integral or solve recomputed. If the change is not close to linear (the second-order part, or the gap between either one-sided change and the first-order prediction, is more than 10 % of the change's typical size), the result comes from Monte Carlo instead: 10 000 samples for an integral, 2 000 solves for an ODE, from the seeded random numbers (`seed(n)` changes them). A warning says so. This also catches a jump at a measured value, where the derivative is 0 almost everywhere but the result moves: `∫ (if x < a then 1 else 0) dx from 0 to 2` with `a = 1.0 ± 0.1` is `1.00 ± 0.10`. The value shown is the one at the measured inputs (as for the linear rule); the spread and the links to the inputs come from the samples, and all values of one Monte Carlo solution share the same samples, so `x(2) - x(1)^2` for x' = −k x is 0 in value. For a different number of samples, use `propagate montecarlo N samples`. DECISIONS D276–D279 and D300–D304 have the details.
 
 ### How it runs
 
