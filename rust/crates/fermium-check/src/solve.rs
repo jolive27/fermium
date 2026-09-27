@@ -1223,7 +1223,18 @@ impl Checker {
     pub fn sol_index(&mut self, vid: SolViewId, e: &A::Expr, index: &A::Expr, ctx: &mut Ctx) -> CResult<I::Expr> {
         let v = self.sols[vid].clone();
         if v.list.is_some() {
-            return Err(self.list_sol_error(&v, e));
+            if !matches!(index.kind, K::End) {
+                return Err(self.list_sol_error(&v, e));
+            }
+            // N[end]: the list at the last time (D282)
+            let line = e.span.line;
+            let sol = self.var_ref(v.sol_sym, ctx, e)?;
+            let I::ExprKind::Var(sym) = sol.kind else { unreachable!() };
+            let ts = ir(I::ExprKind::SolList { sol: sym, comp: 0, what: 1 }, Ty::List(v.tdim.clone()), line);
+            let n = ir(I::ExprKind::Builtin("len".into(), vec![ts.clone()]), Ty::Num(DExpr::of(DIMLESS)), line);
+            let t = ir(I::ExprKind::Index(Box::new(ts), Box::new(n)), Ty::Num(v.tdim.clone()), line);
+            let tfmt = self.fmt_of(&v.tdim, v.thint.clone());
+            return self.list_sol_at(&v, sol, t, tfmt, e);
         }
         let line = e.span.line;
         let index_of = |c: &mut Checker, vals: &I::Expr, ctx: &mut Ctx| -> CResult<I::Expr> {
@@ -1294,25 +1305,8 @@ impl Checker {
                 return Err(self.err(format!("{} is a list of unknowns, so it takes one time, not a list of times",
                                             view.name), e.span, None));
             }
-            let (slot, dy) = if view.comp <= view.top {
-                (view.comp, 0.0)
-            } else if view.comp == view.top + 1 {
-                (view.top, 1.0)
-            } else {
-                return Err(self.err(format!("can't take that many derivatives of the solution {}", view.name), e.span,
-                                    None));
-            };
-            let k = match lt {
-                Ty::VList(el) => vec_n(el),
-                _ => 0,
-            };
-            let line = e.span.line;
-            let c = |x: f64| ir(I::ExprKind::Const(x), Ty::Num(DExpr::of(DIMLESS)), line);
-            let args = vec![sol, c(slot as f64), t, c(dy), c(k as f64), c(tfmt as f64)];
-            let mut r = ir(I::ExprKind::Builtin("__sol_list".into(), args), with_list_dim(lt, view.dim.clone()), line);
-            r.hint = view.hint.clone();
-            r.sf = view.sf;
-            return Ok(r);
+            let _ = lt;
+            return self.list_sol_at(&view, sol, t, tfmt, e);
         }
         let tsf = t.sf;
         let mut r = self.sol_eval_node(&view, sol_sym, &t, e, tfmt)?;
@@ -1356,10 +1350,34 @@ impl Checker {
         }
     }
 
-    /// A list unknown used as something other than N(t) (D282).
+    /// N(t) or N'(t) of a list unknown: `__sol_list(solution, slot, t, derivative?, k, tfmt)` (D282).
+    fn list_sol_at(&mut self, view: &SolView, sol: I::Expr, t: I::Expr, tfmt: usize, e: &A::Expr) -> CResult<I::Expr> {
+        let lt = view.list.clone().unwrap();
+        let (slot, dy) = if view.comp <= view.top {
+            (view.comp, 0.0)
+        } else if view.comp == view.top + 1 {
+            (view.top, 1.0)
+        } else {
+            return Err(self.err(format!("can't take that many derivatives of the solution {}", view.name), e.span,
+                                None));
+        };
+        let k = match &lt {
+            Ty::VList(el) => vec_n(el),
+            _ => 0,
+        };
+        let line = e.span.line;
+        let c = |x: f64| ir(I::ExprKind::Const(x), Ty::Num(DExpr::of(DIMLESS)), line);
+        let args = vec![sol, c(slot as f64), t, c(dy), c(k as f64), c(tfmt as f64)];
+        let mut r = ir(I::ExprKind::Builtin("__sol_list".into(), args), with_list_dim(&lt, view.dim.clone()), line);
+        r.hint = view.hint.clone();
+        r.sf = view.sf;
+        Ok(r)
+    }
+
+    /// A list unknown used as something other than N(t) or N[end] (D282).
     fn list_sol_error(&self, v: &SolView, e: &A::Expr) -> fermium_syntax::diag::Diagnostic {
-        self.err(format!("{n} is a list of unknowns: use its value at a time, like {n}({t}) (a list), or {n}({t})[i]",
-                         n = v.name, t = v.tname), e.span, None)
+        self.err(format!("{n} is a list of unknowns: use its value at a time, like {n}({t}) (a list) or {n}({t})[i], \
+                          or its last value {n}[end]", n = v.name, t = v.tname), e.span, None)
     }
 
     /// The unknowns of a solution, for messages.

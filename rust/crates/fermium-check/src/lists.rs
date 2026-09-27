@@ -298,7 +298,7 @@ impl Checker {
             }
         }
         let t = match t {
-            Checked::Sol(view) if self.sols[view].n > 1 => return self.sol_index(view, e, index, ctx),
+            Checked::Sol(view) if self.sols[view].n > 1 || self.sols[view].list.is_some() => return self.sol_index(view, e, index, ctx),
             Checked::Sol(view) => Checked::Val(self.sol_values(view, e)?),
             other => other,
         };

@@ -1,5 +1,5 @@
 {
  "stdout": "",
- "stderr": "error_solve_list_use.fm, line 3: N is a list of unknowns: use its value at a time, like N(t) (a list), or N(t)[i]\n    print N[end]\n          ^^^^^\n",
+ "stderr": "error_solve_list_use.fm, line 4: N is a list of unknowns: use its value at a time, like N(t) (a list) or N(t)[i], or its last value N[end]\n    print values(N)\n                 ^\n",
  "exit": 1
 }

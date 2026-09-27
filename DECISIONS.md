@@ -1249,8 +1249,8 @@ built-in call, so the rest of the program stays compiled.
 chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
 - **Alternatives:** unrolling at compile time (needs the length at compile time, which a list built by `push` in a
 loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
-tree-walker speed now); allowing `N[end]`, `values(N)` and `plot N` (a list per step; left out for now, with a clear
-error).
+tree-walker speed now); `values(N)` and `plot N` (a list per step; left out for now, with a clear error; `N[end]` is
+`N` at the last time).
 
 ## D283. N-dimensional arrays: `fill(value, n1, n2, …)`, `A[i, j, k]`, entry-by-entry arithmetic (spec C1)
 - **What:** a new type `Array { rank, dim }` (2 ≤ rank ≤ 4; every entry shares one unit; the shape is a run-time

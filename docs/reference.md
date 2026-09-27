@@ -845,8 +845,8 @@ print r(T)[1], r'(T)[3]
   must be a list of numbers in N's units per time. `x` and `x'` of a second-order list unknown must have the same
   length, and so must the list the right side returns (else a run-time error saying how many numbers it gave).
 - **Afterwards:** `N(t)` is the list at a time, `N(t)[i]` one element, `N'(t)` the list of derivatives (from the
-  right side). `N[end]`, `values(N)`, `plot N` and `N(ts)` with a list of times are errors for a list unknown (use
-  `N(t)` in a loop).
+  right side), `N[end]` the list at the end (or where `until` stopped), `times(N)` the solver's times. `values(N)`,
+  `plot N` and `N(ts)` with a list of times are errors for a list unknown (use `N(t)` in a loop).
 - **With other unknowns:** ordinary unknowns can be in the same `solve` (`x' = -k * x` next to `T' = …`). `until` can
   test an element (`until x[3] = 0.01 m`); `absolute` takes one value per unknown's units, used for every element of a
   list unknown; `rk45`, `rk4` with a step, `radau` and `bdf` all work.

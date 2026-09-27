@@ -10,7 +10,7 @@ rates(N) =
 
 N0 = [1e6, 0, 0, 0]
 solve N' = rates(N) with N(0 min) = N0 for t from 0 min to 60 min using radau
-print N(60 min)
+print N(60 min), N[end][4]
 print "Bi-214 at 10 min:", N(10 min)[3]
 print "activities at 10 min:", λ * N(10 min) in 1/s
 print N'(10 min)

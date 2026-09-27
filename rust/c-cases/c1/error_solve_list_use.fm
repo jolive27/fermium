@@ -1,3 +1,4 @@
 solve N' = -N / (1 s) with N(0 s) = [1, 2, 3] for t from 0 s to 1 s
 print N(1 s)
 print N[end]
+print values(N)
