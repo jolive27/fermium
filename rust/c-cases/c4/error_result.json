@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_result.fm, line 2: no overload of phys::twice has the C++ type double(int)\n        phys::twice(n: int) -> [J]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: Fermium passes a number ([unit] or plain) as double, : int and len(…) as int and : list as const double * (or double *), and expects double back (-> [unit], -> number) or int (-> int)\n",
+ "exit": 1
+}

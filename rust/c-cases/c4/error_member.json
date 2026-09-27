@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_member.fm, line 2: phys::Particle::rest_energy is a member function, which needs an object; only free functions and static member functions can be imported\n        phys::Particle::rest_energy() -> [J]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: add a free (or static) function to the library that makes the object and calls it\n",
+ "exit": 1
+}

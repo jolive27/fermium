@@ -1,0 +1,5 @@
+{
+ "stdout": "1.50 m 1\n",
+ "stderr": "exception.fm, line 6: checked_sqrt: the C++ function phys::checked_sqrt threw an exception: checked_sqrt of a negative number\n    print checked_sqrt(-1 m²)\n",
+ "exit": 1
+}

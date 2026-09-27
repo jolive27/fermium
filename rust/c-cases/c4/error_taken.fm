@@ -1,0 +1,5 @@
+# a C++ function whose name the program already uses needs another name: as
+half = 0.5
+import cpp "libphys4.so" header "phys.hpp":
+    phys::half(x) -> number
+print half(1)

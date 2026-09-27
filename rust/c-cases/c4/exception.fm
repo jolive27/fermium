@@ -1,0 +1,7 @@
+# a C++ exception stops the program with its message, after what it printed
+import cpp "libphys4.so" header "phys.hpp":
+    phys::checked_sqrt(x [m²]) -> [m]
+    phys::throws_int(x) -> number
+print checked_sqrt(2.25 m²), throws_int(1)
+print checked_sqrt(-1 m²)
+print "never printed"

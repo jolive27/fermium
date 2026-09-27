@@ -1,0 +1,8 @@
+# arrays of doubles: const double * and double * (the function gets a copy; the list is unchanged)
+import cpp "libphys4.so" header "phys.hpp":
+    phys::sum_sq(x: list [m], n: len(x)) -> [m²]
+    phys::scale_sum(x: list [m], n: len(x), f) -> [m]
+xs = [1 m, 2 m, 300 cm]
+print sum_sq(xs), sum_sq(linspace(0 m, 1 m, 101)) to 6 digits, sum_sq([] [m])
+print scale_sum(xs, 10), xs
+print scale_sum(xs, [1, 2])        # the number parameter gets a list: one call per element

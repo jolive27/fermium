@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_missing.fm, line 3: the header phys.hpp declares no function phys::energyy\n        phys::energyy(m [kg]) -> [J]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: check the spelling and the namespace (C++ names are case-sensitive)\n",
+ "exit": 1
+}

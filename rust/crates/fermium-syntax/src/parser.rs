@@ -556,6 +556,9 @@ impl Parser {
         if tt.is_name("import") && (nx.is_name("c") || nx.is_name("fortran")) && self.peek(2).kind == Kind::Str {
             return self.import_c_stmt(end_line); // import c "libphys.so": … (C3, D275)
         }
+        if tt.is_name("import") && nx.is_name("cpp") && (self.peek(2).kind == Kind::Str || self.peek(2).is_name("header")) {
+            return self.import_c_stmt(end_line); // import cpp "libphys.so" header "phys.hpp": … (C4, D290)
+        }
         if (tt.is_name("import") || tt.is_kw("from")) && matches!(nx.kind, Kind::Name | Kind::Str) {
             let s = self.import_stmt()?;
             if end_line {
@@ -1673,17 +1676,36 @@ impl Parser {
         let t = self.next();
         let lt = self.next();
         let lang = self.toks[lt].s().to_string();
-        let st = self.next();
-        let lib = self.toks[st].s().to_string();
-        let what = if lang == "c" { "C" } else { "Fortran" };
-        let example = if lang == "c" {
-            "like\n    import c \"libphys.so\":\n        kinetic_energy(m [kg], v [m/s]) -> [J]"
-        } else {
-            "like\n    import fortran \"libnuclear.so\":\n        binding_energy(Z: int, A: int) -> [MeV]"
+        let what = lang_name(&lang);
+        let mut lib = String::new();
+        if self.kind() == Kind::Str {
+            let st = self.next();
+            lib = self.toks[st].s().to_string();
+        }
+        let example = match lang.as_str() {
+            "c" => "like\n    import c \"libphys.so\":\n        kinetic_energy(m [kg], v [m/s]) -> [J]",
+            "cpp" => "like\n    import cpp \"libphys.so\" header \"phys.hpp\":\n        phys::kinetic_energy(m [kg], v [m/s]) \
+                      -> [J]",
+            _ => "like\n    import fortran \"libnuclear.so\":\n        binding_energy(Z: int, A: int) -> [MeV]",
         };
+        let mut header = None;
+        if lang == "cpp" {
+            if !self.tok().is_name("header") {
+                return Err(self.err_h(format!("expected header \"….hpp\" after the C++ library's name{}", self.found()),
+                                      example));
+            }
+            self.next();
+            if self.kind() != Kind::Str {
+                return Err(self.err_h(format!("expected the header's name in quotes after header{}", self.found()),
+                                      example));
+            }
+            let ht = self.next();
+            header = Some(self.toks[ht].s().to_string());
+        }
         if !self.at_op(":") {
+            let after = if lang == "cpp" { "header's" } else { "library's" };
             return Err(self.err_h(format!("expected ':' and the signatures of the {what} functions after the \
-                                           library's name{}", self.found()), example));
+                                           {after} name{}", self.found()), example));
         }
         self.next();
         let mut sigs = vec![];
@@ -1720,15 +1742,18 @@ impl Parser {
         for g in &sigs {
             self.known.insert(g.name.clone());
         }
-        Ok(self.stmt(StmtKind::ImportC { lang, lib, sigs }, t))
+        Ok(self.stmt(StmtKind::ImportC { lang, lib, header, sigs }, t))
     }
 
     /// kinetic_energy(m [kg], v [km/s]) -> [J];  sum_sq(x: list [m], n: len(x)) -> [m²];
     /// neutron_separation(Z: int, A: int) -> [MeV] bind(C, name="semf_sn")
     fn c_signature(&mut self, lang: &str) -> R<CSig> {
-        let what = if lang == "c" { "C" } else { "Fortran" };
+        let what = lang_name(lang);
         let nt = self.i;
         let ntt = self.tok().clone();
+        if lang == "cpp" && matches!(ntt.kind, Kind::Name | Kind::Kw) && (self.peek(1).is_op("(") || self.peek(1).is_op(":")) {
+            return self.cpp_signature();
+        }
         if ntt.kind == Kind::Kw && self.peek(1).is_op("(") {
             let hint = if lang == "c" {
                 format!("give it another name in a small C wrapper, like  double my_{0}(double x) {{ return {0}(x); }}",
@@ -1746,6 +1771,49 @@ impl Parser {
         }
         self.next();
         let fname = ntt.s().to_string();
+        self.c_signature_rest(lang, nt, fname, ntt.raw.clone(), None)
+    }
+
+    /// A C++ function's signature (C4, D290): `phys::Particle::rest_energy(m [kg]) -> [J]`, optionally renamed with
+    /// `as name` after the result (two overloads of one function need two names in the program).
+    fn cpp_signature(&mut self) -> R<CSig> {
+        let nt = self.i;
+        let mut parts: Vec<(String, usize)> = vec![];
+        loop {
+            let pt = self.i;
+            if !matches!(self.kind(), Kind::Name | Kind::Kw) {
+                return Err(self.err(format!("expected a name after ::{}", self.found())));
+            }
+            self.next();
+            parts.push((self.toks[pt].s().to_string(), pt));
+            if self.at_op(":") && self.peek(1).is_op(":") {
+                self.next();
+                self.next();
+                continue;
+            }
+            break;
+        }
+        let (last, lt) = parts.last().cloned().unwrap();
+        let qual = parts.iter().map(|p| p.0.as_str()).collect::<Vec<_>>().join("::");
+        let raw = self.toks[lt].raw.clone();
+        let mut sig = self.c_signature_rest("cpp", nt, last.clone(), raw.clone(), Some(qual))?;
+        if sig.name == last && self.toks[lt].kind == Kind::Kw {
+            return Err(self.error(format!("{raw} is a Fermium keyword, so the program needs another name for the C++ \
+                                           function {}", sig.cpp_name.as_deref().unwrap_or("")), Some(lt),
+                                  Some(format!("rename it after the result, like  … -> [J] as my_{raw}"))));
+        }
+        sig.span = self.span_from(nt);
+        Ok(sig)
+    }
+
+    /// The rest of a signature, from its ( on.
+    fn c_signature_rest(&mut self, lang: &str, nt: usize, fname: String, raw: String, cpp_name: Option<String>)
+                        -> R<CSig> {
+        let what = lang_name(lang);
+        struct Raw {
+            raw: String,
+        }
+        let ntt = Raw { raw };
         self.expect_op("(", Some(&format!("after {0} (write the signature like  {0}(x [m]) -> [J])", ntt.raw)))?;
         let mut params = vec![];
         while !self.at_op(")") {
@@ -1810,6 +1878,16 @@ impl Parser {
                 format!("like  {}(x [m]) -> [J]   or  -> int", ntt.raw),
             ));
         };
+        let mut fname = fname;
+        if self.tok().is_name("as") {
+            let at = self.next();
+            if lang != "cpp" {
+                return Err(self.error(format!("as renames C++ functions; a {what} function is called by its own name"),
+                                      Some(at), Some("remove  as …".into())));
+            }
+            let nt2 = self.expect_name("the function's name in the program after as")?;
+            fname = self.toks[nt2].s().to_string();
+        }
         let mut bind = None;
         if self.tok().is_name("bind") {
             let bt = self.next();
@@ -1843,7 +1921,7 @@ impl Parser {
             self.expect_op(")", None)?;
             bind = Some(name);
         }
-        Ok(CSig { name: fname, params, ret, bind, span: self.span_from(nt) })
+        Ok(CSig { name: fname, params, ret, bind, cpp_name, span: self.span_from(nt) })
     }
 
     /// f(x [m], xs [s], n: int) -> list [J]   (the result part is optional).
@@ -2113,4 +2191,13 @@ pub struct SolveState {
     pub lo2: Option<Expr>,
     pub hi2: Option<Expr>,
     pub step2: Option<Expr>,
+}
+
+/// "C", "C++" or "Fortran" for the word after import.
+fn lang_name(lang: &str) -> &'static str {
+    match lang {
+        "c" => "C",
+        "cpp" => "C++",
+        _ => "Fortran",
+    }
 }

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_arity.fm, line 3: kinetic_energy takes 2 arguments (as declared in the import on line 2), but got 1\n    print kinetic_energy(1 kg)\n          ^^^^^^^^^^^^^^^^^^^^\n",
+ "exit": 1
+}

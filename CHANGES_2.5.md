@@ -29,6 +29,38 @@ size(xs: list) = len(xs)
 - Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
   function, the Python API (uses the last version), Fermium 1.5.
 
+## C++ interop (C4, DECISIONS D290)
+
+Fermium calls C++ functions, with the units checked at every call before the program runs, through a small
+`extern "C"` wrapper it generates and compiles with the system's C++ compiler (cached, so only the first run
+compiles):
+
+```text
+import cpp "libkinematics.so" header "kinematics.hpp":
+    kin::TwoBody::momentum(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV/c]   # a static member function
+    kin::invariant_mass(E [MeV], p [MeV/c]) -> [MeV/c²] as mass_of           # one overload …
+    kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass  # … another
+import cpp header "cmath":
+    std::tgamma(x) -> number
+print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 24
+```
+
+- The signatures are those of `import c`, with namespaced names; the declared signature picks the overload
+  (or instantiates a function template), and `as` names it in the program. Static member functions work;
+  ordinary member functions are refused with a message that says why.
+- A C++ exception stops the program with its message; compile-time problems (a misspelt function, no overload
+  with the declared types, a symbol the library doesn't define, a missing header, no C++ compiler) are one line
+  with a caret on the signature.
+- The compiler is `$CXX` or the first of c++, g++, clang++; wrappers are cached in `~/.cache/fermium/cpp` (or
+  `$FERMIUM_CACHE_DIR/cpp`) and rebuilt when a header or the library changes.
+- Worked example: [examples/cpp_interop/](examples/cpp_interop/) computes two-body decay momenta (π⁺ → μ⁺ ν:
+  29.79 MeV/c, as the PDG gives), decay lengths and the invariant mass of the Λ in C++. Reference:
+  [docs/reference.md](docs/reference.md), *C++ interop*.
+- Not yet: objects and ordinary member functions, references, `std::vector` and strings, types other than
+  `double`, `int` and arrays of doubles, functions returning nothing, explicit template arguments. C++ calls
+  take about 0.6 µs each (they go through the run time to check for exceptions). Tested on x86-64 Linux with
+  g++; macOS is untested.
+
 ## C and Fortran interop (C3, DECISIONS D275)
 
 Fermium calls functions in C and Fortran shared libraries through the C ABI, with the units checked at every

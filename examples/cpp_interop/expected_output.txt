@@ -1,0 +1,13 @@
+Daughter momentum p* (C++, Fermium's formula, PDG):
+   π⁺ → μ⁺ ν  29.79 MeV/c 29.79 MeV/c  29.79 MeV/c
+   K⁺ → μ⁺ ν  235.5 MeV/c 235.5 MeV/c  235.5 MeV/c
+   Λ → p π⁻   100.6 MeV/c 100.6 MeV/c  101 MeV/c
+muon energy in π⁺ decay: 109.78 MeV
+γ of a 10 GeV/c pion: 71.66
+mean decay length of a 10 GeV/c pion: 559 m
+mean decay length of a 1 GeV/c muon: 6.23 km
+at 1, 3, 10 GeV/c: [55.9, 168, 559] m
+proton alone: 938.2721 MeV/c²
+p π⁻ pair at 180°: 1115.683 MeV/c²
+the same pair at 90° would be 1106.6 MeV/c²
+p π⁻ as a system of vectors: 1115.683 MeV/c²

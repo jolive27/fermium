@@ -1412,3 +1412,47 @@ grid with 300 K"), puts the unit in the value where the unit rule already applie
 products and inverses mean something an array's don't); `zeros(n1, n2, n3) K` (zeros(r, c) is already a matrix; a
 unit after a call isn't the unit rule); `A[i][j][k]` only (kept working, but `A[i, j, k]` is what physicists write);
 NumPy-style broadcasting, slices and vectorized functions (next steps; each needs its own unit rules).
+
+## D290. C++ interop (C4): a generated extern "C" wrapper per import, compiled by the system's C++ compiler and cached
+- **What:** `import cpp "libphys.so" header "phys.hpp":` followed by `import c` signatures whose names may be
+qualified (`phys::Particle::compton_wavelength(m [kg]) -> [m]`) and may end with `as name`; `import cpp header
+"cmath":` without a library for header-only code. At check time Fermium writes one C++ file per import: for each
+signature an `extern "C"` function `fermium_cpp_k` taking C types (`double`, `int`, `double *`) that converts
+`&phys::f` to the function-pointer type of the declared signature (`double (*)(double, int)`, the result `double`
+or `int`) by passing it to a helper overloaded on that type (one helper per `const double *`/`double *` spelling
+of the lists, up to three lists), calls it inside `try`, and on an exception keeps "the C++ function phys::f threw
+an exception: what()" in a thread-local buffer and returns 0. `int fermium_cpp_error(char *, int)` hands the
+message over and clears it. The file is compiled by `$CXX`, else the first of c++, g++, clang++ that runs, with
+`-std=c++17 -O2 -fPIC -shared -MMD`, `-I` the program's and the header's folders, the library by its path with
+an rpath, `-Wl,--no-undefined` on Linux, then `$CXXFLAGS`. The result goes to `$FERMIUM_CACHE_DIR/cpp` (else
+`$XDG_CACHE_HOME/fermium/cpp`, `~/.cache/fermium/cpp`, macOS `~/Library/Caches/fermium/cpp`) as `w<FNV-1a 64 of
+the source, the named header's text, the library path, $CXX, $CXXFLAGS>.so`, written under a temporary name and
+renamed (parallel runs don't see half a file); it is reused while no file in its `-MMD` list and not the library
+is newer than it. Each signature then becomes a C3 function of the wrapper (`CFuncRef` with lang "C++"): units
+checked at every call, lists, elementwise maps, `fermium build`. `CCallSite.cpp` marks the call sites: after each
+call, eval_c.rs asks `fermium_cpp_error` and turns a message into a run-time error at the call's line, so the
+LLVM back end sends C++ calls through its callback (≈0.6 µs a call) instead of calling directly. Compiler errors
+are translated into one line on the signature they concern (the error's line in the generated file says which):
+undeclared name → "the header declares no function", a pointer-to-member in the output → "a member function,
+which needs an object", no conversion → "no overload of phys::f has the C++ type double(double, int)", ambiguous,
+missing header, undefined reference at link time → "the C++ library has no definition of phys::f(double)" (or,
+with no library, "defined nowhere"); anything else gives the first error and the path of a log with the full
+output.
+- **Why:** spec C4 ("through generated C wrappers"). The function-pointer conversion makes the declared signature
+choose among overloads exactly as C++ would for `static_cast<double(*)(double)>(&f)`, deduces template
+arguments, works for static member functions, and lets the compiler check the declaration against the header,
+which C3 can't. Mangled names are compiler-specific, so calling C++ symbols without a compiler would tie Fermium
+to one ABI's mangling and still not handle inline functions or templates. Catching exceptions in the wrapper is
+required: unwinding through Rust's frames is undefined behaviour. The cache keeps the check fast (a hit needs no
+compiler: ≈40 ms for a program); `-MMD` makes edits to included headers count. The error message crosses as a
+buffer through the existing C3 call machinery, so no new runtime entry points or dependencies were needed.
+- **Alternatives:** calling the function directly in the wrapper (`return phys::f(a0, a1)`: overload resolution
+with implicit conversions would silently pick `f(int)` for a double, or `f(float)`); `static_cast` to one
+pointer type (can't accept either `const double *` or `double *` for a list); parsing the header (libclang: a
+large native dependency); a C++ compiler at run time instead of check time (errors would come late); the
+direct LLVM call with an error flag checked after it (faster, but a new runtime path in the JIT and the AOT
+runtime; left for later); a per-program wrapper instead of per import (fewer files, but more recompiles).
+Known gaps: non-static member functions and objects, references, `float`/`long`/structs/strings/`std::vector`,
+`void` results, explicit template arguments, several headers per import, `import cpp` in modules, calls inside
+`units natural`, the playground; macOS linking is written but untested; `fermium build` executables load the
+wrapper from the cache by its build-time path.

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_no_library.fm, line 2: phys::twice(int) is declared in phys.hpp but defined nowhere: the import names no library\n        phys::twice(n: int) -> int\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: name the library before the header, like  import cpp \"libfoo.so\" header \"phys.hpp\"\n",
+ "exit": 1
+}

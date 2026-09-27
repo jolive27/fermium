@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_value.fm, line 3: kinetic_energy is a C++ function from libphys4.so; it can only be called, like kinetic_energy(m, v)\n    y = kinetic_energy\n        ^^^^^^^^^^^^^^\n",
+ "exit": 1
+}

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_overload.fm, line 2: no overload of phys::energy has the C++ type double(double, int)\n        phys::energy(m [kg], n: int) -> [J]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: Fermium passes a number ([unit] or plain) as double, : int and len(…) as int and : list as const double * (or double *), and expects double back (-> [unit], -> number) or int (-> int)\n",
+ "exit": 1
+}

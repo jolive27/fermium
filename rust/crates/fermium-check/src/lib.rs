@@ -29,6 +29,7 @@ pub mod parallel;
 pub mod print;
 pub mod pyinterop;
 pub mod cinterop;
+pub mod cppinterop;
 pub mod rng;
 pub mod solve;
 pub mod source;

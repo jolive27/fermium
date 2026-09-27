@@ -1,0 +1,9 @@
+# a header-only import (inline functions and templates) and the standard library's <cmath>
+import cpp header "phys.hpp":
+    phys::half(t [s]) -> [s]
+    phys::cube(x) -> number
+import cpp header "cmath":
+    std::tgamma(x) -> number
+    std::hypot(x [m], y [m]) -> [m]
+print half(1 min), cube(1.5)
+print tgamma(5), tgamma(0.5)^2 ≈ π, hypot(3 m, 400 cm)

@@ -1961,7 +1961,7 @@ impl<'c, 'm> Gen<'c, 'm> {
         }
         let Some(ExprKind::Const(id)) = args.first().map(|a| &a.kind) else { return Ok(None) };
         let Some(site) = self.m.tables.ccalls.get(*id as usize) else { return Ok(None) };
-        if site.by_ref || site.map || site.rint || site.params.iter().any(|p| p.kind != fermium_ir::CParamKind::Num)
+        if site.by_ref || site.map || site.rint || site.cpp || site.params.iter().any(|p| p.kind != fermium_ir::CParamKind::Num)
             || vals.len() != site.params.len() + 1 || vals[1..].iter().any(|v| v.k != Kind::F)
         {
             return Ok(None);
