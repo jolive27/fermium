@@ -305,18 +305,27 @@ origin v2.5`.
 ## Phase D (v3)
 
 **D1 started; D2–D8 not started.** With gate C9 met, the last part of the run began D1, a formal language
-specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0.1, in `docs/spec/`:
+specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0.2, in `docs/spec/`:
 - `grammar.md`: the full lexical structure and the syntax in EBNF, taken from the parser, with a 14-level
   precedence table and the parser's special cases.
 - `units.md`: dimensions, the unit rule (the bootcamp's three sentences word for word, then a precise
   7-point form), conversions, temperatures, natural units, and dimension inference.
-- `semantics.md` (partial): the execution model, numerics, printing, errors, calculus, and `solve`.
+- `semantics.md`: the execution model, numerics, printing, errors, calculus, `solve`, the scoping rules (12, each
+  found by running programs against the checker), a formal model of linear uncertainty propagation with its
+  Monte Carlo fallback, and a table of every built-in function's arguments and result dimension.
+- `units.md` also holds the unit catalogue (100 units, generated from the unit database), and `grammar.md` the
+  normative list of tokens that start an implicit product (`2 x`, `3 (a + b)`) and those that don't.
 
-The spec is tested (`rust/crates/fermium-syntax/tests/spec_examples.rs`). Its 17 examples must parse and run;
-13 rejected programs must fail with a one-line error; 19 precedence readings must match their bracketed forms;
-and the spec's keyword, operator, fraction and prefix lists must equal the lexer's own tables. Each file lists
-what isn't specified yet (built-in functions, full scoping, a formal uncertainty model, a case-by-case link to
-the conformance suite). DECISIONS D350.
+The spec is tested so it can't drift from the compiler:
+- its examples must parse and run, and its rejected programs must fail with a one-line error;
+- its precedence readings must match their bracketed forms;
+- its keyword, operator, fraction, prefix, built-in and unit tables must equal the compiler's own;
+- its per-area conformance counts must match `conformance/cases/`.
+
+The tests are `rust/crates/fermium-syntax/tests/spec_examples.rs`, `fermium-check/tests/spec_builtins.rs` and
+`fermium-units/tests/spec_catalogue.rs`. Still open, listed in each file: the dimensions in the built-ins table
+are written by hand (only the names are checked), the parser's full error set isn't listed, and there is no
+case-by-case link to the conformance programs. DECISIONS D350, D351.
 ---
 
 ## Every divergence from v1.5
@@ -458,7 +467,7 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
 1. Review and merge the draft PRs (#2 v1.5 → #3 v2.0 → #4 v2.5, then #5 for the spec draft), then push the tags `v1.5`, `v2.0` and `v2.5`
    from their `claude/*-freeze` branches, so the release binaries get built.
 2. Build it on your Mac (above) and run your own programs and the bootcamp. Report anything that differs.
-3. Phase D1: finish the language specification (draft 0.1 on `claude/v3`, PR #5): the TODO lists in each
-   `docs/spec/` file, and a case-by-case link to the conformance suite.
+3. Phase D1: finish the language specification (draft 0.2 on `claude/v3`, PR #5): the TODO lists in each
+   `docs/spec/` file, then D2 onward.
 4. The performance items in BACKLOG ("High value"), then compiled code for ± values (today they need the
    interpreter).
