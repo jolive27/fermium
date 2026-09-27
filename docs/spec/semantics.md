@@ -81,8 +81,8 @@ print f(3 m), f(2)
   is `NaN`. These rules are the current behaviour, not a promise: see TODO.
 - Floating-point sums may be vectorised in order (`force-ordered-reductions`, D311), so a sum's rounding does not
   depend on the optimiser.
-- `a == b` on numbers is exact; `a ≈ b [within t]` is Julia's `isapprox` with a relative default tolerance, and
-  `≈ 0` needs an absolute tolerance (D260).
+- `a == b` on numbers is exact; `a ≈ b [within t]` is Julia's `isapprox`: without `within`, the allowed difference
+  is 10⁻⁶ × the larger magnitude, so `x ≈ 0` is an error that asks for an absolute tolerance (D260).
 
 ```fermium
 x = 1/3
