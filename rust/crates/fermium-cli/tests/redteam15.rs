@@ -366,3 +366,28 @@ fn the_repl_warning_names_no_line() {
     assert!(all.contains("e.g. ω = 2π f"), "{all}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[cfg(unix)]
+#[test]
+fn the_compile_cache_is_private_too() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = dir("jitperms");
+    std::fs::write(d.join("p.fm"), "x = 0\nfor i from 1 to 10\n    x = x + i\nprint x\n").unwrap();
+    // a fresh cache: jit/ is made owner-only and the program is saved there
+    let fresh = d.join("fresh");
+    let (c, o, e) = fm(&["run", "p.fm"], &d, &fresh, &[]);
+    assert_eq!((c, o.as_str(), e.as_str()), (0, "55\n", ""));
+    for p in [&fresh, &fresh.join("jit")] {
+        assert_eq!(std::fs::metadata(p).unwrap().permissions().mode() & 0o777, 0o700, "{}", p.display());
+    }
+    // a cache folder others can write: one warning, the program runs, nothing is read from it or saved in it
+    let open = d.join("open");
+    std::fs::create_dir_all(open.join("jit")).unwrap();
+    std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).unwrap();
+    let (c, o, e) = fm(&["run", "p.fm"], &d, &open, &[]);
+    assert_eq!((c, o.as_str()), (0, "55\n"), "{e}");
+    assert!(e.starts_with("warning: Fermium's cache folder ") && e.contains("running without a cache"), "{e}");
+    assert_eq!(e.matches("warning").count(), 1, "{e}");
+    assert_eq!(std::fs::read_dir(open.join("jit")).unwrap().count(), 0, "the open cache was written");
+    let _ = std::fs::remove_dir_all(&d);
+}

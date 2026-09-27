@@ -52,7 +52,11 @@ The runner exits non-zero if any language's printed results disagree with Julia'
 ## What is measured
 
 * **Wall** — median wall-clock time of the whole process: runtime startup,
-  package loading, compilation/JIT and the computation.
+  package loading, compilation/JIT and the computation. Fermium 2 keeps a program's
+  compiled code in its compile cache (DECISIONS D317), so after the warm-up run its
+  timed runs load that code instead of compiling (as Julia would with a precompiled
+  package image); run with `FERMIUM_NO_CACHE=1` in the environment for wall times
+  that include compiling every time. Inner times are the same either way.
 * **Inner** — median of the `TIME_INNER <seconds>` line each program prints,
   timed inside the program around the computation only. Julia programs first
   run the kernel on a tiny problem (warm-up) so Inner excludes JIT compilation.

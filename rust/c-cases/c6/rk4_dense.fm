@@ -1,0 +1,13 @@
+# A compiled fixed-step RK4 solve long enough that its sample arrays are mapped in one go (DECISIONS D316):
+# the dense solution reads the same numbers as the tree-walker's, at the samples and between them.
+m = 1 kg
+k = 100 [N/m]
+b = 0.5 kg/s
+solve m x'' = -k x - b x'
+  with x(0) = 0.1 [m], x'(0) = 0 m/s
+  for t from 0 s to 6 s step 1e-5 s
+print "steps", len(x) - 1
+print "x(6 s)", x(6 s) / (1 [m]) to 15 digits
+print "x(1.234567 s)", x(1.234567 s) / (1 [m]) to 15 digits
+print "x'(3.5 s)", x'(3.5 s) / (1 m/s) to 15 digits
+print "x(0.00001 s)", x(0.00001 s) / (1 [m]) to 15 digits

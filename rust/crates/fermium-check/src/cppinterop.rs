@@ -154,7 +154,12 @@ extern "C" int fermium_cpp_error(char *buf, int n) {
 
 /// Where compiled wrappers are kept: `cpp/` in Fermium's cache folder (cachedir.rs).
 pub fn cache_dir() -> PathBuf {
-    crate::cachedir::root().join("cpp")
+    cache_root().join("cpp")
+}
+
+/// Fermium's cache folder (cachedir.rs): C++ wrappers go in `cpp/`, compiled programs in `jit/` (D317, D320).
+pub fn cache_root() -> PathBuf {
+    crate::cachedir::root()
 }
 
 /// A file's size and modification time (ns since 1970), or None when it isn't there.

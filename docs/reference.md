@@ -1410,8 +1410,9 @@ print tgamma(5)                                    # 24
   error, unlike `import c`), but not array lengths. Compiling a wrapper only compiles the header, which runs
   nothing; loading the libraries runs their initialisers, so only `fermium run` and `fermium build` load them.
   `fermium check` and the editor's language server compile the wrapper (so C++ errors show while you edit) but
-  don't load it or the library (DECISIONS D305). Everything in the cache folder is code that a later run loads,
-  so Fermium keeps it private: it makes the folders readable and writable by you alone (0700), and refuses a
+  don't load it or the library (DECISIONS D305). Everything in the cache folder (C++ wrappers in `cpp/`, and the machine
+  code `fermium run` saves for a program in `jit/`, D317) is code that a later run loads, so Fermium keeps it
+  private: it makes the folders readable and writable by you alone (0700), and refuses a
   cache folder that another user owns or that group or others can write (a one-line warning, then the program
   runs without the cache). A wrapper is reused only for exactly the inputs it was made from (above), so one
   program's folder can't change what another program loads: a file in the program's folder is on the include

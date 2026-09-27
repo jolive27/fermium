@@ -5,6 +5,7 @@
 //!
 //! It must print exactly what the tree-walker prints. A module with a construct it can't compile yet is
 //! rejected up front (`supports`), before anything runs, and the CLI runs the tree-walker instead.
+pub mod cache;
 pub mod compile;
 pub mod link;
 pub use crate::native::{blob, rt, solve_rt};
@@ -30,8 +31,30 @@ fn init() {
     ONCE.call_once(|| {
         Target::initialize_native(&InitializationConfig::default()).expect("LLVM native target");
         inkwell::execution_engine::ExecutionEngine::link_in_mc_jit();
+        set_llvm_options();
     });
 }
+
+/// LLVM's own options, set once per process (D311). `force-ordered-reductions` lets the loop vectorizer vectorize
+/// a loop whose floating-point sum must stay in source order (`s += f(j)`): the terms are computed several at a
+/// time and added one by one in the same order, so the result is bit for bit the scalar loop's (no reassociation,
+/// no fast-math). `FERMIUM_LLVM_ARGS` (space-separated) replaces the list: performance experiments only.
+fn set_llvm_options() {
+    use std::ffi::CString;
+    let args: Vec<String> = match std::env::var("FERMIUM_LLVM_ARGS") {
+        Ok(s) => s.split_whitespace().map(str::to_string).collect(),
+        Err(_) => LLVM_OPTIONS.iter().map(|s| s.to_string()).collect(),
+    };
+    let mut all = vec![CString::new("fermium").unwrap()];
+    all.extend(args.into_iter().filter_map(|a| CString::new(a).ok()));
+    let ptrs: Vec<*const std::os::raw::c_char> = all.iter().map(|c| c.as_ptr()).collect();
+    let overview = CString::new("").unwrap();
+    // SAFETY: argv points at NUL-terminated strings that outlive the call; LLVM copies what it keeps
+    unsafe { inkwell::llvm_sys::support::LLVMParseCommandLineOptions(ptrs.len() as i32, ptrs.as_ptr(), overview.as_ptr()) };
+}
+
+/// The LLVM options Fermium runs with (set_llvm_options).
+pub const LLVM_OPTIONS: &[&str] = &["-force-ordered-reductions"];
 
 /// Ok if the LLVM back end compiles every construct of the module; else what it can't compile yet.
 pub fn supports(module: &Module) -> Result<(), String> {
@@ -72,11 +95,33 @@ fn target_machine() -> Result<TargetMachine, String> {
 /// Compile and run a module. Err(reason) when the back end can't compile it (nothing has run then);
 /// Ok(result of the run) otherwise.
 pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(), RunError>, String> {
+    run_module_with(module, printer, None)
+}
+
+/// What a compilation for the compile cache gives back to be saved (cache.rs): the machine code and the run
+/// time's tables (native::blob, with the program's source and file name).
+pub struct Compiled {
+    pub object: Vec<u8>,
+    pub blob: Vec<u8>,
+}
+
+/// Can a module's machine code be saved and loaded by another run (D317)? Not when it calls Python, C or C++,
+/// reads data files when checked, or has constructs the tree-walker runs (their code holds addresses of this
+/// process).
+fn cacheable(module: &Module, t: &blob::GenTables) -> bool {
+    let mt = &module.tables;
+    mt.pycalls.is_empty() && mt.ccalls.is_empty() && mt.loads.is_empty() && t.interp_sites.is_empty()
+}
+
+/// run_module; with `save` = Some((source, file name, save)), the code is compiled so that it can be saved
+/// (Gen::new_reloc) and, when the module is cacheable, `save` gets the machine code before the program runs.
+pub fn run_module_with(module: &Module, printer: &mut dyn Printer, save: Option<(&str, &str, &mut dyn FnMut(Compiled))>)
+                       -> Result<Result<(), RunError>, String> {
     init();
     let mut ctx = rt::Ctx::new(module, printer);
     let addr = &mut *ctx as *mut rt::Ctx as usize;
     let cx = Context::create();
-    let mut g = compile::Gen::new(&cx, module, addr);
+    let mut g = if save.is_some() { compile::Gen::new_reloc(&cx, module) } else { compile::Gen::new(&cx, module, addr) };
     guarded(|| g.compile_module())?;
     let timing = std::env::var_os("FERMIUM_LLVM_TIME").is_some();
     let t0 = std::time::Instant::now();
@@ -105,28 +150,104 @@ pub fn run_module(module: &Module, printer: &mut dyn Printer) -> Result<Result<(
     let po = PassBuilderOptions::create();
     if std::env::var_os("FERMIUM_LLVM_NOVEC").is_some() {
         po.set_loop_vectorization(false);
+    } else if std::env::var_os("FERMIUM_LLVM_NOSLP").is_none() {
+        // straight-line code on several independent values (x, y, z components) in vector registers (D311)
+        po.set_loop_slp_vectorization(true);
     }
     g.lm.run_passes(&pipeline, &tm, po).map_err(|e| e.to_string())?;
     if std::env::var_os("FERMIUM_DUMP_LLVM_OPT").is_some() {
         eprintln!("{}", g.lm.print_to_string().to_string());
     }
     let t1 = std::time::Instant::now();
+    let saving = match &save {
+        Some((source, file_name, _)) if cacheable(module, &g.tables) => Some(blob::write(module, &g.tables, source, file_name)),
+        _ => None,
+    };
     ctx.set_tables(std::mem::take(&mut g.tables));
     let cg = if std::env::var_os("FERMIUM_LLVM_CG3").is_some() { OptimizationLevel::Aggressive } else { OptimizationLevel::Default };
+    // (declared before the engine, so dropped after it)
+    let oc = cache::ObjectCache::new(&[]);
+    let slot = Box::new(addr);
     let ee = g.lm.create_jit_execution_engine(cg).map_err(|e| e.to_string())?;
+    if saving.is_some() {
+        oc.attach(&ee);
+    }
     // (the optimizer has removed the declarations of callbacks the program doesn't use)
     for (name, a) in &g.mappings {
         if let Some(f) = g.lm.get_function(name) {
             ee.add_global_mapping(&f, *a);
         }
     }
+    if let Some(gv) = g.lm.get_global("fm_ctx") {
+        ee.add_global_mapping(&gv, &*slot as *const usize as usize);
+    }
     let main = unsafe { ee.get_function::<unsafe extern "C" fn()>("fm_main") }.map_err(|e| e.to_string())?;
+    if let (Some(blob), Some((_, _, save))) = (saving, save) {
+        let object = oc.saved();
+        if !object.is_empty() {
+            save(Compiled { object, blob });
+        }
+    }
     let t2 = std::time::Instant::now();
     unsafe { main.call() };
     ctx.report_gc();
     if timing {
         eprintln!("llvm: codegen+opt {:.2} ms, jit {:.2} ms, run {:.2} ms, {} integrand evaluations",
                   (t1 - t0).as_secs_f64() * 1e3, (t2 - t1).as_secs_f64() * 1e3, t2.elapsed().as_secs_f64() * 1e3,
+                  rt::QUAD_EVALS.load(std::sync::atomic::Ordering::Relaxed));
+    }
+    Ok(match ctx.error.take() {
+        Some(e) => Err(ctx.locate(e)),
+        None => Ok(()),
+    })
+}
+
+/// Run a program from the compile cache (D317): its machine code (`object`, saved by run_module_with) and the run
+/// time's tables, read back from native::blob. Nothing is parsed, checked, generated or optimized.
+pub fn run_object(module: &Module, tables: blob::GenTables, object: &[u8], printer: &mut dyn Printer,
+                  before_run: &mut dyn FnMut())
+                  -> Result<Result<(), RunError>, String> {
+    use inkwell::module::Linkage;
+    init();
+    let t0 = std::time::Instant::now();
+    let mut ctx = rt::Ctx::new(module, printer);
+    let addr = &mut *ctx as *mut rt::Ctx as usize;
+    let cx = Context::create();
+    // the run-time callbacks' declarations (and addresses), and a definition of fm_main for MCJIT to find the
+    // program by: its code comes from the object cache, not from this module
+    let g = compile::Gen::new_reloc(&cx, module);
+    let f = g.lm.add_function("fm_main", cx.void_type().fn_type(&[], false), Some(Linkage::External));
+    let b = cx.create_builder();
+    b.position_at_end(cx.append_basic_block(f, "entry"));
+    b.build_return(None).map_err(|e| e.to_string())?;
+    let tm = target_machine()?;
+    g.lm.set_triple(&tm.get_triple());
+    g.lm.set_data_layout(&tm.get_target_data().get_data_layout());
+    let cg = if std::env::var_os("FERMIUM_LLVM_CG3").is_some() { OptimizationLevel::Aggressive } else { OptimizationLevel::Default };
+    let oc = cache::ObjectCache::new(object);
+    let slot = Box::new(addr);
+    let ee = g.lm.create_jit_execution_engine(cg).map_err(|e| e.to_string())?;
+    oc.attach(&ee);
+    for (name, a) in &g.mappings {
+        if let Some(f) = g.lm.get_function(name) {
+            ee.add_global_mapping(&f, *a);
+        }
+    }
+    if let Some(gv) = g.lm.get_global("fm_ctx") {
+        ee.add_global_mapping(&gv, &*slot as *const usize as usize);
+    }
+    ctx.set_tables(tables);
+    let main = unsafe { ee.get_function::<unsafe extern "C" fn()>("fm_main") }.map_err(|e| e.to_string())?;
+    if !oc.saved().is_empty() {
+        return Err("the cached machine code wasn't used".into());
+    }
+    before_run();
+    let t1 = std::time::Instant::now();
+    unsafe { main.call() };
+    ctx.report_gc();
+    if std::env::var_os("FERMIUM_LLVM_TIME").is_some() {
+        eprintln!("llvm: cached code loaded in {:.2} ms, run {:.2} ms, {} integrand evaluations",
+                  (t1 - t0).as_secs_f64() * 1e3, t1.elapsed().as_secs_f64() * 1e3,
                   rt::QUAD_EVALS.load(std::sync::atomic::Ordering::Relaxed));
     }
     Ok(match ctx.error.take() {
