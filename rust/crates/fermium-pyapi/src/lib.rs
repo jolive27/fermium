@@ -179,7 +179,7 @@ fn names_of(prog: &A::Program, known: &mut Vec<String>) {
 impl Program {
     pub fn compile(source: &str, base_dir: &str, source_name: &str) -> Result<Program, String> {
         let (prog, pdiags) = fermium_syntax::parse(source, &[]).map_err(|e| jdiag("compile", &e, source))?;
-        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: source_name.to_string() };
+        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: source_name.to_string(), no_load: false };
         let mut checker = Checker::new(opts);
         // a program, not a prompt: the REPL's storage model (top-level variables kept between inputs), without
         // its conveniences (echoing bare expressions, redefining a variable with other units)

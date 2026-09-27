@@ -54,7 +54,7 @@ pub fn llvm_version() -> String {
 /// Run a program's source through the whole pipeline (the default back end), returning what it printed.
 pub fn run_source(src: &str) -> Result<String, String> {
     let (prog, _) = fermium_syntax::parse(src, &[]).map_err(|e| e.message)?;
-    let opts = fermium_check::CheckOptions { base_dir: ".".into(), repl: false, source_name: "<doctor>".into() };
+    let opts = fermium_check::CheckOptions { base_dir: ".".into(), repl: false, source_name: "<doctor>".into(), no_load: false };
     let (module, _) = fermium_check::check(&prog, opts).map_err(|(e, _)| e.message)?;
     let mut out: Vec<u8> = vec![];
     {

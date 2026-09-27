@@ -2051,4 +2051,5 @@ the tree-walker); list-unknown solves (Bateman to 1e-5, circular orbit); N-d arr
 conversion, int checks, stack-spilled arguments, Fortran mangling, SEMF, `fermium build` with C, and shell
 metacharacters in library paths (no injection). No Rust panics.
 
-Status: fixes in progress (agent on claude/v2.5-rt14).
+Status: fixed on claude/v2.5-rt14 (DECISIONS D300–D306; tests rust/crates/fermium-cli/tests/redteam14.rs): #1–#8,
+#9a, b, d (CHANGES "still errors" list), e, f. #9c (arrays of ± values) stays an error, listed in CHANGES_2.5.md.

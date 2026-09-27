@@ -936,6 +936,18 @@ pub(crate) fn mc_take(prev: Option<Mc>) -> Vec<(u64, Vec<f64>)> {
 /// fitted by least squares gives the value at z = 0 and one contribution per source, and what it doesn't
 /// explain (the nonlinear part) is a new source of its own (interp.s_SPropagate's regression).
 pub(crate) fn mc_ufloat(y: &[f64], zs: &[&[f64]], src: &[u64]) -> UFloat {
+    let (mean, mut d, r, var) = mc_regress(y, zs, src);
+    let nf = y.len() as f64;
+    let resid = r.iter().map(|x| x * x).sum::<f64>() / (nf - 1.0);
+    if resid > 1e-20 * var {
+        d.push((U::new_source(), resid.sqrt())); // the nonlinear part: its own source
+    }
+    UFloat::new(mean, d)
+}
+
+/// The regression of samples y on the sources' streams: (the fitted value at z = 0, one contribution per source,
+/// the residual per sample, the samples' variance). With zero variance the residual is empty.
+pub(crate) fn mc_regress(y: &[f64], zs: &[&[f64]], src: &[u64]) -> (f64, Vec<(u64, f64)>, Vec<f64>, f64) {
     let n = y.len();
     let nf = n as f64;
     let ymean = np_sum(y) / nf;
@@ -943,7 +955,7 @@ pub(crate) fn mc_ufloat(y: &[f64], zs: &[&[f64]], src: &[u64]) -> UFloat {
     let dy: Vec<f64> = y.iter().map(|x| x - ymean).collect();
     let var = np_sum(&dy.iter().map(|x| x * x).collect::<Vec<_>>()) / (nf - 1.0);
     if !(var > 0.0) {
-        return UFloat::new(mean, vec![]);
+        return (mean, vec![], vec![], var);
     }
     let mut d: Vec<(u64, f64)> = vec![];
     let mut r = dy.clone();
@@ -966,11 +978,7 @@ pub(crate) fn mc_ufloat(y: &[f64], zs: &[&[f64]], src: &[u64]) -> UFloat {
         mean -= corr;
         d = src.iter().zip(&beta).filter(|(_, b)| **b != 0.0).map(|(k, b)| (*k, *b)).collect();
     }
-    let resid = r.iter().map(|x| x * x).sum::<f64>() / (nf - 1.0);
-    if resid > 1e-20 * var {
-        d.push((U::new_source(), resid.sqrt())); // the nonlinear part: its own source
-    }
-    UFloat::new(mean, d)
+    (mean, d, r, var)
 }
 
 fn failed() -> bool {

@@ -8,8 +8,8 @@
 //! ```
 //!
 //! Each definition of a name that is already a top-level function of this scope makes a new `FuncInfo` whose
-//! `versions` lists every version visible from there (a definition with the same signature as an earlier one
-//! replaces it, which is v1's redefinition). A call picks one version from the checked argument types, at compile
+//! `versions` lists every version visible from there (a definition that covers an earlier one, the same signature
+//! or broader on every parameter, replaces it, which is v1's redefinition; D302). A call picks one version from the checked argument types, at compile
 //! time, and instantiates it like any function: the IR, both back ends and the run time see ordinary calls.
 use fermium_ir::types::Ty;
 use fermium_syntax::ast as A;
@@ -75,20 +75,83 @@ impl Checker {
         self.funcs[info].fdef.as_ref().map(|f| f.span.line).unwrap_or(0)
     }
 
+    /// Does a parameter (kind, dimension) take at least every argument that another one takes? Unannotated takes
+    /// anything; a kind covers the same kind with any or the same unit; a unit alone covers the same dimension
+    /// with any kind but vector (a vector needs `: vector`).
+    fn param_covers(new: &(Option<String>, Option<String>), old: &(Option<String>, Option<String>)) -> bool {
+        match (&new.0, &new.1) {
+            (None, None) => true,
+            (Some(k), u) => old.0.as_ref() == Some(k) && (u.is_none() || *u == old.1),
+            (None, Some(u)) => old.1.as_ref() == Some(u) && old.0.as_deref() != Some("vector"),
+        }
+    }
+
     /// Called by s_funcdef for a new top-level function `id` named `name`: when `name` already is a function here,
-    /// the new definition becomes a version of it, or replaces the version with the same signature.
+    /// the new definition becomes a version of it, or replaces every earlier version it covers: the same number of
+    /// parameters, each at least as broad as the earlier one's (D302). So a redefinition with the same signature
+    /// (v1's `f(x) = 2 x` then `f(x) = 3 x`) and a less specific one written later (`force(x [m]) = …` then
+    /// `force(x) = …`, which v1 also treats as a replacement) replace; a more specific one written later adds a
+    /// version.
     pub fn add_version(&mut self, prev: FuncInfoId, id: FuncInfoId) {
         if !self.can_add_version(prev, id) {
             return;
         }
         let sig = self.signature_key(id);
-        let mut vs: Vec<FuncInfoId> =
-            self.versions_of(prev).into_iter().filter(|&v| self.signature_key(v) != sig).collect();
+        let covers = |old: &[(Option<String>, Option<String>)]| {
+            old.len() == sig.len() && sig.iter().zip(old).all(|(n, o)| Self::param_covers(n, o))
+        };
+        let olds = self.versions_of(prev);
+        let mut vs: Vec<FuncInfoId> = vec![];
+        let mut replaced: Vec<FuncInfoId> = vec![];
+        for v in olds {
+            if covers(&self.signature_key(v)) {
+                replaced.push(v);
+            } else {
+                vs.push(v);
+            }
+        }
+        self.warn_respelt(id, &replaced);
         if vs.is_empty() {
-            return; // the same signature: a redefinition, as in v1
+            return; // a redefinition, as in v1
         }
         vs.push(id);
         self.funcs[id].versions = vs;
+    }
+
+    /// A replaced version whose units have the same dimensions but mean different things (`E(f [Hz])` then
+    /// `E(ω [rad/s])`: Hz and rad/s are both 1/s, so the second replaces the first and `E(1 GHz)` is off by 2π)
+    /// was probably meant as another version: warn (red team 14 #7, D306). The pairs are those of adding such
+    /// values (Hz/rad/s, Bq/Hz, Gy/Sv, J/N m); `[m]` then `[km]` is an ordinary redefinition and says nothing.
+    fn warn_respelt(&mut self, id: FuncInfoId, replaced: &[FuncInfoId]) {
+        let kind = |text: &str| {
+            crate::units::unit_kind(&fermium_ir::Hint { name: text.to_string(), factor: 1.0, offset: 0.0,
+                                                        dim: fermium_ir::DIMLESS })
+        };
+        let newp = self.func_params(id);
+        for &v in replaced {
+            let oldp = self.func_params(v);
+            if oldp.len() != newp.len() {
+                continue;
+            }
+            let differs = oldp.iter().zip(&newp).any(|(o, n)| match (&o.unit, &n.unit) {
+                (Some(a), Some(b)) => {
+                    let (ka, kb) = (kind(&a.text), kind(&b.text));
+                    !ka.is_empty() && !kb.is_empty() && ka != kb
+                }
+                _ => false,
+            });
+            if !differs {
+                continue;
+            }
+            let (Some(fd), line) = (self.funcs[id].fdef.as_ref().map(|f| f.span), self.version_line(v)) else {
+                continue;
+            };
+            let msg = format!("{} replaces {} (line {line}): their units have the same dimensions, so they can't be \
+                               two versions", self.version_sig(id), self.version_sig(v));
+            let hint = "to keep both, give one of them another name (or convert inside one definition, e.g. \
+                        ω = 2π f)".to_string();
+            self.warn(msg, fd, Some(hint));
+        }
     }
 
     fn fit(&mut self, p: &A::Param, a: &Checked, uses: &std::collections::HashMap<String, (bool, String)>)

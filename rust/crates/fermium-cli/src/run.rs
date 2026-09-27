@@ -95,7 +95,7 @@ fn run_file_here(file: &str, o: &RunOptions) -> ExitCode {
             .unwrap_or(std::path::Path::new("."));
         std::path::absolute(dir).unwrap_or(dir.to_path_buf()).to_string_lossy().into_owned()
     });
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: false };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,
         Err((e, d)) => {

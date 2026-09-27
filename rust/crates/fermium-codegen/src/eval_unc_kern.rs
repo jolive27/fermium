@@ -12,8 +12,9 @@
 //!   adaptive solver (the variational equations; D277).
 //!
 //! The linearization is then checked: each source is moved by ±1σ (z_k = ±1) and the kernel recomputed with
-//! plain numbers. If the change is not close to linear there (|I₊ + I₋ − 2 I₀| / 2 > 10 % of |I₊ − I₋| / 2, and
-//! above the kernel's own accuracy), the result comes from Monte Carlo instead (D278), with a warning.
+//! plain numbers. If the change is not close to linear there (the second-order part, or the gap between either
+//! one-sided change and the linear prediction, above 10 % of the change's scale and the kernel's own accuracy),
+//! the result comes from Monte Carlo instead (D278, D300), with a warning.
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -64,12 +65,18 @@ pub(crate) fn add_sources(v: &Value, out: &mut Vec<u64>) {
     }
 }
 
-/// Is the change over ±1σ close to linear? y0 the value, (yp, ym) at z = +1 and −1; `noise` the kernel's own
-/// accuracy on this scale.
-pub(crate) fn linear_enough(y0: f64, yp: f64, ym: f64, noise: f64) -> bool {
+/// Is the change over ±1σ close to linear? y0 the value, (yp, ym) at z = +1 and −1, c the linear prediction of the
+/// change (the contribution ∂y/∂z_k), `scale` the typical size of that change for this quantity (for an ODE, the
+/// largest over the test times, so a turning point where the change passes through 0 isn't judged on its own
+/// tiny scale), `noise` the kernel's own accuracy. Both one-sided changes must agree with the prediction: a jump
+/// at the uncertain value (∂f/∂z = 0 almost everywhere, yet the result moves) fails here (D300).
+pub(crate) fn linear_enough(y0: f64, yp: f64, ym: f64, c: f64, scale: f64, noise: f64) -> bool {
     let d1 = (yp - ym) / 2.0;
     let d2 = (yp + ym - 2.0 * y0) / 2.0;
-    d2.abs() <= LIN_TOL * d1.abs() || d2.abs() <= noise
+    let s = d1.abs().max(c.abs()).max(scale);
+    let tol = LIN_TOL * s + noise;
+    // NaN (a failed ±1σ run) is not linear
+    d2.abs() <= tol && (yp - y0 - c).abs() <= tol && (y0 - ym - c).abs() <= tol
 }
 
 /// The warning for a kernel that fell back to Monte Carlo.
@@ -160,6 +167,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         add_sources(va, &mut srcs);
         add_sources(vb, &mut srcs);
         let mut error: Option<RunError> = None;
+        let rec = seen_begin();
+        let mut unc_out = crate::eval_unc::is_unc(va) || crate::eval_unc::is_unc(vb);
         let r0 = quad::quad(
             |x| {
                 if error.is_some() {
@@ -167,6 +176,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 match self.call_lambda_raw(lam, Value::Num(x), fr) {
                     Ok(v) => {
+                        unc_out |= crate::eval_unc::is_unc(&v);
                         add_sources(&v, &mut srcs);
                         nominal(&v)
                     }
@@ -182,6 +192,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             atol,
             name,
         );
+        extend_new(&mut srcs, &seen_end(rec));
         self.line = line;
         let linear_ok = match &error {
             // the integrand needs plain numbers somewhere (an index, a loop bound): Monte Carlo only
@@ -274,7 +285,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                     return Err(e);
                 }
-                if !linear_enough(i0, ends[0], ends[1], noise) {
+                if !linear_enough(i0, ends[0], ends[1], c, 0.0, noise) {
                     ok = false;
                     break;
                 }
@@ -283,6 +294,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
             }
             if ok {
+                if d.is_empty() && !unc_out {
+                    // the integrand read an uncertain value (in a comparison, say) that doesn't move the result:
+                    // a plain number, as in Fermium 1.5
+                    return Ok(Value::Num(i0));
+                }
                 return Ok(Value::Unc(Rc::new(UFloat::new(i0, d))));
             }
         }
@@ -324,6 +340,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
 /// Samples for the Monte Carlo fallback of an ODE solve (each is a whole solve).
 pub const MC_ODE: usize = 2_000;
 
+/// At most this many nonlinear parts of one Monte Carlo solution are kept as shared sources (later ones are
+/// independent).
+const MC_BASIS: usize = 200;
+
 thread_local! {
     /// > 0 while a kernel's linear pass evaluates (an integral inside an ODE's right side): nested kernels then
     /// propagate linearly without their own ±1σ check or Monte Carlo.
@@ -334,6 +354,55 @@ thread_local! {
     /// While a kernel with uncertain inputs runs: the value of each ± written inside it (by IR node), so that
     /// every evaluation of the integrand or right side sees the same measurement.
     static KERNEL_PM: RefCell<Option<HashMap<usize, Value>>> = const { RefCell::new(None) };
+}
+
+thread_local! {
+    /// While a kernel's linear pass runs: every error source of the uncertain values its integrand or right side
+    /// reads, whether or not they reach its result (`if x < a then 1 else 0` returns a plain number, yet depends on
+    /// a; D300).
+    static SEEN: RefCell<Option<Vec<u64>>> = const { RefCell::new(None) };
+}
+
+/// Records the sources of an uncertain value a kernel reads (a no-op outside a kernel's linear pass).
+pub(crate) fn kernel_seen(v: &Value) {
+    SEEN.with(|s| {
+        if let Some(out) = s.borrow_mut().as_mut() {
+            add_sources(v, out);
+        }
+    })
+}
+
+/// Starts recording the sources a kernel reads; returns the enclosing recording (kept, and extended at the end).
+pub(crate) fn seen_begin() -> Option<Vec<u64>> {
+    SEEN.with(|s| s.borrow_mut().replace(vec![]))
+}
+
+/// Ends a recording: its sources, which are also added to the enclosing one.
+pub(crate) fn seen_end(prev: Option<Vec<u64>>) -> Vec<u64> {
+    SEEN.with(|s| {
+        let mut g = s.borrow_mut();
+        let got = g.take().unwrap_or_default();
+        if let Some(mut p) = prev {
+            for k in &got {
+                if !p.contains(k) {
+                    p.push(*k);
+                }
+            }
+            *g = Some(p);
+        }
+        got
+    })
+}
+
+fn extend_new(srcs: &mut Vec<u64>, got: &[u64]) -> bool {
+    let mut added = false;
+    for k in got {
+        if !srcs.contains(k) {
+            srcs.push(*k);
+            added = true;
+        }
+    }
+    added
 }
 
 pub(crate) fn kernel_pm_active() -> bool {
@@ -384,9 +453,11 @@ pub(crate) enum UncSol {
     Lin { n: usize, srcs: Vec<u64> },
     /// Monte Carlo: one solution per sample of the sources' streams (the stored one is the nominal solve)
     Mc { srcs: Vec<u64>, zs: Vec<Vec<f64>>, sols: Vec<ode::Sol>,
-         /// the source of the nonlinear part at each (component, t, derivative?) asked for, so that asking twice
-         /// gives the same (fully correlated) value
-         resid: RefCell<HashMap<(usize, u64, bool), u64>> },
+         /// the nonlinear parts (residuals of the regression on the sources) of the values asked for so far, as
+         /// orthonormal sample vectors, each an error source: a new value's residual is projected onto them, so
+         /// every value of the solution is linked to the others through the same samples (x(2) − x(1)² ≈ 0 for
+         /// decay; asking twice gives the same value). D304.
+         basis: RefCell<Vec<(u64, Vec<f64>)>> },
 }
 
 fn merge(d: &mut Vec<(u64, f64)>, k: u64, c: f64) {
@@ -481,7 +552,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         y0v.iter().for_each(|v| add_sources(v, &mut srcs));
         add_sources(vt0, &mut srcs);
         depth(1);
+        let rec = seen_begin();
         let probe = self.ode_rhs_values(lam, t0, y0v, fr);
+        extend_new(&mut srcs, &seen_end(rec));
         depth(-1);
         self.line = line;
         let mut linear = match probe {
@@ -503,18 +576,42 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             return Ok(());
         }
         if let Some(fv) = linear.take() {
-            let mut yaug = y0n.clone();
-            for &k in &srcs {
-                for i in 0..n {
-                    yaug.push(contrib(&y0v[i], k) - nominal(&fv[i]) * contrib(vt0, k));
+            // the augmented solve; a source the right side reads only later (a branch not taken at t₀) means
+            // solving again with it included
+            let mut tries = 0;
+            let r = loop {
+                let mut yaug = y0n.clone();
+                for &k in &srcs {
+                    for i in 0..n {
+                        yaug.push(contrib(&y0v[i], k) - nominal(&fv[i]) * contrib(vt0, k));
+                    }
                 }
-            }
-            depth(1);
-            let r = self.ode_core(s, &yaug, t0, t1, h0, Some(&srcs), fr);
-            depth(-1);
+                depth(1);
+                let rec = seen_begin();
+                let r = self.ode_core(s, &yaug, t0, t1, h0, Some(&srcs), fr);
+                let got = seen_end(rec);
+                depth(-1);
+                tries += 1;
+                if tries < 3 && extend_new(&mut srcs, &got) {
+                    continue;
+                }
+                break r;
+            };
             match r {
                 Ok(aug) => {
                     if nested() || self.ode_linear_enough(s, &aug, n, &srcs, y0v, vt0, t1, h0, fr)? {
+                        let inputs_plain = !y0v.iter().chain([vt0]).any(crate::eval_unc::is_unc);
+                        let dim = aug.dim;
+                        let no_sens = (0..aug.n()).all(|j| aug.y[j * dim + n..(j + 1) * dim].iter().all(|c| *c == 0.0));
+                        if inputs_plain && no_sens && !nested() {
+                            // the right side read an uncertain value that doesn't move the solution (a comparison
+                            // far from where it switches): a plain solution, as in Fermium 1.5
+                            let solv = self.ode_core(s, &y0n, t0, t1, h0, None, fr)?;
+                            let snap = self.snapshot(*rhs, fr);
+                            self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, lens: None,
+                                                           check: None, unc: None }, fr);
+                            return Ok(());
+                        }
                         let snap = self.snapshot(*rhs, fr);
                         self.store_sol(*sol, SolData { sol: aug, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None,
                                                        unc: Some(UncSol::Lin { n, srcs }) }, fr);
@@ -557,7 +654,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         crate::eval_calc::warn_at(line, &mc_warning("this differential equation's solution", plain_needed, nmc));
         let snap = self.snapshot(*rhs, fr);
         self.store_sol(*sol, SolData { sol: nom, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None,
-                                       unc: Some(UncSol::Mc { srcs, zs, sols, resid: RefCell::new(HashMap::new()) }) },
+                                       unc: Some(UncSol::Mc { srcs, zs, sols, basis: RefCell::new(vec![]) }) },
                        fr);
         Ok(())
     }
@@ -595,13 +692,24 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Err(_) => return Ok(false), // a ±1σ input the solve can't handle: not linear there
                 Ok(()) => {}
             }
-            for q in 1..=8 {
-                let t = ta + (tb - ta) * q as f64 / 8.0;
-                for i in 0..n {
-                    let (Ok(y0), Ok(yp), Ok(ym)) = (aug.eval(i, t, false, None), ends[0].eval(i, t, false, None),
-                                                    ends[1].eval(i, t, false, None)) else { continue };
-                    let noise = 100.0 * x.rtol.max(1e-12) * maxabs[i];
-                    if !linear_enough(y0, yp, ym, noise) {
+            let ki = srcs.iter().position(|&s| s == k).unwrap_or(0);
+            for i in 0..n {
+                // (y0, y₊, y₋, c) at 8 times across the solution; the scale of this component's change is the
+                // largest over them (D300: a turning point, where the change passes through 0, is judged against
+                // the component's typical ±1σ change, not its own tiny one)
+                let mut pts: Vec<(f64, f64, f64, f64)> = vec![];
+                for q in 1..=8 {
+                    let t = ta + (tb - ta) * q as f64 / 8.0;
+                    let (Ok(y0), Ok(yp), Ok(ym), Ok(c)) = (aug.eval(i, t, false, None), ends[0].eval(i, t, false, None),
+                                                           ends[1].eval(i, t, false, None),
+                                                           aug.eval(n + ki * n + i, t, false, None)) else { continue };
+                    pts.push((y0, yp, ym, c));
+                }
+                let scale = pts.iter().map(|&(_, yp, ym, c)| ((yp - ym) / 2.0).abs().max(c.abs()))
+                    .filter(|x| x.is_finite()).fold(0.0, f64::max);
+                let noise = 100.0 * x.rtol.max(1e-12) * maxabs[i];
+                for &(y0, yp, ym, c) in &pts {
+                    if !linear_enough(y0, yp, ym, c, scale, noise) {
                         return Ok(false);
                     }
                 }
@@ -618,7 +726,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let v0 = self.sol_at_plain(d, comp, t, use_dy, fmt)?; // the range check, and the value
         self.line = line;
         let mut dd: Vec<(u64, f64)> = vec![];
-        let mut val = v0;
+        let val = v0;
         match d.unc.as_ref().unwrap() {
             UncSol::Lin { n, srcs } => {
                 let (n, srcs) = (*n, srcs.clone());
@@ -634,7 +742,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     }
                 }
             }
-            UncSol::Mc { srcs, zs, sols, resid } => {
+            UncSol::Mc { srcs, zs, sols, basis } => {
                 let ys: Vec<f64> = sols.iter().map(|sv| sv.eval(comp, t, use_dy, None).unwrap_or(f64::NAN)).collect();
                 let bad = ys.iter().filter(|y| !y.is_finite()).count();
                 if bad > 0 {
@@ -642,16 +750,27 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                                              end earlier, or fail for some sampled inputs)", ys.len()));
                 }
                 let zr: Vec<&[f64]> = zs.iter().map(|z| &z[..]).collect();
-                let u = mc_ufloat(&ys, &zr, srcs);
-                val = u.v;
-                for (s, c) in u.d {
-                    if srcs.contains(&s) {
-                        dd.push((s, c));
-                    } else {
-                        // the nonlinear part: the same source whenever this value is asked for
-                        let key = (comp, t.to_bits(), use_dy);
-                        let id = *resid.borrow_mut().entry(key).or_insert(s);
-                        dd.push((id, c));
+                // the value stays the nominal solution's (v0), as for a linear solve; the spread and the links come
+                // from the samples
+                let (_, dsrc, mut r, var) = crate::eval_unc::mc_regress(&ys, &zr, srcs);
+                dd.extend(dsrc);
+                if !r.is_empty() {
+                    let nf = (r.len() as f64 - 1.0).max(1.0);
+                    let mut b = basis.borrow_mut();
+                    for (id, e) in b.iter() {
+                        let c = r.iter().zip(e).map(|(a, b)| a * b).sum::<f64>() / nf;
+                        if c != 0.0 {
+                            r.iter_mut().zip(e).for_each(|(a, b)| *a -= c * b);
+                            dd.push((*id, c));
+                        }
+                    }
+                    let rest = (r.iter().map(|x| x * x).sum::<f64>() / nf).sqrt();
+                    if rest * rest > 1e-12 * var {
+                        let id = U::new_source();
+                        if b.len() < MC_BASIS {
+                            b.push((id, r.iter().map(|x| x / rest).collect()));
+                        }
+                        dd.push((id, rest));
                     }
                 }
             }
