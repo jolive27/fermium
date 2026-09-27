@@ -316,7 +316,43 @@ The spec-B2 fixes are 5, 6, 7, 8, 13 and 16. The Phase C changes are 23 and 26�
 
 ## Try it on your Mac
 
-*(being written)*
+There is no download yet (no release tag could be pushed from here; see "What you must install today"), so you
+build it once from source. It takes about 15 minutes, most of it compiling LLVM-linked code.
+
+1. **Tools** (once):
+   ```sh
+   xcode-select --install                                   # Apple's C/C++ compiler and linker
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust; then open a new terminal
+   brew install llvm@18 lld@18 zstd
+   ```
+2. **Get the v2.5 code:**
+   ```sh
+   git clone https://github.com/jolive27/fermium.git && cd fermium
+   git checkout claude/v2.5
+   ```
+3. **Build and install** (puts `fermium` in `~/.cargo/bin`, which rustup added to your PATH):
+   ```sh
+   export LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)
+   export LLD_PREFIX=$(brew --prefix lld@18)
+   make install
+   ```
+4. **Check it:** `fermium --version` should print `fermium 2.5.0 (Rust)`, and `fermium doctor` should say nothing
+   else is needed.
+5. **Try it:**
+   - `fermium run examples/01_pendulum.fm`, then the bootcamp lessons in `bootcamp/` (every code block runs as is).
+   - Your own programs: `fermium fmt --fix lesson2.fm` once (it adds the two brackets the unit rule asks for),
+     then `fermium run lesson2.fm`.
+   - New in 2.5: `research/` rows 12–21 (`cd research/cmb_firas && fermium run firas.fm`), multiple dispatch
+     and `when` events (`docs/reference.md`), and C++ interop (`cd examples/cpp_interop`, build the library with
+     the `c++` line at the top of `cpp_interop.fm`, then `fermium run cpp_interop.fm`).
+   - The REPL (`fermium`), with `\omega` + Tab for ω.
+6. **If something fails:** `fermium doctor`, and bootcamp Lesson 0's "When something goes wrong". Things never
+   run on a real Mac (only on CI's macOS machine): `fermium build` executables, and C++ interop's macOS linking
+   (CI covers the second).
+
+Once you push a tag yourself (`git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push origin
+v2.5`), the release workflow builds a single downloadable `fermium-macos-arm64`; steps 1–3 are then replaced by
+downloading it (Lesson 0 describes that). The workflow has never run, so check its first run.
 
 ## Honest weaknesses and next steps
 
