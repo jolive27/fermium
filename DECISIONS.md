@@ -1981,3 +1981,17 @@ fraction x_p = 0.05, bare masses and α_nβ_n ≈ 1; expected_output.txt, the RE
 isn't the cited one.
 - **Alternatives:** a `fit` option for absolute errors (`absolute_sigma`); later if asked. Keeping (n/n₀)^(2/3) with
 a different citation (the neutron-branch form is the standard one).
+
+## D340. Gate C9: v2.5 is tagged locally and marked by the branch claude/v2.5-freeze; the owner pushes the tag
+
+- **What:** gate C9 (C1–C7 done, CI green, the suite grown with every feature) was met at `eb63425`: PR #4's CI
+  run 249 passed on Linux and macOS, and conformance is 3324 pass + 42 documented = 3366/3366, with 88 new v2.5
+  programs in `rust/c-cases/` plus a cargo test file per item. The tag was held back until the high-severity
+  findings of red teams 15 and 16 were fixed: a cache poisoning, and stale-cache wrong results. `v2.5` was then
+  created locally as an annotated tag on `eb63425`. Pushing it failed on every attempt: "the remote end hung up",
+  five tries with backoff, the same refusal as `v1.5` and `v2.0` (D263, D274). The branch `claude/v2.5-freeze`
+  marks the commit instead. The version is 2.5.0.
+- **For the owner:** `git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push origin v2.5` publishes
+  it, and the release workflow then builds the macOS and Linux binaries (that workflow has never run).
+- **Alternatives:** tagging at 0b19459 when CI first went green (before the round-16 fixes; rejected because the
+  JIT cache could print stale results); a GitHub release through the API (the same permission problem).
