@@ -744,6 +744,25 @@ print y(5 s)       # 6.44 m: within 10⁻¹³ m of the analytic bounces
   - An event that fires again and again ever faster (the ball above bounces infinitely often before t ≈ 27.1 s, a Zeno point) stops the solve with an error that names the time: end the range before it, or stop with `until`.
   - `when` needs the adaptive solver (rk45): with `step`, `using rk4`, `radau` or `bdf` it is an error. A solve with `when` can't use uncertain values (±) yet (use `propagate montecarlo`).
   - The solution keeps both sides of each event: `y(t)` just before and just after it are the values before and after the change, and `plot y vs t` shows the jump.
+- **Parameter sweeps, `sweep`** (Fermium 2.5, spec §C2, DECISIONS D299): `sweep k in [1, 2, 4] N/m` (or
+  `sweep L from 0.5 m to 2 m step 0.5 m`) followed by a block is a `for` loop whose plots draw one curve per value
+  into one figure, labelled with the value (`k = 2 N/m`; with several curves per plot, `x, k = 2 N/m`). The figure is
+  saved once, when the sweep ends ("plot saved to …" appears then). Everything else in the block works as in a `for`
+  loop: print, collect results with `push`, `break`.
+
+```text
+M = 1 kg
+sweep k in [1, 2, 4] N/m
+    solve M x'' = -k x
+      with x(0 s) = 1 m, x'(0 s) = 0 m/s
+      for t from 0 s to 3 s
+    print k, x(3 s)
+    plot x vs t           # one figure, three curves: k = 1 N/m, k = 2 N/m, k = 4 N/m
+```
+
+  - Only plots written directly in the sweep's block (also inside `if` or an inner loop there) collect; a plot in a
+    function called from it saves its own figure as usual. In nested sweeps a plot belongs to the innermost one.
+  - `sweep` stays an ordinary name: once it is your variable, `sweep …` isn't a sweep.
 - **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
 
 ### Equations: solve … for x from a to b

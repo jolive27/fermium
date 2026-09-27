@@ -115,7 +115,8 @@ impl Checker {
             use A::StmtKind as K;
             for x in stmts {
                 if matches!(x.kind, K::Print { .. } | K::Plot { .. } | K::Fit { .. } | K::FuncDef { .. }
-                            | K::Propagate { .. } | K::Import { .. } | K::Units { .. } | K::Return { .. })
+                            | K::Propagate { .. } | K::Import { .. } | K::Units { .. } | K::Return { .. }
+                            | K::Sweep { .. })
                 {
                     return Err(c.err("only formulas (name = …) go inside  propagate montecarlo; print or plot the \
                                       results after the block", x.span, None));

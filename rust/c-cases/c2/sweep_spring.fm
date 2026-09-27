@@ -1,0 +1,33 @@
+# A parameter sweep over solve (spec §C2, D299): `sweep` is a for loop whose plots collect one curve per value
+# into one figure, labelled k = 1 N/m, k = 2 N/m, … and saved once when the sweep ends.
+M = 1 kg
+sweep k in [1, 2, 4] N/m
+    solve M x'' = -k x
+      with x(0 s) = 1 m, x'(0 s) = 0 m/s
+      for t from 0 s to 3 s
+    print k, x(3 s) to 6 digits, abs(x(3 s) - cos(√(k/M) * 3 s) * 1 m) < 1e-8 m
+    plot x vs t to "sweep_spring.svg"
+
+# over a range, and a list of results built as it goes: the period of a pendulum against its length
+periods = []
+sweep L from 0.5 m to 2 m step 0.5 m
+    solve θ'' = -(9.81 m/s²) / L * sin(θ)
+      with θ(0 s) = 0.2, θ'(0 s) = 0 /s
+      for t from 0 s to 4 s
+      until θ' = 0 /s
+    push(periods, 2 times(θ)[end])
+    plot θ vs t to "sweep_pendulum.svg"
+print periods
+# small swings: T ≈ 2π √(L/g) (1 + θ₀²/16)
+print periods[4] ≈ 2π * √(2 m / (9.81 m/s²)) * (1 + 0.2²/16) within 1e-3 s
+
+# two curves per value: each legend entry names the curve and the value
+sweep λ in [0.1 /s, 0.4 /s]
+    solve u' = -λ u, w' = -2 λ w
+      with u(0 s) = 1 m, w(0 s) = 1 m
+      for t from 0 s to 5 s
+    plot u vs t, w vs t to "sweep_decay.svg"
+
+# sweep is still an ordinary name when you use it as one
+sweep = 2
+print sweep * 3

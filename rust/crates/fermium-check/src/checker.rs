@@ -583,6 +583,7 @@ impl Checker {
                 self.s_for(s, var, lo, hi, step.as_ref(), body, *parallel, ctx)
             }
             K::ForIn { var, iterable, body } => self.s_for_in(s, var, iterable, body, ctx),
+            K::Sweep { body } => self.s_sweep(s, &body[0], ctx),
             K::Return { value: v } => self.s_return(s, v.as_ref(), ctx),
             K::Break => self.s_break(s, ctx),
             K::Continue => self.s_continue(s, ctx),
@@ -689,6 +690,7 @@ pub fn stmt_kind_name(k: &A::StmtKind) -> &'static str {
         K::UsePython { .. } => "use python",
         K::ImportC { lang, .. } => if lang == "c" { "import c" } else { "import fortran" },
         K::Propagate { .. } => "propagate montecarlo",
+        K::Sweep { .. } => "sweep",
     }
 }
 

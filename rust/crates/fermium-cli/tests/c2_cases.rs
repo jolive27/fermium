@@ -7,6 +7,19 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// the sweep program writes SVG files next to itself: the two tests that run it take turns
+static FILES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn remove_svgs() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2");
+    for f in std::fs::read_dir(&dir).unwrap() {
+        let p = f.unwrap().path();
+        if p.extension().is_some_and(|e| e == "svg") {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
 fn cases() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2");
     let mut out: Vec<PathBuf> = std::fs::read_dir(&root)
@@ -73,7 +86,10 @@ fn run(p: &Path, backend: &str) -> (String, String, i32) {
         .env_remove("FERMIUM_BACKEND_INFO")
         .output()
         .unwrap();
-    (String::from_utf8_lossy(&o.stdout).into(), String::from_utf8_lossy(&o.stderr).into(), o.status.code().unwrap_or(-1))
+    // "plot saved to <the case's folder>/x.svg": the folder differs from checkout to checkout
+    let dir = format!("{}/", p.parent().unwrap().canonicalize().unwrap().display());
+    let out = String::from_utf8_lossy(&o.stdout).replace(&dir, "");
+    (out, String::from_utf8_lossy(&o.stderr).into(), o.status.code().unwrap_or(-1))
 }
 
 #[test]
@@ -81,6 +97,7 @@ fn c2_cases_print_their_expected_output() {
     let cases = cases();
     assert!(cases.len() >= 5);
     let bless = std::env::var("FERMIUM_BLESS").is_ok_and(|v| v == "1");
+    let _files = FILES.lock().unwrap_or_else(|e| e.into_inner());
     let mut bad = vec![];
     for p in &cases {
         let jp = p.with_extension("json");
@@ -102,5 +119,32 @@ fn c2_cases_print_their_expected_output() {
             bad.push(format!("{}: a check printed false:\n{}", p.display(), want.0));
         }
     }
+    remove_svgs();
     assert!(bad.is_empty(), "{}", bad.join("\n"));
+}
+
+#[test]
+fn a_sweep_draws_one_curve_per_value_in_one_figure() {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../c-cases/c2/sweep_spring.fm");
+    let _files = FILES.lock().unwrap_or_else(|e| e.into_inner());
+    for backend in ["interp", "auto"] {
+        let (out, err, code) = run(&p, backend);
+        assert_eq!(code, 0, "{out}{err}");
+        assert_eq!(out.matches("plot saved to sweep_spring.svg").count(), 1, "{out}");
+        let dir = p.parent().unwrap();
+        let svg = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let (spring, pend, decay) = (svg("sweep_spring.svg"), svg("sweep_pendulum.svg"), svg("sweep_decay.svg"));
+        for f in ["sweep_spring.svg", "sweep_pendulum.svg", "sweep_decay.svg"] {
+            let _ = std::fs::remove_file(dir.join(f));
+        }
+        for k in ["k = 1 N/m", "k = 2 N/m", "k = 4 N/m"] {
+            assert!(spring.contains(k), "{k} not in the legend ({backend})");
+        }
+        for l in ["L = 0.500 m", "L = 1 m", "L = 1.50 m", "L = 2 m"] {
+            assert!(pend.contains(l), "{l} not in the legend ({backend})");
+        }
+        for c in ["u, λ = 0.100 1/s", "w, λ = 0.400 1/s"] {
+            assert!(decay.contains(c), "{c} not in the legend ({backend})");
+        }
+    }
 }

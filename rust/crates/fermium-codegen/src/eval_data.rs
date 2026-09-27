@@ -16,6 +16,8 @@ use crate::eval::{Frame, Interpreter, Printer, RunError, Value};
 #[derive(Default)]
 pub struct DataState {
     pub(crate) sets: Vec<Rc<Dataset>>,
+    /// the figures of plots inside a sweep, one curve per value so far (D299), by plot id
+    pub(crate) pending: std::collections::HashMap<usize, PlotSpec>,
 }
 
 fn get<'a>(j: &'a Json, k: &str) -> &'a Json {
@@ -296,6 +298,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let StmtKind::Plot(pid, exprs) = &s.kind else { unreachable!() };
         let module = self.module;
         let info = &module.tables.plots[*pid];
+        if let Json::List(fl) = get(info, "flush") {
+            // the end of a sweep (D299): save each figure its plots collected
+            for p in fl {
+                if let Some(spec) = self.data.pending.remove(&(num(p) as usize)) {
+                    match plot::save_plot(&spec) {
+                        Ok(line) => self.print_line(&line),
+                        Err(ex) => self.print_line(&format!("(plot not saved: {ex})")),
+                    }
+                }
+            }
+            return Ok(());
+        }
         let sjs = list(get(info, "series"));
         let mut series = vec![];
         let mut ylabels = vec![];
@@ -336,6 +350,30 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             equal_aspect: flag(get(info, "equal")),
         };
         let _ = ylabels;
+        let sw = get(info, "sweep");
+        if let Json::Obj(_) = sw {
+            // inside a sweep (D299): this iteration's curves, labelled with the sweep variable, join the figure
+            let v = self.eval(&exprs[num(get(sw, "expr")) as usize], fr)?;
+            let fmt = num(get(sw, "fmt"));
+            let shown = match &v {
+                Value::Str(t) => t.to_string(),
+                _ if fmt >= 0.0 && fmt < usize::MAX as f64 => crate::eval_calc::fmt_value(module, v.num(), Some(fmt as usize)),
+                _ => fermium_units::format_number(v.num(), 6, true),
+            };
+            let label = format!("{} = {shown}", text(get(sw, "name")));
+            let mut spec = spec;
+            let single = spec.series.len() == 1;
+            for sr in &mut spec.series {
+                sr.legend = if single { label.clone() } else { format!("{}, {label}", sr.legend) };
+            }
+            match self.data.pending.get_mut(pid) {
+                Some(p) => p.series.extend(spec.series),
+                None => {
+                    self.data.pending.insert(*pid, spec);
+                }
+            }
+            return Ok(());
+        }
         match plot::save_plot(&spec) {
             Ok(line) => self.print_line(&line),
             Err(ex) => self.print_line(&format!("(plot not saved: {ex})")),

@@ -93,8 +93,20 @@ solve y'' = -g
   shorter: `g''(x) = 2 cos(x) - x sin(x)` (2.0: `cos(x) + (cos(x) - x sin(x))`), `E'(x) = x exp(x)` (2.0:
   `(1 + x - 1)·exp(x)`), `q''(x) = 1/(1 + x²)^(3/2)`, `∂V/∂x = -x/(x² + y² + z²)^(3/2)`. Values are computed as
   before. One conformance program prints `(1 - x²)/(1 + x²)²` instead of `(1 + x² - 2x²)/(1 + x²)²` (documented).
+- **Parameter sweeps** (D299): `sweep k in [1, 2, 4] N/m` + a block is a for loop whose plots draw one curve
+  per value in one figure, labelled `k = 1 N/m`, … and saved when the sweep ends (a `for` loop's plots overwrite
+  each other). `sweep L from 0.5 m to 2 m step 0.5 m` works too.
+
+```text
+sweep k in [1, 2, 4] N/m
+    solve M x'' = -k x
+      with x(0 s) = 1 m, x'(0 s) = 0 m/s
+      for t from 0 s to 3 s
+    plot x vs t
+```
+
 - Docs: docs/reference.md §8 *Derivatives of functions written over several lines* and §10 (*An `if` on the
-  unknowns*, *`when`*); DECISIONS D295–D298; tests: rust/c-cases/c2 (run by
+  unknowns*, *`when`*, *`sweep`*); DECISIONS D295–D299; tests: rust/c-cases/c2 (run by
   `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
   multi-line functions (C2)* and *v2.5: conditions on the unknowns in solve are located (C2)* and *v2.5: printed derivatives in their tidy form
   when it is clearly shorter (C2)*.

@@ -343,6 +343,10 @@ impl Printer {
                 f.push(("samples", self.opt(samples.as_ref())));
                 f.push(("body", self.block(body)));
             }
+            Sweep { body } => {
+                // Fermium 2.5 (D299); not in the v1 oracle's tree
+                f.push(("body", self.block(body)));
+            }
             Assign { name, value, op } => {
                 f.push(("name", s(name)));
                 f.push(("value", self.expr(value)));
@@ -591,6 +595,7 @@ fn collect_live(p: &Program) -> HashMap<u32, (&'static str, Span)> {
                 samples.iter().for_each(|e| ex(e, live));
                 body.iter().for_each(|x| st(x, live));
             }
+            Sweep { body } => body.iter().for_each(|x| st(x, live)),
             Assign { value, .. } => ex(value, live),
             IndexAssign { index, value, index2, .. } => {
                 ex(index, live);

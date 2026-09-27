@@ -1372,3 +1372,20 @@ the last digits of computed derivatives across the conformance suite); always th
 formulas, two of them only by reordering or 1-2 characters, e.g. `1/(4 √(1 - (x/4)²))` → `1/(4 √(1 - x²/16))`;
 the fifth threshold keeps those as v1 printed them and changes only `(1 + x² - 2x²)/(1 + x²)²` →
 `(1 - x²)/(1 + x²)²`, a documented divergence).
+
+## D299. Parameter sweeps over solve: a `sweep` loop whose plots collect one curve per value (spec C2)
+- **What:** `sweep k in LIST` / `sweep k from a to b [step s]` + a block is parsed as the `for` loop it spells
+(AST `Sweep { body: [the loop] }`) and checked and run exactly like it; the difference is in its plots. A plot
+directly in the block (same function) gets the loop variable as an extra expression and its print format; at run
+time each iteration's curves are labelled `k = <value as print shows it>` (with the curve's own name in front when
+the plot has several curves) and kept; a statement after the loop saves each collected figure once. Both back ends
+(the LLVM back end hands plots to the tree-walker, which keeps the figures). The loop variable and results are the
+loop's, so collecting numbers (`push(periods, …)`) and printing work as in any loop.
+- **Why:** a sweep over a parameter of an ODE is a for loop around a solve, which already worked in v2.0 (`for k in
+[1, 2, 4] N/m`), but each plot then overwrote the previous figure; comparing curves for several parameter values
+is the point of a sweep. A keyword that reads like the physics ("sweep k in …") keeps the loop visible and costs
+nothing else to learn.
+- **Alternatives:** changing `for` so that plots in loops accumulate (would change v1 programs that save one figure
+per iteration on purpose, and their conformance output); a `solve … for k in […]` clause (mixes two ranges on one
+statement, and the results — values at times, event times — would need a new list-of-solutions type); a plot
+option (`plot x vs t for each k`) (the plot would have to know which loop it is in anyway).

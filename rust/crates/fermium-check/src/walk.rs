@@ -36,7 +36,8 @@ pub fn stmt_blocks(s: &A::Stmt) -> Vec<&Vec<A::Stmt>> {
             }
             v
         }
-        K::For { body, .. } | K::ForIn { body, .. } | K::While { body, .. } | K::Propagate { body, .. } => vec![body],
+        K::For { body, .. } | K::ForIn { body, .. } | K::While { body, .. } | K::Propagate { body, .. }
+        | K::Sweep { body } => vec![body],
         K::FuncDef { body: A::FuncBody::Block(b), .. } => vec![b],
         K::Units { body: Some(b), .. } => vec![b],
         _ => vec![],

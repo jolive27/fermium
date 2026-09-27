@@ -326,6 +326,9 @@ pub enum StmtKind {
     If { cond: Expr, then: Vec<Stmt>, other: Option<Vec<Stmt>> },
     For { var: String, lo: Expr, hi: Expr, step: Option<Expr>, body: Vec<Stmt>, parallel: bool },
     ForIn { var: String, iterable: Expr, body: Vec<Stmt> },
+    /// `sweep k in [1, 2, 4] N/m` (or `sweep k from a to b step s`) + a block: a for loop (`inner`, a For or ForIn)
+    /// whose plots collect one curve per value into one figure (spec C2, D299). `body` is that one loop statement.
+    Sweep { body: Vec<Stmt> },
     While { cond: Expr, body: Vec<Stmt> },
     Return { value: Option<Expr> },
     Break,
@@ -395,6 +398,7 @@ impl StmtKind {
             StmtKind::If { .. } => "If",
             StmtKind::For { .. } => "For",
             StmtKind::ForIn { .. } => "ForIn",
+            StmtKind::Sweep { .. } => "Sweep",
             StmtKind::While { .. } => "While",
             StmtKind::Return { .. } => "Return",
             StmtKind::Break => "Break",

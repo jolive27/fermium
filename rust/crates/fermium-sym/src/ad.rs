@@ -393,6 +393,7 @@ impl Ad<'_> {
                     S::Plot { .. } => "plot",
                     S::Fit { .. } => "fit",
                     S::Propagate { .. } => "propagate",
+                    S::Sweep { .. } => "sweep",
                     S::Units { .. } => "a units block",
                     _ => "a statement",
                 };

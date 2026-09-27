@@ -563,6 +563,14 @@ impl Parser {
         if tt.is_name("use") && nx.is_name("python") {
             return self.use_python_stmt(end_line);
         }
+        if tt.is_name("sweep") && !self.known.contains("sweep") && nx.kind == Kind::Name
+            && (self.peek(2).is_kw("in") || self.peek(2).is_kw("from"))
+        {
+            // sweep k in [...]: a for loop whose plots collect one curve per value (spec C2, D299)
+            let s = self.for_stmt()?;
+            let span = s.span;
+            return Ok(Stmt { kind: StmtKind::Sweep { body: vec![s] }, span });
+        }
         if tt.is_name("parallel") && nx.is_kw("for") {
             self.next();
             let mut s = self.for_stmt()?;
