@@ -12,17 +12,18 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 21 of the files completely** (386 templates) — the ones that hold the most common errors: unit and
+covers 23 of the files completely** (404 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
 numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
-`plot` (data.rs), modules (modules.rs), and complex numbers (cplx.rs). The other files (PDEs, eigenvalue problems,
-arrays, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 190 templates) are still to do; see §4.
+`plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) and
+events in ODEs (`when`, events.rs). The other files (PDEs, eigenvalue problems,
+parallel loops, `analyze` and the C, C++ and Python
+interop; about 170 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -41,8 +42,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 144 of the
-386. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 145 of the
+404. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -384,7 +385,7 @@ errors come first, and the rest are simply not written yet (§4).
 | 309 | `… both appear in one equation; that works for up to 4 unknowns (this solve has …); solve for the highest derivatives yourself, e.g. with solve_linear` | solve.rs | an implicit system with more than 4 unknowns | — |
 | 310 | `… both appear in one equation; that works when every equation is linear in … (like m1 a'' + k b'' = F, with coefficients that may depend on … and the unknowns), and this one isn't` | solve.rs | an implicit system that isn't linear in the highest derivatives | C310 |
 | 311 | `… drops out of the equations (its coefficients are all 0), so they can't be solved for it` | solve.rs | an implicit system where an unknown's highest derivative has all-zero coefficients | — |
-| 312 | `the stop condition can use … (not …)` | solve.rs | an `until` condition using a name other than the unknowns and the variable | — |
+| 312 | `the stop condition can use … (not …)` | solve.rs | an `until` condition that uses an unknown's highest derivative (or a higher one) | C312 |
 | 313 | `the two sides of the stop condition don't match: left is …, right is …` | solve.rs | the two sides of an `until` condition have different dimensions | C313 |
 | 314 | `… is a …-vector, so it has no .…` | solve.rs | `.name` on an ODE solution vector with a component it doesn't have | C314 |
 | 315 | `… is complex, and lists of complex numbers aren't supported yet` | solve.rs | an ODE solution with complex values used where a list is needed | — |
@@ -462,6 +463,26 @@ errors come first, and the rest are simply not written yet (§4).
 | 384 | `… needs a plain number, but got a complex number of …` | cplx.rs | `exp`, `ln`, `sin`, … of a complex number with units | C384 |
 | 385 | `complex numbers can't be compared with … (they aren't ordered)` | cplx.rs | `<`, `>`, `≤`, `≥` with a complex number | C385 |
 | 386 | `°C/°F can't be used for complex numbers` | cplx.rs | a complex number (from a computation) given the unit °C or °F | — |
+| | **Arrays of 3 or more dimensions (arrays.rs)** | | | |
+| 387 | `fill(value, n1, n2, …) makes an array of 1 to … dimensions: give the value, then the size along each (fill(0 K, 50, 50) is a 50×50 grid)` | arrays.rs | `fill` with no size, or too many sizes | C387 |
+| 388 | `a size must be a plain whole number, not …` | arrays.rs | a `fill` size with units or not a whole number | C388 |
+| 389 | `… can't take an array here` | arrays.rs | a built-in that doesn't take an array given one where an array can't go | — |
+| 390 | `size(A, k): this array has … dimensions, so k is 1 to …` | arrays.rs | `size(A, k)` with k outside 1 to the array's number of dimensions | C390 |
+| 391 | `… doesn't work on arrays yet (size, sum, mean, max, min, abs and copy do; loop over the entries for the rest)` | arrays.rs | a built-in other than size, sum, mean, max, min, abs and copy applied to an array | C391 |
+| 392 | `… is a …-dimensional array, so it takes … indexes, like …[…]` | arrays.rs | an array read with the wrong number of indexes | C392 |
+| 393 | `an array index is a whole number (slices and end aren't supported for arrays yet)` | arrays.rs | an array index that is a slice or `end` | C393 |
+| 394 | `an array index must be a plain number (1, 2, 3, ...), not …` | arrays.rs | an array index with units | C394 |
+| 395 | `an array index must be a whole number (1, 2, 3, ...), not …` | arrays.rs | an array index that isn't a whole number | C395 |
+| 396 | `… is a …-dimensional array, so it takes … indexes, like …[…] = …` | arrays.rs | an array entry set with the wrong number of indexes | C396 |
+| 397 | `… is an array of …; can't put … in it` | arrays.rs | storing a value of another dimension or kind in an array entry | C397 |
+| 398 | `can't combine a …-dimensional array with a …-dimensional one` | arrays.rs | arithmetic between arrays with different numbers of dimensions | — |
+| 399 | `an array can be combined with numbers and arrays, not with …` | arrays.rs | arithmetic between an array and a list, vector or matrix | C399 |
+| | **Events in ODEs (events.rs)** | | | |
+| 400 | `… can use … (not …)` | events.rs | a `when` condition that uses an unknown's highest derivative (or a higher one); it can use the unknowns and their lower derivatives | C400 |
+| 401 | `the two sides of the condition of when don't match: left is …, right is …` | events.rs | the two sides of a `when` condition have different dimensions | C401 |
+| 402 | `can't set … here: …` | events.rs | a `when` action that sets something other than an unknown or one of its lower derivatives | C402 |
+| 403 | `… is set twice in this when` | events.rs | the same unknown set twice in one `when` | C403 |
+| 404 | `… is … but this is …` | events.rs | a `when` action's value has another dimension than the value it sets | C404 |
 
 ## 3. Examples
 
@@ -1578,6 +1599,11 @@ solve a'' + b''^2 = 0, b'' = 1 with a(0) = 0, a'(0) = 0, b(0) = 0, b'(0) = 0 for
 ```
 
 ```fermium-error
+# C312
+solve y'' = -9.8 with y(0) = 1, y'(0) = 0 for t from 0 to 1 until y'' = 0
+```
+
+```fermium-error
 # C313
 solve x' = -x/(1 s) with x(0) = 1 m for t from 0 s to 1 s until x = 1 s
 ```
@@ -1798,17 +1824,111 @@ w = exp(z)
 b = (1 + 2i) < 3
 ```
 
+```fermium-error
+# C387
+A = fill(0)
+```
+
+```fermium-error
+# C388
+A = fill(0, 3 m, 3, 3)
+```
+
+```fermium-error
+# C390
+A = fill(0, 3, 3, 3)
+n = size(A, 4)
+```
+
+```fermium-error
+# C391
+A = fill(0, 3, 3, 3)
+B = floor(A)
+```
+
+```fermium-error
+# C392
+A = fill(0, 3, 3, 3)
+x = A[1, 2]
+```
+
+```fermium-error
+# C393
+A = fill(0, 3, 3, 3)
+x = A[1, 2, end]
+```
+
+```fermium-error
+# C394
+A = fill(0, 3, 3, 3)
+x = A[1, 2, 3 m]
+```
+
+```fermium-error
+# C395
+A = fill(0, 3, 3, 3)
+x = A[1, 2, 1.5]
+```
+
+```fermium-error
+# C396
+A = fill(0, 3, 3, 3)
+A[1, 2, 3, 1] = 5
+```
+
+```fermium-error
+# C397
+A = fill(0 K, 3, 3, 3)
+A[1, 2, 3] = 5 m
+```
+
+```fermium-error
+# C399
+A = fill(0, 3, 3, 3)
+B = A + [1, 2, 3]
+```
+
+```fermium-error
+# C400
+solve y'' = -9.8 with y(0) = 1, y'(0) = 0 for t from 0 to 1
+  when y'' = 0: y' = 1
+```
+
+```fermium-error
+# C401
+solve y'' = -9.8 m/s^2 with y(0) = 1 m, y'(0) = 0 m/s for t from 0 s to 1 s
+  when y = 0 s: y' = -0.9 y'
+```
+
+```fermium-error
+# C402
+solve y'' = -9.8 with y(0) = 1, y'(0) = 0 for t from 0 to 1
+  when y = 0: y'' = 1
+```
+
+```fermium-error
+# C403
+solve y'' = -9.8 with y(0) = 1, y'(0) = 0 for t from 0 to 1
+  when y = 0: y' = 1, y' = 2
+```
+
+```fermium-error
+# C404
+solve y'' = -9.8 m/s^2 with y(0) = 1 m, y'(0) = 0 m/s for t from 0 s to 1 s
+  when y = 0 m: y' = 1 m
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
   covered, by size of their error set: pde.rs (31), cinterop.rs (25),
-  pyinterop.rs (18), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 190 templates remain.
+  pyinterop.rs (18), eigen.rs (14), parallel.rs (12), systems.rs (8),
+  analyze.rs (6), plus cppinterop.rs's `cerr(…)` messages. About 170 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (144). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (145). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -1818,10 +1938,11 @@ b = (1 + 2i) < 3
   rows: mostly the rarer argument errors, `propagate montecarlo`'s block, the vector-calculus operators and the
   two-list forms of the Fourier built-ins. In rows 168–208 (stmts.rs), 15 rows: natural-units regions, arrays,
   complex lists, ODE solutions and local-function limits. In rows 209–266 (vecmat.rs), 5 rows: the size limits
-  and index forms that need large or run-time matrices. In rows 267–323 (solve.rs), 22 rows: implicit systems,
+  and index forms that need large or run-time matrices. In rows 267–323 (solve.rs), 21 rows: implicit systems,
   complex and list unknowns, events with lists, and messages another check reaches first.
   In rows 324–358 (data.rs), 17 rows: data files with bad headers, `fit` models and guesses, PDE-solution plots
   and `sweep`. In rows 359–373 (modules.rs), 12 rows: they need module files next to the program, which a
   one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
+  In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
