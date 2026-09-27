@@ -1,5 +1,5 @@
 {
  "stdout": "1.341 ± 0.027\n7.70 ± 0.12 m\n",
- "stderr": "warning: line 9: this differential equation's solution uses an uncertain value where a plain number is needed (a loop bound, an index), which first-order propagation can't follow; its uncertainty comes from Monte Carlo (2000 samples; see  propagate montecarlo  to set the number)\n",
+ "stderr": "warning: line 9: this differential equation's solution has a  when  event whose time moves with its uncertain inputs, which first-order propagation can't follow; its uncertainty comes from Monte Carlo (2000 samples; see  propagate montecarlo  to set the number)\n",
  "exit": 0
 }

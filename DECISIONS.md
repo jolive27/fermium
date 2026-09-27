@@ -1921,7 +1921,7 @@ rad vs plain, and none otherwise (J vs N m). In the REPL, where every input is l
 - **Alternatives:** a table of named pairs (the kinds already are one); numbering REPL inputs (a larger change to
 the REPL's diagnostics).
 
-## D330. The compile cache's key holds $HOME, the current folder and an absolute program folder (red team 16 #1)
+## D330. The compile cache's key holds $HOME, the current folder and an absolute program folder (red team 16 #1, #2)
 - **What:** `import "~/m.fm"` expands `~` with `$HOME`, and relative paths resolve against the current folder, so the
 JIT cache key (D317) now includes `HOME` and the current folder; `fermium run --base-dir .` makes the folder absolute
 before it is used (for the key and for module resolution alike). Audit of the other inputs: the checker reads
@@ -1932,27 +1932,27 @@ before it is used (for the key and for module resolution alike). Audit of the ot
 - **Alternatives:** recording the unexpanded spec and its expansion as a dependency line (finer, but every future
 environment input would need its own line; the key is the simpler invariant).
 
-## D331. (u^a)^b is merged into u^(ab) only when b is an integer or a is not (red team 16 #2)
+## D331. (u^a)^b is merged into u^(ab) only when b is an integer or a is not (red team 16 #5)
 - **What:** the simplifier merged `(x²)^(3/2)` into `x³` and `(x²)^(1/2)` into `x`, so f' printed `3x²` and
 evaluated wrongly for x < 0. Now it merges only when b is an integer, or a is not an integer (then u^a already
 needs u ≥ 0); otherwise the power stays and the derivative is `3x (x²)^(1/2)`.
 - **Why:** unit safety and correctness come before a shorter formula; (x²)^(1/2) is |x|.
 - **Alternatives:** rewriting to |x|^(ab) (SymPy leaves it unevaluated for real x too).
 
-## D332. Differentiating a recursive function is a one-line error (red team 16 #3)
+## D332. Differentiating a recursive function is a one-line error (red team 16 #7)
 - **What:** the checker keeps the derivatives being made; one asked for again while it is made (a function that
 calls itself, directly or through another) stops with *can't differentiate f: it calls itself*.
 - **Why:** the derivative transformation recursed forever and overflowed the stack (exit 134), in `check` too.
 - **Alternatives:** differentiating the recursion as a recursive derivative function (needs a fixed point over the
 derivative's own definition; later if asked).
 
-## D333. A tangent that doesn't depend on x is a written 0 (red team 16 #4)
+## D333. A tangent that doesn't depend on x is a written 0 (red team 16 #6)
 - **What:** in AD of a multi-line function, the tangent of `E = 0 J` (and of a non-differentiated parameter) is a
 written `0`, which the checker lets take any unit, so `dE/dr = dE/dr + …` has the unit of E/r.
 - **Why:** a computed 0 is a plain number, and the accumulator's tangent then clashed with a force.
 - **Alternatives:** `0 * value / x` (right unit, but NaN at x = 0).
 
-## D334. `fmt` keeps a `*` where the other spelling would join a unit (red team 16 #5)
+## D334. `fmt` keeps a `*` where the other spelling would join a unit (red team 16 #8)
 - **What:** `--pretty` keeps `*` (not `·`) between a unit and a following unit name (`1.07 fm * A^(1/3)`: `fm·A`
 would be one unit), and `--ascii` writes `* hbar` where a symbol's ASCII spelling is a unit name right after a
 number or unit (`25 ħ / √(2μ|E|)` became `25 hbar / sqrt(…)`, read as the unit `hbar` and a different value). A test
@@ -1961,3 +1961,13 @@ and spelling-only facts aside). Fermium 1.5's formatter (the oracle, legacy/) is
 - **Why:** `fmt` must change only spellings, never meaning.
 - **Alternatives:** bracketing the unit (`1.07 [fm] · A^(1/3)`: changes more text); re-parsing and comparing inside
 `fmt` itself (a safety net worth adding later; the corpus test covers the known forms).
+
+## D335. A solve with `when` takes Monte Carlo for every uncertain value it reads, the reset's too (red team 16 #9)
+- **What:** the sources of a `when`'s condition and reset are collected with the right side's, and a solve with
+`when` goes straight to Monte Carlo (as docs/reference.md already said). The fallback warning says why: *has a
+when event whose time moves with its uncertain inputs* (was "a plain number is needed (a loop bound, an index)",
+wrong here); rust/c-cases/c2/events_uncertain.json records the new text (that recorded warning was the wrong one).
+- **Why:** `k_e = 0.9 ± 0.01` used only in `when y = 0 m: y' = -k_e y'` was refused with v1's "can't use uncertain
+values" error.
+- **Alternatives:** sensitivities through the event (a saltation matrix at each event: exact for smooth crossings,
+more code; later if the Monte Carlo cost matters).

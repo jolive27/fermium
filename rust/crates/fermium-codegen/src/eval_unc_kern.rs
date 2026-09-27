@@ -584,6 +584,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Err(e) if is_unc_error(&e) => None,
             Err(e) => return Err(e),
         };
+        // a `when`'s condition and reset may read uncertain values the right side doesn't (`y' = -k_e y'`): their
+        // sources count too, and a solve with `when` always takes Monte Carlo (the event time moves with the
+        // inputs; red team 16 #9, D335)
+        let has_when = !x.whens.is_empty();
+        if has_when {
+            for w in &x.whens {
+                for l in [w.g, w.reset] {
+                    depth(1);
+                    let rec = seen_begin();
+                    let r = self.ode_rhs_values(&module.lambdas[l], t0, y0v, fr);
+                    extend_new(&mut srcs, &seen_end(rec));
+                    depth(-1);
+                    match r {
+                        Ok(fv) => fv.iter().for_each(|v| add_sources(v, &mut srcs)),
+                        Err(e) if is_unc_error(&e) => {}
+                        Err(e) => return Err(e),
+                    }
+                }
+            }
+            self.line = line;
+            linear = None;
+        }
         let y0n: Vec<f64> = y0v.iter().map(nominal).collect();
         let mut plain_needed = linear.is_none();
         if linear.is_some() && srcs.is_empty() {
@@ -670,7 +692,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         fixed_end(prev);
         let nom = nom?;
         self.line = line;
-        crate::eval_calc::warn_at(line, &mc_warning("this differential equation's solution", plain_needed, nmc));
+        let warning = if has_when {
+            format!("this differential equation's solution has a  when  event whose time moves with its uncertain \
+                     inputs, which first-order propagation can't follow; its uncertainty comes from Monte Carlo ({nmc} \
+                     samples; see  propagate montecarlo  to set the number)")
+        } else {
+            mc_warning("this differential equation's solution", plain_needed, nmc)
+        };
+        crate::eval_calc::warn_at(line, &warning);
         let snap = self.snapshot(*rhs, fr);
         self.store_sol(*sol, SolData { sol: nom, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None,
                                        unc: Some(UncSol::Mc { srcs, zs, sols, basis: RefCell::new(vec![]) }) },

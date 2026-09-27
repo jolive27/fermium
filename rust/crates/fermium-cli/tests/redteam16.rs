@@ -82,6 +82,22 @@ fn a_power_of_an_even_power_keeps_the_absolute_value() {
     assert_eq!(&l[1..], ["-12", "-1", "1"], "{o}");
 }
 
+// ---------------------------------------------------------------- #9 (REDTEAM numbering): ± only in a when (D335)
+
+#[test]
+fn an_uncertain_value_read_only_by_a_when_reset_takes_monte_carlo() {
+    // first bounce at 1.428 s, the second at 1.428 + 2·0.9·14.01/9.81 = 3.999 s: y(4 s) ≈ 0.01 m nominal, and
+    // |Δk|·34 m either side (a folded normal: σ ≈ 0.6·0.34 m)
+    let src = "g = 9.81 m/s²\nk_e = 0.9 ± 0.01\nsolve y'' = -g\n  with y(0 s) = 10 m, y'(0 s) = 0 m/s\n  \
+               for t from 0 s to 4 s\n  when y = 0 m: y' = -k_e y'\nprint y(4 s)\n";
+    let (c, o, e) = run_src("whenpm", src);
+    assert_eq!(c, 0, "{e}");
+    assert!(e.contains("has a  when  event whose time moves with its uncertain inputs"), "{e}");
+    let (v, s) = o.trim().trim_end_matches(" m").split_once(" ± ").expect("a ± result");
+    let (v, s): (f64, f64) = (v.parse().unwrap(), s.parse().unwrap());
+    assert!(v.abs() < 0.05 && (0.12..0.3).contains(&s), "{o}");
+}
+
 // ---------------------------------------------------------------- #3: a recursive function (D332)
 
 #[test]

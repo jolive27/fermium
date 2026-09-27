@@ -275,3 +275,6 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
   works; it was refused with a unit clash.
 - `fermium fmt` no longer changes meaning where a spelling change would join a unit: `--pretty` keeps
   `1.07 fm * A^(1/3)` (was `fm · A`, one unit fm·A), and `--ascii` writes `25 * hbar` for `25 ħ` (was `25 hbar`, a unit).
+- A solve whose `when` reset or condition reads an uncertain value (`when y = 0 m: y' = -k_e y'`, `k_e = 0.9 ± 0.01`)
+  gets its uncertainty from Monte Carlo, as documented (it was refused); the warning names the moving event time as
+  the reason.
