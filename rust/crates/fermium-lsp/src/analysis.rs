@@ -28,7 +28,7 @@ pub struct Analysis {
 fn check(source: &str, base_dir: &str) -> Result<(Checker, Diagnostics), fermium_syntax::Diagnostic> {
     let mut d = Diagnostics::new();
     let prog = fermium_syntax::parse_with(source, &[], &mut d)?;
-    let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: String::new() };
+    let opts = CheckOptions { base_dir: base_dir.to_string(), repl: false, source_name: String::new(), no_load: true };
     match check_keep(&prog, opts) {
         Ok(mut ck) => {
             d.warnings.append(&mut ck.diags.warnings);

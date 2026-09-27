@@ -471,7 +471,12 @@ impl Checker {
                 .into());
         }
         if method == "rk4" && step.is_none() {
-            return Err(self.err("the rk4 method needs a fixed step:  for t from 0 s to 5 s step 0.01 s", s.span, None).into());
+            // the program's own range (red team 14 #9e: it always said 0 s to 5 s), with a step in the end's unit
+            let (lo, hi) = (crate::source::to_source(&sv.lo), crate::source::to_source(&sv.hi));
+            let unit = hi.split_once(' ').filter(|(n, _)| n.parse::<f64>().is_ok()).map(|(_, u)| format!(" {u}"))
+                .unwrap_or_default();
+            return Err(self.err(format!("the rk4 method needs a fixed step:  for {} from {lo} to {hi} step 0.01{unit}",
+                                        sv.var), s.span, None).into());
         }
 
         // state layout: for each unknown x of order n: x, x', ..., x^(n-1)

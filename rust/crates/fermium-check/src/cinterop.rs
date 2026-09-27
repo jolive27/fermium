@@ -119,8 +119,7 @@ impl Checker {
                 Some(n) => (true, n.as_deref()),
             };
             let symbol = if fortran { cffi::fortran_symbol(&ascii, bind_c, bind_name) } else { ascii.clone() };
-            let found = cffi::symbol(&path, &symbol).unwrap_or(None);
-            if found.is_none() {
+            if !self.c_has_symbol(&path, &symbol) {
                 return Err(self.missing_symbol(what, lib, &path, &sig.name, &ascii, &symbol, fortran, bind_c, sig.span));
             }
             refs.push(self.c_signature(sig, what, lib, &path, symbol, sig.span.line)?);
@@ -141,11 +140,30 @@ impl Checker {
         }
     }
 
-    /// Open the library now, so a missing one is a compile error with a hint.
+    /// Does the library define the symbol? Only checking (no_load): read from the file, and when the file can't
+    /// be read that way, assume so (the run says otherwise).
+    fn c_has_symbol(&self, path: &str, symbol: &str) -> bool {
+        if self.opts.no_load {
+            return cffi::file_has_symbol(path, symbol).unwrap_or(true);
+        }
+        cffi::symbol(path, symbol).ok().flatten().is_some()
+    }
+
+    /// Open the library now, so a missing one is a compile error with a hint. Only checking (no_load), the file
+    /// must exist when it is named by a path; it isn't opened.
     fn load_c_library(&self, lang: &str, what: &str, lib: &str, path: &str, span: A::Span) -> CResult<()> {
         let base = self.opts.base_dir.clone();
         let fortran = lang == "fortran";
-        if let Err(why) = cffi::open_library(path) {
+        let opened = if self.opts.no_load {
+            if Path::new(path).is_absolute() && !Path::new(path).exists() || lib.contains('/') && !Path::new(path).exists() {
+                Err("no such file".to_string())
+            } else {
+                Ok(0)
+            }
+        } else {
+            cffi::open_library(path)
+        };
+        if let Err(why) = opened {
             let stem = lib.trim_start_matches("lib").split('.').next().unwrap_or("phys").to_string();
             let build = if fortran {
                 format!("gfortran -shared -fPIC -o {lib} {stem}.f90")
@@ -215,15 +233,17 @@ impl Checker {
                 return Err(self.err(e.msg, span, e.hint));
             }
         };
-        if let Err(why) = cffi::open_library(&wrapper) {
-            return Err(self.err(format!("can't load the compiled C++ wrapper {wrapper}"), s.span,
-                                Some(format!("delete it so that it is made again ({why})"))));
+        if !self.opts.no_load {
+            if let Err(why) = cffi::open_library(&wrapper) {
+                return Err(self.err(format!("can't load the compiled C++ wrapper {wrapper}"), s.span,
+                                    Some(format!("delete it so that it is made again ({why})"))));
+            }
         }
         let shown = if lib.is_empty() { header } else { lib };
         let mut refs = vec![];
         for (k, sig) in sigs.iter().enumerate() {
             let symbol = crate::cppinterop::wrapper_symbol(k);
-            if cffi::symbol(&wrapper, &symbol).unwrap_or(None).is_none() {
+            if !self.c_has_symbol(&wrapper, &symbol) {
                 return Err(self.err(format!("the compiled C++ wrapper {wrapper} has no {symbol}"), sig.span,
                                     Some("delete it so that it is made again".into())));
             }
@@ -268,7 +288,9 @@ impl Checker {
     #[allow(clippy::too_many_arguments)]
     fn missing_symbol(&self, what: &str, lib: &str, path: &str, name: &str, ascii: &str, symbol: &str, fortran: bool,
                       bind_c: bool, span: A::Span) -> Diagnostic {
-        let has = |s: &str| cffi::symbol(path, s).ok().flatten().is_some();
+        let has = |s: &str| {
+            if self.opts.no_load { cffi::file_has_symbol(path, s) == Some(true) } else { cffi::symbol(path, s).ok().flatten().is_some() }
+        };
         let lower = ascii.to_lowercase();
         let under = format!("{lower}_");
         let hint = if fortran && !bind_c && has(&lower) {

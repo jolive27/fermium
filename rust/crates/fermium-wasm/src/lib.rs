@@ -104,7 +104,7 @@ fn run_here(src: &str, base_dir: &str, out: &mut Output) {
             return;
         }
     };
-    let opts = fermium_check::CheckOptions { base_dir: base_dir.to_string(), repl: false,
+    let opts = fermium_check::CheckOptions { base_dir: base_dir.to_string(), repl: false, no_load: false,
                                              source_name: "program.fm".into() };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,

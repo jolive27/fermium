@@ -697,7 +697,14 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Str(s) => Value::Str(s.as_str().into()),
             ExprKind::Var(sym) => {
                 let v = self.get(*sym, fr)?;
-                if crate::eval_unc::mc_active() { crate::eval_unc::mc_sample(&v) } else { v }
+                if crate::eval_unc::mc_active() {
+                    crate::eval_unc::mc_sample(&v)
+                } else {
+                    if crate::eval_unc::is_unc(&v) {
+                        crate::eval_unc_kern::kernel_seen(&v); // the sources a kernel reads (D300)
+                    }
+                    v
+                }
             }
             ExprKind::Bin(op, a, b) => {
                 let (va, vb) = (self.eval(a, fr)?, self.eval(b, fr)?);
@@ -956,16 +963,25 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 let vals = self.eval_args(args, fr)?;
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
+                    if crate::eval_unc_kern::kernel_pm_active() {
+                        // a kernel's ±1σ test or Monte Carlo: the ± written inside it is the measurement its
+                        // linear pass made (one source), sampled like any other input (red team 14 #1)
+                        if let Some(v) = crate::eval_unc_kern::kernel_pm_get(e as *const Expr as usize) {
+                            return Ok(crate::eval_unc::mc_sample(&v));
+                        }
+                    }
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
                 }
                 if (name == "pm" || name == "pm_rel") && crate::eval_unc_kern::kernel_pm_active() {
                     // a ± written inside an integrand or a right side: one measurement per kernel (C7)
                     let key = e as *const Expr as usize;
                     if let Some(v) = crate::eval_unc_kern::kernel_pm_get(key) {
+                        crate::eval_unc_kern::kernel_seen(&v);
                         return Ok(v);
                     }
                     let v = self.builtin_slice(name, &vals)?;
                     crate::eval_unc_kern::kernel_pm_put(key, v.clone());
+                    crate::eval_unc_kern::kernel_seen(&v);
                     return Ok(v);
                 }
                 let r = self.builtin_slice(name, &vals);
@@ -1209,6 +1225,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     pub(crate) fn arr_offset(&self, shape: &[usize], ix: &[f64]) -> Result<usize, RunError> {
         let mut k = 0usize;
         for (d, (&n, &i)) in shape.iter().zip(ix.iter()).enumerate() {
+            if i.is_nan() || (i.is_finite() && i != i.trunc()) {
+                let shown = if i.is_nan() { "NaN".to_string() } else { fermium_units::numfmt::format_number6(i) };
+                return self.err(format!("an array index must be a whole number (1, 2, 3, ...), not {shown}"));
+            }
             if !(i >= 1.0 && i <= n as f64 && i == i.trunc()) {
                 let shown = if i == i.trunc() && i.is_finite() { format!("{}", i as i64) } else { format!("{i}") };
                 return self.err(format!("index {shown} is out of range for dimension {} of this {} array (valid \

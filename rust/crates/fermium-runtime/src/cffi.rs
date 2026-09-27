@@ -224,6 +224,67 @@ pub fn symbol(path: &str, symbol: &str) -> Result<Option<usize>, String> {
     Ok(p)
 }
 
+/// Does the shared library file at `path` define `symbol`, read from its ELF dynamic symbol table without loading
+/// it (so none of its code runs: `fermium check` and the language server, red team 14 #5, D305)? None when the
+/// file can't be read as a 64-bit little-endian ELF library (a Mach-O file on macOS, a bare name the system would
+/// find): the caller can't tell, and the check is left to the run.
+pub fn file_has_symbol(path: &str, symbol: &str) -> Option<bool> {
+    type Cache = Mutex<HashMap<String, Option<Vec<String>>>>;
+    static S: OnceLock<Cache> = OnceLock::new();
+    let cache = S.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut c = cache.lock().unwrap_or_else(|e| e.into_inner());
+    let syms = c.entry(path.to_string()).or_insert_with(|| std::fs::read(path).ok().and_then(|b| elf_dynsyms(&b)));
+    syms.as_ref().map(|v| v.iter().any(|s| s == symbol))
+}
+
+/// The defined symbols of an ELF64 little-endian file's .dynsym (None if it isn't one or has no such table).
+fn elf_dynsyms(b: &[u8]) -> Option<Vec<String>> {
+    let u16_at = |o: usize| -> Option<u16> { Some(u16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?)) };
+    let u32_at = |o: usize| -> Option<u32> { Some(u32::from_le_bytes(b.get(o..o + 4)?.try_into().ok()?)) };
+    let u64_at = |o: usize| -> Option<usize> {
+        usize::try_from(u64::from_le_bytes(b.get(o..o + 8)?.try_into().ok()?)).ok()
+    };
+    if b.get(0..6)? != [0x7f, b'E', b'L', b'F', 2, 1] {
+        return None;
+    }
+    let shoff = u64_at(0x28)?;
+    let shentsize = u16_at(0x3A)? as usize;
+    let shnum = u16_at(0x3C)? as usize;
+    if shentsize < 64 {
+        return None;
+    }
+    let sec = |i: usize| -> Option<(u32, usize, usize, usize, usize)> {
+        let h = shoff.checked_add(i.checked_mul(shentsize)?)?;
+        Some((u32_at(h + 4)?, u64_at(h + 0x18)?, u64_at(h + 0x20)?, u32_at(h + 0x28)? as usize, u64_at(h + 0x38)?))
+    };
+    for i in 0..shnum {
+        let (ty, off, size, link, entsize) = sec(i)?;
+        if ty != 11 {
+            continue; // SHT_DYNSYM
+        }
+        let (_, stroff, strsize, _, _) = sec(link)?;
+        let strtab = b.get(stroff..stroff.checked_add(strsize)?)?;
+        let entsize = if entsize == 0 { 24 } else { entsize };
+        let mut out = vec![];
+        for k in 0..size / entsize {
+            let e = off.checked_add(k * entsize)?;
+            let name = u32_at(e)? as usize;
+            let shndx = u16_at(e + 6)?;
+            if shndx == 0 || name >= strtab.len() {
+                continue; // undefined here (imported)
+            }
+            let end = strtab[name..].iter().position(|&c| c == 0).map(|n| name + n).unwrap_or(strtab.len());
+            let mut s = String::from_utf8_lossy(&strtab[name..end]).into_owned();
+            if let Some(at) = s.find('@') {
+                s.truncate(at); // a versioned name, sym@VER
+            }
+            out.push(s);
+        }
+        return Some(out);
+    }
+    None
+}
+
 /// The name a Fortran compiler gives `name` in the object file: gfortran's and flang's default (lowercase, one
 /// trailing underscore); `bind(C)` without a name keeps the lowercase name; `bind(C, name="…")` is exact.
 pub fn fortran_symbol(name: &str, bind_c: bool, bind_name: Option<&str>) -> String {

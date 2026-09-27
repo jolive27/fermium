@@ -24,8 +24,10 @@ size(xs: list) = len(xs)
 - Works in generic functions (each call chooses again), with derivatives (`energy'`, `d/dx U`), `∫`, `plot`,
   functions passed to functions and modules (`photons.energy(500 nm)`); the editor's hover shows the version a
   call uses.
-- A definition with the *same* signature still replaces the earlier one, so every existing program prints the
-  same. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
+- A definition replaces every earlier version it covers (the same number of parameters, each at least as broad:
+  `f(x) = 2 x` then `f(x) = 3 x`, or `force(x [m]) = …` then `force(x) = …`), so every existing program prints the
+  same; a more specific definition written later adds a version. Replacing `E(f [Hz])` by `E(ω [rad/s])` (the
+  same dimension, a different meaning) warns. A parameter declared `: list` takes the list whole. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
 - Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
   function, the Python API (uses the last version), Fermium 1.5.
 
@@ -81,7 +83,10 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
   Arguments are passed in the declared units and the result converted back; `kinetic_energy(2 kg, 3 s)` is a
   compile-time error with a caret and a hint. Fortran arguments go by reference, with gfortran's name mangling.
 - The library and every function are looked up when the program is checked: a missing library or a misspelt
-  function is a compile error that says how to fix it.
+  function is a compile error that says how to fix it. `fermium check` and the editor's language server read the
+  function names from the library file without loading it, so no library code runs just from checking.
+- Arguments are plain numbers: an uncertain value (±) is an error, as for `use python` (write `value(x)`, or call
+  the function inside `propagate montecarlo`, which calls it once per sample).
 - A function of doubles is called directly from the compiled code (about 5 ns per call); `fermium build`
   executables can call C and Fortran too. There is no libffi or C compiler involved.
 - Worked example: [examples/c_interop/](examples/c_interop/) calls a Fortran semi-empirical mass formula and a
@@ -103,8 +108,13 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
   alongside, so `y(t)` prints value ± uncertainty with its correlations kept. 2.0: "a starting value of solve can't
   be uncertain (±) yet" / "a differential equation (solve) can't use uncertain values (±) yet".
 - **Monte Carlo when linear isn't valid:** each error source is tested at ±1σ; an integral or solve that isn't
-  close to linear there is computed by Monte Carlo instead (seeded, with a warning).
-- Still errors: `solve … for x`, eigenvalue problems and PDEs with uncertain inputs (use `propagate montecarlo`).
+  close to linear there (including a jump at a measured value, `∫ (if x < a then 1 else 0) dx`) is computed by
+  Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs; all values of a
+  Monte Carlo solution share its samples.
+- **`use python`** refuses an uncertain argument again, as Fermium 1.5 does ("this operation needs a plain
+  number, but got an uncertain value (±)"); 2.0 had passed the value alone.
+- Still errors: `solve … for x`, `solve` with a list of unknowns, eigenvalue problems and PDEs with uncertain
+  inputs (use `propagate montecarlo`); arrays (`fill`) of uncertain values.
 - Docs: docs/reference.md §21; DECISIONS D276–D279; tests: rust/c-cases/c7 (run by
   `rust/crates/fermium-cli/tests/c7_cases.rs`).
 

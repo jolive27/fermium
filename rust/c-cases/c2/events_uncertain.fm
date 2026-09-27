@@ -5,7 +5,7 @@ solve z' = if z > 1 then -k z / (1 s) else 0 /s
   with z(0 s) = 2
   for t from 0 s to 0.2 s
 print z(0.2 s)
-# a when with an uncertain start: Monte Carlo (the event time moves); analytic 7.695 m ± 1.192·0.1 m
+# a when with an uncertain start: Monte Carlo (the event time moves); analytic 7.6957 m ± 1.192·0.1 m
 solve y'' = -9.81 m/s²
   with y(0 s) = 10 m ± 0.1 m, y'(0 s) = 0 m/s
   for t from 0 s to 3 s
