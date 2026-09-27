@@ -1807,3 +1807,17 @@ integrand calls and in glibc's exp; both programs evaluate about the same number
 overhead and let the divisions vectorize; the adaptive algorithm must stay v1's (its results are the oracle's), so
 this is a change to fermium-runtime's quad and to the code generator (BACKLOG). spring_adaptive and unit_loop are
 at parity with Julia, bound by the ODE solver's bookkeeping and an in-order sum's latency.
+
+## D326. `fit`: the covariance Jacobian takes a step relative to each parameter (C8 finding)
+
+- **What:** the fit's iteration keeps SciPy's 2-point step √ε·max(|p|, 1), so fitted values stay v1's. The
+  Jacobian for the covariance (the standard errors, `err(x)`, and the ± of fitted values) is taken at the
+  solution with the step √ε·|p| (√ε for p = 0).
+- **Why:** parameters are fitted in SI. `k = 8 MeV` is 1.3×10⁻¹² J, so the old step (1.5×10⁻⁸) was 10⁴ times
+  the parameter. The standard error came out as 1.7×10⁻¹⁰ J (8 ± 1000 MeV), where the same fit written with a
+  plain number gives 7.948 ± 0.089. The value was right; the error was silently wrong. Found by research/level_density (C8).
+  Test: rust/crates/fermium-cli/tests/fit_errors.rs. For |p| ≥ 1 nothing changes. The v1 fit fixture's `si_scale`
+  case (τ = 1.3×10⁻⁶ s, where v1's step is 1.2 % of τ) now matches the analytic-Jacobian standard errors
+  (2.7845×10⁻⁹ s) instead of v1's 2.7881×10⁻⁹ s; the test compares that case with the analytic values.
+- **Alternatives:** scaling parameters by their starting value for the whole fit (changes v1's fitted values
+  in the last digits); fixing Fermium 1.5 too (it is the frozen oracle whose outputs the goldens record).

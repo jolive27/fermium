@@ -59,6 +59,12 @@ impl Model<'_> {
     }
     /// scipy approx_derivative '2-point' at p (f0 = fun(p)); J row-major n×k
     fn jac(&mut self, p: &[f64], f0: &[f64]) -> Vec<f64> {
+        self.jac_step(p, f0, false)
+    }
+    /// `relative`: the step is √ε·|p| for every nonzero parameter, not √ε·max(|p|, 1). The iteration keeps
+    /// SciPy's step (so fitted values are v1's), but for the covariance a parameter whose SI value is tiny
+    /// (k = 8 MeV = 1.3×10⁻¹² J) would get a step 10⁴ times its size, and a meaningless standard error.
+    fn jac_step(&mut self, p: &[f64], f0: &[f64], relative: bool) -> Vec<f64> {
         let (n, k) = (self.n, p.len());
         let mut j = vec![0.0; n * k];
         let rstep = EPS.powf(0.5);
@@ -66,7 +72,8 @@ impl Model<'_> {
         let mut f1 = vec![0.0; n];
         for c in 0..k {
             let sign = if p[c] >= 0.0 { 1.0 } else { -1.0 };
-            let h = rstep * sign * p[c].abs().max(1.0);
+            let scale = if relative && p[c] != 0.0 { p[c].abs() } else { p[c].abs().max(1.0) };
+            let h = rstep * sign * scale;
             x1.copy_from_slice(p);
             x1[c] = p[c] + h;
             self.fun(&x1, &mut f1);
@@ -188,7 +195,7 @@ pub fn least_squares_fit(
     let dof = (n as i64 - k as i64).max(1) as f64;
     let mut errors = vec![None; k];
     let mut cov = None;
-    let jac = m.jac(&res.x, &res.fvec);
+    let jac = m.jac_step(&res.x, &res.fvec, true);
     let mut a = vec![0.0; k * k];
     for p in 0..k {
         for q in 0..k {
