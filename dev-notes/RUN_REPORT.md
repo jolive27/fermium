@@ -254,6 +254,9 @@ documented divergence, recorded only after its new output was checked against an
   16 also found a v1 bug: d/dx (x²)^(3/2) had the wrong sign for x < 0 (fixed in v2.5). Still open from round
   16, all low: nested `sweep` figures overwrite each other, `sweep c` shadows the speed of light without a
   warning, and a bang-bang equilibrium grinds through millions of steps before failing (REDTEAM.md, status lines).
+- Red team 17 fact-checked this report and the docs: it found a wrong number here (the Fortran SEMF value), a
+  release marker that predated a fix, stale lines in CHANGES_2.5 and four docs examples that didn't run as
+  written. All of those are fixed; its remaining lows are in the weaknesses below.
 
 ### Speed of v2.5 (the C6 goal)
 
