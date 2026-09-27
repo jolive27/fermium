@@ -2053,3 +2053,42 @@ metacharacters in library paths (no injection). No Rust panics.
 
 Status: fixed on claude/v2.5-rt14 (DECISIONS D300–D306; tests rust/crates/fermium-cli/tests/redteam14.rs): #1–#8,
 #9a, b, d (CHANGES "still errors" list), e, f. #9c (arrays of ± values) stays an error, listed in CHANGES_2.5.md.
+
+## Round 15 (2026-09-27 06:45 UTC): C4 C++ interop, the round-14 fixes, v1 regressions
+
+Independent reviewer, testing a prebuilt binary of `origin/claude/v2.5` (e5990fb) and doing no builds, to spare
+memory. Scratch programs are in the session scratchpad (rt15/). Nothing was fixed by the reviewer.
+
+**High**
+- **#1 (security) The C++ wrapper cache ignores the program's folder.** `build_wrapper`'s key has no `-I base`
+  folder, and a system header's text reads as empty. So two programs importing `std::tgamma` from `<cmath>` share a
+  key. The wrapper compiled for `evil/a.fm` (whose folder holds a `cstdio` that `#include_next`s the real one and
+  runs code in a static initialiser) is reused by `fermium run good/b.fm`, which runs that code. `fermium check
+  evil/a.fm` itself runs nothing (D305 holds), but it plants the cached wrapper. The key is FNV-1a 64, which is
+  not collision resistant.
+
+**Medium**
+- **#2** The cache key leaves out `CPATH`/`CPLUS_INCLUDE_PATH` and the compiler's identity: the same program
+  under a different include path reuses a stale wrapper and silently prints the old constant.
+- **#3** reference.md "Trust" still says `check` and the LSP load libraries (they don't since D305), and it doesn't
+  mention the cache risk.
+
+**Low**
+- **#4** A declared `: list` parameter doesn't carry through a plain wrapper: `s(x: list) = 2`, `f(y) = s(y)`,
+  `f([1, 2])` is mapped over the elements.
+- **#5** After the ODE Monte Carlo fallback, arithmetic across results is first order (the value is 0, the σ isn't);
+  integrals that fall back print the MC mean, not the nominal value (inconsistent with D304); a "-0.00 ± 0.14".
+- **#6** C++ usability: installed headers (`"Eigen/Dense"`, `"math.h"`) aren't found on the include path;
+  `const double*` vs `double*` overloads can't be told apart; exception messages are printed raw (newlines,
+  escape codes); the compiler call has no timeout (hangs `check`/LSP); `phys::new` gives a raw compiler message.
+- **#7** The D306 warning misses Bq vs 1/s and rad/m vs 1/m, shows the ω = 2πf hint for J vs N m, and says
+  "(line 1)" in the REPL.
+- **#8** reference.md:1596 still says uncertainties can't go into vectors, integrals or ODEs.
+
+**Held up:** C++ overload selection (double/int/float, templates, non-template preferred), unit conversion and int
+checks at the boundary, list isolation, exceptions everywhere (∫, solve, Σ, plot, build executables), fmt
+round-trips, the REPL, no header-name injection (no shell), `check` loads no C or C++ library, the round-14 fixes
+(± through jumps, ± errors at the C/C++/Python boundaries, the redefinition rule in 13 orderings), and all 38
+examples and 112 docs code blocks identical to fermium-legacy. No panics.
+
+Status: fixes in progress (agent on claude/v2.5-rt15).
