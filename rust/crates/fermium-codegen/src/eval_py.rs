@@ -15,6 +15,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let Some(site) = (id >= 0.0).then(|| tables.pycalls.get(id as usize)).flatten() else {
             return self.err("calling Python failed: unknown call site");
         };
+        // v1: Python gets plain numbers; an uncertain argument is UncertainUse's error (red team 14 #2). Monte Carlo
+        // samples (a  propagate montecarlo  block) go through as lists.
+        if args[1..].iter().any(|a| matches!(a, Value::Unc(_) | Value::UList(_) | Value::UVec(_))) {
+            return self.err(crate::eval_unc::GENERIC);
+        }
         let lists: Vec<Option<Vec<f64>>> = args[1..]
             .iter()
             .map(|a| match a {

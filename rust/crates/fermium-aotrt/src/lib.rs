@@ -34,7 +34,7 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
 fn recheck(b: &blob::Blob) -> Result<fermium_ir::Module, String> {
     let (prog, _) = fermium_syntax::parse(&b.source, &[]).map_err(|e| e.format(Some(&b.source), Some(&b.file_name)))?;
     let here = std::env::current_dir().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| ".".into());
-    let opts = fermium_check::CheckOptions { base_dir: here, repl: false, source_name: b.file_name.clone() };
+    let opts = fermium_check::CheckOptions { base_dir: here, repl: false, source_name: b.file_name.clone(), no_load: false };
     let (m, _) = fermium_check::check(&prog, opts).map_err(|(e, _)| e.format(Some(&b.source), Some(&b.file_name)))?;
     if blob::fingerprint(&m) != b.fingerprint {
         return Err("this executable's program checks differently here than where it was built (a data file changed?); \

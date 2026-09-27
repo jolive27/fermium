@@ -54,7 +54,7 @@ pub fn build_file(file: &str, output: Option<&str>) -> ExitCode {
     // absolute, so an executable finds the program's own Python modules (use python) in the folder it was built
     // from, wherever it is run; a relative "." made it import from whatever folder it was run in (red team 13 #6)
     let base = std::fs::canonicalize(&base).map(|p| p.to_string_lossy().into_owned()).unwrap_or(base);
-    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone() };
+    let opts = fermium_check::CheckOptions { base_dir: base, repl: false, source_name: name.clone(), no_load: false };
     let (module, cdiags) = match fermium_check::check(&prog, opts) {
         Ok(x) => x,
         Err((e, d)) => {

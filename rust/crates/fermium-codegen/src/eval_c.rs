@@ -111,6 +111,35 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Ok(None) => return self.err(format!("the library {} has no function {} any more", site.lib, site.symbol)),
             Err(why) => return self.err(format!("can't load the library {}: {why}", site.lib)),
         };
+        // a C, Fortran or C++ function takes plain numbers: an uncertain argument is an error, as for  use python
+        // (red team 14 #2, D301), instead of silently dropping its uncertainty
+        if args[1..].iter().any(|a| matches!(a, Value::Unc(_) | Value::UList(_) | Value::UVec(_))) {
+            let msg = format!("{} is a {} function, which takes plain numbers, but got an uncertain value (±)",
+                              site.display, if site.cpp { "C++" } else if site.by_ref { "Fortran" } else { "C" });
+            return Err(RunError { message: msg, line: self.line,
+                                  hint: Some("write value(x) to drop the uncertainty, or put the call in a  \
+                                              propagate montecarlo  block".into()) });
+        }
+        // Monte Carlo samples (inside  propagate montecarlo): one call per sample, a sample array back. Before,
+        // the first sample was passed and the spread lost (red team 14 #2).
+        if let Some(n) = args[1..].iter().find_map(|a| if let Value::Arr(x) = a { Some(x.len()) } else { None }) {
+            if site.params.iter().any(|p| p.kind != CParamKind::Num && p.kind != CParamKind::Int) {
+                return self.err(format!("{} takes a list, which can't be sampled in a  propagate montecarlo  block yet",
+                                        site.display));
+            }
+            let mut out = Vec::with_capacity(n);
+            for i in 0..n {
+                let one: Vec<Value> = args
+                    .iter()
+                    .map(|a| match a {
+                        Value::Arr(x) => Value::Num(x.get(i).copied().unwrap_or(f64::NAN)),
+                        v => v.clone(),
+                    })
+                    .collect();
+                out.push(self.ccall(&one)?.num());
+            }
+            return Ok(Value::Arr(std::rc::Rc::new(out)));
+        }
         // the arguments by parameter (lengths are filled in)
         let mut given = args[1..].iter();
         let mut ins: Vec<Option<In>> = Vec::with_capacity(site.params.len());

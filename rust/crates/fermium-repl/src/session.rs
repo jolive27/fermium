@@ -24,7 +24,7 @@ pub struct Session {
 
 impl Session {
     pub fn new(base_dir: &str) -> Session {
-        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: true, source_name: String::new() };
+        let opts = CheckOptions { base_dir: base_dir.to_string(), repl: true, source_name: String::new(), no_load: false };
         Session { checker: Checker::new(opts), state: ReplState::new(), known: vec![], programs: vec![], count: 0 }
     }
 
