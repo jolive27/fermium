@@ -913,7 +913,10 @@ sweep k in [1, 2, 4] N/m
 ```
 
   - Only plots written directly in the sweep's block (also inside `if` or an inner loop there) collect; a plot in a
-    function called from it saves its own figure as usual. In nested sweeps a plot belongs to the innermost one.
+    function called from it saves its own figure as usual. In nested sweeps a plot belongs to the innermost one,
+    whose figure is saved each time that inner sweep ends: with the same file name every time, so only the last
+    outer value's figure is left (a known limitation: a plot's file name must be written in quotes, so it can't
+    change with the outer value; for now write one sweep per outer value, each plotting `to` its own file).
   - `sweep` stays an ordinary name: once it is your variable, `sweep …` isn't a sweep.
 - **Runtime errors** name the equation's own variable and units: `the right side of the equation is NaN or infinite at ξ = 0 (0/0? 1/0?)` when it can't be evaluated at the start (start slightly away from a singular point, with a series), and `the range of t is empty` for a range that starts where it ends.
 
