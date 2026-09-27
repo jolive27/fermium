@@ -339,6 +339,9 @@ impl Checker {
             }
         }
         let pconst = const_exponent(right);
+        if let Some(err) = self.take_overflow(right.span) {
+            return Err(err);
+        }
         if let A::ExprKind::Name { name: n } = &left.kind {
             if n == "e" && pconst.is_none_or(|p| p <= Rational64::zero()) {
                 if matches!(self.lookup(ctx.scope, "e"), Some((Binding::Const(_), _))) {
@@ -595,21 +598,33 @@ pub fn const_value(x: &I::Expr) -> Option<f64> {
 /// Python Fraction(x).limit_denominator(max_den), as a Rational64 (None if it doesn't fit: red team 9 #10).
 pub fn limit_denominator(x: f64, max_den: i64) -> Option<Rational64> {
     let (p, q) = fermium_ir::pyfrac::limit_denominator(x, max_den)?;
-    Some(Rational64::new(i64::try_from(p).ok()?, i64::try_from(q).ok()?))
+    let (p, q) = (i64::try_from(p).ok()?, i64::try_from(q).ok()?);
+    // i64::MIN is refused too, so that negating the exponent can't overflow (red team 13)
+    (p != i64::MIN).then(|| Rational64::new(p, q))
 }
 
 /// Evaluate a compile-time constant exponent (Python const_value): a Fraction or None.
 pub fn const_exponent(e: &A::Expr) -> Option<Rational64> {
     match &e.kind {
-        A::ExprKind::Num { value, .. } => limit_denominator(*value, 10000),
+        A::ExprKind::Num { value, .. } => {
+            let r = limit_denominator(*value, 10000);
+            if r.is_none() && value.is_finite() {
+                // a written exponent too large for 64 bits (1e300): recorded, and reported by the caller (red team 13)
+                let text = if value.abs() < 1e21 { format!("{value:.0}") } else { format!("{value}") };
+                fermium_units::exact::overflow_record(format!("a power of {text}"));
+                return Some(Rational64::from_integer(1));
+            }
+            r
+        }
         A::ExprKind::Neg { operand: x } => const_exponent(x).map(|v| -v),
         A::ExprKind::BinOp { op, left, right, .. } if op != "^" => {
+            use fermium_units::exact::{add_or_record, div_or_record, mul_or_record, sub_or_record};
             let (a, b) = (const_exponent(left)?, const_exponent(right)?);
             match op.as_str() {
-                "+" => Some(a + b),
-                "-" => Some(a - b),
-                "*" | "×" => Some(a * b),
-                "/" => if b.is_zero() { None } else { Some(a / b) },
+                "+" => Some(add_or_record(a, b, None)),
+                "-" => Some(sub_or_record(a, b, None)),
+                "*" | "×" => Some(mul_or_record(a, b, None)),
+                "/" => if b.is_zero() { None } else { Some(div_or_record(a, b, None)) },
                 _ => None,
             }
         }

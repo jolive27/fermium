@@ -410,3 +410,23 @@ in the API for calling Fermium from Python (D142), which no conformance case cov
 - It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
   (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
   faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.
+
+## Unit powers are exact fractions of 64-bit whole numbers (red team 13 #1, #2)
+
+v1 keeps a unit's power as a Python `Fraction`, which never overflows: `print √(√(…√(1 m)…))` nested 64 deep
+prints `1 m^(1/18446744073709551616)`. v2 keeps each power as a fraction of two 64-bit integers. Every power
+the checker works out from a program (powers and roots, √ ∛ cbrt, products and quotients, generic functions,
+derivatives and integrals of units, solve/fit and the unifier, `units natural`, `analyze`, and exponents
+written in a unit such as `m^1e300`) is computed exactly in 128 bits and kept only if it fits. One that
+doesn't fit is an error before the program runs, at the expression that made it:
+
+    prog.fm, line 2: this unit's power is too large to track exactly (m^(1/18446744073709551616))
+        z = (x^(1/4294967296))^(1/4294967296)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      hint: Fermium keeps a unit's power as an exact fraction of 64-bit whole numbers; raise a plain number to
+      the power instead, and attach the unit afterwards
+
+Before this fix the arithmetic wrapped silently (`y = (x^4294967296)^4294967296` became a plain number and
+`y + 1` printed 2) or panicked ("denominator == 0", which ended a REPL session). So programs whose unit powers
+pass 2⁶³ (or have a denominator past 2⁶³) are refused where v1 runs them; no conformance case has one. A
+written exponent is a float, as in v1: `(1 m)^4611686018427387903` is m^4611686018427387904.
