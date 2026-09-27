@@ -283,8 +283,17 @@ impl Checker {
                 self.note_assign(ctx, s, false);
                 return Ok(I::Stmt { kind: I::StmtKind::Assign(s, v), line: span.line });
             }
+            let was_empty = self.extra[s].empty_list;
             if !empty_lit {
                 self.extra[s].empty_list = false;
+            }
+            if was_empty && matches!(sty, Ty::List(_)) && matches!(v.ty, Ty::TextList | Ty::VList(_) | Ty::ComplexList(_)) {
+                // names = [] then names = t: the empty list takes the kind of its first value, as with push (D281;
+                // red team 14 #9f)
+                self.module.syms[s].ty = v.ty.clone();
+                self.extra[s].assigned = true;
+                self.note_assign(ctx, s, false);
+                return Ok(I::Stmt { kind: I::StmtKind::Assign(s, v), line: span.line });
             }
             if !same_kind(&sty, &v.ty) {
                 let mut hint = "use a different name for the new value".to_string();

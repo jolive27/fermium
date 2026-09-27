@@ -1456,3 +1456,102 @@ Known gaps: non-static member functions and objects, references, `float`/`long`/
 `void` results, explicit template arguments, several headers per import, `import cpp` in modules, calls inside
 `units natural`, the playground; macOS linking is written but untested; `fermium build` executables load the
 wrapper from the cache by its build-time path.
+
+## D300. The ±1σ test also compares the linear prediction with the actual change, and kernels record every source they read (red team 14 #1)
+- **What:** D278's test accepted linear propagation when the second-order change d₂ was small next to the
+first-order one d₁. A jump at an uncertain value (`∫ (if x < a then 1 else 0) dx`, `sign(a - x)`, `floor(x + a)`,
+`solve x' = if t < a then 1 else 0`) has ∂f/∂a = 0 almost everywhere, so the linear contribution c is 0, while
+the result moves by d₁ = σ_a; and since the integrand returned a plain number, `a` wasn't even counted as a
+source. Now (1) while an integrand or right side is evaluated in the plain or linear pass, every uncertain
+variable it reads is recorded (`kernel_seen`, in the tree-walker's variable read, only for uncertain values and
+not inside Monte Carlo), so a kernel that reads `a` without returning an uncertain value goes to the uncertain
+path; an ODE whose right side reads a source only after t₀ (a branch not taken at the start) is solved again with
+that source's sensitivity; (2) linearity needs both one-sided changes to agree with the prediction:
+|y₊ − y₀ − c| and |y₀ − y₋ − c| and |d₂| all ≤ 10 % of s plus the kernel's noise, where s = max(|d₁|, |c|,
+scale). Otherwise Monte Carlo (both integrals and ODEs have it), with the usual warning. `∫ (if x < a then 1 else
+0) dx from 0 to 2`, a = 1.0 ± 0.1, is 1.00 ± 0.10 (NumPy Monte Carlo of clip(a, 0, 2): 1.00 ± 0.10); a ± written
+inside a kernel is now sampled as the source its linear pass made during the test (before, the test sampled a
+fresh zero stream for it, so the test compared nothing). A kernel that reads an uncertain value which doesn't move
+its result (a comparison far from where it switches) and never returns an uncertain value gives a plain number or
+a plain solution, as Fermium 1.5 does (`2`, not `2 ± 0`).
+- **Why:** the linear rule is only valid if it predicts the ±1σ change; comparing it with the change directly is
+the missing half of the test and costs nothing (the ±1σ runs were already made).
+- **Alternatives:** detecting discontinuities symbolically (branches, floor, sign, comparisons) and always going
+to Monte Carlo (misses user functions that hide them, and a far-away jump needn't matter); an error (the user
+asked for a result, and Monte Carlo is available on both paths).
+
+## D301. Foreign functions take plain numbers: ± is an error, as for `use python` in v1 (red team 14 #2)
+- **What:** a `use python` function given an uncertain value stops with v1's UncertainUse message ("this operation
+needs a plain number, but got an uncertain value (±); write value(x) …"), as `fermium-legacy` does; Fermium 2
+had passed the value alone. C, Fortran and C++ functions do the same with their own message (*sq is a C function,
+which takes plain numbers, but got an uncertain value (±)*, hint: value(x) or `propagate montecarlo`). Inside
+`propagate montecarlo` a C function is called once per sample (before, the first sample was passed for every
+sample, so the spread was lost silently); a C function with list parameters is refused there.
+- **Why:** unit safety and honesty first: dropping ± silently is the worst outcome, and an error matches v1 and
+the rest of the language's "needs a plain number" places.
+- **Alternatives:** linear propagation by numerical derivatives of the foreign function (a step to choose, the
+function may be noisy or not smooth, and it would differ from `use python`'s v1 behaviour).
+
+## D302. A later definition replaces every earlier version it covers (red team 14 #3)
+- **What:** D285 replaced only a version with the same signature, so `force(x [m]) = 3 N/m x` then
+`force(x) = 5 N/m x` kept both and `force(1 m)` still chose the annotated one (3 N) where Fermium 1.5 prints 5 N.
+Now a new top-level definition replaces every earlier version it *covers*: the same number of parameters, and
+each parameter at least as broad: unannotated covers anything; a kind covers the same kind with any unit or the
+same dimension; a unit alone covers the same dimension with any kind but `vector` (which needs `: vector`). A
+definition that doesn't cover an earlier version adds one, so a more specific definition written later still
+adds a version (`describe(x) = 0` then `describe(x [m]) = 1`). The REPL uses the same rule (it goes through
+the same checker).
+- **Why:** a v1 program only redefines functions to replace them; with this rule every v1 program behaves as
+in v1 (a v1 redefinition is always as broad as, or equivalent to, what it replaces unless it adds annotations),
+and the documented way to write versions (general first, specific later, or disjoint signatures) keeps working.
+- **Alternatives:** replace on the same arity only (would break `f(x: vector)` then `f(xs: list)`); warn instead
+of replacing (the v1 program still prints a different number).
+
+## D303. A declared `: list` parameter takes the list whole; `∂/∂y f(1, 3)` sees every version (red team 14 #4, #8)
+- **What:** `call_user` applied a function to each element of a list argument unless the body used the parameter
+as a list (`takes_lists`), so `s(x: list) = 2` then `s([1, 2])` failed with "s expects x to be a list, but got a
+plain number". An argument for a parameter declared `: list` is now never mapped over, and a function with such a
+parameter isn't mapped at all. `∂/∂y f(1, 3)` (read as `(∂/∂y f)(1, 3)`, D221) checked for the parameter y only
+in the last version of f; it now accepts any version that has it, and the call chooses among the derivatives.
+- **Why:** the declared kind is the user's statement of intent; dispatch (D285) already honoured it.
+- **Alternatives:** none considered.
+
+## D304. Monte Carlo ODE solutions: the nominal value, and one shared set of samples; turning points (red team 14 #6)
+- **What:** (1) a Monte Carlo solution's `x(t)` is the nominal solution's value (as a linear solve reports), with
+the spread and the per-source contributions from the regression on the samples; (2) the regression residual
+(the nonlinear part) of each value asked for is projected onto the residuals of the values asked for before (kept
+orthonormal over the samples, each an error source; up to 200 per solution, later ones independent), so values
+at different times, and closed forms built from them, stay linked through the same samples: for x' = −k x with
+k = 1.0 ± 0.4, `x(2) - x(1)^2` is 0.000 ± 0.064 (the σ is the linearization of the square; 0.029 ± 0.099 before),
+and asking twice gives the same value; (3) the ±1σ test of an ODE judges each component against its typical ±1σ
+change (the largest |d₁| or |c| over the 8 test times) instead of the change at that time, so a turning point
+(d₁ ≈ 0) no longer forces Monte Carlo. Decay with k = 1.0 ± 0.1 over 0–3 s and a pendulum with g, L known to
+0.5–1 % over a few periods stay linear, with no warning, matching the analytic σ.
+- **Why:** the value at the measured inputs is what every other path reports; a separate "nonlinear rest" source
+per (component, time) made arithmetic across times inconsistent; the per-time scale was the wrong yardstick.
+- **Alternatives:** storing the samples on every uncertain value (a different, much heavier representation);
+the Monte Carlo mean as the value (what `propagate montecarlo` reports, and still does).
+
+## D305. `fermium check` and the language server don't load foreign libraries (red team 14 #5)
+- **What:** `CheckOptions.no_load` (set by `fermium check` and the LSP): an `import c/fortran/cpp` library is
+not dlopen'ed; a library named by a path must exist, and each function's symbol is looked up in the file's ELF
+`.dynsym` (defined symbols; `cffi::file_has_symbol`, a small reader of 64-bit little-endian ELF). When the file
+can't be read that way (Mach-O, a bare name the system would find), the symbol check is left to the run. C++
+wrappers are still compiled (so their errors show in the editor) but not loaded. `fermium run` and
+`fermium build` load as before.
+- **Why:** loading a library runs its constructors, so opening a cloned .fm file in the editor ran code from the
+repository. Reading the symbol table keeps the useful "misspelt function" error without running anything.
+- **Alternatives:** skipping the symbol checks in check mode (loses the error in the editor); a Mach-O reader
+(later); not compiling C++ wrappers in check mode (safer against compiler bugs, but loses every C++ error in the
+editor; compilers are meant to take untrusted input).
+
+## D306. Replacing a version with same-dimension, different-meaning units warns (red team 14 #7)
+- **What:** when a definition replaces a version (D302) and a parameter's units differ in kind as in adding such
+values (Hz vs rad/s, Bq vs Hz or rad/s, Gy vs Sv, J vs N m; `units::unit_kind`), one warning: *E(ω [rad/s])
+replaces E(f [Hz]) (line 1): their units have the same dimensions, so they can't be two versions*, hint: another
+name, or convert inside one definition. `g(x [m])` then `g(y [km])` stays silent (an ordinary redefinition). No
+conformance program changes (the suite passes unchanged).
+- **Why:** Fermium treats rad as 1, so Hz and rad/s are one dimension; the new docs invite overloads by unit, and
+`E(1 GHz)` silently off by 2π is exactly the mistake the language exists to catch.
+- **Alternatives:** dispatching on the unit's spelling (would make units that are equal in SI behave
+differently); an error (v1 accepts the program).

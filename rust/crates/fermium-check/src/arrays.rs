@@ -116,6 +116,14 @@ impl Checker {
             return Err(self.err(format!("an array index must be a plain number (1, 2, 3, ...), not {}", self.desc(&d)),
                                 ix.span, None));
         }
+        if let I::ExprKind::Const(x) = v.kind {
+            // A[1.5, 1] (red team 14 #9b): as for a list, before the program runs
+            if x != x.trunc() || !x.is_finite() {
+                let shown = if x.is_nan() { "NaN".to_string() } else if x.is_infinite() { "∞".into() } else { crate::arith::py_g(x) };
+                return Err(self.err(format!("an array index must be a whole number (1, 2, 3, ...), not {shown}"),
+                                    ix.span, None));
+            }
+        }
         Ok(v)
     }
 
