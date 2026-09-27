@@ -12,17 +12,17 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 20 of the files completely** (373 templates) — the ones that hold the most common errors: unit and
+covers 21 of the files completely** (386 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
 numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
-`plot` (data.rs), and modules (modules.rs). The other files (PDEs, eigenvalue problems,
-complex numbers, arrays, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 205 templates) are still to do; see §4.
+`plot` (data.rs), modules (modules.rs), and complex numbers (cplx.rs). The other files (PDEs, eigenvalue problems,
+arrays, parallel loops, `analyze`, events and the C, C++ and Python
+interop; about 190 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `data.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -41,8 +41,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 142 of the
-373. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 144 of the
+386. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -448,6 +448,20 @@ errors come first, and the rest are simply not written yet (§4).
 | 371 | `a module can only define functions and constants, but this line has …` | modules.rs | a module line that isn't a function or constant definition (a module can't print, plot or solve) | — |
 | 372 | `in the module … (…): …` | modules.rs | an error inside a module file, reported with the module's name and line | — |
 | 373 | `… is a module, not a value; use the names it defines, like …` | modules.rs | a module name used as a value | — |
+| | **Complex numbers (cplx.rs)** | | | |
+| 374 | `°C/°F can't be used for complex numbers (… has an offset)` | cplx.rs | a complex number given the unit °C or °F | — |
+| 375 | `can't mix complex numbers and … in arithmetic` | cplx.rs | a complex number and a list, vector or matrix in arithmetic | C375 |
+| 376 | `the exponent must be a number` | cplx.rs | a complex power whose exponent isn't a number | C376 |
+| 377 | `the base of a complex power must be a number` | cplx.rs | a power with a complex exponent whose base isn't a number | C377 |
+| 378 | `… needs a number or a complex number, but got …` | cplx.rs | a complex built-in (`re`, `im`, `abs`, `arg`, `conj`) given something that isn't a number | C378 |
+| 379 | `complex(a, b) takes two real numbers: the real and imaginary parts` | cplx.rs | `complex(a, b)` with a complex part | C379 |
+| 380 | `complex(a, b) needs both parts in the same units, but they are … and …` | cplx.rs | `complex(a, b)` with parts of different dimensions | C380 |
+| 381 | `… takes real numbers` | cplx.rs | `polar`/`cis` with a complex argument | C381 |
+| 382 | `the angle in … must be a plain number (radians or degrees), but it is …` | cplx.rs | the angle of `polar`/`cis` with units | C382 |
+| 383 | `… doesn't work on complex numbers` | cplx.rs | a built-in that doesn't take complex numbers given one | C383 |
+| 384 | `… needs a plain number, but got a complex number of …` | cplx.rs | `exp`, `ln`, `sin`, … of a complex number with units | C384 |
+| 385 | `complex numbers can't be compared with … (they aren't ordered)` | cplx.rs | `<`, `>`, `≤`, `≥` with a complex number | C385 |
+| 386 | `°C/°F can't be used for complex numbers` | cplx.rs | a complex number (from a computation) given the unit °C or °F | — |
 
 ## 3. Examples
 
@@ -1728,17 +1742,73 @@ import "no_such_module_here.fm"
 import no_such_module_here
 ```
 
+```fermium-error
+# C375
+z = (1 + 2i) + [1, 2]
+```
+
+```fermium-error
+# C376
+z = (1 + 2i)^[1, 2]
+```
+
+```fermium-error
+# C377
+z = [1, 2]^(1 + 2i)
+```
+
+```fermium-error
+# C378
+z = re([1, 2])
+```
+
+```fermium-error
+# C379
+z = complex(1 + 2i, 3)
+```
+
+```fermium-error
+# C380
+z = complex(1 m, 2 s)
+```
+
+```fermium-error
+# C381
+z = cis(1 + 2i)
+```
+
+```fermium-error
+# C382
+z = cis(2 m)
+```
+
+```fermium-error
+# C383
+z = floor(1 + 2i)
+```
+
+```fermium-error
+# C384
+z = (1 + 2i) * 1 m
+w = exp(z)
+```
+
+```fermium-error
+# C385
+b = (1 + 2i) < 3
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: pde.rs (31), cinterop.rs (25), cplx.rs (20),
+  covered, by size of their error set: pde.rs (31), cinterop.rs (25),
   pyinterop.rs (18), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 205 templates remain.
+  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 190 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (142). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (144). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -1752,6 +1822,6 @@ import no_such_module_here
   complex and list unknowns, events with lists, and messages another check reaches first.
   In rows 324–358 (data.rs), 17 rows: data files with bad headers, `fit` models and guesses, PDE-solution plots
   and `sweep`. In rows 359–373 (modules.rs), 12 rows: they need module files next to the program, which a
-  one-file example can't hold.
+  one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
