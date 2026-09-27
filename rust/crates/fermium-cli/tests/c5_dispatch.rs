@@ -141,3 +141,17 @@ fn repl_adds_versions_and_replaces_same_signatures() {
         assert!(out.lines().any(|l| l.trim().trim_start_matches('>').trim() == want), "missing {want}:\n{out}\n{err}");
     }
 }
+
+#[test]
+fn fermium_build_executables_use_the_chosen_versions() {
+    let tmp = std::env::temp_dir().join(format!("fermium-c5-build-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let p = dir().join("kinds.fm");
+    std::fs::copy(&p, tmp.join("kinds.fm")).unwrap();
+    let (out, err, code) = fermium(&["build", "kinds.fm"], &tmp, "auto");
+    assert_eq!(code, 0, "{out}{err}");
+    let o = Command::new(tmp.join("kinds")).current_dir(&tmp).output().unwrap();
+    let want = field(&std::fs::read_to_string(p.with_extension("json")).unwrap(), "stdout");
+    assert_eq!(String::from_utf8_lossy(&o.stdout), want);
+    let _ = std::fs::remove_dir_all(&tmp);
+}
