@@ -1,0 +1,4 @@
+# Cases whose v1 (oracle) output depends on thread timing, so the oracle doesn't reproduce its own golden on
+# every run. CI's legacy run skips them. The Rust implementation is deterministic here, and runs them as usual
+# (as documented divergences).
+fe2e353a26d0  # parallel for: v1 reports the error of whichever thread stops last (rust/DIVERGENCES.md; CI run 191)
