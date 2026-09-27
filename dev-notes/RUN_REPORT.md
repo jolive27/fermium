@@ -11,12 +11,12 @@ runs, understands calculus, and starts in about 15 ms. The run reached **Phase C
   multi-line functions, unit-checked C, Fortran and C++ calls, multiple dispatch, uncertainties through
   integrals and ODEs, faster loops, and 10 new research reproductions with downloaded data.
 
-Phase D was not started. Five independent red-team rounds (13–17) tested v2.5 during the run; every high finding was
+Phase D has only started (a first draft of the language specification). Five independent red-team rounds (13–17) tested v2.5 during the run; every high finding was
 fixed and has a test. The biggest gaps:
 - **There is still no download.** GitHub refused every tag push, so you build it once from source (below).
 - **The Julia goal is only half met:** of the 6 benchmark programs, faster on 2 (nbody, and forces on both 1
   and 4 threads), level on 1, slower on 3.
-- **All of it is in draft pull requests** (#2 → #3 → #4) waiting for your review.
+- **All of it is in draft pull requests** (#2 → #3 → #4 → #5) waiting for your review.
 
 ---
 
@@ -304,10 +304,19 @@ origin v2.5`.
 
 ## Phase D (v3)
 
-**Not started.** Gate C9 was reached near the end of the run, and the remaining time went into red-team fixes
-and this report rather than into D1 (a formal specification). Recommended first step: D1, the language
-specification in `docs/spec/`, checked against the conformance suite.
+**D1 started; D2–D8 not started.** With gate C9 met, the last part of the run began D1, a formal language
+specification, on branch `claude/v3` (draft PR #5, stacked on #4). It is draft 0.1, in `docs/spec/`:
+- `grammar.md`: the full lexical structure and the syntax in EBNF, taken from the parser, with a 14-level
+  precedence table and the parser's special cases.
+- `units.md`: dimensions, the unit rule (the bootcamp's three sentences word for word, then a precise
+  7-point form), conversions, temperatures, natural units, and dimension inference.
+- `semantics.md` (partial): the execution model, numerics, printing, errors, calculus, and `solve`.
 
+The spec is tested (`rust/crates/fermium-syntax/tests/spec_examples.rs`). Its 17 examples must parse and run;
+13 rejected programs must fail with a one-line error; 19 precedence readings must match their bracketed forms;
+and the spec's keyword, operator, fraction and prefix lists must equal the lexer's own tables. Each file lists
+what isn't specified yet (built-in functions, full scoping, a formal uncertainty model, a case-by-case link to
+the conformance suite). DECISIONS D350.
 ---
 
 ## Every divergence from v1.5
@@ -446,9 +455,10 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
    in the commits).
 
 **Recommended next steps, in order**
-1. Review and merge the draft PRs (#2 v1.5 → #3 v2.0 → #4 v2.5), then push the tags `v1.5`, `v2.0` and `v2.5`
+1. Review and merge the draft PRs (#2 v1.5 → #3 v2.0 → #4 v2.5, then #5 for the spec draft), then push the tags `v1.5`, `v2.0` and `v2.5`
    from their `claude/*-freeze` branches, so the release binaries get built.
 2. Build it on your Mac (above) and run your own programs and the bootcamp. Report anything that differs.
-3. Phase D1: a formal language specification (`docs/spec/`), checked against the conformance suite.
+3. Phase D1: finish the language specification (draft 0.1 on `claude/v3`, PR #5): the TODO lists in each
+   `docs/spec/` file, and a case-by-case link to the conformance suite.
 4. The performance items in BACKLOG ("High value"), then compiled code for ± values (today they need the
    interpreter).
