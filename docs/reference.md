@@ -494,12 +494,12 @@ print ∂/∂x V
 
 - **Sums** written in one line with `Σ(… for k from a to b)` are differentiated term by term (§9), so `f'` and `∇²φ` of a Fourier series work.
 
-### Preview (Fermium 2.5): derivatives of functions written over several lines
+### Derivatives of functions written over several lines (Fermium 2.5)
 
-Opt-in in the Rust compiler with the environment variable `FERMIUM_C2=1` (spec §C2; without it, and in
-Fermium 1.5, differentiating a multi-line function is an error). The derivative is computed by automatic
-differentiation: exact to rounding, like the symbolic one, but through assignments, `if`/`else`, `for` and
-`while` loops.
+New in Fermium 2.5 (spec §C2, DECISIONS D295; in Fermium 1.5 and 2.0, differentiating a multi-line function is an
+error). The derivative is computed by automatic differentiation: exact to rounding, like the symbolic one, but
+through assignments, `if`/`else`, `for` and `while` loops. (The example is a `text` block because the docs'
+`fermium` blocks also run with Fermium 1.5.)
 
 ```text
 root(a) =

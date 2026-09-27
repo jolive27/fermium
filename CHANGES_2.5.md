@@ -1,7 +1,7 @@
 # What changes in Fermium 2.5 (in progress)
 
 Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Programs that ran with 2.0 print
-exactly the same: the conformance suite still holds every program to Fermium 1.5's output (3334 pass, 32
+exactly the same: the conformance suite still holds every program to Fermium 1.5's output (3326 pass, 40
 documented divergences). This file lists each Phase C item as it lands.
 
 ## C and Fortran interop (C3, DECISIONS D275)
@@ -50,3 +50,25 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
 - Still errors: `solve … for x`, eigenvalue problems and PDEs with uncertain inputs (use `propagate montecarlo`).
 - Docs: docs/reference.md §21; DECISIONS D276–D279; tests: rust/c-cases/c7 (run by
   `rust/crates/fermium-cli/tests/c7_cases.rs`).
+
+## Calculus reach (C2, DECISIONS D295)
+
+- **Derivatives of functions written over several lines** (automatic differentiation, D295): `f'`, `f''`,
+  `d/dx f`, `∂/∂v E`, `∇φ` and `∇²φ` work through assignments, `if`/`else`, `for` and `while`, exact to rounding.
+  A one-line function that calls a multi-line one can be differentiated too. 2.0: "can't differentiate through g:
+  it's defined over several lines". Not differentiated: lists whose elements depend on the variable, and `solve`,
+  `plot`, `fit` or `propagate` inside the function (errors naming the statement); `∇·` and `∇×` still need a
+  one-line vector formula.
+
+```text
+root(a) =
+    r = a
+    for i from 1 to 30
+        r = (r + a/r)/2      # Newton's iteration for √a
+    r
+print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
+```
+
+- Docs: docs/reference.md §8 *Derivatives of functions written over several lines*; tests: rust/c-cases/c2 (run
+  by `rust/crates/fermium-cli/tests/c2_cases.rs`); divergences: rust/DIVERGENCES.md *v2.5: derivatives of
+  multi-line functions (C2)*.

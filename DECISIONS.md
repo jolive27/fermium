@@ -1288,3 +1288,22 @@ propagated) and `interp` (segment chosen by the values) now work; the other list
 - **Why:** spec C7. Plain 6-figure entries follow v1's rule for lists of uncertain values, so a list and a vector
 look alike.
 - **Alternatives:** a common exponent for the whole vector (harder to read when entries differ in size).
+
+## D295. Derivatives of multi-line functions by automatic differentiation, on by default in v2.5 (spec C2)
+- **What:** `f'`, `f''`, `d/dx f`, `∂/∂v E`, `∇φ` and `∇²φ` of a function written over several lines (and of a
+one-line function or formula that calls one) are computed by forward-mode automatic differentiation as a source
+transformation (`fermium-sym/src/ad.rs`): each local that depends on the variable gets a tangent, assigned just
+before the local by the chain rule with fermium-sym's symbolic partial derivatives; `if`/`else` differentiate
+branch by branch, loops run the same iterations, a loop counter is a constant, `print` is dropped. Lists whose
+elements depend on the variable, `solve`, `plot`, `fit` and `propagate` inside the function are compile errors
+naming the statement; `∇·` and `∇×` still need a one-line vector formula. The groundwork was opt-in
+(`FERMIUM_C2=1`); v2.5 is the language change, so it is now always on, like C5 and C7. The two v1 goldens that
+pinned "can't differentiate through g: it's defined over several lines" are documented divergences
+(rust/DIVERGENCES.md, *v2.5: derivatives of multi-line functions (C2)*), their new outputs checked analytically.
+- **Why:** physicists write helper variables and loops; refusing their derivatives pushed them to finite
+differences, which lose half the digits. A source transformation keeps the result exact to rounding, reuses the
+one-line differentiator and both back ends (the derivative is an ordinary multi-line function), and a second
+derivative is the same transformation applied again.
+- **Alternatives:** dual numbers at run time (both back ends would need a dual type, and the LLVM back end's
+unboxed doubles would lose their speed); symbolic inlining of the body into one expression (blows up through
+loops, impossible through `while`); keeping the opt-in (v2.5 is where language changes land).

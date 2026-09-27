@@ -1,5 +1,4 @@
-//! Derivatives of multi-line functions by automatic differentiation (spec §C2; Phase C groundwork, opt-in with
-//! `FERMIUM_C2=1` until the v2.5 language change is adopted, so the v1 conformance suite stays identical).
+//! Derivatives of multi-line functions by automatic differentiation (spec §C2, Fermium 2.5; DECISIONS D295).
 //!
 //! Forward mode as a source transformation: each local variable `y` that depends on the variable of
 //! differentiation `x` gets a tangent `dy/dx`, assigned just before `y` is (from the values before the

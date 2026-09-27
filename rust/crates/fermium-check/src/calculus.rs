@@ -18,13 +18,6 @@ use crate::builtins::is_builtin;
 use crate::checker::*;
 use crate::stmts::ty_dim;
 
-/// Phase C (v2.5) calculus, opt-in with the environment variable FERMIUM_C2=1 until the language change is adopted
-/// (spec §C2): derivatives of multi-line functions by automatic differentiation (fermium-sym ad.rs).
-pub fn c2_enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("FERMIUM_C2").map(|v| !v.is_empty() && v != "0").unwrap_or(false))
-}
-
 /// Checker state for calculus (Python keeps it on FuncInfo.derived).
 #[derive(Clone, Debug, Default)]
 pub struct CalcState {
@@ -80,16 +73,10 @@ impl C::DiffContext for DC<'_> {
     fn user_function(&mut self, fname: &str) -> C::SymResult<Option<(Vec<String>, A::Expr)>> {
         if let Some((Binding::Func(b), _)) = self.ck.lookup(self.scope, fname) {
             if !self.ck.funcs[b].one_liner() {
-                if c2_enabled() {
-                    // differentiated by derived_info (automatic differentiation); the body isn't needed here
-                    let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
-                    return Ok(Some((params, C::build::num(0.0))));
-                }
-                return Err(C::build::ferr0(
-                    format!("can't differentiate through {fname}: it's defined over several lines"),
-                    Some(format!("symbolic derivatives need one-line functions: write {fname} on one line (with  \
-                                  where  for helper names), or use a finite difference, (f(x + h) - f(x - h)) / (2h)")),
-                ));
+                // Fermium 2.5 (spec §C2): differentiated by derived_info (automatic differentiation); the body
+                // isn't needed here
+                let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
+                return Ok(Some((params, C::build::num(0.0))));
             }
             let params = self.ck.func_params(b).iter().map(|p| p.name.clone()).collect();
             return Ok(Some((params, self.ck.body_expr(b).unwrap())));
@@ -178,15 +165,11 @@ impl Checker {
         }
         let dn = self.funcs[info].display_name.clone();
         let multi = !self.funcs[info].one_liner();
-        if multi && !c2_enabled() {
-            return Err(self.err(format!("can only differentiate one-line functions like f(x) = ..., and {dn} is \
-                                         defined over several lines"), node, None));
-        }
         let fdef = self.funcs[info].fdef.clone().unwrap();
         let (_, params, fbody) = fdef_parts(&fdef);
         let pname = params[i].name.clone();
         let pnames: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        // one-line: the symbolic derivative; several lines (spec §C2, opt-in): automatic differentiation
+        // one-line: the symbolic derivative; several lines (spec §C2, Fermium 2.5): automatic differentiation
         let mut body = if multi { C::build::num(0.0) } else { self.body_expr(info).unwrap() };
         let mut block = match fbody {
             A::FuncBody::Block(b) => b.clone(),
@@ -411,7 +394,7 @@ impl Checker {
             return Ok(d);
         }
         let multi = !self.funcs[b].one_liner();
-        if multi && !(c2_enabled() && matches!(kind, "grad" | "lap")) {
+        if multi && !matches!(kind, "grad" | "lap") {
             return Err(self.err(format!("{sym} can only differentiate one-line functions like φ(x, y, z) = ..., and \
                                          {name} is defined over several lines"), span, None));
         }
@@ -433,7 +416,7 @@ impl Checker {
         }
         let scope = self.funcs[b].scope;
         let body = if multi {
-            // several lines (spec §C2, opt-in): the partial derivatives are the functions ∂f/∂x made by automatic
+            // several lines (spec §C2, Fermium 2.5): the partial derivatives are the functions ∂f/∂x made by automatic
             // differentiation (derived_info), called at the coordinates
             let f = C::build::name(&self.funcs[b].name);
             C::build::call_e(f, allp.iter().map(|p| C::build::name(p)).collect())

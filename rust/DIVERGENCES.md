@@ -419,3 +419,12 @@ error; v2.5 computes them. For example, `solve x' = -k x / (1 s)` with k = 1.0 �
 (e⁻¹, and |∂x/∂k|·0.1 = e⁻¹·0.1), and `∫ exp(-k x) dx from 0 to 1` prints 0.632 ± 0.026. Each recorded output was
 checked against the analytic derivative. Programs that still can't propagate (see rust/c-cases/c7/still_errors.fm)
 keep v1's error.
+
+## v2.5: derivatives of multi-line functions (C2)
+
+Spec C2 differentiates functions written over several lines by automatic differentiation (forward mode as a
+source transformation, DECISIONS D295). v1 stopped `f'`, `d/dx f`, `∇φ` and `∇²φ` of such a function, and of a
+one-line function that calls one, with "can't differentiate through g: it's defined over several lines" (or "can
+only differentiate one-line functions …"); v2.5 computes them. The recorded programs: `g(t) = (a = 2 s; t²/a)`,
+`f(t) = g(t) + 1 s`, `print f'(5 s)` prints 5 (2t/a = 10 s / 2 s), and `F(x) = (a = 2; x²/a)`, `N(T) = F(T) + 1`,
+`dN = d/dT N`, `print dN(3)` prints 3 (2·3/2). `∇·` and `∇×` of a multi-line function keep v1's error.

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "autodiff_error_list.fm, line 3: can't differentiate f automatically: it changes an element of the list xs with a value that depends on x\n        xs[1] = x\n        ^\n  hint: lists aren't differentiated yet; compute with numbers, or use a finite difference, (f(x + h) - f(x - h)) / (2h); (needed for the derivative of f on line 5)\n",
+ "exit": 1
+}
