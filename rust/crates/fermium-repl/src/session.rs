@@ -108,6 +108,11 @@ impl Session {
                         lines.push(format!("{name}: {}", ck.type_text(&sym.ty, sym.hint.as_ref())));
                     }
                 }
+                Binding::Func(f) if ck.funcs[f].versions.len() > 1 => {
+                    for v in ck.versions_of(f) {
+                        lines.push(format!("{}: function", ck.version_sig(v))); // one line per version (C5)
+                    }
+                }
                 Binding::Func(f) => {
                     let params = match &ck.funcs[f].fdef {
                         Some(A::Stmt { kind: A::StmtKind::FuncDef { params, .. }, .. }) => {

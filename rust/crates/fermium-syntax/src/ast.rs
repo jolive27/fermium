@@ -216,6 +216,8 @@ impl ExprKind {
 pub struct Param {
     pub name: String,
     pub unit: Option<UnitExpr>,
+    /// `r: vector [m]`: the kind a version of a function takes (number, vector, list, complex; C5 dispatch)
+    pub kind: Option<String>,
     pub span: Span,
 }
 

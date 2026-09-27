@@ -1,0 +1,4 @@
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(3 s)

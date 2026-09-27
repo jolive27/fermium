@@ -1,0 +1,29 @@
+# the examples of docs/reference.md ("Several versions of one function") and CHANGES_2.5.md
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(2 kg, 3 m/s)                # 9 J
+print energy(500 nm) in eV               # 2.48 eV: the photon version
+print energy(1 GHz)                      # 6.63×10⁻²⁵ J
+print energy([400, 500, 600] nm) in eV   # each element: [3.10, 2.48, 2.07] eV
+print energy(2 kg, 3 m/s), energy(500 nm) in eV, energy(1 GHz)   # 9 J 2.48 eV 6.63×10⁻²⁵ J
+
+size(x: number) = abs(x)                 # a kind: number, vector, list or complex
+size(r: vector) = |r|
+size(xs: list) = len(xs)
+kinetic(p: vector [kg m/s], M [kg]) = (p · p) / (2 M)     # a kind and a unit together
+kinetic(p [kg m/s], M [kg]) = p² / (2 M)
+print size(-2 m), size(<3, 4> m), size([1, 2, 3])
+print kinetic(<3, 4> kg m/s, 1 kg), kinetic(5 kg m/s, 1 kg)
+
+describe(x) = 0
+describe(x [m]) = 1
+print describe(5 m), describe(5 s)
+
+f(x) = 2 x
+f(x) = 3 x
+print f(2)
+
+photon(x) = energy(x) in eV
+print photon(500 nm), photon(100 THz)
+print energy

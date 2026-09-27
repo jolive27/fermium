@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_arity.fm, line 3: energy takes 1 or 2 arguments but was given 3\n    print energy(1 kg, 2 m/s, 3 s)\n          ^^^^^^^^^^^^^^^^^^^^^^^^\n  hint: the versions of energy are energy(m [kg], v [m/s]) (line 1), energy(\u03bb [m]) (line 2)\n",
+ "exit": 1
+}

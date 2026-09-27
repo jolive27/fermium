@@ -67,7 +67,7 @@ fn new_fdef(name: &str, params: Vec<A::Param>, body: A::Expr, span: A::Span) -> 
 }
 
 fn param(n: &str) -> A::Param {
-    A::Param { name: n.to_string(), unit: None, span: A::Span::default() }
+    A::Param { name: n.to_string(), unit: None, kind: None, span: A::Span::default() }
 }
 
 /// The differentiator's view of names in a scope (Python Checker._diffctx).
@@ -79,6 +79,13 @@ struct DC<'a> {
 impl C::DiffContext for DC<'_> {
     fn user_function(&mut self, fname: &str) -> C::SymResult<Option<(Vec<String>, A::Expr)>> {
         if let Some((Binding::Func(b), _)) = self.ck.lookup(self.scope, fname) {
+            if self.ck.funcs[b].versions.len() > 1 {
+                return Err(C::build::ferr0(
+                    format!("can't differentiate through {fname}: it has several versions, and which one is used \
+                             depends on the arguments"),
+                    Some(format!("differentiate the version you need, like {fname}'(x), or give it its own name")),
+                ));
+            }
             if !self.ck.funcs[b].one_liner() {
                 if c2_enabled() {
                     // differentiated by derived_info (automatic differentiation); the body isn't needed here
@@ -135,7 +142,7 @@ impl Checker {
     fn new_func_info(&mut self, name: String, fdef: A::Stmt, scope: ScopeId) -> FuncInfoId {
         self.funcs.push(FuncInfo { name: name.clone(), fdef: Some(fdef), scope, instances: HashMap::new(),
                                    display_name: name, checked_generic: false, stable: false, nat: None, module: None,
-                                   anon_label: None, parent: None, eval_body: None });
+                                   anon_label: None, parent: None, eval_body: None, versions: vec![] });
         self.funcs.len() - 1
     }
 
@@ -155,6 +162,13 @@ impl Checker {
         }
         let t = self.expr_any(target, ctx)?;
         match t {
+            Checked::Func { info, .. } if self.funcs[info].versions.len() > 1 => {
+                // U' of a function with several versions: the derivative of each one-parameter version (C5)
+                let d = self.derived_versions(info, &|ps: &[String]| (ps.len() == 1).then_some(0), order, e.span,
+                                              &format!("{}' needs a version with one parameter",
+                                                       self.funcs[info].display_name))?;
+                Ok(self.func_ref(d))
+            }
             Checked::Func { info, .. } => {
                 if self.func_params(info).len() != 1 {
                     let dn = self.funcs[info].display_name.clone();
@@ -168,6 +182,37 @@ impl Checker {
             Checked::Val(_) => Err(self.err("' (prime) means a derivative; it only works on functions and ODE solutions",
                                             e.span, Some("to differentiate a formula write d/dt (formula)".into()))),
         }
+    }
+
+    /// The derivative of a function with several versions (C5): the derivative of each version `sel` picks a
+    /// parameter of, as a new function with those versions; made once per function, selector message and order.
+    pub fn derived_versions(&mut self, info: FuncInfoId, sel: &dyn Fn(&[String]) -> Option<usize>, order: i64,
+                            node: A::Span, none_msg: &str) -> CResult<FuncInfoId> {
+        let key = (info, format!("versions,{none_msg},{order}"));
+        if let Some(&d) = self.calc.derived.get(&key) {
+            return Ok(d);
+        }
+        let mut ds = vec![];
+        for v in self.versions_of(info) {
+            let ps: Vec<String> = self.func_params(v).iter().map(|p| p.name.clone()).collect();
+            if let Some(i) = sel(&ps) {
+                ds.push(self.derived_info(v, i, order, node)?);
+            }
+        }
+        let d = match ds.len() {
+            0 => return Err(self.err(none_msg.to_string(), node, None)),
+            1 => ds[0],
+            _ => {
+                // a fresh function whose versions are the derivatives (the derivatives themselves stay shared)
+                let mut f = self.funcs[*ds.last().unwrap()].clone();
+                f.instances = HashMap::new();
+                f.versions = ds;
+                self.funcs.push(f);
+                self.funcs.len() - 1
+            }
+        };
+        self.calc.derived.insert(key, d);
+        Ok(d)
     }
 
     /// The function ∂ᵒʳᵈᵉʳf/∂(param i)ᵒʳᵈᵉʳ, made once (Python derived_info).
@@ -271,6 +316,15 @@ impl Checker {
                 None => self.lookup(ctx.scope, op.name().unwrap()).map(|x| x.0),
             };
             match b {
+                Some(Binding::Func(b)) if self.funcs[b].versions.len() > 1 => {
+                    // d/dx of a function with several versions: of each version that has x, or one parameter (C5)
+                    let sel = |ps: &[String]| {
+                        ps.iter().position(|p| p == var).or(if ps.len() == 1 && !partial { Some(0) } else { None })
+                    };
+                    let msg = format!("no version of {} has a parameter called {var}", self.funcs[b].display_name);
+                    let d = self.derived_versions(b, &sel, order, e.span, &msg)?;
+                    return Ok(self.func_ref(d));
+                }
                 Some(Binding::Func(b)) => {
                     let params: Vec<String> = self.func_params(b).iter().map(|p| p.name.clone()).collect();
                     let i = if let Some(i) = params.iter().position(|p| p == var) {
@@ -1129,7 +1183,7 @@ impl Checker {
             let ds = dims(&args);
             let span = self.funcs[base].fdef.as_ref().map(|f| f.span).unwrap_or_default();
             let node = mk(A::ExprKind::Name { name: String::new() }, span);
-            if let Ok(call) = self.instantiate(base, args, &node, false) {
+            if let Ok(call) = self.instantiate_one(base, args, &node, false) {
                 if let Ty::Num(cd) = &call.ty {
                     let res = self.u.norm(&cd.div(&ds[i].pow(Rational64::from_integer(order as i64))));
                     let pds: Vec<DExpr> = ds.iter().map(|d| self.u.norm(d)).collect();
@@ -1151,7 +1205,7 @@ impl Checker {
         let ds = dims(&args);
         let span = self.funcs[info].fdef.as_ref().map(|f| f.span).unwrap_or_default();
         let node = mk(A::ExprKind::Name { name: String::new() }, span);
-        let Ok(call) = self.instantiate(info, args, &node, false) else { return String::new() };
+        let Ok(call) = self.instantiate_one(info, args, &node, false) else { return String::new() };
         let Ty::Num(cd) = &call.ty else { return String::new() };
         let res = self.u.norm(cd);
         if !res.is_concrete() {

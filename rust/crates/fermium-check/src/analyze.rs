@@ -522,7 +522,7 @@ impl Checker {
         let text = product_text(&an.prefactor, Some(&order));
         if !params.is_empty() {
             let fparams: Vec<A::Param> =
-                params.iter().map(|p| A::Param { name: p.name.clone(), unit: p.unit.clone(), span: p.span }).collect();
+                params.iter().map(|p| A::Param { name: p.name.clone(), unit: p.unit.clone(), kind: None, span: p.span }).collect();
             let fdef = A::Stmt {
                 kind: A::StmtKind::FuncDef { name: title.clone(), params: fparams, body: A::FuncBody::Expr(body),
                                              where_: vec![] },

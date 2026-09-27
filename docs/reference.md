@@ -187,6 +187,58 @@ print force(spring, 3 m)
   `V(x)`, a number means `V × x` as usual, with a warning.
 - Not yet: `x -> x²` (anonymous functions), passing an ODE solution, printing a function parameter.
 
+### Several versions of one function (Fermium 2.5)
+
+*Multiple dispatch* (spec §C5, DECISIONS D285): define the same name again with different parameters, and each
+call uses the version that fits its arguments: their number, their units and their kind.
+
+```text
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(2 kg, 3 m/s)                # 9 J
+print energy(500 nm) in eV               # 2.48 eV: the photon version
+print energy(1 GHz)                      # 6.63×10⁻²⁵ J
+print energy([400, 500, 600] nm) in eV   # each element: [3.10, 2.48, 2.07] eV
+
+size(x: number) = abs(x)                 # a kind: number, vector, list or complex
+size(r: vector) = |r|
+size(xs: list) = len(xs)
+kinetic(p: vector [kg m/s], M [kg]) = (p · p) / (2 M)     # a kind and a unit together
+kinetic(p [kg m/s], M [kg]) = p² / (2 M)
+```
+
+- **Which version:** the arguments must fit a version's parameters: the same number of them, the unit's
+  dimension where a parameter has `[unit]` (any unit of that dimension: `500 nm` fits `λ [m]`), and the kind
+  where it has `: number`, `: vector`, `: list` or `: complex`. A parameter without annotations takes anything,
+  as before. A list fits a number parameter element by element (the function is applied to each element).
+- **The most specific version wins:** an annotated parameter beats an unannotated one (a unit and a kind
+  together beat either alone), so `describe(x) = 0` and `describe(x [m]) = 1` give `describe(5 m)` = 1 and
+  `describe(5 s)` = 0. The chosen version must be at least as specific as every other fitting version in each
+  parameter.
+- **Errors, before the program runs:** no fitting version is a one-line error listing the versions with their
+  lines (`no version of energy takes (time [s])`; hint: `the versions of energy are energy(m [kg], v [m/s])
+  (line 1), energy(λ [m]) (line 2), …`); the wrong number of arguments says `energy takes 1 or 2 arguments`; two
+  versions that fit equally well are ambiguous, naming both (`the call of area is ambiguous: both area(x [m], y)
+  (line 1) and area(x, y [m]) (line 2) fit these arguments`).
+- **Resolved at compile time:** the choice is made from the checked types (units are compile-time), so it costs
+  nothing at run time; in a generic function, `photon(x) = energy(x) in eV`, each call of `photon` chooses
+  again with its own argument's units. A generic function that is never called doesn't have to choose.
+- **Same signature = redefinition:** a definition with the same parameters (same number, units of the same
+  dimension, same kinds) replaces the earlier one, as in Fermium 1.5; `f(x) = 2 x` then `f(x) = 3 x` gives
+  `f(2)` = 6. Only top-level definitions of the same file (or module) become versions; an imported name can't be
+  redefined (as before).
+- **With the rest of the language:** versions can be one-line or several lines, use `where`, call themselves and
+  take functions. `energy'` is the derivative of each one-parameter version and `d/dx U` (or `∂/∂x U`) of each
+  version with a parameter x, chosen per call again; `∫ U(x) dx …`, `plot U vs x from 0 m to 2 m`, passing
+  `U` to a function (`force(U, 1 m)`) and a module's versions (`photons.energy(500 nm)`) all choose by the
+  arguments. The editor's hover over a call shows the version that call uses; `print energy` and the REPL's
+  `vars` list every version.
+- **Not yet:** differentiating a formula that calls a function with several versions (`g(x) = energy(x)`, then
+  `g'`: an error that says so; differentiate `energy` itself), adding versions to an imported function,
+  versions in the Python API (`fermium.compile` uses the last one), and Fermium 1.5 (`fermium-legacy`: a second
+  definition replaces the first).
+
 ## 6. Conditions and loops
 
 ```fermium

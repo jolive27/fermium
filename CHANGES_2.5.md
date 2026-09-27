@@ -4,6 +4,31 @@ Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Progr
 exactly the same: the conformance suite still holds every program to Fermium 1.5's output (3334 pass, 32
 documented divergences). This file lists each Phase C item as it lands.
 
+## Several versions of one function: multiple dispatch (C5, DECISIONS D285)
+
+One function name can have several versions, and each call uses the one its arguments fit, by their number,
+units and kind. The choice is made when the program is checked, so it costs nothing at run time:
+
+```text
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(2 kg, 3 m/s), energy(500 nm) in eV, energy(1 GHz)   # 9 J 2.48 eV 6.63×10⁻²⁵ J
+
+size(r: vector) = |r|          # a parameter can name a kind: number, vector, list or complex
+size(xs: list) = len(xs)
+```
+
+- The most specific version wins (an annotated parameter beats an unannotated one). No fitting version, or two
+  that fit equally well, is a one-line error before the program runs that lists the versions with their lines.
+- Works in generic functions (each call chooses again), with derivatives (`energy'`, `d/dx U`), `∫`, `plot`,
+  functions passed to functions and modules (`photons.energy(500 nm)`); the editor's hover shows the version a
+  call uses.
+- A definition with the *same* signature still replaces the earlier one, so every existing program prints the
+  same. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
+- Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
+  function, the Python API (uses the last version), Fermium 1.5.
+
 ## C and Fortran interop (C3, DECISIONS D275)
 
 Fermium calls functions in C and Fortran shared libraries through the C ABI, with the units checked at every
