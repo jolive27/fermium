@@ -1660,3 +1660,36 @@ conformance program changes (the suite passes unchanged).
 `E(1 GHz)` silently off by 2π is exactly the mistake the language exists to catch.
 - **Alternatives:** dispatching on the unit's spelling (would make units that are equal in SI behave
 differently); an error (v1 accepts the program).
+
+## D320. The C++ wrapper cache: a SHA-256 key of every compile input, a manifest checked on reuse, system headers without the program's folder, a private cache folder (red team 15 #1, #2)
+- **What:** (1) a header the program's folder has (or an absolute path) is included by its absolute path with
+`-I` the program's and the header's folders, as before; any other name (`cmath`, `math.h`, `Eigen/Dense`) is
+included as `<name>` with **no** folder of the program's on the include path, so a `cstdio` planted next to a
+program can't stand in for the real one, and installed headers are found where the compiler finds them (a
+missing one is the compiler's "not found", reported as "can't find the header" with a hint). (2) The cache key
+is the SHA-256 (in-tree, `sha256.rs`; the workspace had no hashing dependency) of the wrapper's source, whether
+the header is local or a system one, its absolute path and text, the `-I` folders, `CXX`, `CXXFLAGS`, `CPATH`,
+`CPLUS_INCLUDE_PATH`, `C_INCLUDE_PATH`, `LIBRARY_PATH`, `GCC_EXEC_PREFIX`, `COMPILER_PATH`, `SDKROOT`,
+`MACOSX_DEPLOYMENT_TARGET`, and the library as written and its path; 40 hex digits name the files. (3) Next to
+each wrapper a manifest records the compiler's identity (each word of the command resolved on the PATH, links
+followed, with its size and time), the SHA-256 of its `--version` output, the wrapper's size and SHA-256, the
+library's size and time, and every file of the compiler's `-MD` list (now `-MD`, so system headers count) with
+its size and time. A wrapper is reused only when the manifest is complete and all of it still matches; a
+compile writes the manifest last, after the wrapper. With no compiler on the PATH a wrapper whose manifest
+otherwise matches is still used (nothing else could be built, and the old test "a second run needs no compiler"
+holds). (4) The cache folders (`cpp/`, and `jit/` of C6) are made 0700; a folder owned by another user or
+writable by group or others is not used: one warning, then a fresh private folder in the temporary folder for
+this run (cachedir.rs). (5) The compiler runs in its own process group and is killed after
+`$FERMIUM_CXX_TIMEOUT` seconds (120 by default), with a one-line error.
+- **Why:** the old key (FNV-1a 64 of the source, the named header's text, the library path, `$CXX`,
+`$CXXFLAGS`) left out the program's folder, which was on the include path, so `fermium check` on one program
+planted a wrapper that another program with the same import loaded and ran; it also left out the include-path
+variables and the compiler, so a stale wrapper silently printed old constants. The compiler's own identity is
+checked in the manifest rather than hashed into the name so a cache hit spawns no process (≈25 ms per program).
+- **Alternatives:** running `c++ --version` (or the preprocessor) on every run to put its output or the resolved
+header list in the key (a process per import per run; the manifest catches the same changes); a content hash
+of every dependency on reuse (≈100 system headers per wrapper to read each run; size and time is what make and
+ninja trust); keeping `-I <program folder>` for system headers (what made the attack work); `-iquote` for the
+program's folders (would break headers that include their neighbours with `<…>`). Known limit: a file newly
+added to an include folder that shadows one the wrapper didn't read isn't noticed (the wrapper stays as it was,
+which runs nothing new).

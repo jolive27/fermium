@@ -53,8 +53,15 @@ print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 2
 - A C++ exception stops the program with its message; compile-time problems (a misspelt function, no overload
   with the declared types, a symbol the library doesn't define, a missing header, no C++ compiler) are one line
   with a caret on the signature.
-- The compiler is `$CXX` or the first of c++, g++, clang++; wrappers are cached in `~/.cache/fermium/cpp` (or
-  `$FERMIUM_CACHE_DIR/cpp`) and rebuilt when a header or the library changes.
+- The compiler is `$CXX` or the first of c++, g++, clang++ (stopped after `$FERMIUM_CXX_TIMEOUT` seconds,
+  120 by default). A header the program's folder doesn't have is looked up on the compiler's own include path
+  (`header "math.h"`, `header "Eigen/Dense"`), with no folder of the program's on it.
+- Wrappers are cached in `~/.cache/fermium/cpp` (or `$FERMIUM_CACHE_DIR/cpp`), a folder only you can use
+  (0700; one that other users can write is not used). A wrapper is used again only when everything it was made
+  from still matches: its source, the header, the include folders, `CPATH`, `CPLUS_INCLUDE_PATH`, `CXXFLAGS`,
+  the compiler, every file the compiler read and the library (DECISIONS D320).
+- Exception messages are printed as one line of plain text (control characters become spaces); a C++ keyword
+  as a name (`phys::new`) is refused with a hint.
 - Worked example: [examples/cpp_interop/](examples/cpp_interop/) computes two-body decay momenta (π⁺ → μ⁺ ν:
   29.79 MeV/c, as the PDG gives), decay lengths and the invariant mass of the Λ in C++. Reference:
   [docs/reference.md](docs/reference.md), *C++ interop*.

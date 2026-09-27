@@ -31,6 +31,8 @@ pub mod print;
 pub mod pyinterop;
 pub mod cinterop;
 pub mod cppinterop;
+pub mod cachedir;
+pub mod sha256;
 pub mod rng;
 pub mod solve;
 pub mod source;
