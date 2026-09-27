@@ -68,6 +68,159 @@ f(x) = 2 x
 print f(3 m), f(2)
 ```
 
+### 2.2 Scoping (fermium-check: `names.rs`, `stmts.rs`, `calls.rs`, `modules.rs`)
+
+Fermium has **one global scope per program, one local scope per function call, and nothing else**: blocks
+(`if`, `for`, `while`, `sweep`) do not open scopes. The rules below are normative; each is fixed by an example
+that runs or is rejected.
+
+1. **Top level.** An assignment `x = e` at the top level (or inside a block at the top level) defines or
+   reassigns the global `x`. A name must be assigned on an earlier line before it is read ("x isn't defined").
+   A variable keeps the dimension of its first assignment: assigning a value of another dimension is an error
+   ("x is length [m]; it can't now hold time [s]"). A built-in constant (`c`, `h`, `G`, …) may be reassigned:
+   from that line on the name means the program's value, with a warning (D34, "c … is now your variable").
+2. **Definite assignment.** A name assigned only inside an `if` without an `else` that also assigns it, or only
+   inside a `for`/`while` body, may not be read after the block ("z might not have a value here: it is only set
+   inside the if on line 2"). A `for` loop's variable after the loop is the same case. If the name had a value
+   before the block, the block updates it: after `i = 10` and `for i from 1 to 3`, `i` is 3.
+3. **Functions read globals late.** A function body may read global variables; it reads the value the global
+   has **when the function is called**, not when it was defined, and the global only has to be defined before
+   the first call (a call that happens before the global's first assignment is the error "q isn't defined",
+   reported at the body with "this happened when calling f on line N"). The dimension of a global cannot change
+   (rule 1), so late reading never changes a function's units.
+4. **Locals.** Parameters are local. In a multi-line body, the first assignment to a name makes it a local of
+   that call; before that line a read of the name reads the global (rule 3), after it the local. Assignments
+   (including `+=`) never change a global: `k += 1` in a body reads the global `k` and creates a local `k`. A
+   local is not visible after the function returns, nor to other functions. Definite assignment (rule 2)
+   applies inside bodies too.
+5. **Nested functions** must be one line (`inner(y) = x y` inside `outer(x)`); they see the enclosing call's
+   parameters and locals, and are not visible outside it (D194). A multi-line nested definition is an error.
+6. **Functions calling functions:** a body may call any function defined at the top level, before or after it
+   (the callee must exist when the call runs), including itself. Functions are passed to functions by name
+   and specialised at compile time (D43).
+7. **`where`** (`e where a = 1 m, b = 2 m`) binds its names for `e` only; they shadow globals of the same name
+   and are not defined after the statement.
+8. **Integrals, derivatives and sums** evaluate their bodies in the scope where they are written; their bound
+   variable (`u` in `∫ … du`, `i` in `Σ(… for i …)`) is local to the body. Other names are read when the
+   integral is evaluated (inside a function: at the call, rule 3).
+9. **`solve` with derivatives** makes each unknown a global (or, inside a function, a local) *ODE solution*
+   callable as `x(t)`; the independent variable (`t` in `for t from …`) is local to the solve and not defined
+   afterwards. The solution is a **snapshot**: the values of every other name the equations read are captured
+   when the `solve` runs, so reassigning `k` afterwards does not change `x(t)` (D46, D261).
+   A root-finding `solve … for x from a to b` assigns the root to `x` as an ordinary variable.
+10. **`fit`** assigns each fitted parameter (a name of the model that is neither a data column nor a defined
+    variable) as an ordinary global with its unit; the data column names are local to the model (D193).
+11. **Modules** (D101): a module is checked in its own scope whose parent is the built-in constants, so its
+    functions never see the importing program's variables. `import m` binds only the name `m` (members are read
+    as `m.f`); `import m as n` binds `n`; `from m import f` binds `f`. Defining a name that is also imported,
+    importing a module whose name the program already uses, and names starting with `_` from outside the module
+    are errors.
+12. **`parallel for`** has the scoping of `for`; in addition its body's assignments to names defined before the
+    loop are restricted so that iterations are independent: `s += e` on an outer number is a reduction, and
+    `xs[i] = e` writes one element (the full restrictions are in docs/reference.md §6; §4 below). `sweep` is a
+    `for` over the listed values.
+
+```fermium
+k = 2
+f(x) = k x
+print f(1)
+k = 3
+print f(1)
+g(x) =
+    k += 1
+    return k x
+print g(1), k
+outer(x) =
+    inner(y) = x y
+    return inner(2)
+print outer(3)
+i = 10
+for i from 1 to 3
+    j = 0
+print i
+print a + 1 where a = 2
+a = 5
+F(t) = ∫ a u² du from 0 to t
+print F(1)
+r = 2 /s
+solve y' = -r y with y(0) = 1 for t from 0 s to 1 s
+r = 7 /s
+print y(1 s)
+solve z² = 2 for z from 0 to 2
+print z
+import mechanics
+print mechanics.pendulum_period(1 m, 9.81 m/s²)
+m_s = 2
+fit y = m_s x + b to table(x = [1, 2, 3], y = [2, 4, 6.1])
+print b
+s = 0
+parallel for n from 1 to 4
+    s += n
+print s
+```
+
+Each of these is rejected:
+
+```fermium-error
+f(x) =
+    y = 2 x
+    return y
+print f(1)
+print y
+```
+
+```fermium-error
+x = 1
+if x > 0
+    z = 4
+print z
+```
+
+```fermium-error
+for i from 1 to 3
+    j = i
+print i
+```
+
+```fermium-error
+f(x) = x + q
+print f(1)
+q = 2
+```
+
+```fermium-error
+print a where a = 3
+print a
+```
+
+```fermium-error
+x = 1 m
+x = 2 s
+```
+
+```fermium-error
+f(x) =
+    g(y) =
+        return 2 y
+    return g(x)
+print f(1)
+```
+
+```fermium-error
+solve y' = -y with y(0) = 1 for t from 0 s to 1 s
+print t
+```
+
+```fermium-error
+fit y = m x + b to table(x = [1, 2, 3], y = [2, 4, 6.1])
+print x
+```
+
+```fermium-error
+from mechanics import pendulum_period
+pendulum_period(L) = L
+```
+
 ## 3. Numeric semantics
 
 ### 3.1 Arithmetic
@@ -200,7 +353,7 @@ and `∇²f` are **exact**: the result is a new function whose dimension is dim(
 - Specify the run-time behaviour of domain errors (`√` and `ln` of negative numbers, `asin(2)`) uniformly; today a
   compile-time constant is an error while a run-time value gives `NaN`.
 - The static semantics of every built-in function (generated from the checker's tables).
-- Scoping rules in full: what a function body may read, capture by `solve` and integrals, modules (`import`),
-  and natural-units regions.
+- ~~Scoping rules~~ (done in 0.2: §2.2). Still open: natural-units regions, the scope of names bound by
+  `analyze`/`propagate`, and the interop blocks' names.
 - Uncertainty propagation (first-order, exact correlations; Monte Carlo) as a formal model.
 - The interop type mappings (`use python`, `import c/cpp/fortran`).
