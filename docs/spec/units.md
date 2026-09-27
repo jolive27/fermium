@@ -1,6 +1,6 @@
 # Units and dimensions
 
-Draft 0.1. Source: `rust/crates/fermium-units` (`dim.rs`, `exact.rs`, `db.rs`, `natural.rs`, `quantity.rs`),
+Draft 0.2. Source: `rust/crates/fermium-units` (`dim.rs`, `exact.rs`, `db.rs`, `natural.rs`, `quantity.rs`),
 `rust/crates/fermium-syntax/src/unitrule.rs` and `expr.rs` (the unit rule), `rust/crates/fermium-ir/src/types.rs`
 (inference) and `rust/crates/fermium-check` (checking). Decisions: D5, D6, D12, D13, D14, D60, D235, D236, D238.
 
@@ -361,5 +361,5 @@ x = 2 s
 
 - ~~The complete unit catalogue as a normative table~~ (done in 0.2: §3.1, generated from `db.rs` and tested).
 - The rules for `Hz`/`rad/s`/`rev`, `Gy`/`Sv`, `J`/`N m` warnings (D27, D95, D306, D324) as a table.
-- Units of the built-in functions (min/max/mean/…; linear algebra; FFT) and of `fit` results.
+- ~~Units of the built-in functions~~ (done in 0.2: semantics.md §7). Still open: the units of `fit` results.
 - Mixed-unit vectors (one dimension per component).

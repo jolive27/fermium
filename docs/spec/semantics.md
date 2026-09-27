@@ -1,6 +1,6 @@
 # Semantics
 
-Draft 0.1, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
+Draft 0.2, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
 conformance/ and docs/reference.md are the authority. Source: `rust/crates/fermium-check` (static semantics),
 `fermium-ir` (the typed IR), `fermium-codegen` / `fermium-runtime` (execution), `fermium-units/src/numfmt.rs`
 (printing numbers), `fermium-sym` (symbolic and automatic differentiation).

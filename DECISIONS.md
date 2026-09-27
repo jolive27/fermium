@@ -2024,3 +2024,31 @@ a different citation (the neutron-branch form is the standard one).
 - **Alternatives:** generating the grammar from the parser (no parser generator is used, and the context-sensitive
   unit rule doesn't fit a generated grammar); extending docs/reference.md §18 (the user guide should stay a guide);
   a spec written for the Python implementation (it is frozen; the Rust front end is the one that will reach 1.0).
+
+## D351. Specification draft 0.2: normative tables derived from the implementation, each held by a test (spec D1)
+- **What:** docs/spec/ goes from draft 0.1 to 0.2 with five additions, each tied to the code it describes:
+  (1) grammar.md §2.4 lists, token class by token class, what starts an implicit product (`starts_term` in
+  expr.rs: numbers, imaginary literals, names except a clause's option words, `√ ∛ ∫ ∂ ∇`, `(`, `|` outside
+  `| |`, a spaced `[` that isn't a unit, `<` of a vector literal) and what doesn't (other keywords, strings,
+  `-`/`+`, operators, postfix marks), with `fermium-reads` lines; (2) semantics.md §2.2 states the scoping rules
+  as observed: one global scope and one local scope per call, blocks open none; a function reads globals at the
+  call (late binding), its first assignment to a name makes a local and never writes the global; nested
+  functions are one line; `where` binds for its expression; an ODE solution snapshots what it reads; modules
+  see only built-in constants; (3) semantics.md §2.3 is a formal model of the linear (first-order, correlated)
+  uncertainty propagation and the kernels' ±1σ test with Monte Carlo fallback, restating D120, D276–D279, D300,
+  D304; (4) semantics.md §7 is the static semantics of every built-in (arguments, kinds, dimensions, result);
+  (5) units.md §3.1 is the unit catalogue, generated from `fermium-units/src/db.rs`.
+- **How each stays true:** `fermium-check/tests/spec_builtins.rs` requires §7's names to equal
+  `builtins::BUILTINS` (one row per group, each name exactly once); `fermium-units/tests/spec_catalogue.rs`
+  regenerates §3.1 and fails when the file differs (`FERMIUM_UPDATE_SPEC=1` rewrites it; the only library
+  change is a read-only `db::unit_prefixable`); `spec_conformance_counts` checks the README's per-area case
+  counts against conformance/cases/. The scoping and uncertainty sections are held by examples: programs that
+  must run (the uncertainty ones assert their σ values) and programs that must fail with a one-line error.
+- **Limits, stated in the files:** §7's dimensions are written by hand from builtin.rs/vecmat.rs/cplx.rs/
+  clist.rs/rng.rs and checked only by the example that calls every built-in, not row by row; the scoping rules
+  were derived by running programs against fermium-check, so a rule the examples don't exercise could be off.
+  Observed rough edges were recorded, not changed: `2 f (x)` with a function `f` is rejected while `f (x)` at the
+  start of a term is a call; `parallel for` accepts `s += i` on an outer number as a reduction.
+- **Alternatives:** generating §7 from the checker (its argument rules are code, not tables; a table in the
+  checker would be a refactor of a large, conformance-bound module late in the run); reproducing
+  docs/reference.md §15's unit list by hand (it would drift; a generated table can't).

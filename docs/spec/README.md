@@ -1,15 +1,15 @@
 # The Fermium Language Specification
 
-**Status: draft 0.1 (started 2026-09-27, spec item D1).** This is the first version of a formal specification of
+**Status: draft 0.2 (2026-09-27, spec item D1; 0.1 earlier the same day).** This is a formal specification of
 Fermium, the language implemented by the Rust compiler `fermium` (Fermium 2.5). It is incomplete; every section
 says what it covers and what is still to do. It describes the language as implemented today; it does not
 propose changes.
 
 | File | Contents | State |
 |---|---|---|
-| [grammar.md](grammar.md) | Lexical structure (characters, names, numbers, superscripts, fractions, strings, comments, indentation, the ASCII ⇄ symbol equivalences) and the syntax in EBNF, with the precedence table and the parser's special cases | Lexical structure: complete. Statements and expressions: the core is complete; the clause-level grammar of `plot`, `analyze`, `propagate`, the interop signatures and `solve … lowest/grid` is summarised, not exhaustive |
-| [units.md](units.md) | Dimensions (7 rational exponents), the unit rule (the bootcamp's three sentences and a precise version), unit expressions, conversions with `in`, affine temperatures, angles, natural units, dimension inference by unification, exact exponent arithmetic | Complete for the rules; the unit catalogue is referenced, not reproduced |
-| [semantics.md](semantics.md) | Values and types, evaluation order, numeric semantics (IEEE-754 double, significant figures for printing), errors (compile time and run time; one line, a caret, a hint), the meaning of the calculus operators and of `solve` | Partial: a high-level account; see its TODO list |
+| [grammar.md](grammar.md) | Lexical structure (characters, names, numbers, superscripts, fractions, strings, comments, indentation, the ASCII ⇄ symbol equivalences) and the syntax in EBNF, with the precedence table, the normative list of tokens that start an implicit product, and the parser's special cases | Lexical structure: complete. Statements and expressions: the core is complete, and implicit multiplication is specified token by token (0.2); the clause-level grammar of `plot`, `analyze`, `propagate`, the interop signatures and `solve … lowest/grid` is summarised, not exhaustive |
+| [units.md](units.md) | Dimensions (7 rational exponents), the unit rule (the bootcamp's three sentences and a precise version), unit expressions, the unit catalogue, conversions with `in`, affine temperatures, angles, natural units, dimension inference by unification, exact exponent arithmetic | Complete for the rules; the catalogue (§3.1) is a normative table generated from the unit database and tested equal to it (0.2) |
+| [semantics.md](semantics.md) | Values and types, scoping, the linear model of uncertainties, evaluation order, numeric semantics (IEEE-754 double, significant figures for printing), errors (compile time and run time; one line, a caret, a hint), the meaning of the calculus operators and of `solve`, and the static semantics of every built-in function | Partial. New in 0.2: scoping (§2.2), uncertainty propagation (§2.3), the built-in table (§7, names tested against the checker). Still a high-level account of the numerical methods, `propagate`, `analyze` and interop; see its TODO list |
 
 ## How this document relates to the others
 
@@ -29,20 +29,28 @@ propose changes.
 
 ## Where the conformance suite exercises each chapter
 
-| Chapter | Conformance areas (conformance/cases/…) |
+| Chapter | Conformance areas (conformance/cases/…, number of cases) |
 |---|---|
-| grammar.md §1–§2.2 (lexing, statements) | every area; especially `control-flow`, `functions`, `modules` |
-| grammar.md §2.3, semantics.md §6.3 (`solve`) | `ode`, `algebraic-solve`, `pde`, `eigen` |
-| grammar.md §2.4 (expressions, calculus syntax) | `units-and-printing`, `derivatives`, `integrals` |
-| grammar.md §2.7 (`plot`) | `data` |
-| units.md | `units-and-printing` (1130 cases, the largest area), `natural-units`, `analyze` |
-| semantics.md §2 (values and types) | `lists`, `vectors-matrices`, `complex`, `uncertainty` |
-| semantics.md §3 (numerics, printing) | `units-and-printing`, `rng`, `fft` |
-| semantics.md §4 (evaluation order, `parallel for`) | `control-flow`, `parallel` |
+| grammar.md §1–§2.2 (lexing, statements) | every area; especially `control-flow` (137), `functions` (197), `modules` (36) |
+| grammar.md §2.3, semantics.md §6.3 (`solve`) | `ode` (341), `algebraic-solve` (46), `pde` (61), `eigen` (63) |
+| grammar.md §2.4 (expressions, implicit products, calculus syntax) | `units-and-printing` (1130), `derivatives` (220), `integrals` (291) |
+| grammar.md §2.7 (`plot`), `load`, `table` | `data` (93) |
+| units.md §1–§5, §7 | `units-and-printing` (1130), `analyze` (34) |
+| units.md §6 (natural units) | `natural-units` (69) |
+| semantics.md §2 (values and types) | `lists` (134), `vectors-matrices` (173), `complex` (106) |
+| semantics.md §2.2 (scoping) | `functions` (197), `control-flow` (137), `modules` (36) |
+| semantics.md §2.3 (uncertainties) | `uncertainty` (113) |
+| semantics.md §3 (numerics, printing) | `units-and-printing` (1130), `rng` (29), `fft` (39) |
+| semantics.md §4 (evaluation order, `parallel for`) | `control-flow` (137), `parallel` (25) |
 | semantics.md §5 (errors) | every area: each case fixes its error message, line and hint (D264) |
-| interop (grammar.md §2.8) | `python-interop` |
+| semantics.md §6.1–§6.2 (derivatives, integrals, sums) | `derivatives` (220), `integrals` (291) |
+| semantics.md §7 (built-in functions) | `lists` (134), `vectors-matrices` (173), `complex` (106), `fft` (39), `rng` (29), `uncertainty` (113) |
+| interop (grammar.md §2.8) | `python-interop` (24) |
+| (worked appendix programs) | `appendix1` (5) |
 
-A case-by-case cross-reference (which rule each case exercises) is future work.
+The suite has 3366 cases in 22 areas; every count above is checked by the test
+`spec_conformance_counts` (spec_examples.rs), so the table can't go stale silently. A case-by-case
+cross-reference (which rule each case exercises) is future work.
 
 ## Notation
 
@@ -63,8 +71,11 @@ A case-by-case cross-reference (which rule each case exercises) is future work.
 ## What "1.0" needs from this document (not done yet)
 
 1. A full clause grammar for `plot`, `solve` (all options), `analyze`, `propagate` and the interop signatures.
-2. The complete static semantics of every built-in function (argument kinds and dimensions), generated from the
-   checker's tables rather than written by hand.
+2. Machine-checked static semantics of the built-in functions. Since 0.2 semantics.md §7 has the table, written
+   by hand from the checker; only its *names* are tested against the checker's list, not each row's dimensions.
 3. The run-time semantics of every numerical method (tolerances, error estimates, failure modes) in one place;
    today they are in docs/reference.md and DECISIONS.md.
-4. A cross-reference from every rule here to the conformance cases that exercise it.
+4. A cross-reference from every rule here to the conformance cases that exercise it (0.2 maps chapters to areas,
+   with tested case counts, above).
+5. The unit catalogue is done (units.md §3.1, generated and tested); the warnings about `Hz`/`rad/s`, `Gy`/`Sv`
+   and `J`/`N m` are still prose.

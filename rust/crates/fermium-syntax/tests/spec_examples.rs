@@ -202,3 +202,40 @@ fn spec_examples_run() {
     let _ = std::fs::remove_dir_all(&dir);
     assert!(bad.is_empty(), "spec examples:\n{}", bad.join("\n"));
 }
+
+/// README.md's cross-reference table gives each conformance area's number of cases; they must be the suite's.
+#[test]
+fn spec_conformance_counts() {
+    let text = std::fs::read_to_string(spec_dir().join("README.md")).unwrap();
+    let s = text.find("## Where the conformance suite").expect("README.md has the cross-reference");
+    let sect = &text[s..s + text[s..].find("future work").unwrap()];
+    let cases = spec_dir().join("../../conformance/cases");
+    let count = |area: &str| -> usize {
+        std::fs::read_dir(cases.join(area))
+            .unwrap_or_else(|_| panic!("conformance/cases/{area} exists"))
+            .filter(|e| e.as_ref().unwrap().path().extension().is_some_and(|x| x == "fm"))
+            .count()
+    };
+    let mut bad = vec![];
+    let mut n = 0;
+    // every "`area` (N)"
+    for piece in sect.split('`').collect::<Vec<_>>().windows(2) {
+        let (name, after) = (piece[0], piece[1]);
+        let Some(rest) = after.strip_prefix(" (") else { continue };
+        let Some(num) = rest.split(')').next().and_then(|x| x.parse::<usize>().ok()) else { continue };
+        n += 1;
+        let got = count(name);
+        if got != num {
+            bad.push(format!("{name}: README says {num}, the suite has {got}"));
+        }
+    }
+    assert!(n >= 15, "README.md's cross-reference should give case counts");
+    let areas: Vec<String> = std::fs::read_dir(&cases).unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+    let total: usize = areas.iter().map(|a| count(a)).sum();
+    let want = format!("The suite has {total} cases in {} areas", areas.len());
+    if !sect.contains(&want) {
+        bad.push(format!("README.md should say: {want}"));
+    }
+    assert!(bad.is_empty(), "docs/spec/README.md vs conformance/cases:\n{}", bad.join("\n"));
+}
