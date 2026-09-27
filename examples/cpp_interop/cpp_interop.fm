@@ -1,0 +1,52 @@
+# C++ interop: two-body decays and invariant masses from a small C++ library, with the units checked
+#
+# Build the library first, in this folder:
+#     c++ -std=c++17 -O2 -shared -fPIC -o libkinematics.so kinematics.cpp
+# then:  fermium run cpp_interop.fm   (the output is in expected_output.txt)
+#
+# Fermium compiles a small extern "C" wrapper for the functions below with the system's C++ compiler (once:
+# it is cached) and calls C++ through it. The library works in MeV/c², MeV/c and seconds; the import block
+# says so, and every call is checked when the program is checked: decay_length(p, 3 m, τ) would be a
+# compile-time error (m must be a mass). kin::invariant_mass has three overloads: each signature below picks
+# one by its parameters, and  as  gives each its own name in the program. kin::TwoBody::momentum is a static
+# member function. A C++ exception (a forbidden decay) stops the program with its message.
+import cpp "libkinematics.so" header "kinematics.hpp":
+    kin::TwoBody::momentum(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV/c]
+    kin::TwoBody::energy(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV]
+    kin::gamma(p [MeV/c], m [MeV/c²]) -> number
+    kin::decay_length(p [MeV/c], m [MeV/c²], τ [s]) -> [m]
+    kin::invariant_mass(E [MeV], p [MeV/c]) -> [MeV/c²] as mass_of
+    kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass
+    kin::invariant_mass(E: list [MeV], px: list [MeV/c], py: list [MeV/c], pz: list [MeV/c], n: len(E)) -> [MeV/c²] as system_mass
+
+# masses (PDG 2022)
+m_π = 139.57039 MeV/c²
+m_K = 493.677 MeV/c²
+m_Λ = 1115.683 MeV/c²
+m_p = 938.27208816 MeV/c²
+m_ν = 0 MeV/c²
+
+# 1. Two-body decays at rest: the daughter's momentum, against the PDG's values
+print "Daughter momentum p* (C++, Fermium's formula, PDG):"
+pstar(M, m1, m2) = c √((M² - (m1 + m2)²) (M² - (m1 - m2)²)) / (2 M)
+print "   π⁺ → μ⁺ ν ", momentum(m_π, m_μ, m_ν) in MeV/c to 4 digits, pstar(m_π, m_μ, m_ν) in MeV/c to 4 digits, " 29.79 MeV/c"
+print "   K⁺ → μ⁺ ν ", momentum(m_K, m_μ, m_ν) in MeV/c to 4 digits, pstar(m_K, m_μ, m_ν) in MeV/c to 4 digits, " 235.5 MeV/c"
+print "   Λ → p π⁻  ", momentum(m_Λ, m_p, m_π) in MeV/c to 4 digits, pstar(m_Λ, m_p, m_π) in MeV/c to 4 digits, " 101 MeV/c"
+print "muon energy in π⁺ decay:", energy(m_π, m_μ, m_ν) in MeV to 5 digits
+
+# 2. How far a particle flies before it decays: βγ c τ (lifetimes from the PDG)
+τ_π = 2.6033e-8 s
+τ_μ = 2.1969811e-6 s
+print "γ of a 10 GeV/c pion:", gamma(10 GeV/c, m_π) to 4 digits
+print "mean decay length of a 10 GeV/c pion:", decay_length(10 GeV/c, m_π, τ_π) to 3 digits
+print "mean decay length of a 1 GeV/c muon:", decay_length(1 GeV/c, m_μ, τ_μ) in km to 3 digits
+print "at 1, 3, 10 GeV/c:", decay_length([1, 3, 10] GeV/c, m_π, τ_π) to 3 digits   # a list maps elementwise
+
+# 3. Invariant masses: rebuild the Λ from its decay products (back to back in its rest frame)
+p = momentum(m_Λ, m_p, m_π)
+E_p = energy(m_Λ, m_p, m_π)
+E_π = energy(m_Λ, m_π, m_p)
+print "proton alone:", mass_of(E_p, p) in MeV/c² to 7 digits
+print "p π⁻ pair at 180°:", pair_mass(E_p, p, E_π, p, -1) in MeV/c² to 7 digits
+print "the same pair at 90° would be", pair_mass(E_p, p, E_π, p, 0) in MeV/c² to 5 digits
+print "p π⁻ as a system of vectors:", system_mass([E_p, E_π], [0, 0] MeV/c, [0, 0] MeV/c, [p, -p]) in MeV/c² to 7 digits

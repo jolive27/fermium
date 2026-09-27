@@ -456,7 +456,7 @@ pub extern "C" fn fm_pde(c: C, site: i64, f: OdeFn, env: *mut u8, t0: f64, t1: f
 /// The tree-walker's copy of a solution (plots and the other constructs it runs read it; they don't ask for
 /// x'(t) or a PDE's grid check, which only the compiled code answers).
 fn mirror(c: &mut Ctx, sol: ode::Sol, grid: Option<(f64, f64)>) -> (usize, std::rc::Rc<crate::eval_solve::SolData>) {
-    let d = std::rc::Rc::new(crate::eval_solve::SolData { sol, rhs: None, grid, check: None, unc: None });
+    let d = std::rc::Rc::new(crate::eval_solve::SolData { sol, rhs: None, grid, lens: None, check: None, unc: None });
     c.interp.solve.sols.push(d.clone());
     (c.interp.solve.sols.len() - 1, d)
 }

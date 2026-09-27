@@ -1,0 +1,2 @@
+import cpp "libphys4.so":
+    phys::twice(n: int) -> int

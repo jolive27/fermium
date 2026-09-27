@@ -1,0 +1,26 @@
+# C1: a 2-D array with units — heat spreading on a plate (explicit finite differences)
+n = 21
+L = 0.2 m
+h = L / (n - 1)
+α = 1e-4 m²/s                      # thermal diffusivity
+dt = 0.2 h^2 / α
+θ = fill(300 K, n, n)
+θ[11, 11] = 400 K                  # a hot spot in the middle
+print size(θ), θ[11, 11], θ[1, 1]
+for k from 1 to 50
+    θn = copy(θ)                   # (θn = θ would share the array, like a list)
+    for i from 2 to n - 1
+        for j from 2 to n - 1
+            θn[i, j] = θ[i, j] + (α dt / h^2) (θ[i+1, j] + θ[i-1, j] + θ[i, j+1] + θ[i, j-1] - 4 θ[i, j])
+    θ = θn
+print θ[11, 11] to 6 digits, θ[11, 12] to 6 digits, θ[1, 1]    # NumPy: 300.790 K, 300.770 K
+print "heat left:", sum(θ - 300 K) to 4 digits      # NumPy: 89.89 K (the edges are held at 300 K)
+print max(θ) to 6 digits, min(θ), mean(θ) to 6 digits   # NumPy: 300.790 K, 300 K, 300.204 K
+print θ
+small = fill(0 m, 2, 3)
+small[2, 3] = 5 m
+small[1, 2] += 2 m
+print small, 2*small - small / 2
+cube = fill(1.5 J, 2, 2, 2)
+cube[2, 1, 2] = 0 J
+print cube, size(cube, 3), sum(cube)

@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_ambiguous.fm, line 3: the call of area is ambiguous: both area(x [m], y) (line 1) and area(x, y [m]) (line 2) fit these arguments\n    print area(2 m, 3 m)\n          ^^^^^^^^^^^^^^\n  hint: add units or a kind (: number, : vector, : list, : complex) to the parameters so that one version is more specific, or define a version for exactly these arguments\n",
+ "exit": 1
+}

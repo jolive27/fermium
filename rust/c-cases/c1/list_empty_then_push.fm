@@ -1,0 +1,20 @@
+# C1: a variable set to [] and used before its first push; lists of vectors made in and returned by a function
+vel = []
+print vel, len(vel)
+for x in vel
+    print x
+push(vel, <1, 2> m/s)
+print vel, len(vel)
+mk(n) =
+    out = []
+    for i from 1 to n
+        push(out, <i, 2 i> m)
+    return out
+q = mk(3)
+print q, len(mk(2))
+for p in mk(2)
+    print p
+names = []
+print names, len(names)
+push(names, "Fe-56")
+print names

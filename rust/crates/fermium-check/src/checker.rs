@@ -66,6 +66,10 @@ pub struct FuncInfo {
     /// evaluated instead of the printed body: an antiderivative's ln|u| where v1's printed formula has ln(u)
     /// (fermium_sym::real_logs, red team 11 #2)
     pub eval_body: Option<A::Expr>,
+    /// multiple dispatch (C5): every version of this name visible where this definition was made, in definition
+    /// order, this one included; empty for a function with one version. Each definition makes a new list (a
+    /// snapshot), so a reference taken earlier keeps the versions it saw.
+    pub versions: Vec<FuncInfoId>,
 }
 
 impl FuncInfo {
@@ -93,6 +97,9 @@ pub struct SolView {
     pub hints: Vec<Option<I::Hint>>,
     pub thint: Option<I::Hint>,
     pub sf: Option<u32>,
+    /// a list unknown (spec C1, D282): the list's type (List or VList of vectors); comp and top are then positions
+    /// in the solve's layout of state slots, whose sizes are known only when it runs
+    pub list: Option<Ty>,
 }
 
 /// A one-line helper defined inside a function (D194), expanded at each call.
@@ -184,6 +191,8 @@ pub struct SymExtra {
     /// why the variable may have no value here, if it may not
     pub unset_msg: Option<String>,
     pub fresh_loop_var: bool,
+    /// every value it was set to so far is the empty list [] (it may still become a list of vectors, D281)
+    pub empty_list: bool,
     pub list_sf: Option<u32>,
     /// a parameter found by fit: the hidden variable holding its standard error, for err(x)
     pub err_sym: Option<I::SymId>,
@@ -228,6 +237,8 @@ pub struct Checker {
     pub func_extra: Vec<crate::calls::FuncExtra>,
     /// FuncInfos made for built-ins passed as functions (simpson(sin, …), D43)
     pub builtin_infos: HashMap<String, FuncInfoId>,
+    /// multiple dispatch (C5): the version each call chose, by the call's span (for hover)
+    pub dispatch_sites: Vec<(A::Span, FuncInfoId)>,
     /// module functions being instantiated from inside their module (D101)
     pub in_module_call: std::collections::HashSet<FuncInfoId>,
     /// errors that already carry the "this happened when calling …" note
@@ -289,6 +300,7 @@ impl Checker {
             ret_types: vec![],
             func_extra: vec![],
             builtin_infos: HashMap::new(),
+            dispatch_sites: vec![],
             in_module_call: Default::default(),
             call_noted: Default::default(),
             counter: 0,
@@ -404,6 +416,12 @@ impl Checker {
             Ty::Vec { n, dim, .. } => format!("a {n}-vector of {}", self.desc(dim.as_ref().unwrap())),
             Ty::Mat { r, c, dim } => format!("a {r}×{c} matrix of {}", self.desc(dim)),
             Ty::TextList => "a list of text".into(),
+            Ty::Array { rank, dim } => format!("a {rank}-dimensional array of {}", self.desc(dim)),
+            Ty::VList(el) => {
+                let d = self.type_desc(el);
+                format!("a list of {}", d.strip_prefix("a ").unwrap_or(&d).replacen("vector", "vectors", 1)
+                    .replacen("matrix", "matrices", 1))
+            }
             Ty::ComplexList(d) => {
                 if self.u.resolve(d).is_dimensionless() {
                     "a list of complex numbers".into()
@@ -507,6 +525,24 @@ impl Checker {
 
     // ============================================================ program
     pub fn check_program(&mut self, prog: &A::Program) -> CResult<I::Module> {
+        fermium_units::exact::overflow_clear();
+        let r = self.check_program_inner(prog);
+        // the backstop for a unit power that overflowed outside any expression or statement (red team 13)
+        if let Some(e) = self.take_overflow(A::Span { line: 1, col: 1, length: 1 }) {
+            return Err(r.err().unwrap_or(e));
+        }
+        r
+    }
+
+    /// A unit power that didn't fit in 64 bits since the last look (see fermium_units::exact), as the error at
+    /// `span`: the expression or statement that produced it.
+    pub fn take_overflow(&self, span: A::Span) -> Option<Diagnostic> {
+        let what = fermium_units::exact::overflow_take()?;
+        let (msg, hint) = fermium_units::exact::overflow_message(&what);
+        Some(self.err(msg, span, Some(hint)))
+    }
+
+    fn check_program_inner(&mut self, prog: &A::Program) -> CResult<I::Module> {
         self.main_count += 1;
         self.uses_unc = false;
         let ctx = Ctx { func: Owner::Main, scope: self.globals, is_main: true, lam: None, loop_depth: 0, branch: 0,
@@ -571,6 +607,15 @@ impl Checker {
 
     /// One statement → zero or more IR statements (Python dispatches on s_<Class>).
     pub fn stmt(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
+        let r = self.stmt_dispatch(s, ctx);
+        // a unit power that overflowed in this statement but outside its expressions (red team 13)
+        if let Some(e) = self.take_overflow(s.span) {
+            return Err(e);
+        }
+        r
+    }
+
+    fn stmt_dispatch(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
         use A::StmtKind as K;
         match &s.kind {
             K::ExprStmt { value: e } => self.s_expr_stmt(s, e, ctx),
@@ -616,9 +661,13 @@ impl Checker {
             .names
             .iter()
             .filter_map(|(n, b)| match b {
-                Binding::Func(fi) => Some((self.funcs[*fi].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), *fi)),
+                Binding::Func(fi) => Some(self.versions_of(*fi)
+                    .into_iter()
+                    .map(|v| (self.funcs[v].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), v))
+                    .collect::<Vec<_>>()),
                 _ => None,
             })
+            .flatten()
             .collect();
         todo.sort();
         for (_, _, b) in todo {
@@ -640,11 +689,24 @@ impl Checker {
             let saved_nat = self.nat.clone();
             let fnat = self.funcs[b].nat.clone().unwrap_or_default();
             self.set_system(fnat);
-            let args: Vec<Checked> =
-                params.iter().map(|_| Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))).collect();
-            let r = self.instantiate(b, args, node, false);
+            if params.iter().any(|p| matches!(p.kind.as_deref(), Some("vector" | "complex"))) {
+                self.set_system(saved_nat);
+                continue; // takes a vector or a complex number (C5): checked per call
+            }
+            let args: Vec<Checked> = params
+                .iter()
+                .map(|p| {
+                    if p.kind.as_deref() == Some("list") {
+                        Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0))
+                    } else {
+                        Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))
+                    }
+                })
+                .collect();
+            let r = self.instantiate_one(b, args, node, false);
             let r = match r {
-                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before") => Ok(()),
+                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before")
+                    || e.message.contains("can't tell which version") => Ok(()),
                 Err(e) if e.message.contains("needs a list") => {
                     // total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some parameters
                     // are numbers), it is checked at each call instead (D142)
@@ -652,7 +714,7 @@ impl Checker {
                         .iter()
                         .map(|_| Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0)))
                         .collect();
-                    let _ = self.instantiate(b, args, node, false);
+                    let _ = self.instantiate_one(b, args, node, false);
                     Ok(())
                 }
                 Err(e) => Err(e),
@@ -688,7 +750,11 @@ pub fn stmt_kind_name(k: &A::StmtKind) -> &'static str {
         K::Units { .. } => "units",
         K::Import { .. } => "import",
         K::UsePython { .. } => "use python",
-        K::ImportC { lang, .. } => if lang == "c" { "import c" } else { "import fortran" },
+        K::ImportC { lang, .. } => match lang.as_str() {
+            "c" => "import c",
+            "cpp" => "import cpp",
+            _ => "import fortran",
+        },
         K::Propagate { .. } => "propagate montecarlo",
         K::Sweep { .. } => "sweep",
     }

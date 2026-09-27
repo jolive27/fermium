@@ -58,6 +58,16 @@ impl Checker {
 
     pub fn e_list_lit(&mut self, e: &A::Expr, items: &[A::Expr], ctx: &mut Ctx) -> CResult<I::Expr> {
         let is_list = |x: &A::Expr| matches!(x.kind, A::ExprKind::ListLit { .. });
+        let is_mat = |x: &A::Expr| matches!(&x.kind, A::ExprKind::ListLit { items } if !items.is_empty()
+                                            && items.iter().all(is_list));
+        if !items.is_empty() && items.iter().all(is_mat) {
+            // a list of matrices written out: [[[1, 0], [0, 1]], [[0, 1], [1, 0]]] (D281)
+            let mut vals = vec![];
+            for x in items {
+                vals.push(self.expr(x, ctx)?);
+            }
+            return self.vlist_literal(e, vals, items);
+        }
         if !items.is_empty() && items.iter().all(is_list) {
             return self.matrix_literal(e, items, ctx);
         }
@@ -75,6 +85,13 @@ impl Checker {
         }
         if vals.iter().any(|v| matches!(v.ty, Ty::Str)) {
             return Err(self.err("a list can hold numbers or text, but not both", e.span, None));
+        }
+        if !vals.is_empty() && vals.iter().all(|v| matches!(v.ty, Ty::Vec { .. } | Ty::Mat { .. })) {
+            return self.vlist_literal(e, vals, items);
+        }
+        if !vals.is_empty() && vals.iter().all(|v| matches!(v.ty, Ty::Complex(_))) {
+            // (a real number among them stays v1's error, "a list element must be a number …": write 2 + 0i)
+            return self.clist_literal(e, vals, items);
         }
         let dim = DExpr::fresh();
         for (it, node) in vals.iter().zip(items) {
@@ -253,6 +270,9 @@ impl Checker {
         if let A::ExprKind::Slice { lo, hi } = &index.kind {
             return self.slice_expr(e, target, lo.as_deref(), hi.as_deref(), ctx);
         }
+        if let Some(r) = self.array_index(e, ctx)? {
+            return Ok(r); // A[i, j, …] of an array (D283)
+        }
         if let A::ExprKind::Index { target: inner_t, index: Some(inner_i) } = &target.kind {
             // M[i, j] (parsed as M[i][j]) or M[i][j]
             let _ = (inner_t, inner_i);
@@ -278,7 +298,7 @@ impl Checker {
             }
         }
         let t = match t {
-            Checked::Sol(view) if self.sols[view].n > 1 => return self.sol_index(view, e, index, ctx),
+            Checked::Sol(view) if self.sols[view].n > 1 || self.sols[view].list.is_some() => return self.sol_index(view, e, index, ctx),
             Checked::Sol(view) => Checked::Val(self.sol_values(view, e)?),
             other => other,
         };
@@ -291,6 +311,14 @@ impl Checker {
             if matches!(v.ty, Ty::ComplexList(_)) {
                 let idx = self.index_expr(index, v, ctx)?;
                 return self.clist_index(v.clone(), idx, e);
+            }
+            if let Ty::VList(el) = &v.ty {
+                // ps[i]: the i-th vector or matrix (D281)
+                let idx = self.index_expr(index, v, ctx)?;
+                let mut r = ir(I::ExprKind::Index(Box::new(v.clone()), Box::new(idx)), (**el).clone(), line);
+                r.hint = v.hint.clone();
+                r.sf = v.sf;
+                return Ok(r);
             }
         }
         let t = match t {
@@ -306,5 +334,65 @@ impl Checker {
         r.hint = hint;
         r.sf = sf;
         Ok(r)
+    }
+
+    /// [<1, 2> m, <3, 4> m] or [A, B]: a list of vectors or matrices, all the same size and units (D281).
+    fn vlist_literal(&mut self, e: &A::Expr, vals: Vec<I::Expr>, items: &[A::Expr]) -> CResult<I::Expr> {
+        let first = vals[0].ty.clone();
+        let (n, r, c) = match &first {
+            Ty::Vec { dims: Some(_), .. } => {
+                return Err(self.err(format!("a list of vectors needs one unit for all components; this is {}",
+                                            self.type_desc(&first)), items[0].span,
+                                    Some("put each component in its own list instead".into())));
+            }
+            Ty::Vec { n, .. } => (*n, 0, 0),
+            Ty::Mat { r, c, .. } => (0, *r, *c),
+            _ => unreachable!(),
+        };
+        let dim = DExpr::fresh();
+        for (v, node) in vals.iter().zip(items) {
+            let same = match &v.ty {
+                Ty::Vec { n: m, dims: None, .. } => *m == n && n > 0,
+                Ty::Mat { r: r2, c: c2, .. } => (*r2, *c2) == (r, c) && n == 0,
+                _ => false,
+            };
+            if !same {
+                return Err(self.err(format!("all elements of a list must be the same kind of value: this one is {} \
+                                             but the first is {}", self.type_desc(&v.ty), self.type_desc(&first)),
+                                    node.span, None));
+            }
+            let d = ty_dim(&v.ty).unwrap();
+            self.unify_or(&dim, &d, |c| format!("all elements of a list need the same units; this one is {} but \
+                                                 earlier ones are {}", c.desc(&d), c.desc(&dim)), node.span, None)?;
+        }
+        let elem = if n > 0 { Ty::Vec { n, dim: Some(dim), dims: None } } else { Ty::Mat { r, c, dim } };
+        let hint = vals.first().and_then(|v| v.hint.clone());
+        let sf = minsf(&vals.iter().collect::<Vec<_>>());
+        let direct = written_code(&vals);
+        let mut out = ir(I::ExprKind::List(vals), Ty::VList(Box::new(elem)), e.span.line);
+        out.hint = hint;
+        out.sf = sf;
+        out.direct = direct;
+        Ok(out)
+    }
+
+    /// [1 + 2i, 3i]: a list of complex numbers sharing one unit (D281).
+    fn clist_literal(&mut self, e: &A::Expr, vals: Vec<I::Expr>, items: &[A::Expr]) -> CResult<I::Expr> {
+        let dim = DExpr::fresh();
+        for (v, node) in vals.iter().zip(items) {
+            if !matches!(v.ty, Ty::Num(_) | Ty::Complex(_)) {
+                return Err(self.err(format!("a list of complex numbers can't hold {}", self.type_desc(&v.ty)),
+                                    node.span, None));
+            }
+            let d = ty_dim(&v.ty).unwrap();
+            self.unify_or(&dim, &d, |c| format!("all elements of a list need the same units; this one is {} but \
+                                                 earlier ones are {}", c.desc(&d), c.desc(&dim)), node.span, None)?;
+        }
+        let hint = vals.iter().find_map(|v| v.hint.clone());
+        let sf = minsf(&vals.iter().collect::<Vec<_>>());
+        let mut out = ir(I::ExprKind::List(vals), Ty::ComplexList(dim), e.span.line);
+        out.hint = hint;
+        out.sf = sf;
+        Ok(out)
     }
 }

@@ -185,7 +185,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
     }
     w.s(py_base_dir);
     w.u(ccalls.len() as u64);
-    for CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map } in ccalls {
+    for CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map, cpp } in ccalls {
         w.s(lib);
         w.s(symbol);
         w.s(display);
@@ -200,6 +200,7 @@ pub fn write(module: &Module, t: &GenTables, source: &str, file_name: &str) -> V
         w.b(*rint);
         w.f(*rfac);
         w.b(*map);
+        w.b(*cpp);
     }
     w.b(module.uses_uncertainty);
     w.u(module.funcs.len() as u64);
@@ -446,8 +447,8 @@ pub fn read(bytes: &[u8]) -> RR<Blob> {
             let (fac, len_of) = (r.f()?, r.u()? as usize);
             params.push(CParam { name, kind, fac, len_of });
         }
-        let (rint, rfac, map) = (r.b()?, r.f()?, r.b()?);
-        tables.ccalls.push(CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map });
+        let (rint, rfac, map, cpp) = (r.b()?, r.f()?, r.b()?, r.b()?);
+        tables.ccalls.push(CCallSite { lib, symbol, display, by_ref, params, rint, rfac, map, cpp });
     }
     let uses_uncertainty = r.b()?;
     let n = r.n()?;

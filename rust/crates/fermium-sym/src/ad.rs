@@ -112,10 +112,11 @@ fn collect_reads(body: &[A::Stmt], out: &mut HashSet<String>) {
                     }
                 }
             }
-            S::IndexAssign { target, index, value, index2, .. } => {
+            S::IndexAssign { target, index, value, index2, rest, .. } => {
                 out.insert(target.clone());
                 expr_reads(index, out);
                 expr_reads(value, out);
+                rest.iter().for_each(|e| expr_reads(e, out));
                 if let Some(i) = index2 {
                     expr_reads(i, out);
                 }
@@ -323,9 +324,12 @@ impl Ad<'_> {
                 }
                 out.push(s.clone());
             }
-            S::IndexAssign { target, index, value, index2, .. } => {
+            S::IndexAssign { target, index, value, index2, rest, .. } => {
                 let mut names = free_names(value);
                 names.extend(free_names(index));
+                for r in rest {
+                    names.extend(free_names(r));
+                }
                 if let Some(i2) = index2 {
                     names.extend(free_names(i2));
                 }

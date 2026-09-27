@@ -185,6 +185,37 @@ pub fn format_vec(p: &[f64], f: &PrintFmt) -> String {
     format!("<{}>{unit}", vals.join(", "))
 }
 
+/// A list of vectors or matrices (spec C1, D281): `[<1, 2>, <3, 4>] m`, `[[[1, 0], [0, 1]], …] N/m`. Every entry
+/// in one number style and the unit once, as for a matrix; `k` numbers per element (a vector of k components, or
+/// an r×c matrix with `cols` = c). More than 12 elements show the first 5 and the last 3, like a list.
+pub fn format_vlist(p: &[f64], k: usize, cols: Option<usize>, f: &PrintFmt) -> String {
+    let n = if k == 0 { 0 } else { p.len() / k };
+    let (vals, unit) = seq_values(f, p);
+    let elem = |i: usize| -> String {
+        let v = &vals[i * k..i * k + k];
+        match cols {
+            Some(c) if c > 0 => {
+                let rows: Vec<String> = v.chunks(c).map(|r| format!("[{}]", r.join(", "))).collect();
+                format!("[{}]", rows.join(", "))
+            }
+            _ => format!("<{}>", v.join(", ")),
+        }
+    };
+    let mut shown: Vec<String> = if n > 12 {
+        (0..5).chain(n - 3..n).map(elem).collect()
+    } else {
+        (0..n).map(elem).collect()
+    };
+    if n > 12 {
+        shown.insert(5, "…".into());
+    }
+    let mut s = format!("[{}]{unit}", shown.join(", "));
+    if n > 12 {
+        s.push_str(&format!("  ({n} {})", if cols.is_some() { "matrices" } else { "vectors" }));
+    }
+    s
+}
+
 /// A vector with a unit per component: `<1 m, 2 m/s>` (whole numbers bare only if every default one is).
 pub fn format_mvec(p: &[f64], fs: &[PrintFmt]) -> String {
     let mut xs = Vec::new();

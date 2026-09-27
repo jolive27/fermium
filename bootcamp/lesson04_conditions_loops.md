@@ -170,7 +170,7 @@ print "half-life is between", years - 1, "and", years, "years"
 half-life is between 6 and 7 years
 ```
 
-⚠️ If the condition never becomes false, the loop runs forever (an **infinite loop**). If your program seems stuck, press **Control + C**: Fermium stops it and prints `stopped by Ctrl+C`. Then look at the loop: does something inside it change the condition?
+⚠️ If the condition never becomes false, the loop runs forever (an **infinite loop**). If your program seems stuck, press **Control + C**: Fermium stops it and prints `stopped by Ctrl+C`. (In a Jupyter notebook, use **Kernel → Restart Kernel**: the interrupt button doesn't stop a running cell yet.) Then look at the loop: does something inside it change the condition?
 
 ## `break` and `continue`
 

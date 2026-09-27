@@ -50,6 +50,11 @@ impl Checker {
         self.estack.push(e as *const A::Expr);
         let r = self.expr_dispatch(e, ctx);
         self.estack.pop();
+        // a unit power too large to track exactly: the error is at the innermost expression that made it (red
+        // team 13), whatever else went wrong after it
+        if let Some(err) = self.take_overflow(e.span) {
+            return Err(err);
+        }
         let mut r = r?;
         if let Checked::Val(v) = &mut r {
             v.line = e.span.line;
@@ -123,6 +128,31 @@ impl Checker {
                       -> CResult<I::Expr> {
         let u = self.resolve_unit(unit)?;
         let v = self.expr(value, ctx)?;
+        if let Ty::VList(el) = &v.ty {
+            // [<1, 2>, <3, 4>] m: the unit of every element (D281)
+            let vdim = ty_dim(el).unwrap();
+            let vd = self.u.norm(&vdim);
+            if u.affine() || (vd.is_concrete() && !vd.konst.is_dimensionless()) {
+                return Err(self.err(format!("this already has units ({}), so [{}] would multiply them",
+                                            self.desc(&vdim), unit.text), e.span, None));
+            }
+            self.u.unify(&vdim, &DExpr::of(DIMLESS));
+            let dim = DExpr::of(u.dim);
+            let elem = match &**el {
+                Ty::Vec { n, .. } => Ty::Vec { n: *n, dim: Some(dim), dims: None },
+                Ty::Mat { r, c, .. } => Ty::Mat { r: *r, c: *c, dim },
+                other => other.clone(),
+            };
+            let line = e.span.line;
+            let (sf, direct) = (v.sf, v.direct);
+            let mut r = ir(I::ExprKind::Bin(I::BinOp::Mul, Box::new(v),
+                                            Box::new(ir(I::ExprKind::Const(u.factor), dimless_num(), line))),
+                           Ty::VList(Box::new(elem)), line);
+            r.hint = Some(hint_of(&u));
+            r.sf = sf;
+            r.direct = direct;
+            return Ok(r);
+        }
         self.need_numlike(&v, value, "this value", true)?;
         let line = e.span.line;
         match &v.ty {

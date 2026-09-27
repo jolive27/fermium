@@ -1,0 +1,5 @@
+# Greek and subscript names map to ASCII C++ names (λ_max is lambda_max), so fmt --pretty/--ascii round-trip
+import cpp "libphys4.so" header "phys.hpp":
+    phys::λ_max(T [K]) -> [m]
+    phys::energy(m [kg]) -> [J] as E₀
+print λ_max(5772 K) in nm to 4 digits, E₀(1 kg) to 4 digits

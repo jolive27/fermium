@@ -74,7 +74,29 @@ fn call_once(site: &CCallSite, fp: *const c_void, nums: &[f64], lists: &[Option<
     // SAFETY: the symbol was found in the library when the program was checked, and the signature the program
     // declares is the contract (as in C, a wrong declaration is the program's error)
     let r = unsafe { cffi::call(fp, &args, ret) }?.num();
+    if site.cpp {
+        cpp_error(site)?;
+    }
     Ok(if site.rfac != 1.0 { r * site.rfac } else { r })
+}
+
+/// After a call of a C++ wrapper (C4, D290): the exception the C++ function threw, if it threw one. The wrapper
+/// catches it (an exception must not unwind into Fermium), keeps its message and returns 0;
+/// `int fermium_cpp_error(char *buf, int n)` copies the message (empty: no exception) and clears it.
+fn cpp_error(site: &CCallSite) -> Result<(), String> {
+    let Ok(Some(ef)) = cffi::symbol(&site.lib, "fermium_cpp_error") else {
+        return Err(format!("{}: the C++ wrapper {} has no fermium_cpp_error (delete it so that it is made again)",
+                           site.display, site.lib));
+    };
+    let mut buf = [0u8; 512];
+    let args = [CArg::Ptr(buf.as_mut_ptr() as *const c_void), CArg::I32(buf.len() as i32)];
+    // SAFETY: the wrapper Fermium generated defines it with this signature and writes at most n bytes
+    let n = unsafe { cffi::call(ef as *const c_void, &args, CRet::I32) }?.num() as usize;
+    if n == 0 {
+        return Ok(());
+    }
+    let msg = String::from_utf8_lossy(&buf[..n.min(buf.len() - 1)]).into_owned();
+    Err(format!("{}: {msg}", site.display))
 }
 
 impl<'m, P: Printer> Interpreter<'m, P> {

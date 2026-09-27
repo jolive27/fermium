@@ -1289,6 +1289,174 @@ propagated) and `interp` (segment chosen by the values) now work; the other list
 look alike.
 - **Alternatives:** a common exponent for the whole vector (harder to read when entries differ in size).
 
+## D285. Multiple dispatch (C5): versions chosen at compile time by arity, dimensions and kinds
+- **What:** a second top-level definition of a function name with a different signature adds a *version*
+  (`energy(m [kg], v [m/s])`, `energy(λ [m])`, `energy(f [Hz])`); a call uses the version its checked argument
+  types fit. A parameter can now also name a kind, `r: vector [m]` (`number`, `vector`, `list`, `complex`),
+  in the `x: list [m]` syntax of `import c` (D275). Fit: the same number of arguments; a `[unit]` needs that
+  dimension (a number, list or complex; a vector only with `: vector`, every component); a kind needs that kind (a
+  list also fits `: number`, element by element); an unannotated parameter takes anything; a function argument
+  fits only an unannotated parameter the body calls, and a value never fits a parameter the body surely calls.
+  *Specificity* per parameter: 0 unannotated, +1 for a kind, +1 for a unit (a list in a `: number` slot scores
+  the kind 0). The chosen version must be at least as specific as every other fitting version in every parameter
+  and more specific in one; otherwise the call is ambiguous: a compile-time error naming two such versions with
+  their lines. No fit: a one-line error (`no version of energy takes (time [s])`, or `energy takes 1 or 2
+  arguments`) whose hint lists every version with its line. A *same signature* (arity, kinds, dimensions of the
+  units) replaces the earlier version, which is exactly v1's redefinition (`f(x) = 2 x` then `f(x) = 3 x`).
+- **Mechanism:** `FuncInfo.versions` (fermium-check `dispatch.rs`): each new definition gets a new list, a
+  snapshot of the versions visible there, so a function passed or bound earlier keeps what it meant. `call_user`
+  and `instantiate` call `pick_version` first; the chosen version is instantiated exactly like any function
+  (one IR function per version and argument types), so the IR, both back ends and `fermium build` are
+  unchanged and the choice costs nothing at run time. Inside a generic function the argument types are concrete
+  per instance, so each instance chooses again. When a dimension isn't known yet (the generic check of a function
+  never called), several fitting versions give "can't tell which version", which that check ignores. `f'`,
+  `d/dx f` and `∂/∂x f` of a function with versions are a new function whose versions are the derivatives of
+  the versions that have that parameter (or one parameter for `'`); plotting, `∫`, passing to functions and
+  `module.name` go through the same calls. Every version is checked when never called (`check_uncalled`) and
+  gets its module's name. The LSP records each call's choice (`Checker.dispatch_sites`), so hover over a call
+  shows the version used there; `print f` and the REPL's `vars` list all versions.
+- **Why:** it is Julia's core idea (spec C5), and in a units language the dimension is the natural thing to
+  dispatch on: the photon energy from a wavelength or a frequency is one name, as on paper. Choosing at compile
+  time keeps the zero-cost promise and needs no run-time type tags. Before C5, a redefinition silently replaced
+  the function; no conformance program depends on that for a *different* signature (the full suite is
+  unchanged, 3334 + 32), and keeping the replacement for the same signature keeps every v1 program the same.
+- **Alternatives:** Julia's rule of the most specific *type* with a type lattice (Fermium has only a handful of
+  kinds, and dimensions are exact, so per-parameter scores suffice); detecting ambiguity when the definitions are
+  made (it would reject pairs that no call ever makes ambiguous; the call-time error names both anyway);
+  run-time dispatch (not needed: every type is known at compile time); letting a unit annotation outrank a kind
+  (arbitrary; equal scores are reported as ambiguous instead). Not yet: differentiating a formula that calls a
+  function with versions, versions added to an imported function (still "defined again" as before), the Python
+  API's `fermium.compile` (checks arguments against the last version), and Fermium 1.5.
+
+## D280. The LLVM back end frees lists: a mark-and-sweep collector with frame epochs (spec C1, memory)
+- **What:** the compiled code's lists, text lists, texts made at run time and Obj values (the tree-walker's values it holds: lists of
+complex numbers or vectors, data sets) are registered when made and freed by a collector (`llvm/rt.rs`, memory
+section; code generation in `llvm/gc.rs`). Roots are variable slots: fm_main registers the module's list variables
+and its own slots, and every compiled function whose loops may make lists registers its list slots on entry
+(`fm_gc_enter`: an array of slot addresses on its stack) and unregisters on each return. Collections happen only at
+safe points, the top of an iteration of such a loop when the allocator has set a flag (`gc_flag`, one load and a
+cold branch), where the function holds no list in a register (a `for … in` keeps its copy of the list in a hidden
+registered slot). A collection frees only lists made after the innermost registered frame was entered (its
+epoch): a caller in the middle of an expression may hold a temporary (`f(2 xs, g(y))` while g loops), and those
+are all older. The main program's frame has epoch 0. A function without such loops is never interrupted by a
+collection, so it needs no frame; nothing is collected while a parallel for runs. A collection runs after as many
+allocations (or bytes) as were live after the last one, at least 20 000 lists or 64 MB. `FERMIUM_GC_STATS=1`
+reports collections and peak memory; `FERMIUM_GC_STRESS=1` collects at every safe point (the whole conformance
+suite agrees with the tree-walker under it: `rust/tools/llvm_diff.py --bin` a wrapper that sets it).
+- **Why:** the tree-walker's lists were already reference counted (DIVERGENCES "Lists are freed"), but the LLVM
+back end kept every list until the program ended, like v1's compiled code: a loop making 3×10⁶ small lists
+reached 300 MB (now 52 MB; `memory_loop.fm`, 10⁶ lists of 100 numbers, peaks at ~76 MB instead of ~800 MB).
+- **Alternatives:** reference counting in the generated code (retain/release on every store, argument and
+temporary: much more code in compile.rs, and a cost on every list operation); a conservative scan of the machine
+stack (not portable, and LLVM may keep only derived pointers); an arena per statement (lists stored in variables
+outlive statements). Texts made at run time (`"run " + str(i)`) are collected the same way: text-id slots are roots
+(kind 4), the ids in surviving text lists are marked, and a freed id is reused (the module's own texts are never
+freed); 2×10⁶ labels in a loop stay at ~55 MB.
+
+## D281. Lists of vectors, matrices, complex numbers and text (spec C1)
+- **What:** a list may hold vectors (all the same length and units: `[<1, 2> m, <3, 4> m]`, type `VList`), matrices
+(same size and units: `[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or `[A, B]`), complex numbers (`[1 + 2i, 3i]`,
+the existing `ComplexList`) and text. For each: written out, `push`, `xs[i]`, `xs[end]`, `xs[i] = …` (and `+=`),
+`len`, `for x in xs`, `clear`, `print`; a unit after the list applies to every element; a list of vectors or
+matrices times or over a number; `sum` and `mean` of a list of vectors or matrices. A variable set to `[]` becomes
+the kind of the first value pushed (`vel = []` then `push(vel, <1, 0> m/s)`), checked from then on (units per
+element type, sizes). The tree-walker holds these as values (`Value::VList`, `CList`, `TextList`); the LLVM back end
+holds lists of vectors and complex numbers as Obj values and hands the statements and expressions that use them to
+the tree-walker (mixed mode), so the rest of the program stays compiled (N-body code over lists of vectors runs
+compiled apart from those accesses).
+- **Why:** reaction networks and N-body problems are written as loops over lists of state vectors; before this,
+users kept one list per component.
+- **Kept from v1:** a list mixing real and complex numbers (`[1i, 2]`) is still the error "a list element must be
+a number, but it is a complex number" (conformance golden ae4d6aeeae8f); write `2 + 0i`. A list of vectors with a
+different unit per component is refused (put each component in its own list).
+- **Alternatives:** a general `List(Ty)` of any element type (nested lists, lists of lists): more checker
+surface than C1 needs; N-dimensional arrays (D283) cover grids. Compiling list-of-vector operations in LLVM
+natively (a flat buffer with a stride) is the performance follow-up.
+
+## D282. `solve` with a list of unknowns (spec C1)
+- **What:** an unknown whose initial value is a list of numbers or of vectors (one unit for all elements) is a list
+unknown: its state variables in the right-hand side are lists (`List`, `VList`), and its size is the initial value's
+length when the solve runs. The checker puts list unknowns' state slots last in the layout (`SolveExtra::lists`),
+so the other unknowns keep offsets known at compile time; a list unknown's `SolView` holds positions in the layout
+(`SolView::list`) and `N(t)` becomes the built-in `__sol_list(solution, slot, t, derivative?, k, format)`, which
+finds the offset from the sizes stored with the solution (`SolData::lens`). The tree-walker flattens the initial
+values, records each list state variable's size for the right side's evaluations, and checks that the right side
+returns as many numbers as the unknowns hold. `absolute` gives one value per unknown's units; a list unknown's value
+is repeated over its elements. The LLVM back end hands the whole `solve` statement to the tree-walker (mixed mode)
+and gets the solution back as a handle into the tree-walker's table (`from_value` of kind H); `N(t)` is then a
+built-in call, so the rest of the program stays compiled.
+- **Why:** spec C1: reaction networks and N-body problems written as loops. One equation per species (the radon
+chain in §10) doesn't scale to a 12-isotope network or a 10-body problem.
+- **Alternatives:** unrolling at compile time (needs the length at compile time, which a list built by `push` in a
+loop doesn't have); a compiled right-hand side over lists in LLVM (the performance follow-up: the right side runs at
+tree-walker speed now); `values(N)` and `plot N` (a list per step; left out for now, with a clear error; `N[end]` is
+`N` at the last time).
+
+## D283. N-dimensional arrays: `fill(value, n1, n2, …)`, `A[i, j, k]`, entry-by-entry arithmetic (spec C1)
+- **What:** a new type `Array { rank, dim }` (2 ≤ rank ≤ 4; every entry shares one unit; the shape is a run-time
+fact, the rank a compile-time one). `fill(value, n1, …, nr)` makes one (the value's unit is the array's; one size
+gives a list), `A[i, j, …]` reads an entry and `A[i, j, …] = x` (or `+=`) sets one, with exactly `rank` indexes;
+`+ - * /` work entry by entry with numbers and arrays of the same rank (same shape checked when it runs; `+`/`-` need
+the same units, `*`/`/` multiply them); `size(A)`, `size(A, k)`, `sum`, `mean`, `max`, `min`, `abs`, `copy`. `B = A`
+shares the array, as lists do (D26). The parser now reads any number of indexes (`A[i, j, k]`, nested Index nodes as
+for `M[i, j]`), and `IndexAssign` keeps the ones after the second in a new field `rest` (empty for every program
+v1 accepts, so the AST dump and the formatter are unchanged for them). The tree-walker holds `Value::NdArr`
+(row-major); the LLVM back end holds arrays as Obj values: `A[i, j]` reads and writes (and the other array
+built-ins, `len`/`sum`/`mean` of a list of vectors, and `N(t)` of a list unknown) are calls through `fm_builtin` with
+the array as an argument (it is shared, so a write needs no copy back), and the other constructs that touch one are
+handed to the tree-walker; the collector counts an Obj's real size so arrays made in a loop are freed in time.
+- **Why:** spec C1 asks for N-dimensional arrays with units; physics grids (heat, diffusion, Poisson, lattice
+models) need more than 16×16 and more than 2 indexes. `fill(value, dims…)` reads like the notebook ("fill a 50×50
+grid with 300 K"), puts the unit in the value where the unit rule already applies, and is Julia's `fill(x, dims…)`.
+- **Alternatives:** growing matrices past 16×16 (they are straight-line code for linear algebra, D195, and their
+products and inverses mean something an array's don't); `zeros(n1, n2, n3) K` (zeros(r, c) is already a matrix; a
+unit after a call isn't the unit rule); `A[i][j][k]` only (kept working, but `A[i, j, k]` is what physicists write);
+NumPy-style broadcasting, slices and vectorized functions (next steps; each needs its own unit rules).
+
+## D290. C++ interop (C4): a generated extern "C" wrapper per import, compiled by the system's C++ compiler and cached
+- **What:** `import cpp "libphys.so" header "phys.hpp":` followed by `import c` signatures whose names may be
+qualified (`phys::Particle::compton_wavelength(m [kg]) -> [m]`) and may end with `as name`; `import cpp header
+"cmath":` without a library for header-only code. At check time Fermium writes one C++ file per import: for each
+signature an `extern "C"` function `fermium_cpp_k` taking C types (`double`, `int`, `double *`) that converts
+`&phys::f` to the function-pointer type of the declared signature (`double (*)(double, int)`, the result `double`
+or `int`) by passing it to a helper overloaded on that type (one helper per `const double *`/`double *` spelling
+of the lists, up to three lists), calls it inside `try`, and on an exception keeps "the C++ function phys::f threw
+an exception: what()" in a thread-local buffer and returns 0. `int fermium_cpp_error(char *, int)` hands the
+message over and clears it. The file is compiled by `$CXX`, else the first of c++, g++, clang++ that runs, with
+`-std=c++17 -O2 -fPIC -shared -MMD`, `-I` the program's and the header's folders, the library by its path with
+an rpath, `-Wl,--no-undefined` on Linux, then `$CXXFLAGS`. The result goes to `$FERMIUM_CACHE_DIR/cpp` (else
+`$XDG_CACHE_HOME/fermium/cpp`, `~/.cache/fermium/cpp`, macOS `~/Library/Caches/fermium/cpp`) as `w<FNV-1a 64 of
+the source, the named header's text, the library path, $CXX, $CXXFLAGS>.so`, written under a temporary name and
+renamed (parallel runs don't see half a file); it is reused while no file in its `-MMD` list and not the library
+is newer than it. Each signature then becomes a C3 function of the wrapper (`CFuncRef` with lang "C++"): units
+checked at every call, lists, elementwise maps, `fermium build`. `CCallSite.cpp` marks the call sites: after each
+call, eval_c.rs asks `fermium_cpp_error` and turns a message into a run-time error at the call's line, so the
+LLVM back end sends C++ calls through its callback (≈0.6 µs a call) instead of calling directly. Compiler errors
+are translated into one line on the signature they concern (the error's line in the generated file says which):
+undeclared name → "the header declares no function", a pointer-to-member in the output → "a member function,
+which needs an object", no conversion → "no overload of phys::f has the C++ type double(double, int)", ambiguous,
+missing header, undefined reference at link time → "the C++ library has no definition of phys::f(double)" (or,
+with no library, "defined nowhere"); anything else gives the first error and the path of a log with the full
+output.
+- **Why:** spec C4 ("through generated C wrappers"). The function-pointer conversion makes the declared signature
+choose among overloads exactly as C++ would for `static_cast<double(*)(double)>(&f)`, deduces template
+arguments, works for static member functions, and lets the compiler check the declaration against the header,
+which C3 can't. Mangled names are compiler-specific, so calling C++ symbols without a compiler would tie Fermium
+to one ABI's mangling and still not handle inline functions or templates. Catching exceptions in the wrapper is
+required: unwinding through Rust's frames is undefined behaviour. The cache keeps the check fast (a hit needs no
+compiler: ≈40 ms for a program); `-MMD` makes edits to included headers count. The error message crosses as a
+buffer through the existing C3 call machinery, so no new runtime entry points or dependencies were needed.
+- **Alternatives:** calling the function directly in the wrapper (`return phys::f(a0, a1)`: overload resolution
+with implicit conversions would silently pick `f(int)` for a double, or `f(float)`); `static_cast` to one
+pointer type (can't accept either `const double *` or `double *` for a list); parsing the header (libclang: a
+large native dependency); a C++ compiler at run time instead of check time (errors would come late); the
+direct LLVM call with an error flag checked after it (faster, but a new runtime path in the JIT and the AOT
+runtime; left for later); a per-program wrapper instead of per import (fewer files, but more recompiles).
+Known gaps: non-static member functions and objects, references, `float`/`long`/structs/strings/`std::vector`,
+`void` results, explicit template arguments, several headers per import, `import cpp` in modules, calls inside
+`units natural`, the playground; macOS linking is written but untested; `fermium build` executables load the
+wrapper from the cache by its build-time path.
+
 ## D295. Derivatives of multi-line functions by automatic differentiation, on by default in v2.5 (spec C2)
 - **What:** `f'`, `f''`, `d/dx f`, `∂/∂v E`, `∇φ` and `∇²φ` of a function written over several lines (and of a
 one-line function or formula that calls one) are computed by forward-mode automatic differentiation as a source

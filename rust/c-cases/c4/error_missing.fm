@@ -1,0 +1,4 @@
+import cpp "libphys4.so" header "phys.hpp":
+    phys::kinetic_energy(m [kg], v [m/s]) -> [J]
+    phys::energyy(m [kg]) -> [J]
+print 1

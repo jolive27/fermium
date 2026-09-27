@@ -1,0 +1,4 @@
+import cpp "libphys4.so" header "phys.hpp":
+    phys::throws_int(x) -> number
+print throws_int(0.5)
+print throws_int(2)

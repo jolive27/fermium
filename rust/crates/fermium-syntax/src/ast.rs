@@ -216,6 +216,8 @@ impl ExprKind {
 pub struct Param {
     pub name: String,
     pub unit: Option<UnitExpr>,
+    /// `r: vector [m]`: the kind a version of a function takes (number, vector, list, complex; C5 dispatch)
+    pub kind: Option<String>,
     pub span: Span,
 }
 
@@ -299,6 +301,9 @@ pub struct CSig {
     pub ret: CRetDecl,
     /// None: no bind; Some(None): `bind(C)`; Some(Some(n)): `bind(C, name="n")`
     pub bind: Option<Option<String>>,
+    /// C++ (C4, D290): the qualified name as written (`phys::Particle::rest_energy`); `name` is then the last
+    /// component, or the `as` name after the result
+    pub cpp_name: Option<String>,
     pub span: Span,
 }
 
@@ -315,7 +320,8 @@ pub enum StmtKind {
     /// `name = value`, `+=`, `-=`, `*=`, `/=`.
     Assign { name: String, value: Expr, op: String },
     /// `xs[i] = …`, `M[i, j] = …` (D195).
-    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr> },
+    /// `rest`: indexes after the second, `A[i, j, k] = …` (N-dimensional arrays, D283; empty otherwise)
+    IndexAssign { target: String, index: Expr, value: Expr, op: String, index2: Option<Expr>, rest: Vec<Expr> },
     FuncDef { name: String, params: Vec<Param>, body: FuncBody, where_: Vec<(String, Expr)> },
     Print { items: Vec<Expr> },
     Plot { series: Vec<PlotSeries>, out: Option<String>, options: Vec<(String, PlotOpt)> },
@@ -341,8 +347,9 @@ pub enum StmtKind {
     Import { module: String, is_path: bool, alias: Option<String>, names: Option<Vec<(String, Option<String>)>> },
     /// `use python numpy as np` (D140).
     UsePython { module: String, alias: Option<String>, sigs: Vec<PySig> },
-    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275).
-    ImportC { lang: String, lib: String, sigs: Vec<CSig> },
+    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275);
+    /// `import cpp "libphys.so" header "phys.hpp":` (C4, D290: `lang` "cpp", `lib` may be empty, `header` set).
+    ImportC { lang: String, lib: String, header: Option<String>, sigs: Vec<CSig> },
 }
 
 /// An event of a solve (spec C2, D297): `when y = 0 m: y' = -0.9 y'`. `op` is `=` (either crossing), `<`, `<=`

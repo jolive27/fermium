@@ -1,0 +1,5 @@
+{
+ "stdout": "0.500\n",
+ "stderr": "exception_other.fm, line 4: throws_int: the C++ function phys::throws_int threw an exception\n    print throws_int(2)\n",
+ "exit": 1
+}

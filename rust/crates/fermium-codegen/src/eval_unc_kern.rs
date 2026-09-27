@@ -498,7 +498,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             // only the end time is uncertain: the solution doesn't depend on it
             let solv = self.ode_core(s, &y0n, t0, t1, h0, None, fr)?;
             let snap = self.snapshot(*rhs, fr);
-            self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None, unc: None },
+            self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None, unc: None },
                            fr);
             return Ok(());
         }
@@ -516,7 +516,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Ok(aug) => {
                     if nested() || self.ode_linear_enough(s, &aug, n, &srcs, y0v, vt0, t1, h0, fr)? {
                         let snap = self.snapshot(*rhs, fr);
-                        self.store_sol(*sol, SolData { sol: aug, rhs: Some((*rhs, snap)), grid: None, check: None,
+                        self.store_sol(*sol, SolData { sol: aug, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None,
                                                        unc: Some(UncSol::Lin { n, srcs }) }, fr);
                         return Ok(());
                     }
@@ -556,7 +556,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         self.line = line;
         crate::eval_calc::warn_at(line, &mc_warning("this differential equation's solution", plain_needed, nmc));
         let snap = self.snapshot(*rhs, fr);
-        self.store_sol(*sol, SolData { sol: nom, rhs: Some((*rhs, snap)), grid: None, check: None,
+        self.store_sol(*sol, SolData { sol: nom, rhs: Some((*rhs, snap)), grid: None, lens: None, check: None,
                                        unc: Some(UncSol::Mc { srcs, zs, sols, resid: RefCell::new(HashMap::new()) }) },
                        fr);
         Ok(())

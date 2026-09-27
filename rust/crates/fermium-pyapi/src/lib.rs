@@ -91,8 +91,15 @@ pub fn parse_dim_key(s: &str) -> Option<Dim> {
     let mut e = [Rational64::from_integer(0); 7];
     for (i, p) in parts.iter().enumerate() {
         e[i] = match p.split_once('/') {
-            Some((n, d)) => Rational64::new(n.trim().parse().ok()?, d.trim().parse().ok()?),
-            None => Rational64::from_integer(p.trim().parse().ok()?),
+            Some((n, d)) => {
+                // no panic on a zero denominator, no overflow on i64::MIN (red team 13)
+                let (n, d): (i64, i64) = (n.trim().parse().ok()?, d.trim().parse().ok()?);
+                if d == 0 || n == i64::MIN || d == i64::MIN {
+                    return None;
+                }
+                Rational64::new(n, d)
+            }
+            None => Rational64::from_integer(p.trim().parse().ok().filter(|v: &i64| *v != i64::MIN)?),
         };
     }
     Some(Dim(e))

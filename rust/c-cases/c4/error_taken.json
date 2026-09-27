@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_taken.fm, line 3: half already means something in this program, so it can't also be the C++ function half\n    import cpp \"libphys4.so\" header \"phys.hpp\":\n    ^^^^^^\n  hint: call it by another name: add  as my_half  after its result\n",
+ "exit": 1
+}

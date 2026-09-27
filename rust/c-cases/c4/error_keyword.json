@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_keyword.fm, line 2: solve is a Fermium keyword, so the program needs another name for the C++ function phys::solve\n        phys::solve(x) -> number\n              ^^^^^\n  hint: rename it after the result, like  … -> [J] as my_solve\n",
+ "exit": 1
+}

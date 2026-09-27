@@ -869,7 +869,7 @@ impl Checker {
     /// M[i, j] = x and v[i] = x (also +=, …): the variable gets a copy with that entry replaced, so a matrix can be
     /// filled in a loop (D195). Indexes may be known only at run time (checked then).
     pub fn entry_assign(&mut self, b: I::SymId, s: &A::Stmt, ctx: &mut Ctx) -> CResult<I::Stmt> {
-        let A::StmtKind::IndexAssign { target: name, index, index2, value, op } = &s.kind else { unreachable!() };
+        let A::StmtKind::IndexAssign { target: name, index, index2, value, op, .. } = &s.kind else { unreachable!() };
         let name_ast = crate::ast_ext::name(name, s.span);
         let tgt = self.expr(&name_ast, ctx)?;
         let bty = self.module.syms[b].ty.clone();

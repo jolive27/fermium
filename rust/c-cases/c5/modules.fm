@@ -1,0 +1,13 @@
+# versions defined in a module: module.name picks one per call, and so do imported names
+import "lib/photons.fm"
+print photons.energy(500 nm) in eV
+print photons.energy(1 PHz) in eV
+print photons.energy'(500 nm)
+
+import "lib/photons.fm" as ph
+print ph.momentum(500 nm)
+print ph.momentum(1 eV)
+
+# a module's function with several versions passed to a function of the program
+twice(F, x) = 2 F(x)
+print twice(ph.energy, 1 PHz) in eV

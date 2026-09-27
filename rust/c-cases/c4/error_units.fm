@@ -1,0 +1,5 @@
+# units are checked at every call, before anything runs
+import cpp "libphys4.so" header "phys.hpp":
+    phys::kinetic_energy(m [kg], v [km/s]) -> [J]
+print "never printed"
+print kinetic_energy(2 kg, 3 s)

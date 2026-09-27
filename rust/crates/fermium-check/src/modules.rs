@@ -451,7 +451,8 @@ fn encode_stmt(s: &mut I::Stmt, k: usize) {
                 match it {
                     I::PrintItem::Num(e, _) | I::PrintItem::List(e, _) | I::PrintItem::Complex(e, _)
                     | I::PrintItem::Vec(e, _) | I::PrintItem::MixedVec(e, _) | I::PrintItem::Mat(e, _)
-                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
+                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::VList(e, _) | I::PrintItem::Array(e, _)
+                    | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
                     | I::PrintItem::TextVar(e) | I::PrintItem::Data(e, _) => encode_expr(e, k),
                     I::PrintItem::Text(_) => {}
                 }
@@ -633,7 +634,8 @@ fn for_each_stmt_expr(s: &I::Stmt, f: &mut dyn FnMut(&I::Expr)) {
                 match it {
                     I::PrintItem::Num(e, _) | I::PrintItem::List(e, _) | I::PrintItem::Complex(e, _)
                     | I::PrintItem::Vec(e, _) | I::PrintItem::MixedVec(e, _) | I::PrintItem::Mat(e, _)
-                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
+                    | I::PrintItem::ComplexList(e, _) | I::PrintItem::VList(e, _) | I::PrintItem::Array(e, _)
+                    | I::PrintItem::TextList(e) | I::PrintItem::Bool(e)
                     | I::PrintItem::TextVar(e) | I::PrintItem::Data(e, _) => f(e),
                     I::PrintItem::Text(_) => {}
                 }
@@ -918,11 +920,14 @@ impl Checker {
         let names: Vec<(String, Binding)> =
             self.scopes[scope].names.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
         for (name, b) in names {
-            if let Binding::Func(fi) = b {
-                if self.funcs[fi].module.is_none() {
-                    self.funcs[fi].module = Some(m);
-                    if self.funcs[fi].display_name == name {
-                        self.funcs[fi].display_name = format!("{stem}.{name}");
+            if let Binding::Func(head) = b {
+                for fi in self.versions_of(head) {
+                    // every version of a function with several (C5)
+                    if self.funcs[fi].module.is_none() {
+                        self.funcs[fi].module = Some(m);
+                        if self.funcs[fi].display_name == name {
+                            self.funcs[fi].display_name = format!("{stem}.{name}");
+                        }
                     }
                 }
             }
@@ -965,7 +970,7 @@ impl Checker {
                        -> CResult<I::Expr> {
         let n0 = self.diags.warnings.len();
         let added = self.in_module_call.insert(info);
-        let r = self.instantiate(info, args, node, cache);
+        let r = self.instantiate_one(info, args, node, cache);
         if added {
             self.in_module_call.remove(&info);
         }

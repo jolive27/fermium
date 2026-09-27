@@ -185,6 +185,10 @@ pub enum PrintItem {
     MixedVec(Expr, Vec<usize>),
     Mat(Expr, usize),
     ComplexList(Expr, usize),
+    /// A list of vectors or matrices (the element format).
+    VList(Expr, usize),
+    /// An N-dimensional array (D283).
+    Array(Expr, usize),
     TextList(Expr),
     Bool(Expr),
     /// A constant text (index into the text table).
@@ -267,6 +271,9 @@ pub struct SolveExtra {
     pub is_complex: bool,
     /// the source line (PDE warnings)
     pub line: u32,
+    /// some unknowns are lists (spec C1, D282): their sizes come from the initial values when the solve runs
+    /// (the list unknowns' slots are last in the layout; `atol` then has one value per list slot)
+    pub lists: bool,
 }
 
 /// One `when` event of a solve (D297): g = lhs − rhs (an Ode lambda with one output), the new state (an Ode
@@ -402,6 +409,9 @@ pub struct CCallSite {
     pub rfac: f64,
     /// some number parameter gets a list: the call is made per element and gives a list
     pub map: bool,
+    /// a generated C++ wrapper (C4, D290): after each call, `fermium_cpp_error` in the same library says whether the
+    /// C++ function threw
+    pub cpp: bool,
 }
 
 /// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
@@ -567,7 +577,8 @@ pub fn stmt_parts(s: &Stmt) -> (Vec<&Expr>, Vec<&Vec<Stmt>>) {
 pub fn print_item_expr(it: &PrintItem) -> Option<&Expr> {
     match it {
         PrintItem::Num(e, _) | PrintItem::List(e, _) | PrintItem::Complex(e, _) | PrintItem::Vec(e, _)
-        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::TextList(e)
+        | PrintItem::MixedVec(e, _) | PrintItem::Mat(e, _) | PrintItem::ComplexList(e, _) | PrintItem::VList(e, _) | PrintItem::Array(e, _)
+        | PrintItem::TextList(e)
         | PrintItem::Bool(e) | PrintItem::TextVar(e) | PrintItem::Data(e, _) => Some(e),
         PrintItem::Text(_) => None,
     }

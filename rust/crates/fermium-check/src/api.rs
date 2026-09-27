@@ -78,6 +78,14 @@ impl Checker {
                 format!("a {r}×{c} matrix of {}", self.num_text(dim, hint).replace("a plain number", "plain numbers"))
             }
             Ty::TextList => "a list of text".into(),
+            Ty::Array { rank, dim } => {
+                format!("a {rank}-D array of {}", self.num_text(dim, hint).replace("a plain number", "plain numbers"))
+            }
+            Ty::VList(el) => {
+                let d = self.type_text(el, hint);
+                format!("a list of {}", d.strip_prefix("a ").unwrap_or(&d).replacen("vector", "vectors", 1)
+                    .replacen("matrix", "matrices", 1))
+            }
             Ty::ComplexList(d) => format!("a list of complex numbers of {}",
                                           self.num_text(d, hint).replace("a plain number (no units)", "plain numbers")),
             Ty::Str => "text".into(),

@@ -1,0 +1,3 @@
+import cpp "libphys4.so" header "phys.hpp":
+    physics::energy(m [kg]) -> [J]
+print 1

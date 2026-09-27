@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_push_units.fm, line 3: can't add length [m] to a list of speed [m/s]\n    push(vel, <0, 1> m)\n              ^^^^^^^^\n",
+ "exit": 1
+}

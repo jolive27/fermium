@@ -4,6 +4,63 @@ Fermium 2.5 grows the language on the Rust compiler of 2.0 (spec Phase C). Progr
 same, except the documented divergences below: the conformance suite still holds every program to Fermium 1.5's
 output (3324 pass, 42 documented divergences). This file lists each Phase C item as it lands.
 
+## Several versions of one function: multiple dispatch (C5, DECISIONS D285)
+
+One function name can have several versions, and each call uses the one its arguments fit, by their number,
+units and kind. The choice is made when the program is checked, so it costs nothing at run time:
+
+```text
+energy(m [kg], v [m/s]) = ½ m v²
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+print energy(2 kg, 3 m/s), energy(500 nm) in eV, energy(1 GHz)   # 9 J 2.48 eV 6.63×10⁻²⁵ J
+
+size(r: vector) = |r|          # a parameter can name a kind: number, vector, list or complex
+size(xs: list) = len(xs)
+```
+
+- The most specific version wins (an annotated parameter beats an unannotated one). No fitting version, or two
+  that fit equally well, is a one-line error before the program runs that lists the versions with their lines.
+- Works in generic functions (each call chooses again), with derivatives (`energy'`, `d/dx U`), `∫`, `plot`,
+  functions passed to functions and modules (`photons.energy(500 nm)`); the editor's hover shows the version a
+  call uses.
+- A definition with the *same* signature still replaces the earlier one, so every existing program prints the
+  same. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
+- Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
+  function, the Python API (uses the last version), Fermium 1.5.
+
+## C++ interop (C4, DECISIONS D290)
+
+Fermium calls C++ functions, with the units checked at every call before the program runs, through a small
+`extern "C"` wrapper it generates and compiles with the system's C++ compiler (cached, so only the first run
+compiles):
+
+```text
+import cpp "libkinematics.so" header "kinematics.hpp":
+    kin::TwoBody::momentum(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV/c]   # a static member function
+    kin::invariant_mass(E [MeV], p [MeV/c]) -> [MeV/c²] as mass_of           # one overload …
+    kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass  # … another
+import cpp header "cmath":
+    std::tgamma(x) -> number
+print momentum(139.57039 MeV/c², m_μ, 0 MeV/c²), tgamma(5)    # 29.79 MeV/c 24
+```
+
+- The signatures are those of `import c`, with namespaced names; the declared signature picks the overload
+  (or instantiates a function template), and `as` names it in the program. Static member functions work;
+  ordinary member functions are refused with a message that says why.
+- A C++ exception stops the program with its message; compile-time problems (a misspelt function, no overload
+  with the declared types, a symbol the library doesn't define, a missing header, no C++ compiler) are one line
+  with a caret on the signature.
+- The compiler is `$CXX` or the first of c++, g++, clang++; wrappers are cached in `~/.cache/fermium/cpp` (or
+  `$FERMIUM_CACHE_DIR/cpp`) and rebuilt when a header or the library changes.
+- Worked example: [examples/cpp_interop/](examples/cpp_interop/) computes two-body decay momenta (π⁺ → μ⁺ ν:
+  29.79 MeV/c, as the PDG gives), decay lengths and the invariant mass of the Λ in C++. Reference:
+  [docs/reference.md](docs/reference.md), *C++ interop*.
+- Not yet: objects and ordinary member functions, references, `std::vector` and strings, types other than
+  `double`, `int` and arrays of doubles, functions returning nothing, explicit template arguments. C++ calls
+  take about 0.6 µs each (they go through the run time to check for exceptions). Tested on x86-64 Linux with
+  g++; macOS is untested.
+
 ## C and Fortran interop (C3, DECISIONS D275)
 
 Fermium calls functions in C and Fortran shared libraries through the C ABI, with the units checked at every
@@ -50,6 +107,30 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
 - Still errors: `solve … for x`, eigenvalue problems and PDEs with uncertain inputs (use `propagate montecarlo`).
 - Docs: docs/reference.md §21; DECISIONS D276–D279; tests: rust/c-cases/c7 (run by
   `rust/crates/fermium-cli/tests/c7_cases.rs`).
+
+## C1. Memory and data structures
+
+- **Lists are freed in compiled code too.** The LLVM back end and `fermium build` executables used to keep every
+  list until the program ended (as Fermium 1.5's compiled code did), so a long loop that made lists grew without
+  bound. They now run a collector at the top of loop iterations that make lists (D280): a loop that makes a million
+  lists of 100 numbers stays under 100 MB instead of 800 MB; texts made in a loop (`"run " + str(i)`) and arrays are
+  freed the same way. `FERMIUM_GC_STATS=1` reports it. (The tree-walker's
+  lists were already reference counted.)
+- **Lists of vectors, matrices, complex numbers and text** (D281): `[<1, 2> m, <3, 4> m]`, a list of matrices
+  (`[[[1, 0], [0, 1]], [[0, 1], [1, 0]]] N/m`, or built with `push`), `[1 + 2i, 3i]`, and `[]` that becomes the kind
+  of the first value pushed onto it. Indexing, `xs[i] = …`, `len`, `for … in`, `clear`, `print`, a number times the
+  list, `sum` and `mean` work; units and sizes are checked per element. An N-body step can be written as loops over
+  lists of position and velocity vectors ([docs/reference.md](docs/reference.md#lists-of-vectors-matrices-complex-numbers-and-text-fermium-25)).
+  Text lists gained `names[i] = "…"`.
+- **`solve` with a list of unknowns** (D282): an unknown whose initial value is a list (`N(0) = [1e6, 0, 0, 0]`) or
+  a list of vectors (`r(0) = r0`) is sized when the program runs, so reaction networks and N-body problems are
+  written as loops in a function (`solve N' = rates(N) …`, `solve r'' = accel(r) …`). `N(t)` is the list at t;
+  `until`, `absolute`, and all four methods work, with ordinary unknowns alongside.
+- **Arrays of 2 to 4 dimensions with units** (D283): `θ = fill(300 K, 50, 50)`, `θ[i, j]`, `θ[i, j] = …`, `A[i, j, k]`,
+  entry-by-entry arithmetic with units checked, `size`, `sum`, `mean`, `max`, `min`, `abs`, `copy`; printed in full up
+  to 64 entries, otherwise as shape and range. For fields on a grid (a heat-equation step is in the reference).
+- Tests: `rust/c-cases/c1/` (each program on both back ends, and under `FERMIUM_GC_STRESS=1`, which collects at
+  every safe point), run by `cargo test` (`crates/fermium-cli/tests/c1_cases.rs`).
 
 ## Calculus reach (C2, DECISIONS D295)
 

@@ -10,7 +10,7 @@ pub fn limit_denominator(x: f64, max_den: i64) -> Option<(i128, i128)> {
     let (mant, exp, sign) = integer_decode(x);
     let (mut p, mut q): (i128, i128);
     if exp >= 0 {
-        if exp > 60 {
+        if exp > 70 {
             return None;
         }
         p = (mant as i128) << exp;
@@ -50,10 +50,21 @@ pub fn limit_denominator(x: f64, max_den: i64) -> Option<(i128, i128)> {
     let (b1n, b1d) = (p0 + k * p1, q0 + k * q1);
     let (b2n, b2d) = (p1, q1);
     // pick the closer bound to n0/d0 (ties: the second, as in Python)
-    let dist = |an: i128, ad: i128| ((an * d0 - n0 * ad).abs(), ad * d0);
-    let (x1, y1) = dist(b2n, b2d);
-    let (x2, y2) = dist(b1n, b1d);
-    if x1 * y2 <= x2 * y1 {
+    // (checked: with a tiny x the cross products overflow i128, and 1e-19 came out as 1/10000; red team 13)
+    let dist = |an: i128, ad: i128| -> Option<(i128, i128)> {
+        Some((an.checked_mul(d0)?.checked_sub(n0.checked_mul(ad)?)?.checked_abs()?, ad.checked_mul(d0)?))
+    };
+    let closer_b2 = match (dist(b2n, b2d), dist(b1n, b1d)) {
+        (Some((x1, y1)), Some((x2, y2))) => match (x1.checked_mul(y2), x2.checked_mul(y1)) {
+            (Some(l), Some(r)) => l <= r,
+            _ => (x1 as f64 / y1 as f64) <= (x2 as f64 / y2 as f64),
+        },
+        _ => {
+            let x = n0 as f64 / d0 as f64;
+            (b2n as f64 / b2d as f64 - x).abs() <= (b1n as f64 / b1d as f64 - x).abs()
+        }
+    };
+    if closer_b2 {
         Some((b2n, b2d))
     } else {
         Some((b1n, b1d))

@@ -11,6 +11,7 @@ use fermium_ir as I;
 use fermium_ir::types::Ty;
 use fermium_ir::Dim;
 use fermium_syntax::ast as A;
+use fermium_units::exact::{add_or_record, div_or_record, mul_or_record, overflow_record, sub_or_record};
 use fermium_units::{Rational64 as R, BASE_NAMES};
 use num_traits::{One, Signed, Zero};
 
@@ -78,12 +79,13 @@ pub fn rref(rows: &[Vec<R>]) -> (Vec<Vec<R>>, Vec<usize>) {
         let Some(p) = (r..m.len()).find(|&i| !m[i][c].is_zero()) else { continue };
         m.swap(r, p);
         let pv = m[r][c];
-        m[r] = m[r].iter().map(|x| x / pv).collect();
+        // checked arithmetic throughout (red team 13): an exponent that doesn't fit is recorded, not wrapped
+        m[r] = m[r].iter().map(|x| div_or_record(*x, pv, None)).collect();
         for i in 0..m.len() {
             if i != r && !m[i][c].is_zero() {
                 let f = m[i][c];
                 let mr = m[r].clone();
-                m[i] = m[i].iter().zip(&mr).map(|(a, b)| a - f * b).collect();
+                m[i] = m[i].iter().zip(&mr).map(|(a, b)| sub_or_record(*a, mul_or_record(f, *b, None), None)).collect();
             }
         }
         pivots.push(c);
@@ -129,21 +131,21 @@ fn nicest(group: Exps) -> Exps {
     let exps: Vec<R> = group.iter().map(|(_, v)| *v).filter(|v| !v.is_zero()).collect();
     let mut cands: Vec<R> = vec![R::one(), -R::one()];
     for e in &exps {
-        for c in [R::one() / e, -R::one() / e] {
+        for c in [div_or_record(R::one(), *e, None), div_or_record(-R::one(), *e, None)] {
             if !cands.contains(&c) {
                 cands.push(c);
             }
         }
     }
     let score = |s: &R| {
-        let g: Vec<R> = exps.iter().map(|e| e * s).collect();
+        let g: Vec<R> = exps.iter().map(|e| mul_or_record(*e, *s, None)).collect();
         let den = g.iter().map(|x| *x.denom()).max().unwrap_or(1);
-        let sum: R = g.iter().map(|x| x.abs()).sum();
+        let sum: R = g.iter().fold(R::zero(), |acc, x| add_or_record(acc, x.abs(), None));
         let neg = g.iter().filter(|x| x.is_negative()).count();
         (den > 2, sum, neg, den, -s)
     };
     let s = *cands.iter().min_by(|a, b| score(a).cmp(&score(b))).unwrap();
-    group.into_iter().map(|(k, v)| (k, v * s)).collect()
+    group.into_iter().map(|(k, v)| (k, mul_or_record(v, s, None))).collect()
 }
 
 /// Base dimensions that `name` has and none of `names` has (for 'nothing else has mass').
@@ -282,7 +284,10 @@ fn lcm(a: i64, b: i64) -> i64 {
     fn gcd(a: i64, b: i64) -> i64 {
         if b == 0 { a.abs() } else { gcd(b, a % b) }
     }
-    a / gcd(a, b) * b
+    (a / gcd(a, b)).checked_mul(b).unwrap_or_else(|| {
+        overflow_record(format!("a power with denominator {a}·{b}"));
+        a
+    })
 }
 
 fn is_int(v: &R) -> bool {
@@ -304,7 +309,7 @@ pub fn product_text(exps: &Exps, order: Option<&[String]>) -> String {
     let has = |e: &Exps, n: &str| e.iter().any(|(k, _)| k == n);
     let root_of = |fr: &Exps| -> String {
         let d = fr.iter().fold(1, |acc, (_, v)| lcm(acc, *v.denom()));
-        let scaled: Exps = fr.iter().map(|(k, v)| (k.clone(), v * R::from_integer(d))).collect();
+        let scaled: Exps = fr.iter().map(|(k, v)| (k.clone(), mul_or_record(*v, R::from_integer(d), None))).collect();
         let (body, compound) = ratio(&scaled, &order);
         let last = body.chars().last().unwrap();
         let wrap = if compound || "⁰¹²³⁴⁵⁶⁷⁸⁹".contains(last) { format!("({body})") } else { body.clone() };
@@ -522,7 +527,7 @@ impl Checker {
         let text = product_text(&an.prefactor, Some(&order));
         if !params.is_empty() {
             let fparams: Vec<A::Param> =
-                params.iter().map(|p| A::Param { name: p.name.clone(), unit: p.unit.clone(), span: p.span }).collect();
+                params.iter().map(|p| A::Param { name: p.name.clone(), unit: p.unit.clone(), kind: None, span: p.span }).collect();
             let fdef = A::Stmt {
                 kind: A::StmtKind::FuncDef { name: title.clone(), params: fparams, body: A::FuncBody::Expr(body),
                                              where_: vec![] },
