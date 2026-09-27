@@ -1,11 +1,21 @@
 # Run report: Fermium 1.5 → 2 → 2.5 (unattended run, ended Sun 2026-09-27 13:00 UTC)
 
-*Draft in progress (the final version is written by 12:30 UTC). The sections "Where Fermium stands", "Phase C",
-"Phase D", "Try it on your Mac" and "Honest weaknesses" are still being written.*
-
 ## Where Fermium stands
 
-*(being written)*
+Fermium is now a single compiled program written in Rust (version 2.5.0). It checks units before your program
+runs, understands calculus, and starts in about 12 ms. The run reached **Phase C (v2.5) and its gate**:
+- **Phase A:** v1.5 was fixed and frozen.
+- **Phase B:** the Rust compiler replaced the Python one. It prints exactly what v1.5 printed on 3324 of 3366
+  recorded programs, and the other 42 are documented, deliberate differences.
+- **Phase C:** it grew memory management, lists of anything and N-d arrays, events in `solve`, derivatives of
+  multi-line functions, unit-checked C, Fortran and C++ calls, multiple dispatch, uncertainties through
+  integrals and ODEs, faster loops, and 10 new research reproductions with downloaded data.
+
+Phase D was not started. Four independent red-team rounds tested v2.5 during the run; every high finding was
+fixed and has a test. The biggest gaps:
+- **There is still no download.** GitHub refused every tag push, so you build it once from source (below).
+- **The Julia goal is only half met** (faster on 3 of 7 compute benchmarks, level on 1).
+- **All of it is in draft pull requests** (#2 → #3 → #4) waiting for your review.
 
 ---
 
@@ -228,9 +238,9 @@ C9 is met: CI is green on Linux and macOS and the suite has grown with every fea
 - C7: arrays of ± values, and list-unknown solves with ±, still stop with an error.
 
 **The conformance suite and v2.5.** The 3366 programs record what v1.5 printed, so they are never rewritten. When
-a v2.5 feature makes a program compute where v1 stopped with "not supported yet" (C7: 6 programs; C2: 2), or
-gives a more accurate answer (C2: 2), the program becomes a documented divergence, recorded only after its new
-output was checked against an analytic value. The pass count went from 3334 to 3324 by exactly those 10; 3366 of
+a v2.5 feature makes a program compute where v1 stopped with "not supported yet" (C7: 6 programs; C2: 2), gives
+a more accurate answer (C2: 1) or prints a derivative in a tidier, equal form (C2: 1), the program becomes a
+documented divergence, recorded only after its new output was checked against an analytic value. The pass count went from 3334 to 3324 by exactly those 10; 3366 of
 3366 still pass or are documented. The new features' own suites are in `rust/c-cases/`.
 
 **Found and fixed along the way (silent wrong answers):**
@@ -239,8 +249,47 @@ output was checked against an analytic value. The pass count went from 3334 to 3
 - Red teams 13–16 (each an independent reviewer, logged in `dev-notes/REDTEAM.md`) found: unit exponents that
   overflowed 64 bits, uncertainty lost at a jump, ± silently dropped at C and Python calls, a C5 redefinition
   changing a v1 program's output, a C++ wrapper cache that one folder could poison for another, and a JIT cache
-  that could go stale when HOME or a relative `--base-dir` changed. All high items are fixed or being fixed
-  (round 16's status is in REDTEAM.md).
+  that could go stale when HOME or a relative `--base-dir` changed. Every high item is fixed and tested. Round
+  16 also found a v1 bug: d/dx (x²)^(3/2) had the wrong sign for x < 0 (fixed in v2.5). Still open from round
+  16, all low: nested `sweep` figures overwrite each other, `sweep c` shadows the speed of light without a
+  warning, and a bang-bang equilibrium grinds through millions of steps before failing (REDTEAM.md, status lines).
+
+### Speed of v2.5 (the C6 goal)
+
+A quiet-machine run of `benchmarks/run.py --interleave -r 7` on the v2.5.0 release build (Sun 09:36 UTC, load
+0.7; `benchmarks/RESULTS.md`, the second of two full runs, which agreed). Inner = the computation alone, the
+fair comparison with Julia (Julia's JIT compile time is excluded).
+
+| Benchmark | Fermium 1.5 | Fermium 2.0 (Sat) | Fermium 2.5 | Julia | 2.5 vs Julia |
+|---|---:|---:|---:|---:|---|
+| nbody (per 1M steps) | 66.1 ms | 66.3 ms | 58.9 ms | 67.4 ms | **0.87× (faster)** |
+| forces, 4 threads | 5.21 ms | 11.00 ms | 2.70 ms | 6.53 ms | **0.41× (faster)** |
+| forces, 1 thread | 19.1 ms | 20.3 ms | 9.24 ms | 17.8 ms | **0.52× (faster)** |
+| unit_loop | 10.0 ms | 6.12 ms | 6.35 ms | 6.20 ms | 1.02× (level; 0.99× in the first run) |
+| spring_adaptive | 555 µs | 696 µs | 808 µs | 619 µs | 1.31× slower |
+| blackbody | 2.56 ms | 3.54 ms | 3.55 ms | 2.02 ms | 1.76× slower |
+| spring_rk4 | 35.0 ms | 34.3 ms | 131 ms (24 ms alone) | 15.8 ms | 8.3× slower in the run (1.5× alone) |
+| startup (whole process) | 173 ms | 17.7 ms | 11.6 ms | 267 ms | 23× faster to start |
+
+- **The goal, "beat Julia on at least half of the benchmark rows": not met by a strict reading.** Fermium is
+  clearly faster on 3 of the 7 compute rows and level on a 4th (unit_loop, 0.99× and 1.02× in two runs).
+- **spring_rk4 is an honest anomaly.** On this machine single runs take either 22–35 ms or 60–130 ms, in bursts.
+  Both full runs caught the slow mode (median 131 ms), while spring_rk4 run alone gives 24 ms (1.5× Julia) and
+  20 back-to-back runs gave 27–33 ms. The suspected cause is C6's huge-page prefault of the large trajectory
+  arrays stalling in the kernel's memory compaction. It's in BACKLOG with a way to measure it. I did not pick
+  the fast number for the table.
+- The Fermium 2.0 and 1.5 columns come from Saturday's run and this run respectively; loads differed, so small
+  differences are noise. Every language printed the same answers (the ✓ column in RESULTS.md).
+- Whole programs, including start-up and compiling, take 12–26 ms with the JIT cache warm (Fermium's "Wall"
+  column), against Julia's 0.9–2.6 s.
+
+### The v2.5 tag
+
+Gate C9 was met at commit `eb63425`: PR #4's CI run 249 passed on Linux and macOS, and every high red-team
+finding was fixed. The tag `v2.5` was created on it, but GitHub refused the push (the connection is cut, as for
+v1.5 and v2.0), so the branch **`claude/v2.5-freeze`** marks the commit (D340). To publish the tag and let the
+release workflow build the downloads: `git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push
+origin v2.5`.
 
 ## Phase D (v3)
 
@@ -356,4 +405,33 @@ downloading it (Lesson 0 describes that). The workflow has never run, so check i
 
 ## Honest weaknesses and next steps
 
-*(being written)*
+**Weaknesses**
+1. **No binary download** (B1, B7). Every tag push was refused, so the release workflow has never run. Building
+   from source needs Rust and LLVM 18: 15 minutes and several gigabytes, which is the opposite of the
+   "install nothing" goal. *Next:* push the `v2.5` tag yourself (one command above) and check the workflow's first run.
+2. **macOS is tested only by CI**, never on a real Mac. `fermium build` executables and C++ interop on macOS
+   have never been run by a person.
+3. **Performance is uneven** (C6). Fermium is faster than Julia on nbody and forces, but 1.3–1.8× slower on
+   spring_adaptive and blackbody. spring_rk4 has an unexplained slow mode (BACKLOG). *Next:* the spring_rk4
+   investigation, then batching the integrand for blackbody (BACKLOG, "High value").
+4. **Parts of v2.5 run in the interpreter.** Programs with ± values, lists of vectors, N-d arrays or list
+   unknowns run those parts in the tree-walker (slower), and `fermium build` refuses them.
+5. **Open v1 behaviour kept on purpose for parity:** √ or log of a negative number at run time gives NaN
+   silently (OPEN_ITEMS A3-NaN); Parseval's sum prints in base SI units (A4-FFT-V2); the interpreter recurses
+   about 500 000 deep where v1 went past a million.
+6. **Fermium 1.5 (legacy/) keeps bugs v2.5 fixed:** the `fit` error for tiny SI parameters, the (x²)^(3/2)
+   derivative, and the formatter turning `fm * A` into a unit. It is frozen as the oracle, so these are listed,
+   not fixed.
+7. **Research track:** C8's r-process reproduction wasn't done (no downloadable table). The neutron-star cooling
+   model assumes a proton fraction of 0.05, flagged in its README.
+8. **The run's own environment:** the machine had 15 GB and no swap. Legacy test workers were killed several
+   times when agents' test runs overlapped, so some checks were run in two parts (every part passed; stated
+   in the commits).
+
+**Recommended next steps, in order**
+1. Review and merge the draft PRs (#2 v1.5 → #3 v2.0 → #4 v2.5), then push the tags `v1.5`, `v2.0` and `v2.5`
+   from their `claude/*-freeze` branches, so the release binaries get built.
+2. Build it on your Mac (above) and run your own programs and the bootcamp. Report anything that differs.
+3. Phase D1: a formal language specification (`docs/spec/`), checked against the conformance suite.
+4. The performance items in BACKLOG ("High value"), then compiled code for ± values (today they need the
+   interpreter).
