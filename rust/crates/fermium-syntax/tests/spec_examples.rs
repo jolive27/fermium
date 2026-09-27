@@ -4,15 +4,20 @@
 //! rejected programs. With `FERMIUM_BIN` set to a `fermium` binary, every ```fermium block must also run without
 //! an error (exit 0) and every ```fermium-error block must fail (non-zero exit); without it only parsing is
 //! checked, so this test needs nothing but this crate.
+use fermium_syntax::ast::{Expr, ExprKind, StmtKind};
 use std::path::{Path, PathBuf};
 
 fn spec_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../docs/spec")
 }
 
-/// (file, 1-based line of the fence, info string, code) for every fenced block whose info string starts with
-/// `fermium`.
+/// (file, 1-based line of the fence, info string, code) for every ```fermium and ```fermium-error block.
 fn blocks() -> Vec<(String, usize, String, String)> {
+    blocks_with(&["fermium", "fermium-error"])
+}
+
+/// The same for the fenced blocks whose info string is one of `infos`.
+fn blocks_with(infos: &[&str]) -> Vec<(String, usize, String, String)> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(spec_dir())
         .expect("docs/spec exists")
         .map(|e| e.unwrap().path())
@@ -35,12 +40,95 @@ fn blocks() -> Vec<(String, usize, String, String)> {
                 code.push_str(l);
                 code.push('\n');
             }
-            if info == "fermium" || info == "fermium-error" {
+            if infos.contains(&info.as_str()) {
                 out.push((name.clone(), i + 1, info, code));
             }
         }
     }
     out
+}
+
+/// The tree of an expression as nested prefix forms, ignoring brackets, spans and implicit-vs-explicit `*`.
+fn shape(e: &Expr) -> String {
+    use ExprKind as K;
+    match &e.kind {
+        K::Num { value, .. } => format!("{value}"),
+        K::Name { name } => name.clone(),
+        K::BinOp { op, left, right, .. } => format!("({op} {} {})", shape(left), shape(right)),
+        K::Neg { operand } => format!("(neg {})", shape(operand)),
+        K::Compare { op, left, right, .. } => format!("({op} {} {})", shape(left), shape(right)),
+        K::Logic { op, left, right } => format!("({op} {} {})", shape(left), shape(right)),
+        K::Not { operand } => format!("(not {})", shape(operand)),
+        K::Call { func, args } => {
+            format!("(call {} {})", shape(func), args.iter().map(shape).collect::<Vec<_>>().join(" "))
+        }
+        K::Sqrt { operand, root } => format!("(root{root} {})", shape(operand)),
+        K::Uncertain { value, err } => format!("(± {} {})", shape(value), shape(err)),
+        K::Convert { value, unit } => format!("(in {} {})", shape(value), unit.text),
+        K::Quantity { value, unit, .. } => format!("(unit {} {})", shape(value), unit.text),
+        K::Prime { target, order } => format!("(prime{order} {})", shape(target)),
+        K::IfExpr { cond, then, other } => format!("(if {} {} {})", shape(cond), shape(then), shape(other)),
+        other => format!("<{:?}>", std::mem::discriminant(other)),
+    }
+}
+
+fn print_item_shape(src: &str) -> Result<String, String> {
+    let (prog, _) = fermium_syntax::parse(&format!("print {src}\n"), &[]).map_err(|e| e.message)?;
+    match &prog.body[0].kind {
+        StmtKind::Print { items } if items.len() == 1 => Ok(shape(&items[0])),
+        _ => Err("not one print item".into()),
+    }
+}
+
+/// grammar.md's ```fermium-reads blocks: each line `A ≡ B` says that A parses to the same tree as the explicitly
+/// bracketed B. This keeps the precedence table honest.
+#[test]
+fn spec_precedence_readings() {
+    let mut n = 0;
+    let mut bad = vec![];
+    for (file, line, info, code) in blocks_with(&["fermium-reads"]) {
+        assert_eq!(info, "fermium-reads");
+        for (k, row) in code.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
+            let Some((a, b)) = row.split_once('≡') else {
+                bad.push(format!("{file}:{}: expected 'A ≡ B'", line + 1 + k));
+                continue;
+            };
+            let (sa, sb) = (print_item_shape(a.trim()), print_item_shape(b.trim()));
+            n += 1;
+            if sa.is_err() || sa != sb {
+                bad.push(format!("{file}:{}: {row}\n    {sa:?}\n    {sb:?}", line + 1 + k));
+            }
+        }
+    }
+    assert!(n >= 10, "grammar.md should list precedence readings");
+    assert!(bad.is_empty(), "precedence readings that don't hold:\n{}", bad.join("\n"));
+}
+
+/// grammar.md §1.6 and §1.10 list the keywords and operators; they must be the lexer's.
+#[test]
+fn spec_lists_the_lexers_keywords_and_operators() {
+    let text = std::fs::read_to_string(spec_dir().join("grammar.md")).unwrap();
+    let block_after = |heading: &str| -> String {
+        let i = text.find(heading).unwrap_or_else(|| panic!("grammar.md has {heading}"));
+        let rest = &text[i..];
+        let s = rest.find("```text\n").unwrap() + 8;
+        let e = rest[s..].find("```").unwrap();
+        rest[s..s + e].to_string()
+    };
+    let mut kws: Vec<&str> = vec![];
+    let kb = block_after("### 1.6 Keywords");
+    kws.extend(kb.split_whitespace());
+    let mut want: Vec<&str> = fermium_syntax::lexer::KEYWORDS.to_vec();
+    kws.sort();
+    want.sort();
+    assert_eq!(kws, want, "grammar.md §1.6 vs lexer::KEYWORDS");
+    let ob = block_after("### 1.10 Operators");
+    // the quoted operators: every other piece between double quotes (no operator contains one)
+    let mut ops: Vec<String> = ob.split('"').skip(1).step_by(2).map(|p| p.to_string()).collect();
+    let mut want: Vec<String> = fermium_syntax::lexer::OPERATORS.iter().map(|s| s.to_string()).collect();
+    ops.sort();
+    want.sort();
+    assert_eq!(ops, want, "grammar.md §1.10 vs lexer::OPERATORS");
 }
 
 #[test]

@@ -37,7 +37,9 @@ propose changes.
   end (`cargo test -p fermium-syntax --test spec_examples`), and with `FERMIUM_BIN` set to a `fermium` binary
   every one must also run without an error. Blocks marked `fermium-error` must be rejected: with `FERMIUM_BIN`
   set, the test checks that each exits with status 1 and a one-line `file, line N: …` error. Blocks marked `text`
-  are not checked. To run everything:
+  are not checked. Blocks marked `fermium-reads` hold lines `A ≡ B`: A must parse to the same tree as the
+  bracketed B (the precedence rules). The same test checks that grammar.md's keyword and operator lists are the
+  lexer's. To run everything:
   `FERMIUM_BIN=rust/target/fast/fermium cargo test --profile fast -p fermium-syntax --test spec_examples`
   (from `rust/`, with an absolute path for the binary).
 

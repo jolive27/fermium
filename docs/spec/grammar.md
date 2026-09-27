@@ -399,6 +399,34 @@ T = 5000 K
 print h_P c_0 / λ k_B T
 ```
 
+Readings that follow from the table (each line: the expression on the left parses to the same tree as the
+bracketed one on the right; the test `spec_precedence_readings` checks every line):
+
+```fermium-reads
+-2^2 ≡ -(2^2)
+-x² ≡ -(x^2)
+2^3^2 ≡ 2^(3^2)
+h c / λ k T ≡ (h c)/(λ k T)
+a b / c d ≡ (a b)/(c d)
+a / b * c ≡ (a / b) * c
+a - b - c ≡ (a - b) - c
+-a b ≡ -(a b)
+a b^2 ≡ a (b^2)
+4π² r ≡ 4 (π^2) r
+√x y ≡ (√x) y
+√x² ≡ √(x^2)
+2 x ± 0.1 ≡ (2 x) ± 0.1
+1 + 2.0 ± 0.1 ≡ 1 + (2.0 ± 0.1)
+not a and b ≡ (not a) and b
+a < b and c < d or e ≡ ((a < b) and (c < d)) or e
+1/2 x ≡ (1/2) x
+f(x)^2 ≡ (f(x))^2
+a + b in km ≡ (a + b) in km
+```
+
+(With `L` instead of `r`, the bracketed form would read `L` as litres: a free unit name after a bracket holding a
+pure number is a unit, §2.6. `4π² L` itself is 4·π²·L.)
+
 #### Special cases in expressions (expr.rs)
 
 - **Implicit multiplication** (`juxt`) happens when the next token can start a term (a number, name, `(`, `√`,
