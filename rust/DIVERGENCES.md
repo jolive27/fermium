@@ -410,3 +410,12 @@ in the API for calling Fermium from Python (D142), which no conformance case cov
 - It runs programs on the tree-walker, not LLVM: a loop-heavy function is roughly as fast as pure Python
   (Leibniz series, 2·10⁶ terms: 1.07 s vs Python's 0.78 s on the shared test machine) where v1's JIT was ~10×
   faster. The LLVM back end doesn't keep top-level variables between inputs (REPL-style) yet.
+
+## v2.5: uncertainties everywhere (C7)
+
+Spec C7 extends uncertain values (±) to vectors, lists, `solve` (parameters and starting values) and integrals, with
+linear propagation (DECISIONS D276–D279). v1 stopped these programs with a "can't use uncertain values (±) yet"
+error; v2.5 computes them. For example, `solve x' = -k x / (1 s)` with k = 1.0 ± 0.1 now prints x(1 s) = 0.368 ± 0.037 m
+(e⁻¹, and |∂x/∂k|·0.1 = e⁻¹·0.1), and `∫ exp(-k x) dx from 0 to 1` prints 0.632 ± 0.026. Each recorded output was
+checked against the analytic derivative. Programs that still can't propagate (see rust/c-cases/c7/still_errors.fm)
+keep v1's error.
