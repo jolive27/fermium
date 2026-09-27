@@ -1,0 +1,2 @@
+delta_T = 50 °F
+print delta_T

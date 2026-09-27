@@ -1,0 +1,17 @@
+{
+ "id": "15b87fc944b3",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is a function of t, which is time [s], not a plain number (no units)",
+  "line": 4,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

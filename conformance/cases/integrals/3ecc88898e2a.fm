@@ -1,0 +1,1 @@
+print ∫ <cos(φ), sin(φ)> dφ from 0 to π/2 to 12 digits

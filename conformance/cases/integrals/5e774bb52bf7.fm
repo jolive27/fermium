@@ -1,0 +1,2 @@
+print integral sin(x)^2 dx from 0 to pi
+print pi / 2

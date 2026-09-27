@@ -1,0 +1,17 @@
+{
+ "id": "c3201d425f6a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't store a value in Ωπ: it is read as Ω × π (π is always the number π, even written next to a letter)",
+  "line": 1,
+  "col": 4,
+  "hint": "name it with an underscore instead, like  Ω_π = …",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

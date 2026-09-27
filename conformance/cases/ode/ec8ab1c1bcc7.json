@@ -1,0 +1,11 @@
+{
+ "id": "ec8ab1c1bcc7",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.00000000197\n-2.95746146798×10⁻⁹\n0.999999991872\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

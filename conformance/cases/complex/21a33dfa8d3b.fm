@@ -1,0 +1,4 @@
+Z = 50 Ω + 1i (2π 1 kHz)(10 mH)
+print Z
+print Z in kΩ
+print arg(Z) in °

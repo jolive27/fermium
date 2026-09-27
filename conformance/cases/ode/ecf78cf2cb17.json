@@ -1,0 +1,11 @@
+{
+ "id": "ecf78cf2cb17",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "principal moments: 9.48167×10⁻⁵ kg m² 0.000376067 kg m² 0.000468750 kg m²\nwobble frequency about axis 1: 7.72396 rad/s\nwobble frequency about axis 3: 9.85878 rad/s\ngrowth rate about axis 2: 7.65833 rad/s\nkinetic energy: 0.018805677 J  after 20 s: 0.018805677 J\n|L|: 0.0037609588 J s  after 20 s: 0.0037609588 J s\nω at 5 s: <2.96, -9.54, 2.32> rad/s\nk²: 0.9998343063  K(k): 5.7391754\nfirst flip, ODE vs Landau: 0.7493408 s 0.7493408 s\ntime between flips, ODE vs Landau: 1.498682 s 1.498682 s\nlargest wobble, spin about axis 1: 0.1630 rad/s\nlargest wobble, spin about axis 3: 0.1420 rad/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "871bbf6e0aa6",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "speed after 30 s: 43.2 m/s = 156 km/hr\nterminal velocity: 43.23 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

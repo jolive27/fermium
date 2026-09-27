@@ -1,0 +1,11 @@
+{
+ "id": "cd1672496e28",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson01_numbers_units.md#6",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    3 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    9.81 m/s²\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 3: this line computes a value but doesn't use it\n    2.30 m\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 4: this line computes a value but doesn't use it\n    3.20 kg\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 5: this line computes a value but doesn't use it\n    13.9 m/s\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

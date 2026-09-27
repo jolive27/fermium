@@ -1,0 +1,5 @@
+total = 0 m
+for i from 1 to 10
+    total += i * 1 cm
+print total
+print 1 ~= 1.0000001

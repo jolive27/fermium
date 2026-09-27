@@ -1,0 +1,17 @@
+{
+ "id": "1d7164ee2e33",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "complex numbers can't be compared with > (they aren't ordered)",
+  "line": 1,
+  "col": 7,
+  "hint": "compare their sizes |z| or their real parts re(z) instead",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

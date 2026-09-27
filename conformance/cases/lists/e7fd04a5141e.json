@@ -1,0 +1,17 @@
+{
+ "id": "e7fd04a5141e",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "there is no index 4 here: valid indexes are 1 to 3",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

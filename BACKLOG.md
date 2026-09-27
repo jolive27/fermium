@@ -41,3 +41,6 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 ## Known traps (by design, documented)
 - `2 g h` means 2 grams times h (a unit right after a number, D7). Fermium warns only if you have defined your own `g`. Write `2*g*h` or `2 g_n h`.
 - Lists are never freed while a program runs (no GC). Fine for scripts, bad for very long loops that allocate.
+- A bundled correctly-rounded libm (CORE-MATH or similar) so printed last digits are identical on every platform (D271); needs re-checking every golden against v1 on Linux.
+- (v2.5, red team 12 #2) Warn when a spaced `/` divides by a function call of the unknown or of anything (`θ'' = -g / L sin(θ)` is -g/(L sin θ) under D8; D34's warning only covers the unknown itself): extend D34 to calls (sin, cos, exp, …). A new warning changes stderr, so it's a language change for v2.5 with conformance updates.
+- (red team 12 #8) An RK4 right side that leaves its domain prints NaN silently (v1 does too): warn once, as the adaptive solvers do.

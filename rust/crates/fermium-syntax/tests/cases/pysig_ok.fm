@@ -1,0 +1,2 @@
+use python numpy as np: f(x [m]) -> list [m]; g(n: int) -> number
+use python scipy.special as sp

@@ -1,0 +1,9 @@
+k = 50 N/m
+mass = 0.5 kg
+b = 0.4 kg/s
+solve mass x'' = -k x - b x'
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 10 s
+print "x at 10 s:", x(10 s)
+print "velocity at 1 s:", x'(1 s)
+plot x vs t to "damped.png"

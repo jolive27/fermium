@@ -1,0 +1,17 @@
+{
+ "id": "9e47c7f24ebc",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "MeV isn't defined",
+  "line": 2,
+  "col": 12,
+  "hint": "MeV is a unit, and units go right after a number; to multiply f(3) by MeV write f(3) * 1 MeV or f(3) [MeV]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

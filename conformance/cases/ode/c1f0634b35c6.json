@@ -1,0 +1,17 @@
+{
+ "id": "c1f0634b35c6",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a vector unknown needs the same units in every component (write separate unknowns for quantities in different units, like x and v)",
+  "line": 2,
+  "col": 15,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "88b3af05d248",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'<…> m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 2,
+  "col": 12,
+  "hint": "write  <…>*m  for <…> × your variable m, or  <…> [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

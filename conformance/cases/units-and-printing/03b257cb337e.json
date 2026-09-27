@@ -1,0 +1,17 @@
+{
+ "id": "03b257cb337e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'ħ = c = 1' sets physical constants to 1: that's natural units",
+  "line": 1,
+  "col": 7,
+  "hint": "write  units natural(ħ = c = 1)  (or just  units natural  for ħ = c = 1)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

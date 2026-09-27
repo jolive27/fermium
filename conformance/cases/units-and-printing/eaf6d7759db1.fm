@@ -1,0 +1,3 @@
+λ = 500 nm
+E = h c / λ
+print E in eV

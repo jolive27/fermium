@@ -1,0 +1,17 @@
+{
+ "id": "9fef05550ce4",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this line's indentation doesn't match any block above it",
+  "line": 3,
+  "col": 3,
+  "hint": "line up the start of the line with the lines above it",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

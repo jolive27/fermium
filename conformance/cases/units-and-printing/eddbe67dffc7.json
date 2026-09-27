@@ -1,0 +1,11 @@
+{
+ "id": "eddbe67dffc7",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 rev/s 60 rpm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

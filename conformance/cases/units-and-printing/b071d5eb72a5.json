@@ -1,0 +1,17 @@
+{
+ "id": "b071d5eb72a5",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'/(b) x' is ambiguous: implicit multiplication binds tighter than '/', so this would divide by all of '(b) x'",
+  "line": 4,
+  "col": 11,
+  "hint": "write  /(b) * x  to multiply by x, or  /((b) x)  to divide by both",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

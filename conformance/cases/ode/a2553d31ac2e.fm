@@ -1,0 +1,5 @@
+solve
+    x' = -x / 2 s
+    y' = x / 2 s
+  with x(0) = 1, y(0) = 0
+  for t from 0 s to 10 s

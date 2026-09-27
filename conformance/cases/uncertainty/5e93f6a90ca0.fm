@@ -1,0 +1,6 @@
+data = load "data/pendulum.csv"
+fit T = 2π √(L / g) to data
+print "g from the fit:", g
+print "g − g_n =", g - g_n, "which is", (value(g) - g_n) / uncertainty(g) to 2 digits, "standard deviations"
+T = data.T ± 0.02 s
+plot T vs data.L to "pendulum_errorbars.png"

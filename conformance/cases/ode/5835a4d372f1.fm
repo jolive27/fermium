@@ -1,0 +1,4 @@
+solve x'' = -x / (1 s)² - 0.1 x' / (1 s)
+  with x(3 s) = 1 m, x'(3 s) = 0 m/s
+  for t from 3 s to -2 s tolerance 1e-11
+print x(-2 s) to 17 digits, x'(-2 s) to 17 digits, x(0 s) to 17 digits

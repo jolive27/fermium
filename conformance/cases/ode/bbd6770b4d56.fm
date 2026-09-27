@@ -1,0 +1,35 @@
+# Astrophysics 01 — Lane–Emden equation, n = 1
+#
+# (Carroll & Ostlie, "An Introduction to Modern Astrophysics", §10.5.)
+# A polytrope P = K ρ^(1+1/n) in hydrostatic equilibrium obeys the
+# Lane–Emden equation
+#
+#     (1/ξ²) d/dξ (ξ² dθ/dξ) = −θⁿ,     θ(0) = 1,  θ'(0) = 0,
+#
+# with ρ = ρ_c θⁿ and r = a ξ,  a² = (n+1) K ρ_c^(1/n − 1) / (4πG).
+# For n = 1 the solution is θ = sin(ξ)/ξ, with its surface at ξ₁ = π.
+#
+#  (a) Integrate numerically; compare θ with sin ξ/ξ at ξ = 1, 2, 3.
+#  (b) Find ξ₁ and −ξ₁² θ'(ξ₁) (exact: π and π).
+#  (c) Model the Sun (M☉, R☉) as an n = 1 polytrope: find the central
+#      density (ρ_c = ρ̄ ξ₁ / (3|θ'(ξ₁)|) = π²/3 · ρ̄), K = 2G R²/π, and the
+#      central pressure P_c = K ρ_c².
+
+# The 2θ'/ξ term is singular at ξ = 0, so start at a small ξ₀ with the
+# series θ ≈ 1 − ξ²/6 + ξ⁴/120 (n = 1).
+ξ0 = 1.0e-4
+solve θ'' = -2 θ' / ξ - θ
+  with θ(ξ0) = 1 - ξ0²/6 + ξ0⁴/120, θ'(ξ0) = -ξ0/3 + ξ0³/30
+  for ξ from ξ0 to 4
+
+for x in [1, 2, 3]
+    print "xi =", x, " theta =", θ(x) to 10 digits, " sin(xi)/xi =", sin(x) / x to 10 digits
+
+solve θ(ξ1) = 0 for ξ1 from 1 to 4
+print "(b) xi_1 =", ξ1 to 10 digits, "  -xi_1² theta'(xi_1) =", -ξ1² θ'(ξ1) to 10 digits
+
+ρ_mean = M_sun / ((4/3) π R_sun³)
+ρ_c = ρ_mean ξ1 / (3 abs(θ'(ξ1)))
+K_poly = 2 G R_sun² / π
+print "(c) mean density =", ρ_mean in g/cm³ to 8 digits, "  central density =", ρ_c in g/cm³ to 8 digits
+print "    K =", K_poly to 8 digits, "  P_c =", K_poly ρ_c² in Pa to 8 digits

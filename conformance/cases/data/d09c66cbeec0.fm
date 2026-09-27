@@ -1,0 +1,4 @@
+s = load "../data/spring.csv"
+fit x = M * 9.81 [m/s^2] / k to s
+print k in N/m
+plot s.x vs s.M to "spring_data.png"

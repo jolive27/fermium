@@ -1,0 +1,4 @@
+units natural
+k = 2 fm^-1
+I = ∫ exp(-k x) dx from 0 to ∞
+print I in fm

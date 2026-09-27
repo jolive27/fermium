@@ -1,0 +1,11 @@
+{
+ "id": "2395ba3cfe8d",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "energy at start: 0.250000000 J\nenergy at 100 s: 0.249999933 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

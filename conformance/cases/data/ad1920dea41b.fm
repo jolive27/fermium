@@ -1,0 +1,45 @@
+# 07 — Radioactive decay and carbon dating
+#
+# Every unstable nucleus has the same small chance per second, λ, of decaying.
+# So the number of nuclei N falls in proportion to how many are left:
+#
+#     dN/dt = -λ N      →      N(t) = N₀ exp(-λ t)
+#
+# The half-life is t½ = ln 2 / λ, and the activity (decays per second) is
+# A = λ N, measured in becquerels (Bq = 1/s).
+#
+# We solve the equation numerically, compare with the exact answer, compute the
+# activity of 1 g of radium-226 (which defines the old unit, the curie), and use
+# carbon-14 to date an old piece of wood.
+
+# Carbon-14
+t_half = 5730 yr
+λ = ln(2) / t_half
+print "decay constant of C-14:", λ in 1/yr
+
+N0 = 1.0e12
+solve N' = -λ N
+  with N(0) = N0
+  for t from 0 yr to 30000 yr
+
+print "left after one half-life:", N(t_half) / N0
+print "numerical N(10000 yr):", N(10000 yr), "   exact:", N0 exp(-λ * 10000 yr)
+
+# Carbon dating: living wood has 0.231 Bq of C-14 per gram of carbon.
+# An old beam measures 0.118 Bq per gram. How old is it?
+A_living = 0.231 Bq
+A_sample = 0.118 Bq
+age = ln(A_living / A_sample) / λ
+print "age of the wood:", age in yr
+
+# Radium-226: t½ = 1600 years, molar mass 226.025 g/mol
+λ_Ra = ln(2) / (1600 yr)
+N_Ra = 1 g / (226.025 g/mol) * N_A
+A_Ra = λ_Ra N_Ra
+print "activity of 1 g of Ra-226:", A_Ra in Bq, "=", A_Ra in Ci
+
+# How many nuclei are left in steps of one half-life
+for n from 0 to 5
+    print n, "half-lives:", N(n * t_half) / N0
+
+plot N vs t to "gallery/radioactive_decay.png"

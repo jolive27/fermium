@@ -1,0 +1,17 @@
+{
+ "id": "e112739117fc",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the orders don't match: ∂1/∂x2",
+  "line": 2,
+  "col": 8,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

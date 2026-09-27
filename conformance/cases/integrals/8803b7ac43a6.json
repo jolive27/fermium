@@ -1,0 +1,11 @@
+{
+ "id": "8803b7ac43a6",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "<20, 60, 0> V/m\n∂V/∂x(x, y, z) = ∫ λ·(s - x)/(4π ε_0 (y² + z² + (s - x)²)^(3/2)) ds from -L to L   [V/m, for x in m, for y in m, for z in m]\n",
+ "stderr": "warning: line 3: this integral came out as exactly 0 because the integrand was 0 at every point where it was sampled; if it is non-zero somewhere narrow (a peak in a wide range), integrate over a range that fits it\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "bf7caf61b3f5",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-adversarial.md#2",
+ "dir": "dev-notes/notes",
+ "stdout": "1.0\n[1.0, 2.0, 3.0, 4.0, 5.0]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

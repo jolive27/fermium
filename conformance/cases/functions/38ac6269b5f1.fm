@@ -1,0 +1,2 @@
+f(x) = 2 x
+print f(1 km) in m, f(3 cm) in cm, f(5 m)

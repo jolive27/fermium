@@ -1,0 +1,4 @@
+f(x) = 3 x²
+print f(2 m)
+print f'(2 m)
+:vars

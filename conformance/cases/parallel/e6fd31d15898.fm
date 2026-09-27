@@ -1,0 +1,4 @@
+f(n) = if n <= 1 then 1 else n f(n - 1)
+s = 0
+parallel for i from 1 to 3
+    s += f(i)

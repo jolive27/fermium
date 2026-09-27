@@ -1,0 +1,11 @@
+{
+ "id": "d09c66cbeec0",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "fit x = M·9.81 [m/s²]/k   (5 data points from ../data/spring.csv)\n  k = 49.01 N/m   (standard error 0.47 N/m)\n  rms residual = 0.126 cm\n49.0 N/m\nplot saved to <ROOT>/bootcamp/solutions/spring_data.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

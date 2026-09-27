@@ -1,0 +1,1 @@
+print Σ(exp(1i π k / 2) for k from 0 to 3) to 12 digits

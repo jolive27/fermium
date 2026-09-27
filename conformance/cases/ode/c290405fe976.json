@@ -1,0 +1,17 @@
+{
+ "id": "c290405fe976",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'tolerance' is given twice in this solve",
+  "line": 3,
+  "col": 3,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

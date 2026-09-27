@@ -2,7 +2,7 @@
 
 Fermium is a programming language for physics. Numbers carry units, and the compiler checks those units **before your program runs**. Calculus (derivatives, integrals, differential equations) is part of the language. Programs are compiled to native code with LLVM.
 
-Every program example on this page is tested: `tests/test_docs.py` runs each block marked with `fermium`. The other blocks (command lines, the error display in §16, the `load`/`fit`/`plot` sketch in §11 and the grammar) are not run.
+Every program example on this page is tested: `legacy/tests/test_docs.py` runs each block marked with `fermium` with Fermium 1.5, and the conformance suite (`conformance/`, run by `make check`) runs it with the `fermium` binary and compares the output. The other blocks (command lines, the error display in §16, the `load`/`fit`/`plot` sketch in §11 and the grammar) are not run.
 
 ## Contents
 1. [Running programs](#1-running-programs)
@@ -37,7 +37,7 @@ fermium                      # interactive prompt (REPL)
 fermium check pendulum.fm    # check units without running
 fermium fmt pendulum.fm --pretty   # ASCII -> symbols;  --ascii for the reverse; -w rewrites the file
 fermium doctor               # check the installation
-fermium build pendulum.fm    # make a standalone executable ./pendulum (needs a C compiler)
+fermium build pendulum.fm    # make a standalone executable ./pendulum
 ```
 
 A program is a text file ending in `.fm`. Comments start with `#`.
@@ -494,6 +494,37 @@ print ∂/∂x V
 
 - **Sums** written in one line with `Σ(… for k from a to b)` are differentiated term by term (§9), so `f'` and `∇²φ` of a Fourier series work.
 
+### Preview (Fermium 2.5): derivatives of functions written over several lines
+
+Opt-in in the Rust compiler with the environment variable `FERMIUM_C2=1` (spec §C2; without it, and in
+Fermium 1.5, differentiating a multi-line function is an error). The derivative is computed by automatic
+differentiation: exact to rounding, like the symbolic one, but through assignments, `if`/`else`, `for` and
+`while` loops.
+
+```text
+root(a) =
+    r = a
+    for i from 1 to 30
+        r = (r + a/r)/2      # Newton's iteration for √a
+    r
+print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
+
+φ(x, y, z) =
+    r = √(x² + y² + z²)
+    k / r
+print ∇φ(1 m, 2 m, 2 m)      # ∇ and ∇² work too
+```
+
+- **All the forms work:** `f'`, `f''`, `d/dx f`, `∂/∂v E`, `∇φ`, `∇²φ`, and one-line functions or formulas that call
+  a multi-line function (`q(x) = 2 root(x) + x`, then `q'`).
+- **How:** each local variable `y` that depends on the variable gets a derivative `dy/dx`, updated just before `y`
+  by the chain rule (forward mode, as a source transformation), so the derivative runs the same loop iterations and
+  takes the same branches. A branch gives a piecewise derivative (`if x > 0 …`); a loop counter counts as a constant.
+- **Not differentiated:** `print` inside the function (the derivative doesn't print), lists whose elements depend on
+  the variable, and `solve`, `plot`, `fit` or `propagate` inside the function: those are errors that name the
+  statement. `∇·` and `∇×` still need a one-line vector formula.
+- **Printing** such a derivative shows `f'(x): a function defined over several lines`.
+
 ### Vector calculus: ∇
 
 ```fermium
@@ -510,7 +541,7 @@ f(x, y) = x² y + sin(x)
 print ∇²f
 ```
 
-- `∇f` (gradient), `∇·F` (divergence), `∇×F` (curl) and `∇²f` (Laplacian) of a one-line function of 2 or 3 Cartesian coordinates. The curl needs 3. The result is a new function of the same coordinates, differentiated symbolically, so `print ∇φ` shows its formula (tidied by SymPy when it is installed). Call it at a point like any function: `∇φ(1 m, 0 m, 0 m)`.
+- `∇f` (gradient), `∇·F` (divergence), `∇×F` (curl) and `∇²f` (Laplacian) of a one-line function of 2 or 3 Cartesian coordinates. The curl needs 3. The result is a new function of the same coordinates, differentiated symbolically, so `print ∇φ` shows its formula (tidied by Fermium's simplifier). Call it at a point like any function: `∇φ(1 m, 0 m, 0 m)`.
 - `F` for `∇·F` and `∇×F` must be a vector formula: `F(x, y, z) = <…, …, …>` (a unit after `>` applies to every component).
 - Units follow: φ in V with coordinates in m gives ∇φ in V/m. A component that differentiates to 0 fits the other components' units.
 - ASCII: `grad(f)`, `div(F)`, `curl(F)`, `laplacian(f)`; `fermium fmt --ascii` writes these. `∇` is typed `\nabla`.
@@ -543,7 +574,7 @@ print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, insi
 
 - **Units:** the result's units are the integrand's units times the variable's units.
 - **Where the upper limit ends:** a `/` with a space before it ends the upper limit, so `∫ B(z) dz from -∞ to ∞ / (μ₀ I)` divides the whole integral by μ₀I. `from 0 to 1/2` (no spaces) and `from 0 to (L / 2)` divide the limit. When the division after a limit is by a plain number (`to L / 2`, `to 1 / (1 + z)`), so that both readings have the same units, Fermium warns that it divides the whole integral (DECISIONS D34, D112, D205); when only dividing the limit has the right units (`to E / (2 P0)` with a time variable), it is an error whose hint says `to (E / (2 P0))`; there is no warning after an infinite limit (`to ∞ / (μ₀ I)`), where both readings agree. A spaced `/` in the lower limit (`from 1 / (1 + z) to 1`) stays in the limit, since `to` follows it. A spaced `+` or `-` stays in the upper limit (`from 0 to L - a` goes up to L − a), with a warning that says so when the other reading, (∫ … to L) − a, has consistent units too (a dimensionless integrand; D205); for `2 ∫ … from 0 to 1 - π` meaning (2∫…) − π, bracket the integral: `(2 ∫ … to 1) - π` (D173).
-- **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function.
+- **Integrals without limits** (`∫ x² dx`) are done symbolically (Fermium 2's own rules; Fermium 1.5 used SymPy) and give a function.
 - **Vectors:** an integral of a vector is the vector of the integrals of its components, each with its own units: `∫ <cos(φ), sin(φ), 0> dφ from 0 to π/2` is `<1, 1, 0>`. Biot–Savart works as written:
 
 ```fermium
@@ -556,7 +587,7 @@ B = μ₀ I / (4π) * ∫ dl(φ) × (P - ring(φ)) / |P - ring(φ)|^3 dφ from 0
 print B                               # <0, 0, 9.0×10⁻⁶> T (up to rounding in x and y)
 ```
 
-- **Integrals without limits** (`∫ x² dx`) are done symbolically with SymPy and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
+- **Integrals without limits** (`∫ x² dx`) are done symbolically (Fermium 2's own rules; Fermium 1.5 used SymPy) and give a function. Answers with `asinh`, `acosh`, `atanh`, `abs` and `sign` are fine: `a = 0.5 m` then `∫ 1/√(a² + s²) ds` is `asinh(s/a)`. A constant is taken as positive only when that is safe: physical constants, quantities written in the formula (`0.5 m`), and variables that are only ever set to positive numbers (not in a loop, `solve` or `fit`; never in the REPL). A constant that only appears squared, like `b` in `√(b² + s²)`, is replaced by `abs(b)`. Every formula is checked by differentiating it at random points, so a formula that only holds for one sign of a constant is refused. When SymPy can't give a usable formula, the error names the line and suggests limits.
 
 ### Sums: Σ
 
@@ -899,6 +930,9 @@ print np.sum([1, 2, 3.5]), np.linspace(0, 1, 5)
 
 ### Calling compiled Fermium from Python: `fermium.compile`
 
+This is the API of Fermium 1.5's Python package (`import fermium`, deprecated, in `legacy/`). With the `fermium`
+binary, the same API is the module `fermium2`: see *Python interop in Fermium 2* below.
+
 ```python
 import fermium
 from fermium import Q
@@ -936,7 +970,7 @@ print(mod["g"])              # 9.81 m/s²  (also mod.g)
 - **Speed:** the function runs as compiled machine code; one call costs roughly 0.1 ms on top of the
   function itself (the arguments are written into the program's memory and the code runs on a thread
   with a large stack, as `fermium run` does). A loop-heavy function is much faster than the same loop in pure
-  Python: 11× for a Leibniz series with `(-1)^k` on the (shared) test machine; tests/test_python_interop.py
+  Python: 11× for a Leibniz series with `(-1)^k` on the (shared) test machine; legacy/tests/test_python_interop.py
   prints the measured ratio.
 - **Limits:** arguments are numbers and lists (not vectors, matrices, functions or text); results are
   numbers, lists, vectors, matrices, booleans or complex numbers (a `fermium.ComplexQuantity`: a Python
@@ -946,6 +980,41 @@ print(mod["g"])              # 9.81 m/s²  (also mod.g)
   argument signature compiles a small extra piece of code (tens of milliseconds).
 
 See DECISIONS.md D140–D142 for the design.
+
+## Python interop in Fermium 2 (the Rust compiler)
+
+**`use python`** works in the `fermium` binary exactly as described above (same signatures, conversions and
+messages). The binary has no link-time dependency on Python: the first time a program says `use python`, it
+asks `python3` where its shared library is (`sysconfig`), loads it, and imports the module in that Python, so
+the modules you can use are those of that `python3` (with NumPy for lists). A program that doesn't use Python
+never loads it, so the binary runs on a machine without Python. To pick another Python, set `FERMIUM_PYTHON`
+to its interpreter (or `FERMIUM_LIBPYTHON` to its `libpython3.x.so`); the interpreter must have been built
+with its shared library, as the Python of Linux distributions, python.org and Homebrew are.
+
+**Calling Fermium 2 from Python** uses the shared library `libfermium_pyapi` (a C interface, built from
+`rust/crates/fermium-pyapi`) through `fermium2`, a pure-Python module that needs only NumPy (no compiler, no
+Python headers). It offers the same API as `fermium.compile` above:
+
+```sh
+cd rust && cargo build --release -p fermium-pyapi      # target/release/libfermium_pyapi.so
+export PYTHONPATH=$PWD/crates/fermium-pyapi/python    # where fermium2/ is
+```
+
+```python
+import fermium2 as fermium
+from fermium2 import Q
+
+mod = fermium.compile("g = 9.81 m/s²\nperiod(L [m]) = 2π √(L / g)\n")
+print(mod.period(1.0), mod.period(Q(50, "cm")).to("s"), mod["g"])
+```
+
+`fermium2` finds the library in `FERMIUM_PYAPI_LIB`, next to its own `__init__.py`, or in the repository's
+`rust/target/{release,fast,debug}`. Quantities, lists, errors (`fermium2.FermiumError`,
+`FermiumRuntimeError`), warnings, the ΔT and rpm/Hz checks behave as in Fermium 1.5, and a compiled program can
+itself `use python`. One difference: Fermium 2 runs these programs with its tree-walking interpreter, not
+the LLVM back end, so a loop-heavy function is about as fast as pure Python rather than ~10× faster
+(rust/DIVERGENCES.md). Tests: `rust/crates/fermium-pyapi/python/test_fermium2.py` (run by `cargo test -p
+fermium-pyapi`).
 
 ## 12. Symbols and ASCII spellings
 
@@ -1132,16 +1201,13 @@ Runtime problems (an index out of range, asking an ODE solution for a time outsi
 
 - **REPL:** run `fermium`. It keeps history (the up arrow), saved between sessions in `~/.fermium_history`. Type `\theta` then Tab to get θ; `\name` is also replaced when you press Enter. `:help` shows help, `:quit` leaves.
 - **`fermium fmt file.fm --pretty` / `--ascii`:** converts between ASCII and symbols without changing the program's meaning.
-- **`fermium doctor`:** checks the installation and explains fixes. It also reports whether a C compiler is available, which only `fermium build` needs.
-- **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which is linked with a small C runtime. This needs a C compiler (on a Mac: `xcode-select --install`). The executable prints exactly what `fermium run` prints, and doesn't need Python. `load`, `fit` and `plot` work too, with three differences:
-  - **Files are relative to the folder you run the program in**, not the folder of the `.fm` file. `load "data/pendulum.csv"` in a program built as `./pendulum` reads `data/pendulum.csv` from the current folder, and a plot is saved there too. The CSV is read when the program runs, so new measurements work without rebuilding; but the header must be the one the program was built with (the columns' units are compiled in), otherwise the program stops with a message saying so.
-  - **Plots are SVG files.** `plot ... to "decay.png"` writes `decay.svg` and prints `plot saved to /path/to/the/run/folder/decay.svg (standalone programs write SVG)`. The plot has axes, ticks, unit labels, a legend, log scales and the title, but it is simpler than the matplotlib one (no minor ticks). Open it in a web browser.
-  - **`fit`** uses Fermium's own Levenberg–Marquardt instead of SciPy. It starts from the same guesses and reports the same numbers to the printed digits. When the fit can't pin a parameter down (the warning *the fit may not have converged*), the value it stops at can differ from `fermium run`.
+- **`fermium doctor`:** checks the installation and explains fixes: the version and where the program is, the LLVM built into it, the platform, and a test program it compiles and runs. `fermium` is one file, so there is nothing else to check.
+- **`fermium build file.fm -o prog`:** compiles ahead of time into a standalone executable. LLVM compiles the program to an object file, which the linker built into `fermium` (lld) links with Fermium's run time, so Linux needs no C compiler. On a Mac, the system library comes from Apple's Command Line Tools (`xcode-select --install`); the Mac path is not tested yet. The executable prints exactly what `fermium run` prints. Programs that use `plot`, `fit` or `load` (and the other constructs `fermium run` hands to its interpreter) build too: the executable carries the program, checks it again when it starts, and refuses to run if it checks differently there (for example, after a data file it loads changed).
 - **`fermium check file.fm`:** checks the units and the syntax without running the program. It prints the warnings in line order, then `units check out, 2 warnings` (or `no problems found` when there are none), and stops at the first error.
-- **Jupyter kernel:** `fermium jupyter install` registers a Fermium kernel (ipykernel comes with `python3 -m pip install -e ".[full]"`). Each cell runs like a REPL input: variables carry over, plots are shown inline, warnings (also the run-time ones, like a too-coarse step) appear under the cell, and Tab completes `\name` symbols, names and a module's members (`mechanics.` → `spring_period`). A cell that fails leaves nothing behind. See `examples/notebook.ipynb`.
-- **Language server:** `fermium lsp` speaks the Language Server Protocol (pygls comes with `python3 -m pip install -e ".[full]"`): live error and warning underlines, hover that shows a name's units (also `mechanics.pendulum_period`), and completion of `\name`, names and module members. `fermium doctor` says whether pygls and ipykernel are installed, and prints the one install command if anything is missing.
-- **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion, and uses `fermium lsp` for hover and live errors when pygls is installed.
-- **Browser playground:** `web/` runs Fermium in the browser with Pyodide (no install; the README's *Browser playground* section says how to build and serve it). It uses the reference interpreter, so it is slower, but it prints the same output and warnings as `fermium run`.
+- **Jupyter kernel:** `fermium jupyter install` registers a Fermium kernel (the kernel is built into `fermium`; Jupyter itself is installed separately, e.g. `python3 -m pip install jupyterlab`). Each cell runs like a REPL input: variables carry over, plots are shown inline, warnings (also the run-time ones, like a too-coarse step) appear under the cell, and Tab completes `\name` symbols, names and a module's members (`mechanics.` → `spring_period`). A cell that fails leaves nothing behind. See `examples/notebook.ipynb`.
+- **Language server:** `fermium lsp` speaks the Language Server Protocol (built into `fermium`): live error and warning underlines, hover that shows a name's units (also `mechanics.pendulum_period`), and completion of `\name`, names and module members.
+- **VS Code:** `editors/vscode/` adds syntax highlighting and `\name` completion, and uses `fermium lsp` for hover and live errors.
+- **Browser playground:** `web/` runs Fermium in the browser (no install; the README's *Browser playground* section says how to build and serve it). It runs the compiler built to WebAssembly with its interpreter, so it is slower, but it prints the same output and warnings as `fermium run`.
 
 ## 18. Grammar summary
 

@@ -1,0 +1,11 @@
+{
+ "id": "b6e8088a0f22",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "natural frequency: 20.0000 1/s\ndamping rate: 2.00000 1/s\nquality factor: 10.0000\nresonance frequency: 19.9499 1/s\npeak amplitude: 6.25783 cm\nstatic deflection F0/k: 0.625000 cm\nhalf-power points: 18.9222 rad/s 20.9273 1/s\nfull width at half power: 2.00504 rad/s  (γ = 2.00 1/s )\nω/ω0 = 0.50  A_ode = 0.831488 cm  A_formula = 0.831488 cm  phase_ode = 3.81407°  phase_formula = 3.81407°\nω/ω0 = 0.90  A_ode = 2.97282 cm  A_formula = 2.97282 cm  phase_ode = 25.3462°  phase_formula = 25.3462°\nω/ω0 = 0.99  A_ode = 6.18933 cm  A_formula = 6.18933 cm  phase_ode = 78.6344°  phase_formula = 78.6344°\nω/ω0 = 1.0  A_ode = 6.25000 cm  A_formula = 6.25000 cm  phase_ode = 90.0000°  phase_formula = 90.0000°\nω/ω0 = 1.1  A_ode = 2.63640 cm  A_formula = 2.63640 cm  phase_ode = 152.354°  phase_formula = 152.354°\nω/ω0 = 2.0  A_ode = 0.207872 cm  A_formula = 0.207872 cm  phase_ode = 176.186°  phase_formula = 176.186°\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

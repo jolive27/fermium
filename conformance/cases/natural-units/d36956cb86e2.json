@@ -1,0 +1,11 @@
+{
+ "id": "d36956cb86e2",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "5.29×10⁴ fm\n0.529 Å\n1.4138 fm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

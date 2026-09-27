@@ -1,0 +1,10 @@
+print Σ(k² for k from 1 to 10)                          # 385
+print sum(1/k² for k from 1 to 1000) to 6 digits         # 1.64393
+square(x) = Σ(4/(n π) · sin(n x) for n from 1 to 99 step 2)
+print square(1) to 4 digits                              # a square wave: about 1
+print square'
+a = 1 m
+V0 = 10 V
+φ(x, y) = Σ(4 V0/(n π) · sin(n π x/a) sinh(n π y/a) / sinh(n π) for n from 1 to 61 step 2)
+lap = laplacian(φ)
+print φ(0.5 m, 0.5 m) to 6 digits, lap(0.3 m, 0.7 m)     # V₀/4, and 0: it solves Laplace's equation

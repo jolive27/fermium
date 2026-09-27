@@ -1,0 +1,11 @@
+{
+ "id": "0b10742d96bd",
+ "area": "appendix1",
+ "origin": "tests/programs/john/appendix1_lesson2b.fm",
+ "dir": "tests/programs/john",
+ "stdout": "10 rad/s\n2.0 s\n0.500\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

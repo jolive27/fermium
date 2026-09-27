@@ -1,0 +1,7 @@
+at(f, t) = f(t)
+print at(d/dt (3 t²), 2 s)
+φ(x, y) = x² y
+field(G, x, y) = -G(x, y)
+print field(∇φ, 1 m, 2 m)
+p(x) = x³
+print at(p', 2)

@@ -1,0 +1,64 @@
+# Quantum 23 — The hydrogen atom by shooting the radial equation
+#
+# (Griffiths §4.2, Problem 4.12 and §4.2.1; Sakurai §3.7.)  With ψ = (u(r)/r) Y_lm,
+# the radial equation for the electron in hydrogen (infinite proton mass) is
+#
+#     u'' = [ l(l+1)/r² − (2m/ħ²) (E + e²/(4πε₀ r)) ] u,    u(0) = 0.
+#
+#  (a) For l = 0 and l = 1, find the lowest bound states numerically: start
+#      near r = 0 with u ≈ r^(l+1) (1 − r/((l+1) a₀)), integrate out to
+#      r_max = 60 a₀, and adjust E until u(r_max) = 0.  Compare with the
+#      Bohr formula E_n = −Ry/n², Ry = m e⁴/(32π² ε₀² ħ²), and check that the
+#      levels with the same n are degenerate (n = l + 1, l + 2, …).
+#  (b) From the numerical 1s and 2p wavefunctions compute ⟨r⟩ =
+#      ∫ r u² dr / ∫ u² dr and compare with ⟨r⟩ = (a₀/2)(3n² − l(l+1)):
+#      1.5 a₀ for 1s, 5 a₀ for 2p.
+
+Ry = m_e e⁴ / (32 π² ε₀² ħ²)
+print "Ry =", Ry in eV to 10 digits
+
+r0 = 1e-6 a_0
+r_max = 60 a_0
+r_cut = 30 a_0
+
+# u is measured in units where u ≈ (r/a₀)^(l+1) near the origin.
+# The normalisation integrals N = ∫ u² dr and M = ∫ r u² dr ride along as extra
+# unknowns (N' = u², M' = r u²): an ODE solution inside a function can't be put
+# into an ∫, and a solution can't be returned from a function (FRICTION.md).
+# They must come from the very same integration that the energy was tuned on:
+# for 1s the outward solution grows like e^{r/a₀} away from the eigenvalue, so
+# a second, separately written solve gives a visibly wrong ⟨r⟩.
+# want = 0 returns u(r_max) (for shooting), want = 1 returns ⟨r⟩/a₀ up to r_cut
+# (both results must have the same units, so ⟨r⟩ is returned in units of a₀).
+radial(E, l, want) =
+    solve u'' = (l (l + 1) / r² - (2 m_e / ħ²) (E + e² / (4π ε₀ r))) u,
+          N' = u²,
+          M' = r u²
+      with u(r0) = (r0/a_0)^(l + 1) (1 - r0 / ((l + 1) a_0)),
+           u'(r0) = (l + 1) (r0/a_0)^l / a_0 - (l + 2) (r0/a_0)^(l + 1) / ((l + 1) a_0),
+           N(r0) = 0 m, M(r0) = 0 m²
+      for r from r0 to r_max
+    if want == 0
+        return u(r_max)
+    return M(r_cut) / (N(r_cut) a_0)
+
+E1s = 0 eV
+E2p = 0 eV
+for l from 0 to 1
+    found = 0
+    E_lo = -15 eV
+    while found < 3 - l
+        E_hi = 0.97 E_lo
+        if radial(E_lo, l, 0) * radial(E_hi, l, 0) < 0
+            solve radial(E, l, 0) = 0 for E from E_lo to E_hi
+            found += 1
+            n = l + found
+            if n == 1
+                E1s = E
+            if n == 2 and l == 1
+                E2p = E
+            print "l =", l, " n =", n, " E_shoot =", E in eV to 10 digits, " -Ry/n² =", -Ry / n² in eV to 10 digits
+        E_lo = E_hi
+
+# (b)
+print "(b) <r>_1s =", radial(E1s, 0, 1) to 10 digits, "a0   <r>_2p =", radial(E2p, 1, 1) to 10 digits, "a0"

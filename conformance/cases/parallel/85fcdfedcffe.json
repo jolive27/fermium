@@ -1,0 +1,17 @@
+{
+ "id": "85fcdfedcffe",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "break can't be used inside a parallel for: the loop has to run to the end",
+  "line": 3,
+  "col": 9,
+  "hint": "keep the values in a list with xs[i] = …, then use them after the loop",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,13 @@
+f(x) = tanh(2x)
+d1 = f'
+d2 = f''
+print d1(-1.6618248579083739) to 17 digits
+print d2(-1.6618248579083739) to 17 digits
+print d1(-0.7032042586774061) to 17 digits
+print d2(-0.7032042586774061) to 17 digits
+print d1(-0.3569593094110908) to 17 digits
+print d2(-0.3569593094110908) to 17 digits
+print d1(1.183267521303617) to 17 digits
+print d2(1.183267521303617) to 17 digits
+print d1(-1.5381415954701723) to 17 digits
+print d2(-1.5381415954701723) to 17 digits

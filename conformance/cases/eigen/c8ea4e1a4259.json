@@ -1,0 +1,11 @@
+{
+ "id": "c8ea4e1a4259",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "(a) E(2s) = -3.401423280 eV  E(2p) = -3.401423281 eV  Bohr = -3.401423281 eV\n(b) 2s: <1/r> a0 = 0.25000000  <1/r²> a0² = 0.25000000  |psi(0)|² a0³ = 0.039788730\n    2p: <1/r> a0 = 0.25000000  <1/r²> a0² = 0.083333333  <1/r³> a0³ = 0.041666666\n(c) 2s1/2: rel = -147.16844 μeV  Darwin = 90.565184 μeV  total = -56.603260 μeV\n    2p1/2: total = -56.603249 μeV  2p3/2: total = -11.320650 μeV\n    formula: j = 1/2: -56.603249 μeV  j = 3/2: -11.320650 μeV\n    Dirac (minus the Bohr energy): j = 1/2: -56.604831 μeV  j = 3/2: -11.320725 μeV\n(d) 2p3/2 - 2p1/2 = 10.9493 GHz  Dirac: 10.9496 GHz\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "87257ab9268c",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-review.md#1",
+ "dir": "dev-notes/notes",
+ "stdout": "y''(t) = -9.81 m/s²   [m/s², for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

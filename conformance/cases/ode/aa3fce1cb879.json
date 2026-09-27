@@ -1,0 +1,11 @@
+{
+ "id": "aa3fce1cb879",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "(a) mu = 0.1: T = 6.28711127 s  Lindstedt 2π(1 + μ²/16) = 6.28711230 s  amplitude = 2.000104\n(b) mu = 10: T = 19.0783696 s  amplitude = 2.014285\n(c) mu = 100: crossings = 6  T = 162.837071 s  asymptotic = 162.8511 s  steps = 38853\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

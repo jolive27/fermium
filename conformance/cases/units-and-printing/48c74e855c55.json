@@ -1,0 +1,11 @@
+{
+ "id": "48c74e855c55",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[0, 0.500000000000000, 1.00000000000000, 1.50000000000000, 2.00000000000000] Hz\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

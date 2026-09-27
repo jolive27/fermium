@@ -1,0 +1,11 @@
+{
+ "id": "c7b2019bffe0",
+ "area": "ode",
+ "origin": "dev-notes/notes/bugs-adversarial.md#57",
+ "dir": "dev-notes/notes",
+ "stdout": "6.85 K\n23.5 °C\n10 K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

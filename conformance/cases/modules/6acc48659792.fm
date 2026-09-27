@@ -1,0 +1,4 @@
+import mechanics
+
+print (mechanics.pendulum_period_large(1 m, g_n, 0.001)) / (1 s) to 12 digits
+print (mechanics.pendulum_period(1 m, g_n)) / (1 s) to 12 digits

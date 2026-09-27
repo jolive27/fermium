@@ -1,0 +1,11 @@
+{
+ "id": "68173b9b91ab",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "fit counts = N0 exp(-t/τ)   (13 data points from ../data/decay.csv)\n  N0 = 1195.6   (standard error 9.4)\n  τ = 20.10 min   (standard error 0.26 min)\n  rms residual = 10.8\n0.000829 1/s\n0.0498 1/min\nactivity at t = 0: 59.5 1/min\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

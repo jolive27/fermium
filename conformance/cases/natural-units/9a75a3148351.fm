@@ -1,0 +1,8 @@
+units nuclear:
+    r = 2 fm
+    E = 10 MeV
+print r in m
+x = r in fm
+print x
+print E in J to 10 digits
+print E in kg to 10 digits

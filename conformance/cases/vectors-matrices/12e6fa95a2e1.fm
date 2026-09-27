@@ -1,0 +1,63 @@
+# Special relativity 31 — Wigner rotation and Thomas precession from boost matrices
+#
+# (Jackson 3rd ed., §11.8 and Problem 11.9–11.10; Goldstein 3rd ed., §7.3 and
+#  Misner, Thorne & Wheeler, Exercise 6.9; Sexl & Urbantke §4.4.)
+# The pure boost with velocity β⃗ c (β⃗ in the x–y plane) has the 4×4 matrix
+#     B⁰₀ = γ,  B⁰ᵢ = Bⁱ₀ = −γ βᵢ,  Bⁱⱼ = δᵢⱼ + (γ − 1) βᵢ βⱼ / β².
+#   (a) Boost along x with β₁ = 0.600, then along the new y axis with β₂ = 0.800.
+#       The product is not a pure boost: L = R(θ) B(β⃗), with the Wigner angle
+#       cos θ = (γ₁ + γ₂)/(1 + γ₁ γ₂). Read off β⃗ from L, strip the boost, and
+#       measure θ from the rotation left over.
+#   (b) Thomas precession: an electron goes round a circle at speed β = 0.600. Follow its
+#       rest frame through N small boosts, each from the current rest frame to the next
+#       (Λₖ₊₁ = B(u⃗′ₖ) Λₖ, with u⃗′ₖ the next lab velocity seen from frame k). After one
+#       orbit the frame has turned by 2π(γ − 1) = 90.0°, against the orbit's sense
+#       (Thomas's ω_T = (γ − 1) ω). Use N = 1000 and 2000 and Richardson-extrapolate.
+# Workaround: matrices are at most 4×4 and can't be filled in a loop (friction #51),
+# so the boost is a function returning a 4×4 literal, with β_z = 0.
+
+boost(bx, by) =
+    b2 = bx² + by²
+    γ = 1 / √(1 - b2)
+    k = if b2 > 0 then (γ - 1) / b2 else 0
+    return [[γ, -γ bx, -γ by, 0],
+            [-γ bx, 1 + k bx², k bx by, 0],
+            [-γ by, k bx by, 1 + k by², 0],
+            [0, 0, 0, 1]]
+
+# the rotation left in a Lorentz matrix L = R B: β⃗ = −(L⁰ᵢ)/L⁰₀ ... from the first row
+rotation_angle(L) =
+    bx = -L[1, 2] / L[1, 1]
+    by = -L[1, 3] / L[1, 1]
+    R = L boost(-bx, -by)
+    return atan2(R[3, 2], R[2, 2])
+
+# (a) two perpendicular boosts
+β1 = 0.600
+β2 = 0.800
+γ1 = 1 / √(1 - β1²)
+γ2 = 1 / √(1 - β2²)
+L = boost(0, β2) boost(β1, 0)
+θ = rotation_angle(L)
+print "(a) Wigner angle =", θ in ° to 10 digits, " closed form acos((γ1 + γ2)/(1 + γ1 γ2)) =", acos((γ1 + γ2) / (1 + γ1 γ2)) in ° to 10 digits
+print "    composite speed =", √((L[1, 2] / L[1, 1])² + (L[1, 3] / L[1, 1])²) to 10 digits, " (sqrt(1 - 1/(γ1 γ2)²) =", √(1 - 1 / (γ1 γ2)²) to 10 digits, ")"
+
+# (b) Thomas precession on a circle
+β = 0.600
+γ = 1 / √(1 - β²)
+thomas(N) =
+    Λ = boost(0, β)                                  # the rest frame at φ = 0, moving along +y
+    for j from 1 to N
+        φ = 2π j / N
+        U = <γ, -γ β sin(φ), γ β cos(φ), 0>          # the lab 4-velocity at the next point
+        Up = Λ U                                     # ... seen from the current rest frame
+        Λ = boost(Up[2] / Up[1], Up[3] / Up[1]) Λ
+    return rotation_angle(Λ)
+
+t1 = thomas(1000)
+t2 = thomas(2000)
+print "(b) gamma =", γ to 6 digits, " angle N = 1000:", t1 in ° to 10 digits, " N = 2000:", t2 in ° to 10 digits
+# the error falls as 1/N² (step-midpoint symmetry), so extrapolate with (4 t2 − t1)/3.
+# Λ maps lab components to rest-frame components (a passive rotation by +θ), so the
+# frame's axes have turned by −θ: clockwise, against the counter-clockwise orbit.
+print "    Richardson (4 t2 - t1)/3 =", (4 t2 - t1) / 3 in ° to 10 digits, " expected 2π(γ - 1) =", 2π (γ - 1) in ° to 10 digits

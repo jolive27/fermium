@@ -1,0 +1,17 @@
+{
+ "id": "a989e9944aa1",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the seed must be a plain number, not length [m]",
+  "line": 1,
+  "col": 6,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

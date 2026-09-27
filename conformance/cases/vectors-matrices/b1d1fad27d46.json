@@ -1,0 +1,11 @@
+{
+ "id": "b1d1fad27d46",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "[[2, -1], [-1, 2]] N/m\n<0, 0.0300> N\n3 N²/m² [[0.667, 0.333], [0.333, 0.667]] m/N\n[[2, -1], [-1, 2]] N/m [[5, -4], [-4, 5]] N²/m²\n<0.667, 0.333> m\n-1 N/m <-1, 2> N/m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

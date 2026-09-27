@@ -1,0 +1,4 @@
+a = 280.9039218679102 [MeV]
+b = a in erg
+print b / (1 [erg]) to 15 digits
+print (a in erg) in MeV to 15 digits

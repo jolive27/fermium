@@ -1,0 +1,17 @@
+{
+ "id": "bcafc3890c29",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'feet' is not a unit Fermium knows",
+  "line": 2,
+  "col": 12,
+  "hint": "Fermium writes units as symbols: ft",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "d3a903a189b3",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "g(x) = -exp(x)/(exp(x) + 1)²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

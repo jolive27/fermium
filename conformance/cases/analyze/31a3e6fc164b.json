@@ -1,0 +1,11 @@
+{
+ "id": "31a3e6fc164b",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "dimensional analysis of stokes: F depends on μ, v, r\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = F/(μ v r)\n  so F ∝ μ v r   (F = C μ v r, with C a pure number)\n  defined stokes(μ, v, r) = μ v r, so F = C stokes(μ, v, r)\ndimensional analysis of sphere: F depends on μ, v, r, ρ\n  5 quantities, 3 independent dimensions (length, mass, time) → 5 − 3 = 2 dimensionless groups\n  Π₁ = F/(μ v r)\n  Π₂ = v r ρ/μ\n  so F = μ v r · f(Π₂)   (f is a function dimensional analysis can't give)\n  defined sphere(μ, v, r) = μ v r, so F = sphere(μ, v, r) · f(Π₂)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

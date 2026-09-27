@@ -1,0 +1,13 @@
+f(x) = (x + 2)^(1/3)
+d1 = f'
+d2 = f''
+print d1(0.6012426958730444) to 17 digits
+print d2(0.6012426958730444) to 17 digits
+print d1(3.809543461533717) to 17 digits
+print d2(3.809543461533717) to 17 digits
+print d1(3.981132439538718) to 17 digits
+print d2(3.981132439538718) to 17 digits
+print d1(4.422137826951238) to 17 digits
+print d2(4.422137826951238) to 17 digits
+print d1(4.946459719175864) to 17 digits
+print d2(4.946459719175864) to 17 digits

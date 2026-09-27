@@ -1,0 +1,23 @@
+# The same simulation with the Euler method (position first)
+GM = G M_sun
+dt = 1 day
+x = 1 AU
+y = 0 AU
+vx = 0 km/s
+vy = 29.78 km/s
+xs = []
+ys = []
+
+for day_number from 1 to 5 * 365
+    r = sqrt(x^2 + y^2)
+    ax = -GM x / r^3
+    ay = -GM y / r^3
+    x += vx dt
+    y += vy dt
+    vx += ax dt
+    vy += ay dt
+    push(xs, x)
+    push(ys, y)
+
+print "distance from the Sun after 5 years:", sqrt(x^2 + y^2) in AU
+plot ys in AU vs xs in AU to "euler_orbit.png"

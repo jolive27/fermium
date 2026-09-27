@@ -1,0 +1,8 @@
+total = 0
+terms = 0
+for n from 1 to ∞
+    total += 1/n²
+    terms = n
+    if 1/n² < 1e-6
+        break
+print terms, total

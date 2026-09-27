@@ -1,0 +1,11 @@
+{
+ "id": "9bc2ece334b7",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "12 m/s 6 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

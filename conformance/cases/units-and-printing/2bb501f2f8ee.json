@@ -1,0 +1,17 @@
+{
+ "id": "2bb501f2f8ee",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "km/s is a unit, not a value",
+  "line": 1,
+  "col": 5,
+  "hint": "for the quantity write  1 km/s  (a number, then its unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

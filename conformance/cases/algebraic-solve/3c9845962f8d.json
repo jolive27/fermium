@@ -1,0 +1,17 @@
+{
+ "id": "3c9845962f8d",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "until (a stop condition) is for differential equations",
+  "line": 3,
+  "col": 3,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

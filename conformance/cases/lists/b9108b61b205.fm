@@ -1,0 +1,2 @@
+xs = [1 m, 200 cm]
+print xs[2] in m

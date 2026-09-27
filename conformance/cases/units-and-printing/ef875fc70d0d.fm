@@ -1,0 +1,2 @@
+v_esc = sqrt(2 G M_earth / R_earth)
+print v_esc in km/s

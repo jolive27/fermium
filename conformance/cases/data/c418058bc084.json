@@ -1,0 +1,17 @@
+{
+ "id": "c418058bc084",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't find the file '/tmp/pytest-of-root/pytest-790/popen-gw1/test_fit_with_the_analysis_res0/pendulum.csv'",
+  "line": 1,
+  "col": 8,
+  "hint": "looked in /tmp/pytest-of-root/pytest-790/popen-gw1/test_fit_with_the_analysis_res0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

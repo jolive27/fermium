@@ -1,0 +1,17 @@
+{
+ "id": "db5ec743debe",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 eV/h': in Fermium h is Planck's constant, not the hour, so this would divide by Planck's constant",
+  "line": 1,
+  "col": 12,
+  "hint": "write 2 eV/hr for eV per hour, or  (2 eV)/h  to divide by Planck's constant",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

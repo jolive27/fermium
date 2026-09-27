@@ -1,0 +1,17 @@
+{
+ "id": "60eb1dc9e79f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'x ≈ 0 m within 1%' is true only when x is exactly 0: a percentage of 0 is 0",
+  "line": 2,
+  "col": 9,
+  "hint": "give an absolute tolerance: write x ≈ 0 m within 1e-9 m (the difference you can accept)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

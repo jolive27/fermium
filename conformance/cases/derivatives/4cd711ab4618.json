@@ -1,0 +1,11 @@
+{
+ "id": "4cd711ab4618",
+ "area": "derivatives",
+ "origin": "dev-notes/notes/bugs-adversarial.md#50",
+ "dir": "dev-notes/notes",
+ "stdout": "8.26\ng(x) = ((cos(exp(x))² - sin(exp(x)))·exp(x) + cos(exp(x)))·exp(sin(exp(x)))·exp(x)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

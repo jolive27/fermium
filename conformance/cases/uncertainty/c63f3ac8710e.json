@@ -1,0 +1,11 @@
+{
+ "id": "c63f3ac8710e",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "mean period: 2.208 ± 0.012 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

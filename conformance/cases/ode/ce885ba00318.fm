@@ -1,0 +1,9 @@
+GM = G M_sun
+solve
+    x'' = -GM x / (x^2 + y^2)^1.5
+    y'' = -GM y / (x^2 + y^2)^1.5
+    with x(0) = 1 AU, y(0) = 0 AU, x'(0) = 0 km/s, y'(0) = 20 km/s
+    for t from 0 yr to 0.5 yr
+r(t) = sqrt(x(t)^2 + y(t)^2)
+print "closest approach (solve):", min(x) in AU
+print "distance after 0.25 yr:", r(0.25 yr) in AU to 3 digits

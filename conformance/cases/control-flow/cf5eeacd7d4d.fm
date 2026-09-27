@@ -1,0 +1,2 @@
+for i from 10 to 1 step -3
+    print i

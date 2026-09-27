@@ -1,0 +1,11 @@
+{
+ "id": "5548b11422ae",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 mSv\n",
+ "stderr": "warning: line 1: subtracting a value in mSv and one in mGy: both are J/kg in SI, but grays measure absorbed dose and sieverts equivalent dose (weighted by the radiation type)\n    print 2 mSv - 1 mGy\n          ^\n  hint: convert the absorbed dose with the radiation weighting factor first (H = w_R D)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

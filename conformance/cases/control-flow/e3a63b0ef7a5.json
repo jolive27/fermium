@@ -1,0 +1,17 @@
+{
+ "id": "e3a63b0ef7a5",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'1.2 T' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 2,
+  "col": 23,
+  "hint": "write  1.2*T  for 1.2 × your variable T, or  1.2 [T]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

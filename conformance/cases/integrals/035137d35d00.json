@@ -1,0 +1,11 @@
+{
+ "id": "035137d35d00",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "V1 = 0.492590 L\nT2 = 689.564 K\nwork done on the gas in compression = 161.888 J\nwork done by the gas in expansion   = 375.631 J\nQ_in = 378.489 J\nefficiency from the integrals = 0.56472472\nefficiency 1 - r^(1-γ)       = 0.56472472\n",
+ "stderr": "warning: line 28: this scales an absolute temperature: °C values are multiplied as kelvins (20 °C is 293.15 K, and that is what gets scaled)\n    T2 = T1 r^(γ - 1)                # T V^(γ-1) is constant on an adiabat\n         ^\n  hint: to scale a temperature change, write it in K\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

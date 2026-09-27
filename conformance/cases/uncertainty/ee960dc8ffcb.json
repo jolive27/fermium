@@ -1,0 +1,11 @@
+{
+ "id": "ee960dc8ffcb",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "5.00 ± 0.15\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

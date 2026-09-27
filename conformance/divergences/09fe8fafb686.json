@@ -1,0 +1,8 @@
+{
+ "id": "09fe8fafb686",
+ "section": "Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)",
+ "stdout": "1.20 m 0.333 0.67 1×10²² 123456789 0.3 ∞ NaN\n20 °C 26.9 °C [0, 10] °C\n<1.5, 2> m 2.5 m\n0.368 -0.61\n[0, 0.0526, 0.105, 0.158, 0.211, …, 0.895, 0.947, 1.00]  (20 values)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

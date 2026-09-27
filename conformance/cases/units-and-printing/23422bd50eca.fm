@@ -1,0 +1,2 @@
+print gamma(5)      # actual: "line 1: γ isn't defined"   expected: 24
+print γ(5)          # same

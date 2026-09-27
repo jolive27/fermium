@@ -1,0 +1,5 @@
+g = 9.81 m/s²
+print g
+print g in ft/s²
+print "g is", g
+print to(g, km/hr^2)

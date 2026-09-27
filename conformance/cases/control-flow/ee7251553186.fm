@@ -1,0 +1,2 @@
+for f in [0.25, 0.5, 3]
+    print f, 2 f

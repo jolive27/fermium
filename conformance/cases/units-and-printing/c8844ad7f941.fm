@@ -1,0 +1,1 @@
+"﻿x = 3\nprint x"     # actual: unexpected character '﻿' (Zero Width No-Break Space)

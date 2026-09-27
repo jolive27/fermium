@@ -1,0 +1,11 @@
+{
+ "id": "0279d1bbb3f3",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson02_variables_formulas.md#26",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    6 kg m/s\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

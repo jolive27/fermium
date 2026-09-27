@@ -1,0 +1,11 @@
+{
+ "id": "897c39584fc0",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "385\n1.64393\n0.9935\nsquare'(x) = Σ(4 cos(n x)/π for n from 1 to 99 step 2)\n2.50000 V 0 V/m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

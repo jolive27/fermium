@@ -1,0 +1,11 @@
+{
+ "id": "887be0dddbad",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "critical temperature: 303.998 K\ncritical pressure: 7.40444 MPa\ncritical volume: 128.010 cm³/mol\nspinodal volumes: 91.9876 cm³/mol 195.664 cm³/mol\nspinodal pressures: 3.10871 MPa 5.36091 MPa\nsaturation pressure: 4.79066 MPa\nP_s / P_c: 0.64700\nliquid and gas volumes: 77.2415 cm³/mol 300.675 cm³/mol\narea check (J/mol): 1.28×10⁻¹³ J/mol\nlatent heat: 4.57228 kJ/mol\ndP_s/dT, numerical: 74.795 kPa/K\ndP_s/dT, Clapeyron: 74.795 kPa/K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

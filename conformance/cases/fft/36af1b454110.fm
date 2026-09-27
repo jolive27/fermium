@@ -1,0 +1,19 @@
+dt = 1 ms                                  # sampling interval
+n = 1000
+ts = linspace(0 s, (n - 1) dt, n)
+xs = zeros(n)
+for i from 1 to n
+    xs[i] = 3 V · sin(2π · 50 Hz · ts[i]) + 1 V · cos(2π · 120 Hz · ts[i])
+
+A = amplitude_spectrum(xs)                 # in V: a sine of amplitude 3 V gives a peak of 3 V
+f = frequencies(xs, dt)                    # in Hz: 0, 1 Hz, 2 Hz, …, 500 Hz (the Nyquist frequency)
+k = argmax(A)
+print "strongest:", f[k], "with amplitude", A[k]
+
+P = power_spectrum(xs, dt)                 # power spectral density, in V²/Hz
+print "Parseval:", sum(P) (f[2] - f[1]), "=", mean(xs · xs)
+
+X = fft(xs)                                # the transform: a list of complex numbers, in V
+print len(X), abs(X[51]) / n               # |X| at 50 Hz is n × 3 V / 2
+back = re(ifft(X))                         # the inverse transform gives back the signal
+print back[10], xs[10]

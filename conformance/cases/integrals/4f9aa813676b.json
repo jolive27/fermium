@@ -1,0 +1,13 @@
+{
+ "id": "4f9aa813676b",
+ "area": "integrals",
+ "origin": "benchmarks/fermium/blackbody.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "sum_integrals 4.0159493727×10¹⁰\nratio_5778K 0.9999999999706\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

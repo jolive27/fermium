@@ -1,0 +1,17 @@
+{
+ "id": "0ca0fbf84ae4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "M is a matrix: set one entry at a time, like M[i, j] = …",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

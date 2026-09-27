@@ -1,0 +1,7 @@
+g = 9.81 m/s²
+v(h) = √(2*g*h)
+print v'
+term(x, y) = sin(3 x) y²
+print ∂²/∂x² term
+y(t) = 20 m/s * t - ½ g t²
+print y

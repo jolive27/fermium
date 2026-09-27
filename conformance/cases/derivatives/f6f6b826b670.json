@@ -1,0 +1,11 @@
+{
+ "id": "f6f6b826b670",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "∇φ(x, y, z) = <-q x/(4π ε_0 (x² + y² + z²)^(3/2)), -q y/(4π ε_0 (x² + y² + z²)^(3/2)), -q z/(4π ε_0 (x² + y² + z²)^(3/2))>\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

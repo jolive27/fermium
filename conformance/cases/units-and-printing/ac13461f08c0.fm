@@ -1,0 +1,4 @@
+a = 962.9380489198014 [J]
+b = a in J
+print b / (1 [J]) to 15 digits
+print (a in J) in J to 15 digits

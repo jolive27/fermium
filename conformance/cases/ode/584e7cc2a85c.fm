@@ -1,0 +1,11 @@
+g = 9.81 m/s^2
+L = 1 m
+for amp in [10 deg, 45 deg, 90 deg]
+    solve theta'' = -(g / L) sin(theta)
+      with theta(0) = amp, theta'(0) = 0 rad/s
+      for t from 0 s to 5 s
+    T = 0.01 s
+    while not (theta'(T - 1 ms) > 0 rad/s and theta'(T) <= 0 rad/s)
+        T += 1 ms
+    print "amplitude", amp, "period", T to 4 digits
+print "small-angle formula:", 2 pi sqrt(L / g) to 4 digits

@@ -1,0 +1,13 @@
+f(x) = atan(x) + asin(x/4)
+d1 = f'
+d2 = f''
+print d1(-1.2313884305625555) to 17 digits
+print d2(-1.2313884305625555) to 17 digits
+print d1(1.694688834197879) to 17 digits
+print d2(1.694688834197879) to 17 digits
+print d1(-0.2770798436017956) to 17 digits
+print d2(-0.2770798436017956) to 17 digits
+print d1(0.030046299796101295) to 17 digits
+print d2(0.030046299796101295) to 17 digits
+print d1(-2.6110225818834794) to 17 digits
+print d2(-2.6110225818834794) to 17 digits

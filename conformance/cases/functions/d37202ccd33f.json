@@ -1,0 +1,17 @@
+{
+ "id": "d37202ccd33f",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "m isn't defined",
+  "line": 1,
+  "col": 16,
+  "hint": "m is a unit, and units go right after a number; to multiply x + 1 by m write x + 1 * 1 m or x + 1 [m]; this happened when calling f on line 2 (with x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

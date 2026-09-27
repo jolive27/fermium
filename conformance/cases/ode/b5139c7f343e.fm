@@ -1,0 +1,4 @@
+solve x'' = -x / (1 s²)
+  with x(0 s) = 1 m, x'(0 s) = 0 m/s
+  for t from 0 s to 3 s tolerance 1e-11
+print x''(2 s) to 12 digits, x(2 s) to 12 digits

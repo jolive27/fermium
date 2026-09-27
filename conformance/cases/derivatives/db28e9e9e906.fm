@@ -1,0 +1,2 @@
+ap(f, x) = f'(x) + f(x)
+print 1

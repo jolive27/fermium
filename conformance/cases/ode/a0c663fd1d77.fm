@@ -1,0 +1,6 @@
+E = 1.0 eV
+T = 1e-14 s
+solve 1i ħ ψ' = E ψ with ψ(0 s) = 1 + 0i for t from 0 s to T
+print ψ(T) to 12 digits
+print |ψ(T) - exp(-1i E T / ħ)| to 3 digits
+print |ψ(T/2)| to 12 digits

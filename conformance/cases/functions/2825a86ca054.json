@@ -1,0 +1,11 @@
+{
+ "id": "2825a86ca054",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "examples/rosetta",
+ "stdout": "D + T -> He-4 + n: 17.589 MeV\np + Li-7 -> 2 He-4: 17.346 MeV\nU-238 -> Th-234 + He-4: 4.2697 MeV\n4 H -> He-4: 26.731 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

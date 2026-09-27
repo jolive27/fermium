@@ -1,0 +1,11 @@
+{
+ "id": "4fb9e61d64bf",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "orbital period: 87.9356 day\ncase A, exact advance per orbit: 0.006292626\ncase A, first order: 0.006283185\ncase A, aphelion: 0.4643779 AU\ncase A, advance from the integral: 0.006292626\ncase A, advance from the ODE: 0.006292626\ncase B, advance from the integral: 0.006299051\ncase B, advance from the ODE: 0.006299051\ncase B, first order: 0.006283185\n",
+ "stderr": "warning: line 25: e (the elementary charge) is now your variable: from here on, e means your value\n    e = 0.206\n    ^\n  hint: that's fine if you don't need the elementary charge below; otherwise pick another name, like e_0 or e2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

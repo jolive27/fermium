@@ -1,0 +1,11 @@
+{
+ "id": "326ed4c73ce2",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9.74×10⁻¹²\n2.31×10⁻¹⁷\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

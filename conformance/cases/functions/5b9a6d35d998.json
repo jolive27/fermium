@@ -1,0 +1,11 @@
+{
+ "id": "5b9a6d35d998",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "true false\ntrue\ntrue true\ntrue true\ntrue\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

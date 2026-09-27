@@ -1,0 +1,11 @@
+{
+ "id": "006b03ca9545",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "70 °C\n126 °F\n194 °F\n",
+ "stderr": "warning: line 3: this is a difference of two temperatures, so it is shown in °C without the offset (a change of 1 °C is 1 K)\n    print d in °C\n          ^\n  hint: write it  in K  to make that clear\nwarning: line 4: this is a difference of two temperatures, so it is shown in °F without the offset (a change of 1 °C is 1 K)\n    print (T0 - 20 °C) in °F\n          ^\n  hint: write it  in K  to make that clear\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

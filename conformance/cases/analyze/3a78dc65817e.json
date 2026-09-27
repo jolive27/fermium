@@ -1,0 +1,11 @@
+{
+ "id": "3a78dc65817e",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of planck: ℓ depends on G, ħ, c\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = ℓ √(c³/(G ħ))\n  so ℓ ∝ √(G ħ/c³)   (ℓ = C √(G ħ/c³), with C a pure number)\n  defined planck = √(G ħ/c³) = 1.62×10⁻³⁵ m\n1.61626×10⁻³⁵ m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

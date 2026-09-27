@@ -1,0 +1,20 @@
+# Mass on a spring
+k = 50 N/m
+m = 0.5 kg
+ω = √(k/m)
+print ω in rad/s                      # 10 rad/s
+
+A = 10 cm                             # cm, not 0.1 m: here m is also the mass (Fermium would warn)
+x(t) = A cos(ω t)
+v = d/dt x
+print v                               # v(t) = -A ω sin(ω t)   [m/s, for t in s]
+
+F(x) = k x
+W = ∫ F(x) dx from 0 cm to 20 cm
+print W                               # 1 J
+
+b = 0.2 kg/s
+solve m x'' = -k x - b x'
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 5 s
+print x(5 s)                          # 3.52 cm (to 6 digits: 3.52006 cm)

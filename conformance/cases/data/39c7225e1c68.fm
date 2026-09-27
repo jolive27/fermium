@@ -1,0 +1,8 @@
+nuclei = load "research/semf_ame2020/ame2020_binding.csv"
+a_V = 15 MeV
+a_S = 17 MeV
+a_C = 0.7 MeV
+a_A = 23 MeV
+a_P = 12 MeV
+fit B = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + P a_P / √A to nuclei
+print err(a_V)

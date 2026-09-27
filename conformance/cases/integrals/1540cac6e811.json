@@ -1,0 +1,11 @@
+{
+ "id": "1540cac6e811",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "integral of Planck: 6.32×10⁷ W/m²\nStefan-Boltzmann:  6.32×10⁷ W/m²\npower of the Sun: 3.84×10²⁶ W\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

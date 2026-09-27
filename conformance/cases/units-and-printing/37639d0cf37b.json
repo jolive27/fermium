@@ -1,0 +1,11 @@
+{
+ "id": "37639d0cf37b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "Hello Physics!\n29.4 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

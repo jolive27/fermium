@@ -1,0 +1,17 @@
+solve y'' = -9.8 m/s²
+  with y(0 s) = 0 m, y'(0 s) = 9.8 m/s
+  for t from 0 s to 10 s
+  until y' = 0 m/s
+print times(y)[end] to 12 digits
+solve y2'' = -9.8 m/s²
+  with y2(0 s) = 0 m, y2'(0 s) = 9.8 m/s
+  for t from 0 s to 10 s step 0.01 s
+  until y2 = 1 m
+print times(y2)[end] to 12 digits
+solve u' = u / (1 s)
+  with u(0 s) = 1 m
+  for t from 0 s to -10 s
+  until u = 0.5 m
+print times(u)[end] to 12 digits
+solve q' = 1 m/s with q(0 s) = 0 m, until q = 2 m for t from 0 s to 5 s
+print times(q)[end]

@@ -1,0 +1,6 @@
+L = 1.20 ± 0.01 m
+T = 2.21 ± 0.02 s
+propagate montecarlo 3000 samples
+    g = 4π² L / T²
+    if g < 0 m/s² then g = 0 m/s²
+print value(g) to 9 digits

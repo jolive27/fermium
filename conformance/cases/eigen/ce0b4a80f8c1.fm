@@ -1,0 +1,10 @@
+V(r) = -1 eV nm / r
+solve -ħ²/(2*m_e) * u'' + V(r) u = E u
+    with u(0 nm) = 0, u(5 nm) = 0
+    for r from 0 nm to 5 nm
+    lowest 3
+    grid 3000
+    using shooting
+for k from 1 to 3
+    print E[k] in eV to 10 digits
+print ∫ u_1(r)^2 dr from 0 nm to 5 nm to 6 digits

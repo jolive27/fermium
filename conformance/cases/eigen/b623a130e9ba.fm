@@ -1,0 +1,5 @@
+V(x) = 0 eV
+solve -ħ²/(2*m_e) * ψ'' + V(x) ψ = E ψ
+    with ψ(0 nm) = 0, ψ(1 nm) = 0
+    for x from 0 nm to 1 nm lowest 2
+print ψ

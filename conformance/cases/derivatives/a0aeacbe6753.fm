@@ -1,0 +1,3 @@
+f(x) = exp(sin(exp(sin(x))))
+h = f''
+print h(13/10) to 6 digits

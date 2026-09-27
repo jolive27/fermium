@@ -1,0 +1,1 @@
+print Σ(1/k² for k from 1 to ∞)

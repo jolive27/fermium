@@ -1097,3 +1097,694 @@ regression tests in tests/test_redteam8.py.
 | 23 | BBN README ⁷Li sentence and old `2/π² T⁴` note | doc | fixed |
 | 24 | ²⁰⁸Pb table −8.05 vs printed −8.04 | doc | fixed |
 | 25 | Lesson 2 overstated the rule | doc | fixed by #5, #6, #9 |
+
+## Round 9 (run 2, 2026-09-26 04:30 UTC): Phase B groundwork (conformance suite + early Rust)
+
+Independent reviewer on branch claude/v2-rust at 2939b2e: `conformance/run`, `conformance/harvest.py`,
+`conformance/MANIFEST.md`, the `FERMIUM_HARVEST` hook in `tests/conftest.py`, and the Rust crates `fermium-ir`
+(types.rs, the Unifier), `fermium-codegen/src/eval.rs`, `fermium-units` (numfmt) and `fermium-check` (arith.rs).
+`cargo test --workspace` passes (13 tests, plus the 51 247-check units parity fixture). The Rust CLI stub scores
+0/3037, which is honest. The scoreboard itself is the problem: a deliberately wrong implementation scores 99.9 %.
+Nothing here is fixed yet; the status of each finding is "open".
+
+### 1. A wrong implementation scores 3034/3037 (99.9 %) (high). Status: open
+- **Repro:** a fake `--bin` script (`mutant`, 30 lines of Python) reads the golden `<id>.json` next to the program
+  and prints it back with every number changed: each integer +1, the last decimal digit of each decimal +1,
+  `1.5×10⁻⁹` rewritten as `1.5e-9`. It prints every warning without its caret and hint, and every error message
+  with its words in reverse order. `conformance/run --impl rust --bin ./mutant --out /tmp/M.md` gives
+  **3034 of 3037 (99.9 %)**, 100 % in 20 of the 22 areas. The only 3 failures are subnormal numbers
+  (`9.35762×10⁻³¹⁴`), where `10.0 ** -324` underflows the tolerance to 0. A second mutant adds a digit to every
+  number (`3` → `3.4`, `2.21` → `2.214`) and scores 3035/3037.
+- **Why it passes:** `same_token` accepts a difference of one unit in the expected token's last digit, so for an
+  integer (`4`, `100`, a count, a loop index, a list length) any value ±1 passes. 2924 of the 24 820 stdout tokens
+  are such integers. The got token's precision and notation are never compared, so `3.1` matches `3.14159`,
+  `1.00` matches `1`, and `1500` matches `1.5×10³`. Significant figures (D11) and the `×10ⁿ` style are core
+  language behaviour, and none of it is scored. `parse_num` strips `[](),<>;:`, so `[1, 2, 3] m` matches
+  `1 2 3 m` and `<3, 4>` matches `(3; 4)`. `similar()` is a 60 % Jaccard over sets of words, so word order and
+  negation are ignored: "expected a length but got a time" matches "expected a time but got a length", and
+  "x is not a length" matches "x is a length". Whitespace is ignored (`split()`), so table alignment is not scored.
+- **Fix:** compare text exactly by default. Allow a numeric tolerance only where the numerics are expected to
+  differ (quadrature, ODE, PDE, eigen, fit, fft, rng), and only when the got token has the same digit count and
+  notation as the expected one. Compare integers exactly. Keep the brackets. Compare error messages exactly, or by
+  an ordered key phrase stored per case. Add `conformance/selftest` with these mutants and require them to score
+  below a few percent, and report "exact" and "within tolerance" counts separately in CONFORMANCE.md.
+
+### 2. Diagnostics: column, caret, hint, kind and exit code are never compared (high). Status: open
+- **Repro:** the mutant in #1 drops every caret and hint and still passes. The 773 expected errors include 414
+  hints, and `col`, `hint` and `kind` are stored in each case's JSON but `judge()` never reads them. `case["exit"]`
+  is never read either: any non-zero exit counts as "an error", so a Rust panic (exit 101) is as good as exit 1.
+  Also, when the implementation's error has no `line N:`, `judge()` skips the line check: the probe
+  `judge(case, out, "", {"message": <expected message>, "line": None})` passes for an error expected on line 3.
+  `run_binary` takes `msg[0]` (the first matching line), although its comment says "the last".
+- **Why it matters:** spec §B3 requires "expected diagnostics (kind, line and column, key content), an exit code",
+  and "one-line errors with a caret and a hint" is on the keep-100 % list (spec §1).
+- **Fix:** compare the exit code, the line and the column (fail when the implementation gives no line), the kind,
+  and the caret line. Compare the hint by key phrase. Parse the whole error block, not only the `file, line N:`
+  line.
+
+### 3. The golden output sits next to the program, and nothing stops the binary from reading it or calling Python (medium). Status: open
+- **Repro:** the mutant in #1 opens `path[:-3] + ".json"`. A "Rust" binary that runs
+  `python3 -m fermium run` would also score 100 %, although spec §B1 requires zero runtime dependencies.
+- **Fix:** copy each `.fm` into a fresh temporary directory, with only its data files, before running it. Run the
+  binary with a minimal environment (`env -i PATH=/usr/bin:/bin`, no `PYTHONPATH`), and in CI on a runner image
+  without python3 on PATH, or under a seccomp or `unshare` sandbox that denies `execve`.
+
+### 4. Harvest gaps against spec §B3: notes/, FRICTION.md, REDTEAM.md repros, fmt, REPL, CLI and rejection-only checks (medium). Status: open
+- **What is harvested:** only programs that go through `run_source` while pytest runs (3030 cases), plus the
+  benchmarks (7). The glob list (examples, rosetta, gauntlet, research, tests/programs, john, benchmarks) adds
+  nothing new, because tests already run those files and dedup keeps the tests copy. Bootcamp, docs and README
+  ```fermium blocks *are* covered (all 236 are in the suite, via test_docs).
+- **Missing sources** (fenced blocks counted with a fence parser; "covered" means every non-comment line of the
+  block appears in a single case):
+  - `dev-notes/notes/*.md` (5 files of bug repros, e.g. `xs = [1, 2, 3] / ys = xs / push(ys, 4)`): 123 fenced
+    blocks, 32 covered. About 40 more appear in tests/*.py with edited comments, and the remaining ~50 are complete
+    programs with no guaranteed case.
+  - `gauntlet/**/FRICTION.md` (11 files): 30 fenced blocks, 7 covered. About 500 inline code spans, 197 of them
+    found verbatim in the suite.
+  - `dev-notes/REDTEAM.md`: 6 fenced blocks (5 covered). 85 `**Repro:**` lines hold 130 code-like inline spans, and
+    ~23 of those are not in the suite verbatim (e.g. `f = 50 Hz; print f in rev/min`,
+    `f(a) = ∫ exp(-(x - a)²) dx from -1e6 to 1e6`, `print [0.125, 0.375] * 1.0`).
+  - rejection tests that only run the checker: `warnings_of()` (68 calls) and `check_only()` (2) in conftest call
+    `Checker` directly, so the hook never sees them.
+  - `fmt`: `format_source` has 45 calls in 12 test files, and the suite has no fmt case. B5 milestone 1 ("Syntax,
+    including fmt round-trips") therefore has no conformance group.
+  - REPL/Jupyter (`ReplSession`, 12 uses), the CLI, `fermium build` and `fermium check` (64 subprocess calls in
+    39 test files). Milestones 9 and 10 have no conformance group.
+  - programs where the oracle itself raises a non-FermiumError: the hook doesn't record them, and `rerun_clean`
+    drops them silently (MANIFEST's "crashed in legacy: 0" counts only the globbed files).
+- **Fix:** harvest every ```fermium block, and every untagged block that parses, from notes/, FRICTION.md and
+  REDTEAM.md, plus the `Repro:` spans joined on ` / `. Add case kinds `fmt` (input → `--pretty`/`--ascii` output
+  and the round-trip), `check` (warnings and errors without running), `repl` (a transcript) and `cli`
+  (argv → stdout, stderr, exit code). Record the checker-only paths in the hook, and count legacy crashes in
+  MANIFEST.
+
+### 5. The "machine-dependent" and "temporary directory" exclusions hide real behaviour (medium). Status: open
+- **Repro:** `NONDETERMINISTIC = \bclock\(\)|\bTIME\b|\btime:\s`, matched anywhere in the source, comments included:
+  - `gauntlet/quantum/32_rabi_ramsey.fm` is excluded because a *comment* says "to the same time: the
+    counter-rotating terms". This is a false positive; the program is deterministic.
+  - `research/shell_model_magic_numbers/shell.fm` (a whole research reproduction) is excluded for its one
+    `print "time:", clock() - t_start` line.
+  - Neither is in `conformance/cases`. The benchmarks already show the right mechanism: `drop_prefixes`.
+  - "temporary directory with files: 141": every test program that `load`s a CSV, `import`s a module or `plot`s
+    into `tmp_path` is dropped. That removes most of the data and modules features from the suite, and a Rust
+    `load`/`import` is scored on only 28 `load "` cases.
+- Separately, the 53 successful plot cases compare stdout only (usually empty), and no PNG or SVG is checked. A
+  `plot` that writes nothing passes (B5 milestone 7). Running the suite also writes PNGs into the repo directories
+  (e.g. `tests/programs/x_vs_t.png`).
+- **Fix:** match NONDETERMINISTIC on code with comments stripped, and use `drop_prefixes: ["time:"]` for shell.fm.
+  In the hook, snapshot the files in `base_dir` into `conformance/fixtures/<id>/` and run the case there. For
+  plots, check that the file exists and is a valid PNG/SVG of the right size, and compare the axis labels and
+  units in the SVG text.
+
+### 6. eval.rs ports interp.py, but the oracle that scores it is the compiled path, and the two disagree (medium). Status: open
+- **Repro (Python, both 1.5 back ends):** `x = 0.49999999999999994` / `print round(x)` gives `0` from
+  `run_source` (LLVM `llvm.round`) and `1` from `run_interpreted`. `x = -10` / `print x^309` gives `-∞` compiled
+  and `∞` interpreted. The Rust probe (a scratch crate calling the pub helpers) gives
+  `math1("round", 0.49999999999999994) = 1` and `math1("round", 4503599627370497.0) = 4503599627370498`: the
+  interp.py formula `floor(|x| + 0.5)` is off for 0.5 − ½ulp and for odd integers ≥ 2⁵², and the compiled oracle
+  is right in both cases. On the other hand `fpow(-10, 309) = -inf` matches the compiled path and not interp.py.
+  Julia's `round` is ties-to-even, Python 1.5 rounds half away from zero, and the eval.rs test pins
+  `round(2.5) = 3`, which is correct for Fermium.
+- **Fix:** name `run_source` (compiled) as the reference in eval.rs's header. Use `x.round()` (Rust rounds half
+  away from zero exactly, like `llvm.round`). Add a differential fixture over the IEEE helpers (edge values:
+  ±0, ½ − ½ulp, 2⁵²+1, subnormals, ±∞, NaN, overflow of negative bases) generated from the compiled path. Log in
+  DIVERGENCES.md where interp.py and the compiled path differ.
+
+### 7. eval.rs `for` loops: a NaN or ∞ bound or a NaN step runs 0 times silently, and the step-0 message differs (medium). Status: open
+- **Repro (oracle):** `x = 0/0` / `for i from 1 to x` stops with "this for loop has no definite number of steps:
+  it goes from 1 to NaN …". `for i from 1 to 3 step x` (x NaN) stops with "the step must be a non-zero number
+  that goes from the start towards the end". `for i from 1 to 1/0` with a `break` after 4 passes prints `4` (the
+  oracle runs 2⁶² iterations for +∞). eval.rs (`StmtKind::For`) checks only `st == 0.0`, and
+  `n = floor(span + 1e-9)` that is not finite gives 0 iterations, so all three run 0 times with no error. Its
+  step-0 message ("the step of this for loop is 0, so it would never end") shares few words with the oracle's.
+- **Fix:** port `s_SFor` exactly: error on NaN step or NaN span, 2⁶² iterations for +∞, and the oracle's messages.
+
+### 8. eval.rs returns NaN silently for unported built-ins and value shapes (medium). Status: open
+- **Repro (by reading, with the oracle's output):**
+  - the checker lowers `max(xs)` / `min(xs)` to the built-ins `max_list` / `min_list`, which eval.rs sends to
+    `math1`, and `math1`'s `_ => NaN` returns NaN. The probe gives `math1("max_list", 1) = NaN`; the oracle
+    prints `5` for `xs = [1, 5, 3]` / `print max(xs)`.
+  - `erf`, `erfc`, `gamma`, `lgamma` also return NaN unless the runtime registers them (probe:
+    `math1("erf", 0.5) = NaN`; the oracle prints 0.52).
+  - `max(x, x)` with x NaN folds from −∞ and returns `-∞` (min returns `∞`); the oracle returns `NaN NaN`.
+  - `max(xs, 1e-12)` (element by element, D162) collapses the list to NaN.
+  - `ExprKind::Pow` calls `.num()`, so `xs^k` with a list base gives a scalar NaN; the oracle prints `[1, 25, 9]`.
+  - `ExprKind::Neg` of a complex list returns the list unchanged (`v => v`): −z = z.
+  - `IndexAssign`, `Push` and `Clear` on an unexpected shape do nothing.
+  - `print` of an unexpected shape prints an empty line.
+
+  `Value::num()` turns every non-number into NaN.
+- **Fix:** every fall-through should return `RunError("not yet supported by the Rust back end: …")`, as the
+  unsupported statements already do. A stub must stop, not print NaN (rule 6). Implement `max_list`/`min_list`
+  and the NaN-propagating fold (`r = a if a > r or r != r`).
+
+### 9. `odd_root_numerator` is not the oracle's algorithm (low). Status: open
+- **Repro:** Python uses `Fraction(p).limit_denominator(99)` with an odd denominator and a relative tolerance.
+  Rust tries only q ∈ {3, 5, …, 15}. The Rust probe gives `powc(-2, 1/17) = NaN` and `powc(-2, 2/25) = NaN`;
+  `x = -2` / `print x^(1/17)` prints `-1.04` and `x^(2/25)` prints `1.06` in the oracle.
+- **Fix:** port the continued-fraction `limit_denominator(99)` (arith.rs already has one), and add fixtures for
+  every n/q with q odd ≤ 99.
+
+### 10. Rational64 can overflow where Python's Fraction cannot (low). Status: open
+- `Dim::pow`, `DExpr::pow`/`mul` and `const_exponent` (a·b, a/b) use `Ratio<i64>`: overflow panics in debug builds
+  and wraps silently in release builds (overflow-checks are off in `[profile.release]`). Python's Fraction is
+  unbounded. It is reachable with chained constant exponents, e.g. `((x^(1/9973))^(1/9967))^(1/9949)…`, and in
+  `limit_denominator`, where `exp > 60` returns None and a value ≥ 2⁶³ is cast with `as i64` and wraps.
+- **Fix:** use checked arithmetic, and on overflow give the checker's "this exponent is too complicated" error,
+  or use `Ratio<i128>` as a backstop. Set `overflow-checks = true` in release, at least for fermium-units and
+  fermium-check.
+
+### 11. Small runner issues (low). Status: open
+- `parse_num` raises OverflowError for `×10⁴⁰⁰`-style tokens (it computes `10.0 ** 400`), and the case is counted
+  as a "crash". Subnormal expectations can only match exactly (see #1).
+- `CONFORMANCE.md` lists the first 20 failures per area; spec §B3 asks for pass/fail for each program.
+- The legacy score (3037/3037) comes from the same in-process `run_source`, in a reused worker process, that
+  wrote the goldens. It shows only determinism, not the CLI path the Rust binary is scored through. Score legacy
+  also through a `fermium run --base-dir` subprocess (the Python CLI has no `--base-dir`), and run each case in a
+  fresh process at least once, to rule out state carried from one case to the next (units.py keeps module-level
+  caches such as `_PREFERRED`).
+- Six success cases expect empty stdout, so a binary that prints nothing and exits 0 passes them
+  (e.g. `units-and-printing/c1a48190d6c0`, a list of assignments). Add a `print` or compare the warnings.
+
+**Not findings (noted):**
+- Number formatting in fermium-units matches CPython on ties: a probe of `{:.Ne}`/`{:.N}` over 0.125, 2.5, 0.375,
+  1e23, 5e-324, 12.5, 1234.5, −2.5 (p = 0–3) gave 0 differences from `f"{x:.Ne}"`/`f"{x:.Nf}"`.
+  `round_text` uses `round_ties_even`, like Python's `round()`.
+- The Unifier (types.rs) is a faithful port of types.py's (same variable choice, `|c| == 1` first, then the
+  oldest), and `limit_denominator` matches Python's tie rule.
+- `fdiv` (x/0 = ±∞ by the sign of 0, 0/0 = NaN), NaN comparisons, `sign(NaN) = 0` and `fpow` with 0 to a
+  negative power (+∞, including −0) match the oracle.
+
+**Status of round 9 (04:40 UTC):** #1, #2, #3 fixed (D264: strict comparison, hint/line/exit code compared, isolated
+runs with an empty PATH, self-test with fake implementations in tests/test_conformance_suite.py); #11 partly (every
+failure listed; first vs last error line fixed). #6 fixed (round = llvm.round, the compiled oracle). #8 partly
+(unknown built-ins are errors now; the rest is assigned to the core-expressions port). #7 assigned to the core port.
+#4, #5, #9, #10 open (PROGRESS.md "Next").
+
+## Round 10 (run 2, 2026-09-26 08:05 UTC): the Rust implementation (v2) against v1
+
+Independent reviewer on branch claude/v2-rust. I started at cfea465, and the branch moved to 5ade949 while I
+worked (LLVM ODE/eigen/PDE, decimal-place sums and rounding-level integrals in the LLVM back end, evaluator
+speed-ups). Every finding below was re-checked on a binary I built from 5ade949
+(`CARGO_TARGET_DIR=/tmp/redteam10-target cargo build --profile fast -p fermium-cli`). The oracle is
+`python3 -m fermium run`. Scratch programs are in /tmp/claude-0/redteam10/ (p/: my programs; bc/: mutated bootcamp
+and gauntlet blocks; ex/: examples; rs/: research; out/: outputs).
+
+**What I ran.** I compared stdout, stderr and exit code byte for byte on:
+- 203 new programs of my own: units and conversions, natural/nuclear/astro units, significant figures, lists,
+  vectors, matrices, eigenvalues, complex numbers, derivatives, ∇, definite and indefinite integrals, Σ, algebraic
+  solve, ODEs (until, backwards ranges, rk4, radau, bdf, vector and complex unknowns), bound states, PDEs, FFT,
+  RNG, load/fit/plot on small CSVs, ±, Monte Carlo, parallel for, where, modules/stdlib/import by path,
+  analyze, and error cases (wrong units, typos, index out of range, division by zero, singular matrix, bad CSV,
+  missing module, recursion depth);
+- 91 bootcamp and gauntlet blocks with their numbers changed by 13 % or a unit removed;
+- the 31 examples and the 11 research programs.
+
+I also compared the three back ends (auto, `--backend interp`, `--backend llvm`) on all 203 programs, ran
+`fermium check`, `fmt --pretty/--ascii/--fix` (all programs plus examples) and a piped REPL session against v1, and
+ran `ldd`, `doctor` and `strace`.
+
+**Result.** The port is very faithful. All 91 mutated blocks gave the same bytes as v1, as did 30 of the 31
+examples and every `check`/`fmt` output apart from the documented integral and caret cases. My own programs
+differed from v1 in 27 cases:
+- 16 are the documented indefinite-integral formula divergence (c05, c06, ii01–ii18; rust/DIVERGENCES.md). Two of
+  them (ii16, ii18) are a real bug (#3).
+- 1 is the documented rounding-level integral (i01).
+- 3 are the documented decimal-place rule for sums (s01, s02, s04; see #7).
+- 7 are findings: d06, d08 and d09 (#1), fr3 (#5), pd02, w01 and w02 (#6).
+
+Outside my own programs, `examples/42_python_interop.fm` differs (#4) and `research/bbn_network` times out (#2).
+
+Other checks:
+- **Dependencies:** `ldd` lists only libc, libm, libgcc_s and the vdso. `strace` shows no libpython and no exec for
+  ordinary programs, including indefinite integrals, radau, eigen, PDE, load/fit and plots. libpython is opened
+  only for `use python`.
+- **Back ends:** auto, interp and llvm now agree on every program the LLVM back end compiles. At cfea465 they
+  did not: `--backend llvm` printed `9.80 m/s²` for `g = 4π² L / T²` with ±, and `0` for a loop sum of ± values,
+  and the rounding-level integral rule was interp-only. That was fixed in 715c4c4 and 5a00b16, and `--backend llvm`
+  now refuses ± ("uncertain values (±) aren't compiled").
+- **Startup:** `fermium check`/`run` on a small program takes about 25 ms.
+
+### 1. Fit parameters lose their uncertainty when the program uses ± (high). Status: open
+- In v1, a program that uses ± anywhere gets its `fit` parameters as correlated uncertain values (reference §21,
+  D124). The Rust binary prints plain numbers and drops the fit's standard error from everything computed later.
+  The result is a silently understated uncertainty, which breaks a lab report.
+- **Repro** (`spring.csv`: `x [cm], F [N]`, the rows 1.0,0.52 / 2.0,0.98 / 3.0,1.55 / 4.0,2.03 / 5.0,2.47):
+  ```
+  data = load "spring.csv"
+  fit F = k x to data
+  x0 = 2.0 ± 0.1 cm
+  print k
+  print k x0
+  ```
+  v1: `50.18 ± 0.47 N/m` / `1.004 ± 0.051 N`. Rust: `50.2 N/m` / `1.004 ± 0.050 N`. Both print the same fit
+  summary lines above these.
+- With decay.csv and `print τ ln(2), τ + dt` (dt = 1.0 ± 0.1 s), v1 prints `13.901 ± 0.037 s 21.05 ± 0.11 s` and
+  Rust prints `13.9 s 21.05 ± 0.10 s`.
+- `fermium-runtime/src/numerics/uncertain.rs::correlated` exists "for the parameters found by fit" but nothing
+  calls it. The only suite case with fit + ± (uncertainty/5e93f6a90ca0) fails earlier, on a plot error, so the
+  suite never reaches this.
+- **Fix:** when `module.uses_uncertainty`, have fit store `uncertain::correlated(params, cov)`. Add conformance
+  cases for fit followed by arithmetic with ±.
+
+### 2. A `plot` (or any construct LLVM can't compile) moves the whole program to the tree-walker: 20–30× slower than v1 (high, performance). Status: open
+- **Repro:**
+  ```
+  s = 0.0
+  for i from 1 to 20000000
+      s += 1/i^2
+  print s
+  plot [1, 2] vs [1, 2] to "pp.svg"
+  ```
+  Rust takes 3.9 s and v1 takes 0.77 s. Without the plot line, Rust takes 0.14 s.
+- `research/rutherford_mc`, whose 2×10⁷-sample loop ends in one plot, takes 92–106 s in Rust against 3.2–4.3 s in
+  v1 (under load, but consistently about 25× slower).
+- `research/bbn_network` (radau, with plots) did not finish in 900 s on 5ade949 (600 s on cfea465) against 45 s in
+  v1: both runs timed out.
+- `research/hydrogen_levels` took 15 s against 2.3 s.
+- The suite's 4 time-outs are the same programs. Three of them are filed under "uncertainty" only because a
+  string contains ± ("35 ± 8.4 expected").
+- The cause: `run.rs` picks one back end for the whole program. Plot, data, `±`, a function applied to a list,
+  setting a vector component and similar constructs each make the program fall back to the tree-walker.
+- **Fix:** compile per statement or per function, so that plot/data/± statements call into the runtime from
+  LLVM code. At least compile the hot loops and functions and interpret only the unsupported statements, or
+  compile `plot`/`load` as runtime calls, which are cheap. Spec §E/§B8: v2 must not be slower than v1.
+
+### 3. `∫ 1/(a² − x²) dx` and `∫ 1/(x² − a²) dx` give `atanh`, which is NaN outside |x| < a (medium). Status: open
+- **Repro:**
+  ```
+  F = ∫ 1/(x² - 1) dx
+  print F(2), F(0.5), F(3) - F(2), ∫ 1/(x² - 1) dx from 2 to 3
+  ```
+  v1: `-0.549 NaN 0.203 0.203`. Rust: `NaN -0.55 NaN 0.203` (the formula is `-atanh(x)`).
+- `G = ∫ 1/(4 - x²) dx` gives `atanh(x/2)/2`, so `G(3) - G(2.5)` is NaN (v1: -0.15).
+- The 12-point derivative check passes because atanh's derivative is right wherever it is defined.
+- Neither formula is valid for every x, but the x > a side (a resonance denominator, a potential above its
+  threshold) is the common one in physics, and it is exactly where the Rust formula now fails.
+- **Fix:** return `ln(|x - a|/|x + a|)/(2a)`, or v1's two-log form, which Fermium can print with `abs`. Make the
+  verification sample points on both sides of every real root of the denominator.
+
+### 4. `use python` can't find the program's own .py file when the program is run by a bare file name (medium). Status: open
+- **Repro:** `cd examples && fermium run 42_python_interop.fm` fails with
+  `line 9: can't find the Python module blackbody_py` (hint: "put blackbody_py.py in the program's folder"),
+  although the file is there. `fermium run ./42_python_interop.fm` and an absolute path work. v1 works in all
+  three cases.
+- A two-line `mylib.py` next to `py1.fm` fails the same way.
+- **Cause:** `fermium-runtime/src/python.rs:107` has `if base_dir and base_dir not in sys.path`. For `file.fm`,
+  base_dir is `""`, which is falsy, so the folder is never added.
+- The conformance runner passes absolute paths, so the suite can't see this.
+- **Fix:** canonicalize the base directory in the CLI, or use `"."` when it is empty. Add a CLI test that runs a
+  `use python` program by bare file name from its own folder.
+
+### 5. The tree-walker's recursion limit is lower than v1's, and a `plot` line decides which limit applies (medium). Status: open
+- **Repro:**
+  ```
+  f(n) = if n <= 0 then 0 else 1 + f(n - 1)
+  print f(1000000)
+  plot [1, 2] vs [1, 2] to "fr3.svg"
+  ```
+  v1 prints `1000000` and saves the plot. Rust stops with "f called itself too many times (the program ran out of
+  stack)", already at n = 3×10⁵. Without the plot line (LLVM), Rust prints `1000000`, and `f(10000000)` works too.
+- llvm_diff lists this case (functions/8c5765b57c68) as "llvm-better". It is the program's other statements, not
+  the recursion, that decide whether a program runs.
+- The REPL, the Jupyter kernel and fermium2 (pyapi) always use the tree-walker.
+- **Fix:** give the tree-walker's thread a larger stack (v1's compiled code has the C stack; 512 MB is already
+  used for the program thread, so the frames are probably too big), or make the evaluator iterative for calls.
+  Fixing #2 also removes the dependence on unrelated statements.
+
+### 6. The caret of the "is now your variable" warning spans the whole line; the suite doesn't compare carets (low). Status: open
+- **Repro:** `c = 3` / `print c`. v1 puts `^` under `c`. Rust puts `^^^^^` under the whole assignment. The same
+  happens for `G = 6.674e-11 m³/(kg s²)` (24 carets) and in `fermium check`.
+- This is the only caret difference I found (error carets matched in every case), but nothing would catch others.
+- Round 9 #2 was closed with hint, line and exit code compared, but `judge()` still ignores the column and caret
+  of errors, and the source line, caret and hint of warnings. Spec §B3 asks for "kind, line and column".
+- **Fix:** anchor the warning at the name's span. Compare the caret line (column and width) of errors and warnings
+  in `conformance/run`.
+
+### 7. The decimal-place rule for sums: cancellation prints unjustified figures; temperatures keep the old rule (low). Status: open
+This is the documented divergence, and it is mostly an improvement: `1.23 m + 4.5678 m` → `5.80 m` (v1:
+`5.7978 m`), `1.10 + 2.2 + 3.333` → `6.6`. But:
+- `12.0 kg - 11.99 kg` prints `0.01 kg` (v1: `0.01000 kg`), and `10.0 m - 9.95 m` prints `0.05 m`. By the textbook
+  rule the result is known only to 0.1, so it is `0.0 kg` / `0.1 m`. The "at least one figure" floor gives a
+  cancellation more precision than its operands have, as does the recorded divergence 47680448a9da,
+  `W − (Q_h + Q_c) = -7×10⁻¹⁵ μJ` with operands known to 10⁻⁴ μJ.
+- `100.0 °C - 0.5 K` still prints `99.50 °C` (v1's rule), where the new rule gives `99.5 °C`.
+- **Fix:** when the coarsest decimal place is above the result's leading digit, print the result rounded to that
+  place (`0.0 kg`), or keep v1's output for that case. Apply the rule to temperature differences too. Record both
+  in DIVERGENCES.md.
+
+### 8. Documentation that isn't true (low). Status: open
+- **REPL and ±:** rust/DIVERGENCES.md "The REPL" says "`±` is refused by the checker as in `fermium run`". In
+  fact the Rust REPL accepts ± (`L = 1.20 ± 0.01 m` then `L * 2` → `2.400 ± 0.020 m`), which v1's REPL refused.
+  This is the B5.6 improvement, but it is undocumented and the sentence says the opposite.
+- **CONFORMANCE.md is stale (07:15, 4e3e0eb):**
+  - 12 of the 27 recorded divergences (09fe8fafb686, 173e2d6f8f97, 47680448a9da, 664786f7f30f, 67451d15fe04,
+    89747a9eb10a, 9bef8c6f60d5, a1b56d5b320c, a504c61d2cbc, ca02b7679e45, e7ffc7d1ff73, eaf1d936eb6c) appear
+    nowhere in it.
+  - At that commit the default (LLVM) path printed v1's output for them, so DIVERGENCES.md described behaviour
+    the default binary didn't have. `∫ sin(x) dx from -1 to 1` printed `2.78×10⁻¹⁷` by default and `3×10⁻¹⁷`
+    only with `--backend interp`.
+  - That is fixed in 715c4c4, but the scoreboard still counts those cases as passes. Regenerate it on HEAD.
+- **"The back end never changes what a program prints"** (docs/architecture.md) was false at cfea465 (see
+  "Other checks"). It is true now as far as I tested, apart from #5.
+- **Python interop:** reference §"Python interop in Fermium 2" says `use python` works "exactly as described",
+  which #4 contradicts.
+
+### 9. Speed of the compiled paths against v1 (low; measured under a load average of 8–19 from other agents). Status: open
+TIME_INNER from benchmarks/fermium, 3 runs each, v1 against Rust (default):
+
+| Benchmark | v1 | Rust | Rust / v1 |
+|---|---|---|---|
+| blackbody (1000 integrals) | 0.0025–0.0032 s | 0.008–0.016 s | about 3–5× |
+| forces | 0.020–0.029 s | 0.063–0.082 s | about 3× |
+| spring_rk4 | 0.066–0.12 s | 0.13–0.24 s | about 2× |
+| nbody | 0.09–0.22 s | 0.20–0.26 s | about 1.5× |
+
+unit_loop and spring_adaptive are at parity. Whole-program wall time favours Rust, because it starts in 25 ms
+against v1's 0.4 s.
+- **Fix:** profile the quadrature call path (blackbody: probably per-call allocation or a non-inlined integrand
+  thunk) and the vector code in forces/nbody. Re-measure on an idle machine before B8.
+
+**Not findings (checked):**
+- The documented divergences I spot-checked are right physically:
+  - ∫ of a 1 nm Gaussian over ±1 m = 2.51×10⁻⁹ m (σ√2π);
+  - ∫₀¹ |x − 0.3|^−0.8 = 8.5858;
+  - ∫₋₁² |x|^−0.9 = 20.718;
+  - ∫ exp(−x²) from −10⁶ to 10⁶ = 1.77.
+  v1's `0`, `0 m` and "couldn't compute" were wrong.
+- `∫ sec(x) dx`: Rust's `ln(tan(x) + sec(x))` is right on |x| < π/2, where v1's `ln(1 + sin)/2 - ln(-1 + sin)/2` is
+  NaN for every real x. An improvement, not a regression.
+- These matched v1 byte for byte:
+  - seeded RNG and Monte Carlo (`propagate montecarlo`, sample);
+  - parallel for sums (reproducible and equal to v1 to 15 digits);
+  - FFT, bound states (matrix and shooting), PDE heat/wave, radau/bdf;
+  - analyze, stdlib imports, import by path, private names, bad CSVs, missing modules;
+  - all the error cases I tried.
+- `fermium doctor` is honest: it says `fermium build` isn't in this version (B5.10 is still open).
+
+**Round 10 status (08:50 UTC):**
+- #1 (fit uncertainty lost with ±): assigned to the uncertainty agent.
+- #2 (one uncompiled construct sends the whole program to the tree-walker): assigned to the LLVM agent as its priority (compile plot/load in LLVM, or a mixed mode).
+- #3 (atanh antiderivative NaN for |x| > a): assigned to the calculus agent.
+- #4: fixed. The program folder is absolute even for a bare file name; test `a_bare_file_name_finds_the_module_beside_it`.
+- #5: partly fixed. The tree-walker now has 1.9 GB of stack, about 5×10⁵ calls deep instead of 3×10⁵; the rest is documented in rust/DIVERGENCES.md. Smaller frames are open.
+- #6 (warning caret): assigned to agent A; the runner comparing columns is open.
+- #7 (sums rule on cancellations): open, next.
+- #8: DIVERGENCES.md is corrected (the REPL accepts ±, `fermium build` exists). CONFORMANCE.md will be regenerated after the next full run. The reference's `use python` line is true after #4.
+- #9 (compiled inner loops slower than v1): assigned to the LLVM agent, to re-measure on a quiet machine.
+
+## Round 11 (run 2, 2026-09-26 10:30 UTC): Rust v2 against v1, after the mixed-mode LLVM back end
+
+Independent reviewer. I started on a binary built from 64e088d. The branch moved to d393edb while I worked
+(mixed-mode LLVM, integrator forms, conformance regenerated), so I rebuilt from d393edb
+(`CARGO_TARGET_DIR=/tmp/claude-0/rt11-target FERMIUM_NO_AOTRT=1 cargo build --profile fast -p fermium-cli`) and
+re-ran everything. Every finding below holds at d393edb. Oracle: `python3 -m fermium run` from the same tree.
+Programs are in /tmp/claude-0/redteam11/p/ and outputs in /tmp/claude-0/redteam11/out/{v1,auto,interp,llvm}/.
+
+**What I ran.**
+- 361 new programs. Areas: units and conversions (including °C/°F offsets), natural, nuclear and astro units,
+  constants, sig figs, sums and cancellations, `to N digits`, derivatives, ∇, definite integrals, 60 indefinite
+  integrals (including the x² − a² families), Σ, ODEs (rk45, rk4, radau, bdf, until, backwards, complex, vector),
+  PDEs, bound states, FFT, RNG, parallel for, fit with and without ±, ± propagation (including correlated fit
+  parameters and det/inverse/solve_linear of uncertain matrices), vectors, matrices, complex numbers, lists,
+  stdlib and user modules, and 12 mixed-mode programs (plot/load/fit/list functions inside loops, with variables
+  set before and after).
+- About 55 of the 361 are error programs: unit mismatch, undefined names, bad index, wrong arity, missing
+  file/module/column, private name, bad slice, etc.
+- Each program ran with `--backend auto`, `--backend interp` and `--backend llvm`. I also ran the conformance
+  suite, the benchmarks and `doctor`, piped a REPL session, and read the docs.
+
+**Result.** The port is very faithful. 328 of 361 programs are byte for byte identical to v1. The 33 that differ:
+- 12: the documented decimal-place rule for sums (g02 g03 g05 g07 g10 g11 s01 s02 s04 s12 s13 u40). All are
+  right by the textbook rule.
+- 7: the documented indefinite-integral formula divergence, with equivalent formulas (i09 i25 j11 j12 j13 j18
+  j27).
+- 2: v1 bugs that Rust fixes. g25 is `∫ sec`. In j01, `∫ √x ln(x)` gives the right formula, where v1 refused
+  it with a "meijerg" error.
+- 5: the documented coverage divergence (j06 j07 j23 j28 g23). See #5.
+- 1: both implementations are wrong, on different sides of the pole (g27, #2).
+- 5: a Rust bug (g08 g09 g31 u03 mx11, #1).
+
+Other results:
+- **Back ends:** `interp` and `llvm` gave the same output as `auto` on every program, except where llvm
+  refused with exit 3 (47 programs: ±, and at 64e088d also data and vector-component programs). The one other
+  exception is r5.fm, a recursion 10⁶ deep plus a plot. It now works in auto/llvm (mixed mode) and runs out of
+  stack in interp, as rust/DIVERGENCES.md "The command-line tool" says.
+- **Panics:** none. I searched every output for "panicked" and "RUST_BACKTRACE".
+
+### 1. A difference of two °C or °F temperatures prints the wrong number (high). Status: open
+- The decimal-place rule takes each operand's last significant place from its absolute SI value. For
+  `20.0 °C`, that value is 293.15 K with 3 significant figures, so the place is 1 K instead of 0.1 K. The
+  difference is then rounded to whole kelvins.
+- This hits the most common measured subtraction in a teaching lab: ΔT from two thermometer readings.
+- Both back ends (and `interp`) print these:
+
+| Program | Rust | v1 | Right |
+|---|---|---|---|
+| `print 0.5 °C - 0.2 °C` | `0 K` | `0.30 K` | 0.3 K |
+| `print 25.5 °C - 20.0 °C` | `6 K` | `5.50 K` | 5.5 K |
+| `print (25.5 °C - 20.0 °C) in mK` | `6×10³ mK` | `5500 mK` | 5500 mK |
+| `print 98.6 °F - 32.0 °F` | `37 K` | `37.0 K` | 37.0 K |
+| `print 300.0 K - 20.0 °C` | `7 K` | `6.850 K` | 6.9 K |
+| `print 25.5 °C - 20.0 °C + 0.1 K` | `6 K` | `5.60 K` | 5.6 K |
+
+- In a calorimetry program (g09.fm), `T1 = 21.3 °C`, `T2 = 23.8 °C`, `print T2 - T1` prints `2 K`. The same
+  value stored first (`ΔT = T2 - T1`, `print ΔT`) prints `2.50 K`.
+- Variables work the same way: `T = 20.0 °C` raised by 1.5 K three times, then `print T - 20.0 °C`, prints `4 K`
+  where the answer is 4.5 K (mx11.fm).
+- Other units are fine: `1.0 hr - 30.0 min` → `0.5 hr`, `3.0 mi + 1.00 km` → `3.6 mi`, `1.5 km + 20.5 m` →
+  `1.5 km` are all right by the rule. So are uncertain temperatures: `(23.8 ± 0.2 °C) - (21.3 ± 0.2 °C)` →
+  `2.50 ± 0.28 K`.
+- **Cause:** `fermium-codegen/src/eval_calc.rs`, `sum_place` calls `last_place(v / k, s)` with v in absolute
+  kelvins.
+- **Fix:** take the place from the value in the unit it was written in. With the offset removed, the place of
+  `20.0 °C` is 0.1, and 0.1 °C is 0.1 K. Until then, keep v1's rule when any operand has an offset unit.
+- **Tests:** add conformance cases for °C − °C, °F − °F, K − °C and a stored-variable operand. The suite has no
+  printed difference of two offset temperatures, which is why the 4-case measurement in DIVERGENCES.md didn't
+  catch this.
+- **Repro:** p/g08.fm, g09.fm, g31.fm (last line), t01.fm, t03.fm, mx11.fm.
+
+### 2. Antiderivatives use ln(u), not ln|u|, so F is NaN on one side of every real pole (medium; both implementations). Status: open
+- `∫ 1/(9 - x²) dx` gives `-ln(-3 + x)/6 + ln(3 + x)/6` in both. So `F(1) - F(0)` is NaN on |x| < 3, the side
+  where 1/(a² − x²) is usually used (i04, g13).
+- `∫ 1/(1 - x²)` has `F(0.5)` = NaN (i22).
+- `∫ 1/(x - 5)` has `F(2) - F(1)` = NaN (g28).
+- `∫ 3/(x² - 5x + 6)` is NaN between the roots (g29).
+- `∫ 1/(2 - x)`: Rust gives `-ln(2 - x)`, which is NaN for x > 2. v1 gives `-ln(-2 + x)`, which is NaN for x < 2
+  (g27). This is the one output difference in this family, and neither is right on both sides.
+- Round 10 #3 was fixed by adopting v1's form (i03 now matches v1). That fixes x > a and leaves |x| < a broken
+  in both. The 12-point derivative check evidently passes because NaN samples are skipped.
+- **Fix:** use `ln(abs(u))` for a linear or quadratic u with real roots. The derivative is the same, and Fermium
+  already prints `abs`. At least make the check test both sides of every real root.
+
+### 3. `∫ 1/(x² - a²) dx` with a dimensional constant gives a function that can't be called (low–medium; both). Status: open
+- **Repro:** `a = 2 m`, `F = ∫ 1/(x² - a²) dx`, then `print F(3 m) - F(2.5 m)`. Both stop with
+  `ln needs a plain number, but got length [m]`, because the formula is `ln(x - a)/(2a) - ln(x + a)/(2a)` (i10).
+- The definite integral works.
+- **Fix:** combine the logs into `ln((x - a)/(x + a))/(2a)`, or divide each argument by a, when the constant has
+  units.
+
+### 4. The decimal-place rule for sums: where it applies is fragile (low). Status: open
+- The rule applies only to a sum that is the whole print item:
+  - `print 1.20 m + 2.0 m` → `3.2 m`;
+  - but `-(1.20 m + 2.0 m)` → `-3.20 m`, `(1.20 m + 2.0 m) in cm` → `320 cm`, `2 (1.20 m + 2.0 m)` → `6.40 m`,
+    `str(…)` → `3.20 m`, and `[1.20 m + 2.0 m, 1 m]` → `[3.20, 1.00] m` (g01, g31).
+- DIVERGENCES.md says the place is found "in the unit the result prints in", which suggests `in cm` is covered.
+- `100.0 °C - 0.5 K` still prints `99.50 °C`: the second half of round 10 #7 is still open. Meanwhile
+  `20.5 °C + 1.25 K` prints `21.8 °C`.
+- An exact whole operand turns the rule off: `1500 m + 2.0 m` → `1.5×10³ m`, and `100 m + 0.5 m` → `100 m`.
+  The added amount disappears (t02). v1 does the same, but the new rule could print 1502.0 m and 100.5 m.
+- **Fix:** apply the rule through negation, unit conversion and scaling by exact numbers. Otherwise document
+  exactly where it applies.
+
+### 5. Antiderivative coverage: textbook integrals v1 could do are refused, and some forms are redundant (low). Status: open
+- **Refused.** v1 gives a formula and Rust says "Fermium couldn't find a formula for this integral" for:
+  - `∫ x³ ln(x)² dx` (j06);
+  - `∫ x asin(x) dx` (j07);
+  - `∫ 1/(x² √(x² + 1)) dx` (j23);
+  - `∫ 1/cosh(x) dx` (j28);
+  - `∫ 1/(x √(x² - 1)) dx` (g23). v1 refuses this one too, with a different message.
+- DIVERGENCES.md describes the gaps as mixtures, products of several transcendental functions and symbolic
+  coefficients. These are single-function textbook cases: add rules, or name them in the doc.
+- **Redundant forms:**
+  - `∫ (x + 1)/(x² - 1) dx` → `ln(-1 + x)/2 + ln(-1 + x²)/2 - ln(1 + x)/2` (v1: `ln(-1 + x)`);
+  - `∫ x/(x² - 4x + 3)` → `ln(3 + x² - 4x)/2 - ln(-1 + x) + ln(-3 + x)`.
+  - They are equivalent, but not what a physicist would write. Cancel common factors before partial fractions.
+
+### 6. Speed of compiled inner loops against v1 (low; indicative only). Status: open (round 10 #9)
+- **Conditions:** load average 19–23, `fast` profile (release without LTO), TIME_INNER, 3 interleaved runs.
+- **Results:**
+
+| Benchmark | Rust | v1 |
+|---|---|---|
+| nbody | 0.27–0.31 s | 0.14–0.16 s |
+| spring_rk4 | 0.19–0.29 s | 0.068–0.081 s |
+| forces | 0.06–0.11 s | 0.035–0.054 s |
+| blackbody | 0.009–0.035 s | 0.0025–0.0028 s |
+
+- README and benchmarks/ make no speed claims for v2, so nothing is unfair today. Re-measure a release build on
+  a quiet machine before any v2 number is published.
+- **Round 10 #2 is fixed** by mixed mode. The 2×10⁷-iteration loop plus `plot` takes 0.12 s (was 3.9–5.1 s;
+  v1 1.0 s), and plus `load` 0.09 s. A ± program is still interpreted, but a 2×10⁶-iteration loop in one takes
+  0.70 s against v1's 11.1 s.
+
+### 7. Documentation (low). Status: open
+- **Lesson 0 (`bootcamp/lesson00_setup.md`, this branch)** tells beginners to download `fermium-macos-arm64` /
+  `fermium-linux-x86_64` from the Releases page. The repository has no releases yet (`list_releases` is empty),
+  and the binary calls itself `2.0.0-dev`. Until the first release, say it is coming and point to the Python
+  version (or building from source). Otherwise Step 2 is a dead end for a student.
+- **The conformance judge still ignores carets and columns** (the second half of round 10 #6). My 55 error
+  programs matched v1's carets byte for byte anyway.
+
+**Checked and fine:**
+- **CONFORMANCE.md reproduces exactly.** A fresh `conformance/run --impl rust` on d393edb gives 3334/3366 + 32
+  documented = 3366/3366, with the same per-area table and the same divergence list.
+- **Round 10 fixes verified:**
+  - #1: fit parameters carry correlated uncertainties. `k x0` → `1.004 ± 0.051 N`; `k (3 cm) + F0` with a
+    correlated slope and intercept → `1.510 ± 0.017 N`, the textbook σ at the mean x.
+  - #2 (mixed mode) is fixed.
+  - #3: matches v1 now; see #2 above for what remains.
+  - #4: `use python` by a bare file name works.
+  - #5: documented.
+  - #6: the warning caret is under the name.
+  - #7: `12.0 kg - 11.99 kg` → `0 kg`, `10.0 m - 9.95 m` → `0.1 m`.
+- **Uncertain matrices (B-U1)** match v1 and are right:
+  - `det([[1, 2], [3, 4]] L)` = `-2.880 ± 0.048 m²`;
+  - `det(I a)` = `4.00 ± 0.40`, and `det(M) - a²` = `0 ± 0`;
+  - independent a and b in diag(a, b) give det `6.00 ± 0.63` and `solve_linear` `0.333 ± 0.011` / `0.500 ± 0.050`;
+  - solving a stiffness matrix k·K₀ gives `0.0667 ± 0.0033 m`.
+- **Physics spot checks:**
+  - the 1 nm box ground state is 0.376 eV;
+  - Newton cooling after 30 min is 23.5 °C;
+  - radau and bdf stiff solves are right;
+  - PDE heat decay matches exp(−Dπ²t/L²) to 5 digits;
+  - the Kepler orbit closes to 1.0000 AU;
+  - FFT, seeded RNG, parallel for, the stdlib modules and natural-unit conversions (ħc, 1/m_e, GeV⁻² → pb) are
+    right.
+- **Error messages:** all the error programs have v1's message, line, caret and hint.
+  - That includes errors inside a function reported at the definition with "when calling f on line 3", errors
+    in solve blocks and in module imports.
+  - Runtime errors (index out of range, singular matrix, slices) have no caret or hint, as in v1.
+- **Doctor and REPL:** `doctor` is honest (build unavailable without AOTRT; Python optional). The REPL answers
+  Lesson 0's examples exactly (`2.30 m`, `1.61 km`, `1.60934 km`).
+
+**Round 11 status (10:45 UTC):**
+- #1 (temperature differences): fixed in the sums rule. A sum whose result is a temperature keeps v1's rule, so both back ends print `0.30 K` again.
+- #2, #3, #5 (ln|u|, dimensioned log argument, refused integrals): assigned to the calculus agent.
+- #4 (sums rule fragile): open; the `100.0 °C - 0.5 K` case is covered by the #1 fix.
+- #6 (speed): the LLVM agent re-measures on a quiet machine for PERF.md.
+- #7: the Releases page gets its first release at the B8 v2.0 tag. Comparing carets and columns in the runner is open.
+
+## Round 12 (2026-09-26 13:10 UTC): the v2.0 release as a user meets it, benchmarks, the newest compiled code
+
+Independent reviewer. Binary: `claude/v2.0-freeze` (f61b8e6) built with
+`CARGO_TARGET_DIR=/tmp/claude-0/rt12-target FERMIUM_NO_AOTRT=1 cargo build --release -p fermium-cli`
+(`fermium 2.0.0 (Rust)`; no `fermium build` in this build). Oracle: `fermium-legacy` (checked:
+`import fermium` → /home/user/fermium/legacy/fermium). Programs: /tmp/claude-0/redteam12/{loops,phys}/, outputs
+in /tmp/claude-0/redteam12/{out,out2}/. Load average 5–7.7 the whole time (other agents).
+
+**High: none.** The compiled-code changes of D273 held up against everything I threw at them (below).
+
+**Medium**
+- **#1 The release binaries don't exist, but the docs send users to them without a caveat.** README "Install", CHANGES_2.0 "Installing"
+  (first bullet), and bootcamp Lesson 0 Steps 2–3 ("Open the Releases page … click the file for your computer")
+  all present the download as the way in; nothing says the release hasn't been published yet (D274: the tag push
+  was refused). D274 says "CHANGES_2.0 and the README say how to build from source meanwhile". They do list the
+  build route, but only as an alternative. A beginner following Lesson 0 finds an empty Releases page. This repeats
+  round 11 #7. Fix: a one-line note in all three ("the first release is pending; until then build from the
+  source, below") until the owner pushes the tag.
+- **#2 The textbook pendulum, written as on paper, is silently a different equation (v1 and v2 alike).**
+  `θ'' = -g / L sin(θ)` is `-g/(L sin θ)` under D8. D34 warns only when the denominator factor *is* an unknown,
+  not when it's a function of one. So `phys/q02_pend_small.fm` (θ₀ = 1) and `phys/p11_pendulum_large.fm`
+  fail with a misleading "step became too small … not a blow-up … add an absolute tolerance" (the equation
+  really is singular at θ = 0). The silent case is worse: `phys/q06_force_over_mass.fm`, `a(t) = F0 / M cos(t / 1 s)`,
+  prints a(1 s) = 3.70 m/s² (= F0/(M cos 1)) with no warning. `-(g / L) * sin(θ)` gives the right 1.60 (SciPy 1.6022).
+  Suggest extending D34's warning to a denominator factor that is a call of sin/cos/exp/… (or any call whose
+  argument holds an unknown or the independent variable) after a spaced `/`. `h c / λ k_B T` has no call, so it
+  stays unwarned.
+
+**Low**
+- **#3 CHANGES_2.0 "Speed" is stale.** It says "The benchmark table in the README was measured with Fermium 1.5 …
+  the re-run … replaces the table", but the README table is now the 26 Sep Fermium 2 run.
+- **#4 Stale SymPy mentions in user docs:**
+  - docs/reference.md:465 ("hand 𝑖 to SymPy");
+  - :544 ("tidied by SymPy when it is installed");
+  - :577 and :590 ("done symbolically with SymPy", "When SymPy can't give a usable formula");
+  - bootcamp/lesson08_integrals.md:151 ("This uses a separate maths library (SymPy)");
+  - docs/stdlib.md:6 cites `tests/test_stdlib.py` (now `legacy/tests/`).
+  The kept-for-conformance error "SymPy's formula for this integral uses the function Ei …" also names a library
+  that v2 doesn't use. That is documented, but worth rewording once the oracle goes.
+- **#5 ∫ sin(x) cos(x) dx is not v1's function** (`phys/s02_indef_trig.fm`, `phys/s41_indef_value.fm`). v2 gives
+  `-cos(2x)/4`, v1 gives `sin(x)²/2`, so F(1) is 0.104 against 0.354 (a constant ¼ apart; F(b) − F(a) agrees).
+  DIVERGENCES says formulas may be written differently "with symbolic constants … the values agree". Here
+  there are no symbolic constants and F's values differ. Either match SymPy (substitute u = sin x first), or say in
+  DIVERGENCES that F can differ from v1's by a constant.
+- **#6 Ambiguous ratios in the README speed table.** `1.2× Fermium 1.5` (adaptive RK45) and the bold
+  `**1.6× Fermium 1.5**` (forces, 4 threads) are both *slower* (696 vs 592 µs; 11.0 vs 6.74 ms). Elsewhere bold
+  plus "(slower)" marks a loss, so a reader can take 1.6× for a speed-up. Write "1.6× slower than Fermium 1.5".
+- **#7 `make install` bypasses rust/.cargo/config.toml.** `cargo install --path rust/crates/fermium-cli` runs
+  from the repository root, and cargo reads `.cargo/config.toml` from the working directory. So the
+  `-fuse-ld=lld` flag isn't applied, and the link uses the default linker, which BUILD.md calls several times
+  slower. I didn't check whether it fails. Fix: `cd rust && cargo install --locked --path crates/fermium-cli`.
+- **#8 (v1-shared) An RK4 right side that goes out of its domain gives NaN silently.** In `loops/r01_rk4_error_mid.fm`
+  (`x' = -√x`, past x = 0), `x(3 s)` prints `NaN m` with no warning on any back end.
+- **#9 (nit, fair to Julia) blackbody.jl's timed region includes the extra `ratio` integral** (1001 integrals
+  against Fermium's 1000). That handicaps Julia by about 0.1 %.
+
+**What checked out**
+- **Compiled code (D273), 71 adversarial programs** (`loops/v*`, `w*`, `x*`, `y*`, `r*`): `--backend llvm`,
+  `--backend interp` and `fermium-legacy run` were byte for byte identical on every one (stdout, stderr, exit
+  code). They covered:
+  - indexes out of range only on the last, the first or some middle iterations (`x[6 - i]`, `x[4 - i]`,
+    `x[i + 1]` with step 2, two lists of different lengths in one body, descending loops to 0, negative ranges);
+  - lists that grow or are cleared inside the loop, or in a function called from it;
+  - a list rebound, pushed through an alias (`b = a`), or mutated by a function;
+  - "constants" reassigned later at module level, inside a loop, by a `for N` loop, by a solve unknown of the
+    same name, or in an if/else; a function reading a name before it is defined;
+  - a loop variable or an outer loop variable reassigned inside a versioned body; loop bounds changed in the
+    body;
+  - fractional, zero, negative and too-large steps, NaN bounds, `to inf` with and without `break`, trip counts
+    near 2⁵³ and past 2³¹; integer products past 2⁶³ (no wraparound); integer comparisons against fractions;
+  - `parallel for` with an out-of-range index and with negative steps;
+  - RK4 right sides that fail mid-solve (index error, √ of a negative, log, 1/(1 − t)), a solve inside a
+    function used in a solve's right side, solves in loops, backwards RK4, a step that doesn't divide the range
+    or exceeds it, vector RK4, and a right side reading a list that changes between solves;
+  - mixed mode (plot and list-function calls next to compiled loops).
+- **Benchmarks reproduced** (release build against fermium-legacy, 7 interleaved runs, medians, load 7.0–7.7,
+  so busier than RESULTS.md's 1.4–2.9). Inner v2/v1: nbody 1.03, spring_rk4 0.98, blackbody 1.46,
+  spring_adaptive 1.20. Wall: v2 27–140 ms against v1 297–443 ms. That agrees with PERF.md (1.06, 0.98, 1.4,
+  1.26) and RESULTS.md. Like for like: spring_rk4 has the same dt and 10⁶ steps (Fermium's trajectory storage
+  and step check are disclosed); blackbody has the same rtol 10⁻¹⁰; Julia's warm-up is excluded from Inner and
+  said so. The README's wall ranges (24–133 ms, 0.8–2.5 s, 0.16–0.41 s, 18 ms startup) match RESULTS.md. No
+  cherry-picking found: the slower rows (spring_rk4 1.89×, blackbody 1.50× Julia, forces 1 thread) are shown.
+- **User-facing tools and docs:**
+  - `fermium --version` → `fermium 2.0.0 (Rust)`, as Lesson 0 and CHANGES say.
+  - `doctor` is honest: it says `fermium build` isn't in this binary and that Python is optional.
+  - Both README program blocks print their commented results (9.70 m/s², 31.8 ft/s², 10 rad/s, v(t), 1 J,
+    3.52 cm).
+  - `fmt --pretty`, `check`, `use python math`, SVG plots and the REPL work.
+  - The conformance numbers (3334 + 32 = 3366) agree across CHANGES_2.0 and CONFORMANCE.md.
+  - legacy/README is accurate (`fermium-legacy --version` → `fermium 0.1.0`, `fermium-legacy doctor` works).
+  - pyproject only installs `fermium-legacy`. I found no doc telling a user to pip-install `fermium` as the
+    language.
+- **Physics, 106 programs** (`phys/p01–p64`, `s01–s41`, `q*`): identical to v1 except the documented
+  decimal-place sum rule (`0.1 + 0.2` → `0.3`, v1 `0.30`) and #5. The results match physics:
+  - Bohr radius 52.9 pm, 13.6 eV, ħc 197 MeV fm, escape speed 11.19 km/s;
+  - box levels 0.376/1.50/3.38 eV, harmonic oscillator E/ħω = 0.500/1.50/2.50;
+  - Monte Carlo g = 9.87 ± 0.22 m/s², correlated ± (x²/x = 2.00 ± 0.10, x − x = 0 ± 0);
+  - complex ODE = exp(−2i), radau/bdf stiff solves, the Bateman two-member chain;
+  - 1 AU orbit = 365 d, Compton 2.43 pm, R∞ = m_e c α²/2h, 1/α = 137, Hα 656.46 nm, ∇, curl and ∇² of test
+    fields, Carnot 0.400, Doppler 1100 Hz;
+  - every unit-error program has v1's message, caret and hint.
+- **Seen but not new (v1 does the same):** the display mixes `1.0` and `1` in one list (`[1.0, 50, 3.0]`);
+  `r × F` prints in J rather than N m; `semf_binding(A, Z)` doesn't reject Z > A (the README's own SEMF example
+  writes B(Z, A)).
+- **Not tested:** `fermium build` (the binary had no AOTRT), the 3.6 MB wasm claim, macOS.
+
+**Round 12 status (13:55 UTC):**
+- #1: fixed. README, CHANGES_2.0 and Lesson 0 say the release isn't published yet and point to building from source.
+- #3, #4, #6: fixed. The CHANGES speed section is updated, the SymPy mentions in reference.md and lesson 8 are corrected, stdlib.md's test path is corrected, and the README ratios now say "slower".
+- #5: documented in DIVERGENCES (antiderivatives differ by a constant; F(b) − F(a) agrees).
+- #7: fixed. `make install` runs from rust/.
+- #2, #8: added to BACKLOG for v2.5 (a new warning is a language change).
+- #9: noted (Julia's blackbody times 1001 integrals against 1000, 0.1 % in Fermium's favour); it doesn't change any ratio's first two digits.

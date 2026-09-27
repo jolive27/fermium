@@ -1,0 +1,17 @@
+{
+ "id": "d6883a691720",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson00_setup.md#3",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "python3 isn't defined",
+  "line": 1,
+  "col": 1,
+  "hint": "give it a value on an earlier line, e.g.  python3 = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

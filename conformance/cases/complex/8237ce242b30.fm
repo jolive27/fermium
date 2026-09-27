@@ -1,0 +1,1 @@
+print exp(1i), ln(1i), sqrt(1i), sin(1i), cos(1i), sinh(1i), cosh(1i), tan(1i), tanh(1i)

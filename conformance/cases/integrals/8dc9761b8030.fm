@@ -1,0 +1,2 @@
+a = 0.529e-10 m
+print ∫ 4π r² exp(-2 r/a) / (π a³) dr from 0 m to ∞ to 6 digits

@@ -1,0 +1,10 @@
+xs = [1 m, 2 m, 3 m]
+print xs[1], xs[end], len(xs)
+ys = 2 xs + 1 m
+print sum(ys), mean(ys), max(ys)
+zs = []
+push(zs, 5 s)
+push(zs, 7 s)
+print zs
+ts = linspace(0 s, 1 s, 5)
+print ts

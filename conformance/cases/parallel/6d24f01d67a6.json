@@ -1,0 +1,17 @@
+{
+ "id": "6d24f01d67a6",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "each iteration of a parallel for may only write its own element, x[i]",
+  "line": 3,
+  "col": 5,
+  "hint": "two iterations writing the same element would race; index with the loop variable i",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

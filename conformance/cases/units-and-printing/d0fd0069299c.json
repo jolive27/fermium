@@ -1,0 +1,11 @@
+{
+ "id": "d0fd0069299c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n",
+ "stderr": "warning: line 1: k_B (Boltzmann's constant) is now your variable: from here on, k_B means your value\n    k_B = 1.38e-23 J/K\n    ^\n  hint: that's fine if you don't need Boltzmann's constant below; otherwise pick another name, like k_B_0 or k_B2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

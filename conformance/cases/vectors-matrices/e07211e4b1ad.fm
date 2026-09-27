@@ -1,0 +1,8 @@
+rot(θ) = [[cos(θ), -sin(θ)], [sin(θ), cos(θ)]]
+v = <1, 0> m
+print rot(π/2) v to 3 digits
+sq(A) = A A
+print sq([[1, 1], [0, 1]])
+big = true
+M = if big then 2 identity(2) else identity(2)
+print M

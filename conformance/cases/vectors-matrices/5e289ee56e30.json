@@ -1,0 +1,17 @@
+{
+ "id": "5e289ee56e30",
+ "area": "vectors-matrices",
+ "origin": "dev-notes/notes/bugs-adversarial.md#58",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f returns a vector, so it can't be applied to each element of a list (lists of vectors aren't supported yet)",
+  "line": 2,
+  "col": 7,
+  "hint": "loop over the list and push the components into separate lists",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

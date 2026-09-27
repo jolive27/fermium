@@ -1,0 +1,1 @@
+print Σ(k² for k in 1)

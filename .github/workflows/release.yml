@@ -1,0 +1,92 @@
+name: Release
+
+# One self-contained `fermium` binary per platform (spec §B7): Linux x86_64 and macOS arm64 (Apple silicon).
+# Runs only when a version tag is pushed (git tag v2.0 && git push origin v2.0) or when started by hand (Actions
+# tab → Release → Run workflow). A tag publishes the binaries as assets of that tag's GitHub release; a hand-started
+# run only keeps them as workflow artifacts (download them from the run's page).
+# Minutes: the macOS job counts 10x on this private repo, which is why this never runs on plain pushes.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # built on ubuntu-latest: the binary needs a glibc at least as new as the runner's (Ubuntu 24.04, 2024)
+          - os: ubuntu-latest
+            asset: fermium-linux-x86_64
+          - os: macos-14
+            asset: fermium-macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: LLVM 18 static libraries and lld (Linux, rust/BUILD.md)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18-dev lld-18 liblld-18-dev libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev || \
+            (wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+             sudo add-apt-repository -y "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" && \
+             sudo apt-get update && sudo apt-get install -y llvm-18-dev lld-18 liblld-18-dev libzstd-dev zlib1g-dev libncurses-dev libpolly-18-dev)
+          echo "LLVM_SYS_180_PREFIX=/usr/lib/llvm-18" >> "$GITHUB_ENV"
+          echo "/usr/lib/llvm-18/bin" >> "$GITHUB_PATH"
+      - name: LLVM 18 static libraries and lld (macOS, rust/BUILD.md)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18 zstd
+          if brew install lld@18; then echo "LLD_PREFIX=$(brew --prefix lld@18)" >> "$GITHUB_ENV"; fi
+          echo "LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)" >> "$GITHUB_ENV"
+      - name: Build (release profile)
+        working-directory: rust
+        run: cargo build --release -p fermium-cli
+      - name: Strip, name for the platform, check it runs and what it links
+        run: |
+          mkdir dist
+          cp rust/target/release/fermium "dist/${{ matrix.asset }}"
+          strip "dist/${{ matrix.asset }}"
+          if [ "$RUNNER_OS" = Linux ]; then ldd "dist/${{ matrix.asset }}"; else otool -L "dist/${{ matrix.asset }}"; fi
+          ls -l dist
+          "dist/${{ matrix.asset }}" --version || true
+          "dist/${{ matrix.asset }}" doctor
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  # one job publishes both files, so the two builds never race to create the release
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum fermium-* > SHA256SUMS && cat SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/fermium-linux-x86_64
+            dist/fermium-macos-arm64
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          generate_release_notes: true

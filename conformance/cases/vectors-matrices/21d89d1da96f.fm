@@ -1,0 +1,14 @@
+A = [[7, 2, -2, 5, 1, -3], [-2, 17, 1, -3, 4, 0], [1, -3, 16, 0, -4, 3], [4, 0, -4, 15, -1, -5], [-4, 3, -1, -5, 14, -2], [-1, -5, 2, -2, 5, 13]] N/m
+b = <1, 2, 3, 4, 5, 6> N
+x = solve_linear(A, b)
+for i from 1 to 6
+    print x[i] in m to 12 digits
+print det(A) to 12 digits
+B = inverse(A)
+print B[2, 3] in m/N to 12 digits
+S = A + Aᵀ
+print eigenvalues(S) in N/m to 12 digits
+M = identity(6) * 2 kg
+M[1, 1] = 1 kg
+M[6, 6] = 3 kg
+print eigenvalues(S, M) in 1/s² to 12 digits

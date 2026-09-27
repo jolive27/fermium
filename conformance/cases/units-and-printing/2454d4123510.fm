@@ -1,0 +1,3 @@
+n = 2
+x = 3 m
+print x^n

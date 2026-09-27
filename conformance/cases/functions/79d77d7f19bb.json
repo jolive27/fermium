@@ -1,0 +1,11 @@
+{
+ "id": "79d77d7f19bb",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "energy per kg at start: -4.437×10⁸ J/kg\nrelative energy change after 2 years: 1.281×10⁻⁹\nperiod: 365 day\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

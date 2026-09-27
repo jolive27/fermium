@@ -1,0 +1,11 @@
+{
+ "id": "125f6b0e2ff6",
+ "area": "units-and-printing",
+ "origin": "gauntlet/thermodynamics/FRICTION.md#1",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "70.0 °C\n",
+ "stderr": "warning: line 2: this is a difference of two temperatures, so it is shown in °C without the offset (a change of 1 °C is 1 K)\n    print (T0 - 20 °C) in °C      # a physicist expects \"70 °C\" (a 70-degree difference)\n          ^\n  hint: write it  in K  to make that clear\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

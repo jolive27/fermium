@@ -1,0 +1,3 @@
+F_grav(m1, m2, r) = G m1 m2 / r^2
+print F_grav(M_earth, 70 kg, R_earth)
+print 70 kg * 9.81 m/s^2

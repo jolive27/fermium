@@ -1,0 +1,2 @@
+K = [[1, 2], [3, 4]] kN/m
+print K in N/m

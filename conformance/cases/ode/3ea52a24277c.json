@@ -1,0 +1,17 @@
+{
+ "id": "3ea52a24277c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the stop condition (until y = 5 m) never happened up to t = 1 s; make the range longer",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

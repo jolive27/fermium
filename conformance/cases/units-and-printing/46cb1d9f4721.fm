@@ -1,0 +1,6 @@
+a = 3 m
+b = 5 m
+temp = a
+a = b
+b = temp
+print a, b

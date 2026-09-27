@@ -1,0 +1,11 @@
+{
+ "id": "e2f4bbea9939",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "plot saved to <ROOT>/bootcamp/solutions/decay_model.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

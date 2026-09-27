@@ -1,0 +1,8 @@
+k = 50 N/m
+mass = 0.5 kg
+solve mass x'' = -k x
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 100 s
+E(t) = ½ mass x'(t)^2 + ½ k x(t)^2
+print "energy at start:", E(0 s) to 9 digits
+print "energy at 100 s:", E(100 s) to 9 digits

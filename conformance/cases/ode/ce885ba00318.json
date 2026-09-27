@@ -1,0 +1,11 @@
+{
+ "id": "ce885ba00318",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "closest approach (solve): -0.291 AU\ndistance after 0.25 yr: 0.302 AU\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+A_d = 4
+m_a = 4 u
+μ = m_a A_d u / (m_a + A_d u)
+print μ

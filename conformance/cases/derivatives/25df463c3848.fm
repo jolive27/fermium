@@ -1,0 +1,6 @@
+kT = 0.025 eV
+μ = 5 eV
+f(E) = 1/(exp((E - μ)/kT) + 1)
+g = f'
+h = f''
+print g(30 eV) in 1/eV

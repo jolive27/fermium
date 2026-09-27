@@ -1,0 +1,7 @@
+
+μ = 1000
+solve x'' = μ (1 - x²) x' / 1 s - x / (1 s)² with x(0 s) = 2, x'(0 s) = 0 / 1 s for t from 0 s to 3300 s using radau
+solve x(T1) = 0 for T1 from 0 s to 3300 s
+solve x(T2) = 0 for T2 from T1 + 10 s to 3300 s
+print 2 (T2 - T1) / (1 s)
+print len(times(x))

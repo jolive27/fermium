@@ -1,0 +1,3 @@
+L = 50 cm
+T(x) = 300 K + 400 K/m * x
+print (integral T(x) dx from 0 m to L) / L

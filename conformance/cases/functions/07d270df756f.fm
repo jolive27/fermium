@@ -1,0 +1,5 @@
+f(x) =
+    if x > 0
+        y = 2 x
+    y
+print f(-1)

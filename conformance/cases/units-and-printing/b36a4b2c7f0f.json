@@ -1,0 +1,11 @@
+{
+ "id": "b36a4b2c7f0f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "-0.988\n",
+ "stderr": "warning: line 1: sin(30) is the sin of 30 radians\n    print sin(30)\n          ^^^^^^^\n  hint: for degrees write sin(30°)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

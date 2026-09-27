@@ -1,0 +1,4 @@
+a = 2.00001 [b]
+b = a in b
+print b / (1 [b]) to 15 digits
+print (a in b) in b to 15 digits

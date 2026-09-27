@@ -1,0 +1,2 @@
+P(V, Z) = re(V conj(V / Z)) / 2
+print P((10 + 0i) [V], 3 Ω + 4i Ω) to 3 digits

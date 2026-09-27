@@ -1,0 +1,3 @@
+xs = [1 m, 2 m, 3 m]
+ys = 2 xs + 1 m
+print ys, √(sum(ys²))

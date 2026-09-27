@@ -1,0 +1,11 @@
+{
+ "id": "ecc255beccc8",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "predicted shift per orbit: 5.01867×10⁻⁷\npredicted shift per century: 42.9808 arcsec\nODE shift per orbit: 5.01867×10⁻⁷\nODE shift per century: 42.9808 arcsec\nNewtonian shift per orbit: -8.88×10⁻¹⁶\n",
+ "stderr": "warning: line 23: e (the elementary charge) is now your variable: from here on, e means your value\n    e = 0.20563\n    ^\n  hint: that's fine if you don't need the elementary charge below; otherwise pick another name, like e_0 or e2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

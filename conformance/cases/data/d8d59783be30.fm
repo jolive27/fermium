@@ -1,0 +1,6 @@
+solve N_Mo' = -λ_Mo N_Mo,
+      N_Tc' = λ_Mo N_Mo - λ_Tc N_Tc,
+      N_99' = λ_Tc N_Tc
+  with N_Mo(0) = N0, N_Tc(0) = 0, N_99(0) = 0
+  for t from 0 hr to 240 hr
+plot N_Mo vs t, N_Tc vs t, N_99 vs t to "gallery/bateman_chain.png"

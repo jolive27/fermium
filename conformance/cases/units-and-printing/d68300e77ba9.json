@@ -1,0 +1,11 @@
+{
+ "id": "d68300e77ba9",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-examples.md#10",
+ "dir": "dev-notes/notes",
+ "stdout": "2.57×10⁻³⁸ C²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

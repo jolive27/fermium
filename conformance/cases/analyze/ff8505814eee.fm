@@ -1,0 +1,2 @@
+analyze waves: v [m/s] depends on g [m/s²], λ [m]
+print "λ = 100 m:", waves(g_n, 100 m) / √(2π)

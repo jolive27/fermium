@@ -1,0 +1,56 @@
+# Nuclear 23 — Reactor point kinetics with six delayed-neutron groups
+#
+# (Lamarsh & Baratta, "Introduction to Nuclear Engineering", §7.1–7.2;
+# Krane §13.5.  Keepin's six-group data for thermal fission of U-235.)
+#
+#     n'   = ((ρ − β)/Λ) n + Σ λᵢ Cᵢ
+#     Cᵢ'  = (βᵢ/Λ) n − λᵢ Cᵢ,          i = 1 … 6
+#
+# with prompt-neutron generation time Λ = 5.0×10⁻⁵ s.  The reactor is
+# critical at n = 1 with the precursors in equilibrium, Cᵢ(0) = βᵢ/(λᵢ Λ).
+# At t = 0 a step of reactivity ρ = 0.100 β (10 cents) is inserted.
+#
+#  (a) Integrate n(t) for 300 s.  Check the prompt jump
+#      n(0⁺) ≈ β/(β − ρ) against n(0.5 s).
+#  (b) The stable period T = 1/ω₁, where ω₁ is the positive root of the
+#      inhour equation  ρ = ωΛ + Σ βᵢ ω/(ω + λᵢ).  Compare with the late-time
+#      growth rate of the numerical solution, ln(n(300 s)/n(250 s))/(50 s).
+#  (c) The one-group estimate for small ρ, T ≈ Σ(βᵢ/λᵢ)/ρ.
+#  (d) The reactivity (in cents) that gives a 60 s period.
+
+βs = [0.000215, 0.001424, 0.001274, 0.002568, 0.000748, 0.000273]
+λs = [0.0124 s⁻¹, 0.0305 s⁻¹, 0.111 s⁻¹, 0.301 s⁻¹, 1.14 s⁻¹, 3.01 s⁻¹]
+β = sum(βs)
+Λ = 5.0e-5 s
+ρ = 0.100 β
+
+solve n' = ((ρ - β) / Λ) n + λs[1] C1 + λs[2] C2 + λs[3] C3 + λs[4] C4 + λs[5] C5 + λs[6] C6,
+      C1' = βs[1] n / Λ - λs[1] C1,
+      C2' = βs[2] n / Λ - λs[2] C2,
+      C3' = βs[3] n / Λ - λs[3] C3,
+      C4' = βs[4] n / Λ - λs[4] C4,
+      C5' = βs[5] n / Λ - λs[5] C5,
+      C6' = βs[6] n / Λ - λs[6] C6
+  with n(0 s) = 1,
+       C1(0 s) = βs[1] / (λs[1] Λ), C2(0 s) = βs[2] / (λs[2] Λ),
+       C3(0 s) = βs[3] / (λs[3] Λ), C4(0 s) = βs[4] / (λs[4] Λ),
+       C5(0 s) = βs[5] / (λs[5] Λ), C6(0 s) = βs[6] / (λs[6] Λ)
+  for t from 0 s to 300 s
+
+print "beta =", β to 6 digits
+print "(a) n(0.5 s) =", n(0.5 s) to 8 digits, "  prompt jump beta/(beta - rho) =", β / (β - ρ) to 8 digits
+print "    n(100 s) =", n(100 s) to 8 digits, "  n(300 s) =", n(300 s) to 8 digits
+
+# (b) inhour equation, with the sum over groups written as a list sum
+inhour(ω) = ω Λ + sum(βs ω / (ω + λs))
+solve inhour(ω) = ρ for ω from 1e-6 s⁻¹ to 10 s⁻¹
+ω1 = ω
+ω_late = ln(n(300 s) / n(250 s)) / (50 s)
+print "(b) omega_1 =", ω1 to 10 digits, "  period =", 1 / ω1 to 8 digits, "  late-time growth rate =", ω_late to 8 digits
+
+# (c) one-group, small-ρ estimate
+print "(c) sum beta_i/lambda_i =", sum(βs / λs) to 8 digits, "  period estimate =", sum(βs / λs) / ρ to 8 digits
+
+# (d)
+ρ60 = inhour(1 / (60 s))
+print "(d) rho for a 60 s period =", ρ60 to 8 digits, " =", 100 ρ60 / β to 6 digits, "cents"

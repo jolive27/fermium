@@ -1,0 +1,11 @@
+{
+ "id": "3de8f4703a42",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "2 Hz\n",
+ "stderr": "warning: line 1: adding a value in Hz and one in rad/s: Fermium treats rad as 1, so Hz and rad/s are the same unit and they add as if 1 Hz were 1 rad/s\n    print 1 Hz + 1 rad/s\n          ^\n  hint: if the Hz value counts cycles per second, multiply it by 2π first\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

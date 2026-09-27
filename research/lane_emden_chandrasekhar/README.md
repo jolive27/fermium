@@ -30,7 +30,7 @@ with units, `4π ω3 ((ħ c / 4) (3π²)^(1/3) / ((μ_e m_u)^(4/3) π G))^(3/2)`
 | 3 | 6.896849 | 6.89685 | 2.018236 | 2.01824 | 54.182 |
 
 All six agree with the table to its last digit, and with an independent SciPy `solve_ivp` (rtol 10⁻¹²) to 10⁻⁶
-(`tests/test_research.py`).
+(`legacy/tests/test_research.py`).
 
 | Chandrasekhar mass | Fermium | published |
 |---|---|---|

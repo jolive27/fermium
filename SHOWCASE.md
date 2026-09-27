@@ -1,7 +1,7 @@
 # Fermium showcase
 
 Five things Fermium does that general-purpose languages don't. Every snippet is copy-pasteable into a file
-and runnable with `fermium run file.fm` (tests/test_showcase.py runs them all and checks the output shown).
+and runnable with `fermium run file.fm` (legacy/tests/test_showcase.py runs them all and checks the output shown).
 
 ## 1. The compiler knows physics units, before anything runs
 
@@ -74,7 +74,7 @@ print "probability outside the well, ground state:", 1 - ∫ ψ₁(x)² dx from 
 Output: `[0.2718, 1.077, 2.379] eV` and `0.0083`.
 - The Schrödinger equation is written as on paper. `E` is the one undefined name, so Fermium treats it as the eigenvalue.
 - It finds the three lowest levels and their normalised wavefunctions `ψ₁ … ψ₃`, which can be integrated, differentiated and plotted.
-- The levels agree with the transcendental equations of a finite well to 10⁻⁶ (tests/test_m3_eigen.py).
+- The levels agree with the transcendental equations of a finite well to 10⁻⁶ (legacy/tests/test_m3_eigen.py).
 - The same language does 1-D PDEs (heat, wave, time-dependent Schrödinger with animated GIFs), complex numbers (`1i ħ ψ' = E ψ`), natural units (`units natural(ħ = c = 1)`, still unit-checked) and dimensional analysis (`analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]` gives T ∝ √(L/g)).
 
 ## 5. Real data, real physics: the liquid-drop model against AME2020

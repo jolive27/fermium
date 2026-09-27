@@ -1,0 +1,11 @@
+[package]
+name = "fermium-units"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fermium's dimensions, unit database (loaded from fermium/selfhost/units_db.fm at build time), CODATA constants, natural unit systems and number printing"
+build = "build.rs"
+
+[dependencies]
+num-rational = "0.4"
+num-traits = "0.2"

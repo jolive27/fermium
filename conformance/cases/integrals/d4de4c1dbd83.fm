@@ -1,0 +1,5 @@
+density(x) = 2 kg/m + 1 kg/m^2 x
+M = integral density(x) dx from 0 m to 2 m
+x_cm = (integral x density(x) dx from 0 m to 2 m) / M
+print "mass:", M
+print "centre of mass:", x_cm

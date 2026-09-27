@@ -1,0 +1,4 @@
+rg = 1.48 km
+print 2 * rg / 1 km to 3 digits
+f(rg) = 2 rg
+print f(3) to 3 digits

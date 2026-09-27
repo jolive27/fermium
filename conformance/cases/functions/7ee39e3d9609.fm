@@ -1,0 +1,15 @@
+xs = [1 m]
+names = ["a"]
+reset(a) =
+    clear(xs)
+    clear(names)
+    push(xs, a)
+    push(names, "b")
+    return len(xs)
+print reset(5 m)
+print xs, names
+clear(xs)
+print len(xs)
+push(xs, 7 m)
+push(xs, 8 m)
+print xs

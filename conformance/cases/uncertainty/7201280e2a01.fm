@@ -1,0 +1,49 @@
+# The semi-empirical (liquid-drop) mass formula fitted to 2484 measured nuclei from AME2020.
+#   B(Z, A) = a_V A − a_S A^(2/3) − a_C Z(Z−1)/A^(1/3) − a_A (A − 2Z)²/A + P a_P / A^(1/2)
+# P = +1 even–even, −1 odd–odd, 0 odd A (column of the data file, see prepare.py).
+# Run from this folder:  fermium run semf.fm
+
+nuclei = load "ame2020_binding.csv"
+
+a_V = 15 MeV
+a_S = 17 MeV
+a_C = 0.7 MeV
+a_A = 23 MeV
+a_P = 12 MeV
+fit B = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + P a_P / √A to nuclei
+
+print "relative errors:", err(a_V)/a_V, err(a_S)/a_S, err(a_C)/a_C
+
+# residuals: measured minus liquid drop, the shell effects the formula leaves out
+Zs = nuclei.Z
+Ns = nuclei.N
+As = nuclei.A
+Bfit(Z, A, P) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_A (A - 2Z)² / A + P a_P / √A
+residual = []
+for i from 1 to len(As)
+    push(residual, nuclei.B[i] - Bfit(Zs[i], As[i], nuclei.P[i]))
+print "rms residual:", std(residual) to 6 digits
+
+# the nuclei most underbound by the formula sit at the magic numbers (A ≥ 40: the liquid drop is poor below)
+worst = 0 MeV
+worst_i = 1
+for i from 1 to len(As)
+    if As[i] >= 40 and residual[i] > worst
+        worst = residual[i]
+        worst_i = i
+print "largest extra binding (A ≥ 40):", worst, "at Z =", Zs[worst_i], "N =", Ns[worst_i]
+
+# mean residual of the isotones N = magic, against N = magic ± 8
+mean_residual(n0) =
+    s = 0 MeV
+    k = 0
+    for i from 1 to len(As)
+        if Ns[i] == n0
+            s = s + residual[i]
+            k = k + 1
+    s / k
+for n0 in [28, 50, 82, 126]
+    print "N =", n0, ": mean residual", mean_residual(n0), "  (N ± 8:", mean_residual(n0 - 8), "and", mean_residual(n0 + 8), ")"
+
+plot residual vs Ns with points, title "AME2020 − liquid drop (MeV): peaks at N = 28, 50, 82, 126" to "residuals_vs_N.png"
+plot residual vs Zs with points, title "AME2020 − liquid drop (MeV) against Z: peaks at Z = 28, 50, 82" to "residuals_vs_Z.png"

@@ -1,0 +1,11 @@
+{
+ "id": "569f81f53c3c",
+ "area": "lists",
+ "origin": "dev-notes/notes/bugs-adversarial.md#1",
+ "dir": "dev-notes/notes",
+ "stdout": "[1, 2, 3, 4]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "804426a869db",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9.0 J 6.0 kg m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

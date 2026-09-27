@@ -1,0 +1,11 @@
+{
+ "id": "1680aea4477f",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "closest approach d = 29.6 fm\nθ = 10°   b = 169 fm   dσ/dΩ = 9480 b/sr\nθ = 30°   b = 55.2 fm   dσ/dΩ = 122 b/sr\nθ = 60°   b = 25.6 fm   dσ/dΩ = 8.75 b/sr\nθ = 90°   b = 14.8 fm   dσ/dΩ = 2.19 b/sr\nθ = 150°   b = 3.96 fm   dσ/dΩ = 0.628 b/sr\nσ(θ > 90°) by integration: 6.87 b    π b(90°)² = 6.87 b\nfraction scattered by more than 90°: 1.6×10⁻⁵  = 1 in 6.2×10⁴\nplot saved to <ROOT>/examples/gallery/rutherford.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+solve x' = t^4 with x(0) = 0 for t from 0 to 1
+print x(1)                  # expected 0.2; actual: runtime error "step became too small near t = 0"

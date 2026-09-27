@@ -1,0 +1,11 @@
+{
+ "id": "690fa7e611ac",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "examples/rosetta",
+ "stdout": "peak: 501.52 nm\nWien b/T: 501.52 nm\nπ ∫ B dλ = 63.2007 MW/m²\nσ T⁴ = 63.2007 MW/m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

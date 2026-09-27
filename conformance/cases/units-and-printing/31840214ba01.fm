@@ -1,0 +1,4 @@
+P = 1000 W
+m = 1 kg
+c_w = 4186 J/(kg K)
+print P 60 s / (m c_w) to 6 digits

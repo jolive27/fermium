@@ -1,0 +1,17 @@
+{
+ "id": "8b45c4f2cd9f",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 b' is ambiguous: right after a number, b is a unit (barns), but b is also your variable b",
+  "line": 2,
+  "col": 9,
+  "hint": "write  2*b  for 2 × your variable b, or  2 [b]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

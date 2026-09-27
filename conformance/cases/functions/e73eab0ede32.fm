@@ -1,0 +1,5 @@
+f(x) =
+    if x > 0
+        return 1 m
+print f(-2)       # actual: 0 m   expected: a compile error ("f doesn't return a value when the
+                  #                 if is false"), or at least a runtime error

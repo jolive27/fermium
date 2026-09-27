@@ -1,0 +1,1 @@
+print min(3 m, 2 m, 50 cm), max([1 s, 5 s]), hypot(3 m, 4 m)

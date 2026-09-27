@@ -1,0 +1,11 @@
+{
+ "id": "37d8903df6fb",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "data from data/pendulum.csv: columns L [m], T [s]\n[0.200, 0.400, 0.600, 0.800, 1.00, 1.20, 1.40] m\n[0.904, 1.28, 1.55, 1.79, 1.99, 2.20, 2.36] s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

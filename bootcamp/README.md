@@ -24,7 +24,7 @@ Each lesson takes roughly 30–60 minutes.
 
 | Lesson | Topic | You will learn |
 |---|---|---|
-| [0](lesson00_setup.md) | Setup | Install Fermium on your Mac and run your first program |
+| [0](lesson00_setup.md) | Setup | Install Fermium on your Mac or Linux PC and run your first program |
 | [1](lesson01_numbers_units.md) | Numbers & units | Fermium as a calculator that understands units |
 | [2](lesson02_variables_formulas.md) | Variables & formulas | Give values names, write formulas like on paper |
 | [2b](lesson02b_symbols.md) | Symbols | Write `π`, `θ`, `√`, `²` (or their plain-keyboard spellings) |
@@ -58,7 +58,7 @@ print 2 m + 30 cm
 2.30 m
 ```
 
-Lines you type into the **Terminal** (the Mac's command window) look like this:
+Lines you type into the **Terminal** (the command window on a Mac or Linux) look like this:
 
 ```
 fermium run hello.fm
@@ -68,6 +68,6 @@ Every Fermium example in this course is run automatically by Fermium's test suit
 
 ## A note for teachers and maintainers
 
-Each ```` ```fermium ```` block in `bootcamp/*.md` and `bootcamp/solutions/*.md` is executed by `tests/test_docs.py` (with the markdown file's folder as the working folder, so `load "data/pendulum.csv"` works). Blocks that deliberately fail are written as plain ```` ``` ```` blocks, marked `<!-- run as name.fm -->` when they have an output box. Run `python3 -m pytest -q tests/test_docs.py tests/test_bootcamp_outputs.py` after editing.
+Each ```` ```fermium ```` block in `bootcamp/*.md` and `bootcamp/solutions/*.md` is executed by `legacy/tests/test_docs.py` (with the markdown file's folder as the working folder, so `load "data/pendulum.csv"` works). Blocks that deliberately fail are written as plain ```` ``` ```` blocks, marked `<!-- run as name.fm -->` when they have an output box. Run `python3 -m pytest -q legacy/tests/test_docs.py legacy/tests/test_bootcamp_outputs.py` after editing (these run Fermium 1.5, the deprecated Python version; the blocks are also harvested into the conformance suite, `conformance/`, which `make check` runs with the `fermium` binary: re-harvest with `conformance/harvest.py` after adding a block).
 
-The output boxes are real program output. After a change to Fermium or to an example, run `python3 bootcamp/update_outputs.py` to re-run every example and refresh them (an output box is any plain block after a `<!-- output -->` marker; a deliberately failing example is marked `<!-- run as name.fm -->`). Review the diff: a changed output can reveal a regression, or prose that no longer matches. `tests/test_bootcamp_outputs.py` fails when a box is out of date (the order of warnings doesn't matter), and `python3 bootcamp/update_outputs.py --check` lists the stale boxes without changing anything.
+The output boxes are real program output. After a change to Fermium or to an example, run `python3 bootcamp/update_outputs.py` to re-run every example and refresh them (an output box is any plain block after a `<!-- output -->` marker; a deliberately failing example is marked `<!-- run as name.fm -->`). Review the diff: a changed output can reveal a regression, or prose that no longer matches. `legacy/tests/test_bootcamp_outputs.py` fails when a box is out of date (the order of warnings doesn't matter), and `python3 bootcamp/update_outputs.py --check` lists the stale boxes without changing anything.

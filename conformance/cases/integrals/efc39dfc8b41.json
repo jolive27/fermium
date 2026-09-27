@@ -1,0 +1,11 @@
+{
+ "id": "efc39dfc8b41",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "examples/rosetta",
+ "stdout": "Earth: 11.18 km/s\nMoon: 2.375 km/s\nSun: 617.7 km/s\nwork per kg: 62.50 MJ\nSchwarzschild radius of the Sun: 2.953 km\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

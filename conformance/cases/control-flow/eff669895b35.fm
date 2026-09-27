@@ -1,0 +1,5 @@
+v0 = 20 m/s
+g = 9.81 m/s^2
+for t from 0 s to 4 s step 0.5 s
+    y = v0 t - ½ g t²
+    print t, y

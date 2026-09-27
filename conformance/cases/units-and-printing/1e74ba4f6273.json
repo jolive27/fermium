@@ -1,0 +1,17 @@
+{
+ "id": "1e74ba4f6273",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this already has units (length [m]), so [cm] would multiply them",
+  "line": 2,
+  "col": 7,
+  "hint": "to show it in cm, write:  ... in cm",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

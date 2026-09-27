@@ -1,0 +1,2 @@
+solve y' = -1e4 (y - cos(t / 1 s)) / 1 s with y(0) = 0 for t from 0 s to 1 s
+print y(1 s)

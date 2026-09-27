@@ -1,0 +1,17 @@
+{
+ "id": "78664c3d056d",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "exp needs a plain number, but got a complex number of length [m]",
+  "line": 1,
+  "col": 11,
+  "hint": "the argument of exp, ln, sin, ... must be a plain number",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

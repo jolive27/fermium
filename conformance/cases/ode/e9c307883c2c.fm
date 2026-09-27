@@ -1,0 +1,5 @@
+solve a'' + 0.5 b'' = -a / (1 s²),
+      b'' + 0.5 a'' = -b / (1 s²)
+  with a(0 s) = 1 m, b(0 s) = 0 m, a'(0 s) = 0 m/s, b'(0 s) = 0 m/s
+  for t from 0 s to 1 s tolerance 1e-11
+print a(1 s) to 10 digits, b(1 s) to 10 digits

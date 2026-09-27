@@ -1,0 +1,8 @@
+print 300 K - 20 °C            # error "can't subtract an absolute temperature (°C) from this"
+                               # expected 6.85 K (both are absolute temperatures)
+Ta = 20 °C
+solve T' = -(T - Ta) / (10 min) with T(0 s) = 90 °C for t from 0 min to 30 min
+print T(30 min)                # same error; expected 23.4851 °C (20 + 70 e⁻³)
+Ta = 20 °C
+f(T) = T - Ta
+print f(30 °C)                 # same error (the instance sees T as "temperature [K]")

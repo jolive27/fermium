@@ -1,0 +1,11 @@
+{
+ "id": "55f2d3b1d55b",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "after 5730 years:  0.500\nafter 10000 years: 0.298\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

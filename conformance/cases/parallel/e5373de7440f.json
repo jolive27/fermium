@@ -1,0 +1,17 @@
+{
+ "id": "e5373de7440f",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x is written by the iterations (x[i] = …), so inside the loop it can only be read as x[i]",
+  "line": 3,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

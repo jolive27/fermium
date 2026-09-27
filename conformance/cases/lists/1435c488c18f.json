@@ -1,0 +1,11 @@
+{
+ "id": "1435c488c18f",
+ "area": "lists",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "2.21 s\n2.19 s\n2.23 s\n5\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

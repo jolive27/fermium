@@ -1,0 +1,2 @@
+x = 1.20 ± 0.01 m
+print x in mm

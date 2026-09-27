@@ -1,0 +1,2 @@
+use python scipy.special
+print 1

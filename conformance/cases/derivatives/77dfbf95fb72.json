@@ -1,0 +1,11 @@
+{
+ "id": "77dfbf95fb72",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "g(x) = 1/(3x^(2/3))\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

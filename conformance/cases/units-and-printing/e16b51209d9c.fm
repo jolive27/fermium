@@ -1,0 +1,4 @@
+a = 910.48440684087 [Hz]
+b = a in Hz
+print b / (1 [Hz]) to 15 digits
+print (a in Hz) in Hz to 15 digits

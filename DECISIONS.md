@@ -1026,3 +1026,164 @@ The rule (spec §3.4.2), refined:
 ## D263. The v1.5 freeze point: a local tag and a branch (the tag can't be pushed from here)
 - **What:** v1.5 is commit `ccdb288`, where CI passed on Linux and macOS (PR #2). It is tagged `v1.5` locally, but pushing tags from this session is refused (HTTP 403: the session's git access covers branches only), so the same commit is published as the branch `claude/v1.5-freeze`. Phase B's branch `claude/v2-rust` starts from that commit, as the spec asks ("created from the v1.5 tag").
 - **For John:** `git tag -a v1.5 ccdb288 -m "Fermium 1.5" && git push origin v1.5` creates the tag on GitHub (or the GitHub web UI: Releases → Draft a new release → tag v1.5 on branch claude/v1.5-freeze).
+
+## D264. The conformance runner compares strictly (red team round 9)
+- **What:** `conformance/run` compares stdout exactly (spacing and punctuation included). The one tolerance: a number
+written with a decimal point or a power of ten may differ by one unit in its last printed digit, and only when it
+has the same shape (digits, decimal places, power of ten). Errors need the same message, line and hint; warnings
+the same lines and messages; the exit code must match. The Rust binary runs on a copy of the program in an empty
+temporary directory with an empty PATH. CONFORMANCE.md lists every failure.
+- **Why:** red team round 9 built a fake implementation (every integer +1, every last digit changed, notation
+rewritten, error words reversed) that scored 3034/3037 under the first runner: ±1 on integers, value-only number
+comparison (so significant figures and notation were never scored), stripped brackets, and a 60 % bag-of-words
+message match. `tests/test_conformance_suite.py` now checks that such fakes fail.
+- **Alternatives:** keep a loose default and a strict mode (rejected: the scoreboard must be honest by default);
+compare numbers by value with a relative tolerance in the numerics areas only (kept for later if a documented
+divergence needs it; then it goes in DIVERGENCES.md with the case ids).
+
+## D265. Documented divergences are checked, not just listed
+- **What:** a deliberate difference from v1 (spec B2: v1 limitations fixed natively; or v1 behaviour that isn't
+  deterministic) is a section of `rust/DIVERGENCES.md` plus, for each affected conformance case,
+  `conformance/divergences/<id>.json` holding what the Rust implementation prints instead (written by
+  `conformance/add_divergence.py` after reading the output). `conformance/run` counts such a case as a
+  *documented divergence* only while the Rust output matches that file exactly; CONFORMANCE.md shows passes and
+  documented divergences separately. The B8 gate ("100 %, or every failure is a documented divergence") reads
+  the sum.
+- **Why:** a divergence that is only listed could hide a later regression in the same case (the integral that
+  gave the true value starts giving something else). Checking the recorded output keeps the scoreboard honest.
+- **Not divergences:** features that aren't ported yet (e.g. `use python` until B5.14) stay failures.
+
+## D266. The playground runs the Rust compiler as WebAssembly, through a C ABI without JS glue (B5.12)
+- **What:** `rust/crates/fermium-wasm` (a cdylib for `wasm32-unknown-unknown`, built with `--profile wasm`: release,
+fat LTO, stripped; 3.6 MB, 1.2 MB gzipped) runs parse → check → the tree-walking back end, as `fermium run
+--backend interp`. It exports `alloc`/`dealloc`/`put_file`/`run_program`/`panic_message`/`partial_stdout` over
+numbers and byte buffers; `run_program` returns length-prefixed JSON. `web/fermium.js` is the only JS that
+talks to it (shared by the worker and the Node tests); each run instantiates the compiled module afresh, so the
+runtime's per-process state (warnings shown once, RNG, the recursion check's base) behaves as in separate `fermium
+run` processes. Files go through `fermium_runtime::vfs` (the file system natively, an in-memory map on wasm32), and
+run-time warnings through `vfs::stderr_line` (captured by the driver). Shared crates change only behind
+`cfg(target_arch = "wasm32")` (no threads for the parser's big stack, `clock()` from the page) plus the two
+routings through `vfs`, which are identical natively.
+- **Why:** one implementation everywhere (the page prints what `fermium run` prints; `web/test/compare_native.js`
+checks every example in CI); a 3 MB download instead of Pyodide's ~50 MB; no Python/SciPy/SymPy loading on demand.
+- **Alternatives:** wasm-bindgen (generated JS glue and a CLI tool pinned to the crate's version: more build-time
+parts for six functions); `wasm32-wasip1` with a WASI shim for files and stderr (a JS shim or a dependency either
+way, and std's WASI file layer for three files); keeping one instance across runs (needs every thread-local reset;
+a trap in the middle of a run leaves Rust state inconsistent); the LLVM back end (LLVM doesn't run in the browser).
+
+## D267. Distribution (B7): one plain binary per platform from a tag-triggered workflow; macOS CI only on PRs
+- **What:** `.github/workflows/release.yml` runs on `v*` tags and by hand. It builds `cargo build --release -p
+fermium-cli` on ubuntu-latest and macos-14, strips the binary and uploads it as `fermium-linux-x86_64` /
+`fermium-macos-arm64` (plain files, not archives) plus `SHA256SUMS`; one `publish` job attaches them to the tag's
+release (softprops/action-gh-release), so the two builds never race to create it. A hand-started run only keeps
+workflow artifacts. In CI, the Rust compiler on macOS is its own job (`rust-macos`: build, `cargo test`, the whole
+conformance suite against `conformance/RUST_FLOOR`) with the same gate as the Python `macos` job: pull requests
+and workflow_dispatch only. `tests/test_workflows.py` loads the workflows with a duplicate-key-refusing YAML loader
+and checks those gates. Lesson 0 now installs the binary (download, `~/bin`, PATH, Gatekeeper's quarantine,
+`fermium doctor`), with the pip install of Fermium 1.5 kept in a labelled section until the B8 cutover.
+- **Why:** "download one file, put it on your PATH" (spec §B7) is literal with a plain file; beginners don't have to
+unpack anything. macOS minutes cost 10x on the private repo (CLAUDE.md rule 11). Separate macOS jobs run side by
+side, so neither approaches its timeout. The Linux binary is built on ubuntu-latest, so it needs a glibc as new
+as the runner's.
+- **Alternatives:** .tar.gz archives (keep the executable bit, but one more step for beginners); a Homebrew tap or
+an install script (later: needs a public download URL); building Linux on an older image for an older glibc (the
+apt LLVM 18 path is only tested on ubuntu-latest); running the Rust steps inside the existing macOS job (over its
+45-minute timeout with make check).
+
+## D268. PDE time steps: a tridiagonal LU, not a port of SuperLU and OpenBLAS (documented divergence)
+- **What:** the Rust PDE solver factors each implicit step's tridiagonal matrix with a plain LU. v1 used SciPy's `splu`. Three conformance cases differ at the rounding level: two in the 14th–15th digit, and one noise-around-zero value. They are recorded as divergences (rust/DIVERGENCES.md, "PDE linear solves").
+- **Why:** both are exact to rounding; the differences are invisible at printed precision unless a program prints 14+ digits or a pure rounding-noise value. A bit-for-bit port would mean SuperLU's column elimination with its row and column pivot order, plus OpenBLAS's FMA arithmetic in the two blocks SuperLU hands to BLAS. That is several hours of work, a fragile dependence on library internals, and it would slow the solver.
+- **Alternatives:** port SuperLU and model OpenBLAS (rejected, as above); call a system SuperLU (rejected: spec §B6 wants no runtime dependencies).
+
+## D269. The B8 cutover: the Rust binary is `fermium`; Fermium 1.5 moves to legacy/ as `fermium-legacy`
+- **What:** the Python implementation moved with `git mv` to `legacy/fermium` (the package), `legacy/tests` (its
+  pytest suite, test programs and John's Appendix 1 programs) and `legacy/tools` (the 1.5 migration scripts).
+  `pyproject.toml` maps the package from `legacy/` (`package-dir = {"" = "legacy"}`), so
+  `pip install -e ".[full,dev]"` still installs it under the import name `fermium` (conformance/run --impl legacy,
+  conformance/harvest.py, rust/tools/*.py and the legacy tests keep working); its console script is renamed
+  `fermium-legacy` (`python3 -m fermium` still works) and its output is untouched, since the conformance goldens
+  come from it. `fermium` is the Rust binary: the release download (bootcamp Lesson 0) or `make install`
+  (`cargo install --locked --path rust/crates/fermium-cli`). Tests and scripts say which one they mean: the v1
+  tests run `fermium-legacy` or `python3 -m fermium`; benchmarks/run.py, the VS Code extension and the docs mean
+  the Rust binary. `make check` (check.sh) runs (a) ruff and the legacy pytest suite, (b) `cargo build` and
+  `cargo test` (profile fast; plus fermium-pyapi and fermium-wasm), (c) the whole conformance suite against
+  `rust/target/fast/fermium` with `--min conformance/RUST_FLOOR`, writing its report to a temporary file. Every
+  docs, bootcamp, examples, gauntlet and research program is harvested into the suite, so (c) is what checks them
+  against the Rust binary. `FERMIUM_SKIP_RUST=1` skips (b) and (c), and a missing cargo skips them; both print
+  that they were skipped. In CI the legacy jobs (`linux`, `macos`, named "legacy (Fermium 1.5, deprecated)") run
+  make check with `FERMIUM_SKIP_RUST=1`, because the `rust-linux` / `rust-macos` jobs already build, test and
+  score the binary; the macOS gate (pull requests and hand-started runs only) and the concurrency rule are
+  unchanged. Conformance cases keep their folder names `tests/programs[/john]` (a case's id hashes its folder,
+  and one case prints a path in it): `conformance/run` reads those folders from `legacy/tests/…` and
+  `conformance/harvest.py` writes `legacy/tests/…` back as `tests/…`, so ids and goldens don't change. The Rust
+  build already finds the standard library and the unit database under `legacy/fermium/` (build.rs).
+- **Why:** spec §B8 (Rust at 99.7 % with every other failure a documented divergence): the Rust binary becomes
+  *the* fermium, and legacy/ stays in CI for one more phase, deprecated. `git mv` keeps the history (`git log
+  --follow`). Keeping the import name means nothing that reads the oracle has to change, and a different console
+  script name means a machine can have both without one shadowing the other.
+- **Alternatives:** delete the Python implementation now (rejected: it is the conformance oracle, and the spec
+  keeps it one more phase); keep it at the top level and only rename the script (rejected: the layout would
+  still present it as the compiler); rename the package to `fermium_legacy` (rejected: every oracle reader,
+  the harvest and ~120 test files import `fermium`, and a rename risks changing v1's output, e.g. module names
+  in messages); re-harvest the suite with `legacy/tests/…` folders (rejected: new ids and one changed golden for
+  no behaviour change); run the Rust part of make check in the legacy CI job too (rejected: duplicates the
+  rust-linux job's 20+ minutes of build and conformance).
+
+## D270. The tree-walker remembers pure calls within one ODE right-hand side
+- **What:** while `ode_call` evaluates a `solve`'s equations once, a call to a function that only computes
+(numbers in, a number out; assignments to its own locals, if, loops, return, arithmetic, `where`, pure math
+built-ins, integrals and sums, calls of such functions) and that integrates or sums somewhere returns the number
+remembered from an identical earlier call in the same evaluation (`fermium-codegen/src/eval_memo.rs`). The cache
+is emptied for every evaluation and after any call of a function that may do more than compute; Monte Carlo
+propagation turns it off.
+- **Why:** research/bbn_network (conformance 6de08e3389a9) calls n_b(T), which integrates the e± plasma twice,
+from each of 42 rate terms: ~100 quadratures per evaluation where 5 are distinct. Under the tree-walker a step
+took 250 ms against v1's 5 ms (v1 compiles the right-hand side), and the program ran 25 minutes; with the cache
+it runs in about 200 s with exactly the same steps and numbers (a hit returns the bits the call would compute; a
+run-time warning is shown once per text anyway).
+- **Alternatives:** compile the right-hand side (the LLVM back end; the program has a plot, which the tree-walker
+had to run); common-subexpression elimination in the checker (changes the IR both back ends see); a cache kept
+for the whole solve (more hits in the Jacobian columns, but must prove no global can change between evaluations).
+
+
+## D271. Platform maths libraries: goldens are glibc's; macOS is compared within a few ulp, with listed cases skipped
+- **What:** the numerics fixtures and the conformance goldens come from Linux (glibc's libm, and OpenBLAS's SkylakeX kernels for v1's linear algebra). On a platform with another libm (macOS), the Rust fixture tests assert bit-identity only where the libm is the fixtures' (`FIXTURE_LIBM`); elsewhere they compare within a few ulp (ODE trajectories at the solvers' accuracy, noisy dense-output derivatives within 1e-3). The macOS conformance job skips the 28 cases in `conformance/libm_sensitive.txt`, whose printed last digits or rounding-noise values differ with Apple's libm. The runner lowers the floor by the number skipped and names them in the report. CI's legacy job pins `OPENBLAS_CORETYPE=SkylakeX` on AVX-512 runners, and otherwise skips `conformance/blas_sensitive.txt`.
+- **Why:** these values are the platform's C library, not Fermium: v1 on macOS differs from the Linux goldens the same way. Printing 17 digits or a value that is pure rounding noise exposes the last bits of `sin`/`exp`. Linux keeps the strict, bit-for-bit claim.
+- **Alternatives:** a bundled correctly-rounded libm (e.g. CORE-MATH) for bit-identical results everywhere. That is the better long-term fix, but it would change digits against v1's goldens on Linux too, so it is a v2.5 candidate (BACKLOG). A separate macOS golden set was rejected: it would need v1 on macOS to regenerate, and a second truth to maintain.
+
+## D272. Phase C work starts in agent branches once B8's criteria are met; nothing merges before the v2.0 tag
+- **What:** the B8 gate's criteria are met: 3366/3366 pass or are documented divergences, CI is green on Linux and macOS (PR #3, run 127), the cutover is done, and docs/architecture.md is written. What remains is the B8.3 benchmark re-run and the tag. Phase C items start in agent worktrees now, based on claude/v2-rust. They are merged into `claude/v2.5` (branched from the v2.0 tag) only after the tag, each through tests and the full conformance suite.
+- **Why:** the end time is fixed. Waiting two idle hours for a benchmark run would waste time the plan needs, and the gate's purpose (don't grow the language on a compiler that doesn't yet match v1) is already served.
+- **Alternatives:** start Phase C only after the tag (strict ordering, but idle time); merge Phase C work into claude/v2-rust (rejected: v2.0 must be the v1-compatible cut).
+
+## D273. The LLVM back end's inner loops: facts found at compile time instead of per-iteration checks
+- **What:** (1) *Module constants* (`llvm/consts.rs`): a module variable set exactly once, at the top of the main
+block before any user function is called, to a value known then, is that constant wherever the compiled code
+reads it (`m = 1 kg`, `N = 1000000`); a list bound once to a list of known length and used only by indexing, `len`
+and `for … in` keeps that length (`len(mass)` is 5). The slots are still written, so the tree-walker's constructs
+see the same values. The main block is compiled before the functions so they see these constants too.
+(2) *Integer trip counts* for `for i from a to b` with whole a, b and step ±1 (the same number as the
+floating-point formula below 2⁵³), integer comparisons of integer loop variables, and integer loop variables in
+`parallel for` bodies. (3) *Versioned loops* (`hoist.rs versioned_loop`): a small straight-line loop body
+(no inner loop, call, integrand or solve) whose indexes are integer loop variables is compiled twice; one test
+before the loop checks every such index for the first and last value, then the copy without the checks runs,
+else the checked copy (so a program that fails still fails with the same message and line). (4) *Owned lists*: a
+list that is bound once to a new list and only ever indexed gets a TBAA type of its own, so a store into `vx`
+doesn't make LLVM reload `x` or `mass` (v1's lists were separate globals, which gave LLVM the same fact).
+(5) *Compiled fixed-step RK4* (`ode.rs rk4_inline`): a `solve … step h` without `until` takes its steps in the
+module with the right side called directly (inlined) and the state in registers, `ode::rk4_plain` operation for
+operation; fermium-runtime does the checks, the first derivative, the error estimate and the solution object
+(fm_rk4_begin / fm_rk4_end; the solution under construction is boxed in the loop's plan, so a right side that
+itself solves an equation is safe). (6) The quadrature's sentinel cache uses a cheap hasher instead of SipHash.
+- **Why:** PERF.md showed v2's compiled inner loops 1.2–2.4× slower than v1's on nbody, spring_rk4, forces and
+blackbody. Every change keeps the printed results bit for bit (llvm_diff, full conformance).
+- **Alternatives:** a Gauss–Kronrod panel compiled into the module with the integrand inlined, as v1 did
+(tried: only ~15% fewer instructions per integral on blackbody, the rest being the adaptive bookkeeping and
+`exp`, and ~0.3 s more compile time for the 15 inlined copies; rejected); `default<O3>` (no measurable gain on
+the benchmarks, 3–30 ms more compile time: only the `FERMIUM_LLVM_PASSES` experiment switch); fast-math flags
+(they change results: never).
+
+## D274. v2.0 is tagged locally and marked by the branch claude/v2.0-freeze; the release binaries wait for the owner
+- **What:** `v2.0` is an annotated tag on f61b8e6 (the version bump to 2.0.0 after make check passed: legacy 3968 passed, all Rust tests, conformance 3334 + 32 documented; PR #3 green on Linux and macOS). The session's GitHub token refuses tag pushes (HTTP 403, as for v1.5, D263), so the branch `claude/v2.0-freeze` marks the commit. `claude/v2.5`, the Phase C branch, starts there. The release workflow publishes binaries only on a `v*` tag push. A manual run (workflow_dispatch) returns 404, because GitHub dispatches only workflows on the default branch, and release.yml isn't on `main` yet.
+- **Why:** the same constraint and remedy as v1.5. A branch keeps the exact commit, and the owner can create the tag from it with `git tag -a v2.0 origin/claude/v2.0-freeze && git push origin v2.0`, which also runs release.yml and attaches the binaries.
+- **Alternatives:** none available from this session (tag pushes and dispatch are refused). Until the release exists, Lesson 0's download instructions point at a release that hasn't been published; CHANGES_2.0 and the README say how to build from source meanwhile.

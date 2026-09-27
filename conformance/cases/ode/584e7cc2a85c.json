@@ -1,0 +1,11 @@
+{
+ "id": "584e7cc2a85c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "amplitude 10° period 2.010 s\namplitude 45° period 2.087 s\namplitude 90° period 2.368 s\nsmall-angle formula: 2.006 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

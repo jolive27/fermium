@@ -1,0 +1,11 @@
+{
+ "id": "d661c2246919",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.0175 Hz\n",
+ "stderr": "warning: line 1: angles are plain numbers (1 rev = 2π), so a rate in °/s shown in Hz is an angular frequency: 1 °/s is 0.0174533 Hz here, not 0.00277778 Hz\n    print 1 °/s in Hz\n          ^\n  hint: to count turns per second write  in rev/s ; for the frequency in cycles per second divide by 2π:  ω/(2π) in Hz\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,1 @@
+print ∫ (x^(-2) + 1)^0.4 dx from 0 to 1 to 12 digits

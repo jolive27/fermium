@@ -1,0 +1,11 @@
+{
+ "id": "0213622f8a74",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "5.50×10⁻⁵ m\n1.69×10⁻⁵ m\n24.2 m\n",
+ "stderr": "warning: line 2: the step is too coarse for this equation: the estimated error is 3.5% of the solution's size (fixed-step RK4, checked by step doubling); use a smaller step, or drop  step  to use the adaptive solver\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

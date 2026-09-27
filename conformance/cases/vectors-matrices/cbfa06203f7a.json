@@ -1,0 +1,17 @@
+{
+ "id": "cbfa06203f7a",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "≈ compares a vector with a vector of the same length, but this is length [m]",
+  "line": 1,
+  "col": 18,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

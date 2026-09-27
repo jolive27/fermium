@@ -1,0 +1,1 @@
+print round(25.2), round(25.2) + 1      # 25.0 26.0   expected: 25 26

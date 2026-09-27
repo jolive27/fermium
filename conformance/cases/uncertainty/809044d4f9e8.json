@@ -1,0 +1,17 @@
+{
+ "id": "809044d4f9e8",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "only formulas (name = …) go inside  propagate montecarlo; print or plot the results after the block",
+  "line": 3,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

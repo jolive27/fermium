@@ -1,0 +1,11 @@
+{
+ "id": "e7d8e781529f",
+ "area": "lists",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "mean: 2.21 s\nstd dev: 0.0207 s\nstd error: 0.00927 s\nmin and max: 2.19 s 2.24 s\nsum: 11.1 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

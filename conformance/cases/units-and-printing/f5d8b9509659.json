@@ -1,0 +1,17 @@
+{
+ "id": "f5d8b9509659",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show a quantity with units [J m] in J/m (force [N])",
+  "line": 1,
+  "col": 7,
+  "hint": "h c is energy × length; try  in J m  or  in eV nm",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

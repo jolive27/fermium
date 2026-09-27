@@ -1,0 +1,17 @@
+{
+ "id": "72ac3f6e78b3",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "sp.jv is a Python function, which takes plain numbers, but argument 2 is length [m]",
+  "line": 3,
+  "col": 16,
+  "hint": "divide by a unit, like  r / (1 m),  or declare the unit in the use line:  jv(x1, x2 [m])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "dafc6d42f365",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x'(…) isn't needed: the equation for x is order 1",
+  "line": 2,
+  "col": 35,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

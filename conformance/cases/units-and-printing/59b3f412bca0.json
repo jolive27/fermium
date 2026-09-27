@@ -1,0 +1,17 @@
+{
+ "id": "59b3f412bca0",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "g isn't defined. For standard gravity use g_n (9.80665 m/s²), or define your own: g = 9.81 m/s²",
+  "line": 1,
+  "col": 18,
+  "hint": "put  g = 9.81 m/s²  near the top of your program",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

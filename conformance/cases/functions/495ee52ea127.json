@@ -1,0 +1,11 @@
+{
+ "id": "495ee52ea127",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "ħc = 197.327 MeV fm\ne²/(4π ε₀) = 1.43996 MeV fm   α ħc = 1.43996 MeV fm\np + p:         0.600 MeV\nD + T:         0.444 MeV\nα + C-12:      3.71 MeV\nC-12 + C-12:   9.43 MeV\nα + U-238:     28.4 MeV\nO-16 + Pb-208: 93.2 MeV\nk_B T in the solar core: 1.35 keV\nbarrier / thermal energy for p + p: 443\nBoltzmann factor exp(-V/kT): 2.52×10⁻¹⁹³\ntemperature needed classically: 4.64×10⁹ K\nclosest approach of a 5 MeV alpha to gold: 45.5 fm  (gold's radius: 6.98 fm )\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

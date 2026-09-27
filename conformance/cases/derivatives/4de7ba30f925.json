@@ -1,0 +1,11 @@
+{
+ "id": "4de7ba30f925",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

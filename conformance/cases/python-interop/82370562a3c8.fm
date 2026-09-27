@@ -1,0 +1,9 @@
+use python numpy as np
+use python scipy.special as sp
+print ∫ sp.erf(x) dx from 0 to 1 to 10 digits
+solve y' = -np.tanh(y) / 1 s with y(0) = 1 for t from 0 s to 2 s
+print y(2 s) to 6 digits
+s = 0
+for k from 1 to 1000
+    s += np.cos(k / 1000)
+print s to 10 digits

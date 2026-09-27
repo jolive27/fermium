@@ -1,0 +1,17 @@
+{
+ "id": "84a42bc33ae2",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the column x of a table must be a list of numbers, like  x = [1, 2, 3] m",
+  "line": 1,
+  "col": 15,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

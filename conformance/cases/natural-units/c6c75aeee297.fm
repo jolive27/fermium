@@ -1,0 +1,3 @@
+units nuclear:
+    r = 2 fm
+print r

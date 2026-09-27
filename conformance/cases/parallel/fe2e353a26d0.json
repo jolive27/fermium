@@ -1,0 +1,17 @@
+{
+ "id": "fe2e353a26d0",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 12 is out of range: the list has 10 elements (valid indexes are 1 to 10)",
+  "line": 4,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

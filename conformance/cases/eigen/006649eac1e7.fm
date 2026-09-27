@@ -1,0 +1,10 @@
+V0 = 5 eV
+a = 0.5 nm
+V(x) = if abs(x) < a then 0 eV else V0
+solve -ħ²/(2m_e) * ψ'' + V(x) ψ = E ψ
+    with ψ(-2 nm) = 0, ψ(2 nm) = 0
+    for x from -2 nm to 2 nm
+    lowest 3
+    grid 3000 using shooting
+for n from 1 to 3
+    print E[n] in eV to 14 digits

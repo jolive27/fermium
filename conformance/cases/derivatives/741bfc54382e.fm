@@ -1,0 +1,4 @@
+B(x, y, z) = <-y, x, 0> T/m
+print ∇×B(1 m, 2 m, 3 m)
+f(x, y) = x² y
+print ∇²f(1, 2), ∇f(1, 2)

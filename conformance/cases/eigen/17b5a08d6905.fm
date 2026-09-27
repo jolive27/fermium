@@ -1,0 +1,3 @@
+f(x) = 1 / (1 + exp((x - 5 fm) / (0.6 fm)))
+solve -ħ²/(2*m_n) * ψ'' + (-50 MeV) f(x) ψ + (1 MeV fm) d/dx f(x) ψ = E ψ with ψ(0 fm) = 0, ψ(15 fm) = 0 for x from 0 fm to 15 fm lowest 2
+print E in MeV to 9 digits

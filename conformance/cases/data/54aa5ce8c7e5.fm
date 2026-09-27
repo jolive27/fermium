@@ -1,0 +1,11 @@
+k = 50 N/m
+mass = 0.5 kg
+b = 0.4 kg/s
+F0 = 1 N
+omega_d = 10 rad/s
+solve mass x'' = -k x - b x' + F0 cos(omega_d t)
+  with x(0) = 0 m, x'(0) = 0 m/s
+  for t from 0 s to 30 s
+print "largest amplitude:", max(x)
+print "theory at resonance, F0 / (b omega):", F0 / (b omega_d)
+plot x vs t to "driven.png"

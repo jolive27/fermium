@@ -1,0 +1,17 @@
+{
+ "id": "88dc1cb04575",
+ "area": "modules",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add energy [J] to length [m]",
+  "line": 2,
+  "col": 5,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

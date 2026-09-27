@@ -1,0 +1,4 @@
+import stats
+x = 1
+y = 2
+print stats.standard_error([5 m])

@@ -1,0 +1,3 @@
+f(x) = tanh(x)
+h = f''
+print h(1000)

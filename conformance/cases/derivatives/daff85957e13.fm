@@ -1,0 +1,11 @@
+q = 1 nC
+phi(x, y, z) = q / (4pi epsilon_0 sqrt(x^2 + y^2 + z^2))
+E = -grad(phi)(0 m, 3 m, 4 m)
+print E
+print grad(phi)
+
+B(x, y, z) = <-y, x, 0> T/m
+print curl(B)(1 m, 2 m, 3 m)
+print div(B)(1 m, 2 m, 3 m)
+f(x, y) = x^2 y + sin(x)
+print laplacian(f)

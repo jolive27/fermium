@@ -1,0 +1,17 @@
+{
+ "id": "900783d880e6",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "g is a function here; call it like g(x)",
+  "line": 1,
+  "col": 11,
+  "hint": "this happened when calling f on line 3 (with g = the function sq, x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

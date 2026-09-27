@@ -1,0 +1,17 @@
+{
+ "id": "cda9773883be",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "not enough memory for a list of 1×10¹⁵ numbers (the most is 10⁹)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

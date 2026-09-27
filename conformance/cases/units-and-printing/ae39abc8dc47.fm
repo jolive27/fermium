@@ -1,0 +1,4 @@
+a = 852.0327151880451 [W]
+b = a in W
+print b / (1 [W]) to 15 digits
+print (a in W) in W to 15 digits

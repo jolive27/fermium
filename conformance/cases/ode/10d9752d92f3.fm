@@ -1,0 +1,1 @@
+solve x' = -x with x(1) = 1 for t from 1 to 1 using radau

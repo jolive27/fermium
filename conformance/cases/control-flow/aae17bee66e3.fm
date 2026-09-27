@@ -1,0 +1,6 @@
+[project]
+name = "lab-reports"
+version = "0.1.0"
+
+[paths]
+modules = ["lib", "../shared"]     # folders searched for modules, relative to fermium.toml

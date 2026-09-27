@@ -1,0 +1,3 @@
+line 2: didn't expect 'print' here
+    print 3
+    ^^^^^

@@ -1,0 +1,17 @@
+{
+ "id": "7f10b8130f44",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "randn(μ, σ): σ is a standard deviation, so it can't be negative",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

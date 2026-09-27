@@ -1,0 +1,11 @@
+{
+ "id": "210b5ea54d4b",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "(a) ω = 9.5788331×10⁶ rad/s\n    T = 655.94475 ns\n    v_d_x = 10000.000 m/s  v_d_y = 0 m/s\n    R = 1.0439685 mm\n(b) t/T = 0.25  r = <0.596, 1.04, 0.328> mm  cycloid = <0.596, 1.04, 0.328> mm\n(b) t/T = 0.5  r = <3.28, 2.09, 0.656> mm  cycloid = <3.28, 2.09, 0.656> mm\n(b) t/T = 3  r = <19.7, 4.86×10⁻¹¹, 3.94> mm  cycloid = <19.7, 0, 3.94> mm\n    x(T/4) = 0.59589338 mm   exact 0.59589338 mm\n    y(T/2) = 2.0879370 mm   exact 2.0879370 mm\n    x(3T) = 19.678342 mm   exact 19.678342 mm\n    z(3T) = 3.9356685 mm   exact 3.9356685 mm\n(c) <v_x> over a period = 10000.000 m/s\n    speed in the xy plane at T/2 = 2.0000000 × v_d\n    KE gained by 0.3 T = 1.3665725 eV   q E y = 1.3665725 eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

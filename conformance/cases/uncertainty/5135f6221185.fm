@@ -1,0 +1,5 @@
+print ∫ abs(x)^(-0.8) dx from -1 to 1          # "doesn't converge ... estimate 9.99352 ± 0.002"   expected 10
+print ∫ abs(x)^(-0.8) dx from -2 to 3          # expected 11.9721 (worked before the rewrite)
+print ∫ abs(x - 3/10)^(-0.8) dx from 0 to 1    # expected 8.58577
+print ∫ abs(x)^(-0.9) dx from -1 to 2          # expected 20.7177
+print ∫ ((1/x)^2 + 1)^(2/5) dx from -2 to 3    # expected 13.7312 (worked before the rewrite)

@@ -1,0 +1,17 @@
+{
+ "id": "c43746ae8b2c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "√ of a negative number (-4) isn't a real number",
+  "line": 1,
+  "col": 7,
+  "hint": "for the complex square root write  √(-4 + 0i)  (√(-1) is 𝑖)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

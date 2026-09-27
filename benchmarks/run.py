@@ -22,9 +22,12 @@ Usage:
   python benchmarks/run.py -r 3 --langs julia,python,numpy
   python benchmarks/run.py --benchmarks nbody,startup --langs fermium,julia
   python benchmarks/run.py --interleave --langs fermium,fermium-base,julia   # before/after M5, vs Julia
+  python benchmarks/run.py --interleave --langs fermium,fermium-1.5,julia,python,numpy   # v2 against v1.5
 
 `fermium-base` is Fermium with its M5 speed-ups switched off (FERMIUM_DISABLE=all: no integer loop
-counters, parallel for on one thread): the "before" column.  `forces` is the multi-threaded benchmark:
+counters, parallel for on one thread): the "before" column (Fermium 1.5 only: the Rust binary ignores it).
+`fermium-1.5` is the Python implementation (`python -m fermium.cli run`, legacy/, compiled with llvmlite): the
+"before" column when there is no `fermium-base`.  `forces` is the multi-threaded benchmark:
 Fermium's `parallel for` and Julia's `Threads.@threads` both use --threads threads (default: all cores).
 """
 from __future__ import annotations
@@ -48,7 +51,7 @@ JULIA = ROOT / ".tools" / "julia" / "bin" / "julia"
 JULIA_DEPOT = ROOT / ".tools" / "julia-depot"
 
 BENCHMARKS = ["nbody", "spring_rk4", "spring_adaptive", "blackbody", "unit_loop", "forces", "startup"]
-LANGS = ["fermium", "fermium-base", "julia", "python", "numpy"]
+LANGS = ["fermium", "fermium-base", "fermium-1.5", "julia", "python", "numpy"]
 THREADS = os.cpu_count() or 1
 LOAD_AT_START = "n/a"     # threads for the parallel benchmark (forces); --threads changes it
 REFERENCE_LANG = "julia"   # results and speed ratios are compared against this
@@ -75,7 +78,7 @@ TOLERANCE = {
     "azN": 1e-10,
 }
 
-LANG_LABEL = {"fermium": "Fermium", "fermium-base": "Fermium, M5 off", "julia": "Julia",
+LANG_LABEL = {"fermium": "Fermium", "fermium-base": "Fermium, M5 off", "fermium-1.5": "Fermium 1.5", "julia": "Julia",
               "python": "Python (pure)", "numpy": "NumPy/SciPy"}
 
 
@@ -92,9 +95,13 @@ def fermium_cmd():
     override = os.environ.get("FERMIUM_CMD")
     if override:
         return override.split()
-    exe = shutil.which("fermium")
+    exe = shutil.which("fermium")          # Fermium 2, the Rust binary (Fermium 1.5: FERMIUM_CMD=fermium-legacy)
     if exe:
         return [exe]
+    for profile in ("release", "fast"):       # or a build in this checkout (rust/BUILD.md)
+        built = ROOT / "rust" / "target" / profile / "fermium"
+        if built.exists():
+            return [str(built)]
     return None
 
 
@@ -119,11 +126,11 @@ def command_for(lang: str, bench: str, quick: bool):
             n = NBODY_N_QUICK[lang] if quick else NBODY_N[lang]
             args = [str(n)]
         return [sys.executable, str(src), *args], dict(os.environ), None
-    if lang in ("fermium", "fermium-base"):
+    if lang in ("fermium", "fermium-base", "fermium-1.5"):
         src = BENCH_DIR / "fermium" / f"{bench}.fm"
         if not src.exists():
             return None, None, f"missing {src.relative_to(ROOT)}"
-        prefix = fermium_cmd()
+        prefix = [sys.executable, "-m", "fermium.cli"] if lang == "fermium-1.5" else fermium_cmd()
         if prefix is None:
             return None, None, "`fermium` not on PATH (set FERMIUM_CMD to override)"
         env = dict(os.environ, FERMIUM_THREADS=str(THREADS))
@@ -379,6 +386,7 @@ def before_after(records, info):
             return None
         v = r["inner"][key]
         return v / nbody_n(r) * 1e6 if bench == "nbody" else v     # nbody: per 1M steps
+    base_lang = "fermium-base" if any(k[1] == "fermium-base" for k in by) else "fermium-1.5"
     rows = []
     for bench in BENCHMARKS:
         keys = [("TIME_INNER", bench)]
@@ -386,7 +394,7 @@ def before_after(records, info):
             keys = [("TIME_INNER", f"forces ({info.get('threads', THREADS)} threads)"),
                     ("TIME_INNER_SERIAL", "forces (1 thread)")]
         for key, label in keys:
-            base, new, jl = (inner(bench, lang, key) for lang in ("fermium-base", "fermium", "julia"))
+            base, new, jl = (inner(bench, lang, key) for lang in (base_lang, "fermium", "julia"))
             if new is None or jl is None:
                 continue
             ratio = new / jl
@@ -397,9 +405,12 @@ def before_after(records, info):
                         f"{fmt_ratio(base / jl) if base else '—'} | {fmt_ratio(ratio)} | {verdict} |")
     if not rows:
         return []
-    out = ["## Before/after M5\n",
-           "Compute-only (Inner) medians from this run. *Before* = `Fermium, M5 off` (the same programs with "
-           "`FERMIUM_DISABLE=all`), *after* = `Fermium`. nbody is per 1M steps. \"Beats\" means below 0.95× "
+    what = ("## Before/after M5\n", "*Before* = `Fermium, M5 off` (the same programs with `FERMIUM_DISABLE=all`), "
+            "*after* = `Fermium`.") if base_lang == "fermium-base" else \
+        ("## Fermium 2 against Fermium 1.5\n", "*Before* = Fermium 1.5 (the Python implementation, LLVM through "
+         "llvmlite), *after* = Fermium 2 (the Rust binary).")
+    out = [what[0],
+           "Compute-only (Inner) medians from this run. " + what[1] + " nbody is per 1M steps. \"Beats\" means below 0.95× "
            "Julia, \"matches\" within ±5%. The runs of each benchmark were "
            + ("interleaved (A B C A B C …)" if info.get("interleaved") else "run one language after another")
            + f"; load average at the start: {info.get('load', 'n/a')}. On a busy machine the ratios move by "
@@ -451,8 +462,12 @@ def write_report(records, info, args):
                "Julia runs the kernel once on a tiny problem first, so Inner excludes JIT time.")
     out.append("* **×Julia** = time / Julia time (lower is better; < 1 means faster than Julia). For the "
                "rows marked *1 thread* it is the ratio to Julia's 1-thread row.")
-    out.append("* **Fermium, M5 off** = the same Fermium programs with the M5 speed-ups switched off "
-               "(`FERMIUM_DISABLE=all`): the before/after comparison.")
+    if any(r["lang"] == "fermium-base" for r in records):
+        out.append("* **Fermium, M5 off** = the same Fermium programs with the M5 speed-ups switched off "
+                   "(`FERMIUM_DISABLE=all`): the before/after comparison.")
+    if any(r["lang"] == "fermium-1.5" for r in records):
+        out.append("* **Fermium** = Fermium 2, the Rust binary (LLVM JIT); **Fermium 1.5** = the Python "
+                   "implementation (legacy/, LLVM through llvmlite), the same programs.")
     out.append("* nbody: Inner is reported **per step** (and scaled to 1M steps) because pure Python / "
                "NumPy may run fewer steps.")
     out.append("")
@@ -496,7 +511,7 @@ def write_report(records, info, args):
                 notes.append("pure relative tolerance 1e-6 like the others (D17); a different step-size "
                              "controller, so accepted_steps differ (4297 vs 4903)")
             if bench == "forces" and not r["variant"]:
-                notes.append(f"{THREADS} threads" if r["lang"] in ("fermium", "julia") else
+                notes.append(f"{THREADS} threads" if r["lang"] in ("fermium", "fermium-1.5", "julia") else
                              ("parallel for on 1 thread (M5 off)" if r["lang"] == "fermium-base" else
                               "one thread"))
             if bench == "spring_rk4" and r["lang"].startswith("fermium"):

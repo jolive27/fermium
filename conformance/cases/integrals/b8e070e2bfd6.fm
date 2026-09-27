@@ -1,0 +1,2 @@
+E0 = 1 MeV
+print ∫ exp(-E/E0) dE from 0 J to ∞ in MeV to 6 digits

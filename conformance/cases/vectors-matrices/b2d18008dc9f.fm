@@ -1,0 +1,4 @@
+v = 3e-15 m/s
+if v ≈ 0 m/s within 1e-12 m/s then print "at rest" else print "moving"
+print 1000 m ≈ 1000.0005 m, 1000 m ≈ 1000.0005 m within 0.1 mm
+print <3, 4> m ≈ <3.003, 4> m within 1 cm, 100 ≈ 101 within 2%

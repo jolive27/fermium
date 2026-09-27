@@ -1,0 +1,10 @@
+R = 3 Ω
+X = 4 Ω
+Z = R + 1i X
+print Z
+print |Z|
+print re(Z), im(Z)
+print Z + (1 + 1i) [Ω]
+V = (10 + 0i) [V]
+print V / Z
+print conj(Z)

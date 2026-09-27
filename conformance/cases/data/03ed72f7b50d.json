@@ -1,0 +1,17 @@
+{
+ "id": "03ed72f7b50d",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a log y axis can't start at 0 or below",
+  "line": 3,
+  "col": 32,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

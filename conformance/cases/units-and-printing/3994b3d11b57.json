@@ -1,0 +1,17 @@
+{
+ "id": "3994b3d11b57",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unexpected '='",
+  "line": 1,
+  "col": 1,
+  "hint": "use == to compare two values",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "e7270dce6d20",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this integral is missing its 'dx' (the variable to integrate over)",
+  "line": 1,
+  "col": 7,
+  "hint": "write e.g.  ∫ F(x) dx from 0 m to 1 m",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

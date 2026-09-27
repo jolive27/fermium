@@ -1,0 +1,6 @@
+L = [0.20, 0.40, 0.60, 0.80, 1.00] m
+T = [0.8973, 1.2690, 1.5543, 1.7947, 2.0066] s
+fit T = 2π √(L / g) to table(L = L, T = T)
+print g to 4 digits
+f(a, b) = a / b
+print f(L, T)

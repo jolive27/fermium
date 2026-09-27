@@ -1,0 +1,3 @@
+m = 2 kg
+n = 8 m⁻³
+print n

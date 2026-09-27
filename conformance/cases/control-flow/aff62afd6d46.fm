@@ -1,0 +1,8 @@
+n = 0
+while n < 3
+    mid = n
+    n = mid + 1
+while n < 6
+    mid = n
+    n = mid + 1          # line 7: "mid might not have a value here: it is only set inside
+print n                  #          the while loop on line 2"

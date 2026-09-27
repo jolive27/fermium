@@ -1,0 +1,17 @@
+{
+ "id": "063831dab8af",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "sum doesn't work on a list of complex numbers",
+  "line": 2,
+  "col": 7,
+  "hint": "a list of complex numbers works with X[k], len, for z in X, print, fft, ifft, re, im, abs, arg and conj; take one element X[k] for other operations",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

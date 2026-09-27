@@ -1,0 +1,11 @@
+{
+ "id": "cb9d1f0ce987",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "9.70 ± 0.19 m/s² 31.82 ± 0.63 ft/s²\n9.70 m/s² 0.19 m/s² 0.020\n0 ± 0 m 1 ± 0\n5.00 ± 0.15 20.00 ± 0.50 °C 1.200 ± 0.010 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

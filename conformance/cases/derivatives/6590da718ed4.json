@@ -1,0 +1,11 @@
+{
+ "id": "6590da718ed4",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = 2/cosh(2x)²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

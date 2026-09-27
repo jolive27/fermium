@@ -1,0 +1,17 @@
+{
+ "id": "bc4217e776a8",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't differentiate through F: it's defined over several lines",
+  "line": 4,
+  "col": 8,
+  "hint": "symbolic derivatives need one-line functions: write F on one line (with  where  for helper names), or use a finite difference, (f(x + h) - f(x - h)) / (2h); (needed for the derivative of N on line 5)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

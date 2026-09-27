@@ -1,0 +1,11 @@
+{
+ "id": "0726c6eb70e8",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "199.224\n-0.981 nm\n",
+ "stderr": "warning: levels 1 and 2 are nearly degenerate (ΔE/E = 3.8×10⁻⁹); their eigenfunctions ψ₁, ψ₂ can be any mixture of the two: use them only through combinations, or break the symmetry\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

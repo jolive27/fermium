@@ -1,0 +1,11 @@
+{
+ "id": "43d7ca1090cb",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "5.97×10²⁴ kg\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

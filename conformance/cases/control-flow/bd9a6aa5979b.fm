@@ -1,0 +1,7 @@
+T = 5 degC
+if T < 0 degC
+    print "ice"
+else if T < 100 degC
+    print "liquid water"
+else
+    print "steam"

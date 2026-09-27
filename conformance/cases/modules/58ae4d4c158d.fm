@@ -1,0 +1,2 @@
+import mechanics
+print mechanics.projectile_range(20 m/s, 35°, 3 s)

@@ -1,0 +1,70 @@
+# Optics 23 — Thin films by characteristic (transfer) matrices
+#
+# At normal incidence a film of index n and thickness d has the characteristic
+# matrix (Hecht §9.7.1; Born & Wolf §1.6)
+#
+#     M = [[cos δ, i sin δ / n], [i n sin δ, cos δ]],   δ = 2π n d / λ,
+#
+# and a stack is the product of its layers' matrices, from the air side.
+# With [B, C] = M [1, n_s] on a substrate n_s, the amplitude reflection is
+# r = (n₀B − C)/(n₀B + C). The entries are real on the diagonal and imaginary
+# off it, and products keep that pattern, so M is stored as the real matrix
+# [[cos δ, sin δ/n], [−n sin δ, cos δ]] (the product rule is the same).
+#
+# (a) A quarter-wave MgF₂ coating (n = 1.38) on crown glass (n_s = 1.52) for
+#     λ₀ = 550 nm: the reflectance at 550 nm against ((n₀n_s − n²)/(n₀n_s + n²))²,
+#     and against bare glass.
+# (b) The same film at 450 nm and 700 nm (the tests redo the complex matrix
+#     product in NumPy).
+# (c) A dielectric mirror for λ₀ = 1064 nm: 8 quarter-wave pairs of TiO₂
+#     (n_H = 2.35) and SiO₂ (n_L = 1.46) on glass. Compare R(λ₀) with
+#     ((n₀ − Y)/(n₀ + Y))², Y = (n_H/n_L)^16 n_s.
+# (d) The edges of the mirror's stop band are where |trace| of one HL period
+#     is 2 (the Bloch condition). Find them with an algebraic solve and compare
+#     with λ₀/λ = 1 ± (2/π) asin((n_H − n_L)/(n_H + n_L)).
+
+n0 = 1.000
+n_s = 1.52
+
+layer(n, d, λ) = [[cos(2π n d / λ), sin(2π n d / λ) / n], [-n sin(2π n d / λ), cos(2π n d / λ)]]
+
+# reflectance of a stack whose (real-form) matrix is M
+R_of(M) = ((n0 M[1,1] - M[2,2] n_s)² + (n0 M[1,2] n_s + M[2,1])²) / ((n0 M[1,1] + M[2,2] n_s)² + (n0 M[1,2] n_s - M[2,1])²)
+
+# (a) a quarter-wave MgF₂ layer
+λ0 = 550 nm
+n_f = 1.38
+d_f = λ0 / (4 n_f)
+print "(a) MgF2 thickness =", d_f in nm to 8 digits
+print "    R(550 nm) =", R_of(layer(n_f, d_f, λ0)) to 10 digits,
+      "  formula", ((n0 n_s - n_f²) / (n0 n_s + n_f²))² to 10 digits
+print "    bare glass R =", ((n_s - n0) / (n_s + n0))² to 10 digits
+
+# (b) away from the design wavelength
+for λ in [450 nm, 700 nm]
+    print "(b) λ =", λ, " R =", R_of(layer(n_f, d_f, λ)) to 10 digits
+
+# (c) the mirror
+λm = 1064 nm
+n_H = 2.35
+n_L = 1.46
+pairs = 8
+mirror(λ) =
+    M = identity(2)
+    for j from 1 to pairs
+        M = M layer(n_H, λm / (4 n_H), λ) layer(n_L, λm / (4 n_L), λ)
+    M
+Y = (n_H / n_L)^(2 pairs) n_s
+print "(c) R(1064 nm) =", R_of(mirror(λm)) to 10 digits, "  formula", ((n0 - Y) / (n0 + Y))² to 10 digits
+print "    R(900 nm) =", R_of(mirror(900 nm)) to 10 digits
+
+# (d) the stop band: |trace of one period| = 2
+period(λ) = layer(n_H, λm / (4 n_H), λ) layer(n_L, λm / (4 n_L), λ)
+half_trace(λ) = (period(λ)[1,1] + period(λ)[2,2]) / 2
+solve half_trace(λ_short) = -1 for λ_short from 800 nm to 1060 nm
+solve half_trace(λ_long) = -1 for λ_long from 1070 nm to 1500 nm
+Δ = (2/π) asin((n_H - n_L) / (n_H + n_L))
+print "(d) band edges:", λ_short in nm to 8 digits, "and", λ_long in nm to 8 digits
+print "    λ0/λ at the edges =", λm / λ_long to 8 digits, λm / λ_short to 8 digits,
+      "  formula", 1 - Δ to 8 digits, 1 + Δ to 8 digits
+print "    R at the band centre and just outside:", R_of(mirror(λm)) to 6 digits, R_of(mirror(1.02 λ_long)) to 6 digits

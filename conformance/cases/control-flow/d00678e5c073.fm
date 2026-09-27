@@ -1,0 +1,9 @@
+s = 0
+for i from 1 to 4
+    for j from 1 to 4
+        if j == 2
+            continue
+        s += j
+    if i == 3
+        break
+print s

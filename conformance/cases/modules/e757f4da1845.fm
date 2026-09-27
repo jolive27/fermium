@@ -1,0 +1,14 @@
+import mechanics
+
+print (mechanics.projectile_range(20 m/s, 35°, g_n)) / (1 m) to 12 digits
+print (mechanics.projectile_apex(20 m/s, 35°, g_n)) / (1 m) to 12 digits
+print (mechanics.projectile_flight_time(20 m/s, 35°, g_n)) / (1 s) to 12 digits
+print (mechanics.pendulum_period(1.5 m, 1.62 m/s²)) / (1 s) to 12 digits
+print (mechanics.pendulum_period_large(1 m, g_n, 170°)) / (1 s) to 12 digits
+print (mechanics.spring_period(0.5 kg, 20 N/m)) / (1 s) to 12 digits
+print (mechanics.kinetic_energy(2 kg, 3 m/s)) / (1 J) to 12 digits
+print (mechanics.relativistic_kinetic_energy(m_e, 0.6 c)) / (1 J) to 12 digits
+print (mechanics.relativistic_kinetic_energy(1 kg, 1 m/s)) / (1 J) to 12 digits
+print (mechanics.potential_energy(2 kg, g_n, 10 m)) / (1 J) to 12 digits
+print (mechanics.rocket_equation(3 km/s, 100 tonne, 20 tonne)) / (1 m/s) to 12 digits
+print mechanics.rocket_mass_ratio(9 km/s, 3 km/s) to 12 digits

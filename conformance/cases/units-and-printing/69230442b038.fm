@@ -1,0 +1,3 @@
+h = 0.6736
+H0 = 100 h [km/s/Mpc]
+print H0 in km/s/Mpc to 4 digits

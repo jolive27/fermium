@@ -1,0 +1,11 @@
+{
+ "id": "fb6d3cb37085",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "true\nfalse\ntrue\ntrue\ntrue false\ntrue false\ntrue false\ntrue true\nfalse\ntrue\ntrue false\ntrue false\ntrue false\ntrue false\ntrue false false\ntrue false\ntrue\ntrue false\ntrue\ntrue true false\ntrue true\ntrue false\nat rest\n1\ntrue false\ntrue false 1 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

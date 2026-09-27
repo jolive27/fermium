@@ -1,0 +1,17 @@
+{
+ "id": "9fc3b3db6503",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "np.sin is a Python function, which takes plain numbers, but argument 1 is length [m]",
+  "line": 2,
+  "col": 15,
+  "hint": "divide by a unit, like  x / (1 m),  or declare the unit in the use line:  sin(x1 [m]); this happened when calling f on line 3 (with x = length [m])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

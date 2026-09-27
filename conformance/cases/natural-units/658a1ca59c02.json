@@ -1,0 +1,11 @@
+{
+ "id": "658a1ca59c02",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.4138 fm 1.4138×10⁻¹⁵ m\n3.89×10⁴ fm²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

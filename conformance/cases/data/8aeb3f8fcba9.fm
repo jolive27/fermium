@@ -1,0 +1,46 @@
+# 16 — Charging a capacitor: the RC circuit
+#
+# A battery of voltage V₀ charges a capacitor C through a resistor R.
+# The current is I = (V₀ − V_C)/R and it piles charge onto the capacitor,
+# C dV_C/dt = I, so
+#
+#     R C dV_C/dt = V₀ − V_C       →      V_C(t) = V₀ (1 − exp(−t/τ)),  τ = R C
+#
+# After one time constant τ the capacitor is 63% charged; after 5τ it is
+# essentially full. A classic surprise: while charging, the resistor turns
+# exactly as much energy into heat as ends up stored in the capacitor, ½ C V₀²,
+# no matter what R is.
+
+V0 = 9.00 V
+R = 4.70 kΩ
+C = 220 μF
+τ = R C
+print "time constant τ = R C =", τ in s
+
+solve R C V_C' = V0 - V_C
+  with V_C(0) = 0 V
+  for t from 0 s to 8 s
+
+print "after τ:  ", V_C(τ), "=", V_C(τ) / V0 to 3 digits, "of V0  (1 - 1/e =", 1 - exp(-1), ")"
+print "after 5τ: ", V_C(5τ)
+
+# Current through the resistor, from the derivative of the exact solution
+V_exact(t) = V0 (1 - exp(-t/τ))
+I(t) = C V_exact'(t)           # I = C dV/dt, derivative done symbolically
+print "current at t = 0:", I(0 s) in mA, "  (V0/R =", V0/R in mA, ")"
+print "current at t = τ:", I(τ) in mA
+
+# Energy bookkeeping (integrals to infinity: the charging never quite ends)
+E_heat = ∫ I(t)² R dt from 0 s to ∞
+E_battery = ∫ V0 I(t) dt from 0 s to ∞
+print "energy stored in C:     ", ½ C V0² in mJ
+print "energy turned to heat:  ", E_heat in mJ
+print "energy from the battery:", E_battery in mJ
+
+# Now let it discharge through the same resistor
+solve R C U' = -U
+  with U(0) = V0
+  for t from 0 s to 8 s
+print "discharging: half the voltage is left after", ln(2) τ, "; check:", U(ln(2) τ)
+
+plot V_C vs t, U vs t to "gallery/rc_circuit.png"

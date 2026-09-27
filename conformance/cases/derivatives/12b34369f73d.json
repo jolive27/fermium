@@ -1,0 +1,17 @@
+{
+ "id": "12b34369f73d",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "∇·f needs f to be a vector formula, like f(x, y, z) = <-y, x, 0> T",
+  "line": 2,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+g = 9.81 m/s²
+w = 2 g
+a = w
+print a in m/s²

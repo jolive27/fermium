@@ -1,0 +1,17 @@
+{
+ "id": "a34d42bbbbfe",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "propagate montecarlo: 976 of the 1000 samples of y aren't finite numbers (the formula fails for some sampled inputs)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

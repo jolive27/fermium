@@ -1,0 +1,11 @@
+{
+ "id": "aa373396dc40",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "-625 1/day\n-230 1/day\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

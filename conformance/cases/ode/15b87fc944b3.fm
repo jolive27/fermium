@@ -1,0 +1,4 @@
+solve x' = -x / (1 s)
+  with x(0 s) = 2 m
+  for t from 0 s to 3 s
+print x([1, 2])

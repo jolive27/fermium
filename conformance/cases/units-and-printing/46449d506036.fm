@@ -1,0 +1,4 @@
+a = 0.95 [V]
+b = a in V
+print b / (1 [V]) to 15 digits
+print (a in V) in V to 15 digits

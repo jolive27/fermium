@@ -1,0 +1,3 @@
+xs = linspace(0, 1, 3)
+push(xs, 4)
+print xs

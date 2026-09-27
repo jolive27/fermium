@@ -1,0 +1,17 @@
+{
+ "id": "242f55094ca6",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "h takes 2 arguments but was given 1",
+  "line": 1,
+  "col": 12,
+  "hint": "this happened when calling ap on line 3 (with f = the function h, x = a plain number (no units))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "6b751545174a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "ΔT looks like a temperature change, but this value in °C is an absolute temperature (Fermium reads °C values as absolute temperatures in K)",
+  "line": 2,
+  "col": 6,
+  "hint": "write a change of temperature in K, or as a difference like T2 - T1",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

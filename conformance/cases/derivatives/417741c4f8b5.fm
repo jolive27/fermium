@@ -1,0 +1,4 @@
+B(x, y, z) = <-y, x, 0> T/m
+print curl(B)(1 m, 2 m, 3 m)
+f(x, y) = x^2 y
+print laplacian(f)(1, 2), grad(f)(1, 2)

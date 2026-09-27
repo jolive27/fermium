@@ -1,0 +1,5 @@
+y(t) = 20 m/s t - ½ 9.81 m/s^2 t^2
+v = y'
+print "velocity at 1 s:", v(1 s)
+print "velocity at 3 s:", v(3 s)
+print "directly:", y'(2 s)

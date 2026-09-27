@@ -1,0 +1,6 @@
+a = 1 m
+λ = 1 nC/m
+k = 1/(4π ε₀)
+V(r, z) = ∫ k λ a / √(r² + a² + z² - 2 r a cos(φ)) dφ from 0 to 2π
+Vk(r, z) = 4 k λ a ellipk(4 a r / ((a + r)² + z²)) / √((a + r)² + z²)
+print V(0.3 m, 0.2 m) / Vk(0.3 m, 0.2 m) to 12 digits

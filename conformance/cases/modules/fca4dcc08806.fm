@@ -1,0 +1,2 @@
+from nuclear import bateman_daughter
+print bateman_daughter(1000, 1 s, 1000 s, 800 s) to 12 digits

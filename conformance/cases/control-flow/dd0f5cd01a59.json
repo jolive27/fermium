@@ -1,0 +1,11 @@
+{
+ "id": "dd0f5cd01a59",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "flight time: 3.736 s\nhighest point: 17.11 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

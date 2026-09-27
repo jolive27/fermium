@@ -1,0 +1,5 @@
+f(x) = cot(x) + sec(x) + csc(x)
+print f'(0.7) to 8 digits
+print ∫ cot(x) dx from 1 to 1.5 to 8 digits
+g = ∫ csc(x)² dx
+print g(1) to 8 digits

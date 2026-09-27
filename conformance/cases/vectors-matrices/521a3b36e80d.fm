@@ -1,0 +1,3 @@
+M = [[1.0, 0.0], [0.0, 1.0]] N/m
+print eigenvalues(M) to 15 digits
+print eigenvectors(M) to 15 digits

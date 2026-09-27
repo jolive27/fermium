@@ -1,0 +1,2 @@
+g = d/dt (a t^2) where a = 3
+print g, g(1)

@@ -1,0 +1,2 @@
+g(x) = exp(1i x)
+print g

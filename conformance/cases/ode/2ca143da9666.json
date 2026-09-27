@@ -1,0 +1,11 @@
+{
+ "id": "2ca143da9666",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) ε0 = 1.122995961 MeV\n    x(10 ns) = 2.07835871 m   exact 2.07835871 m\n    y(10 ns) = 1.70843296 m   exact 1.70843296 m\n    τ(10 ns) = 2.91203939 ns   exact 2.91203939 ns\n    p(10 ns) = <3.00, 1.00, 0> MeV/c\n(b) catenary x at that y = 2.07835871 m\n    Newtonian parabola x = 3.60166 m\n(c) speed 0.98 c at t = 7.70296037 ns   exact 7.70296037 ns\n    (from |r'(t)| instead: 7.70296037 ns )\n(d) energy gained = 2.07835871 MeV   eE x = 2.07835871 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

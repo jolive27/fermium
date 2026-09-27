@@ -1,0 +1,17 @@
+{
+ "id": "559e150e77af",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show energy or mass [MeV] in fm (length or time (1/energy) [MeV⁻¹])",
+  "line": 3,
+  "col": 7,
+  "hint": "in natural units (ħ = c = 1) a length or time is 1/energy and a mass is an energy; check the powers of energy",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

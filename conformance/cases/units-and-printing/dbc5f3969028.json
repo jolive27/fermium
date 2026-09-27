@@ -1,0 +1,11 @@
+{
+ "id": "dbc5f3969028",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "7905.39 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

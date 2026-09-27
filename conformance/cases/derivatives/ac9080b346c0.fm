@@ -1,0 +1,13 @@
+f(x) = cos(x)^2 + 2^x
+d1 = f'
+d2 = f''
+print d1(-1.3884349316894857) to 17 digits
+print d2(-1.3884349316894857) to 17 digits
+print d1(-1.5777091532016998) to 17 digits
+print d2(-1.5777091532016998) to 17 digits
+print d1(-0.3627375501958028) to 17 digits
+print d2(-0.3627375501958028) to 17 digits
+print d1(-1.084619090556679) to 17 digits
+print d2(-1.084619090556679) to 17 digits
+print d1(-1.741867238936956) to 17 digits
+print d2(-1.741867238936956) to 17 digits

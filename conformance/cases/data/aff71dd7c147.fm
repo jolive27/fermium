@@ -1,0 +1,4 @@
+data = load "data/pendulum.csv"
+fit T^2 = k L to data
+print "slope k =", k
+print "so g is", 4 pi^2 / k

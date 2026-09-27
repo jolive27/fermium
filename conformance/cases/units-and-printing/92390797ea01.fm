@@ -1,0 +1,3 @@
+x = 2 m
+y = 3 s
+print x + y

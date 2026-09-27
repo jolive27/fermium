@@ -1,0 +1,4 @@
+a = 0.001 [min]
+b = a in s
+print b / (1 [s]) to 15 digits
+print (a in s) in min to 15 digits

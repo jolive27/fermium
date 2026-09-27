@@ -1,0 +1,4 @@
+z = 0
+for k from 1 to 3
+    z += 1i
+print z

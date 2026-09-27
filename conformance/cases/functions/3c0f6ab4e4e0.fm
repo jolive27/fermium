@@ -1,0 +1,22 @@
+GM = G M_sun
+orbit_period(dt) =
+    x = 1 AU
+    y = 0 AU
+    vx = 0 km/s
+    vy = 29.78 km/s
+    t = 0 s
+    period = 0 s
+    while period == 0 s
+        r = sqrt(x^2 + y^2)
+        vx += -GM x / r^3 * dt
+        vy += -GM y / r^3 * dt
+        y_before = y
+        x += vx dt
+        y += vy dt
+        t += dt
+        if y_before < 0 AU and y >= 0 AU
+            period = t
+    period
+
+for dt in [1 day, 6 hr, 1 hr, 10 min]
+    print "dt =", dt in min, "period =", orbit_period(dt) in day to 7 digits

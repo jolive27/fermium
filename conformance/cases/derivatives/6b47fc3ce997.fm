@@ -1,0 +1,2 @@
+g(x, s) = x s
+print ∂/∂s g(1, 2 s)

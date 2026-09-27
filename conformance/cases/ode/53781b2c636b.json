@@ -1,0 +1,11 @@
+{
+ "id": "53781b2c636b",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "examples/rosetta",
+ "stdout": "x(5 s) = 3.5201 cm\nv(1 s) = 44.412 cm/s\nenergy left after 10 s: 0.01799\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

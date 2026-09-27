@@ -1,0 +1,17 @@
+{
+ "id": "06700a2ff93f",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "rand takes no arguments or two: rand() or rand(a, b)",
+  "line": 1,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

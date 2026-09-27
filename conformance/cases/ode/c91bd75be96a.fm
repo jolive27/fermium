@@ -1,0 +1,3 @@
+w = 1/s²
+solve u'' = -2 u w with u(0) = 2 [u], u'(0) = 0 u/s for t from 0 s to 1 s
+print u(1 s)

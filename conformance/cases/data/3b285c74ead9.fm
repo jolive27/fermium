@@ -1,0 +1,35 @@
+# An eccentric orbit
+GM = G M_sun
+dt = 1 hr
+x = 1 AU
+y = 0 AU
+vx = 0 km/s
+vy = 20 km/s
+t = 0 s
+period = 0 s
+r_min = 1 AU
+r_max = 1 AU
+xs = []
+ys = []
+
+while period == 0 s
+    r = sqrt(x^2 + y^2)
+    vx += -GM x / r^3 * dt
+    vy += -GM y / r^3 * dt
+    y_before = y
+    x += vx dt
+    y += vy dt
+    t += dt
+    r_min = min(r_min, r)
+    r_max = max(r_max, r)
+    push(xs, x)
+    push(ys, y)
+    if y_before < 0 AU and y >= 0 AU
+        period = t
+
+a = (r_min + r_max) / 2        # semi-major axis
+print "closest to the Sun:", r_min in AU
+print "furthest from the Sun:", r_max in AU
+print "period:", period in yr
+print "T^2 / a^3 =", period^2 / a^3 in yr^2/AU^3
+plot ys in AU vs xs in AU to "eccentric_orbit.png"

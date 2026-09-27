@@ -1,0 +1,17 @@
+{
+ "id": "f315ca61d966",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the sum s can't be read inside the parallel for: its value is only known after the loop",
+  "line": 4,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

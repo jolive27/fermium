@@ -1,0 +1,7 @@
+L = 1 nm
+solve -ħ²/(2m_e) * ψ'' = E ψ
+    with ψ(0 nm) = 0, ψ(L) = 0
+    for x from 0 nm to L
+    lowest 4 using matrix
+for n from 1 to 4
+    print E[n] in eV to 14 digits

@@ -1,0 +1,11 @@
+{
+ "id": "ad106b00462f",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = cos(x)² - sin(x)²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

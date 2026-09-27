@@ -1,0 +1,7 @@
+s = 0
+for i from 1 to 4
+    for j from 1 to 4
+        if j > i
+            break
+        s += 1
+print s

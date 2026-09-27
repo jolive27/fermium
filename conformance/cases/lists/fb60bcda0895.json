@@ -1,0 +1,11 @@
+{
+ "id": "fb60bcda0895",
+ "area": "lists",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "mean: 9.81 m/s²\nstd dev: 0.0428 m/s²\nstd error: 0.0191 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

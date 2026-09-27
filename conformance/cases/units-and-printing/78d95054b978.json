@@ -1,0 +1,17 @@
+{
+ "id": "78d95054b978",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "LT isn't defined",
+  "line": 3,
+  "col": 7,
+  "hint": "did you mean L T (L times T)? Fermium reads LT as one name; put a space between",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

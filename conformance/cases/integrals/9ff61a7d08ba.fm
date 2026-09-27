@@ -1,0 +1,1 @@
+print ∫ sin(x) + 1e-9 dx from -π to π

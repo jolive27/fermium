@@ -1,0 +1,1 @@
+print cosh(1 + 2i) to 15 digits

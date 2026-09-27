@@ -1,0 +1,11 @@
+{
+ "id": "7d5bb8e4d246",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "fit counts = N0 exp(-t/τ)   (13 data points from data/decay.csv)\n  N0 = 1195.6   (standard error 9.4)\n  τ = 20.10 min   (standard error 0.26 min)\n  rms residual = 10.8\nhalf-life: 13.9 min\nplot saved to <ROOT>/bootcamp/decay.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

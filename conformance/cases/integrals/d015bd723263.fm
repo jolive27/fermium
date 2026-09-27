@@ -1,0 +1,11 @@
+B(ν, T) = 2h ν³/c² / (exp(h ν/(k_B T)) - 1)
+n = 50
+Ts = linspace(2000 K, 8000 K, n)
+power = zeros(n) [W/m²]
+total = 0 W/m²
+parallel for i from 1 to n
+    T = Ts[i]
+    P = π ∫ B(ν, T) dν from 1e11 Hz to 1e16 Hz
+    power[i] = P
+    total += P
+print power[n], total / n

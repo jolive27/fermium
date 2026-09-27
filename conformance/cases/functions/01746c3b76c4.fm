@@ -1,0 +1,7 @@
+g() =
+    zs = [1, 2]
+    zs
+a = g()
+b = g()
+push(a, 9)
+print a, b

@@ -35,7 +35,7 @@ Run it from this folder with `fermium run friedmann.fm` (1 s).
 - z_eq comes out 3419, 1.5σ above Planck's 3387: Planck's Ω_m includes the 0.06 eV neutrino, which is still
   relativistic at equality. Removing its Ω_ν h² ≈ 0.0006 from the matter gives 3404 (0.8σ; computed by hand, not in
   the program).
-- The integral and the ODE give the same age to 5 digits, and both agree with SciPy to 10⁻⁴ (`tests/test_research.py`).
+- The integral and the ODE give the same age to 5 digits, and both agree with SciPy to 10⁻⁴ (`legacy/tests/test_research.py`).
 
 ![a(t)](scale_factor.png)
 

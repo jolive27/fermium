@@ -1,0 +1,11 @@
+{
+ "id": "0230da34dd67",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "ly 2.9979245800000000×10⁸ 1/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

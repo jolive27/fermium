@@ -1,0 +1,5 @@
+energy(n) = -13.6 eV / n^2
+photon(n1, n2) = energy(n2) - energy(n1)
+E = photon(2, 3)
+print E in eV
+print "wavelength:", h c / E in nm

@@ -1,0 +1,17 @@
+{
+ "id": "fe01850e3eac",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "max needs all values in the same units (here length [m] and time [s])",
+  "line": 2,
+  "col": 15,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

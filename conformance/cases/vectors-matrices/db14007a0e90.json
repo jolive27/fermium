@@ -1,0 +1,11 @@
+{
+ "id": "db14007a0e90",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[[4, 5], [10, 11]]\n[[1, 4], [2, 5], [3, 6]]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

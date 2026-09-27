@@ -1,0 +1,11 @@
+{
+ "id": "f1ba5f50a653",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "specific energy: -336.919 km²/s²\nangular momentum per kg: 4.93673×10⁹ km²/s\nbound: true\nsemi-major axis: 1.31653 AU\neccentricity: 0.259966\nperihelion: 0.974278 AU\naphelion: 1.65879 AU\nperiod: 1.51062 yr\naphelion from the ODE: 1.65879 AU\nperihelion from the ODE: 0.974278 AU\nperiod from the ODE: 1.51062 yr\nvis-viva, v² at 1 yr: 1123.01 km²/s² vs 1123.01 km²/s²\nangular momentum at 1 yr: 4.93673×10⁹ km²/s\n",
+ "stderr": "warning: line 29: e (the elementary charge) is now your variable: from here on, e means your value\n    e = √(1 + 2 ε h² / GM²)\n    ^\n  hint: that's fine if you don't need the elementary charge below; otherwise pick another name, like e_0 or e2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

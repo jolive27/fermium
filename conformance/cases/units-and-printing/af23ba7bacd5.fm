@@ -1,0 +1,1 @@
+print ellipe(1), ellipk(1), besselk(0, 0)

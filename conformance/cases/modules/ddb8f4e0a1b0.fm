@@ -1,0 +1,3 @@
+import nuclear
+
+print (nuclear.semf_binding(56, 26)) / (1 MeV) to 12 digits

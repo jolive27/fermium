@@ -1,0 +1,17 @@
+{
+ "id": "4db30fab0d80",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'9.81 kg/(m s²' is ambiguous: right after a number, kg/(m s² is one unit (m is metres there), but m is also your variable m",
+  "line": 2,
+  "col": 16,
+  "hint": "write  (9.81 kg)/m  to divide by your variable m, or  9.81 [kg/(m s²]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

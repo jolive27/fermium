@@ -1,0 +1,7 @@
+for E in [0.50 eV, 0.75 eV, 1 eV]
+    print E, 2 E
+for d in [1.20 mm, 1.30 mm]
+    print d
+for v in [0.5, 0.75]
+    print v
+print [1.20 mm, 1.30 mm]

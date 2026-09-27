@@ -1,0 +1,11 @@
+{
+ "id": "c5ed9788b57e",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "(a) delta = 0  E_t = 1.000000000 + 0i  |E_t|² = 1.000000000  Airy = 1.000000000\n(a) delta = 0.100  E_t = 0.5501973805 + 0.4730818121i  |E_t|² = 0.5265235585  Airy = 0.5265235585\n(a) delta = 3.14  E_t = 0.05263157895 + 0i  |E_t|² = 0.002770083102  Airy = 0.002770083102\n(b) FSR = 29.979246 GHz  half-width phase = 0.1054581170  FWHM = 1006.3542 MHz\n(c) finesse = 29.78995588  exact pi/(2 asin(1/sqrt F)) = 29.78995588  approx = 29.803765\n    resolving power = 470764  order m = 15803\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

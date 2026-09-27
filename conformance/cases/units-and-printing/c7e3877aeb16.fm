@@ -1,0 +1,5 @@
+m = 2.0 kg
+v = 3.0 m/s
+E = (1/2) m v^2
+p = m v
+print E, p

@@ -1,0 +1,11 @@
+{
+ "id": "2841d2466ed9",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = 3x² - 2 f''(x) = 6x\n10\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

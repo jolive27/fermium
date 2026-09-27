@@ -1,0 +1,17 @@
+{
+ "id": "19a433f8a97e",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add these vectors: component 2 is speed [m/s] on one side and length [m] on the other",
+  "line": 1,
+  "col": 7,
+  "hint": "vectors add component by component, and each pair must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

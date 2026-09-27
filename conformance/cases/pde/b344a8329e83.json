@@ -1,0 +1,11 @@
+{
+ "id": "b344a8329e83",
+ "area": "pde",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "norm: 1.00\ncentre: 6.94×10⁻⁹ m   (ħ k0 t / m = 6.95 nm )\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "a65168e8ccca",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a PDE must be linear in u: each term may have one factor u, ∂u/∂x or ∂²u/∂x² (no u², no products of them)",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

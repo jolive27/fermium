@@ -1,0 +1,6 @@
+solve
+    x' = v
+    v' = -x / (1 s²)
+    with x(0) = 1 m, v(0) = 0 m/s
+    for t from 0 s to 1 s absolute 1e-9 m
+print x(1 s)

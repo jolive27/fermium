@@ -1,0 +1,11 @@
+{
+ "id": "a8c496e7ef5b",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "4.50\n",
+ "stderr": "warning: line 2: the ' + 1' is part of the upper limit: this integral goes up to L + 1\n    print ∫ x dx from 0 to L + 1\n                             ^\n  hint: if that's what you meant, write  to (L + 1);  to add it after integrating, write  (… to L) + 1\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

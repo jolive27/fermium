@@ -1,0 +1,2 @@
+ψ0 = 1 / √(1 nm) + 0i
+print |ψ0|² in 1/nm to 6 digits

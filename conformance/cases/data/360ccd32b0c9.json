@@ -1,0 +1,11 @@
+{
+ "id": "360ccd32b0c9",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "after one year: 1.00 AU -0.00983 AU\nplot saved to <ROOT>/bootcamp/earth_orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

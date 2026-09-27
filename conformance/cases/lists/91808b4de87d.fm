@@ -1,0 +1,5 @@
+masses = [1.0 kg, 2.0 kg, 0.50 kg]
+speeds = [3.0 m/s, 4.0 m/s, 10.0 m/s]
+KE = ½ masses speeds^2
+print KE
+print "total:", sum(KE)

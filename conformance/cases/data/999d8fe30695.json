@@ -1,0 +1,11 @@
+{
+ "id": "999d8fe30695",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "B after 5 hours: 476\nmost B ever: 543\nplot saved to <ROOT>/bootcamp/chain.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,6 @@
+A = 0.1 m
+omega = 10 rad/s
+x(t) = A cos(omega t)
+a = x''
+print a(0.3 s) / x(0.3 s)
+print -omega^2

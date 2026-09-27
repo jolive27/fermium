@@ -1,0 +1,5 @@
+# The first number whose square is over 200
+for n from 1 to 100
+    if n^2 > 200
+        print n, "squared is", n^2
+        break

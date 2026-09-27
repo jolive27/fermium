@@ -1,0 +1,17 @@
+{
+ "id": "b9bcaf79d90d",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the y axis is a plain number (no units), but this end of its range is time [s]",
+  "line": 3,
+  "col": 25,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

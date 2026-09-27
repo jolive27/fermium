@@ -1,0 +1,2 @@
+xs = [1 m, 2 m]
+print xs[1.5]            # actual: 2 m   expected: an error (index must be a whole number)

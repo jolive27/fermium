@@ -1,0 +1,11 @@
+{
+ "id": "48f1a4243f26",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "plot saved to <ROOT>/bootcamp/_a62_check.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

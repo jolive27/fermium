@@ -1,0 +1,5 @@
+K = [[2, -1], [-1, 2]] N/m
+M = [[1, 0], [0, 1]] kg
+ω2 = eigenvalues(K, M)
+for n from 1 to 2
+    print √(ω2[n]) to 6 digits

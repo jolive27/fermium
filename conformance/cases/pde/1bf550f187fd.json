@@ -1,0 +1,17 @@
+{
+ "id": "1bf550f187fd",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 1: c (the speed of light) is now your variable: from here on, c means your value\n    c = 2 m/s\n    ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\n",
+ "error": {
+  "message": "the wave equation's explicit scheme is unstable with this step: it needs c dt ≤ h, dt ≤ 0.0005 s (SI) on this grid (Courant number 2); use a smaller step or leave out step",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+
+B(ν, T) = 2h ν³/c² / (exp(h ν/(k_B T)) - 1)
+n = 300
+Ts = linspace(1000 K, 10000 K, n)
+P = zeros(n) [W/m²]
+total = 0 W/m²
+parallel for i from 1 to n
+    T = Ts[i]
+    I = ∫ B(ν, T) dν from 1e11 Hz to 1e16 Hz
+    P[i] = I
+    total += I
+print total / (1 W/m²) to 17 digits
+s = 0 W/m²
+for i from 1 to n
+    s += P[i]
+print abs(total - s) / s < 1e-13
+print P[n] / (σ (10000 K)⁴ / π) to 8 digits

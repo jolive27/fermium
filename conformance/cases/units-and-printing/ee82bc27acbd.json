@@ -1,0 +1,17 @@
+{
+ "id": "ee82bc27acbd",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this line ended before the expression was complete",
+  "line": 1,
+  "col": 4,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

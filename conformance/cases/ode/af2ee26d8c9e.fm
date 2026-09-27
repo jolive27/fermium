@@ -1,0 +1,6 @@
+k = 1.5 / (1 s)
+solve y' = k y
+  with y(0 s) = 1
+  for t from 0 s to 2 s
+k = 7 / (1 s)
+print y'(1 s) / y(1 s)

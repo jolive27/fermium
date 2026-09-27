@@ -1,0 +1,17 @@
+{
+ "id": "b3aee5014bf9",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected ',' or ']' in this list but the line ended",
+  "line": 1,
+  "col": 10,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

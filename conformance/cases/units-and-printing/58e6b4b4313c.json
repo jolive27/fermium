@@ -1,0 +1,17 @@
+{
+ "id": "58e6b4b4313c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'10⁻² m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 2,
+  "col": 18,
+  "hint": "write  10⁻²*m  for 10⁻² × your variable m, or  10⁻² [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

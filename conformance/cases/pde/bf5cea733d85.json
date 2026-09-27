@@ -1,0 +1,11 @@
+{
+ "id": "bf5cea733d85",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.499999905914\n0.480438676867\n13.6347512472\n",
+ "stderr": "warning: line 1: c (the speed of light) is now your variable: from here on, c means your value\n    c = 2 m/s\n    ^\n  hint: that's fine if you don't need the speed of light below; otherwise pick another name, like c_0 or c2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

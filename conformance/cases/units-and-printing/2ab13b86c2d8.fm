@@ -1,0 +1,4 @@
+a = 256.3092388828228 [m]
+b = a in nm
+print b / (1 [nm]) to 15 digits
+print (a in nm) in m to 15 digits

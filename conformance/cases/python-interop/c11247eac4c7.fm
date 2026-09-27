@@ -1,0 +1,7 @@
+use python numpy as np
+use python scipy.special as sp
+r = 2.5 m
+print sp.jv(0, r / (1 m)) to 6 digits       # Bessel J₀ of a plain number
+print np.sinc(0.25), np.pi
+xs = [0, 0.5, 1, 2]
+print np.sqrt(xs)                            # a list goes in as a NumPy array, and comes back as a list

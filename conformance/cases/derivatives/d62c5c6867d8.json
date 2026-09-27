@@ -1,0 +1,11 @@
+{
+ "id": "d62c5c6867d8",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "d/ds (h(2·s)) = 2 h'(2·s)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

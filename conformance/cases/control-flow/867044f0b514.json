@@ -1,0 +1,11 @@
+{
+ "id": "867044f0b514",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "50 Hz\n3.00000000000 V\n0.500000000000 V\n501 500 Hz\n1.00000000000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

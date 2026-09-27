@@ -1,0 +1,3 @@
+units natural:
+    g(E) = E + 1 kg
+print g(1 J)

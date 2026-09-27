@@ -1,0 +1,3 @@
+planet = "Mars"
+print "Planet:", planet
+print planet, "is the fourth planet"

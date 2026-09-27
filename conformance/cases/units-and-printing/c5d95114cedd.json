@@ -1,0 +1,11 @@
+{
+ "id": "c5d95114cedd",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.19×10⁶ J\n",
+ "stderr": "warning: line 1: 10 °C is an absolute temperature, so it enters this formula as 283.15 K\n    print 1 kg * 4186 J/(kg K) * 10 °C\n                                 ^^^^^\n  hint: for a temperature change (ΔT in Q = m c ΔT) write 10 K; for an absolute temperature (p V = n R T) write 283.15 K to make it clear\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

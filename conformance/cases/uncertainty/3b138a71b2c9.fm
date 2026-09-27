@@ -1,0 +1,6 @@
+v = 10.0 +- 0.1 m/s
+theta = 45 +- 5deg
+print "linear:", v^2 sin(2theta) / g_n
+propagate montecarlo 20000 samples
+    R = v^2 sin(2theta) / g_n
+print "Monte Carlo:", R

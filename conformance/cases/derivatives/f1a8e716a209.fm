@@ -1,0 +1,3 @@
+f = 3
+ω = 2πf          # fmt --ascii -> "omega = 2pif"   ("pif isn't defined")
+print ∂/∂x g     # fmt --ascii -> "print partial/partialx g"   (doesn't parse)

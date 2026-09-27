@@ -1,0 +1,11 @@
+{
+ "id": "32588108c8f4",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) Sun: nu_max = 339.3315947 THz   lambda_max = 502.0394933 nm\n    lambda_max nu_max / c = 0.5682526605\n(b) h nu_max / kT = 2.821439372   hc / (lambda_max kT) = 4.965114232\n(c) CMB: nu_max = 160.2301215 GHz   lambda_max = 1.063207468 mm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,10 @@
+print ∫ exp(-x^2) dx from -inf to inf to 6 digits
+print ∫ 1/(1+x^2) dx from 0 to inf to 6 digits
+print ∫ x^2 exp(-x) dx from 0 to inf to 6 digits
+print ∫ sin(x)/x dx from 1 to 100 to 6 digits
+print ∫ 1/sqrt(x) dx from 0 to 1 to 6 digits
+print ∫ ln(x) dx from 0 to 1 to 6 digits
+print ∫ exp(-x^2) dx from inf to -inf to 6 digits
+print ∫ exp(-x^2/2e-6) dx from -inf to inf to 6 digits
+print ∫ 1/(1+(x-50)^2) dx from -inf to inf to 6 digits
+print ∫ exp(-x/1e6) dx from 0 to inf to 6 digits

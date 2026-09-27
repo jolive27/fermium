@@ -1,0 +1,5 @@
+A = 0.1 m
+ω = 10 1/s
+x(t) = A cos(ω t)
+v = d/dt x
+print v(0.1 s), x''(0.1 s)

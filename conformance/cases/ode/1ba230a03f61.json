@@ -1,0 +1,11 @@
+{
+ "id": "1ba230a03f61",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "small-angle period: 2.0060667 s\namplitude 10° | elliptic: 2.0098926 s | energy integral: 2.0098926 s | ODE: 2.0098926 s | series: 2.0098926 s\namplitude 45° | elliptic: 2.0862559 s | energy integral: 2.0862559 s | ODE: 2.0862559 s | series: 2.0861401 s\namplitude 90° | elliptic: 2.3678419 s | energy integral: 2.3678419 s | ODE: 2.3678419 s | series: 2.3591591 s\namplitude 150° | elliptic: 3.5350982 s | energy integral: 3.5350982 s | ODE: 3.5350982 s | series: 3.2028379 s\namplitude 179° | elliptic: 7.8257968 s | energy integral: 7.8257968 s | ODE: 7.8257968 s | series: 3.9140855 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

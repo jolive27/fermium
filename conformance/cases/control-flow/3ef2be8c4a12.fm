@@ -1,0 +1,2 @@
+for ρ in [1.0e7 kg/m³, 1.0e8 kg/m³]
+    print ρ, 2 ρ

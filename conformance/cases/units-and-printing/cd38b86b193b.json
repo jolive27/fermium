@@ -1,0 +1,13 @@
+{
+ "id": "cd38b86b193b",
+ "area": "units-and-printing",
+ "origin": "benchmarks/fermium/startup.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "9.69965830454514\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

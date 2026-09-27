@@ -1,0 +1,11 @@
+{
+ "id": "2fed632c4d9d",
+ "area": "derivatives",
+ "origin": "dev-notes/notes/bugs-adversarial.md#32",
+ "dir": "dev-notes/notes",
+ "stdout": "-2\n4\ng(x) = 1/(3x^(2/3))\n0.0833\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

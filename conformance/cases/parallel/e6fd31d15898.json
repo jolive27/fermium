@@ -1,0 +1,17 @@
+{
+ "id": "e6fd31d15898",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f calls itself; a recursive function can't be used inside a parallel for",
+  "line": 4,
+  "col": 5,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

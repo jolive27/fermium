@@ -1,0 +1,13 @@
+f(x) = x^3 - 2x + 1
+d1 = f'
+d2 = f''
+print d1(-2.044565630484672) to 17 digits
+print d2(-2.044565630484672) to 17 digits
+print d1(-1.827755027520738) to 17 digits
+print d2(-1.827755027520738) to 17 digits
+print d1(-0.1629295791034151) to 17 digits
+print d2(-0.1629295791034151) to 17 digits
+print d1(-0.4585466624981209) to 17 digits
+print d2(-0.4585466624981209) to 17 digits
+print d1(0.06237314076324907) to 17 digits
+print d2(0.06237314076324907) to 17 digits

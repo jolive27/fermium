@@ -1,0 +1,11 @@
+{
+ "id": "343e746b0794",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "v'(h) = g/√(2·g h)\n∂²term/∂x²(x, y) = -9y² sin(3x)\ny(t) = 20 m/s t - 0.5·g t²   [m, for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

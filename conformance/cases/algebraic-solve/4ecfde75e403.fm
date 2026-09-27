@@ -1,0 +1,2 @@
+solve 1/(x - 1.5) = 2 for x from 1 to 2
+print x

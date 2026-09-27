@@ -1,0 +1,11 @@
+{
+ "id": "d264a99c7399",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "fit T = 2π √(L/g)   (5 data points from table(L = L, T = T))\n  g = 9.80526 m/s²   (standard error 0.00028 m/s²)\n  rms residual = 4.43×10⁻⁵ s\n9.805 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

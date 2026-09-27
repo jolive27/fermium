@@ -1,0 +1,17 @@
+{
+ "id": "5997241a85c2",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "r'' and s'' both appear in one equation, which works only for unknowns that are numbers, but r is a vector; write its components as separate unknowns",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

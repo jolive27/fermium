@@ -1,0 +1,5 @@
+g(t) =
+    a = 2 s
+    t^2 / a
+f(t) = g(t) + 1 s
+print f'(5 s)

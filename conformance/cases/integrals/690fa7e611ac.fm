@@ -1,0 +1,19 @@
+# Wien's law from dB/dλ = 0, and Stefan–Boltzmann from integrating Planck's law
+T = 5778 K
+B(λ) = 2 h c² / λ⁵ / (exp(h c / (λ k_B T)) - 1)
+dB = d/dλ B
+
+lo = 100 nm
+hi = 2000 nm
+for i from 1 to 60
+    mid = (lo + hi) / 2
+    if dB(mid) > 0 W/m⁴
+        lo = mid
+    else
+        hi = mid
+print "peak:", (lo + hi) / 2 in nm to 5 digits
+print "Wien b/T:", b_W / T in nm to 5 digits
+
+flux = π * ∫ B(λ) dλ from 0 nm to ∞
+print "π ∫ B dλ =", flux in MW/m² to 6 digits
+print "σ T⁴ =", σ T⁴ in MW/m² to 6 digits

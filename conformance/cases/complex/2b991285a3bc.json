@@ -1,0 +1,17 @@
+{
+ "id": "2b991285a3bc",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "z holds a plain number (no units); it can't now hold a complex number",
+  "line": 3,
+  "col": 5,
+  "hint": "to let z become complex, start it as a complex number, e.g.  z = 0i",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

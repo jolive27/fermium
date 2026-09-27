@@ -1,0 +1,11 @@
+{
+ "id": "10ca52e792f2",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) pp  b = 22.206474 keV^(1/2)  E0 = 6.0880951 keV  Delta = 6.6279061 keV  tau = 13.499887\n(b) pp  integral = 8.297099045×10⁻⁶ keV  Gaussian = 8.0536863×10⁻⁶ keV  ratio = 1.0302238  1 + 5/(12 tau) = 1.0308645\n(a) C12+alpha  b = 650.53104 keV^(1/2)  E0 = 315.56872 keV  Delta = 170.31299 keV  tau = 54.930343\n(b) C12+alpha  integral = 2.118909388×10⁻²² keV  Gaussian = 2.1030409×10⁻²² keV  ratio = 1.0075455  1 + 5/(12 tau) = 1.0075854\n(c) pp: nu = 3.8428759  (tau - 2)/3 = 3.8332958\n    C12+alpha: nu = 17.645931  (tau - 2)/3 = 17.643448\n(d) <sigma v> = 1.47674×10⁻⁴³ cm³/s  n_p = 3.049×10²⁵ 1/cm³  proton mean life = 7.038×10⁹ yr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

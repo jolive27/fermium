@@ -1,0 +1,11 @@
+{
+ "id": "f506d68c4d0b",
+ "area": "functions",
+ "origin": "dev-notes/notes/bugs-tests.md#18",
+ "dir": "dev-notes/notes",
+ "stdout": "3 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

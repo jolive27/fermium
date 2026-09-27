@@ -1,0 +1,2 @@
+f(n) = if n == 0 then 1 + 0i else 1i * f(n - 1)
+print f(3)

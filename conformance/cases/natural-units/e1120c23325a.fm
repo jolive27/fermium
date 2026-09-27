@@ -1,0 +1,3 @@
+units natural:
+    a = 5 MeV
+print a in fm

@@ -1,0 +1,2 @@
+ψ0 = (1 + 1i) / √(2 nm)
+print ψ0 * conj(ψ0) in 1/nm

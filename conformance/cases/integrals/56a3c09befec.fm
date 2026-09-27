@@ -1,0 +1,6 @@
+
+a = 1 m
+for k from 1 to 2
+    a = -a
+F = ∫ 1 / √(a^2 + s^2) ds
+print F(2 m) - F(-2 m) to 9 digits

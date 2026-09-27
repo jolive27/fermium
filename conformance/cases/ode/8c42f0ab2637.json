@@ -1,0 +1,11 @@
+{
+ "id": "8c42f0ab2637",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "cycloid: θ_f = 3.508369  a = 0.5171999 m\ncycloid time, closed form: 0.8055638 s\ncycloid time, functional: 0.8055638 s\nstraight line, functional: 1.009638 s\nstraight line, closed form: 1.009638 s\ndT/dε at ε = 0: -3.13×10⁻¹⁷ s\nd²T/dε² at ε = 0: 0.164943 s\nT(0) − cycloid: 0 s\nT(+0.01) − T(0): 8.1715×10⁻⁶ s\nT(−0.01) − T(0): 8.3247×10⁻⁶ s\nT(+0.02) − T(0): 3.2390×10⁻⁵ s\nratio for doubling ε: 3.964\n½ T'' ε² for ε = 0.01: 8.2471×10⁻⁶ s\nrolling ball on the cycloid: 0.9531560 s\nratio to the sliding bead: 1.183216  √(7/5) = 1.183216\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

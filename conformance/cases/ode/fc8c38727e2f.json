@@ -1,0 +1,11 @@
+{
+ "id": "fc8c38727e2f",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "A = 0.100 m | exact period: 1.249168 s | ω exact: 5.029896 1/s | 1st order: 5.030000 rad/s | 2nd order: 5.029895 rad/s\nA = 0.200 m | exact period: 1.227575 s | ω exact: 5.118370 1/s | 1st order: 5.120000 rad/s | 2nd order: 5.118320 rad/s\nA = 0.400 m | exact period: 1.151614 s | ω exact: 5.455984 1/s | 1st order: 5.480000 rad/s | 2nd order: 5.453120 rad/s\nA = 0.100 m | ODE period: 1.249168 s\nA = 0.200 m | ODE period: 1.227575 s\nA = 0.400 m | ODE period: 1.151614 s\nfirst-order error ratio, A = 0.2 m vs 0.1 m: 15.64\nfirst-order error ratio, A = 0.1 m vs 0.05 m: 15.91\nsteady-state amplitude, ODE: 20.796 cm\nsteady-state amplitude, harmonic balance: 20.746 cm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

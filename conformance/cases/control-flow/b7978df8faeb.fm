@@ -1,0 +1,6 @@
+N = 1000
+years = 0
+while N > 500
+    N = N * 0.9
+    years += 1
+print "half-life is between", years - 1, "and", years, "years"

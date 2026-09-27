@@ -1,0 +1,2 @@
+f(x) = x * f(x - 1)          # forgot the base case
+print f(3)                   # actual: "Segmentation fault" (exit 139)   expected: a one-line runtime error

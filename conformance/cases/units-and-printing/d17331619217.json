@@ -1,0 +1,11 @@
+{
+ "id": "d17331619217",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "606 °C\n",
+ "stderr": "warning: line 3: this scales an absolute temperature: °C values are multiplied as kelvins (20 °C is 293.15 K, and that is what gets scaled)\n    print k T1\n          ^\n  hint: to scale a temperature change, write it in K\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

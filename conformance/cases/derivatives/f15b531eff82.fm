@@ -1,0 +1,2 @@
+x(t) = 3 m * t / 1 s
+print d/dt x(2 s)

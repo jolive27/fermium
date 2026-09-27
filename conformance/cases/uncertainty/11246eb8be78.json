@@ -1,0 +1,11 @@
+{
+ "id": "11246eb8be78",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "eccentricity: 1.13826\nturning angle: 122.932°\nimpact parameter: 1.40576×10⁶ km\nheliocentric speed before: 14.8265 km/s\nheliocentric speed after: 19.3236 km/s\nspeed gain: 4.49714 km/s\n|Δu| = 2 v∞ sin(δ/2): 12.2995 km/s\ntime from 1000 r_p to 1000 r_p: 1143.56 day\nheliocentric speed gain, ODE: 4.52012 km/s\nspeed gain between the mirror points, exact: 4.52012 km/s\nturning of the relative velocity, ODE: 122.931°\nturning at 1000 r_p, exact: 122.931°\nperiapsis time, ODE vs half the flight: 571.782 day 571.782 day\nclosest approach, ODE: 5.00000 R_J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,9 @@
+
+R = 0.10 m
+I = 2.0 A
+ring(φ) = R * <cos(φ), sin(φ), 0>
+dl(φ) = R * <-sin(φ), cos(φ), 0>
+B(P) = μ₀ I / (4π) * ∫ dl(φ) × (P - ring(φ)) / |P - ring(φ)|^3 dφ from 0 to 2π
+b = B(<0 m, 0 m, 0.05 m>)
+print b to 10 digits
+print μ₀ I R^2 / (2 (R^2 + (0.05 m)^2)^1.5) to 10 digits

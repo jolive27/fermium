@@ -1,0 +1,14 @@
+me = 9.1093837e-31 kg
+L = 1 nm
+shoot(V, E) =
+    solve ψ'' = 2 me (V(x) - E) ψ / ħ²
+      with ψ(0 nm) = 0, ψ'(0 nm) = 1
+      for x from 0 nm to L
+    ψ(L)
+flat(x) = 0 eV
+ramp(x) = 0.5 eV x / L
+solve shoot(flat, E) = 0 for E from 0.2 eV to 0.5 eV
+print E in eV to 8 digits
+print π² ħ² / (2 me L²) in eV to 8 digits
+solve shoot(ramp, E2) = 0 for E2 from 0.4 eV to 1 eV
+print E2 in eV to 8 digits

@@ -1,0 +1,2 @@
+advance(s, dt) = s + <s.y dt, -ω² s.x dt> where ω = 2 [rad/s]
+print advance(<1 m, 0 m/s>, 0.1 s)

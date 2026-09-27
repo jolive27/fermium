@@ -1,0 +1,2 @@
+min = 4.0
+print 8 / min

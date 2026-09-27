@@ -1,0 +1,17 @@
+{
+ "id": "da2bd1acc364",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "exp needs a plain number, but got time [s]",
+  "line": 1,
+  "col": 11,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

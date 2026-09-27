@@ -1,0 +1,17 @@
+{
+ "id": "cb9ad14187d7",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "√ of a negative number (-4 m²) isn't a real number",
+  "line": 1,
+  "col": 7,
+  "hint": "a square root needs a value ≥ 0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

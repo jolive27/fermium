@@ -1,0 +1,13 @@
+{
+ "id": "4d8d138e31d1",
+ "area": "parallel",
+ "origin": "benchmarks/fermium/forces.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "U_J -2.65245485517×10¹⁴\nax1 -0.411634935411\nazN -1.70275358154\nserial_same true\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

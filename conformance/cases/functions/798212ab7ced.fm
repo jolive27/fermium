@@ -1,0 +1,5 @@
+f(θ) = 2 cos(θ)
+θ = 60°
+print f(θ)           # 57.2958°   (the value is 1)
+g(θ) = cos(θ) / cos(θ/2)
+print g(θ)           # 33.0797°   (the value is 0.577)

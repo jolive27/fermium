@@ -1,0 +1,11 @@
+{
+ "id": "f318ae4f6614",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Tc-99m after 24 h: solve 7.2×10¹³   Bateman formula 7.2×10¹³\nTc-99m peaks at 22.85 hr   (formula: 22.84 hr )\nMo-99 activity:  2.3 GBq\nTc-99m activity: 2.3 GBq\nactivity ratio at 200 h: 1.1  expected 1.1002\ntotal at 240 h / N0: 1.0\nplot saved to <ROOT>/examples/gallery/bateman_chain.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "a8f643eb693f",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[10, -2, -2, -2] m\n[25, 4, 1] m²/Hz\n[0, 250, 500] Hz\n",
+ "stderr": "warning: line 2: fft_re(xs) is deprecated and will be removed after Fermium 1.5: write re(fft(xs))\n    print fft_re(xs)\n          ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

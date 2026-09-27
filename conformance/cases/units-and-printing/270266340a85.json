@@ -1,0 +1,11 @@
+{
+ "id": "270266340a85",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-bootcamp.md#13",
+ "dir": "dev-notes/notes",
+ "stdout": "1 AU/c (= 499 s)\n8.99×10¹⁶ J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

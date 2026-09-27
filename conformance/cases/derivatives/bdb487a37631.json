@@ -1,0 +1,11 @@
+{
+ "id": "bdb487a37631",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "velocity at 1 s: 10.2 m/s\nvelocity at 3 s: -9.43 m/s\ndirectly: 0.380 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

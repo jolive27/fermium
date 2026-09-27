@@ -1,0 +1,4 @@
+f(x, a) = x² - a
+for a from 1 to 3
+    solve f(r, a) = 0 for r from 0 to 5
+    print r to 10 digits

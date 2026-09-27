@@ -1,0 +1,6 @@
+f(x) =
+    for i from 1 to 3
+        x += 1
+    x
+a = 1
+print f(a), f([1, 2]), a

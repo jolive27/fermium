@@ -1,0 +1,11 @@
+{
+ "id": "6b188a40b09d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3 m\n",
+ "stderr": "warning: line 2: h is the built-in Planck constant (exact); from here on, h means your value\n    h = 3 m\n    ^\n  hint: pick another name if you still need the constant h\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

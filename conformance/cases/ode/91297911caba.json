@@ -1,0 +1,11 @@
+{
+ "id": "91297911caba",
+ "area": "ode",
+ "origin": "dev-notes/notes/bugs-examples.md#1",
+ "dir": "dev-notes/notes",
+ "stdout": "0.61 m\n0.61 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

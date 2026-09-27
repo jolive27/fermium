@@ -1,0 +1,11 @@
+{
+ "id": "19e975845b3c",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "g = 9.700 m/s²\ng = 31.82 ft/s²\namplitude 10° period 2.2142 s\namplitude 45° period 2.2983 s\namplitude 90° period 2.6086 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

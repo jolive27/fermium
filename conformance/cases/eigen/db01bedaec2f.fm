@@ -1,0 +1,42 @@
+# Nuclear 31 — The deuteron in a square well
+#
+# (Krane, Introductory Nuclear Physics, §4.2, eqs. 4.4–4.10 and Problems 4.2–4.4;
+#  Wong, Introductory Nuclear Physics 2nd ed., §3.2; Blatt & Weisskopf ch. II.)
+# The neutron–proton pair (reduced mass μ = m_p m_n/(m_p + m_n)) is bound by
+# B = 2.2246 MeV in a square well of radius R = 2.10 fm. For l = 0, u = r ψ obeys
+#     u'' = (2μ/ħ²)(V(r) + B) u,   V = −V₀ for r < R, 0 outside,
+# so u = A sin(k r) inside, A sin(kR) e^(−κ(r − R)) outside, with
+# k = √(2μ(V₀ − B))/ħ, κ = √(2μB)/ħ and the matching condition k cot(kR) = −κ.
+#   (a) Solve the matching condition for V₀ (Krane: about 35 MeV).
+#   (b) Check with the eigenvalue solver: with that V₀, the lowest state of
+#       −(ħ²/2μ) u'' + V u = E u on 0 < r < 40 fm must have E = −B, and it is the only
+#       bound state.
+#   (c) The probability that the pair is outside the well, in closed form
+#       P = (sin²kR/2κ) / (R/2 − sin(2kR)/4k + sin²kR/2κ), and from the numerical state.
+#   (d) The rms radius of the deuteron, r_d = ½ √⟨r²⟩ (each nucleon is r/2 from the
+#       centre), from the numerical state; measured 2.13 fm (the square well is crude).
+
+μ = m_p m_n / (m_p + m_n)
+B = 2.2246 MeV
+R = 2.10 fm
+κ = √(2 μ B) / ħ
+kk(V0) = √(2 μ (V0 - B)) / ħ
+solve kk(V0) cos(kk(V0) R) / sin(kk(V0) R) = -κ for V0 from 5 MeV to 100 MeV
+k = kk(V0)
+print "(a) V0 =", V0 in MeV to 10 digits, " kR =", k R to 10 digits, " kappa =", κ in 1/fm to 8 digits
+
+V(r) = if r < R then -V0 else 0 MeV
+solve -ħ²/(2*μ) * u'' + V(r) u = E u
+    with u(0 fm) = 0, u(40 fm) = 0
+    for r from 0 fm to 40 fm
+    lowest 2
+    grid 16000
+print "(b) E1 =", E[1] in MeV to 7 digits, " E2 =", E[2] in MeV to 6 digits, " (E2 > 0: no second bound state)"
+
+s2 = sin(k R)²
+P_out = (s2 / (2 κ)) / (R/2 - sin(2 k R) / (4 k) + s2 / (2 κ))
+P_num = ∫ u₁(r)² dr from R to 40 fm
+print "(c) P(outside) closed form =", P_out to 8 digits, " numerical =", P_num to 6 digits
+
+r2 = ∫ r² u₁(r)² dr from 0 fm to 40 fm
+print "(d) rms radius r_d =", ½ √r2 in fm to 6 digits

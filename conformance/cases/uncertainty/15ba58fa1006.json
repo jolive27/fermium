@@ -1,0 +1,11 @@
+{
+ "id": "15ba58fa1006",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "research/recombination_history",
+ "stdout": "n_H today = 0.18946 1/m³   Ω_m = 0.31377   Ω_r = 9.221×10⁻⁵\nSaha: x_e = 0.5 at z = 1368.97404   x_e(1600) = 0.99438833   x_e(1100) = 0.00476\nPeebles: 988 steps (radau)\nPeebles: x_e = 0.5 at z = 1272.65108\nz = 1500 : x_e Peebles = 0.95549368   Saha = 0.948\nz = 1400 : x_e Peebles = 0.80814824   Saha = 0.654\nz = 1300 : x_e Peebles = 0.56946056   Saha = 0.213\nz = 1200 : x_e Peebles = 0.32660675   Saha = 0.0391\nz = 1100 : x_e Peebles = 0.14571596   Saha = 0.00476\nz = 1000 : x_e Peebles = 0.048661117   Saha = 0.000371\nz = 800 : x_e Peebles = 0.0037390489   Saha = 3.20×10⁻⁷\nz = 600 : x_e Peebles = 0.0010639609   Saha = 2.38×10⁻¹²\nz = 400 : x_e Peebles = 0.00058360823   Saha = 1.19×10⁻²²\nfreeze-out: x_e(200) = 0.00038491449   d ln x_e / d ln(1 + z) at z = 200: 0.373\noptical depth τ = 1 at z_* = 1089.60970   (Planck 2018: z_* = 1089.92 ± 0.25)\ng(z) peaks at z = 1078.8033\ng(η) peaks at z = 1089.1171\nx_e at z_* = 0.131822\ng(z): half maximum at z = 966.99182 and 1170.3241   (FWHM Δz = 203 )\n∫ g dz from 200 to 1600 = 1.0000000   (1 − e^(−τ(1600)) = 1.0000000 )\nwith F = 1.14: x_e(200) = 0.00034041759   τ = 1 at z = 1090.42940   x_e(1100) = 0.145560\nstarted at z = 2500: 1184 radau steps; x_e(200) = 0.00038491449   x_e(1100) = 0.14571596\nplot saved to <ROOT>/research/recombination_history/xe.png\nplot saved to <ROOT>/research/recombination_history/visibility.png\n",
+ "stderr": "warning: line 8: h (Planck's constant) is now your variable: from here on, h means your value\n    h = 0.6736\n    ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

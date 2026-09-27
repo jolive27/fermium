@@ -1,0 +1,11 @@
+{
+ "id": "db021f2c7347",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.52×10¹⁷\n",
+ "stderr": "warning: line 1: the two sides of this equation agree only to rounding error near 1.54×10¹⁷, so the solution found there may be meaningless (large terms cancelling?); rewrite the equation so they cancel on paper\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

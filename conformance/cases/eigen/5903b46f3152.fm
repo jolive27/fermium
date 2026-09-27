@@ -1,0 +1,4 @@
+V(x) = 2 eV (x / 0.3 nm)^4 - 1 eV (x / 0.3 nm)^2
+solve -ħ²/(2m_e) * ψ'' + V(x) ψ = E ψ with ψ(-1.5 nm) = 0, ψ(1.5 nm) = 0 for x from -1.5 nm to 1.5 nm lowest 3 using shooting
+for n from 1 to 3
+    print E[n] in eV to 14 digits

@@ -1,0 +1,17 @@
+{
+ "id": "ee90238a49a6",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "L isn't defined",
+  "line": 1,
+  "col": 11,
+  "hint": "L is a unit, and units go right after a number; to multiply 4π² by L write 4π² * 1 L or 4π² [L]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

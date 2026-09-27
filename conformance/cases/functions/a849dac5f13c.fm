@@ -1,0 +1,12 @@
+g = 9.8 m/s^2
+t1 = 2 s
+tc = 3 s
+u(t) = if t < t1 then g t
+       else if t < t1 + tc then g t1
+       else g t1 - g (t - t1 - tc)
+print u(1 s), u(3 s), u(6 s)
+x = 2
+if x > 1
+    print "big"
+else
+    print "small"

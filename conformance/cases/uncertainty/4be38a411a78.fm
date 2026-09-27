@@ -1,0 +1,7 @@
+data = load "ba137m_decay.csv"
+fit rate = A exp(-t / τ) + B to data with A = 80 s⁻¹, τ = 150 s, B = 1 s⁻¹
+print value(τ) to 10 digits
+print uncertainty(τ) to 10 digits
+print uncertainty(A + B) to 10 digits
+print uncertainty(τ ln(2)) to 10 digits
+print err(τ) to 10 digits

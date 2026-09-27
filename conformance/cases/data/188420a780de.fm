@@ -1,0 +1,2 @@
+data = load "data/pendulum.csv"
+plot data.T vs data.L to "pendulum_data.png"

@@ -1,0 +1,11 @@
+{
+ "id": "a4516635a625",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3.1415926535918755\n3.1415926535918226\ntrue\n3.9999999999750004 2.0000050000062499\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

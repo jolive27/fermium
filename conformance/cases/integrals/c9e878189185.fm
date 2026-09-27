@@ -1,0 +1,2 @@
+F(t) = ∫ sin(u) du from 0 to t
+print F(3.141592653589793)

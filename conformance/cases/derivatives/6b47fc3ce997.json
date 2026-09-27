@@ -1,0 +1,17 @@
+{
+ "id": "6b47fc3ce997",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 s' is ambiguous: right after a number, s is a unit (seconds), but s is also the variable s you differentiate by",
+  "line": 2,
+  "col": 19,
+  "hint": "write  2*s  for 2 × the variable s you differentiate by, or  2 [s]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

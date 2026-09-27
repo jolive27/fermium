@@ -1,0 +1,3 @@
+f(r, R) = 1 / (1 + exp((r - R) / (0.6 fm)))
+dR = d/dR f(r, R)
+print dR(4 fm, 5 fm) in 1/fm to 6 digits

@@ -1,0 +1,3 @@
+lambda = 500 nm
+E = h c / lambda
+print E in eV

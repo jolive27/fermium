@@ -1,0 +1,2 @@
+solve x³ - 2x - 5 = 0 for x from 2 to 3
+print x to 17 digits

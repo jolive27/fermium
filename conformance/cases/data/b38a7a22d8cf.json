@@ -1,0 +1,11 @@
+{
+ "id": "b38a7a22d8cf",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "Compton wavelength of the electron: 2.42631 pm\nθ = 0°   photon keeps 661.657 keV   wavelength shift 0 pm\nθ = 30°   photon keeps 563.844 keV   wavelength shift 0.325 pm\nθ = 60°   photon keeps 401.633 keV   wavelength shift 1.21 pm\nθ = 90°   photon keeps 288.325 keV   wavelength shift 2.43 pm\nθ = 120°   photon keeps 224.882 keV   wavelength shift 3.64 pm\nθ = 180°   photon keeps 184.323 keV   wavelength shift 4.85 pm\nCompton edge (maximum electron energy): 477.334 keV\nbackscatter peak: 184.323 keV\nelectron, 100 eV:       0.1226 nm\nthermal neutron, 25 meV: 0.181 nm\nbaseball, 0.145 kg at 40 m/s: 1.14×10⁻³⁴ m\nelectron, 1 GeV: 1.24 fm  (smaller than a nucleus: electron scattering sees inside)\n   (non-relativistic formula would give 38.8 fm )\nelectron microscope, 200 keV: 2.51 pm\nplot saved to <ROOT>/examples/gallery/compton.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

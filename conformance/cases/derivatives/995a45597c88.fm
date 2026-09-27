@@ -1,0 +1,13 @@
+f(x) = exp(sin(x))
+d1 = f'
+d2 = f''
+print d1(-2.905065954326922) to 17 digits
+print d2(-2.905065954326922) to 17 digits
+print d1(1.9717070013883777) to 17 digits
+print d2(1.9717070013883777) to 17 digits
+print d1(-0.640894850278706) to 17 digits
+print d2(-0.640894850278706) to 17 digits
+print d1(1.0405280521205977) to 17 digits
+print d2(1.0405280521205977) to 17 digits
+print d1(2.1602486889224455) to 17 digits
+print d2(2.1602486889224455) to 17 digits

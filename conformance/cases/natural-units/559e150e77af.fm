@@ -1,0 +1,3 @@
+units natural
+E = 1 MeV
+print E in fm

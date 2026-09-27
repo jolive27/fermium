@@ -1,0 +1,2 @@
+print ∫ 1/u du from 1 to 2 to 6 digits
+print 1/u

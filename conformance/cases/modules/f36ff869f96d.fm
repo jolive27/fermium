@@ -1,0 +1,18 @@
+import nuclear
+
+print (nuclear.semf_binding(56, 26)) / (1 MeV) to 12 digits
+print (nuclear.semf_binding(238, 92)) / (1 MeV) to 12 digits
+print (nuclear.semf_binding(27, 13)) / (1 MeV) to 12 digits
+print (nuclear.semf_binding(14, 7)) / (1 MeV) to 12 digits
+print (nuclear.semf_binding_per_nucleon(56, 26)) / (1 MeV) to 12 digits
+print (nuclear.semf_pairing(56, 26)) / (1 MeV) to 12 digits
+print (nuclear.Q_value(238.0507884 u, 234.0436014 u + 4.00260325 u)) / (1 MeV) to 12 digits
+print (nuclear.nuclear_radius(208)) / (1 fm) to 12 digits
+print (nuclear.decay_constant(5730 yr)) / (1 1/s) to 12 digits
+print (nuclear.mean_lifetime(5730 yr)) / (1 yr) to 12 digits
+print (nuclear.activity(1e20, 5730 yr)) / (1 Bq) to 12 digits
+print (nuclear.remaining(100 g, 10 day, 30 day)) / (1 g) to 12 digits
+print nuclear.bateman_daughter(1e6, 10 hr, 1 hr, 5 hr) to 12 digits
+print nuclear.sommerfeld_parameter(1, 1, 1e6 m/s) to 12 digits
+print (nuclear.gamow_energy(1, 1, m_p/2)) / (1 MeV) to 12 digits
+print nuclear.gamow_factor(1, 1, 1 keV, m_p/2) to 12 digits

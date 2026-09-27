@@ -1,0 +1,17 @@
+{
+ "id": "a6d868bd6ffe",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'50 N/m' is ambiguous: right after a number, N/m is one unit (m is metres there), but m is also your variable m",
+  "line": 2,
+  "col": 10,
+  "hint": "write  (50 N)/m  to divide by your variable m, or  50 [N/m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

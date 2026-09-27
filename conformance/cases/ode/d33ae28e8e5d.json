@@ -1,0 +1,17 @@
+{
+ "id": "d33ae28e8e5d",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unknown method 'euler' (use rk45, rk4 with a step, or radau for stiff equations)",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

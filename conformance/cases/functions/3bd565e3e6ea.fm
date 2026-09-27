@@ -1,0 +1,2 @@
+f(E) = E
+print f(3 MeV)

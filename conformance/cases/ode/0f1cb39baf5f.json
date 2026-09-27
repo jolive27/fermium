@@ -1,0 +1,17 @@
+{
+ "id": "0f1cb39baf5f",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "two absolute tolerances in length [m]; give one value per unit",
+  "line": 4,
+  "col": 45,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

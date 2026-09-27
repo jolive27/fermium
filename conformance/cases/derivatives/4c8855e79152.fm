@@ -1,0 +1,2 @@
+r(t) = 1 AU
+print r'           # r'(t) = 0   [no units]      expected [m/s, for t in s]

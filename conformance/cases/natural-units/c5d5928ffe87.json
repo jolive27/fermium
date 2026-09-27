@@ -1,0 +1,11 @@
+{
+ "id": "c5d5928ffe87",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6.2336598 km\n6233.6598 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

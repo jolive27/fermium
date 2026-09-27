@@ -1,0 +1,2 @@
+print 2 h
+print 6.0e24 kg * G / (6.4e6 m)^2

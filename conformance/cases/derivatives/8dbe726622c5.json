@@ -1,0 +1,11 @@
+{
+ "id": "8dbe726622c5",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = x/√(1 + x²)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

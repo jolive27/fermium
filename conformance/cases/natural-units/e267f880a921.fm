@@ -1,0 +1,3 @@
+units natural
+f(E [MeV]) = 2 E
+print f(1 fm)

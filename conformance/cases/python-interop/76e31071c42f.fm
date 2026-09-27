@@ -1,0 +1,4 @@
+use python numpy as np
+units natural(ħ = c = 1)
+E = 1 MeV
+print np.sin(E / (1 MeV))

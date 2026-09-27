@@ -1,0 +1,8 @@
+{
+ "id": "c4bc3351e5c6",
+ "section": "PDE linear solves: a tridiagonal LU instead of SuperLU (rounding level)",
+ "stdout": "0.0848059422069\n300.000000001 K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

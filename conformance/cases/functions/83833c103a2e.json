@@ -1,0 +1,17 @@
+{
+ "id": "83833c103a2e",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "cos needs a plain number, but got speed [m/s]",
+  "line": 1,
+  "col": 18,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers); this happened when calling x on line 2 (with t = length [m])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

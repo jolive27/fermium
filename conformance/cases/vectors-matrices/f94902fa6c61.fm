@@ -1,0 +1,7 @@
+
+k = 80 N/m
+kc = 20 N/m
+K = [[k + kc, -kc], [-kc, k + kc]]
+λ = eigenvalues(K)
+print λ
+print λ[2] in kN/m

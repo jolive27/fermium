@@ -1,0 +1,3 @@
+ts = [0 s, 1 s, 2 s, 3 s, 4 s]
+ys = 20 m/s ts - ½ 9.81 m/s^2 ts^2
+print ys

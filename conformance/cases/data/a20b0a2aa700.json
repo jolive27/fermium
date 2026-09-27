@@ -1,0 +1,17 @@
+{
+ "id": "a20b0a2aa700",
+ "area": "data",
+ "origin": "README.md#8",
+ "dir": ".",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "B isn't defined",
+  "line": 1,
+  "col": 14,
+  "hint": "define the function first, e.g.  B(x) = 2 x",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

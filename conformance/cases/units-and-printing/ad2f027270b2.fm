@@ -1,0 +1,3 @@
+I = 1.0 A
+dl = 1 m
+print μ₀ I/(4π) dl

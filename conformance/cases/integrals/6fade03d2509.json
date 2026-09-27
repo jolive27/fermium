@@ -1,0 +1,17 @@
+{
+ "id": "6fade03d2509",
+ "area": "integrals",
+ "origin": "gauntlet/optics_waves/FRICTION.md#3",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "couldn't compute this integral numerically: it may diverge (like 1/x at 0) or oscillate without decaying (like sin(x)/x up to ∞), or the integrand is NaN or ∞ somewhere -- the estimate was 4.13122×10⁻⁵ ± 1.90183×10⁻¹⁴ in SI units",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

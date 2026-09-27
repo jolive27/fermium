@@ -1,0 +1,17 @@
+{
+ "id": "8cac30c3c345",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "y might not have a value here: it is only set inside the if on line 2",
+  "line": 4,
+  "col": 7,
+  "hint": "give y a value before the if on line 2, e.g.  y = 0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

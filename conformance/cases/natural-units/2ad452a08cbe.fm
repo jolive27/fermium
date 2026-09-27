@@ -1,0 +1,4 @@
+L0 = 1 fm
+f(x) = x + L0
+units natural
+print f(1 MeV)

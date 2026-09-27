@@ -1,0 +1,11 @@
+{
+ "id": "82370562a3c8",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.4860649581\n0.158383\n841.2410658\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

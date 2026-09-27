@@ -1,0 +1,11 @@
+{
+ "id": "1e35e294efba",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "λ = 1 m:  v_p = 1.2497069 m/s\nλ = 1 m:  v_g = 0.62521948 m/s\nλ = 1 m:  v_g/v_p = 0.50029288\nλ = 1 mm: v_g/v_p = 1.4965983\nk_min = 367.08684 1/m   formula: 367.08684 1/m\nv_min = 23.118790 cm/s   formula: 23.118790 cm/s\nv_g/v_p at k_min = 1.0000000\nH = 2 m, λ = 10 m: v_g = 2.5682191 m/s\nH = 2 m, λ = 10 m: formula = 2.5682191 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

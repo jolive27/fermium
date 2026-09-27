@@ -1,0 +1,11 @@
+{
+ "id": "2080b66392ab",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "∇×B(x, y, z) = <0, 0, 2 T/m>\n<0, 0, 2> T/m\n0\n30\n<0, 0, 2>\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

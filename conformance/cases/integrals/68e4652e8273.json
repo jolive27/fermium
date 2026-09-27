@@ -1,0 +1,11 @@
+{
+ "id": "68e4652e8273",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "16 N/m\n<2, 5, 8> N/m <7, 8, 10> N/m\n<1, 4, 7> N/m\n<2, 5, 8> N/m\n<3, 6, 10> N/m\n1.682941970\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,7 @@
+x = 1.0 ± 0.5
+propagate montecarlo 200000 samples
+    y = exp(3 x)
+print value(y) to 8 digits
+print uncertainty(y) to 8 digits
+print value(exp(3 x)) to 8 digits
+print uncertainty(exp(3 x)) to 8 digits

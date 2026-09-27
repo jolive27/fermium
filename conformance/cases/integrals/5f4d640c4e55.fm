@@ -1,0 +1,5 @@
+k = 50 N/m
+F(x) = k x
+W = ∫ F(x) dx from 0 m to 0.2 m
+print W
+print ∫ exp(-x²) dx from -∞ to ∞

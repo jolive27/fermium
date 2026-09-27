@@ -1,0 +1,17 @@
+{
+ "id": "3d0839fd566d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 T' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 2,
+  "col": 9,
+  "hint": "write  (4/3) T  for 4/3 × your variable T, or  4/3 [T]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

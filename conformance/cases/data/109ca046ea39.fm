@@ -1,0 +1,40 @@
+# 10 — How big is a nucleus?  R = r₀ A^(1/3)
+#
+# Electron-scattering experiments show that nuclei are balls of roughly
+# constant density: adding nucleons makes the ball bigger, not denser.
+# If the volume grows like A, the radius grows like the cube root:
+#
+#     R = r₀ A^(1/3),     r₀ ≈ 1.2 fm   (1 fm = 10⁻¹⁵ m, a "fermi")
+#
+# From this we get the density of nuclear matter, which is the same for every
+# nucleus and is also (roughly) the density inside a neutron star.
+
+r0 = 1.20 fm
+R(A) = r0 A^(1/3)
+
+# A table of radii (calling R on a list applies it to every element)
+As = [1, 4, 12, 16, 56, 120, 208, 238]
+Rs = R(As)
+for i from 1 to len(As)
+    print "A =", As[i], "  R =", Rs[i] in fm
+
+print "the uranium nucleus is", R(238) / R(1), "times wider than a proton-sized one"
+
+# Nuclear density: mass of A nucleons divided by the volume of the ball
+ρ(A) = A m_u / ((4/3) π R(A)³)     # (4/3) needs brackets: 4/3 π R³ = 4/(3 π R³)
+print "density of Fe-56:", ρ(56) in kg/m³
+print "density of Pb-208:", ρ(208) in kg/m³, " (the same: A cancels)"
+print "nucleons per fm³:", 1 / ((4/3) π r0³) in 1/fm³
+print "a teaspoon (5 mL) of nuclear matter weighs", ρ(56) * 5 mL in tonne
+
+# Compare with measured rms charge radii. For a uniform ball the rms radius is
+# √(3/5) R, so r₀ is about √(5/3) r_rms / A^(1/3).
+print "O-16:  r0 from data =", √(5/3) * 2.699 fm / 16^(1/3) in fm
+print "Ca-40: r0 from data =", √(5/3) * 3.478 fm / 40^(1/3) in fm
+print "Pb-208: r0 from data =", √(5/3) * 5.501 fm / 208^(1/3) in fm
+
+# How big would the Earth be at nuclear density?
+R_earth_nuclear = ∛(3 M_earth / (4π ρ(56)))
+print "the Earth squeezed to nuclear density:", R_earth_nuclear
+
+plot R(A) in fm vs A from 1 to 250 to "gallery/nuclear_radius.png"

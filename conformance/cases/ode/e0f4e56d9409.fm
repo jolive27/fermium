@@ -1,0 +1,69 @@
+# Electromagnetism 22 — The field of a charged ring and a charged disk, off the axis
+#
+# A thin ring of radius a = 10.0 cm in the xy plane, centred on the origin,
+# carries a charge Q = 5.00 nC spread uniformly.
+#
+# (a) Find the electric field at P = (6.00 cm, 0, 4.00 cm), off the axis, by
+#     integrating Coulomb's law around the ring as a vector integral. Compare
+#     with the closed form in complete elliptic integrals K(m), E(m) (Jackson
+#     §3.3; the tests evaluate it with scipy.special), where k_e = 1/(4πε₀),
+#     S = √((a + ρ)² + z²), D = (a − ρ)² + z², m = 4aρ/S²:
+#         V   = k_e Q (2/π) K(m) / S
+#         E_ρ = k_e Q / (π ρ S) [K(m) − (a² − ρ² + z²)/D · E(m)]
+#         E_z = k_e Q (2/π) z E(m) / (D S)
+# (b) Find the potential V(x, y, z) as an integral over the ring and get the
+#     field again as −∇V (differentiating under the integral sign).
+# (c) On the axis, check E_z against kQz/(a² + z²)^(3/2), and find where on the
+#     axis the field is strongest (z = a/√2) with an algebraic solve.
+# (d) A disk of radius a with the same total charge: find the field at P by
+#     adding up rings (a double integral), and on the axis compare with
+#     E = σ/(2ε₀) (1 − z/√(z² + a²)).
+# (Griffiths Ex. 2.5 and Prob. 2.6; Jackson §3.3 and Prob. 3.3)
+
+a = 10.0 cm
+Q = 5.00 nC
+λ = Q / (2π a)
+k = 1 / (4π ε₀)
+P = <6.00, 0, 4.00> cm
+
+ring(φ) = a * <cos(φ), sin(φ), 0>
+
+# (a) Coulomb's law, dE = k dq (P − r') / |P − r'|³ with dq = λ a dφ
+E_ring = ∫ k λ a (P - ring(φ)) / |P - ring(φ)|^3 dφ from 0 to 2π
+print "(a) E_x =", E_ring.x in V/m to 8 digits
+print "    E_y =", E_ring.y in V/m to 3 digits
+print "    E_z =", E_ring.z in V/m to 8 digits
+
+# (b) the potential, and E = −∇V
+V(x, y, z) = ∫ k λ a / √((x - a cos(φ))^2 + (y - a sin(φ))^2 + z^2) dφ from 0 to 2π
+E_grad = -∇V(6.00 cm, 0 cm, 4.00 cm)
+print "(b) V(P) =", V(6.00 cm, 0 cm, 4.00 cm) in V to 8 digits
+print "    -∇V: E_x =", E_grad.x in V/m to 8 digits
+print "    -∇V: E_z =", E_grad.z in V/m to 8 digits
+
+# (c) on the axis
+Ez_axis(z) = k Q z / (a² + z²)^(3/2)
+z1 = 7.00 cm
+print "(c) E_z on axis (integral) =", -(∂/∂z V)(0 cm, 0 cm, z1) in V/m to 8 digits
+print "    E_z on axis (formula)  =", Ez_axis(z1) in V/m to 8 digits
+dEz = Ez_axis'
+solve dEz(z_max) = 0 for z_max from 1 cm to 30 cm
+print "    strongest at z =", z_max in cm to 8 digits, "  a/√2 =", a / √2 in cm to 8 digits
+
+# (d) the disk: rings of radius s, charge σ 2π s ds
+σ = Q / (π a²)
+# The vector double integral stops with "this integral doesn't converge", because
+# its y component is 0 by symmetry and the inner integrals leave only rounding
+# noise (FRICTION E10), so the two nonzero components are done one at a time.
+r3(s, φ) = |P - <s cos(φ), s sin(φ), 0 m>|^3
+Ex_disk = ∫ (∫ k σ s (P.x - s cos(φ)) / r3(s, φ) dφ from 0 to 2π) ds from 0 m to a
+Ez_disk_P = ∫ (∫ k σ s P.z / r3(s, φ) dφ from 0 to 2π) ds from 0 m to a
+print "(d) disk E_x =", Ex_disk in V/m to 8 digits
+print "    disk E_z =", Ez_disk_P in V/m to 8 digits
+# Written as one function, Ez_disk(z) = ∫ (∫ … z … dφ …) ds …, the inner integral
+# reads garbage instead of z and the result is 0 or 10⁻³⁰⁸ (FRICTION E9), so the
+# ring's contribution is a separate function of (s, z).
+Ez_ring(s, z) = ∫ k σ s z / (s² + z²)^(3/2) dφ from 0 to 2π
+Ez_disk(z) = ∫ Ez_ring(s, z) ds from 0 m to a
+print "    disk on axis (integral) =", Ez_disk(z1) in V/m to 8 digits
+print "    disk on axis (formula)  =", σ / (2ε₀) * (1 - z1 / √(z1² + a²)) in V/m to 8 digits

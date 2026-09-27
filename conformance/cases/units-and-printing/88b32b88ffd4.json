@@ -1,0 +1,11 @@
+{
+ "id": "88b32b88ffd4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "477 rev/min\n",
+ "stderr": "warning: line 2: Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 Hz is 9.5493 rev/min, not 60 rev/min; 1 Hz = 1/(2π) rev/s\n    print f in rev/min\n          ^\n  hint: if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is 3000 rpm), or multiply it by 2π:  2π f in rev/min\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

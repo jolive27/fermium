@@ -1,0 +1,17 @@
+{
+ "id": "ed5e1b661c7a",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "log of a negative number isn't a real number",
+  "line": 1,
+  "col": 7,
+  "hint": "the logarithm needs a positive argument",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

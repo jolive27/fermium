@@ -1,0 +1,6 @@
+X = fft([0.3, -1.2, 2.5, 0.7, -0.4, 1.9, -2.2, 0.05])
+print re(X) to 15 digits
+print im(X) to 15 digits
+print re(ifft(X)) to 15 digits
+print im(ifft(X)) to 15 digits
+print len(X)

@@ -1,0 +1,8 @@
+GM = G M_sun
+solve
+    x'' = -GM x / (x^2 + y^2)^1.5
+    y'' = -GM y / (x^2 + y^2)^1.5
+    with x(0) = 1 AU, y(0) = 0 AU, x'(0) = 0 km/s, y'(0) = 29.8 km/s
+    for t from 0 yr to 1 yr
+print "after one year:", x(1 yr) in AU, y(1 yr) in AU
+plot y in AU vs x in AU to "earth_orbit.png"

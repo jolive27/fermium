@@ -1,0 +1,6 @@
+L = 1 m
+D = 1 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 1 K * sin(20 π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 100 s
+print u(0.525 m, 0.1 s)

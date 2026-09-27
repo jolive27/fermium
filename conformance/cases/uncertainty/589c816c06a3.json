@@ -1,0 +1,17 @@
+{
+ "id": "589c816c06a3",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a starting value of solve can't be uncertain (±) yet; put the solve inside a  propagate montecarlo  block, or use value(x)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

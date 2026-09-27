@@ -1,0 +1,17 @@
+{
+ "id": "628a5ef498f6",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the analysis can't be called T: that's one of its quantities",
+  "line": 1,
+  "col": 1,
+  "hint": "pick another name, e.g.  analyze T_law: ...",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

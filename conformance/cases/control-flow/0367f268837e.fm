@@ -1,0 +1,2 @@
+v = 3e-15 m/s
+if v ≈ 0 m/s within 1e-12 m/s then print "at rest" else print "moving"

@@ -1,0 +1,11 @@
+{
+ "id": "ccf49cc58559",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "F(s) = asinh(s/a)   [no units, for s in m]\n-1.44363548\n0\n1.44363548\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

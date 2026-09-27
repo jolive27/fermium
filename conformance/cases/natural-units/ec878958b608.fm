@@ -1,0 +1,4 @@
+units natural(ħ = c = 1)
+E = 1 MeV
+r = 1 fm
+print E + r

@@ -1,0 +1,11 @@
+{
+ "id": "1e42b3ff96b3",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "at 0 s velocity is 0 m/s\nat 1 s velocity is 1 m/s\nat 2 s velocity is 4 m/s\nat 3 s velocity is 9 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

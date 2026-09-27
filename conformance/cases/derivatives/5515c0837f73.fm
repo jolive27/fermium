@@ -1,0 +1,2 @@
+f(x) = exp(-x^2)
+print f'

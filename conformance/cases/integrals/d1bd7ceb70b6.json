@@ -1,0 +1,11 @@
+{
+ "id": "d1bd7ceb70b6",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "∫ x dx = x²/2\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

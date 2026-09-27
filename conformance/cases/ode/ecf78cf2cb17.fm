@@ -1,0 +1,77 @@
+# Mechanics 21 — The tennis-racket theorem: a free rigid body spun about its intermediate axis
+#
+# (Goldstein, Classical Mechanics, §5.6–5.7; Landau & Lifshitz, Mechanics, §37 (problems);
+#  Taylor §10.8–10.9.)
+# A phone, modelled as a uniform box m = 0.200 kg, 15.0 cm × 7.50 cm × 0.800 cm, is
+# tossed spinning. In body axes along the 15, 7.5 and 0.8 cm edges the principal
+# moments are I₁ = m(b² + c²)/12 < I₂ = m(a² + c²)/12 < I₃ = m(a² + b²)/12, and with
+# no torque Euler's equations read
+#     I₁ ω₁' = (I₂ − I₃) ω₂ ω₃,   I₂ ω₂' = (I₃ − I₁) ω₃ ω₁,   I₃ ω₃' = (I₁ − I₂) ω₁ ω₂.
+#
+#   (a) Linear stability: for a spin ω₀ about axis i, a small wobble obeys
+#       δ'' = −(I_i − I_j)(I_i − I_k)/(I_j I_k) ω₀² δ. Give the wobble frequencies
+#       about axes 1 and 3 and the growth rate about axis 2, for ω₀ = 10.0 rad/s.
+#   (b) Spin about axis 2 with a tiny wobble: ω(0) = <0, 10.0, 0.100> rad/s.
+#       Integrate Euler's equations (as one vector ODE) for 20 s. Check that the
+#       kinetic energy E and |L| stay constant.
+#   (c) The body flips over: ω₂ changes sign again and again. Landau's exact solution
+#       (for L² > 2EI₂) has ω₂ ∝ sn(τ, k), τ = t √((I₃ − I₂)(L² − 2EI₁)/(I₁I₂I₃)),
+#       k² = (I₂ − I₁)(2EI₃ − L²) / ((I₃ − I₂)(L² − 2EI₁)). Starting at ω₁ = 0 means
+#       τ(0) = K(k), so ω₂ first vanishes after a time K/rate and then every 2K/rate,
+#       with K(k) = ∫₀^{π/2} dθ / √(1 − k² sin²θ). Compare with the ODE.
+#   (d) The same wobble about axes 1 and 3 stays small: the largest excursion of the
+#       two small components over 20 s.
+
+m = 0.200 kg
+a = 15.0 cm
+b = 7.50 cm
+c = 0.800 cm
+I1 = m (b² + c²) / 12
+I2 = m (a² + c²) / 12
+I3 = m (a² + b²) / 12
+ω0 = 10.0 rad/s
+print "principal moments:", I1 to 6 digits, I2 to 6 digits, I3 to 6 digits
+
+# (a) linear stability
+print "wobble frequency about axis 1:", ω0 √((I2 - I1) (I3 - I1) / (I2 I3)) to 6 digits
+print "wobble frequency about axis 3:", ω0 √((I3 - I1) (I3 - I2) / (I1 I2)) to 6 digits
+print "growth rate about axis 2:", ω0 √((I2 - I1) (I3 - I2) / (I1 I3)) to 6 digits
+
+# (b) Euler's equations as a vector ODE
+euler(w) = <(I2 - I3) / I1 * w.y w.z, (I3 - I1) / I2 * w.z w.x, (I1 - I2) / I3 * w.x w.y>
+solve ω' = euler(ω)
+  with ω(0) = <0, 10.0, 0.100> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+energy(w) = ½ (I1 w.x² + I2 w.y² + I3 w.z²)
+angmom(w) = √((I1 w.x)² + (I2 w.y)² + (I3 w.z)²)
+E = energy(ω(0 s))
+L = angmom(ω(0 s))
+print "kinetic energy:", E to 8 digits, " after 20 s:", energy(ω(20 s)) to 8 digits
+print "|L|:", L to 8 digits, " after 20 s:", angmom(ω(20 s)) to 8 digits
+print "ω at 5 s:", ω(5 s)
+
+# (c) the flips against Landau's elliptic-function solution
+rate = √((I3 - I2) (L² - 2 E I1) / (I1 I2 I3))
+k2 = (I2 - I1) (2 E I3 - L²) / ((I3 - I2) (L² - 2 E I1))
+K_ell = ∫ 1 / √(1 - k2 sin(θ)²) dθ from 0 to π/2
+print "k²:", k2 to 10 digits, " K(k):", K_ell to 8 digits
+w2(t) = ω(t).y
+solve w2(t_flip1) = 0 rad/s for t_flip1 from 0 s to 20 s
+solve w2(t_flip2) = 0 rad/s for t_flip2 from t_flip1 + 0.01 s to 20 s
+print "first flip, ODE vs Landau:", t_flip1 to 7 digits, (K_ell / rate) to 7 digits
+print "time between flips, ODE vs Landau:", (t_flip2 - t_flip1) to 7 digits, (2 K_ell / rate) to 7 digits
+
+# (d) the stable axes
+solve p' = euler(p)
+  with p(0) = <10.0, 0.100, 0.100> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+solve q' = euler(q)
+  with q(0) = <0.100, 0.100, 10.0> rad/s
+  for t from 0 s to 20 s tolerance 1e-12
+big1 = 0 rad/s
+big3 = 0 rad/s
+for tt from 0 s to 20 s step 0.01 s
+    big1 = max(big1, abs(p(tt).y), abs(p(tt).z))
+    big3 = max(big3, abs(q(tt).x), abs(q(tt).y))
+print "largest wobble, spin about axis 1:", big1 to 4 digits
+print "largest wobble, spin about axis 3:", big3 to 4 digits

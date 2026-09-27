@@ -1,0 +1,4 @@
+L = 1.20 ± 0.01 m
+T = 2.21 ± 0.02 s
+print L, T
+print L in cm

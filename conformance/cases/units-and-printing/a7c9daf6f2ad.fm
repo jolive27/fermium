@@ -1,0 +1,3 @@
+xs = [1 m]
+xs = []
+print len(xs)

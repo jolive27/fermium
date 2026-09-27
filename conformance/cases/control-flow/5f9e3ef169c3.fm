@@ -1,0 +1,5 @@
+xs = []
+ys = xs
+for i from 1 to 100
+    push(xs, i)
+print len(ys), sum(ys)

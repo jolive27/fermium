@@ -1,0 +1,17 @@
+v = <1, 2, 3> m
+s = 0 m
+for i from 1 to 3
+    s = s + v[i]
+print s
+M = [[1, 2], [3, 4]]
+t = 0
+for i from 1 to 2
+    for j from 1 to 2
+        t = t + M[i, j] * i
+print t
+for i from 1 to 2
+    print M[i]
+k = 2
+print v[k], v[end], v[k + 1]
+f(n) = v[n]
+print f(3)

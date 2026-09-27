@@ -1,0 +1,17 @@
+{
+ "id": "b19e956d2284",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "propagate montecarlo gives uncertainties to plain numbers, but b is a list; give each number its own formula, like b1 = …, b2 = …",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

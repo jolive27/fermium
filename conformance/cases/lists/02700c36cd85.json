@@ -1,0 +1,11 @@
+{
+ "id": "02700c36cd85",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0 °C 5 °C -5 °C\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

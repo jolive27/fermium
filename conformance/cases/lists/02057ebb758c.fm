@@ -1,0 +1,5 @@
+ts = [0 s, 0.5 s, 1 s, 1.5 s, 2 s]
+print 20 m/s * ts - ½ * 9.81 m/s^2 * ts^2     # [0, 9, 20, 20, 20] m
+masses = [1.0 kg, 2.0 kg, 0.5 kg]
+speeds = [3.0 m/s, 4.0 m/s, 10 m/s]
+print ½ masses speeds^2                        # [4, 20, 20] J   (true: 4.5, 16, 25)

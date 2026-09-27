@@ -1,0 +1,4 @@
+τ = 2 s
+solve N' = -N / τ with N(0) = 1000 for t from 0 s to 10 s
+print N(10 s) to 15 digits
+print N(3.3 s) to 15 digits

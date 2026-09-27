@@ -1,0 +1,7 @@
+T = [10 °C, 20 °C]
+print std(T)            # actual: -266.079 °C   expected: 7.07107 K  (`std(T) in K` is right)
+T = [0 °C, 100 °C]
+print diff(T)           # actual: [-173.15] °C  expected: [100] K
+print cumsum(T)         # actual: [0, 373.15] °C  expected: an error (sum of absolute temperatures)
+T = linspace(0 °C, 100 °C, 3)
+print sum(T)            # actual: 696.3 °C      expected: an error, or 969.45 K

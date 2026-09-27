@@ -1,0 +1,1 @@
+solve ∂²u/∂t² = (1 m/s)^2 * ∂²u/∂x² with u(x, 0 s) = 0 m, u(0 m, t) = 0 m, u(1 m, t) = 0 m for x from 0 m to 1 m, t from 0 s to 1 s

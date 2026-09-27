@@ -1,0 +1,3 @@
+x0 = 100 fm
+σ = 1 fm
+print ∫ exp(-(x - x0)^2/(2 σ^2)) dx from -∞ to ∞ in fm to 6 digits

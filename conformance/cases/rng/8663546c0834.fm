@@ -1,0 +1,5 @@
+seed(11)
+N = 100000
+ys = sample(exp(-rand()^2), N)
+print mean(ys) to 12 digits
+print std(ys) / sqrt(N) to 12 digits

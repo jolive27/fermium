@@ -1,0 +1,17 @@
+{
+ "id": "17dd076cb393",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 V V' is ambiguous: right after a number, V V is one unit (V is volts there), but V is also your variable V",
+  "line": 2,
+  "col": 9,
+  "hint": "write  (3 V) V  for 3 V × your variable V, or  3 [V V]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

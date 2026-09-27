@@ -1,0 +1,2 @@
+print ∫ exp(-(x-100)^2) dx from -inf to inf to 6 digits
+print ∫ exp(-(x-1000)^2) dx from -inf to inf to 6 digits

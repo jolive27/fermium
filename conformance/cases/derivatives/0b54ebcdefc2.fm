@@ -1,0 +1,3 @@
+f(x, y) = x² y
+g = ∂/∂x f
+print g(1, 2)

@@ -1,0 +1,17 @@
+{
+ "id": "fa57868f4981",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the tolerance after 'within' must be a plain number (no units), like the values it compares, but it is length [m]",
+  "line": 2,
+  "col": 22,
+  "hint": "for a relative tolerance write a percentage, like within 0.1%",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

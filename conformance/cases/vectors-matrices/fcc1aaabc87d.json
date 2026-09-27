@@ -1,0 +1,11 @@
+{
+ "id": "fcc1aaabc87d",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[[1000, 2000], [3000, 4000]] N/m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

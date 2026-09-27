@@ -1,0 +1,17 @@
+{
+ "id": "390d8191622d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unexpected character '‽' (Interrobang)",
+  "line": 2,
+  "col": 7,
+  "hint": "remove it, or check the cheat sheet for the symbols Fermium understands",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

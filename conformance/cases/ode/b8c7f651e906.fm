@@ -1,0 +1,8 @@
+a = 2 s⁻¹
+b = 1 [1/s]
+solve
+    x' = -a x
+    y' = a x - b y
+    with x(0) = 1 kg, y(0) = 0 kg
+    for t from 0 s to 1 s step 1 ms
+print x(1 s) to 6 digits

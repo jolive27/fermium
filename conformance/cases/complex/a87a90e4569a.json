@@ -1,0 +1,17 @@
+{
+ "id": "a87a90e4569a",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f calls itself and returns a complex number; a function that calls itself must return a single real number",
+  "line": 1,
+  "col": 1,
+  "hint": "write the recursion as a loop",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "0dd9c6671b2f",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) half ionised at T = 9555.9493 K\n    x(8300 K) = 0.054609724   x(11300 K) = 0.95111268\n    dx/dT at T_half = 0.00049747850 1/K   width 1/(dx/dT) = 2010.1371 K\n(b) x = 1/2 at z = 1369.2329   T = 3734.5696 K\n    x(z = 1100) = 0.0047393722   x(z = 1500) = 0.94809712\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

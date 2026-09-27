@@ -1,0 +1,11 @@
+{
+ "id": "32be089a9afa",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-adversarial.md#14",
+ "dir": "dev-notes/notes",
+ "stdout": "2.123456 m\n2 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

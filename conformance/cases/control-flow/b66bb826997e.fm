@@ -1,0 +1,5 @@
+x = 3 m
+if x ≥ 2 m and x ≠ 5 m
+    print "far"
+else
+    print "near"

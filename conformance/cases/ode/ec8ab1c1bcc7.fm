@@ -1,0 +1,10 @@
+GM = G M_sun
+r0 = 1 AU
+v0 = √(GM / r0)
+T = 2π r0 / v0
+solve r'' = -GM r / |r|³
+  with r(0) = <1, 0> AU, r'(0) = <0 m/s, v0>
+  for t from 0 s to T
+print r.x(T) / (1 AU) to 12 digits
+print r.y(T) / (1 AU) to 12 digits
+print |r'(T/2)| / v0 to 12 digits

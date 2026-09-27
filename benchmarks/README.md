@@ -39,8 +39,12 @@ The runner exits non-zero if any language's printed results disagree with Julia'
   ```
   (`benchmarks/julia/Project.toml` + `Manifest.toml` pin QuadGK and Unitful.)
 * **Python** 3 with `numpy` and `scipy`.
-* **Fermium** — `fermium` on `PATH` (`python3 -m pip install -e ".[full]"`), or set `FERMIUM_CMD`
-  (e.g. `FERMIUM_CMD="python -m fermium"`). Programs live in
+* **Fermium** — the `fermium` binary (Fermium 2) on `PATH` (the release download, or `make install`), else
+  a build in this checkout (`rust/target/release/fermium`, then `rust/target/fast/fermium`), or set
+  `FERMIUM_CMD` (e.g. `FERMIUM_CMD=fermium-legacy` or `FERMIUM_CMD="python3 -m fermium"` for the
+  deprecated Fermium 1.5, which measured the current RESULTS.md). `fermium-base` sets
+  `FERMIUM_DISABLE=all`, a Fermium 1.5 switch: with Fermium 2 it measures the same thing as `fermium`.
+  Programs live in
   `benchmarks/fermium/<name>.fm` and run as `fermium run benchmarks/fermium/<name>.fm`
   from the repository root. A missing file or failing run is reported as
   skipped/failed, not fatal.

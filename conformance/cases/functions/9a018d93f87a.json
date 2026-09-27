@@ -1,0 +1,17 @@
+{
+ "id": "9a018d93f87a",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add time [s] to length [m]",
+  "line": 1,
+  "col": 8,
+  "hint": "both sides of + and - must have the same units; this happened when calling f on line 2 (with x = time [s])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

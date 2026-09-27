@@ -1,0 +1,6 @@
+λA = 0.3 / (1 s)
+λB = 0.1 / (1 s)
+solve A' = -λA A, B' = λA A - λB B
+  with A(0) = 1000, B(0) = 0
+  for t from 0 s to 20 s
+print B(20 s) to 15 digits

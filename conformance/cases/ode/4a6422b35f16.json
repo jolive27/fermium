@@ -1,0 +1,11 @@
+{
+ "id": "4a6422b35f16",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "beta = 0.00650200\n(a) n(0.5 s) = 1.1312071   prompt jump beta/(beta - rho) = 1.1111111\n    n(100 s) = 3.5305136   n(300 s) = 26.867986\n(b) omega_1 = 0.01013660891 1/s   period = 98.652321 s   late-time growth rate = 0.010137434 1/s\n(c) sum beta_i/lambda_i = 0.084783111 s   period estimate = 130.39543 s\n(d) rho for a 60 s period = 0.00094062573  = 14.4667 cents\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

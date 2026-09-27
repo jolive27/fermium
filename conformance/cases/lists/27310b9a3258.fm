@@ -1,0 +1,5 @@
+xs = [1, 2, 3]
+ys = xs
+push(xs, 4)
+ys[1] = 9
+print xs, len(ys)

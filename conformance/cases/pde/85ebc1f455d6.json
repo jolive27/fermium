@@ -1,0 +1,17 @@
+{
+ "id": "85ebc1f455d6",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "boundary conditions are at the ends of the range (x = 0 m or L)",
+  "line": 4,
+  "col": 46,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

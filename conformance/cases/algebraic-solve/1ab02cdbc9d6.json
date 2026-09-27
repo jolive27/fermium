@@ -1,0 +1,17 @@
+{
+ "id": "1ab02cdbc9d6",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the search range goes from time [s] to a plain number (no units); both ends need the same units",
+  "line": 1,
+  "col": 24,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

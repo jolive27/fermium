@@ -1,0 +1,17 @@
+{
+ "id": "54afb7b1ce55",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a list index must be a whole number (1, 2, 3, ...), not ∞",
+  "line": 2,
+  "col": 10,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

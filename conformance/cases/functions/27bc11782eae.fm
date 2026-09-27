@@ -1,0 +1,4 @@
+k = 50 N/m
+F(x) = -k x
+print F(0.1 m)
+print F(-2 cm)

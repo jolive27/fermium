@@ -1,0 +1,11 @@
+{
+ "id": "4fb9eee33ef7",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "25 °C 298.15 K 25.6926 meV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

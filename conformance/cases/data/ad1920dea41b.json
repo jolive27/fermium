@@ -1,0 +1,11 @@
+{
+ "id": "ad1920dea41b",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "decay constant of C-14: 0.000121 1/yr\nleft after one half-life: 0.50\nnumerical N(10000 yr): 3.0×10¹¹    exact: 3.0×10¹¹\nage of the wood: 5550 yr\nactivity of 1 g of Ra-226: 3.65760×10¹⁰ Bq = 0.988540 Ci\n0 half-lives: 1.0\n1 half-lives: 0.50\n2 half-lives: 0.25\n3 half-lives: 0.12\n4 half-lives: 0.062\n5 half-lives: 0.031\nplot saved to <ROOT>/examples/gallery/radioactive_decay.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

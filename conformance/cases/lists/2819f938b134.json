@@ -1,0 +1,17 @@
+{
+ "id": "2819f938b134",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "xs is a list of time [s]; can't put length [m] in it",
+  "line": 2,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

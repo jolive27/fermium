@@ -1,0 +1,3 @@
+units natural
+lam = 1/m_p
+print lam in fm to 9 digits

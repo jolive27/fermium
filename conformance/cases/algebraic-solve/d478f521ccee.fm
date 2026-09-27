@@ -1,0 +1,10 @@
+X = 2.00 m
+Y = 1.00 m
+g = 9.81 m/s²
+solve (θf - sin(θf)) / (1 - cos(θf)) = X / Y for θf from 0.1 to 2π - 0.1
+a = Y / (1 - cos(θf))
+xc(θ) = a (θ - sin(θ))
+yc(θ) = a (1 - cos(θ))
+T(ε) = ∫ √(xc'(θ)² + (yc'(θ) + ε a 2 sin(π θ / θf) cos(π θ / θf) π / θf)²) / √(2*g (yc(θ) + ε a sin(π θ / θf)²)) dθ from 0 to θf
+dT = d/dε T
+print dT(0)

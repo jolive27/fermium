@@ -1,0 +1,11 @@
+{
+ "id": "56799e76f909",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "docs",
+ "stdout": "Fe-56: B/A = 8.8461 MeV\nU-238: B/A = 7.6249 MeV\npeak at A = 58 with B/A = 8.8648 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

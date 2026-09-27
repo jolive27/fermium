@@ -1,0 +1,4 @@
+M = [[1, 2], [3, 4]] s
+print transpose(M)
+print Mᵀ
+print (M Mᵀ)[1, 2]

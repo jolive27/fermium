@@ -1,0 +1,4 @@
+for i from 1 to 2
+    print i
+for i from 1 to 2
+    print i

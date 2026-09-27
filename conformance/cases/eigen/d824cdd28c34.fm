@@ -1,0 +1,7 @@
+m = m_e
+V(x) = 2 eV * ((x / 1 nm)^2 - 1)^2 * 8
+solve -ħ²/(2*m) * ψ'' + V(x) ψ = E ψ
+    with ψ(-3 nm) = 0, ψ(3.5 nm) = 0
+    for x from -3 nm to 3.5 nm
+    lowest 2
+print E[2] - E[1] in eV

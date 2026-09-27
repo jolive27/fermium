@@ -1,0 +1,5 @@
+v = 0.01 * c
+lam = h / (m_e * v)
+print lam in nm
+lam2 = h / m_e v
+print lam2 in nm

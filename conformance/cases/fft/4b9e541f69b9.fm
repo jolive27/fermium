@@ -1,0 +1,4 @@
+X = fft([1 V, 2 V])
+print X in mV
+Y = fft([1.5, 2, 3])
+print Y to 4 digits

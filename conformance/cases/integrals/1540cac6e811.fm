@@ -1,0 +1,6 @@
+T = 5778 K
+B(lam) = 2 h c^2 / lam^5 / (exp(h c / (lam k_B T)) - 1)
+flux = pi * integral B(lam) dlam from 10 nm to 100 um
+print "integral of Planck:", flux
+print "Stefan-Boltzmann: ", sigma T^4
+print "power of the Sun:", flux * 4 pi R_sun^2

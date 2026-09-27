@@ -1,0 +1,11 @@
+{
+ "id": "5e93f6a90ca0",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "fit T = 2π √(L/g)   (7 data points from data/pendulum.csv)\n  g = 9.856 m/s²   (standard error 0.038 m/s²)\n  rms residual = 0.00850 s\ng from the fit: 9.856 ± 0.038 m/s²\ng − g_n = 0.049 ± 0.038 m/s² which is 1.3 standard deviations\nplot saved to <ROOT>/bootcamp/pendulum_errorbars.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

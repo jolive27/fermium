@@ -1,0 +1,11 @@
+q = 1 nC
+φ(x, y, z) = q / (4π ε₀ √(x² + y² + z²))
+E = -∇φ(0 m, 3 m, 4 m)
+print E
+print ∇φ
+
+B(x, y, z) = <-y, x, 0> T/m
+print ∇×B(1 m, 2 m, 3 m)
+print ∇·B(1 m, 2 m, 3 m)
+f(x, y) = x² y + sin(x)
+print ∇²f

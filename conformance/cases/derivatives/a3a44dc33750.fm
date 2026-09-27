@@ -1,0 +1,8 @@
+eps = 1.65e-21 J
+sig = 0.34 nm
+U(r) = 4 eps ((sig / r)^12 - (sig / r)^6)
+F(r) = -U'(r)
+for r in [0.35 nm, 0.38 nm, 0.45 nm]
+    print r, F(r)
+r0 = 2^(1/6) sig
+print "zero force at", r0 in nm, ": F =", F(r0)

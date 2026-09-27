@@ -1,0 +1,4 @@
+m = 2 kg
+v = 3 m/s
+E = ½ m v²
+print E                          # 9 J

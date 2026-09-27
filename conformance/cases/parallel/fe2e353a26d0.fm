@@ -1,0 +1,5 @@
+xs = zeros(10)
+out = zeros(12)
+parallel for i from 1 to 12
+    out[i] = xs[i] + 1
+print 1

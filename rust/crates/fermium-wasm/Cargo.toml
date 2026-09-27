@@ -1,0 +1,19 @@
+[package]
+name = "fermium-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Fermium for the browser playground: the tree-walking back end as a WebAssembly module with a tiny C ABI"
+
+# cdylib: web/fermium.wasm (cargo build --target wasm32-unknown-unknown --release -p fermium-wasm);
+# rlib: the native tests of `run` (cargo test -p fermium-wasm)
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }
+fermium-check = { path = "../fermium-check" }
+# no LLVM in the browser: the tree-walker only
+fermium-codegen = { path = "../fermium-codegen", default-features = false }
+fermium-runtime = { path = "../fermium-runtime" }
+fermium-ir = { path = "../fermium-ir" }

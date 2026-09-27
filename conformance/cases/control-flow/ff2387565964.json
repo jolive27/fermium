@@ -1,0 +1,11 @@
+{
+ "id": "ff2387565964",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "planet 1 is at 0.387 AU\nplanet 2 is at 0.723 AU\nplanet 3 is at 1.00 AU\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

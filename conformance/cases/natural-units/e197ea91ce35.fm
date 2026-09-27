@@ -1,0 +1,4 @@
+units natural(ħ = c = G = 1)
+print m_p to 6 digits
+print 1 in kg to 7 digits
+print m_p in kg to 12 digits

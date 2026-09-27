@@ -1,0 +1,11 @@
+{
+ "id": "c4bc3351e5c6",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.0848059422066\n300.000000001 K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

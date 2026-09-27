@@ -1,0 +1,17 @@
+{
+ "id": "0b19d02a65c8",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a vector times a matrix isn't defined here; write the matrix first (M v), or use transpose(M) v for the row-vector product",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+f = 50 Hz
+print f in rev/min

@@ -1,0 +1,11 @@
+{
+ "id": "e1d104b49db2",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "(a) MgF2 thickness = 99.637681 nm\n    R(550 nm) = 0.01260079021   formula 0.01260079021\n    bare glass R = 0.04257999496\n(b) λ = 450 nm  R = 0.01620430160\n(b) λ = 700 nm  R = 0.01596196873\n(c) R(1064 nm) = 0.9987043288   formula 0.9987043288\n    R(900 nm) = 0.2937045896\n(d) band edges: 925.13816 nm and 1251.9098 nm\n    λ0/λ at the edges = 0.84990151 1.1500985   formula 0.84990151 1.1500985\n    R at the band centre and just outside: 0.998704 0.819741\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

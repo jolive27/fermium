@@ -1,0 +1,2 @@
+solve sin(x) = 0 for x from 3 to 4
+print x to 17 digits

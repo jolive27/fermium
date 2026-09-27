@@ -1,0 +1,11 @@
+{
+ "id": "7fb1673831f2",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "19.6 m 2.00\n-12 N\n",
+ "stderr": "warning: line 2: h (Planck's constant) is now your variable: from here on, h means your value\n        h = (b - a) / n\n        ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

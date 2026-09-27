@@ -1,0 +1,11 @@
+{
+ "id": "c8844ad7f941",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-tests.md#9",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    \"﻿x = 3\\nprint x\"     # actual: unexpected character '﻿' (Zero Width No-Break Space)\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

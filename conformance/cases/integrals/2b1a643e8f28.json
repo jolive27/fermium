@@ -1,0 +1,17 @@
+{
+ "id": "2b1a643e8f28",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add energy [J] to force [N]",
+  "line": 4,
+  "col": 7,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

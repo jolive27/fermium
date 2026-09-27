@@ -1,0 +1,17 @@
+{
+ "id": "50010cc0bbc1",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 1: this equation looks stiff: rk45 has taken 100014 steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n",
+ "error": {
+  "message": "the ODE solver needed too many steps (20 million: it got from t = 2500 s only to t = 2499 s); if the equation is stiff (time scales far apart, like a 164 μs half-life in a chain followed for hours), add  using radau  after the range; otherwise the solution may blow up",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

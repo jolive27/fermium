@@ -1,0 +1,11 @@
+{
+ "id": "d23a091d5106",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.250\n",
+ "stderr": "warning: line 1: the ' / ' after the upper limit divides the whole integral, not the limit\n    print ∫ x dx from 0 to 1 / 2\n                             ^\n  hint: to divide the limit, write it without spaces (to L/2) or in parentheses (to (L / 2))\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

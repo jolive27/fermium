@@ -1,0 +1,17 @@
+{
+ "id": "8e63087a5c31",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "y is the solution of an ODE; it can't be passed to a function yet",
+  "line": 3,
+  "col": 10,
+  "hint": "pass a value, like y(1 s), or values(y) for all computed values",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

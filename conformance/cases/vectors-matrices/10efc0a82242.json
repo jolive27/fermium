@@ -1,0 +1,17 @@
+{
+ "id": "10efc0a82242",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't show a vector with different units per component in cm",
+  "line": 1,
+  "col": 7,
+  "hint": "convert one component at a time, like to(s.x, cm)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

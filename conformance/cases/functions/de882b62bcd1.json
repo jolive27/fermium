@@ -1,0 +1,17 @@
+{
+ "id": "de882b62bcd1",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'0.1 m' is ambiguous: right after a number, m is a unit (metres), but m is also the m from 'where'",
+  "line": 1,
+  "col": 9,
+  "hint": "write  0.1*m  for 0.1 × the m from 'where', or  0.1 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+if true
+    analyze T [s] depends on L [m], g [m/s²]

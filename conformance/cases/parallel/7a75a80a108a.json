@@ -1,0 +1,11 @@
+{
+ "id": "7a75a80a108a",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "22100 100\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

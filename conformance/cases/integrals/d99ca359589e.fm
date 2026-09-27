@@ -1,0 +1,1 @@
+print ∫ x^2 sin(x) dx from 0 to π to 17 digits

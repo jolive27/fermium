@@ -1,0 +1,17 @@
+{
+ "id": "5e2299e27fdd",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "np.sqrt is a Python function, which takes plain numbers, but argument 1 is area [m²]",
+  "line": 2,
+  "col": 15,
+  "hint": "divide by a unit, like  … / (1 m²),  or declare the unit in the use line:  sqrt(x1 [m²])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "58646e845f2c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 Å 2 μm 5.97×10³⁰ kg 20 °C ∞ -∞\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

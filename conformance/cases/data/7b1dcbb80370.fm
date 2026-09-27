@@ -1,0 +1,2 @@
+T_of_L(L) = 2 pi sqrt(L / 9.81 m/s^2)
+plot T_of_L(L) vs L from 0 m to 2 m to "pendulum_theory.png"

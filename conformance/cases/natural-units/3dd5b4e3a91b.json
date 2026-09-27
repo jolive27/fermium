@@ -1,0 +1,11 @@
+{
+ "id": "3dd5b4e3a91b",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "939.6 MeV\n0.005068 MeV⁻¹\n8.828×10⁵ MeV²\n0.510999 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

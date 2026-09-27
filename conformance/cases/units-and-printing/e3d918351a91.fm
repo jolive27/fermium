@@ -1,0 +1,1 @@
+print clamp(1 m, 0 s, 2 s)

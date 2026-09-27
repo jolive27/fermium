@@ -1,0 +1,3 @@
+G_N = 6.674×10⁻¹¹ N m²/kg²
+c_light = 3.00×10⁸ m/s
+print G_N, c_light

@@ -1,0 +1,17 @@
+{
+ "id": "5229a1523424",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the limits of this integral are length [m] and time [s]; they need the same units",
+  "line": 1,
+  "col": 7,
+  "hint": "if you divide or multiply the integral by something, put the integral in parentheses: (∫ ... dx from a to b) / M",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

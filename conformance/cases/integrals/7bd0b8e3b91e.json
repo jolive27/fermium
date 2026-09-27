@@ -1,0 +1,17 @@
+{
+ "id": "7bd0b8e3b91e",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the limits of this integral are time [s] and energy [J]: the ' / ' after the upper limit divides the whole integral, not the limit",
+  "line": 3,
+  "col": 7,
+  "hint": "to divide the limit, write  to (E / (2 P0))",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

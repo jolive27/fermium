@@ -1,0 +1,11 @@
+{
+ "id": "21a29346492c",
+ "area": "functions",
+ "origin": "dev-notes/FERMIUM_SPEC_V1.5_V2.md#5",
+ "dir": "dev-notes",
+ "stdout": "686 N\n2.7 fm 4.6 fm 7.4 fm\n35.3 m 40.8 m 35.3 m\n501.6 nm 0.5016 μm 9348 nm 9.348 μm\n8.20 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

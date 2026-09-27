@@ -1,0 +1,17 @@
+{
+ "id": "2af19670012c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 m L^2' is ambiguous: right after a number, m L^2 is one unit (L is litres there), but L is also your variable L",
+  "line": 4,
+  "col": 21,
+  "hint": "write  (2 m) L^2  for 2 m × your variable L, or  2 [m L^2]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

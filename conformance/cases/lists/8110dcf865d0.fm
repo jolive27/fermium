@@ -1,0 +1,2 @@
+names = ["x", "y"]
+print names[end] + "!"

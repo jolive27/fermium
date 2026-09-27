@@ -1,0 +1,11 @@
+{
+ "id": "f43147f5d28f",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "measured g = 9.70 m/s²\nin imperial: 31.8 ft/s²\nsmall-angle period: 2.20 s\namplitude 5°  period 2.20 s  ratio 1.00\namplitude 20°  period 2.21 s  ratio 1.01\namplitude 45°  period 2.29 s  ratio 1.04\namplitude 90°  period 2.59 s  ratio 1.18\nfit T = 2π √(L/g)   (11 data points from data/pendulum.csv)\n  g = 9.818 m/s²   (standard error 0.021 m/s²)\n  rms residual = 0.00566 s\ng from the fit: 9.82 m/s²  (standard gravity: 9.81 m/s² )\nplot saved to <ROOT>/examples/gallery/pendulum_data.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

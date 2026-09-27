@@ -1,0 +1,4 @@
+print |exp(𝑖 π) + 1| to 3 digits
+print exp(𝑖 π/2) == 𝑖
+print exp(𝑖 π/2) ≈ 𝑖
+print cis(π) ≈ -1 + 0i

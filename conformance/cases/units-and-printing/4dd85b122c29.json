@@ -1,0 +1,17 @@
+{
+ "id": "4dd85b122c29",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 l²' is ambiguous: right after a number, l is a unit (litres), but l is also your variable l",
+  "line": 2,
+  "col": 9,
+  "hint": "write  2*l²  for 2 × your variable l, or  2 [l²]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

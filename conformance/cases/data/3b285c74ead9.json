@@ -1,0 +1,11 @@
+{
+ "id": "3b285c74ead9",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "closest to the Sun: 0.291 AU\nfurthest from the Sun: 1.00 AU\nperiod: 0.519 yr\nT^2 / a^3 = 1.00 yr²/AU³\nplot saved to <ROOT>/bootcamp/eccentric_orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

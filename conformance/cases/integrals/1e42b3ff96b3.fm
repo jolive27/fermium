@@ -1,0 +1,4 @@
+a(t) = 2 m/s^3 t
+for T from 0 s to 3 s step 1 s
+    v = integral a(t) dt from 0 s to T
+    print "at", T, "velocity is", v

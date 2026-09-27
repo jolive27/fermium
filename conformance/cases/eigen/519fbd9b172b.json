@@ -1,0 +1,11 @@
+{
+ "id": "519fbd9b172b",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "E 1 = 0.500 eV   (ħω(n - ½) = 0.50 eV )\nE 2 = 1.50 eV   (ħω(n - ½) = 1.5 eV )\nE 3 = 2.50 eV   (ħω(n - ½) = 2.5 eV )\nE 4 = 3.50 eV   (ħω(n - ½) = 3.5 eV )\n4.52×10⁴ 1/m^(1/2) 1.00\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

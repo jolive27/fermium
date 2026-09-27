@@ -1,0 +1,2 @@
+print 20 °C - 10 °C      # actual: -263.15 °C   expected: 10 K (a difference), or an error
+print 20 °C + 10 °C      # actual: 303.15 °C    expected: an error (can't add two absolute temperatures)

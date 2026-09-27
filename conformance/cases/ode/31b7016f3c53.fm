@@ -1,0 +1,2 @@
+solve z' = 1i z with z(0) = 1 for t from 0 to 1
+print z([0, 0.5])

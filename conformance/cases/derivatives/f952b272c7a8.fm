@@ -1,0 +1,4 @@
+f(x) = ln(x^2 + 1) / sqrt(x)
+g = f'
+h = f''
+print g(13/10) to 6 digits, h(13/10) to 6 digits

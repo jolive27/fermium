@@ -1,0 +1,11 @@
+{
+ "id": "4135d65a8d77",
+ "area": "units-and-printing",
+ "origin": "bootcamp/lesson03_functions.md#6",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    9 J\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    2.84 eV\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

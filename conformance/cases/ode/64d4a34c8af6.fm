@@ -1,0 +1,7 @@
+g = 9.8 m/s²
+solve h'' = -g
+  with h(0 s) = 0 m, h'(0 s) = 10 m/s
+  for t from 0 s to 100 s
+  until h = 0 m
+print times(h)[end] to 15 digits, h[end] to 15 digits, h'[end] to 15 digits
+print 2 × 10 [m/s] / g to 15 digits

@@ -1,0 +1,17 @@
+{
+ "id": "4dbbe05e7a46",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 L' is ambiguous: right after a number, L is a unit (litres), but L is also your variable L",
+  "line": 2,
+  "col": 14,
+  "hint": "write  2*L  for 2 × your variable L, or  2 [L]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

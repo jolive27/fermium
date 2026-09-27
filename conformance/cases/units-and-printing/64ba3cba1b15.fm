@@ -1,0 +1,2 @@
+g = 9.81 m/s²
+print to(g, km/hr^2) == g, to(g, km/hr^2)

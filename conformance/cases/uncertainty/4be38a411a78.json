@@ -1,0 +1,11 @@
+{
+ "id": "4be38a411a78",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "examples/data",
+ "stdout": "fit rate = A exp(-t/τ) + B   (40 data points from ba137m_decay.csv)\n  A = 84.64 1/s   (standard error 0.53 1/s)\n  τ = 219.6 s   (standard error 2.9 s)\n  B = 1.649 1/s   (standard error 0.21 1/s)\n  rms residual = 0.716 1/s\n219.6470435 s\n2.868712426 s\n0.5593576829 1/s\n1.988439930 s\n2.868712426 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,13 @@
+f(x) = cbrt(x^2 + 1)
+d1 = f'
+d2 = f''
+print d1(0.17340154351518677) to 17 digits
+print d2(0.17340154351518677) to 17 digits
+print d1(-2.3126564610830123) to 17 digits
+print d2(-2.3126564610830123) to 17 digits
+print d1(-2.7492412786576623) to 17 digits
+print d2(-2.7492412786576623) to 17 digits
+print d1(2.550534110251478) to 17 digits
+print d2(2.550534110251478) to 17 digits
+print d1(-2.8257672735139217) to 17 digits
+print d2(-2.8257672735139217) to 17 digits

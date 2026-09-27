@@ -1,0 +1,11 @@
+solve x' = -x / (1 s)
+  with x(0 s) = 2 m
+  for t from 0 s to 3 s
+print x([0 s, 1 s]) to 5 digits
+xs = [10, 20, 30, 40] [m]
+print xs[2:3], xs[:1], len(xs[5:4])
+print cot(1) to 8 digits, sec(1) to 8 digits, csc(1) to 8 digits
+solve y' = -y / (1 s)
+  with y(0) = 1 m
+  for t from 0 s to 1 s using rk45 tolerance 1e-11
+print y(1 s) to 9 digits

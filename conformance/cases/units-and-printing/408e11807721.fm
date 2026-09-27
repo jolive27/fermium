@@ -1,0 +1,3 @@
+# My first Fermium program
+print "Hello, physics!"
+print 9.81 m/s^2 * 3 s

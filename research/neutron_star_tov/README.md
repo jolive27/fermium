@@ -30,7 +30,7 @@ refines the maximum. The whole program runs in about 2 s. Run it from this folde
 | central density (rest mass, n m_n) | 3.54×10¹⁵ g/cm³ | 3.54×10¹⁵ g/cm³ | — |
 | compactness 2GM/(Rc²) | 0.229 | | |
 
-Points on the curve (Fermium, agree with SciPy to 10⁻³, checked in `tests/test_research.py`):
+Points on the curve (Fermium, agree with SciPy to 10⁻³, checked in `legacy/tests/test_research.py`):
 
 | x_c | 0.2 | 0.5 | 1.0 | 2.0 |
 |---|---|---|---|---|

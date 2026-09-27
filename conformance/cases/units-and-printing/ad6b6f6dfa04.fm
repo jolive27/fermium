@@ -1,0 +1,4 @@
+k = 1.38e-23 J/K
+T = 300 K
+E = 1.5 kT
+print E

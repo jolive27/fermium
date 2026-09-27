@@ -1,0 +1,13 @@
+L = 1 m
+D = 1 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 1 K, u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 2 s
+print u(0.5 m, 2 s) to 6 digits
+print u(0.0025 m, 2 s) to 6 digits
+solve ∂w/∂t = D * ∂²w/∂x²
+    with w(x, 0 s) = 0 K, ∂w/∂x(0 m, t) = -1 K/m, w(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 5 s
+print w(0 m, 5 s) to 6 digits
+print ∂w/∂x(0.01 m, 5 s) to 6 digits
+print ∂w/∂x(0.5 m, 5 s) to 6 digits

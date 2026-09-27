@@ -1,0 +1,4 @@
+x = 2 m
+J = ∫ 1/√((x - s)^2 + (0.5 m)^2) ds
+print J(3 m) - J(1 m) to 9 digits
+print J(2 m)

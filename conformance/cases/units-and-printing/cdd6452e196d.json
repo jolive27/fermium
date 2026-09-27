@@ -1,0 +1,11 @@
+{
+ "id": "cdd6452e196d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "50 °C [273, 323, 373] K\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

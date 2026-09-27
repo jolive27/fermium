@@ -1,0 +1,12 @@
+q = 1 nC
+φ(x, y, z) = q / (4π ε₀ √(x² + y² + z²))
+print ∇φ
+print -∇φ(0 m, 3 m, 4 m)
+
+m = 0.5 kg
+k = 50 [N/m]
+b = 0.2 kg/s
+solve m x'' = -k x - b x'
+  with x(0) = 10 cm, x'(0) = 0 m/s
+  for t from 0 s to 5 s
+print x(5 s)

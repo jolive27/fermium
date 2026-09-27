@@ -1,0 +1,2 @@
+M = 2e30 kg
+print M in m_sun

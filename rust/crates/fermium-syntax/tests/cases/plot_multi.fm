@@ -1,0 +1,4 @@
+plot y vs x from 0 to 1, title "T", log y, points
+    z vs x
+    with xlabel "a", ylabel "b", y from 1 to 2, reversed x
+    to "a.png"

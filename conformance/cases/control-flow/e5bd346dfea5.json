@@ -1,0 +1,13 @@
+{
+ "id": "e5bd346dfea5",
+ "area": "control-flow",
+ "origin": "benchmarks/fermium/unit_loop.fm",
+ "dir": "benchmarks/fermium",
+ "stdout": "E_J 3.333333833333×10⁸\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": [
+  "TIME"
+ ]
+}

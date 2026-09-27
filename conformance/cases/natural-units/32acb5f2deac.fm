@@ -1,0 +1,2 @@
+units natural(ħ = c = 1)
+analyze pendulum: T [s] depends on L [m], m [kg], g [m/s²]

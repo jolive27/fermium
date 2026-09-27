@@ -1,0 +1,17 @@
+{
+ "id": "dc9a5d564990",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "s is shared by all the iterations of this parallel for, so it can't be set inside it",
+  "line": 3,
+  "col": 5,
+  "hint": "only sums are allowed:  s += …  (added up in a fixed order); or give each iteration its own new variable",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,8 @@
+L = 1 m
+solve L tan(θ) = 2 m for θ from 0 to 1.5
+print θ to 6 digits
+g = 9.81 m/s²
+solve g t²/2 = 20 m for t from 0 s to 10 s
+print t to 6 digits
+solve E² = (3 MeV)² + (4 MeV)² for E from 0 MeV to 10 MeV
+print E

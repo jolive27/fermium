@@ -1,0 +1,8 @@
+a = 0.5 nm
+V(x) = if |x| < a then 0 eV else 5 eV
+solve -ħ²/(2 m_e) * ψ'' + V(x) ψ = E ψ
+    with ψ(-2 nm) = 0, ψ(2 nm) = 0
+    for x from -2 nm to 2 nm
+    lowest 3
+print "finite well levels:", E in eV to 4 digits
+print "probability outside the well, ground state:", 1 - ∫ ψ₁(x)² dx from -a to a

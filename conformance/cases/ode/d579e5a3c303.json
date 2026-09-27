@@ -1,0 +1,11 @@
+{
+ "id": "d579e5a3c303",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "n = 1  E_shoot = 0.3760301621 eV  E_exact = 0.3760301621 eV\nn = 2  E_shoot = 1.504120648 eV  E_exact = 1.504120648 eV\nn = 3  E_shoot = 3.384271459 eV  E_exact = 3.384271459 eV\nnorm = 1.000000000\n<x> = 0.5000000000 nm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

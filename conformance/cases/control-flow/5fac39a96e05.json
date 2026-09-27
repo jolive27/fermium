@@ -1,0 +1,17 @@
+{
+ "id": "5fac39a96e05",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a sum needs a finite number of terms",
+  "line": 1,
+  "col": 30,
+  "hint": "sum up to a large fixed number, like Σ(… for k from 1 to 1000)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

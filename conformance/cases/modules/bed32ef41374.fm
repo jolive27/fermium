@@ -1,0 +1,2 @@
+import stats
+print stats.standard_error([5 m])

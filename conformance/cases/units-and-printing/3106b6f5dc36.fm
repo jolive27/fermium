@@ -1,0 +1,3 @@
+rustup target add wasm32-unknown-unknown
+python3 web/build.py                  # fermium.wasm, examples and symbols -> web/gen/
+python3 -m http.server -d web 8000    # then open http://localhost:8000/

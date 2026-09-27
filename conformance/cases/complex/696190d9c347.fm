@@ -1,0 +1,3 @@
+x = 2
+z = 2i + (1i) x + 3i
+print z

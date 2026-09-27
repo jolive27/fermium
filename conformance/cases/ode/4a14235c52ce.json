@@ -1,0 +1,17 @@
+{
+ "id": "4a14235c52ce",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the right side of the equation is NaN or infinite at t = 0 (0/0? 1/0?); if the equation is singular there, start slightly away from 0",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

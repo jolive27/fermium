@@ -1,0 +1,11 @@
+{
+ "id": "fb9f4b4aefb7",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "1 J\ncheck: ½ k x² = 1 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

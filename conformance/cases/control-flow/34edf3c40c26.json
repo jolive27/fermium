@@ -1,0 +1,17 @@
+{
+ "id": "34edf3c40c26",
+ "area": "control-flow",
+ "origin": "gauntlet/mechanics/FRICTION.md#2",
+ "dir": "gauntlet/mechanics",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "T_vac isn't defined",
+  "line": 2,
+  "col": 6,
+  "hint": "give it a value on an earlier line, e.g.  T_vac = 2.5 m  (with its own unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

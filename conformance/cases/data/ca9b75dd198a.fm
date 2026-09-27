@@ -1,0 +1,4 @@
+data = load "pendulum.csv"       # header:  L [m], T [s]
+print data.L                     # a column, as a list with units
+fit T = 2π √(L / g) to data      # fits g; reports g with units
+plot data.T vs data.L to "pendulum.png"

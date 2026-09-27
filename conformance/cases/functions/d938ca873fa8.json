@@ -1,0 +1,11 @@
+{
+ "id": "d938ca873fa8",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "30 deg: 35.3 m\n45 deg: 40.8 m\n60 deg: 35.3 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

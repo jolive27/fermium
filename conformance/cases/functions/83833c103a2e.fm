@@ -1,0 +1,2 @@
+x(t) = 0.1 m cos(10 t / 1 s)
+print x(3 m)

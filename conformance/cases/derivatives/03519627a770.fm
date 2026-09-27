@@ -1,0 +1,3 @@
+f(x) = exp(sin(exp(x))) * cos(exp(x)) * exp(x)
+g = f'
+print g(13/10)       # actual 0.856062, expected 8.25545

@@ -1,0 +1,11 @@
+{
+ "id": "d4de11582cff",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "jerk(t) = A ω³ sin(ω t)   [m/s³, for t in s]\n1.2 m/s³\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

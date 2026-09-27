@@ -1,0 +1,17 @@
+{
+ "id": "2454d4123510",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't raise length [m] to a power that isn't a fixed number",
+  "line": 3,
+  "col": 7,
+  "hint": "with units, the exponent must be a number written in the program, like x^2 or x^(1/3)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

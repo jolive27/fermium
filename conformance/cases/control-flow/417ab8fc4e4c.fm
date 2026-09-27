@@ -1,0 +1,2 @@
+for n from 1 to 5
+    print n, "squared is", n^2

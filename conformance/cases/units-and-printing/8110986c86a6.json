@@ -1,0 +1,17 @@
+{
+ "id": "8110986c86a6",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'x ≈ -0 J' is true only when x is exactly 0: ≈ allows a difference of 10⁻⁶ × the larger size, which is 0 here",
+  "line": 2,
+  "col": 9,
+  "hint": "give an absolute tolerance: write x ≈ -0 J within 1e-9 J (the difference you can accept)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

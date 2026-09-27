@@ -1,0 +1,11 @@
+{
+ "id": "d01db0c60fd5",
+ "area": "ode",
+ "origin": "tests",
+ "dir": ".",
+ "stdout": "10 rad/s\nv(t) = -A ω sin(ω t)   [m/s, for t in s]\n1 J\n3.52 cm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

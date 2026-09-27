@@ -1,0 +1,11 @@
+{
+ "id": "5cc7615d1dad",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "carbon-12:  2.7 fm\niron-56:    4.6 fm\nuranium-238: 7.4 fm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

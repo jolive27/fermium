@@ -1,0 +1,11 @@
+{
+ "id": "b8ddef6e5637",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "10.6666666667\nG'(x) = (∫ s² ds from 0 to x) + x³\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

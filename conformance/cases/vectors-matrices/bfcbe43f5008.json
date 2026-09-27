@@ -1,0 +1,17 @@
+{
+ "id": "bfcbe43f5008",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this vector's components have different units, so pick one with a fixed number, like v[1]",
+  "line": 3,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

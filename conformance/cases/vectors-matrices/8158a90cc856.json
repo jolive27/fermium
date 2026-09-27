@@ -1,0 +1,17 @@
+{
+ "id": "8158a90cc856",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the argument of sin must be a number, but it is a 2-vector of a plain number (no units)",
+  "line": 1,
+  "col": 11,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+T = [0 °C, 100 °C]
+print interp(50 °C, T, [1 m, 2 m])

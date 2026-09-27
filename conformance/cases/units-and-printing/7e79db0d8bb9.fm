@@ -1,0 +1,4 @@
+print h c
+print h c in eV nm
+τ = 5 N m
+print τ

@@ -1,0 +1,17 @@
+{
+ "id": "777908bedfdf",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "besselj(n, x) needs a whole-number order n, not 1.5",
+  "line": 1,
+  "col": 15,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

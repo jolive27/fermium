@@ -1,0 +1,17 @@
+{
+ "id": "b9dd0fa6fc88",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'8.5e28 m^-3' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 2,
+  "col": 12,
+  "hint": "write  8.5e28*m^-3  for 8.5e28 × your variable m, or  8.5e28 [m^-3]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

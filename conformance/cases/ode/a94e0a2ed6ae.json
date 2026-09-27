@@ -1,0 +1,17 @@
+{
+ "id": "a94e0a2ed6ae",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "asked for the solution at 6 s, outside the range it was solved for (it ends at 5 s)",
+  "line": 5,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

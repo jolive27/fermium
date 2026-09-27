@@ -1,0 +1,17 @@
+{
+ "id": "9abe18acbf84",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "N/m is a unit, not a value",
+  "line": 1,
+  "col": 5,
+  "hint": "for the quantity write  1 N/m  (a number, then its unit)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

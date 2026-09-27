@@ -1,0 +1,8 @@
+{
+ "id": "6781a0d7f2f0",
+ "section": "PDEs right after a jump: the grid check (spec B2; OPEN_ITEMS RT7-2, L-1)",
+ "stdout": "34.239 K\n",
+ "stderr": "warning: line 5: the grid is too coarse for this PDE at x = 0.00250 m, t = 0.0500 s: the value there changes by 3.5% of the solution's range when the grid is made half as fine (a sharp front, a short wavelength, or the time right after a jump needs more grid points); raise  grid  (it is 400)\n",
+ "error": null,
+ "exit": 0
+}

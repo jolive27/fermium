@@ -1,0 +1,11 @@
+{
+ "id": "aff71dd7c147",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "fit T² = k L   (7 data points from data/pendulum.csv)\n  k = 3.997 s²/m   (standard error 0.012 s²/m)\n  rms residual = 0.0271 s²\nslope k = 4.00 s²/m\nso g is 9.88 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

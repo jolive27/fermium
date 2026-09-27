@@ -1,0 +1,17 @@
+{
+ "id": "88baa904af56",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 0 is out of range: the list has 3 elements (valid indexes are 1 to 3); Fermium counts from 1, so the first element is [1]",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

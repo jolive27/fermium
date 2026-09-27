@@ -1,0 +1,11 @@
+{
+ "id": "36af1b454110",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "strongest: 50 Hz with amplitude 3 V\nParseval: 5 kg² m⁴/(s⁶ A²) = 5 kg² m⁴/(s⁶ A²)\n1000 1.50 V\n1.80 V 1.80 V\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

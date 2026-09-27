@@ -1,0 +1,11 @@
+{
+ "id": "6824c5614215",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "research/rutherford_mc",
+ "stdout": "distance of closest approach d = 45.50 fm\nb_max = 521.1 fm   (θ > 5°:  σ = 8531 barn )\nχ² of the 35 bins against the exact bin contents: 38.2  (35 degrees of freedom: 35 ± 8.4 expected)\nbackward (θ > 90°) fraction: 0.00191255   exact: 0.00190628\nθ = 150 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 0.980  ( 936 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.894\nθ = 135 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.02  ( 1647 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.972\nθ = 120 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.00  ( 2568 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.906\nθ = 105 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 0.988  ( 4008 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.854\nθ = 75.0 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.00  ( 11716 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.899\nθ = 60.0 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.01  ( 23326 α; exact bin average 1.00 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.925\nθ = 45.0 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.01  ( 55165 α; exact bin average 1.01 )   Geiger–Marsden N sin⁴(θ/2) / mean = 0.955\nθ = 37.5 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.01  ( 95346 α; exact bin average 1.01 )   Geiger–Marsden N sin⁴(θ/2) / mean = 1.09\nθ = 30.0 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.02  ( 188651 α; exact bin average 1.01 )   Geiger–Marsden N sin⁴(θ/2) / mean = 1.09\nθ = 22.5 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.03  ( 450560 α; exact bin average 1.03 )   Geiger–Marsden N sin⁴(θ/2) / mean = 1.23\nθ = 15.0 °: MC dσ/dΩ sin⁴(θ/2)/(d/4)² = 1.06  ( 1568413 α; exact bin average 1.06 )   Geiger–Marsden N sin⁴(θ/2) / mean = 1.19\nRutherford dσ/dΩ at 90°: 5.176 barn per sr\nplot saved to <ROOT>/research/rutherford_mc/cross_section.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "94260dfe012d",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x was set outside this units natural (ħ = c = 1) region, so it can't be changed here (its units mean something different there)",
+  "line": 3,
+  "col": 1,
+  "hint": "use a new name for the value in natural units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

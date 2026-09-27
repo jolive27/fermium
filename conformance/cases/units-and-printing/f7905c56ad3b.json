@@ -1,0 +1,11 @@
+{
+ "id": "f7905c56ad3b",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "9550 rpm\n",
+ "stderr": "warning: line 1: Hz here means rad/s (angles are plain numbers, 1 rev = 2π), so 1 kHz is 9549.3 rpm, not 60000 rpm; 1 Hz = 1/(2π) rev/s\n    print 1 kHz in rpm\n          ^\n  hint: if the value counts cycles per second, write it in rev/s instead of Hz (50 rev/s is 3000 rpm), or multiply it by 2π:  2π f in rpm\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

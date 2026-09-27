@@ -1,0 +1,3 @@
+Ts = [2.19 s, 2.23 s, 2.20 s, 2.24 s, 2.18 s]
+T = mean(Ts) ± std(Ts) / √len(Ts)
+print "mean period:", T

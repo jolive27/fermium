@@ -1,0 +1,17 @@
+{
+ "id": "2ad452a08cbe",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add energy or mass [MeV] to length or time (1/energy) [MeV⁻¹]",
+  "line": 2,
+  "col": 8,
+  "hint": "both sides of + and - must have the same units; this happened when calling f on line 4 (with x = energy or mass [MeV])",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

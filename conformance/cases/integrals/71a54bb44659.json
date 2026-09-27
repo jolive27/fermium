@@ -1,0 +1,11 @@
+{
+ "id": "71a54bb44659",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "F(x) = if x <= 0 then -x²/2 else x²/2\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

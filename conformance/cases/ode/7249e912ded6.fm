@@ -1,0 +1,8 @@
+R = 10 kohm
+C = 100 uF
+V0 = 5 V
+solve R C V' = V0 - V
+  with V(0) = 0 V
+  for t from 0 s to 5 s
+print "RC =", R C
+print "V at t = RC:", V(R C), "which is", V(R C) / V0, "of V0"

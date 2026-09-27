@@ -1,0 +1,6 @@
+T = -40 °C
+print T in K, T in °F, T      # actual: -313.15 K -1023.34 °F -586.3 °C
+                              # expected: 233.15 K -40 °F -40 °C
+print -40 °F in °C            # actual: -550.744 °C   expected: -40 °C
+T = [-10 °C, 10 °C]
+print T in K                  # actual: [-283.15, 283.15] K   expected: [263.15, 283.15] K

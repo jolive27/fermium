@@ -1,0 +1,10 @@
+ω_p = 1.4e16 /s
+γ = 1.0e14 /s
+print ε_0 ω_p² / γ
+a = 0.1 m
+ω = 30 /s
+print a² ω²
+print 4σ / c
+E = -5 J/kg
+print E
+print a² ω² in J/kg

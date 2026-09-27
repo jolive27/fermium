@@ -1,0 +1,2 @@
+solve tan(z) = √((8/z)² - 1) for z from 0.1 to 1.5
+print z to 12 digits

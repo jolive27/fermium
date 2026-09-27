@@ -1,0 +1,17 @@
+{
+ "id": "4e85dd314b0e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "no unknown of this solve is in mass [kg], so this absolute tolerance isn't used",
+  "line": 4,
+  "col": 45,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

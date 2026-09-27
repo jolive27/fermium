@@ -1,0 +1,11 @@
+{
+ "id": "fae8104df68c",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "fit T = 2π √(L/g)   (7 data points from data/pendulum.csv)\n  g = 9.856 m/s²   (standard error 0.038 m/s²)\n  rms residual = 0.00850 s\nplot saved to <ROOT>/bootcamp/pendulum_fit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

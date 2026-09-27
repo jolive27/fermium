@@ -1,0 +1,3 @@
+t = 0 s
+while t < 5
+    t += 1 s

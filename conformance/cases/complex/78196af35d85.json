@@ -1,0 +1,17 @@
+{
+ "id": "78196af35d85",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "dot doesn't work on complex numbers",
+  "line": 1,
+  "col": 7,
+  "hint": "complex numbers work with + - * / ^, exp, ln, sqrt, sin, cos, tan, sinh, cosh, tanh, abs, arg, re, im and conj",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

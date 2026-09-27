@@ -1,0 +1,38 @@
+# Thermodynamics 03 — Maxwell–Boltzmann speeds of nitrogen
+#
+# Nitrogen gas (N₂, molar mass 28.0 g/mol) is at room temperature, 25 °C.
+# The Maxwell speed distribution is
+#
+#     f(v) = 4π (m / 2π k_B T)^(3/2) v² exp(−m v² / 2 k_B T)
+#
+# (a) Check that f is normalised: ∫₀^∞ f dv = 1.
+# (b) Find the mean speed ⟨v⟩ and the rms speed √⟨v²⟩ by integration, and
+#     compare with √(8 k_B T / π m) and √(3 k_B T / m).
+# (c) Check that the most probable speed √(2 k_B T / m) is where df/dv = 0.
+# (d) What fraction of the molecules move faster than 1000 m/s?
+# (Schroeder §6.4, Halliday/Resnick ch. 19)
+
+M = 28.0 g/mol
+m = M / N_A                       # mass of one molecule
+T = 25 °C
+
+f(v) = 4π (m / (2π k_B T))^(3/2) v² exp(-m v² / (2 k_B T))
+
+# (a) normalisation
+print "∫ f dv =", ∫ f(v) dv from 0 m/s to ∞ to 10 digits
+
+# (b) mean and rms speed
+v_mean = ∫ v f(v) dv from 0 m/s to ∞
+v_rms = √(∫ v² f(v) dv from 0 m/s to ∞)
+print "<v>   =", v_mean in m/s to 8 digits, "  formula:", √(8 k_B T / (π m)) in m/s to 8 digits
+print "v_rms =", v_rms in m/s to 8 digits, "  formula:", √(3 k_B T / m) in m/s to 8 digits
+
+# (c) the peak: the symbolic derivative vanishes there
+v_p = √(2 k_B T / m)
+print "v_p   =", v_p in m/s to 8 digits
+print "f'(v_p) * v_p / f(v_p) =", f'(v_p) v_p / f(v_p) to 3 digits
+print "f'(0.9 v_p) > 0:", f'(0.9 v_p) > 0, "  f'(1.1 v_p) < 0:", f'(1.1 v_p) < 0
+
+# (d) the fast tail
+fast = ∫ f(v) dv from 1000 m/s to ∞
+print "fraction faster than 1000 m/s =", fast to 8 digits

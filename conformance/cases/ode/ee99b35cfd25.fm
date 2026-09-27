@@ -1,0 +1,4 @@
+L = [1, 2]
+k = 3
+solve x' = -L[k] x with x(0) = 1 for t from 0 to 1 using radau
+print x(1)

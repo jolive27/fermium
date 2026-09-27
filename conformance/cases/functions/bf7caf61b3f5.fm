@@ -1,0 +1,8 @@
+a = [1.0, 2.0]
+f(v) =
+    push(v, 3.0)
+    push(v, 4.0)
+    push(v, 5.0)
+    v[1]
+print f(a)
+print a           # actual: [3.6×10⁻³¹⁵, -2.8×10⁻¹²²]   expected: [1.0, 2.0] (or the pushed list)

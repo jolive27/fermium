@@ -1,0 +1,3 @@
+print ∫ exp(-x/(1 nm)) dx from 0 m to ∞          # 1 nm
+print ∫ exp(-(x/(1e8 m))^2) dx from -∞ to ∞      # √π × 10⁸ m
+print ∫ 1/sqrt(abs(x)) dx from -1 to 1           # 4: a singularity at 0, inside the range

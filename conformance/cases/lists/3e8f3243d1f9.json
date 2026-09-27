@@ -1,0 +1,17 @@
+{
+ "id": "3e8f3243d1f9",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "xs[i, j] = … sets an entry of a matrix, but xs is a list",
+  "line": 2,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

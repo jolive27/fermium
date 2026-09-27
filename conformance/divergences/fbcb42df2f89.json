@@ -1,0 +1,8 @@
+{
+ "id": "fbcb42df2f89",
+ "section": "PDE linear solves: a tridiagonal LU instead of SuperLU (rounding level)",
+ "stdout": "1.44×10⁻⁷ K\n1.03×10⁻³⁴ K\n",
+ "stderr": "warning: line 3: this PDE's time step could not be made fine enough: with 32000 steps the estimated error is still 2.9% of the solution's range (checked by step doubling); the result may be inaccurate\n",
+ "error": null,
+ "exit": 0
+}

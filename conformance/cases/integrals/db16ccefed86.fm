@@ -1,0 +1,5 @@
+k = 50 N/m
+F(x) = k x
+W = integral F(x) dx from 0 m to 0.2 m
+print W
+print integral exp(-x^2) dx from -inf to inf

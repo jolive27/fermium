@@ -1,0 +1,2 @@
+x(t) = t^3
+print d^2/dt^2 x, d/dt x

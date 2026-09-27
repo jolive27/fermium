@@ -1,0 +1,2 @@
+p = 2 atm
+print ln(p / (1 atm)) to 6 digits

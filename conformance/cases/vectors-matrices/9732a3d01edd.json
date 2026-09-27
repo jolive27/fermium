@@ -1,0 +1,11 @@
+{
+ "id": "9732a3d01edd",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "(a) Λ = [[1.25, -0.750, 0, 0], [-0.750, 1.25, 0, 0], [0, 0, 1.00, 0], [0, 0, 0, 1.00]]\n    size of Λᵀ η Λ − η = 0\n    det Λ = 1.000000000\n    eigenvalues: 0.5000000000 1.000000000 1.000000000 2.000000000\n    exp(∓φ) = 0.5000000000 2.000000000\n(b) combined β = 0.9459459459   (β1 + β2)/(1 + β1 β2) = 0.9459459459\n    rapidity = 1.791759469   φ1 + φ2 = 1.791759469\n(c) combined γ = 2.083333333   γ1 γ2 = 2.083333333\n    Λ2 Λ1 symmetric? entry [1,2] vs [2,1]: -1.25000 -0.750000\n    R[1,1] = 1.000000000   R[4,4] = 1.000000000\n    Wigner angle = 18.92464442°   acos((γ1 + γ2)/(1 + γ1 γ2)) = 18.92464442°\n(d) p* = 29.79214091 MeV/c   E*_μ = 109.7782491 MeV\n    lab energy = 7865.439732 MeV   γ E* = 7865.439732 MeV\n    lab angle = 0.2170408917°   atan(p*/(γ β E*/c)) = 0.2170408917°\n    invariant mass = 105.6583755 MeV/c²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

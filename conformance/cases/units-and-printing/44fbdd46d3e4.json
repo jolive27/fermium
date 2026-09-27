@@ -1,0 +1,11 @@
+{
+ "id": "44fbdd46d3e4",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3\n",
+ "stderr": "warning: line 1: replaced look-alike character 'а' (Cyrillic Small Letter A) with Latin 'a'\n    а = 3\n    ^\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

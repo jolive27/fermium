@@ -1,0 +1,4 @@
+q = <1 m, 2 m/s>
+print q, q.x, q[2]
+print q + <3 m, 4 m/s>
+print 2 q, q / (2 s)

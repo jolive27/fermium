@@ -1,0 +1,2 @@
+analyze hydrogen: E [J] depends on m_e, e, ε₀, ħ
+print hydrogen/(32 π²) in eV to 6 digits

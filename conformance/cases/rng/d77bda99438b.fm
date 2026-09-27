@@ -1,0 +1,6 @@
+seed(2026)
+N = 200000
+inside = sample(if rand()^2 + rand()^2 < 1 then 1 else 0, N)
+p = mean(inside)
+print 4 p to 12 digits
+print 4 sqrt(p (1 - p) / N) to 12 digits

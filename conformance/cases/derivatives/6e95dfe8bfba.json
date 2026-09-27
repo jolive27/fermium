@@ -1,0 +1,11 @@
+{
+ "id": "6e95dfe8bfba",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.773978809116 -0.155902496010\ng(x) = Σ(cos(n x) for n from 1 to 49 step 2)\n2.5000000 V\n0 V/m²\n0.542551574534\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

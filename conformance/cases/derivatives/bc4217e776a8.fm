@@ -1,0 +1,6 @@
+F(x) =
+    a = 2
+    x^2 / a
+N(T) = F(T) + 1
+dN = d/dT N
+print dN(3)

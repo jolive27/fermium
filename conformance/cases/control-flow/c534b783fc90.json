@@ -1,0 +1,11 @@
+{
+ "id": "c534b783fc90",
+ "area": "control-flow",
+ "origin": "dev-notes/notes/bugs-adversarial.md#3",
+ "dir": "dev-notes/notes",
+ "stdout": "[1, 2, 3, 1, 2, 3]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "fd912de28eee",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "32\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

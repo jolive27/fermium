@@ -1,0 +1,17 @@
+{
+ "id": "b0c6b2df9971",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "s isn't defined",
+  "line": 1,
+  "col": 13,
+  "hint": "s is a unit; units go right after a number, like 1 s, or in brackets [s]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

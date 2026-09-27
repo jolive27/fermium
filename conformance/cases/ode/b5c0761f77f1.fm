@@ -1,0 +1,5 @@
+I(x) = (2 besselj(1, x) / x)^2
+solve I'(x) = 0 for x from 4 to 6
+print x to 8 digits
+solve besselj(1, x) = 0 for x from 3 to 4.5
+print x / π to 6 digits

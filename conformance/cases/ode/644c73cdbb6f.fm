@@ -1,0 +1,4 @@
+decay(k) =
+    solve y' = -k y with y(0) = 1 for t from 0 to 1
+    y(1)
+print decay(2) to 6 digits, decay(3) to 6 digits

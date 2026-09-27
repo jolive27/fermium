@@ -1,0 +1,11 @@
+{
+ "id": "7d2b9b08367a",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "3p1/2\n1s1/2\n1s3/2\n2p1/2\n2p3/2\n3d1/2\n3d3/2\nE = 2.5 MeV\nabb\nv = 0.17 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

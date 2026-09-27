@@ -1,0 +1,11 @@
+{
+ "id": "c8d4d0f17ce0",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "NaN NaN NaN\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

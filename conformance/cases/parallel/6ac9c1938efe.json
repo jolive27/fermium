@@ -1,0 +1,17 @@
+{
+ "id": "6ac9c1938efe",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "xs and ys are the same list (one was set from the other), so the iterations of this parallel for would write and read the same numbers at the same time; make a copy first, e.g.  ys = xs * 1",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

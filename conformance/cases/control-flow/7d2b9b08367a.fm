@@ -1,0 +1,15 @@
+print "3p" + "1/2"
+names = ["s", "p", "d"]
+js = ["1/2", "3/2"]
+for l from 1 to 3
+    for k from 1 to 2
+        label = str(l) + names[l] + js[k]
+        print label
+E = 2.5 MeV
+print "E = " + str(E)
+t = "a"
+t = t + "b"
+t = t + "b"
+print t
+r = 0.5 m / (3 s)
+print "v = " + str(r)

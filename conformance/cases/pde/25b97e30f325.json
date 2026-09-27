@@ -1,0 +1,17 @@
+{
+ "id": "25b97e30f325",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the two sides of this equation don't match: left is a quantity with units [K/s], right is a quantity with units [m K/s]",
+  "line": 3,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

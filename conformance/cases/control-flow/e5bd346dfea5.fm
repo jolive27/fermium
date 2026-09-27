@@ -1,0 +1,12 @@
+# A tight loop with unit-carrying arithmetic: E = Σ ½ m v², v = i × 1 µm/s.
+# The units are checked by the compiler and erased: this compiles to plain float code.
+N = 10000000
+m = 2 kg
+E = 0 J
+t0 = clock()
+for i from 1 to N
+    v = i * 1e-6 m/s
+    E += ½ m v²
+t1 = clock()
+print "E_J", E / (1 J) to 13 digits
+print "TIME_INNER", (t1 - t0) / (1 s)

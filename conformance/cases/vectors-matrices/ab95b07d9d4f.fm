@@ -1,0 +1,5 @@
+K = [[2, -1], [-1, 2]] N/m
+x = <1, 2> cm
+print K x in N
+print K * x in N
+print K · x in N

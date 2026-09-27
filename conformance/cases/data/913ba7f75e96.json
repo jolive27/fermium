@@ -1,0 +1,17 @@
+{
+ "id": "913ba7f75e96",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected 'vs' (write: plot y vs x) but the line ended",
+  "line": 2,
+  "col": 8,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

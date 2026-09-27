@@ -1,0 +1,17 @@
+{
+ "id": "659b48a08183",
+ "area": "control-flow",
+ "origin": "bootcamp/TROUBLESHOOTING.md#37",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this range is time [s], so it needs a step with units",
+  "line": 1,
+  "col": 1,
+  "hint": "add e.g.  step 0.1 s",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

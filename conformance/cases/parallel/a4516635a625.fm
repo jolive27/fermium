@@ -1,0 +1,16 @@
+
+n = 200000
+xs = zeros(n)
+total = 0
+parallel for i from 1 to n
+    x = (i - 0.5) / n
+    y = 4 / (1 + x²)
+    xs[i] = y
+    total += y / n
+print total to 17 digits
+serial = 0
+for i from 1 to n
+    serial += xs[i] / n
+print serial to 17 digits
+print abs(total - serial) < 1e-12
+print xs[1] to 17 digits, xs[n] to 17 digits

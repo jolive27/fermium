@@ -1,0 +1,11 @@
+{
+ "id": "d6ad1aee5a4a",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "gauntlet/astrophysics",
+ "stdout": "(a) R_S(Sun) = 2.9532501 km   R_S(10 Msun) = 29.532501 km   R_S(Sgr A*) = 0.084887407 AU\n(b) shadow of Sgr A* = 53.271486 micro-arcsec\n(c) L_Ed(1 Msun) = 32838.693 L☉   L_Ed(Sgr A*) = 5.4053803×10³⁷ W\n(d) Mdot = 0.095451533 M☉/yr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

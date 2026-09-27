@@ -1,0 +1,11 @@
+t = 1.5 eV
+H = zeros(16, 16)
+for i from 1 to 15
+    H[i, i + 1] = -t
+    H[i + 1, i] = -t
+E = eigenvalues(H)
+for n from 1 to 16
+    print E[n] / (-2 t cos(n π / 17)) - 1 to 3 digits
+V = eigenvectors(H)
+print V[3, 1] / (sqrt(2 / 17) sin(3 π / 17)) - 1 to 3 digits
+print Vᵀ V

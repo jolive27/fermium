@@ -1,0 +1,3 @@
+f(x) = x³ - 2x
+print f', f''
+print f'(2)

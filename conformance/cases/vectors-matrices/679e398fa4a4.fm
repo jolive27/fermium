@@ -1,0 +1,2 @@
+K = [[1 N/m, 0 N/m], [0 N/m, 2 N/m]]
+print K

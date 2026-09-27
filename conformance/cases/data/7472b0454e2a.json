@@ -1,0 +1,11 @@
+{
+ "id": "7472b0454e2a",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "number of measurements: 40\nfirst and last rate: 81.3 1/s 2.45 1/s\nfit rate = R0 exp(-ln(2) t/t_half) + B   (40 data points from data/ba137m_decay.csv)\n  R0 = 84.64 1/s   (standard error 0.53 1/s)\n  t_half = 152.2 s   (standard error 2.0 s)\n  B = 1.649 1/s   (standard error 0.21 1/s)\n  rms residual = 0.716 1/s\nhalf-life: 2.54 min   (accepted value 2.552 min)\nbackground: 1.65 1/s\nrough half-life from two points: 156 s\nt = 10 s   measured 81.3 1/s   model 82.5 1/s\nt = 280 s   measured 24.9 1/s   model 25.3 1/s\nt = 580 s   measured 8.55 1/s   model 7.69 1/s\nt = 1180 s   measured 2.45 1/s   model 2.04 1/s\nplot saved to <ROOT>/examples/gallery/ba137m_fit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "aca31381a557",
+ "area": "units-and-printing",
+ "origin": "bootcamp/solutions/lesson01.md#6",
+ "dir": "bootcamp/solutions",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    940 MeV\n    ^\n  hint: use print to show it, or store it:  name = ...\nwarning: line 2: this line computes a value but doesn't use it\n    1.29 MeV\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

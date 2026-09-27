@@ -1,0 +1,7 @@
+powers = []
+p = 1
+for n from 1 to 10
+    p = 2 p
+    push(powers, p)
+print powers
+print sum(powers)

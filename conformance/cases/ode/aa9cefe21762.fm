@@ -1,0 +1,2 @@
+solve x'' = -x' - x'' - 2x with x(0) = 1, x'(0) = 0 for t from 0 to 2
+print x(2) to 6 digits

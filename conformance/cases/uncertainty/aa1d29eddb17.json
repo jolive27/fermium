@@ -1,0 +1,11 @@
+{
+ "id": "aa1d29eddb17",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "He-4:   B/A = 5.710 MeV   (measured 7.07 MeV: the liquid drop fails for tiny nuclei)\nC-12:   B/A = 7.468 MeV   (measured 7.68 MeV)\nFe-56:  B/A = 8.846 MeV   (measured 8.79 MeV)\nNi-62:  B/A = 8.863 MeV   (measured 8.79 MeV)\nU-238:  B/A = 7.625 MeV   (measured 7.57 MeV)\nmost stable Z for A = 56: 25  (iron-56 has Z = 26: the pairing term, left out here, favours even Z)\nmost stable Z for A = 208: 82  (lead is 82)\nthe peak of the curve is at A = 58 with B/A = 8.865 MeV\nfission of U-235 releases about 182.4 MeV\nplot saved to <ROOT>/examples/gallery/binding_energy.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

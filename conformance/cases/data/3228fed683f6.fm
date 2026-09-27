@@ -1,0 +1,2 @@
+f(x) = 50 N/m * x
+plot f(x) vs x from 0 m to 1 m to "f.png"

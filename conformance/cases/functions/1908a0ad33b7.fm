@@ -1,0 +1,2 @@
+p = mass * v where mass = 2 kg, v = 3 m/s
+print p

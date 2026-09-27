@@ -1,0 +1,54 @@
+# 04 — Kepler orbit: the Earth around the Sun
+#
+# Newton's law of gravity pulls the Earth toward the Sun with an acceleration
+# G M☉ / r², pointing inward. Written for the x and y coordinates:
+#
+#     x'' = -G M☉ x / r³,    y'' = -G M☉ y / r³,    r = √(x² + y²)
+#
+# We start the Earth at perihelion (closest approach) with its measured speed
+# and let `solve` follow it for one year. Kepler's laws tell us what to expect:
+#   * the orbit is an ellipse with eccentricity ε ≈ 0.0167,
+#   * the period obeys T² = 4π² a³ / (G M☉)  (third law),
+#   * the energy E = ½ v² − G M☉/r (per kg) stays constant.
+
+GM = G M_sun
+r_peri = 1.47098e11 m        # perihelion distance
+v_peri = 30.29 km/s          # speed at perihelion
+
+solve x'' = -GM x / (x² + y²)^(3/2),
+      y'' = -GM y / (x² + y²)^(3/2)
+  with x(0) = r_peri, y(0) = 0 m,
+       x'(0) = 0 m/s, y'(0) = v_peri
+  for t from 0 s to 1 yr
+
+# Energy per kilogram gives the semi-major axis: E = -GM / (2a)
+E0 = ½ v_peri² - GM / r_peri
+a = -GM / (2 E0)
+T = 2π √(a³ / GM)
+print "semi-major axis a =", a in AU
+print "period from Kepler's third law:", T in day
+ecc = 1 - r_peri / a
+print "eccentricity:", ecc
+
+# After exactly one Kepler period the Earth should be back where it started
+solve X'' = -GM X / (X² + Y²)^(3/2),
+      Y'' = -GM Y / (X² + Y²)^(3/2)
+  with X(0) = r_peri, Y(0) = 0 m,
+       X'(0) = 0 m/s, Y'(0) = v_peri
+  for t from 0 s to T
+print "distance from start after one period:", √((X(T) - r_peri)² + Y(T)²) in km
+
+# Energy conservation check, halfway round (at aphelion)
+E_half = ½ (x'(T/2)² + y'(T/2)²) - GM / √(x(T/2)² + y(T/2)²)
+print "relative energy drift:", abs(E_half - E0) / abs(E0)
+print "aphelion distance:", -x(T/2) in AU
+
+# A comet-like orbit for comparison: same start, but only 60% of the speed.
+# It falls toward the Sun, whips round it and climbs back out: a long ellipse.
+solve comet_x'' = -GM comet_x / (comet_x² + comet_y²)^(3/2),
+      comet_y'' = -GM comet_y / (comet_x² + comet_y²)^(3/2)
+  with comet_x(0) = r_peri, comet_y(0) = 0 m,
+       comet_x'(0) = 0 m/s, comet_y'(0) = 0.6 v_peri
+  for t from 0 s to 1 yr
+
+plot y in AU vs x in AU, comet_y in AU vs comet_x in AU to "gallery/kepler_orbit.png"

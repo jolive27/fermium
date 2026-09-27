@@ -1,0 +1,2 @@
+solve √(x - 1) = 0.5 for x from 0 to 2
+print x

@@ -1,0 +1,11 @@
+{
+ "id": "b48650e4c9d9",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "after 365 days: 1.00 AU -0.001453 AU\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

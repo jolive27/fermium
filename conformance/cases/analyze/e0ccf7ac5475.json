@@ -1,0 +1,11 @@
+{
+ "id": "e0ccf7ac5475",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "dimensional analysis of horizon: r depends on G, M, c\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = r c²/(G M)\n  so r ∝ G M/c²   (r = C G M/c², with C a pure number)\n  defined horizon(M) = G M/c², so r = C horizon(M)\nSun: 2.95 km\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

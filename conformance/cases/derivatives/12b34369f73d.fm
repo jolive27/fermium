@@ -1,0 +1,2 @@
+f(x, y, z) = x + y + z
+print ∇·f

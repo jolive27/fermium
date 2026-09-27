@@ -1,0 +1,11 @@
+{
+ "id": "d229d5891a61",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.17\n",
+ "stderr": "warning: line 4: this divides by all of 'b x': implicit multiplication binds tighter than '/'\n    print a/b x\n           ^\n  hint: write …/b * x if only b is below the line, or …/(b x) if all of it is\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,8 +1,19 @@
-# Lesson 0 — Setting up your Mac
+# Lesson 0 — Setting up your computer
 
 In this lesson you will install Fermium and run your first program. Nothing here is hard, but there are a lot of small steps. Go slowly, and read each step to the end before doing it.
 
-**What you need:** a Mac (any Mac from the last ~8 years), an internet connection, and about 30 minutes.
+**What you need:** an internet connection, about 20 minutes, and one of these computers:
+
+| Your computer | What to download |
+|---|---|
+| A Mac with Apple silicon (M1, M2, M3, M4…: most Macs sold since late 2020) | `fermium-macos-arm64` |
+| A Linux PC (Intel or AMD, "x86_64") | `fermium-linux-x86_64` |
+| A Mac with an Intel processor | not built yet: [build it from the source](#building-fermium-from-the-source) |
+| Windows | not built yet. **WSL** works: install Ubuntu from the Microsoft Store (search "WSL"), open it, and follow the Linux instructions inside it. |
+
+Not sure which Mac you have? Click the Apple menu  → **About This Mac**. If the line **Chip** says *Apple M…*, you have Apple silicon; if it says **Processor** … *Intel*, you have an Intel Mac.
+
+Fermium is **one file**: a single program with everything inside it (the compiler, the units, the calculus, the plots). You don't need to install Python, a C compiler or anything else to use it.
 
 ---
 
@@ -10,16 +21,16 @@ In this lesson you will install Fermium and run your first program. Nothing here
 
 The **Terminal** is a window where you type commands to your computer instead of clicking. Programmers use it all the time. It looks old-fashioned, but it's just a place to type.
 
-1. Press **⌘ Command + Space** to open Spotlight (the search bar).
-2. Type `Terminal` and press **Return**.
+- **Mac:** press **⌘ Command + Space** to open Spotlight (the search bar), type `Terminal` and press **Return**.
+- **Linux:** press **Ctrl + Alt + T** (on most Linux systems), or look for *Terminal* in your applications.
 
-A window opens with a line that ends in `%` (or `$`), something like:
+A window opens with a line that ends in `%` or `$`, something like:
 
 ```
 yourname@MacBook ~ %
 ```
 
-This is the **prompt**. It means "I'm waiting for you to type a command". In this course, when you see a grey box like the one below, type what's inside it after the prompt and press **Return**:
+This is the **prompt**. It means "I'm waiting for you to type a command". In this course, when you see a grey box like the one below, type what's inside it after the prompt and press **Return** (or **Enter**):
 
 ```
 echo hello
@@ -27,74 +38,82 @@ echo hello
 
 The computer answers `hello`. You just ran your first command.
 
-> **Tip:** In the Terminal you can't click to move the cursor. Use the ← and → arrow keys. The ↑ key brings back the previous command, which saves a lot of typing.
+> **Tip:** In the Terminal you can't click to move the cursor. Use the ← and → arrow keys. The ↑ key brings back the previous command, which saves a lot of typing. You can also copy a command from this page and paste it into the Terminal (**⌘ V** on a Mac, **Ctrl + Shift + V** on Linux).
 
-## Step 2: Install Python 3
+## Step 2: Download Fermium
 
-Fermium is written in **Python**, another programming language, so your Mac needs Python version **3.10 or newer**.
+> **Not published yet:** the first release (v2.0) hasn't been uploaded to the Releases page yet. Until it is, build Fermium from the source ([Building Fermium from the source](#building-fermium-from-the-source), below) and continue at Step 4, or use the Python version ([below](#the-old-python-version-fermium-15-deprecated)).
 
-Check what you have. Type:
+1. Open the Fermium **Releases** page in your web browser: **https://github.com/jolive27/fermium/releases**
+2. Under the newest release, click **Assets**, then click the file for your computer (see the table at the top): `fermium-macos-arm64` or `fermium-linux-x86_64`.
 
-```
-python3 --version
-```
+Your browser saves it in your **Downloads** folder. That one file is the whole of Fermium.
 
-- If it prints `Python 3.10.x`, `3.11.x`, `3.12.x`, `3.13.x` or newer: great, skip to Step 3.
-- If it prints `Python 3.9.6` (or anything below 3.10), or a window pops up offering to install "command line developer tools", or you get `command not found`: you need to install a newer Python. (The Python that comes with macOS is too old for Fermium. You can close that pop-up window.)
+## Step 3: Put it on your PATH
 
-**To install Python:**
+When you type a command such as `fermium`, the Terminal looks for a program with that name in a short list of folders. That list is called your **PATH**. To make `fermium` work from anywhere, we'll make a folder for your own programs, move Fermium into it, and add that folder to your PATH. Do it once and you never have to think about it again.
 
-1. Open **https://www.python.org/downloads/** in Safari.
-2. Click the big yellow **Download Python 3.x.x** button. This downloads a file ending in `.pkg`.
-3. Open the downloaded file (it's in your Downloads folder) and click **Continue** / **Agree** / **Install** through the installer. It will ask for your Mac password.
-4. When it finishes, **quit the Terminal completely** (⌘ Command + Q) and open it again. This matters: a Terminal that was open before the install doesn't know about the new Python.
-5. Check again:
+**3a. Make a folder called `bin` in your home folder** (*bin*, short for "binaries", is the traditional name for a folder of programs; `~` is short for your home folder, the one named after you):
 
 ```
-python3 --version
+mkdir -p ~/bin
 ```
 
-It should now say something like `Python 3.13.1`.
+**3b. Move the downloaded file there and name it `fermium`.** Type the line for your computer:
 
-## Step 3: Get the Fermium folder
-
-Fermium lives in a folder called `fermium`. Put it in your **home folder** (the folder with the little house icon in Finder, named after you).
-
-- If you received it as a **ZIP file** (for example from GitHub's green **Code → Download ZIP** button): double-click the ZIP to unpack it, rename the folder to `fermium` if it is called something like `fermium-main`, and drag it into your home folder.
-- If you know how to use `git`, you can clone it instead.
-
-Now tell the Terminal to go into that folder. `cd` means "change directory" (a *directory* is the same thing as a folder):
+On a Mac:
 
 ```
-cd ~/fermium
+mv ~/Downloads/fermium-macos-arm64 ~/bin/fermium
 ```
 
-The `~` is short for your home folder. Check you're in the right place with `ls` ("list"), which shows the files in the current folder:
+On Linux:
 
 ```
-ls
+mv ~/Downloads/fermium-linux-x86_64 ~/bin/fermium
 ```
 
-You should see names like `bootcamp`, `fermium`, `pyproject.toml` and `README.md`.
+(`mv` means "move". Giving the new place a different name renames the file at the same time.)
 
-## Step 4: Install Fermium
-
-Still in the `fermium` folder, type this (all one line, including the dot and the quotes):
+**3c. Allow the file to run as a program.** Browsers never mark a download as a program, for safety, so you tell the computer it's allowed (`chmod +x` means "make executable"):
 
 ```
-python3 -m pip install -e ".[full]"
+chmod +x ~/bin/fermium
 ```
 
-What this means, piece by piece:
-- `python3 -m pip` runs **pip**, Python's tool for installing software.
-- `install -e .` installs the program in the current folder (`.` means "this folder"). The `-e` means "editable": if the folder is updated later, you don't need to reinstall.
-- `[full]` means "with everything": the libraries Fermium uses for fitting data, symbolic integrals and plots (SciPy, SymPy and Matplotlib), the Jupyter kernel and the editor support.
+**3d. Mac only: tell macOS you trust it.** macOS protects you from programs downloaded from the internet with a feature called **Gatekeeper**: it marks each download as "quarantined", and a quarantined program that doesn't come from the App Store is blocked with a message like *"fermium" cannot be opened because the developer cannot be verified*. This command removes the quarantine mark from Fermium (and only from Fermium):
 
-You'll see a lot of text scroll by while it downloads things. That's normal. It should end with a line starting with `Successfully installed ...`.
+```
+xattr -d com.apple.quarantine ~/bin/fermium
+```
 
-> **In the future:** once Fermium is published, the whole of Step 3 and Step 4 will be one line: `python3 -m pip install "fermium[full]"`.
+If it answers `No such xattr: com.apple.quarantine`, the file wasn't quarantined, which is fine.
 
-## Step 5: Check the installation with `fermium doctor`
+**3e. Add `~/bin` to your PATH.** Your PATH is set by a small settings file that the Terminal reads every time it opens. This command adds one line to the end of that file:
+
+On a Mac (the Terminal's shell is called *zsh*, and its settings file is `~/.zshrc`):
+
+```
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+```
+
+On Linux (the shell is usually *bash*, and its settings file is `~/.bashrc`):
+
+```
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+```
+
+Type it exactly, with the single quotes `'` on the outside and the double quotes `"` inside. The `>>` means "add to the end of this file". Then **close the Terminal window and open a new one**: only new windows read the settings file.
+
+**3f. Check it worked.** In the new window, type:
+
+```
+fermium --version
+```
+
+It prints the version, for example `fermium 2.0.0 (Rust)`. If instead it says `command not found: fermium`, see [When something goes wrong](#when-something-goes-wrong).
+
+## Step 4: Check the installation with `fermium doctor`
 
 Fermium comes with a checkup command:
 
@@ -102,30 +121,31 @@ Fermium comes with a checkup command:
 fermium doctor
 ```
 
-You should see something like this (your version numbers will differ):
+You should see something like this (your version numbers, folder and platform will differ):
 
 ```
 Checking your Fermium installation...
 
-  ✓ Python 3.11.15 (Linux x86_64)
-  ✓ llvmlite 0.49.0 (LLVM 22.1.0)
-  ✓ numpy 2.4.6
-  ✓ scipy 1.17.1
-  ✓ sympy 1.14.0
-  ✓ matplotlib 3.11.2
-  ✓ pygls 2.1.1: for the language server, fermium lsp (VS Code hover and live errors)
-  ✓ ipykernel 7.3.0: for the Jupyter kernel (fermium jupyter install)
-  ✓ C compiler: cc (only needed for  fermium build)
+  ✓ Fermium 2.0.0 (/Users/you/bin/fermium)
+  ✓ LLVM 18.1.8 is built in (the compiler back end)
+  ✓ platform: macOS arm64 (Apple silicon)
+  ✓ nothing else is needed: no Python, C compiler or LLVM to install
+  - Python is optional, only for programs that say  use python : none found (that's fine)
+  ✓ built in too: the REPL (fermium), the language server (fermium lsp) and the Jupyter kernel (fermium jupyter install)
+  ✓ fermium build makes standalone executables with the built-in linker (lld): no C compiler needed
   ✓ compiled and ran a test program: g = 9.70 m/s²
 
 Everything looks good! Try:  fermium   (then type  print 2 m + 30 cm )
 ```
 
-The pygls, ipykernel and C-compiler lines are for optional tools; if one of them says `-` instead of `✓`, everything in the bootcamp still works. (On a Mac the first line says `Darwin arm64` or `Darwin x86_64` instead of `Linux`. *Darwin* is the technical name of macOS.)
+What the lines mean:
+- **LLVM** is the part that turns your program into fast machine code. It's *inside* the `fermium` file, so there is nothing to install.
+- **Python** is only needed if you want your Fermium programs to call Python libraries (a later, optional topic). If you have Python, the line says where it is; if not, the line starts with `-` and everything in the bootcamp still works.
+- The last line is the real test: Fermium worked out *g* from a pendulum's length and period.
 
-A `✗` means something is missing. The line below it, starting with `fix:`, tells you what to type. Do that, then run `fermium doctor` again.
+A `✗` means something is wrong. The line below it, starting with `fix:`, tells you what to do. Do that, then run `fermium doctor` again.
 
-## Step 6: Try the interactive prompt
+## Step 5: Try the interactive prompt
 
 Type `fermium` on its own and press Return:
 
@@ -146,29 +166,32 @@ It added 2 metres and 30 centimetres correctly! (Answers show 3 significant figu
 
 To leave the REPL and go back to the normal Terminal, type `:quit` (or press **Control + D**).
 
-## Step 7: Your first program in a file
+## Step 6: Your first program in a file
 
 For anything longer than a line or two, you write a **program**: a text file with instructions, which Fermium runs from top to bottom. Fermium programs end in `.fm`.
+
+### Make a folder for your programs
+
+Keep your programs together in one folder. This makes a folder called `physics` in your home folder and goes into it (`cd` means "change directory"; a *directory* is the same thing as a folder):
+
+```
+mkdir -p ~/physics
+cd ~/physics
+```
 
 ### Get a code editor
 
 You need a **text editor** made for code. We recommend **Visual Studio Code** ("VS Code"), which is free:
 
-1. Download it from **https://code.visualstudio.com** and drag it into your Applications folder.
-2. Open VS Code. Choose **File → Open Folder…** and open your `fermium` folder.
-3. *(Optional but nice)* Install the Fermium extension for VS Code. It colours your code and lets you type `\theta` then Tab to get `θ`. It lives in the folder `editors/vscode/` inside `fermium`. Open VS Code once (so it creates its settings folder), then type this in the Terminal (one line) and restart VS Code:
-
-   ```
-   ln -s ~/fermium/editors/vscode ~/.vscode/extensions/fermium
-   ```
-
-   (`ln -s` makes a *shortcut*, which Mac people call an alias, so VS Code finds the extension inside your `fermium` folder. More details are in `editors/vscode/README.md`.)
+1. Download it from **https://code.visualstudio.com** and install it (on a Mac, drag it into your Applications folder).
+2. Open VS Code. Choose **File → Open Folder…** and open your `physics` folder.
+3. *(Optional but nice)* The Fermium extension for VS Code colours your code and lets you type `\theta` then Tab to get `θ`. It lives in the folder `editors/vscode/` of the Fermium source code; `editors/vscode/README.md` there explains how to install it.
 
 > **Don't use TextEdit** (the Mac's built-in editor) for code: it likes to turn `"` into curly quotes `“ ”` and save files as "rich text", which Fermium can't read. If you must use it, choose **Format → Make Plain Text** first.
 
 ### Write the program
 
-1. In VS Code choose **File → New File…**, and save it (⌘ S) inside your `fermium` folder as `hello.fm`.
+1. In VS Code choose **File → New File…**, and save it (⌘ S on a Mac, Ctrl + S on Linux) inside your `physics` folder as `hello.fm`.
 2. Type this into it and save again:
 
 ```fermium
@@ -177,7 +200,7 @@ print "Hello, physics!"
 print 9.81 m/s^2 * 3 s
 ```
 
-3. Go back to the Terminal (make sure you're in the `fermium` folder: `cd ~/fermium`) and run it:
+3. Go back to the Terminal (make sure you're in the `physics` folder: `cd ~/physics`) and run it:
 
 ```
 fermium run hello.fm
@@ -208,14 +231,31 @@ The most common setup problems:
 
 | What you see | What it means | What to do |
 |---|---|---|
-| `zsh: command not found: fermium` | The install didn't finish, or the Terminal hasn't noticed it yet | Quit and reopen the Terminal. If that doesn't help, repeat Step 4 and read the last lines it prints. |
-| `zsh: command not found: python3` or a pop-up about "developer tools" | Python isn't installed | Do Step 2. |
-| `ERROR: ... does not appear to be a Python project` | You ran the install from the wrong folder | `cd ~/fermium`, check with `ls` that you see `pyproject.toml`, and try again. |
-| `requires a different Python: 3.9.6 not in '>=3.10'` | `python3` is still the old Apple Python | Quit and reopen the Terminal after installing Python from python.org. `python3 --version` must say 3.10 or more. |
+| `command not found: fermium` | The Terminal can't find Fermium in your PATH | Close the Terminal window and open a new one. Check the file is there with `ls ~/bin` (it should list `fermium`). Check Step 3e: `echo $PATH` should show your home folder followed by `/bin`. |
+| `No such file or directory` in Step 3b | The download has a different name or is somewhere else | `ls ~/Downloads` shows what's there. Browsers sometimes add ` (1)` to a name when you download twice. |
+| `permission denied: fermium` | The file isn't marked as a program | Do Step 3c: `chmod +x ~/bin/fermium`. |
+| *"fermium" cannot be opened because the developer cannot be verified*, or *Apple could not verify…* (Mac) | Gatekeeper's quarantine | Do Step 3d: `xattr -d com.apple.quarantine ~/bin/fermium`. |
+| `bad CPU type in executable` (Mac) or `cannot execute binary file: Exec format error` (Linux) | You downloaded the file for a different kind of computer | Check the table at the top of this lesson and download the other file. On an Intel Mac, build it from the source. |
 | `can't find the file 'hello.fm'` | The Terminal is in a different folder from your file (or the name is spelled differently) | `cd` into the folder where you saved the file, and `ls` to check the file is there. |
-| `fermium doctor` says `matplotlib is not installed` (or another package) | The install didn't finish | `cd ~/fermium` and run the one line `fermium doctor` prints: `python3 -m pip install -e ".[full]"` (Step 4 again). |
 
-If pip warns that a script was installed in a folder "which is not on PATH", your Terminal can't find the `fermium` command. The simplest fix is to reinstall Python from python.org (Step 2), quit the Terminal, reopen it, and redo Step 4.
+## Building Fermium from the source
+
+If there is no download for your computer yet (an Intel Mac, for example), you can build `fermium` yourself. It takes longer (the first build can take half an hour) and needs a few tools that programmers use:
+
+1. Get the Fermium source folder (GitHub's green **Code → Download ZIP** button, then unzip it and rename the folder to `fermium`; or `git clone`), and put it in your home folder.
+2. Install **Rust** from **https://rustup.rs** (it installs `cargo`, Rust's build tool, into `~/.cargo/bin`), and the **LLVM 18** development files: `rust/BUILD.md` in the source folder lists the one command for a Mac (Homebrew) and for Ubuntu.
+3. Build and install it:
+
+```
+cd ~/fermium
+make install
+```
+
+This puts `fermium` in `~/.cargo/bin`, which Rust's installer added to your PATH. Open a new Terminal window and continue with Step 3f above (`fermium --version`) and Step 4.
+
+## The old Python version (Fermium 1.5, deprecated)
+
+Before version 2.0, Fermium was written in Python. That version, **Fermium 1.5**, is kept in the source folder (`legacy/`) for one more release, because it is what the new one is checked against, but you don't need it: every example in this bootcamp is checked with the downloaded `fermium`. If you install it anyway (`python3 -m pip install -e ".[full]"` in the source folder), its command is called `fermium-legacy`, so it never gets in the way of `fermium`. `fermium --version` says which version you're running (version 2 ends in `(Rust)`).
 
 ## Exercises
 

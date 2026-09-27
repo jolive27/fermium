@@ -1,0 +1,2 @@
+print ∫ exp(-x²) dx from -∞ to ∞
+print √(π)

@@ -1,0 +1,26 @@
+N = 8
+k = 3 N/m
+m = 0.5 kg
+K = zeros(8, 8)
+for i from 1 to N
+    K[i, i] = 2 k
+    if i < N
+        K[i, i + 1] = -k
+        K[i + 1, i] = -k
+ω2 = eigenvalues(K) / m
+for n from 1 to N
+    print ω2[n] / (4 k / m * sin(n π / (2 (N + 1)))²) - 1 to 3 digits
+print det(K) to 6 digits
+t = 1.5 eV
+H = zeros(16, 16)
+for i from 1 to 15
+    H[i, i + 1] = -t
+    H[i + 1, i] = -t
+E = eigenvalues(H)
+for n from 1 to 16
+    print E[n] / (-2 t cos(n π / 17)) - 1 to 3 digits
+V = eigenvectors(H)
+print V[3, 1] / (sqrt(2 / 17) sin(3 π / 17)) - 1 to 3 digits
+print Vᵀ V
+w = <1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14> [m]
+print w

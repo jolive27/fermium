@@ -1,0 +1,5 @@
+
+λ = 2.0 nC/m
+L = 0.5 m
+V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)^2 + y^2 + z^2)) ds from -L to L
+print -∇V(1.2 m, 0.05 m, 0 m) to 10 digits

@@ -1,0 +1,4 @@
+h(x) =
+    c = 3
+    ∫ c u^2 du from 0 to x
+print h(2)

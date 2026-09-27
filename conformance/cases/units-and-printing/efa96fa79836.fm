@@ -1,0 +1,36 @@
+# Special relativity 01 — Cosmic-ray muons and time dilation
+#
+# (Taylor & Wheeler, "Spacetime Physics", the muon experiment; data from Frisch & Smith,
+# Am. J. Phys. 31, 342 (1963).)  On Mount Washington, 1907 m above Cambridge,
+# Frisch and Smith counted 563 muons per hour with speeds of 0.9952 c.  At sea
+# level they counted 408 per hour of the same muons.  The muon mean lifetime
+# at rest is τ = 2.197 μs.
+#
+#  (a) How long does the trip take in the lab frame, and in the muon's frame?
+#  (b) How many muons per hour would reach sea level without time dilation?
+#      With it?
+#  (c) What time-dilation factor do the measured counts imply?
+#  (d) How thick is the 1907 m of air in the muon's frame?
+
+τ = 2.197 μs
+H = 1907 m
+v = 0.9952 c
+N_top = 563
+N_bottom = 408
+
+γ = 1 / √(1 - v²/c²)
+t_lab = H / v
+t_muon = t_lab / γ
+
+print "gamma =", γ to 6 digits
+print "trip time, lab frame =", t_lab in μs to 6 digits
+print "trip time, muon frame =", t_muon in μs to 6 digits
+print "expected per hour, no dilation =", N_top exp(-t_lab / τ) to 6 digits
+print "expected per hour, with dilation =", N_top exp(-t_muon / τ) to 6 digits
+
+# (c) the measured survival fraction gives the muon-frame trip time directly
+t_measured = τ ln(N_top / N_bottom)
+print "measured dilation factor =", t_lab / t_measured to 6 digits
+
+# (d) length contraction: the muon sees the mountain rushing past, shortened by γ
+print "air column in muon frame =", H / γ in m to 6 digits

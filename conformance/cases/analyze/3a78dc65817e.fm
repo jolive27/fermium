@@ -1,0 +1,2 @@
+analyze planck: ℓ [m] depends on G, ħ, c
+print planck to 6 digits

@@ -1,0 +1,7 @@
+
+f(s) = <exp(-s) s, 1 / (1 + s^2), √s> m
+v = ∫ f(s) ds from 0 to 3
+print v to 12 digits
+print ∫ f(s).x ds from 0 to 3 to 12 digits
+print ∫ f(s).y ds from 0 to 3 to 12 digits
+print ∫ f(s).z ds from 0 to 3 to 12 digits

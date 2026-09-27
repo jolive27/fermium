@@ -1,0 +1,4 @@
+a = 835.8044774889333 [min]
+b = a in ms
+print b / (1 [ms]) to 15 digits
+print (a in ms) in min to 15 digits

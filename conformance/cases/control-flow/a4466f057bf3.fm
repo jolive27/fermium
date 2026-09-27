@@ -1,0 +1,7 @@
+x = 3 m
+if x >= 2 m and x != 5 m
+    print "far"
+else if x <= 1 m
+    print "near"
+else
+    print "mid"

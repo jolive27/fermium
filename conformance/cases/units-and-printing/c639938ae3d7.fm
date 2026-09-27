@@ -1,0 +1,2 @@
+theta = 30 deg
+print sin(θ)

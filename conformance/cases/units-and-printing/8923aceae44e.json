@@ -1,0 +1,17 @@
+{
+ "id": "8923aceae44e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 m/s' is ambiguous: right after a number, m/s is one unit (s is seconds there), but s is also your variable s",
+  "line": 2,
+  "col": 11,
+  "hint": "write  (3 m)/s  to divide by your variable s, or  3 [m/s]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

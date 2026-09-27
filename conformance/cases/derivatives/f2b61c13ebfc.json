@@ -1,0 +1,11 @@
+{
+ "id": "f2b61c13ebfc",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "<0, 0.216, 0.288> V/m\n∇φ(x, y, z) = <-q x/(4π ε_0 (x² + y² + z²)^(3/2)), -q y/(4π ε_0 (x² + y² + z²)^(3/2)), -q z/(4π ε_0 (x² + y² + z²)^(3/2))>\n<0, 0, 2> T/m\n0\n∇²f(x, y) = 2y - sin(x)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

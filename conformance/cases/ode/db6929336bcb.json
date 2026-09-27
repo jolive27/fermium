@@ -1,0 +1,17 @@
+{
+ "id": "db6929336bcb",
+ "area": "ode",
+ "origin": "bootcamp/TROUBLESHOOTING.md#50",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "missing initial condition: x'(start)",
+  "line": 1,
+  "col": 1,
+  "hint": "add them after 'with', e.g.  with x(0) = 0.1 [m], x'(0) = 0 m/s",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

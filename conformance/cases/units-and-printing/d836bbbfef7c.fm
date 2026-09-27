@@ -1,0 +1,3 @@
+m = 2 kg
+t = 3 s
+print 2 m / t

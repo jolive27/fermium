@@ -1,0 +1,11 @@
+{
+ "id": "f8dfa438e4bc",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.000294203 K\n",
+ "stderr": "warning: line 3: the time step is too coarse for this PDE: the estimated error is 26% of the solution's range (checked by step doubling); use a smaller step, or drop  step  to let Fermium choose it\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

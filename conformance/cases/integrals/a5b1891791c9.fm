@@ -1,0 +1,4 @@
+x = 1
+
+F = ∫ exp(s) / s ds
+print F(1)

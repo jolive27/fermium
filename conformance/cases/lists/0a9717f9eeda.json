@@ -1,0 +1,17 @@
+{
+ "id": "0a9717f9eeda",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 1×10¹⁹ is out of range: the list has 2 elements (valid indexes are 1 to 2)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "efa96fa79836",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "gauntlet/special_relativity",
+ "stdout": "gamma = 10.2185\ntrip time, lab frame = 6.39175 μs\ntrip time, muon frame = 0.625509 μs\nexpected per hour, no dilation = 30.6911\nexpected per hour, with dilation = 423.507\nmeasured dilation factor = 9.03477\nair column in muon frame = 186.623 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

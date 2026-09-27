@@ -1,0 +1,7 @@
+L = 1 m
+D = 0.01 m²/s
+solve ∂u/∂t = D * ∂²u/∂x²
+    with u(x, 0 s) = 2 K * sin(π x / L), u(0 m, t) = 0 K, u(L, t) = 0 K
+    for x from 0 m to L, t from 0 s to 10 s
+print u(0.5 m, 10 s), "  exact:", 2 K exp(-D π² 10 [s] / L²)
+print ∂u/∂x(0 m, 5 s), ∂u/∂t(0.5 m, 5 s)

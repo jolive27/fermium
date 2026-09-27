@@ -1,0 +1,2 @@
+print m_n * c^2 in MeV
+print (m_n - m_p) * c^2 in MeV

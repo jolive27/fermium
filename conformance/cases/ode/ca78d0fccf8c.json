@@ -1,0 +1,17 @@
+{
+ "id": "ca78d0fccf8c",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "x'(…) should be a plain number (no units) but this is speed [m/s]",
+  "line": 4,
+  "col": 30,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

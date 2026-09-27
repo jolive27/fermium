@@ -1,0 +1,17 @@
+{
+ "id": "def818919144",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "u at the boundary should be temperature [K], not length [m]",
+  "line": 4,
+  "col": 54,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

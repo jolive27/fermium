@@ -1,0 +1,11 @@
+L = 1.000 ± 0.002 m
+T = 2.007 ± 0.005 s
+g = 4π² L / T²
+print "g =", g
+x = 5.0 ± 0.2 m
+print "x - x =", x - x
+propagate montecarlo 100000 samples
+    v = 20.0 ± 0.5 m/s
+    θ = 45° ± 5°
+    R = v² sin(2θ) / g_n
+print "range:", R

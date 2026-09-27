@@ -1,0 +1,6 @@
+m = 0.500 ± 0.005 kg
+v = 0.20 ± 0.15 m/s
+print "linear rule:", ½ m v²
+propagate montecarlo
+    E = ½ m v²
+print "Monte Carlo:", E

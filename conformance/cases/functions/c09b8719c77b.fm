@@ -1,0 +1,2 @@
+g(x) = 2/cosh(2x)²
+print g(0.08745093357349454) to 15 digits

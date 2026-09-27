@@ -1,0 +1,17 @@
+{
+ "id": "9357dbcdc473",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[2.0000, 0.73576] m\n[20, 30] m [10] m 0\n0.64209262 1.8508157 1.1883951\n0.367879441 m\n",
+ "stderr": "",
+ "error": {
+  "message": "a slice xs[a:b] runs from a up to b, so b can't be smaller than a − 1 (xs[a:a-1] is the empty list); to reverse a list use reverse(xs)",
+  "line": 12,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

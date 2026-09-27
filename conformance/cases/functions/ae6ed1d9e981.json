@@ -1,0 +1,17 @@
+{
+ "id": "ae6ed1d9e981",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "h is defined as a function on line 2, after this line",
+  "line": 1,
+  "col": 7,
+  "hint": "move the definition of h(...) above its first use",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

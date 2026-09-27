@@ -1,0 +1,3 @@
+x = zeros(10)
+parallel for i from 1 to 10
+    x[i] = sum(x)

@@ -1,0 +1,17 @@
+{
+ "id": "8af5c2363834",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'step' is a reserved word in Fermium, so it can't be a variable name",
+  "line": 1,
+  "col": 1,
+  "hint": "pick another name, e.g. step_ or my_step",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

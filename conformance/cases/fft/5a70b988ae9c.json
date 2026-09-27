@@ -1,0 +1,11 @@
+{
+ "id": "5a70b988ae9c",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[210 + 0i, -10.0 + 63.1i, -10.0 + 30.8i, -10.0 + 19.6i, -10.0 + 13.8i, …, -10.0 - 19.6i, -10.0 - 30.8i, -10.0 - 63.1i]  (20 values)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

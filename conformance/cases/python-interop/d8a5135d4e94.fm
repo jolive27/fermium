@@ -1,0 +1,2 @@
+use python numpyy as np
+print 1

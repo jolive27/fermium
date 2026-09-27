@@ -1,0 +1,11 @@
+{
+ "id": "19257ccf0039",
+ "area": "appendix1",
+ "origin": "tests/programs/john/appendix1_ke.fm",
+ "dir": "tests/programs/john",
+ "stdout": "9 J\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

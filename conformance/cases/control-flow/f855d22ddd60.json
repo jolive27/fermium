@@ -1,0 +1,11 @@
+{
+ "id": "f855d22ddd60",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "L = 0.250 m T = 1.00 s\nL = 0.500 m T = 1.42 s\nL = 1 m T = 2.01 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

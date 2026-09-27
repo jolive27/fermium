@@ -1,0 +1,11 @@
+{
+ "id": "d240dea54f08",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/quantum",
+ "stdout": "oscillator length a = 0.2760 nm\nn = 0  E_shoot = 0.5000000000 eV  ħω(n+½) = 0.5000000000 eV\nn = 2  E_shoot = 2.500000000 eV  ħω(n+½) = 2.500000000 eV\nn = 1  E_shoot = 1.500000000 eV  ħω(n+½) = 1.500000000 eV\nn = 3  E_shoot = 3.500000000 eV  ħω(n+½) = 3.500000000 eV\n<V> in ground state = 0.2500000000 eV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

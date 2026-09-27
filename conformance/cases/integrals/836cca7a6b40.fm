@@ -1,0 +1,1 @@
+print ∫ exp(-t/(1 Gyr)) dt from 0 s to ∞ in Gyr to 10 digits

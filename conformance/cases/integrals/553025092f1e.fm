@@ -1,0 +1,4 @@
+area(ψ, L) = ∫ ψ(x)² dx from 0 m to L
+normalize(ψ, L) = √(1 / area(ψ, L))
+box(x) = sin(π x / (1 m))
+print normalize(box, 1 m) to 12 digits

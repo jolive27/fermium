@@ -1,0 +1,9 @@
+r = 2 °C/min
+print r
+print r in K/s to 6 digits
+c = 4.18 J/(g °C)
+print c in J/(kg K)
+T = 90 °C
+print T + r * 5 min
+print 0.5 K/s in °C/min
+print 1 °F/s in K/s to 6 digits

@@ -1,0 +1,2 @@
+d = table(x = [1, 2, 3] m, y = [1, 2] s)
+print d.x

@@ -1,0 +1,11 @@
+{
+ "id": "9fecf0e78f7a",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1\n3\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

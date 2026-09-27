@@ -1,0 +1,11 @@
+{
+ "id": "a3a44dc33750",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "0.35 nm 6.5×10⁻¹¹ N\n0.38 nm 1.4×10⁻¹² N\n0.45 nm -1.0×10⁻¹¹ N\nzero force at 0.38 nm : F = -6.8×10⁻²⁷ N\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

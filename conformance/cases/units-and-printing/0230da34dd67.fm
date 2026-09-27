@@ -1,0 +1,2 @@
+c0 = 299792458 m/s
+print "ly", c0 / (1 m) to 17 digits

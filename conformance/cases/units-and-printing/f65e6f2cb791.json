@@ -1,0 +1,17 @@
+{
+ "id": "f65e6f2cb791",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "unexpected character '@' (Commercial At)",
+  "line": 2,
+  "col": 7,
+  "hint": "remove it, or check the cheat sheet for the symbols Fermium understands",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

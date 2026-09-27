@@ -1,0 +1,2 @@
+f(x [m]) = x
+print f(3)

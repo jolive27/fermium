@@ -1,0 +1,17 @@
+{
+ "id": "f6a9bd18e3a2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "sin needs a plain number, but got frequency [1/s]",
+  "line": 2,
+  "col": 11,
+  "hint": "the argument of sin, cos, exp, ... must be a plain number (angles in rad are plain numbers)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

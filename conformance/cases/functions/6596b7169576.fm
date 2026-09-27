@@ -1,0 +1,2 @@
+f(m) = m c^2
+print f(1 u) in MeV to 6 digits

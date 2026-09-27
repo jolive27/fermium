@@ -1,0 +1,378 @@
+#!/usr/bin/env python3
+"""Score an implementation against the conformance suite (spec §B3) and write CONFORMANCE.md.
+
+  conformance/run --impl legacy            # the Python implementation (v1.5, the oracle): must be 100%
+  conformance/run --impl rust [--bin PATH] # the Rust compiler (default rust/target/release/fermium)
+  options: --area NAME (one area), -j N (parallel jobs), --out FILE (default CONFORMANCE.md at the repo root)
+
+How outputs are compared (D264, strict since red team round 9):
+  - stdout: line by line, exactly, including spacing and punctuation.  The one tolerance: a number written with a
+    decimal point or a power of ten may differ by one unit in its last printed digit (rounding), and only when it
+    has the same shape (the same number of digits, the same decimal places, the same power of ten).  Whole
+    numbers, significant figures and notation must match exactly;
+  - an expected error: the implementation must fail (exit code 1) with the same message, on the same line, and
+    the same hint when the oracle gives one;
+  - warnings (stderr): the same warnings (line and message), in the same order;
+  - a program that should run must exit with code 0.
+The Rust binary runs on a copy of the program in an empty temporary directory, with an empty PATH, so it can't
+read the expected output or call the Python implementation. FERMIUM_PYTHON names the runner's own Python (with
+NumPy and SciPy), which the binary loads only for `use python` programs.
+"""
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+sys.path.insert(0, os.path.join(ROOT, "legacy"))   # Fermium 1.5, the oracle, lives in legacy/fermium since v2.0 (D269)
+
+SUP = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻", "0123456789-")
+NUM = re.compile(r"^[-+]?(\d+(\.\d*)?|\.\d+)(e[-+]?\d+)?(×10[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)?$")
+
+
+TOKEN = re.compile(r"(\s+|[\[\](),<>;:=])")
+
+
+def num_shape(t):
+    """(value, unit of the last digit, shape) of a number with a decimal point or a power of ten, else None."""
+    if not NUM.match(t) or ("." not in t and "e" not in t and "×10" not in t):
+        return None
+    mant, _, exp = t.partition("×10")
+    try:
+        v = float(mant)
+    except ValueError:
+        return None
+    digits = mant.split("e")[0]
+    decimals = len(digits.split(".")[1]) if "." in digits else 0
+    e10 = int(exp.translate(SUP)) if exp and exp.translate(SUP).lstrip("-").isdigit() else 0
+    if exp and not exp.translate(SUP).lstrip("-").isdigit():
+        return None
+    e_part = int(mant.split("e")[1]) if "e" in mant else 0
+    last = 10.0 ** (e_part - decimals)
+    v *= 10.0 ** e10
+    last *= 10.0 ** e10
+    shape = (len(digits.lstrip("-+").replace(".", "")), decimals, e_part, e10, t.startswith("-"))
+    return v, last, shape
+
+
+def same_token(want, got):
+    if want == got:
+        return True
+    a, b = num_shape(want), num_shape(got)
+    if a is None or b is None:
+        return False
+    (va, ulp, sa), (vb, _, sb) = a, b
+    if sa[1:] != sb[1:] or abs(sa[0] - sb[0]) > 1:    # a carry (9.99 -> 10.00) may add one digit
+        return False
+    return abs(va - vb) <= ulp * 1.0000001
+
+
+def same_text(want, got):
+    wl, gl = want.rstrip("\n").split("\n"), got.rstrip("\n").split("\n")
+    if len(wl) != len(gl):
+        return False, f"{len(gl)} lines, expected {len(wl)}"
+    for i, (w, g) in enumerate(zip(wl, gl)):
+        if w == g:
+            continue
+        wt, gt = TOKEN.split(w), TOKEN.split(g)
+        if len(wt) != len(gt) or not all(same_token(a, b) for a, b in zip(wt, gt)):
+            return False, f"line {i + 1}: got {g.strip()[:90]!r}, expected {w.strip()[:90]!r}"
+    return True, ""
+
+
+def words(s):
+    return set(re.findall(r"[\w'’]+", (s or "").lower()))
+
+
+def similar(a, b):
+    """The same message, ignoring only runs of spaces."""
+    return (a or "").split() == (b or "").split()
+
+
+WARN = re.compile(r"warning: (?:.*?, )?line (\d+): (.*)")
+
+
+def warnings_of(stderr):
+    return [(int(m.group(1)), m.group(2)) for m in (WARN.match(ln) for ln in stderr.splitlines()) if m]
+
+
+def _norm_paths(e, fix=None):
+    """An error with the repository's path written as <ROOT> (and a copied folder mapped back), in message and hint."""
+    if not e:
+        return e
+    e = dict(e)
+    for k in ("message", "hint"):
+        if e.get(k):
+            v = e[k]
+            if fix:
+                v = fix(v)
+            e[k] = v.replace(ROOT, "<ROOT>")
+    return e
+
+
+def judge(case, out, err, error, exit_code=None):
+    """(passed, reason)"""
+    case = dict(case, error=_norm_paths(case["error"]))
+    error = _norm_paths(error)
+    drop = tuple(case.get("drop_prefixes") or ())
+    if drop:
+        out = "".join(ln for ln in out.splitlines(True) if not ln.startswith(drop))
+    exp_err = case["error"]
+    if exp_err is not None:
+        if error is None:
+            return False, f"expected the error {exp_err['message'][:80]!r}, but the program ran"
+        if exp_err.get("line") != error.get("line"):
+            return False, f"error on line {error.get('line')}, expected line {exp_err.get('line')}"
+        if not similar(exp_err["message"], error.get("message")):
+            return False, f"error {error.get('message', '')[:80]!r}, expected {exp_err['message'][:80]!r}"
+        if exp_err.get("hint") and not similar(exp_err["hint"], error.get("hint")):
+            return False, f"hint {str(error.get('hint'))[:80]!r}, expected {exp_err['hint'][:80]!r}"
+    elif error is not None:
+        return False, f"unexpected error: {error.get('message', '')[:100]!r}"
+    ok, why = same_text(case["stdout"], out)
+    if not ok:
+        return False, "stdout " + why
+    we, wg = warnings_of(case["stderr"]), warnings_of(err)
+    if [ln for ln, _ in we] != [ln for ln, _ in wg] or not all(similar(a, b) for (_, a), (_, b) in zip(we, wg)):
+        return False, f"warnings on lines {[ln for ln, _ in wg]}, expected {[ln for ln, _ in we]}"
+    if exit_code is not None and exit_code != case.get("exit", 1 if exp_err else 0):
+        return False, f"exit code {exit_code}, expected {case.get('exit')}"
+    return True, ""
+
+
+def run_legacy(path, case):
+    import io
+    import signal
+    from fermium.driver import run_source
+    from fermium.errors import FermiumError
+    src = open(path, encoding="utf-8").read()
+    base = case_dir(case["dir"]) if case["dir"] else None
+    out, err = io.StringIO(), io.StringIO()
+
+    def alarm(*_):
+        raise TimeoutError
+    signal.signal(signal.SIGALRM, alarm)
+    signal.alarm(300)
+    try:
+        run_source(src, os.path.basename(path) if case["origin"] != "tests" else "<program>", out=out, base_dir=base,
+                   err=err)
+        e = None
+    except FermiumError as ex:
+        e = {"message": ex.message, "line": ex.line, "hint": ex.hint}
+    except TimeoutError:
+        return out.getvalue(), err.getvalue(), {"message": "timed out after 300 s", "line": None}
+    finally:
+        signal.alarm(0)
+    out, err = out.getvalue(), err.getvalue()
+    if base:           # paths the program prints as if it ran in the case's folder (see case_dir)
+        real = os.path.normpath(os.path.join(ROOT, case["dir"]))
+        out, err = out.replace(base, real), err.replace(base, real)
+    return out.replace(ROOT, "<ROOT>"), err.replace(ROOT, "<ROOT>"), e
+
+
+def case_dir(rel):
+    """Where a case's folder is now. v1's test programs moved from tests/ to legacy/tests/ at the v2.0 cutover
+    (D269); the cases keep the old folder name (it is part of their id and of the paths they print), so programs
+    still run as if in tests/programs, reading the files from legacy/tests/programs."""
+    real = os.path.normpath(os.path.join(ROOT, rel))
+    if not os.path.isdir(real) and (rel == "tests" or rel.startswith("tests/")):
+        real = os.path.normpath(os.path.join(ROOT, "legacy", rel))
+    return real
+
+
+ERR_LINE = re.compile(r"^(?:.*?, )?line (\d+): (.*)$")
+
+
+def run_binary(binary, path, case):
+    """Run the binary on a copy of the program in an empty directory, with an empty PATH (red team round 9 #3);
+    (stdout, stderr, error or None, exit code)."""
+    import shutil
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        prog = os.path.join(tmp, os.path.basename(path))
+        shutil.copy(path, prog)
+        base = tmp
+        if case["dir"]:
+            # a copy of the program's folder, so plots and other files it writes never land in the repository:
+            # the folder's own files, and any repository file the program names by a relative path (data/x.csv,
+            # ../data/y.csv, lib/z.fm), copied into a mirror of the repository under tmp/root
+            src_dir = case_dir(case["dir"])
+            mirror = os.path.join(tmp, "root")
+            base = os.path.normpath(os.path.join(mirror, case["dir"]))
+            os.makedirs(base, exist_ok=True)
+            for name in os.listdir(src_dir):
+                f = os.path.join(src_dir, name)
+                if os.path.isfile(f) and os.path.getsize(f) < 5_000_000:
+                    shutil.copy2(f, os.path.join(base, name))
+            src_text = open(path, encoding="utf-8").read()
+            for rel in re.findall(r'"([^"\n]+\.[A-Za-z0-9]+)"', src_text):
+                f = os.path.normpath(os.path.join(src_dir, rel))
+                dst = os.path.normpath(os.path.join(base, rel))
+                if f.startswith(ROOT + os.sep) and os.path.isfile(f) and dst.startswith(mirror + os.sep):
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(f, dst)
+        empty = os.path.join(tmp, "empty-path")
+        os.mkdir(empty)
+        try:
+            p = subprocess.run([os.path.abspath(binary), "run", "--base-dir", base, prog], capture_output=True,
+                               text=True, timeout=300, cwd=tmp, env={"PATH": empty, "LANG": "C.UTF-8", "FERMIUM_PYTHON": sys.executable})
+        except subprocess.TimeoutExpired:
+            return "", "", {"message": "timed out after 300 s", "line": None}, None
+        except OSError as ex:
+            return "", "", {"message": f"could not run {binary}: {ex}", "line": None}, None
+    out, err = p.stdout, p.stderr
+    if case["dir"]:            # paths the program prints (plot saved to …) as if it ran in its own folder
+        out = out.replace(base, os.path.normpath(os.path.join(ROOT, case["dir"])))
+        err = err.replace(base, os.path.normpath(os.path.join(ROOT, case["dir"])))
+    out, err = out.replace(ROOT, "<ROOT>"), err.replace(ROOT, "<ROOT>")
+    e = None
+    if p.returncode != 0:
+        # the error: the last line that looks like 'file, line N: message' and isn't a warning; its hint follows
+        lines = err.splitlines()
+        idx = [i for i, ln in enumerate(lines) if ERR_LINE.match(ln) and not ln.startswith("warning:")]
+        if idx:
+            i = idx[-1]
+            m = ERR_LINE.match(lines[i])
+            hint = None
+            for ln in lines[i + 1:]:
+                if ln.startswith("  hint: "):
+                    hint = ln[len("  hint: "):]
+                    break
+            e = {"message": m.group(2), "line": int(m.group(1)), "hint": hint}
+            rest = lines[:i]
+        else:
+            e = {"message": (err.strip().splitlines() or ["(no message)"])[-1], "line": None, "hint": None}
+            rest = lines
+        err = "\n".join(ln for ln in rest if ln.startswith("warning:"))
+    if case["dir"] and e:
+        real = os.path.normpath(os.path.join(ROOT, case["dir"]))
+        e = _norm_paths(e, lambda v: v.replace(base, real))
+    return out, err, e, p.returncode
+
+
+DIVERGENCES = os.path.join(HERE, "divergences")
+
+
+def divergence_of(cid):
+    """A documented divergence (rust/DIVERGENCES.md): conformance/divergences/<id>.json holds the section name and
+    what the Rust implementation prints instead (stdout, stderr, error, exit), checked like a golden."""
+    p = os.path.join(DIVERGENCES, cid + ".json")
+    return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else None
+
+
+def one(args):
+    impl, binary, path = args
+    case = json.load(open(path[:-3] + ".json", encoding="utf-8"))
+    t0 = time.time()
+    try:
+        if impl == "legacy":
+            out, err, e = run_legacy(path, case)
+            code = None
+        else:
+            out, err, e, code = run_binary(binary, path, case)
+        ok, why = judge(case, out, err, e, code)
+        if not ok and impl == "rust":
+            d = divergence_of(case["id"])
+            if d is not None:
+                alt = dict(case, stdout=d.get("stdout", case["stdout"]), stderr=d.get("stderr", case["stderr"]),
+                           error=d.get("error", case["error"]), exit=d.get("exit", case.get("exit")))
+                ok2, why2 = judge(alt, out, err, e, code)
+                if ok2:
+                    return case["area"], case["id"], case["origin"], "divergence", d["section"], time.time() - t0
+                why = f"{why} (a documented divergence, but the output differs from it too: {why2})"
+    except Exception as ex:          # a crash of the implementation counts as a failure, never stops the run
+        ok, why = False, f"crash: {type(ex).__name__}: {ex}"
+    return case["area"], case["id"], case["origin"], ok, why, time.time() - t0
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--impl", choices=["legacy", "rust"], required=True)
+    ap.add_argument("--bin", default=os.path.join(ROOT, "rust", "target", "release", "fermium"))
+    ap.add_argument("--area")
+    ap.add_argument("-j", type=int, default=os.cpu_count() or 2)
+    ap.add_argument("--out", default=os.path.join(ROOT, "CONFORMANCE.md"))
+    ap.add_argument("--min", type=int, default=None,
+                    help="exit 0 if at least this many pass (CI's ratchet for the Rust implementation)")
+    ap.add_argument("--skip-file", help="a file of case ids (one per line, # comments) not run here; they are listed in "
+                                        "the report (CI: the oracle's BLAS-kernel-dependent cases on another CPU type)")
+    a = ap.parse_args()
+    files = sorted(glob.glob(os.path.join(HERE, "cases", a.area or "*", "*.fm")))
+    skipped = []
+    if a.skip_file:
+        ids = {ln.split("#")[0].strip() for ln in open(a.skip_file, encoding="utf-8")} - {""}
+        skipped = sorted(os.path.basename(f)[:-3] for f in files if os.path.basename(f)[:-3] in ids)
+        files = [f for f in files if os.path.basename(f)[:-3] not in ids]
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=a.j) as ex:
+        results = list(ex.map(one, [(a.impl, a.bin, f) for f in files], chunksize=4))
+    areas = {}
+    for area, cid, origin, ok, why, dt in results:
+        areas.setdefault(area, []).append((cid, origin, ok, why))
+    total, passed = len(results), sum(r[3] is True for r in results)
+    documented = sum(r[3] == "divergence" for r in results)
+    impl_name = "Fermium 1.5 (Python, the oracle)" if a.impl == "legacy" else "Fermium 2 (Rust)"
+    lines = [f"# Conformance: {impl_name}", "",
+             f"**{passed} of {total} programs pass ({100.0 * passed / max(total, 1):.1f} %)**, "
+             f"generated by `conformance/run --impl {a.impl}` in {time.time() - t0:.0f} s."
+             + (f" **{documented} more are documented divergences** (rust/DIVERGENCES.md; each checked against the "
+                f"output the divergence describes): **{passed + documented} of {total} "
+                f"({100.0 * (passed + documented) / max(total, 1):.1f} %) pass or are documented.**" if documented else ""),
+             "",
+             *([f"**{len(skipped)} cases not run here** (--skip-file {os.path.relpath(a.skip_file, ROOT)}): "
+                + " ".join(skipped), ""] if skipped else []),
+             "The suite (conformance/cases, see conformance/MANIFEST.md) was harvested from Fermium 1.5: every program the",
+             "test suite runs, every example, rosetta, gauntlet and research program, the benchmarks, and John's Appendix 1",
+             "programs. Comparison (D264): output exactly, except that a number with a decimal point or a power of ten",
+             "may differ by one unit in its last digit when it has the same shape; errors with the same message, line and",
+             "hint; the same warnings; the same exit code.", "",
+             "| Area | Pass | Documented divergences | Total | % pass |", "|---|---|---|---|---|"]
+    for area in sorted(areas):
+        rs = areas[area]
+        n = sum(r[2] is True for r in rs)
+        dv = sum(r[2] == "divergence" for r in rs)
+        lines.append(f"| {area} | {n} | {dv or ''} | {len(rs)} | {100.0 * n / len(rs):.0f} |")
+    lines += [f"| **all** | **{passed}** | **{documented or ''}** | **{total}** | **{100.0 * passed / max(total, 1):.1f}** |",
+              ""]
+    divs = [(area, r) for area in sorted(areas) for r in areas[area] if r[2] == "divergence"]
+    if divs:
+        lines += ["## Documented divergences", ""]
+        lines += [f"- `{r[0]}` ({area}, {r[1]}): {r[3]}" for area, r in divs]
+        lines.append("")
+    fails = [(area, r) for area in sorted(areas) for r in areas[area] if r[2] is False]
+    if fails:
+        lines += ["## Failures", ""]
+        for area in sorted(areas):
+            fs = [r for r in areas[area] if r[2] is False]
+            if not fs:
+                continue
+            lines.append(f"### {area} ({len(fs)})")
+            lines += [f"- `{cid}` ({origin}): {why}" for cid, origin, _, why in fs]
+            lines.append("")
+    open(a.out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    print("\n".join(lines[:len(areas) + 12]))
+    shown = [ln for ln in lines if ln.startswith("- `")][:60]
+    if shown:
+        print("\n".join(["", "Failures and divergences (first 60):"] + shown))
+    passed_or_documented = passed + documented
+    if a.min is not None:
+        floor = a.min
+        if skipped:
+            # skipped cases can't pass here: the floor (set on Linux, where they run) is lowered by their number
+            floor -= sum(1 for cid in skipped if divergence_of(cid) is None)
+            print(f"floor {a.min} lowered to {floor}: {len(skipped)} cases skipped (--skip-file)")
+        if passed < floor:
+            print(f"REGRESSION: {passed} pass, fewer than the floor {floor} (conformance/RUST_FLOOR)")
+            return 1
+        return 0
+    return 0 if passed_or_documented == total else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,2 @@
+theta_0 = 30deg
+print sin(theta_0), cos(theta_0)^2  + sin(theta_0)^2

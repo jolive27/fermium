@@ -26,7 +26,7 @@ pendulum.fm, line 6: can't add length [m] to time [s]
 Fermium is a small programming language for physicists.
 - **Units are part of the language.** The compiler checks them *before the program runs*, and they cost nothing at run time: they are erased before code generation.
 - **Calculus is built in:** `x'`, `d/dt`, `∫ … dx from a to b`, and `solve m x'' = -k x with …`.
-- **Programs compile to native code** through LLVM (via llvmlite).
+- **Programs compile to native code** through LLVM, built into the `fermium` binary: one file, nothing else to install.
 - **Errors are one line in physics terms**, with a caret and a hint.
 - **Plain ASCII works too.** You can type `pi` or `π`, `sqrt` or `√`, `x^2` or `x²`. `fermium fmt --pretty` / `--ascii` converts between the two.
 
@@ -43,14 +43,24 @@ Fermium is a small programming language for physicists.
 
 ## Install
 
+Fermium is one program, `fermium`, with everything inside it: the compiler, LLVM, the units, the numerics, the plots, the REPL, the language server and the Jupyter kernel. Download the file for your computer from the Releases page (`fermium-macos-arm64` or `fermium-linux-x86_64`), put it on your PATH as `fermium`, and check it (the v2.0 binaries aren't on the Releases page yet: until they are, build it with `make install`, below):
+
+```
+fermium doctor                   # checks the installation and explains fixes
+fermium run pendulum.fm
+```
+
+New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac or Linux PC, step by step.
+
+From a checkout, build and install it with Rust and the LLVM 18 development files ([rust/BUILD.md](rust/BUILD.md) lists what to install):
+
 ```
 git clone <this repository>
 cd fermium
-python3 -m pip install -e ".[full]"   # needs Python 3.10+; installs every dependency (llvmlite, numpy, scipy, sympy, matplotlib, Jupyter kernel, language server)
-fermium doctor                   # checks everything and explains fixes
+make install                     # cargo install --locked --path rust/crates/fermium-cli  → ~/.cargo/bin/fermium
 ```
 
-New to programming? Start with the **[Fermium Bootcamp](bootcamp/README.md)**. Lesson 0 walks through the install on a Mac, step by step.
+Fermium 2 (the Rust implementation in [rust/](rust/)) replaced Fermium 1.5 (Python) in v2.0: see [CHANGES_2.0.md](CHANGES_2.0.md). Fermium 1.5 is deprecated and kept in [legacy/](legacy/README.md) for one more phase; `python3 -m pip install -e ".[full]"` installs it as `fermium-legacy`.
 
 ## A 30-second tour
 
@@ -83,7 +93,7 @@ Also:
 - `plot x vs t` saves a PNG with labelled axes.
 - Vectors: `<3, 4> m/s`, `|v|`, `v.x`, `a · b`, `a × b`. ODEs can have vector unknowns: `solve r'' = -G M r / |r|³ with …`.
 - Leibniz notation: `dx/dt` works for functions and in `solve`.
-- `fermium build prog.fm` makes a standalone executable (needs a C compiler). `load`, `fit` and `plot` work in it too; plots are written as SVG, and data files are read from the folder you run the program in.
+- `fermium build prog.fm` makes a standalone executable. The linker is built into `fermium`, so Linux needs no C compiler (a Mac needs Apple's Command Line Tools for the system library). A program it can't compile yet says so: run that one with `fermium run`.
 
 ## Gallery
 
@@ -128,19 +138,30 @@ plot B(λ) vs λ from 50 nm to 3000 nm to "gallery/blackbody.png"
 
 ## Speed
 
-Measured on one 4-core machine with nothing else running (load average ≈ 1.2 at the start; the earlier overnight runs were on a busy machine), median of 7 interleaved runs, 25 Sep 2026. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md); `python benchmarks/run.py --interleave --langs fermium,fermium-base,julia,python,numpy` reproduces every number.
+Fermium 2 (the Rust binary), measured 26 Sep 2026 on one 4-core machine (Intel Xeon @ 2.10 GHz, a shared VM:
+load average 1.4–2.9 during the run, part of one core busy with another job the whole time), median of 7
+interleaved runs. The full table, methods and caveats are in [benchmarks/RESULTS.md](benchmarks/RESULTS.md);
+`python benchmarks/run.py --interleave --langs fermium,fermium-1.5,julia,python,numpy` reproduces every number.
+The Fermium 1.5 column (the Python implementation, LLVM through llvmlite) is from the same run, for reference;
+the back end's own measurements and what is still slower are in
+[rust/crates/fermium-codegen/PERF.md](rust/crates/fermium-codegen/PERF.md). Ratios near 1 move by 5–10% from run
+to run on this machine.
 
-| Benchmark | Fermium (compute) | Julia (compute) | Pure Python |
-|---|---|---|---|
-| N-body, 1M steps | 0.95× Julia (2.5× faster than before M5: integer loop counters, D150) | 1× | ~55× Julia |
-| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | 1.93× Julia | 1× | ~21× Julia |
-| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 0.86× Julia | 1× | ~20× Julia |
-| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | 1.27× Julia | 1× | ~20× Julia |
-| Loop with units | 1.54× Julia | 1× | ~79× Julia |
-| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 0.65× Julia (faster) | 1× | ~54× Julia's 1-thread time (Python runs one thread) |
-| the same, 1 thread | 1.09× Julia | 1× | |
+| Benchmark | Fermium 2 (compute) | Fermium 1.5 (compute) | Julia (compute) | Pure Python |
+|---|---|---|---|---|
+| N-body, 1M steps | 1.01× Julia | 0.98× Julia | 1× | ~54× Julia |
+| Damped spring, RK4, 1M steps (Fermium also stores the whole trajectory: 40 MB, D151) | **1.89× Julia** (slower) | 1.95× Julia | 1× | ~21× Julia |
+| Damped spring, adaptive RK45, both at pure-relative rtol 10⁻⁶ (errors vs exact: Fermium 2.4×10⁻⁴, Julia 1.5×10⁻⁴; Fermium takes 12% fewer steps) | 1.03× Julia (1.2× slower than Fermium 1.5) | 0.87× Julia | 1× | ~21× Julia |
+| Blackbody integrals, both at rtol 10⁻¹⁰ (same number of integrand evaluations) | **1.50× Julia** (slower; 1.1–1.4× Fermium 1.5) | 1.34× Julia | 1× | ~20× Julia |
+| Loop with units | 0.98× Julia | 1.04× Julia | 1× | ~83× Julia |
+| All-pairs gravity, N = 2000: `parallel for` vs `Threads.@threads`, 4 threads (D152) | 1.00× Julia (**1.6× slower than Fermium 1.5**; noisy on this machine, see PERF.md) | 0.61× Julia | 1× | ~52× Julia's 1-thread time (Python runs one thread) |
+| the same, 1 thread | 1.13× Julia | 1.06× Julia | 1× | |
 
-Counting startup and compilation, the Fermium benchmark programs finish sooner than Julia's (0.2–0.45 s against 0.9–2.9 s for the whole process), because Julia spends that time starting up: loading its runtime and packages, the untimed warm-up call each benchmark makes, and JIT-compiling. A program that computes one number takes 0.17 s in Fermium and 0.27 s in Julia (the `startup` row in RESULTS.md).
+Counting startup and compilation, Fermium 2 finishes every benchmark program far sooner than Julia (24–133 ms
+against 0.8–2.5 s for the whole process) and than Fermium 1.5 (0.16–0.41 s), because it starts in milliseconds
+and compiles quickly, while Julia spends that time loading its runtime and packages, running the untimed warm-up
+call each benchmark makes, and JIT-compiling. A program that computes one number takes 18 ms in Fermium 2,
+0.16 s in Fermium 1.5 and 0.25 s in Julia (the `startup` row in RESULTS.md).
 
 ## Gauntlet
 
@@ -166,14 +187,15 @@ Friction items logged: 96; fixed in the language: 86.
 
 ## Browser playground
 
-`web/` is a static site that runs Fermium in the browser with [Pyodide](https://pyodide.org): an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It uses the reference interpreter (`fermium run --interp`), because llvmlite doesn't exist in the browser, so it is slower than the desktop compiler; its output matches `fermium run`.
+`web/` is a static site that runs Fermium in the browser: an editor with `\name` + Tab completion, Run (Ctrl+Enter / Cmd+Enter), errors in the usual one-line form, plots, and a menu with every code block of the bootcamp lessons and every program in `examples/`. Nothing is sent to a server. It runs the Rust compiler built to WebAssembly (a 3.6 MB module, `rust/crates/fermium-wasm`) with its interpreter, so it is slower than the desktop `fermium run`; its output matches `fermium run`.
 
 ```
-python3 web/build.py                  # examples, symbols and a wheel of fermium -> web/gen/
+rustup target add wasm32-unknown-unknown
+python3 web/build.py                  # fermium.wasm, examples and symbols -> web/gen/
 python3 -m http.server -d web 8000    # then open http://localhost:8000/
 ```
 
-Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` downloads it (about 45 MB) into `web/pyodide/`, and the page then works offline. `web/gen/` and `web/pyodide/` are build outputs and are not committed.
+`web/gen/` is a build output and is not committed. [web/README.md](web/README.md) has the details and the tests.
 
 ## Documentation
 - [Language reference](docs/reference.md)
@@ -188,15 +210,17 @@ Pyodide loads from the jsdelivr CDN. `python3 web/build.py --local-pyodide` down
 ## Development
 
 ```
-./check.sh           # lint + all tests (including every ```fermium code block and bootcamp output box) + all examples
+python3 -m pip install -e ".[full,dev]"   # Fermium 1.5 (legacy): the conformance oracle and its test suite
+make check           # legacy lint + tests, then the Rust build, cargo test and the conformance suite
+make build           # rust/target/fast/fermium, for iterating
 python3 benchmarks/run.py
 ```
 
-Project layout:
-- `fermium/`: the compiler.
-  - `lexer.py`, `parser.py`, `checker.py` (units and types), `calculus.py`, `solve.py`
-  - `codegen_llvm.py` (the LLVM backend and numeric kernels)
-  - `runtime/` (printing, plots, data, fits)
-  - `repl.py`, `fmt.py`, `cli.py`
-  - `interp.py` (the reference interpreter: no LLVM, also used by the browser playground)
-- `tests/`: pytest suites.
+`make check` runs the Rust binary on the whole conformance suite (`conformance/`): every example, rosetta, gauntlet and research program, every ```fermium code block of the docs and bootcamp, and every test program, each with the output Fermium 1.5 gives. `FERMIUM_SKIP_RUST=1 make check` skips the Rust part and says so.
+
+Project layout ([docs/architecture.md](docs/architecture.md) is the guide for contributors):
+- `rust/`: Fermium 2, the compiler (a Cargo workspace; `rust/crates/fermium-cli` is the `fermium` binary). [rust/BUILD.md](rust/BUILD.md) explains the build; [rust/DIVERGENCES.md](rust/DIVERGENCES.md) lists where it deliberately differs from 1.5.
+- `conformance/`: the conformance suite and its runner; the score is in [CONFORMANCE.md](CONFORMANCE.md).
+- `legacy/`: Fermium 1.5 (Python), deprecated: `legacy/fermium/` (the package, still imported as `fermium`) and `legacy/tests/` (its pytest suite).
+- `examples/`, `bootcamp/`, `docs/`, `gauntlet/`, `research/`, `benchmarks/`: programs and documentation.
+- `web/`: the browser playground; `editors/vscode/`: the VS Code extension.

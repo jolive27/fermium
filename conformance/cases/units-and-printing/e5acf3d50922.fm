@@ -1,0 +1,4 @@
+a = 0.0029274368614152775 [day]
+b = a in day
+print b / (1 [day]) to 15 digits
+print (a in day) in day to 15 digits

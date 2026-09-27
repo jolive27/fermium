@@ -1,0 +1,17 @@
+{
+ "id": "7b4cf5e8c300",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add text and a number",
+  "line": 2,
+  "col": 16,
+  "hint": "turn the number into text first:  str(E)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

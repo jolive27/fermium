@@ -1,0 +1,9 @@
+x = 3
+print 2(x+1)^2          # actual: 64   expected: 32   (2 (x+1)^2 with a space gives 32)
+print ½(x+1)^2          # actual: 4    expected: 8
+print 0.5(x - 1)^2      # actual: 1.0  expected: 2.0
+k = 2
+print k(x+1)^2          # actual: 64   expected: 32
+print 3(x)²             # actual: 81   expected: 27
+x = 3 m
+print 2(x)^2            # actual: 36 m²  expected: 18 m²

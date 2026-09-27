@@ -1,0 +1,17 @@
+{
+ "id": "a8ddf79452cf",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "a PDE solution's plot takes only  title  and  animate over t [frames N]  (not axis ranges, labels, log or reversed axes)",
+  "line": 4,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

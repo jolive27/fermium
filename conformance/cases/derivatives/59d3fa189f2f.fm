@@ -1,0 +1,10 @@
+x(t) = 30 m/s * t - 2.5 m/s^2 * t^2
+v = x'
+print "velocity at 2 s:", v(2 s)
+print "acceleration at 2 s:", x''(2 s)
+
+# find when it stops, in steps of 0.01 s
+t = 0 s
+while v(t) > 0 m/s
+    t += 0.01 s
+print "stops at", t

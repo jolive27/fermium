@@ -1,0 +1,17 @@
+{
+ "id": "b9f15e1b1203",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'0.1 m²' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 2,
+  "col": 9,
+  "hint": "write  0.1*m²  for 0.1 × your variable m, or  0.1 [m²]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

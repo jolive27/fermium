@@ -1,0 +1,17 @@
+{
+ "id": "bb91644d1082",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't add a quantity with units [N/K] to force [N]",
+  "line": 2,
+  "col": 5,
+  "hint": "both sides of + and - must have the same units",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

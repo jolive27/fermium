@@ -1,0 +1,3 @@
+x(t) = 3 m/s * t
+v = dx/dt
+print v(1 s)        # actual: line 2: dx isn't defined (hint: give it a value first)   expected: 3 m/s

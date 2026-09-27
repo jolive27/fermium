@@ -1,0 +1,17 @@
+{
+ "id": "4a3aebad6aa2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "u isn't defined",
+  "line": 3,
+  "col": 13,
+  "hint": "u is a unit, and units go right after a number; to multiply m_a A_d by u write m_a A_d * 1 u or m_a A_d [u]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

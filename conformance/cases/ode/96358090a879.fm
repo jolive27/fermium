@@ -1,0 +1,4 @@
+solve y'' = -9.81 m/s²
+  with y(0 s) = 0 m, y'(0 s) = 10 m/s
+  for t from 0 s to 5 s using rk45 tolerance 1e-11 until y = 0 m
+print times(y)[end] to 6 digits

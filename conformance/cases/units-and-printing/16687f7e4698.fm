@@ -1,0 +1,1 @@
+print csc(0), cot(0)

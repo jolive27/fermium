@@ -1,0 +1,4 @@
+xs = [1 m, 2 m, 3 m]
+print xs[4]
+# actual: FermiumRuntimeError with line=None: "index 4 is out of range: ..."
+# expected: line 2 (spec Tier 4: one plain line + a caret pointing at the problem)

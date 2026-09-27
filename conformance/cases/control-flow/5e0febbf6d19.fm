@@ -1,0 +1,10 @@
+# Pendulum, plain ASCII
+L = 1.20 m
+g = 9.81 m/s^2
+theta_0 = 10 deg
+omega = sqrt(g / L)
+T = 2 * pi / omega
+print "omega =", omega in rad/s
+print "T =", T
+if theta_0 <= 15 deg
+    print "small angle: the formula is accurate"

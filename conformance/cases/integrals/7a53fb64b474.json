@@ -1,0 +1,11 @@
+{
+ "id": "7a53fb64b474",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "B_z (Biot–Savart) = 15.846432 μT\nB_z (formula)     = 15.846432 μT\n|B_x| + |B_y| = 9.66×10⁻¹⁶ μT\nB at the centre = 25.132741 μT   μ₀ I / 2R = 25.132741 μT\n∫ B_z dz / μ₀ I = 1.0000000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "8191e0327342",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't mix complex numbers and a vector in arithmetic",
+  "line": 1,
+  "col": 7,
+  "hint": "lists, vectors and matrices of complex numbers aren't supported yet",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

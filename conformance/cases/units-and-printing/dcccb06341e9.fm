@@ -1,0 +1,2 @@
+m_π = 134.9768 MeV/c²
+print m_π in MeV/c²

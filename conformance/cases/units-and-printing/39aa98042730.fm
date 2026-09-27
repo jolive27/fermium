@@ -1,0 +1,2 @@
+T = -40 °C
+print T in K to 5 digits, T in °F, T

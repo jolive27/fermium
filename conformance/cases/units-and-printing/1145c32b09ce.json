@@ -1,0 +1,11 @@
+{
+ "id": "1145c32b09ce",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "Ada Lovelace\n1.75 m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

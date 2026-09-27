@@ -1,0 +1,11 @@
+{
+ "id": "28d8f3befcac",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "first-order band, lower edge: 19.5000 1/s\nfirst-order band, upper edge: 20.5000 1/s\nfirst-order largest growth rate: 0.250000 1/s\ntrace at 2ω₀: -2.0061681\nFloquet growth rate at 2ω₀: 0.249927 1/s\ntrace off resonance (γ = 1.5 ω₀): -1.01036\nexact band, lower edge: 19.4970 1/s\nexact band, upper edge: 20.4968 1/s\nband width, exact vs first order: 0.999803 1/s 1.00000 1/s\namplitude after 60 periods: 78.8848 mm\ngrowth rate from the amplitude: 0.249929 1/s\nedge shifts, exact: -0.003016 1/s -0.003212 1/s  second order: -0.003125 1/s\n",
+ "stderr": "warning: line 27: h (Planck's constant) is now your variable: from here on, h means your value\n    h = 0.100\n    ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

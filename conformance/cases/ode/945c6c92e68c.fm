@@ -1,0 +1,58 @@
+# Quantum 32 — A driven two-level atom: Rabi flopping, the rotating-wave approximation,
+#              and Ramsey fringes
+#
+# (Sakurai & Napolitano, Modern QM 2nd ed., §5.5 (eqs. 5.5.21–5.5.22) and Problem 5.35;
+#  Griffiths & Schroeter §11.1; Foot, Atomic Physics §7.1–7.3 and eq. 7.23 (Ramsey).)
+# A two-level atom (ω₀ = 1.00×10⁹ rad/s) is driven by H₁ = ħ Ω cos(ω t) σₓ with
+# Ω = 2.00×10⁷ rad/s and detuning Δ = ω − ω₀ = 1.00×10⁷ rad/s. In the amplitudes c_g, c_e
+#     i c_e' = (ω₀/2) c_e + Ω cos(ω t) c_g,    i c_g' = −(ω₀/2) c_g + Ω cos(ω t) c_e.
+# In the rotating frame with the rotating-wave approximation (RWA)
+#     i c_g' = (Ω/2) c_e,    i c_e' = (Ω/2) c_g − Δ c_e,
+# and Rabi's formula is P_e = (Ω²/Ω_R²) sin²(Ω_R t/2), Ω_R = √(Ω² + Δ²).
+#   (a) Solve the RWA equations (complex unknowns) to t = π/Ω_R, the peak of the first
+#       flop, and compare P_e and |c_g|² + |c_e|² with Rabi's formula.
+#   (b) Solve the full equations to the same time: the counter-rotating terms change P_e by
+#       O(Ω/ω₀) (a few per cent here).
+#   (c) Ramsey: two pulses of length τ = π/(2Ω) separated by a free gap T = 1.00 μs (RWA,
+#       with Ω switched off in the gap). Foot's result for rectangular pulses is
+#         P_e = (2Ω/Ω_R)² sin²(Ω_R τ/2) [cos(Ω_R τ/2) cos(ΔT/2) − (Δ/Ω_R) sin(Ω_R τ/2) sin(ΔT/2)]².
+#       Compare at Δ = 1.00×10⁶ and 3.00×10⁶ rad/s.
+
+ω0 = 1.00e9 rad/s
+Ω = 2.00e7 rad/s
+Δ = 1.00e7 rad/s
+ω = ω0 + Δ
+Ω_R = √(Ω² + Δ²)
+t_pk = π / Ω_R
+
+# (a) the RWA
+solve 𝑖 cg' = (Ω/2) ce,
+      𝑖 ce' = (Ω/2) cg - Δ ce
+  with cg(0 s) = 1 + 0i, ce(0 s) = 0i
+  for t from 0 s to t_pk tolerance 1e-12
+P_rwa = |ce(t_pk)|^2
+print "(a) P_e (RWA ODE) =", P_rwa to 10 digits, " Rabi =", Ω² / Ω_R² * sin(Ω_R t_pk / 2)² to 10 digits, " norm =", |cg(t_pk)|^2 + |ce(t_pk)|^2 to 10 digits
+
+# (b) the full Hamiltonian, no RWA
+solve 𝑖 ae' = (ω0/2) ae + Ω cos(ω t) ag,
+      𝑖 ag' = -(ω0/2) ag + Ω cos(ω t) ae
+  with ag(0 s) = 1 + 0i, ae(0 s) = 0i
+  for t from 0 s to t_pk tolerance 1e-12
+P_full = |ae(t_pk)|^2
+print "(b) P_e (full) =", P_full to 8 digits, " difference from RWA =", P_full - P_rwa to 4 digits, " Omega/omega0 =", Ω / ω0 to 3 digits
+
+# (c) Ramsey fringes
+τ = π / (2*Ω)     # `2 Ω` is 2 ohms: the Rabi frequency needs 2*Ω
+T = 1.00 μs
+pulse(t) = if t < τ then Ω else if t < τ + T then 0 /s else Ω
+ramsey(δ) =
+    solve 𝑖 bg' = (pulse(t)/2) be,
+          𝑖 be' = (pulse(t)/2) bg - δ be
+      with bg(0 s) = 1 + 0i, be(0 s) = 0i
+      for t from 0 s to 2 τ + T tolerance 1e-12
+    return |be(2 τ + T)|^2
+foot(δ) =
+    W = √(Ω² + δ²)
+    return (2*Ω / W)² sin(W τ / 2)² (cos(W τ / 2) cos(δ T / 2) - (δ / W) sin(W τ / 2) sin(δ T / 2))²
+for δ in [1.00e6 rad/s, 3.00e6 rad/s]
+    print "(c) Delta =", δ, " P_e (ODE) =", ramsey(δ) to 10 digits, " Foot =", foot(δ) to 10 digits, " short-pulse cos²(ΔT/2) =", cos(δ T / 2)² to 6 digits

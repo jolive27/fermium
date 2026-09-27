@@ -1,0 +1,17 @@
+{
+ "id": "57ad49d8775e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the ODE solver's step became too small near t = 1.57 s; the solution may blow up there",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

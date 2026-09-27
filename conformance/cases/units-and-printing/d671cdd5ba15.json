@@ -1,0 +1,11 @@
+{
+ "id": "d671cdd5ba15",
+ "area": "units-and-printing",
+ "origin": "dev-notes/notes/bugs-examples.md#13",
+ "dir": "dev-notes/notes",
+ "stdout": "Pound–Rebka\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

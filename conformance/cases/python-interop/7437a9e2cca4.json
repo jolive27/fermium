@@ -1,0 +1,17 @@
+{
+ "id": "7437a9e2cca4",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "np.sqrt: a Python function takes numbers and lists of numbers, but argument 1 is a vector",
+  "line": 2,
+  "col": 15,
+  "hint": "pass the components one at a time, like v.x",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

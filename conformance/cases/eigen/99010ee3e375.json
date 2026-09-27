@@ -1,0 +1,11 @@
+{
+ "id": "99010ee3e375",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": ".",
+ "stdout": "finite well levels: [0.2718, 1.077, 2.379] eV\nprobability outside the well, ground state: 0.0083\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,3 @@
+solve x' = -x / 1 s with x(0) = 1 for t from 0 s to 1 s using radau
+solve y' = -y / 1 s with y(0) = 1 for t from 0 s to 1 s
+print x(1 s) ~= y(1 s)

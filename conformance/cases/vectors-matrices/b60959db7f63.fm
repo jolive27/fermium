@@ -1,0 +1,6 @@
+a = <0, 0> /s
+print a
+b = <1, 2> 1/s
+print b
+x = 4 m
+print <1, 2> / x

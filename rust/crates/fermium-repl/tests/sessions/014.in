@@ -1,0 +1,2 @@
+F(x) = 50 N/m * x
+print F(0.2 m)

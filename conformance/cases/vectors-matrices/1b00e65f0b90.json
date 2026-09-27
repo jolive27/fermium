@@ -1,0 +1,17 @@
+{
+ "id": "1b00e65f0b90",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this matrix has 2 columns, so there is no column 4",
+  "line": 1,
+  "col": 32,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

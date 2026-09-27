@@ -1,0 +1,4 @@
+speed(h) =
+    g = 9.81 m/s²
+    return √(2*g*h)
+print speed(10 m)

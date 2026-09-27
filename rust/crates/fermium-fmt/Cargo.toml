@@ -1,0 +1,7 @@
+[package]
+name = "fermium-fmt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fermium-syntax = { path = "../fermium-syntax" }

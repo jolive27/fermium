@@ -1,0 +1,2 @@
+print integral exp(-x^2) dx from -inf to inf
+print sqrt(pi)

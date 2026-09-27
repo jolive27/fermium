@@ -1,0 +1,11 @@
+{
+ "id": "cfdb3ff210f1",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0 + 0i\n5 + 0i\n-1.00000000000\n(1 + 2i) Ω\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

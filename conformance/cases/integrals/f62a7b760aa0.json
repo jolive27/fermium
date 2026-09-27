@@ -1,0 +1,11 @@
+{
+ "id": "f62a7b760aa0",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "∫ f dv = 1.000000000\n<v>   = 474.81621 m/s   formula: 474.81621 m/s\nv_rms = 515.36641 m/s   formula: 515.36641 m/s\nv_p   = 420.79491 m/s\nf'(v_p) * v_p / f(v_p) = -8.11×10⁻¹⁶\nf'(0.9 v_p) > 0: true   f'(1.1 v_p) < 0: true\nfraction faster than 1000 m/s = 0.010232765\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

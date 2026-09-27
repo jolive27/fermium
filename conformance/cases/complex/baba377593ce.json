@@ -1,0 +1,11 @@
+{
+ "id": "baba377593ce",
+ "area": "complex",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6.00 W\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,10 @@
+f(a) =
+    solve x' = -a x
+      with x(0 s) = 1
+      for t from 0 s to 1 s tolerance 1e-12
+    solve y' = a y
+      with y(0 s) = 1
+      for t from 0 s to 1 s tolerance 1e-12
+    k2 = 2
+    return ∫ k2 x(t) y(t) dt from 0 s to 1 s
+print f(1 / (1 s)) to 9 digits

@@ -1,0 +1,11 @@
+{
+ "id": "c7442f09c3ef",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "x at 10 s: 0.146 cm\nvelocity at 1 s: 0.360 m/s\nplot saved to <ROOT>/bootcamp/damped.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

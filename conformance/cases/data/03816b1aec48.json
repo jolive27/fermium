@@ -1,0 +1,11 @@
+{
+ "id": "03816b1aec48",
+ "area": "data",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "(a) age = 7204.8323 yr\n    C-14 atoms = 1.3913355×10¹¹\nfit Sr87_Sr86 = slope Rb87_Sr86 + ratio0   (10 data points from data/rb_sr_isochron.csv)\n  slope = 0.065632   (standard error 1.1×10⁻⁵)\n  ratio0 = 0.698997   (standard error 1.9×10⁻⁵)\n  rms residual = 3.47×10⁻⁵\n(b) slope = 0.065631944   initial ratio = 0.69899652\n    age = 4.5496706 Gyr\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

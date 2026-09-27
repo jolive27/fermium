@@ -1,0 +1,11 @@
+{
+ "id": "e6bb6d4743c2",
+ "area": "algebraic-solve",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "matched Einstein temperature: 265.687 K\nT = 5 K | Debye: 0.00602105 J/(mol K) | Einstein: 5.89529×10⁻¹⁹ J/(mol K) | T³ law: 0.00602105 J/(mol K) | C_D/3R: 0.000241389\nT = 20 K | Debye: 0.385289 J/(mol K) | Einstein: 0.00748728 J/(mol K) | T³ law: 0.385347 J/(mol K) | C_D/3R: 0.0154465\nT = 100 K | Debye: 14.7661 J/(mol K) | Einstein: 14.2897 J/(mol K) | T³ law: 48.1684 J/(mol K) | C_D/3R: 0.591986\nT = 300 K | Debye: 23.3862 J/(mol K) | Einstein: 23.3751 J/(mol K) | T³ law: 1300.55 J/(mol K) | C_D/3R: 0.937572\nT = 1000 K | Debye: 24.7973 J/(mol K) | Einstein: 24.7972 J/(mol K) | T³ law: 48168.4 J/(mol K) | C_D/3R: 0.994142\nC_D = 3R/2 at: 85.3119 K  = θ_D × 0.248723\nentropy at 300 K, ∫ C/T dT: 30.7134 J/(mol K)\nentropy at 300 K, closed form: 30.7134 J/(mol K)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

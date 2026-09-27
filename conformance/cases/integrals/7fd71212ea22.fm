@@ -1,0 +1,5 @@
+λ = 2 nC/m
+L = 0.5 m
+V(x, y, z) = ∫ λ / (4π ε₀ √((x - s)² + y² + z²)) ds from -L to L
+print -grad(V)(0.3 m, 0.4 m, 0 m)          # the field of a finite line charge
+print ∂/∂x V

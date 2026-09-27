@@ -1,0 +1,2 @@
+v = 36 km/hr
+print v in m/s

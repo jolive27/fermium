@@ -1,0 +1,11 @@
+{
+ "id": "f486d8797ceb",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "32.2 ft/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

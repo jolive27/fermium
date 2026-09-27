@@ -1,0 +1,4 @@
+print integral sin(x) dx from 0 to pi
+print integral 1 / sqrt(x) dx from 0 to 1
+print integral exp(-x^2) dx from -inf to inf
+print sqrt(pi)

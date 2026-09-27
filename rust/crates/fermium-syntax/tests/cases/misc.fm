@@ -1,0 +1,10 @@
+propagate montecarlo 1000 samples
+    y = 2 x
+units natural(ħ = c = 1)
+units nuclear:
+    E = 2 MeV
+analyze pend: T [s] depends on L [m], g [m/s²]
+from nuclear import a as b, c
+import "x.fm" as y
+parallel for i from 1 to 3
+    print i

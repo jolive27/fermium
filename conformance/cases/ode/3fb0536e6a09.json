@@ -1,0 +1,11 @@
+{
+ "id": "3fb0536e6a09",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "in-phase mode: 6.32456 1/s\nout-of-phase mode: 6.92820 1/s\nenergy transfer time: 5.20435 s\nt = 1.00000 s | x1: 4.49558 cm vs 4.49558 cm | x2: 0.500138 cm vs 0.500138 cm\nt = 2.50000 s | x1: -2.38230 cm vs -2.38230 cm | x2: -2.59098 cm vs -2.59098 cm\nt = 5.20435 s | x1: 1.01808×10⁻⁹ cm vs -3.05378×10⁻¹⁶ cm | x2: 0.357435 cm vs 0.357435 cm\nω1 from the ODE: 6.32456 1/s\nslow mode: 4.65212 rad/s  x2/x1 = 5.58945\nfast mode: 6.66017 rad/s  x2/x1 = -0.0894542\nlargest departure from a pure slow mode: 8.71×10⁻⁷ cm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

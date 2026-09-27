@@ -1,0 +1,11 @@
+{
+ "id": "bdc3e96ee708",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "star: z = 0.00019809   v ≈ c z = 59.4 km/s\nVirgo galaxy: z = 0.0039922   v = 1194.4 km/s   distance ≈ 17.063 Mpc\nquasar z = 2:  naive c z = 5.996×10⁵ km/s   relativistic v = 0.8000 c\n  Hα from this quasar arrives at 1969 nm (in the infrared)\nHubble time 1/H0 = 14.0 Gyr\nsiren approaching: 767 Hz   receding: 644 Hz\nplot saved to <ROOT>/examples/gallery/doppler.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

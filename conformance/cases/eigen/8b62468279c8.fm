@@ -1,0 +1,12 @@
+L = 1 nm
+solve -ħ²/(2m_e) * ψ'' = E ψ
+    with ψ(0 nm) = 0, ψ(L) = 0
+    for x from 0 nm to L
+    lowest 4
+for n from 1 to 4
+    print E[n] in eV to 14 digits
+print ∫ ψ₁(x)^2 dx from 0 nm to L to 10 digits
+print ∫ ψ₁(x) ψ₂(x) dx from 0 nm to L to 10 digits
+print ψ₁(0.3 nm) / sqrt(2 / L) to 10 digits
+print ψ₂'(0 nm) / (sqrt(2 / L) 2π / L) to 10 digits
+print ψ₁''(0.3 nm) / ψ₁(0.3 nm) * ħ² / (2m_e) / E[1] to 10 digits

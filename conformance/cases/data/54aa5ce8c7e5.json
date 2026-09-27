@@ -1,0 +1,11 @@
+{
+ "id": "54aa5ce8c7e5",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "largest amplitude: 0.250 m\ntheory at resonance, F0 / (b omega): 0.25 m\nplot saved to <ROOT>/bootcamp/solutions/driven.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

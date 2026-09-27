@@ -1,0 +1,2 @@
+solve w' = w/(2t) with w(1e-10 s) = 1e-5 for t from 1e-10 s to 1 s
+print w(1 s) to 8 digits

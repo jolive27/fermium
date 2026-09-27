@@ -1,0 +1,4 @@
+g(k) =
+    solve x' = -k x with x(0) = 1 for t from 0 to 1
+    x(1)
+print ∫ g(k) dk from 0 to 1 to 6 digits

@@ -1,0 +1,11 @@
+{
+ "id": "3f0673b26076",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "6\n",
+ "stderr": "warning: line 1: h (Planck's constant) is now your variable: from here on, h means your value\n    h = 2\n    ^\n  hint: that's fine if you don't need Planck's constant below; otherwise pick another name, like h_0 or h2\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

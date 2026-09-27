@@ -1,0 +1,2 @@
+g(x) = cos(x)² - sin(x)²
+print g(0.31032856305811984) to 15 digits

@@ -1,0 +1,6 @@
+tau = 8267 yr
+solve N' = -N / tau
+  with N(0) = 1
+  for t from 0 yr to 20000 yr
+print "after 5730 years: ", N(5730 yr)
+print "after 10000 years:", N(10000 yr)

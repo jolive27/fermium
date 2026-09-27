@@ -1,0 +1,11 @@
+{
+ "id": "b7cf7e809f23",
+ "area": "lists",
+ "origin": "bootcamp/lesson05_lists.md#14",
+ "dir": "bootcamp",
+ "stdout": "",
+ "stderr": "warning: line 1: this line computes a value but doesn't use it\n    [1.00, 1.42, 2.01, 2.84] s\n    ^\n  hint: use print to show it, or store it:  name = ...\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

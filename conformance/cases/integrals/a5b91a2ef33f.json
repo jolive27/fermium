@@ -1,0 +1,17 @@
+{
+ "id": "a5b91a2ef33f",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the thing being integrated must be a number, but it is a 2×2 matrix of a plain number (no units)",
+  "line": 1,
+  "col": 9,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

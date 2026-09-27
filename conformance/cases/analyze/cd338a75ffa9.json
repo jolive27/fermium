@@ -1,0 +1,11 @@
+{
+ "id": "cd338a75ffa9",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis: v depends on g, L\n  3 quantities, 2 independent dimensions (length, time) → 3 − 2 = 1 dimensionless group\n  Π₁ = v/√(g L)\n  so v ∝ √(g L)   (v = C √(g L), with C a pure number)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

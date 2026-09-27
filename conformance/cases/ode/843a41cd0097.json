@@ -1,0 +1,17 @@
+{
+ "id": "843a41cd0097",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the ODE solver's step became too small near t = 1 s; no unknown has grown there, so this is probably not a blow-up: the error control asks for relative accuracy on values that are tiny or rounding noise (like an abundance of 10⁻²³); add an absolute tolerance after the range, e.g.  tolerance 1e-9 absolute 1e-16  (in the units of the unknowns)",
+  "line": 1,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

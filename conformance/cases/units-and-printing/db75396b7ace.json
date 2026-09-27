@@ -1,0 +1,11 @@
+{
+ "id": "db75396b7ace",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "333333\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

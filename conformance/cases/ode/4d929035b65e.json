@@ -1,0 +1,11 @@
+{
+ "id": "4d929035b65e",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/gravitation",
+ "stdout": "geostationary radius: 42164.2 km\ngeostationary altitude: 35786.1 km\nLEO speed: 7.72578 km/s\nfirst burn: 2.42574 km/s\nsecond burn: 1.46683 km/s\ntotal: 3.89257 km/s\ntransfer time: 5.27506 hr\nescape burn from LEO: 3.20012 km/s\nODE apogee radius: 42164.2 km\nODE time to apogee: 5.27506 hr\nODE speed at apogee: 1.60783 km/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

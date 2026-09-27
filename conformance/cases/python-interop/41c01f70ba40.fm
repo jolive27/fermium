@@ -1,0 +1,8 @@
+use python numpy as np
+use python scipy.special as sp
+r = 2.5 m
+print np.sinc(0.25) to 12 digits
+print sp.jv(0, r / (1 m)) to 12 digits
+print sp.gamma(4.5) to 12 digits
+print np.pi to 12 digits
+print np.sqrt(2) to 12 digits

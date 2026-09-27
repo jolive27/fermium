@@ -1,0 +1,12 @@
+
+n = 1000
+a = 10 J
+b = 0 J
+c = 0
+parallel for i from 1 to n
+    a += i * 1 J
+    b -= 2 i * 1 J
+    if mod(i, 2) == 0
+        continue
+    c += 1
+print a, b, c

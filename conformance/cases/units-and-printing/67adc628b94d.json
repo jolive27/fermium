@@ -1,0 +1,17 @@
+{
+ "id": "67adc628b94d",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'2 m' is ambiguous: right after a number, m is a unit (metres), but m is also your variable m",
+  "line": 3,
+  "col": 11,
+  "hint": "write  ½ m  for 1/2 × your variable m, or  1/2 [m]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

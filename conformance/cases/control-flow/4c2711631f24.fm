@@ -1,0 +1,2 @@
+for d from 0 km to 10 km step 1 km
+    print d, d / c in us

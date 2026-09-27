@@ -1,0 +1,17 @@
+g = 9.81 m/s^2
+k = 0.01 1/m        # drag constant
+dt = 0.001 s
+y = 0 m
+v = 20 m/s
+t = 0 s
+y_max = 0 m
+
+while y >= 0 m
+    y += v dt
+    v -= g dt + k v abs(v) dt
+    t += dt
+    if y > y_max
+        y_max = y
+
+print "flight time:", t to 4 digits
+print "highest point:", y_max to 4 digits

@@ -1,0 +1,2 @@
+analyze horizon: r [m] depends on G, M [kg], c
+print "Sun:", 2 horizon(M_sun) in km

@@ -30,7 +30,7 @@ in MeV), computes the residual for every nucleus, and plots them against N and Z
 - rms residual: **3.31 MeV** over 2484 nuclei (binding energies range up to ~1800 MeV). Published fits of this
   five-term form quote a few MeV; the exact numbers depend on which nuclei are included and on Z² vs Z(Z−1).
 - The coefficients agree with an independent NumPy least-squares solution on the same file to 2×10⁻⁴
-  (`tests/test_research.py`), and are in the range of the textbook values (which were fitted to older, smaller data sets).
+  (`legacy/tests/test_research.py`), and are in the range of the textbook values (which were fitted to older, smaller data sets).
 - **Magic numbers:** the largest extra binding for A ≥ 40 is **13.3 MeV at Z = 50, N = 82 (¹³²Sn, doubly magic)**.
   Mean residual of the isotones: N = 50: +3.5 MeV (N ± 8: −3.5, −0.6); N = 82: +5.6 MeV (+0.3, −0.1);
   N = 126: +5.4 MeV (+2.8, −2.3); N = 28: +0.3 MeV (−1.7, −2.5).

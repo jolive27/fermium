@@ -1,0 +1,11 @@
+{
+ "id": "98d6ec3cf3f8",
+ "area": "lists",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "[1.00, 1.00, 1.00, 1.00, 0.999] yr²/AU³\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

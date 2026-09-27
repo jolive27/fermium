@@ -1,0 +1,6 @@
+solve -ħ²/(2*m_e) * ψ'' = E ψ
+    with ψ(0 nm) = 0, ψ(1 nm) = 0
+    for x from 0 nm to 1 nm
+    using shooting
+    lowest 3
+print E[1] in eV to 6 digits

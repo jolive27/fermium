@@ -1,0 +1,3 @@
+area(V, L) = ∫ V(x) dx from 0 m to L
+f(x) = 3 J
+print area(f, 2 m)

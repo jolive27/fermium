@@ -1,0 +1,17 @@
+{
+ "id": "0e0b3f9e27f8",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'sec' isn't a unit Fermium knows (or a variable you've defined)",
+  "line": 1,
+  "col": 7,
+  "hint": "Fermium writes units as symbols: s",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

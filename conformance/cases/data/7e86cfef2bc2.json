@@ -1,0 +1,11 @@
+{
+ "id": "7e86cfef2bc2",
+ "area": "data",
+ "origin": "tests",
+ "dir": "gauntlet/nuclear",
+ "stdout": "Z = 84  A = 210  Q = 5.40745 MeV  G = 30.607185  log10 t_calc/s = 5.46847  log10 t_meas/s = 7.07758\nZ = 84  A = 212  Q = 8.95412 MeV  G = 16.145484  log10 t_calc/s = -7.20118  log10 t_meas/s = -6.53091\nZ = 84  A = 214  Q = 7.83346 MeV  G = 19.501249  log10 t_calc/s = -4.25623  log10 t_meas/s = -3.78418\nZ = 84  A = 216  Q = 6.90646 MeV  G = 22.933854  log10 t_calc/s = -1.24624  log10 t_meas/s = -0.838632\nZ = 84  A = 218  Q = 6.11468 MeV  G = 26.513002  log10 t_calc/s = 1.89012  log10 t_meas/s = 2.26923\nZ = 86  A = 222  Q = 5.59031 MeV  G = 30.419232  log10 t_calc/s = 5.30469  log10 t_meas/s = 5.51897\nZ = 88  A = 226  Q = 4.87062 MeV  G = 36.389281  log10 t_calc/s = 10.5223  log10 t_meas/s = 10.7032\nZ = 90  A = 232  Q = 4.08160 MeV  G = 44.565289  log10 t_calc/s = 17.6654  log10 t_meas/s = 17.6454\nZ = 92  A = 238  Q = 4.26990 MeV  G = 43.996790  log10 t_calc/s = 17.1649  log10 t_meas/s = 17.1492\n(b) U-238: b = 60.702503 fm  G numeric = 43.99678969  G closed = 43.99678969\nfit log10(t_half/(1 s)) = a1·(Z - 2)/√(Q/(1 MeV)) + a2   (9 data points from data/alpha_emitters.csv)\n  a1 = 1.480   (standard error 0.043)\n  a2 = -46.83   (standard error 1.5)\n  rms residual = 0.620\n(c) Geiger-Nuttall: a1 = 1.4804684   a2 = -46.831406\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

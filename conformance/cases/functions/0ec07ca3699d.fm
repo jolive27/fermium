@@ -1,0 +1,2 @@
+g(x) = cosh(x) - sinh(x/2)/2
+print g(-1.236837361009246) to 15 digits

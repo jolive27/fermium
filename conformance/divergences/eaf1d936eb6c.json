@@ -1,0 +1,8 @@
+{
+ "id": "eaf1d936eb6c",
+ "section": "Integrals at the rounding level print only their meaningful figures (spec B2; OPEN_ITEMS L-2, RT7-5)",
+ "stdout": "8×10⁻⁹\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

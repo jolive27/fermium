@@ -1,0 +1,17 @@
+{
+ "id": "96bf6c529332",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "expected 'else' (an if-expression needs an else part) but the line ended",
+  "line": 1,
+  "col": 20,
+  "hint": "to continue on the next line, indent the line that starts with else, or put the whole right side in brackets ( … )",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,2 @@
+d = load "data/decay.csv"
+fit counts = N0 exp(-t / tau) to d

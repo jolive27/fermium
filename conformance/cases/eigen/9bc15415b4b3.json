@@ -1,0 +1,17 @@
+{
+ "id": "9bc15415b4b3",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the boundary conditions must be at the ends of the range (x = start and x = end)",
+  "line": 1,
+  "col": 50,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

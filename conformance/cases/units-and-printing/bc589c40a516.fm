@@ -1,0 +1,4 @@
+m = 1500 kg
+v = 100 km/hr
+KE = ½ m v^2
+print KE in kJ

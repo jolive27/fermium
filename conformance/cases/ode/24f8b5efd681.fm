@@ -1,0 +1,5 @@
+solve
+    x'' = -x / (1 s²)
+    with x(0) = 1 m, x'(0) = 0 m/s
+    for t from 0 s to 10 s step 0.01 s absolute 1e-9 m
+print x(10 s) to 10 digits

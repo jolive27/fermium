@@ -1,0 +1,2 @@
+g(x) = ((2x - x²)·sin(3x) + 3x² cos(3x))·exp(-x)
+print g(1.70192150681553) to 15 digits

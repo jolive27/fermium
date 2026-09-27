@@ -1,0 +1,11 @@
+{
+ "id": "640b8e22f67c",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "rest energies:  electron 0.510999 MeV   proton 938.272 MeV   neutron 939.565 MeV\n1 MeV electron:  γ = 2.957   v = 0.9411 c  p = 1.422 MeV/c\ncheck E² = (pc)² + (mc²)²: 1.511 MeV\nNewton would say v = 1.978 c  (faster than light!)\nLHC proton: γ = 7.2×10³   1 - v/c = 9.5×10⁻⁹\nmuon: γ = 31.63   mean distance without time dilation: 0.6583 km   with: 20.82 km\ndK/dv at v = 0.5 c: 2.10×10⁻²² kg m/s   γ³ m v = 2.10×10⁻²² kg m/s\nat v = 0.1 c: relativistic 2.57 keV   Newton 2.55 keV\nat v = 0.9 c: relativistic 661 keV   Newton 207 keV\nplot saved to <ROOT>/examples/gallery/relativistic_energy.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

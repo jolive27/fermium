@@ -1,0 +1,12 @@
+g = 9.8 m/s²
+solve h'' = -g
+  with h(0 s) = 0 m, h'(0 s) = 10 m/s
+  for t from 0 s to 100 s
+  until h = 0 m
+print times(h)[end]
+solve u' = -u / (1 s)
+  with u(5 s) = 1 m
+  for t from 5 s to 0 s step 0.01 s
+print u(0 s), u[end]
+solve sin(x) = 0 for x from 1 to 10
+print x

@@ -1,0 +1,17 @@
+{
+ "id": "f5006b0f0deb",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an integral can't use uncertain values (±) yet; put it inside a  propagate montecarlo  block, or use value(x)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

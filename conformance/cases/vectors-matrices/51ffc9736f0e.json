@@ -1,0 +1,11 @@
+{
+ "id": "51ffc9736f0e",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "<2.0, 0, 0> m\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

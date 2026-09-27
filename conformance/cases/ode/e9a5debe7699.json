@@ -1,0 +1,11 @@
+{
+ "id": "e9a5debe7699",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/oscillations",
+ "stdout": "Landau coefficient = 0.089062500 1/(m² s)\nx0 = 0.05 m  T_ode = 3.1412420811 s  T_exact = 3.1412420811 s  x_minus = -0.05012527472 m  coefficient = 0.089282522 1/(m² s)\nx0 = 0.1 m  T_ode = 3.1401874679 s  T_exact = 3.1401874679 s  x_minus = -0.1005018915 m  coefficient = 0.089496932 1/(m² s)\nx0 = 0.2 m  T_ode = 3.1359537868 s  T_exact = 3.1359537868 s  x_minus = -0.2020101513 m  coefficient = 0.089906726 1/(m² s)\nx0 = 0.4 m  T_ode = 3.1189779141 s  T_exact = 3.1189779141 s  x_minus = -0.4079999680 m  coefficient = 0.090633615 1/(m² s)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "4b2a5f48eb53",
+ "area": "fft",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "[-0.900000000000000, 1.50000000000000]\n[0, 0]\n[0.300000000000000, -1.20000000000000]\n",
+ "stderr": "warning: line 2: fft_re(xs) is deprecated and will be removed after Fermium 1.5: write re(fft(xs))\n    print fft_re(xs) to 15 digits\n          ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 3: fft_im(xs) is deprecated and will be removed after Fermium 1.5: write im(fft(xs))\n    print fft_im(xs) to 15 digits\n          ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 4: fft_re(xs) is deprecated and will be removed after Fermium 1.5: write re(fft(xs))\n    print ifft(fft_re(xs), fft_im(xs)) to 15 digits\n               ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 4: fft_im(xs) is deprecated and will be removed after Fermium 1.5: write im(fft(xs))\n    print ifft(fft_re(xs), fft_im(xs)) to 15 digits\n                           ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\nwarning: line 4: ifft(re, im) is deprecated and will be removed after Fermium 1.5: write ifft(complex(re, im))\n    print ifft(fft_re(xs), fft_im(xs)) to 15 digits\n          ^\n  hint: fft(xs) gives the transform as a list of complex numbers; ifft(X) transforms one back\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

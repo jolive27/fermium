@@ -1,0 +1,6 @@
+x = 2 m
+x += 1 m
+x -= 50 cm
+x *= 2
+x /= 5
+print x

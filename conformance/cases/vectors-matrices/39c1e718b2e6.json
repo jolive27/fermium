@@ -1,0 +1,17 @@
+{
+ "id": "39c1e718b2e6",
+ "area": "vectors-matrices",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "f returns a vector, so it can't be applied to each element of a list (lists of vectors aren't supported yet)",
+  "line": 2,
+  "col": 7,
+  "hint": "loop over the list and push the components into separate lists",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

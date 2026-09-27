@@ -1,0 +1,3 @@
+b = 2.898e-3 m K
+peak(T) = b / T
+print peak(5778 K) in nm

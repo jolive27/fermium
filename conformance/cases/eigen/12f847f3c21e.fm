@@ -1,0 +1,21 @@
+k = e² / (4π ε_0)
+r_max = 4 nm
+solve -ħ²/(2*m_e) * ψ'' - k / r * ψ = E ψ
+    with ψ(0 nm) = 0, ψ(r_max) = 0
+    for r from 0 nm to r_max
+    lowest 2
+    grid 2000
+solve -ħ²/(2*m_e) * φ'' + (ħ² / (m_e r²) - k / r) φ = W φ
+    with φ(0 nm) = 0, φ(r_max) = 0
+    for r from 0 nm to r_max
+    lowest 1
+    grid 2000
+print (∫ ψ₂(r)² / r dr from 0 nm to r_max) a_0 * 4 - 1 to 4 digits
+print (∫ φ₁(r)² / r dr from 0 nm to r_max) a_0 * 4 - 1 to 4 digits
+print (∫ ψ₂(r)² / r² dr from 0 nm to r_max) a_0² * 4 - 1 to 4 digits
+print (∫ φ₁(r)² / r² dr from 0 nm to r_max) a_0² * 12 - 1 to 4 digits
+print (∫ ψ₂(r)² dr from 0 nm to r_max) - 1 to 4 digits
+print E[1] / (-m_e k² / (2 ħ²)) - 1 to 4 digits
+print E[2] / (-m_e k² / (8 ħ²)) - 1 to 4 digits
+print W[1] / (-m_e k² / (8 ħ²)) - 1 to 4 digits
+print ψ₂'(0 nm)² / (4π) * a_0³ * 8π - 1 to 4 digits

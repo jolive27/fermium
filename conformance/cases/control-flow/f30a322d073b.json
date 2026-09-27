@@ -1,0 +1,17 @@
+{
+ "id": "f30a322d073b",
+ "area": "control-flow",
+ "origin": "gauntlet/oscillations/FRICTION.md#2",
+ "dir": "gauntlet/oscillations",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "K isn't defined",
+  "line": 1,
+  "col": 18,
+  "hint": "K is a unit; units go right after a number, like 1 K, or in brackets [K]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

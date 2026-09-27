@@ -1,0 +1,5 @@
+solve
+    xe' = peebles(z, xe, 1)
+    τ' = xe s(z)
+    with xe(1600) = x_saha(1600), τ(1600) = 0
+    for z from 1600 to 200 using radau tolerance 1e-10 absolute 1e-14

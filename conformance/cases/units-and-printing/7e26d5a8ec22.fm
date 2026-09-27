@@ -1,0 +1,5 @@
+m = 2 kg
+v = 3 m/s
+E = 0
+E += ½ m v²
+print E

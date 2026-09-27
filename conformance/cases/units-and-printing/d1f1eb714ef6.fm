@@ -1,0 +1,4 @@
+a = 754.4766785199972 [C]
+b = a in C
+print b / (1 [C]) to 15 digits
+print (a in C) in C to 15 digits

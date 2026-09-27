@@ -1,0 +1,11 @@
+{
+ "id": "901c17218b8c",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "box: E1 = 0.376030 eV  exact 0.376030 eV\nbox: E2/E1 = 4.00000  E3/E1 = 9.00000\nfinite well: level 1 at 0.27180 eV\nfinite well: level 2 at 1.0774 eV\nfinite well: level 3 at 2.3792 eV\nfinite well: probability outside the well in the ground state: 0.00827\noscillator: E 1 / ħω = 0.500000000   shooting: 0.500000000\noscillator: E 2 / ħω = 1.50000000   shooting: 1.50000000\noscillator: E 3 / ħω = 2.50000000   shooting: 2.50000000\noscillator: E 4 / ħω = 3.50000000   shooting: 3.50000000\nplot saved to <ROOT>/examples/gallery/bound_states.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

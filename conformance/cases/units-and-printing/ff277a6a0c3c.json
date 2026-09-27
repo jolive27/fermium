@@ -1,0 +1,17 @@
+{
+ "id": "ff277a6a0c3c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "eigenvalues(K, M) needs K and M of the same size, but they are 2×2 and 3×3",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

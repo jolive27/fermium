@@ -1,0 +1,8 @@
+{
+ "id": "47680448a9da",
+ "section": "Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)",
+ "stdout": "radiation constant a: 7.56573×10⁻¹⁶ J/(m³ K⁴)\nadiabat: T at 8 L: 1500.000 K\nV T³ at 1 L and 8 L: 2.700000×10⁷ m³ K³ 2.700000×10⁷ m³ K³\ncorner volumes: 1.00 L 2.00 L 16.0000 L 8.00000 L\nwork on each leg (μJ): 20.4275 μJ 61.2824 μJ -10.2137 μJ -30.6412 μJ\nnet work: 40.8550 μJ\nheat in, heat out: 81.7099 μJ -40.8550 μJ\nfirst law, W − (Q_h + Q_c): 0 μJ\nClausius sum: 0 J/K\nphoton Carnot efficiency: 0.500000  1 − T_c/T_h: 0.500000\nStirling net work: 13.7016 kJ\nStirling, no regenerator: 0.297145\nStirling, closed form: 0.297145\nStirling, perfect regenerator: 0.500000\nStirling, 90 % regenerator: 0.468047\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

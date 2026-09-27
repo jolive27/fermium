@@ -1,0 +1,6 @@
+A = 2 cm
+omega = 5 rad/s
+x(t) = A cos(omega t)
+jerk = x'''
+print jerk
+print jerk(0.1 s)

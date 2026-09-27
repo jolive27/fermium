@@ -1,0 +1,4 @@
+xs = [1 m, 2 m, 3 m, 4 m]
+print fft_re(xs)
+print power_spectrum(xs, 1 s)
+print frequencies(xs, 1 ms)

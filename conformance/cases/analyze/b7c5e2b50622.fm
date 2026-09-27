@@ -1,0 +1,2 @@
+analyze kepler: T [s] depends on a [m], G, M [kg]
+print "one year:", 2π kepler(AU, M_sun) in day

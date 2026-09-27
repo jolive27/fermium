@@ -1,0 +1,6 @@
+v = <3, 4> m/s
+print v, |v|, v.x
+a = <1, 0, 0> m
+b = <0, 2, 0> m
+print a · b, a × b, unit(v)
+print 2 v + <1, 1> m/s

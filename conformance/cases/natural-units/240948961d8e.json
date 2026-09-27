@@ -1,0 +1,17 @@
+{
+ "id": "240948961d8e",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "g was defined in natural units (ħ = c = 1), so it can only be used where those units hold",
+  "line": 3,
+  "col": 7,
+  "hint": "define g outside the  units  region to use it everywhere",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

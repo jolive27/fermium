@@ -1,0 +1,11 @@
+{
+ "id": "68e8676f9e5f",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "dimensional analysis of pendulum: T depends on L, m, g\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = T √(g/L)\n  so T ∝ √(L/g)   (T = C √(L/g), with C a pure number)\n  m drops out: nothing else has mass\n  defined pendulum(L, g) = √(L/g), so T = C pendulum(L, g)\nfit T = C pendulum(L, 9.81 m/s²)   (7 data points from data/pendulum.csv)\n  C = 6.269   (standard error 0.012)\n  rms residual = 0.00850 s\nC = 6.27 and 2π = 6.28\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

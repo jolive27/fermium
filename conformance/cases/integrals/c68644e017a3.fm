@@ -1,0 +1,2 @@
+print ∫ exp(-x^2) dx from -inf to inf to 6 digits
+print √π to 6 digits

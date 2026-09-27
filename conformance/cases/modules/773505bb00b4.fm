@@ -1,0 +1,3 @@
+import astro
+z = 1
+print astro.comoving_distance(-10, 70 km/s/Mpc, 0.3)

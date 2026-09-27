@@ -1,0 +1,17 @@
+{
+ "id": "49ecc9640f4f",
+ "area": "control-flow",
+ "origin": "dev-notes/notes/bugs-adversarial.md#41",
+ "dir": "dev-notes/notes",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "index 1×10¹⁹ is out of range: the list has 3 elements (valid indexes are 1 to 3)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

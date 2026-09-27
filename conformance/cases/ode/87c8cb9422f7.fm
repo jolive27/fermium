@@ -1,0 +1,4 @@
+L = [1, 2]
+f(i) = L[i]
+solve x' = -f(3) x with x(0) = 1 for t from 0 to 1 using radau
+print x(1)

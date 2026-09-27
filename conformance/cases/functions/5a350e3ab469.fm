@@ -1,0 +1,11 @@
+for i from 1 to 0
+    print 5
+print i              # actual: 6.92797×10⁻³¹⁰
+for x in []
+    print 5
+print x              # actual: 6.92365×10⁻³¹⁰
+f(n) =
+    for i from 1 to n
+        print 1
+    i
+print f(0)           # actual: 6.90166×10⁻³¹⁰

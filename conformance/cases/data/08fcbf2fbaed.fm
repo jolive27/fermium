@@ -1,0 +1,3 @@
+T = [1, 0.5, 0.2, 0.1] [MeV]
+D = [1e-15, 1e-10, 1e-6, 1e-5]
+plot D vs T with y from D[1] to 1 to "p.png"

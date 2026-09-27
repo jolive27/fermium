@@ -1,0 +1,11 @@
+{
+ "id": "5cbdb1acef98",
+ "area": "data",
+ "origin": "dev-notes/notes/bugs-examples.md#2",
+ "dir": "dev-notes/notes",
+ "stdout": "plot saved to <ROOT>/dev-notes/notes/orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

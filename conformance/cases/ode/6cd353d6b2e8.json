@@ -1,0 +1,11 @@
+{
+ "id": "6cd353d6b2e8",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/thermodynamics",
+ "stdout": "k = 0.0672944 1/min\nT(5 min)  = 70.0000 °C\nT(10 min) = 55.7143 °C\ncooling rate at t = 0: -4.71061 K/min\ncool enough to drink after 12.5909 min\nexact: t = ln((T0 - T_room)/(T_drink - T_room))/k = 12.5909 min\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "92eb9cdaa509",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'3 s^2' is ambiguous: right after a number, s is a unit (seconds), but s is also your variable s",
+  "line": 1,
+  "col": 11,
+  "hint": "write  3*s^2  for 3 × your variable s, or  3 [s^2]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

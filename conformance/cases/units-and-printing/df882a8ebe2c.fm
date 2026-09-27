@@ -1,0 +1,4 @@
+L = 1.20 m
+T = 2.21 s
+print L
+print T

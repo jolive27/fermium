@@ -1,0 +1,14 @@
+import quantum
+
+print (quantum.box_energy(2, m_e, 1 nm)) / (1 eV) to 12 digits
+print (quantum.oscillator_energy(3, 1e15 rad/s)) / (1 eV) to 12 digits
+print (quantum.de_broglie_wavelength(m_e * 1e6 m/s)) / (1 nm) to 12 digits
+print (quantum.de_broglie_wavelength_from_energy(m_e, 100 eV)) / (1 nm) to 12 digits
+print (quantum.photon_energy(500 nm)) / (1 eV) to 12 digits
+print (quantum.reduced_mass(m_e, m_p)) / (1 kg) to 12 digits
+print (quantum.hydrogen_level(1)) / (1 eV) to 12 digits
+print (quantum.hydrogen_level(3)) / (1 eV) to 12 digits
+print (quantum.hydrogenlike_level(1, 2, m_α)) / (1 eV) to 12 digits
+print quantum.barrier_transmission(1 eV, 2 eV, 0.5 nm, m_e) to 12 digits
+print quantum.barrier_transmission(3 eV, 2 eV, 0.5 nm, m_e) to 12 digits
+print quantum.barrier_transmission(2 eV, 2 eV, 0.5 nm, m_e) to 12 digits

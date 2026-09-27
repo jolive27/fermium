@@ -1,0 +1,11 @@
+{
+ "id": "ee4b5f8044db",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "(a) z_R = 0.7381561686 m  w(1 m) = 0.8419152136 mm  R(1 m) = 1.544874529 m\n    closed forms: w0 sqrt(1 + (z/z_R)²) = 0.8419152136 mm  z (1 + (z_R/z)²) = 1.544874529 m\n(b) new waist at s = 106.6426815 mm  w0' = 42.95566682 μm\n    Self: s = 106.6426815 mm  w0' = 42.95566682 μm\n(c) Gouy phase to the lens = 53.566882°\n(d) norm = 1.0000000  rms width = 0.420938 mm  w(z)/2 = 0.420958 mm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

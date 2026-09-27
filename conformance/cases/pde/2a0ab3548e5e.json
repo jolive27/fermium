@@ -1,0 +1,17 @@
+{
+ "id": "2a0ab3548e5e",
+ "area": "pde",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "in this PDE, i is your own variable i, not the imaginary unit",
+  "line": 5,
+  "col": 7,
+  "hint": "write the imaginary unit as 𝑖 (Tab \\imag) or 1i, like  𝑖 ħ ∂ψ/∂t = …; or rename your variable",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

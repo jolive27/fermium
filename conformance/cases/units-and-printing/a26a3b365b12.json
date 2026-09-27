@@ -1,0 +1,17 @@
+{
+ "id": "a26a3b365b12",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'36 km/h': h is your variable here, and the hour is written hr",
+  "line": 2,
+  "col": 13,
+  "hint": "write 36 km/hr for km per hour, or  (36 km)/h  to divide by your h",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

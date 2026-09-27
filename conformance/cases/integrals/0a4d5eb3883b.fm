@@ -1,0 +1,1 @@
+print ∫ (∫ <s, s sin(φ)> dφ from 0 to 2π) ds from 0 to 1 to 13 digits

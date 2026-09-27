@@ -1,0 +1,65 @@
+# Nuclear 02 — Q-values, separation energies and the liquid-drop model
+#
+# (Krane, "Introductory Nuclear Physics", Ch. 3 and 11; masses from AME2020.)
+# Atomic masses (in u):
+#   n 1.008664916   H-1 1.007825032   H-2 2.014101778   H-3 3.016049281
+#   He-4 4.002603254   Th-234 234.043599801   U-238 238.050786936
+#   Pb-207 206.975896887   Pb-208 207.976652481
+#
+#  (a) Q of the fusion reaction D + T → He-4 + n.  How is it shared between
+#      the neutron and the alpha (non-relativistically, from rest)?
+#  (b) Q of the alpha decay U-238 → Th-234 + α, and the alpha's kinetic
+#      energy T_α = Q (A − 4)/A.
+#  (c) The Q of free-neutron beta decay, n → p + e⁻ + ν̄.
+#  (d) The neutron separation energy of Pb-208.
+#  (e) The binding energy of Pb-208 from the masses, and from the
+#      semi-empirical mass formula with Krane's coefficients
+#      a_V = 15.5, a_S = 16.8, a_C = 0.72, a_sym = 23.0 MeV, a_P = 34 MeV
+#      (pairing ±a_P A^(−3/4)).
+
+M_n = 1.008664916 u
+M_H1 = 1.007825032 u
+M_H2 = 2.014101778 u
+M_H3 = 3.016049281 u
+M_He4 = 4.002603254 u
+M_Th234 = 234.043599801 u
+M_U238 = 238.050786936 u
+M_Pb207 = 206.975896887 u
+M_Pb208 = 207.976652481 u
+
+# (a)
+Q_DT = (M_H2 + M_H3 - M_He4 - M_n) c²
+print "(a) Q(D+T) =", Q_DT in MeV to 8 digits
+print "    T_n =", Q_DT M_He4 / (M_He4 + M_n) in MeV to 8 digits, "  T_alpha =", Q_DT M_n / (M_He4 + M_n) in MeV to 8 digits
+
+# (b)
+Q_α = (M_U238 - M_Th234 - M_He4) c²
+print "(b) Q(U-238 alpha) =", Q_α in MeV to 8 digits, "  T_alpha =", Q_α (238 - 4) / 238 in MeV to 8 digits
+
+# (c) atomic masses: the electron is already counted in M(H-1)
+print "(c) Q(n beta decay) =", (M_n - M_H1) c² in MeV to 8 digits
+
+# (d)
+print "(d) S_n(Pb-208) =", (M_Pb207 + M_n - M_Pb208) c² in MeV to 8 digits
+
+# (e) liquid drop
+a_V = 15.5 MeV
+a_S = 16.8 MeV
+a_C = 0.72 MeV
+a_sym = 23.0 MeV
+a_P = 34 MeV
+
+pairing(Z, A) =
+    N = A - Z
+    if mod(Z, 2) == 0 and mod(N, 2) == 0
+        return a_P A^(-3/4)
+    else if mod(Z, 2) == 1 and mod(N, 2) == 1
+        return -a_P A^(-3/4)
+    else
+        return 0 MeV
+
+B_semf(Z, A) = a_V A - a_S A^(2/3) - a_C Z (Z - 1) / A^(1/3) - a_sym (A - 2Z)² / A + pairing(Z, A)
+B_meas(Z, A, M) = (Z M_H1 + (A - Z) M_n - M) c²
+
+print "(e) B(Pb-208): masses", B_meas(82, 208, M_Pb208) in MeV to 8 digits, "  SEMF", B_semf(82, 208) in MeV to 8 digits
+print "    B/A: masses", B_meas(82, 208, M_Pb208) / 208 in MeV to 8 digits, "  SEMF", B_semf(82, 208) / 208 in MeV to 8 digits

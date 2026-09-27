@@ -1,0 +1,5 @@
+A = 0.1 m
+ω = 10 rad/s
+x(t) = A cos(ω t)
+print d/dt x
+print x''

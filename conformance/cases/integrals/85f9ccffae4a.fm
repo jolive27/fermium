@@ -1,0 +1,2 @@
+σ = 1 fm
+print ∫ exp(-x^2/(2 σ^2)) dx from -∞ to ∞ in fm to 6 digits

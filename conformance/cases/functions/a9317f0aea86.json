@@ -1,0 +1,11 @@
+{
+ "id": "a9317f0aea86",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "x(t) = A cos(ω t)   [m, for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

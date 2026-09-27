@@ -1,0 +1,11 @@
+{
+ "id": "49f64779e582",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/optics_waves",
+ "stdout": "first dark fringe at y  = 12.660254 mm\nsecond dark fringe at y = 25.322029 mm\ncentral fringe width    = 25.320507 mm\nsecondary maximum at β = 4.4934095\nI/I0 there              = 0.047190449\nI/I0 at y = 2.00 cm     = 0.038109637\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+total = 0
+for i from 1 to 4
+    total += 1 s
+print total

@@ -1,0 +1,40 @@
+# 19 — Rutherford scattering: discovering the nucleus
+#
+# In 1909 Geiger and Marsden fired alpha particles at a thin gold foil. Most
+# went straight through, but a tiny fraction bounced back by more than 90°,
+# "as if you fired a 15-inch shell at a piece of tissue paper and it came back".
+# Rutherford explained this with a tiny, heavy, positive nucleus. For an alpha
+# of kinetic energy E hitting a nucleus of charge Ze, Coulomb repulsion gives
+#
+#     d = z Z e² / (4π ε₀ E)                    distance of closest approach (head-on)
+#     b = (d/2) cot(θ/2)                        impact parameter for angle θ
+#     dσ/dΩ = (d/4)² / sin⁴(θ/2)                 differential cross section
+#
+# Cross sections are measured in barns (1 b = 10⁻²⁸ m² = 100 fm²).
+
+z = 2                   # alpha particle
+Z = 79                  # gold
+E = 7.69 MeV            # alphas from polonium-214 (RaC'), as Geiger & Marsden used
+
+d = z Z e² / (4π ε_0 E)
+print "closest approach d =", d in fm
+
+b(θ) = (d/2) / tan(θ/2)
+dσdΩ(θ) = (d/4)² / sin(θ/2)⁴
+
+for θ in [10°, 30°, 60°, 90°, 150°]
+    print "θ =", θ in deg, "  b =", b(θ) in fm, "  dσ/dΩ =", dσdΩ(θ) in b/sr
+
+# Cross section for scattering by more than 90°: integrate over the solid
+# angle dΩ = 2π sin θ dθ, and compare with the ring of radius b(90°): π b²
+σ_back = ∫ dσdΩ(θ) 2π sin(θ) dθ from 90° to 180°
+print "σ(θ > 90°) by integration:", σ_back in b, "   π b(90°)² =", π b(90°)² in b
+
+# Fraction of alphas bounced back by a gold foil 0.4 μm thick:
+# (atoms per volume) × (thickness) × σ
+n_Au = 19.3 g/cm³ / (196.97 g/mol) * N_A
+foil = 0.40 μm
+frac = n_Au foil σ_back
+print "fraction scattered by more than 90°:", frac, " = 1 in", 1 / frac to 2 digits
+
+plot dσdΩ(θ) in b/sr vs θ from 20° to 180° to "gallery/rutherford.png"

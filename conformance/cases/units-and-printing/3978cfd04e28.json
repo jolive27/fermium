@@ -1,0 +1,17 @@
+{
+ "id": "3978cfd04e28",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this is a single number (speed [m/s]), not a vector, so it has no .x",
+  "line": 2,
+  "col": 7,
+  "hint": "a vector is written <3, 4> m/s",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

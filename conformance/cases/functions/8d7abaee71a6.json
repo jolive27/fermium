@@ -1,0 +1,11 @@
+{
+ "id": "8d7abaee71a6",
+ "area": "functions",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "after 1 s: 15.1 m 10.2 m/s\nafter 3 s: 15.9 m -9.43 m/s\ny(t) = v0 t - 0.5·g t²   [m, for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+F = 2 eV/nm
+solve -ħ²/(2m_e) * ψ'' + F x ψ = E ψ with ψ(0 nm) = 0, ψ(2 nm) = 0 for x from 0 nm to 2 nm lowest 2 grid 3000
+print E[1] in eV to 14 digits
+print E[2] in eV to 14 digits

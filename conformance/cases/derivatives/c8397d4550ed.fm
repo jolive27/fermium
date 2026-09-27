@@ -1,0 +1,2 @@
+f(x, y) = x^2 y
+print (∂/∂x f)(1, 2), (partial/partial y f)(1, 2)

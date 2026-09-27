@@ -1,0 +1,8 @@
+{
+ "id": "89747a9eb10a",
+ "section": "Sums of measured values print by the decimal-place rule (spec B2; DECISIONS D95, red team 7 #4)",
+ "stdout": "293.65 K\n940.5 MeV\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0
+}

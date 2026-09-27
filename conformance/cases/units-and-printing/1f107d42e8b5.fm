@@ -1,0 +1,4 @@
+θ = 1 arcsec
+print θ in mas
+print θ in μas
+print 5 marcsec in mas

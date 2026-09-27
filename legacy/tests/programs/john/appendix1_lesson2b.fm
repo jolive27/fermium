@@ -1,0 +1,5 @@
+ω₀ = √(k/m) where k = 50 N/m, m = 0.5 kg
+print ω₀ in rad/s                # 10 rad/s
+print 2π √(1.0 m / 9.81 m/s²)    # 2.0 s
+theta = 30 deg
+print sin(θ)                     # 0.500 (theta and θ are the same name)

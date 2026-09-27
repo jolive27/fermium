@@ -1,0 +1,11 @@
+{
+ "id": "a36d84ba44c5",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1 kg\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

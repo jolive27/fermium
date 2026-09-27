@@ -1,0 +1,4 @@
+f(a, b, c) = a + b * c
+xs = [1, 2, 3] m
+print f(xs, xs, 2)
+print f(1 m, xs, 3)

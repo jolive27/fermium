@@ -1,0 +1,17 @@
+{
+ "id": "bd15cb4160d4",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an eigenvalue problem needs one unknown function with a second derivative, like ψ''",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

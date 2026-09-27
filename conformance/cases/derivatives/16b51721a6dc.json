@@ -1,0 +1,17 @@
+{
+ "id": "16b51721a6dc",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "∇ works on a function of the coordinates, like φ(x, y, z) = ..., and k isn't a function",
+  "line": 2,
+  "col": 8,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

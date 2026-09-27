@@ -1,0 +1,4 @@
+k = 2 N/m
+F(x) = k x
+plot F(x) vs x from 0 m to 1 m to "F.png"
+# actual: line 3: x isn't defined     expected: plots the formula, prints "plot saved to F.png"

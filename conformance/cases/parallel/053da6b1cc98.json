@@ -1,0 +1,11 @@
+{
+ "id": "053da6b1cc98",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "-5.5798808510194269×10⁻⁸ J\n1.2350907942248988×10⁻¹⁰ m/s² 4.7685312694591787×10⁻¹¹ m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

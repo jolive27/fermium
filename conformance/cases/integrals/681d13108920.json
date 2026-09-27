@@ -1,0 +1,11 @@
+{
+ "id": "681d13108920",
+ "area": "integrals",
+ "origin": "gauntlet/electromagnetism/FRICTION.md#4",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "<1.53, -4.51×10⁻¹⁷, 3.38>\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

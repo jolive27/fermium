@@ -1,0 +1,2 @@
+solve z' = z² / 1 s with z(0) = 1 for t from 0 s to 2 s using radau
+print z(2 s)

@@ -1,0 +1,17 @@
+{
+ "id": "fb721935606c",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't store a value in a + b: the left side of = must be a variable name",
+  "line": 2,
+  "col": 7,
+  "hint": "you can only assign to a name; to solve a + b = … for b, write  solve a + b = … for b from b_min to b_max; to compare two values use ==",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

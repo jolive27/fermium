@@ -1,0 +1,2 @@
+use python scipy.special as sp
+print sp.γ(5)

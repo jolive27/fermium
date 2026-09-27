@@ -1,0 +1,7 @@
+
+j = 100
+tot = 0
+parallel for i from 1 to 50
+    for j from 1 to i
+        tot += j
+print tot, j

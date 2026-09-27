@@ -1,0 +1,58 @@
+# Astrophysics 23 — The age and distances of a flat ΛCDM universe
+#
+# (Carroll & Ostlie §29.4 and Problem 29.19; Ryden §6.5; Planck 2018
+# parameters H₀ = 67.66 km/s/Mpc, Ω_m = 0.3111, Ω_r = 9.14×10⁻⁵, flat.)
+# The Friedmann equation gives H(a) = H₀ √(Ω_r/a⁴ + Ω_m/a³ + Ω_Λ).
+#
+#  (a) Without radiation (Ω_Λ = 1 − Ω_m) the age t₀ = ∫₀¹ da/(a H) has the closed
+#      form t₀ = 2/(3H₀√Ω_Λ) · asinh(√(Ω_Λ/Ω_m)).  Compute both.
+#  (b) With radiation (Ω_Λ = 1 − Ω_m − Ω_r): the age, the age at recombination
+#      (z = 1100), and the lookback time to z = 1.
+#  (c) The comoving distance to z = 1, D_C = c ∫₀¹ dz/H(z), and the luminosity
+#      distance D_L = (1 + z) D_C.
+#  (d) The expansion starts to accelerate when ä = 0:
+#          ä/a = −(H₀²/2)(Ω_m/a³ + 2Ω_r/a⁴) + H₀² Ω_Λ.
+#      Solve for a_acc, then integrate ȧ = a H(a) as an ODE in t (from
+#      z = 99) and find when a = a_acc and when a = 1 (the age again).
+
+H_0 = 67.66 km/s/Mpc
+Ω_m = 0.3111
+Ω_r = 9.14e-5
+
+# (a) matter + Λ only
+Ω_Λ0 = 1 - Ω_m
+H_mΛ(a) = H_0 √(Ω_m / a³ + Ω_Λ0)
+t_num = ∫ 1 / (a H_mΛ(a)) da from 0 to 1
+t_closed = 2 / (3 H_0 √Ω_Λ0) * asinh(√(Ω_Λ0 / Ω_m))
+print "(a) age, matter + Lambda: integral =", t_num in Gyr to 10 digits, "  closed form =", t_closed in Gyr to 10 digits
+
+# (b) with radiation
+Ω_Λ = 1 - Ω_m - Ω_r
+H(a) = H_0 √(Ω_r / a⁴ + Ω_m / a³ + Ω_Λ)
+t_0 = ∫ 1 / (a H(a)) da from 0 to 1
+t_rec = ∫ 1 / (a H(a)) da from 0 to 1/1101
+t_lb = ∫ 1 / (a H(a)) da from 1/2 to 1
+print "(b) age =", t_0 in Gyr to 10 digits, "  age at z = 1100 =", t_rec in yr to 8 digits, "  lookback to z = 1 =", t_lb in Gyr to 10 digits
+
+# (c)
+D_C = c ∫ 1 / H(1 / (1 + z)) dz from 0 to 1
+print "(c) D_C(z = 1) =", D_C in Mpc to 10 digits, "  D_L =", 2 D_C in Mpc to 10 digits
+
+# (d) acceleration
+acc(a) = -(H_0² / 2) (Ω_m / a³ + 2 Ω_r / a⁴) + H_0² Ω_Λ
+solve acc(a) = 0 for a from 0.1 to 1
+a_acc = a
+print "(d) a_acc =", a_acc to 10 digits, "  z_acc =", 1 / a_acc - 1 to 10 digits
+
+# Start at z = 99, with t_i from the integral.  Starting deep in the radiation
+# era (a_i = 10⁻⁷, t_i = a_i²/(2H₀√Ω_r) = 2.4×10⁵ s) silently gives an age 1.3 Myr
+# short, even with tolerance 1e-12: the solver's first trial step is 10⁻⁴ of the
+# whole range (2 Myr ≫ t_i) and is accepted although it is far too big (FRICTION.md).
+a_i = 0.01
+t_i = ∫ 1 / (a H(a)) da from 0 to a_i
+solve A' = A H(A)
+  with A(t_i) = a_i
+  for t from t_i to 20 Gyr
+solve A(t_acc) = a_acc for t_acc from t_i to 20 Gyr
+solve A(t_now) = 1 for t_now from t_i to 20 Gyr
+print "    acceleration begins at t =", t_acc in Gyr to 10 digits, "  ODE age (A = 1) =", t_now in Gyr to 10 digits

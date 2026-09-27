@@ -1,0 +1,17 @@
+{
+ "id": "72e95831cc63",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "factorial of a negative whole number (-1) isn't defined",
+  "line": 1,
+  "col": 7,
+  "hint": "factorial(n) needs n ≥ 0",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,15 @@
+g = 9.81 m/s²
+θ = 40°
+k = 0.01 / (1 m)
+solve r'' = <0 m/s², -g> - k |r'| r'
+  with r(0 s) = <0, 0> m, r'(0 s) = 30 m/s · <cos(θ), sin(θ)>
+  for t from 0 s to 60 s
+  until r.y = 0 m
+print "flight time", times(r)[end]
+print "range", r.x[end]
+
+solve u' = u / (1 s)
+  with u(0 s) = 1 m
+  for t from 0 s to -5 s
+  until u = 0.5 m
+print "u halves at", times(u)[end]

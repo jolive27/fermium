@@ -1,0 +1,4 @@
+m = 0.5 kg
+k = 50 [N/m]
+F(x) = k x
+print ∫ F(x) dx from 0 m to 0.2 m

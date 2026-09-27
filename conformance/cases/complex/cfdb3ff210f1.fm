@@ -1,0 +1,7 @@
+f(z) = z² + 1
+print f(1i)
+print f(2 + 0i)
+g(x) = exp(1i x)
+print re(g(π)) to 12 digits
+Z(ω) = R + 1i ω L where R = 1 Ω, L = 1 H
+print Z(2 /s)

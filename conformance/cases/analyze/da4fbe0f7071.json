@@ -1,0 +1,11 @@
+{
+ "id": "da4fbe0f7071",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of drag: F depends on ρ, v, A, μ\n  5 quantities, 3 independent dimensions (length, mass, time) → 5 − 3 = 2 dimensionless groups\n  Π₁ = F/(ρ v² A)\n  Π₂ = ρ v √A/μ\n  so F = ρ v² A · f(Π₂)   (f is a function dimensional analysis can't give)\n  defined drag(ρ, v, A) = ρ v² A, so F = drag(ρ, v, A) · f(Π₂)\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

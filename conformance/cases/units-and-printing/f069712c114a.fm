@@ -1,0 +1,3 @@
+f = 3
+omega = 2pi f
+print omega

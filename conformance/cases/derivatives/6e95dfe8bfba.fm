@@ -1,0 +1,14 @@
+f(x) = Σ(sin(n x)/n for n from 1 to 49 step 2)
+g = f'
+print f(1) to 12 digits, g(1) to 12 digits
+print g
+a = 1 m
+V0 = 10 V
+term(n, x, y) = 4 V0 / (n π) * sin(n π x / a) sinh(n π y / a) / sinh(n π)
+φ(x, y) = Σ(term(n, x, y) for n from 1 to 61 step 2)
+print φ(0.5 m, 0.5 m) to 8 digits
+lap = ∇²φ
+print lap(0.3 m, 0.7 m)
+u(x, y) = Σ(sin(n x) sin(n y) / n² for n from 1 to 7)
+L = ∇²u
+print L(0.4, 1.1) to 12 digits

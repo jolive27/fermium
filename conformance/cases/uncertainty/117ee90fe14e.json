@@ -1,0 +1,17 @@
+{
+ "id": "117ee90fe14e",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "± needs the uncertainty after it, like  L = 1.20 ± 0.01 m",
+  "line": 1,
+  "col": 7,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

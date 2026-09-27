@@ -1,0 +1,11 @@
+{
+ "id": "787946c72a11",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "distance from the Sun after 5 years: 1.562 AU\nplot saved to <ROOT>/bootcamp/euler_orbit.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

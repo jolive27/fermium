@@ -1,0 +1,8 @@
+T = 5778 K
+B(lam) = 2 h c^2 / lam^5 / (exp(h c / (lam k_B T)) - 1)
+best = 100 nm
+for lam from 100 nm to 2000 nm step 1 nm
+    if B(lam) > B(best)
+        best = lam
+print "loop:", best
+print "Wien:", b_W / T in nm

@@ -1,0 +1,7 @@
+n = 1.5
+m = 2
+k = 3 [N/m]
+g = 9.81 m/s^2
+lam = 500 nm
+M = 2 kg
+print lam, M

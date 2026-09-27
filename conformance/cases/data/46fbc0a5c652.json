@@ -1,0 +1,11 @@
+{
+ "id": "46fbc0a5c652",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "peak wavelength (from dB/dλ = 0): 501.5 nm\nWien's law b / T:                 501.5 nm\nπ ∫ B dλ = 63.2007 MW/m²\nσ T⁴     = 63.2007 MW/m²\nrelative difference: 0\nsolar luminosity: 3.84×10²⁶ W  (catalogue value 3.83×10²⁶ W )\n2.725 K  peaks at 1060 μm\n300 K  peaks at 9.66 μm\n3000 K  peaks at 0.966 μm\n5778 K  peaks at 0.502 μm\n10000 K  peaks at 0.290 μm\n30000 K  peaks at 0.0966 μm\nplot saved to <ROOT>/examples/gallery/blackbody.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

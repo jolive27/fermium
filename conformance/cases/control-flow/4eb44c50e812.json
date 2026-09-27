@@ -1,0 +1,17 @@
+{
+ "id": "4eb44c50e812",
+ "area": "control-flow",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this for loop has no definite number of steps: it goes from 1 to NaN (NaN in the start, end or step)",
+  "line": 2,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

@@ -1,0 +1,11 @@
+{
+ "id": "783a27bb7e35",
+ "area": "ode",
+ "origin": "tests",
+ "dir": "gauntlet/mechanics",
+ "stdout": "(a) a²ω² = 39.4784 m²/s²  2 g l = 3.92400 m²/s²  inverted stable: true\n    Omega_0 = 23.292278 1/s  Omega_pi = 21.081514 1/s  slow period about pi = 0.29804242 s\n(b) strobed crossings: 34  slow period = 0.29821213 s\n    relative difference from the averaged theory: 0.0005694\n    largest strobed |theta - pi| = 0.100000\n(c) a²ω² = 3.55306 m²/s²  inverted stable: false\n    largest strobed |phi - pi| in 1 s = 0.504707\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

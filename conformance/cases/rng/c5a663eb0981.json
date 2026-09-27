@@ -1,0 +1,11 @@
+{
+ "id": "c5a663eb0981",
+ "area": "rng",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "true\ntrue true\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

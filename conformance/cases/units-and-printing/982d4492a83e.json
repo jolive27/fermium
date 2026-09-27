@@ -1,0 +1,11 @@
+{
+ "id": "982d4492a83e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "-127 °C\n",
+ "stderr": "warning: line 2: this scales an absolute temperature: °C values are divided as kelvins (20 °C / 2 is 293.15 K / 2 = -126.575 °C)\n    print T1 / 2\n          ^\n  hint: to scale a temperature change, write it in K\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

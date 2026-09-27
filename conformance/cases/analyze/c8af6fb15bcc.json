@@ -1,0 +1,17 @@
+{
+ "id": "c8af6fb15bcc",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "v can't be made from m, t: v has length, but nothing it depends on has length; so there is no dimensionless group at all (3 quantities, 3 independent dimensions)",
+  "line": 1,
+  "col": 15,
+  "hint": "v must depend on something else too (a constant like G, c or ħ?)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

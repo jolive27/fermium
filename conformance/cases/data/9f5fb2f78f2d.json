@@ -1,0 +1,11 @@
+{
+ "id": "9f5fb2f78f2d",
+ "area": "data",
+ "origin": "tests",
+ "dir": "research/u238_chain",
+ "stdout": "activity of 1 kg of U-238: 1.244×10⁷ Bq\nt = 1 yr : A/A(U-238):  Th-234 0.99997  U-234 2.5546×10⁻⁶  Th-230 1.0745×10⁻¹¹  Ra-226 1.4313×10⁻¹⁵  Rn-222 1.3633×10⁻¹⁵  Po-214 1.3627×10⁻¹⁵  Po-210 2.2839×10⁻¹⁸\nt = 1000 yr : A/A(U-238):  Th-234 1.0000  U-234 0.0028192  Th-230 1.2927×10⁻⁵  Ra-226 1.6823×10⁻⁶  Rn-222 1.6822×10⁻⁶  Po-214 1.6822×10⁻⁶  Po-210 1.5327×10⁻⁶\nt = 100000 yr : A/A(U-238):  Th-234 1.0000  U-234 0.24599  Th-230 0.088545  Ra-226 0.085238  Rn-222 0.085238  Po-214 0.085238  Po-210 0.085192\nt = 3000000 yr : A/A(U-238):  Th-234 1.0000  U-234 0.99985  Th-230 0.99977  Ra-226 0.99977  Rn-222 0.99977  Po-214 0.99977  Po-210 0.99977\nsecular equilibrium at 3 Myr: largest |A_i/A(U-238) − 1| = 0.00023   ( 9226 radau steps )\natoms conserved: total/N₀ − 1 = 5.8×10⁻¹⁴   Pb-206 formed: 9.946×10²⁰\nplot saved to <ROOT>/research/u238_chain/activities.png\nRn-222 reaches 99 % of the Ra-226 activity after 25.399 day\nTh-234 reaches 99 % of the U-238 activity after 160.12 day ; then A(Pa-234m)/A(U-238) = 0.99000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

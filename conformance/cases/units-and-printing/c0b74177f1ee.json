@@ -1,0 +1,11 @@
+{
+ "id": "c0b74177f1ee",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "25 °C\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

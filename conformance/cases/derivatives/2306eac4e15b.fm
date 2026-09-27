@@ -1,0 +1,13 @@
+f(x) = √(1 + x^2)
+d1 = f'
+d2 = f''
+print d1(0.560257821322236) to 17 digits
+print d2(0.560257821322236) to 17 digits
+print d1(2.711228198418768) to 17 digits
+print d2(2.711228198418768) to 17 digits
+print d1(1.6493179019817061) to 17 digits
+print d2(1.6493179019817061) to 17 digits
+print d1(1.2732780105639119) to 17 digits
+print d2(1.2732780105639119) to 17 digits
+print d1(-0.9074627869608856) to 17 digits
+print d2(-0.9074627869608856) to 17 digits

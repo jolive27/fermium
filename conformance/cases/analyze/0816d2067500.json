@@ -1,0 +1,11 @@
+{
+ "id": "0816d2067500",
+ "area": "analyze",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "dimensional analysis of kepler: T depends on a, G, M\n  4 quantities, 3 independent dimensions (length, mass, time) → 4 − 3 = 1 dimensionless group\n  Π₁ = T √(G M/a³)\n  so T ∝ √(a³/(G M))   (T = C √(a³/(G M)), with C a pure number)\n  defined kepler(a, M) = √(a³/(G M)), so T = C kepler(a, M)\n365.257 day\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

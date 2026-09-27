@@ -1,0 +1,2 @@
+f(x) = sin(x)
+print ∫ f(x) dx from 0 m to 1 m

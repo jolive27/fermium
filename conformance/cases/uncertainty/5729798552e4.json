@@ -1,0 +1,11 @@
+{
+ "id": "5729798552e4",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "one period: 2.210 ± 0.020 s\ng = 9.70 ± 0.19 m/s²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

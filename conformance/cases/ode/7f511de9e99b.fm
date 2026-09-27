@@ -1,0 +1,8 @@
+GM = G M_sun
+r0 = 1 AU
+v0 = √(GM / r0)
+solve x'' = -GM x / (x² + y²)^(3/2), y'' = -GM y / (x² + y²)^(3/2)
+  with x(0) = r0, y(0) = 0 m, x'(0) = 0 m/s, y'(0) = v0
+  for t from 0 s to 2π r0 / v0
+print x(2π r0 / v0) / (1 AU) to 15 digits
+print y(2π r0 / v0) / (1 AU) to 15 digits

@@ -1,0 +1,6 @@
+v = 10.0 ± 0.1 m/s
+θ = 45 ± 5°
+print "linear:", v² sin(2θ) / g_n
+propagate montecarlo 20000 samples
+    R = v² sin(2θ) / g_n
+print "Monte Carlo:", R

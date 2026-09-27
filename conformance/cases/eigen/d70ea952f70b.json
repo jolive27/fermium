@@ -1,0 +1,17 @@
+{
+ "id": "d70ea952f70b",
+ "area": "eigen",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "an eigenvalue problem needs ψ at both ends:  with ψ(0 nm) = 0, ψ(1 nm) = 0",
+  "line": 1,
+  "col": 1,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

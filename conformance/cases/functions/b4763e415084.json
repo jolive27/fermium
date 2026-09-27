@@ -1,0 +1,17 @@
+{
+ "id": "b4763e415084",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'0.25 T' is ambiguous: right after a number, T is a unit (tesla), but T is also your variable T",
+  "line": 1,
+  "col": 31,
+  "hint": "write  0.25*T  for 0.25 × your variable T, or  0.25 [T]  for the unit",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

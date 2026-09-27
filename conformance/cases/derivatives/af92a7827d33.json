@@ -1,0 +1,11 @@
+{
+ "id": "af92a7827d33",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "force on 1 kg at the surface: -9.80 N\nforce at twice the radius: -2.45 N\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

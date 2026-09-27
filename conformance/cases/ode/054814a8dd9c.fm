@@ -1,0 +1,7 @@
+tau = 5 s
+solve N' = -N / tau
+  with N(0) = 1000
+  for t from 0 s to 20 s
+print "after 5 s: ", N(5 s)
+print "after 10 s:", N(10 s)
+print "exact:     ", 1000 exp(-10 s / tau)

@@ -1,0 +1,17 @@
+{
+ "id": "a43e9a3223f8",
+ "area": "parallel",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "parallel for works with a range of numbers: write  parallel for i from 1 to n",
+  "line": 2,
+  "col": 1,
+  "hint": "loop over the indexes: parallel for i from 1 to len(xs), then use xs[i]",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

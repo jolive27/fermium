@@ -1,0 +1,4 @@
+xs = [1, 2, 3]
+ys = xs[1:2]
+ys[1] = 9
+print xs, ys

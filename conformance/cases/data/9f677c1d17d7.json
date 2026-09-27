@@ -1,0 +1,11 @@
+{
+ "id": "9f677c1d17d7",
+ "area": "data",
+ "origin": "tests",
+ "dir": "examples",
+ "stdout": "field on the axis, 10 cm away: <0, 0, 180.653> V/m\ndipole approximation: 180 V/m\n∇×E = 0: true\n∇²φ = 0 away from the charges: true\nplot saved to <ROOT>/examples/gallery/dipole_field.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

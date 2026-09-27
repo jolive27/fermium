@@ -1,0 +1,1 @@
+print ∫ 1/(1 + x^2) dx from -inf to inf to 12 digits

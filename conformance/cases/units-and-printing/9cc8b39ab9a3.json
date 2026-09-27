@@ -1,0 +1,11 @@
+{
+ "id": "9cc8b39ab9a3",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "47.3333 MeV\n14 MeV\n160 N\n7 m/s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

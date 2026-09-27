@@ -1,0 +1,35 @@
+# Electrostatics with ∇: the field of a dipole from its potential, and checks
+# that the textbook identities hold (∇×E = 0, and ∇²φ = 0 away from the charges).
+# Units follow automatically: φ in volts, coordinates in metres, so E = -∇φ is in V/m.
+# Run with: fermium run examples/27_electrostatics_nabla.fm
+
+q = 1 nC
+d = 1 cm                                   # separation of the two charges (along z)
+r(x, y, z) = √(x² + y² + z²)
+
+# the potential of +q at z = d/2 and -q at z = -d/2
+φ(x, y, z) = q / (4π ε₀ r(x, y, z - d/2)) - q / (4π ε₀ r(x, y, z + d/2))
+E = -∇φ(0 m, 0 m, 10 cm)
+print "field on the axis, 10 cm away:", E to 6 digits
+
+# far away the dipole field along the axis is 2 p / (4π ε₀ z³) with p = q d
+p = q d
+print "dipole approximation:", 2 p / (4π ε₀ (10 cm)³) in V/m
+
+# identities
+Ef(x, y, z) = -∇φ(x, y, z)
+# (symbolic, then evaluated in floating point, so "zero" means zero up to rounding)
+c = ∇×Ef(3 cm, 4 cm, 5 cm)
+L = ∇²φ(3 cm, 4 cm, 5 cm)
+scale = |Ef(3 cm, 4 cm, 5 cm)| / (1 cm)
+print "∇×E = 0:", |c| < 1e-9 scale
+print "∇²φ = 0 away from the charges:", abs(L) < 1e-9 scale
+assert |c| < 1e-9 scale, "the curl of a gradient is zero"
+assert abs(L) < 1e-9 scale, "Laplace's equation holds in empty space"
+
+# the field falls off like 1/z³: plot E_z along the axis
+zs = linspace(3 cm, 30 cm, 60)
+Ez = []
+for z in zs
+    push(Ez, Ef(0 m, 0 m, z).z)
+plot Ez in V/m vs zs in cm with log y, title "Dipole field on the axis" to "gallery/dipole_field.png"

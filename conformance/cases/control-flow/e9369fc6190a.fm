@@ -1,0 +1,4 @@
+xs = []
+for i from 1 to 1000
+    push(xs, i)
+print sum(xs), len(xs)

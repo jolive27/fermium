@@ -1,0 +1,2 @@
+f(x) = 2 x
+print 2 * (1 km), f(1 km)

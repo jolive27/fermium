@@ -1,0 +1,17 @@
+{
+ "id": "ad2f027270b2",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "'/(4π) dl' is ambiguous: implicit multiplication binds tighter than '/', so this would divide by all of '(4π) dl'",
+  "line": 3,
+  "col": 12,
+  "hint": "write  /(4π) * dl  to multiply by dl, or  /((4π) dl)  to divide by both",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

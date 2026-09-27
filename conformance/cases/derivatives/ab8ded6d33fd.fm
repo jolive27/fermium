@@ -1,0 +1,13 @@
+f(x) = sin(x) cos(x)
+d1 = f'
+d2 = f''
+print d1(-1.039932160836458) to 17 digits
+print d2(-1.039932160836458) to 17 digits
+print d1(-1.9566554863603773) to 17 digits
+print d2(-1.9566554863603773) to 17 digits
+print d1(2.5721134614389616) to 17 digits
+print d2(2.5721134614389616) to 17 digits
+print d1(-0.27784089113491905) to 17 digits
+print d2(-0.27784089113491905) to 17 digits
+print d1(-2.938055507403397) to 17 digits
+print d2(-2.938055507403397) to 17 digits

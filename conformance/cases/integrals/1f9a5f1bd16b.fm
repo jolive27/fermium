@@ -1,0 +1,2 @@
+f(a) = ∫ x^a dx from 0 to 1
+print f(1), f(2)

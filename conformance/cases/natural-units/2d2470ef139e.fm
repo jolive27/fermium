@@ -1,0 +1,8 @@
+units natural(hbar = c = 1)
+a0 = 1/(alpha m_e)          # the Bohr radius, as on paper
+print a0                # 268.173 MeV⁻¹
+print a0 in fm          # 52917.7 fm
+print a0 in angstrom           # 0.529177 Å
+m_pi = 139.57 MeV
+print 1/m_pi in fm       # range of the pion-exchange force: 1.4138 fm
+print hbar, c              # 1 1

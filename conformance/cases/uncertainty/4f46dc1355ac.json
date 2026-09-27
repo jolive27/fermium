@@ -1,0 +1,11 @@
+{
+ "id": "4f46dc1355ac",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": "research/friedmann_planck2018",
+ "stdout": "Ω_γ = 5.444×10⁻⁵   Ω_r = 9.210×10⁻⁵   Ω_Λ = 0.68491\nHubble time 1/H₀ = 14.507 Gyr\nage of the universe t₀ = 13.791 Gyr   (Planck 2018: 13.787 ± 0.020 Gyr)\nage from solving a' = a H(a) until a = 1: 13.791 Gyr\nmatter–Λ equality: z = 0.2955\ndeceleration → acceleration (q = 0): z = 0.6317   at t = 7.693 Gyr\nmatter–radiation equality: z = 3419   (Planck 2018: 3387 ± 21)\ncomoving distance to z = 1100: 13866 Mpc = 45.23 Gly\nage of the universe at z = 1100: 3.655×10⁵ yr\nparticle horizon today (comoving): 46.13 Gly\nplot saved to <ROOT>/research/friedmann_planck2018/scale_factor.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

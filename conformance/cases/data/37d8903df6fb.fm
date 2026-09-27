@@ -1,0 +1,4 @@
+data = load "data/pendulum.csv"
+print data
+print data.L
+print data.T

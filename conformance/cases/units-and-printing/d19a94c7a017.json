@@ -1,0 +1,17 @@
+{
+ "id": "d19a94c7a017",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "identity(n) needs a whole number n from 2 to 16 (matrices are at most 16×16)",
+  "line": 1,
+  "col": 16,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

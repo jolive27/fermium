@@ -1,0 +1,2 @@
+ΔT = 10 °C
+print 1 kg * 4186 J/(kg K) * ΔT

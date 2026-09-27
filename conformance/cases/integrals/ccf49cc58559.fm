@@ -1,0 +1,6 @@
+a = 0.5 m
+F = ∫ 1 / √(a^2 + s^2) ds
+print F
+print F(-1 m) to 9 digits
+print F(0 m)
+print F(1 m) to 9 digits

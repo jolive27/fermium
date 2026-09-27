@@ -1,0 +1,2 @@
+solve w' = 2 m/s with w(0) = 0 m for t from 0 s to 1 s step 0.5 s
+print w(1 s)

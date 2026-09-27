@@ -1,0 +1,11 @@
+{
+ "id": "17352a90f469",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "f'(x) = (1 + x² - 2x²)/(1 + x²)²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

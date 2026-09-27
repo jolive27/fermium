@@ -1,0 +1,11 @@
+{
+ "id": "ec1c1bcba8cd",
+ "area": "ode",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "-1.51061\n",
+ "stderr": "warning: line 2: this equation looks stiff: rk45 has taken 100014 steps, held small by stability rather than accuracy (time scales far apart); add  using radau  after the range for an implicit solver made for this\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

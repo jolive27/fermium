@@ -1,0 +1,17 @@
+{
+ "id": "d8a5135d4e94",
+ "area": "python-interop",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "can't find the Python module numpyy",
+  "line": 1,
+  "col": 1,
+  "hint": "install it with  pip install numpyy  (or put numpyy.py in the program's folder)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

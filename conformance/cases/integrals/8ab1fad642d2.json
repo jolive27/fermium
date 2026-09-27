@@ -1,0 +1,11 @@
+{
+ "id": "8ab1fad642d2",
+ "area": "integrals",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.5000\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

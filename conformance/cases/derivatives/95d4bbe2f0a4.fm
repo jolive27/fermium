@@ -1,0 +1,13 @@
+f(x) = sinh(x) - cosh(x/2)
+d1 = f'
+d2 = f''
+print d1(-1.525103891985137) to 17 digits
+print d2(-1.525103891985137) to 17 digits
+print d1(-1.9564338937816061) to 17 digits
+print d2(-1.9564338937816061) to 17 digits
+print d1(-0.761201912978847) to 17 digits
+print d2(-0.761201912978847) to 17 digits
+print d1(0.2526501924043796) to 17 digits
+print d2(0.2526501924043796) to 17 digits
+print d1(1.0428440923468014) to 17 digits
+print d2(1.0428440923468014) to 17 digits

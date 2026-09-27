@@ -1,0 +1,11 @@
+{
+ "id": "facbd62a127e",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "1.00000×10⁻²⁸ m²\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

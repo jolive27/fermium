@@ -1,0 +1,11 @@
+{
+ "id": "858b39f533ec",
+ "area": "uncertainty",
+ "origin": "gauntlet/electromagnetism/FRICTION.md#3",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "2\n0.464\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

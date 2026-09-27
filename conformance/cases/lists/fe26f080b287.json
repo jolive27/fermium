@@ -1,0 +1,17 @@
+{
+ "id": "fe26f080b287",
+ "area": "lists",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the entries of M are a plain number (no units); can't put length [m] in it",
+  "line": 2,
+  "col": 11,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

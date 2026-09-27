@@ -1,0 +1,4 @@
+xs = [0.3, -1.2]
+print fft_re(xs) to 15 digits
+print fft_im(xs) to 15 digits
+print ifft(fft_re(xs), fft_im(xs)) to 15 digits

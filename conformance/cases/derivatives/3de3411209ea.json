@@ -1,0 +1,11 @@
+{
+ "id": "3de3411209ea",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "d/dt (3t²) = 6t\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

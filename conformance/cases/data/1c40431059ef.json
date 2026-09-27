@@ -1,0 +1,11 @@
+{
+ "id": "1c40431059ef",
+ "area": "data",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "x at 0.5 s: 2.8 cm\nexact:      2.8 cm\nplot saved to <ROOT>/bootcamp/spring.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

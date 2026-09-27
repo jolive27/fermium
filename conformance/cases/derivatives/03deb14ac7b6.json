@@ -1,0 +1,11 @@
+{
+ "id": "03deb14ac7b6",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "x'(t) = -A ω sin(ω t)   [m/s, for t in s]\nx''(t) = -A ω² cos(ω t)   [m/s², for t in s]\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

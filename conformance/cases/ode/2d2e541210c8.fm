@@ -1,0 +1,4 @@
+solve x' + y' = -x / (1 s), x' - y' = -y / (1 s), 2 z' + x' = 0 m/s
+  with x(0 s) = 1 m, y(0 s) = 0 m, z(0 s) = 0 m
+  for t from 0 s to 1 s tolerance 1e-11
+print x(1 s) to 10 digits, y(1 s) to 10 digits, z(1 s) to 10 digits

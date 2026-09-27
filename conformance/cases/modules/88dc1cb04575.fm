@@ -1,0 +1,2 @@
+import mechanics
+x = mechanics.kinetic_energy(2 kg, 3 m/s) + 1 m

@@ -1,0 +1,6 @@
+times = [2.21 s, 2.19 s, 2.24 s, 2.20 s, 2.23 s]
+print "mean:", mean(times)
+print "std dev:", std(times)
+print "std error:", std(times) / sqrt(len(times))
+print "min and max:", min(times), max(times)
+print "sum:", sum(times)

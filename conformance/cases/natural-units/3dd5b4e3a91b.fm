@@ -1,0 +1,7 @@
+units natural
+E = 939.6 MeV
+r = 1/(197.3 MeV)
+print E
+print r
+print E^2
+print m_e to 6 digits

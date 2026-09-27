@@ -8,7 +8,7 @@ htmlcov/
 build/
 dist/
 .ruff_cache/
-tests/programs/*.png
+legacy/tests/programs/*.png
 .claude/
 web/gen/
 web/pyodide/
@@ -26,3 +26,15 @@ venv/
 .idea/
 *.swp
 target/
+
+# plots written when the conformance harvest runs the notes' code blocks
+dev-notes/notes/*.png
+dev-notes/notes/*.svg
+dev-notes/notes/*.gif
+
+# plot files the harvest writes when it runs README/docs blocks at the repo root
+/*.png
+/*.gif
+/gallery/
+/*_frames/
+bootcamp/_a62_check.png

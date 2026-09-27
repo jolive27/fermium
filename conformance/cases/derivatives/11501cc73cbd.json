@@ -1,0 +1,17 @@
+{
+ "id": "11501cc73cbd",
+ "area": "derivatives",
+ "origin": "gauntlet/electromagnetism/FRICTION.md#6",
+ "dir": "gauntlet/electromagnetism",
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "d/dz V(0 cm, 0 cm, z1): V, z1 aren't defined, so this can't be a function of z alone",
+  "line": 1,
+  "col": 8,
+  "hint": "for the partial derivative with the other arguments kept as parameters, write ∂/∂z V  (a function of the same arguments as V)",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

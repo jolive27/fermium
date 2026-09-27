@@ -1,0 +1,3 @@
+peak(T) = 2.898e-3 [m K] / T
+print "Sun:  ", peak(5778 K) in nm
+print "human:", peak(310 K) in um

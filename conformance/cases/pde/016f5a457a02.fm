@@ -1,0 +1,9 @@
+m = m_e
+sigma = 1 nm
+k0 = 2 / (1 nm)
+solve (1i) hbar partial psi/partial t = -hbar^2/(2*m) * partial^2psi/partial x^2
+    with psi(x, 0 fs) = (2pi sigma^2)^(-1/4) exp(-x^2 / (4sigma^2)) exp((1i) k0 x), psi(-40 nm, t) = 0 nm^(-1/2), psi(40 nm, t) = 0 nm^(-1/2)
+    for x from -40 nm to 40 nm, t from 0 fs to 30 fs
+    grid 2000
+print "norm:", integral |psi(x, 30 fs)|^2 dx from -40 nm to 40 nm
+print "centre:", integral x |psi(x, 30 fs)|^2 dx from -40 nm to 40 nm, "  (ħ k0 t / m =", hbar k0 30 [fs] / m in nm, ")"

@@ -1,0 +1,11 @@
+{
+ "id": "59d3fa189f2f",
+ "area": "derivatives",
+ "origin": "tests",
+ "dir": "bootcamp/solutions",
+ "stdout": "velocity at 2 s: 20 m/s\nacceleration at 2 s: -5 m/s²\nstops at 6.0 s\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

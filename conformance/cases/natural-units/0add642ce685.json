@@ -1,0 +1,11 @@
+{
+ "id": "0add642ce685",
+ "area": "natural-units",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "Bohr radius:        52917.7 fm = 0.529177 Å\nRydberg energy:     13.6057 eV\nelectron Compton λ: 2.42631 pm\nproton ƛ:           0.210309 fm\npion range 1/m_π:   1.4138169 fm\nmuon decay length:  6.2336598 km\nG = 6.70883×10⁻³⁹ 1/GeV²\nPlanck mass:        1.22089×10¹⁹ GeV = 2.17643×10⁻⁸ kg\nSun's r_s = 2GM:    2.95325 km\nħc = 197.327 MeV fm\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

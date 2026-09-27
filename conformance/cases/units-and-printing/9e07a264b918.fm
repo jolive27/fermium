@@ -1,0 +1,4 @@
+speed_of_sound = 343 m/s
+distance = 1 km
+time_to_hear = distance / speed_of_sound
+print time_to_hear

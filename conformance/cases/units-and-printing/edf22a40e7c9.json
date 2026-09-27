@@ -1,0 +1,11 @@
+{
+ "id": "edf22a40e7c9",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": "bootcamp",
+ "stdout": "1 AU/c (= 499 s)\n8.32 min\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,4 @@
+xs = [10, 20, 30, 40, 50] [m]
+print xs[2:4]
+print xs[:2], xs[4:], xs[2:end-1]
+print xs[3:3]

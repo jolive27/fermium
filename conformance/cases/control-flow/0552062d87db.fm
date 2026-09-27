@@ -1,0 +1,10 @@
+# Pendulum, with symbols
+L = 1.20 m
+g = 9.81 m/s²
+θ₀ = 10°
+ω = √(g / L)
+T = 2π / ω
+print "omega =", ω in rad/s
+print "T =", T
+if θ₀ ≤ 15°
+    print "small angle: the formula is accurate"

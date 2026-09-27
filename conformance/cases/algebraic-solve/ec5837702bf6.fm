@@ -1,0 +1,2 @@
+solve x^2 = 2 for x from 0 to 2 absolute 1e-9
+print x

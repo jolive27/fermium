@@ -1,0 +1,11 @@
+{
+ "id": "51444e39bf80",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "warning: line 1: 'J/kg K' has only kg below the line: K multiplies\n    c = 4186 J/kg K\n                  ^\n  hint: for K below the line too, write /(kg K)\n",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

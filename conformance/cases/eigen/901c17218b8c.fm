@@ -1,0 +1,51 @@
+# 40 — Bound states of an electron: solving the Schrödinger equation as an eigenvalue problem
+#
+# The time-independent Schrödinger equation
+#
+#     -ħ²/(2m) ψ'' + V(x) ψ = E ψ
+#
+# has normalisable solutions only for special energies E: the bound states.
+# `solve … lowest N` finds the N lowest of them (the energies as a list E, the
+# wavefunctions as ψ₁, ψ₂, …), with units checked like any other equation.
+# (fermium run only: eigenvalue problems run in Python, so fermium build refuses them.)
+
+# 1. An electron in a 1 nm box: E_n = n² π² ħ² / (2 m L²)
+L = 1 nm
+solve -ħ²/(2m_e) * ψ'' = E ψ
+    with ψ(0 nm) = 0, ψ(L) = 0
+    for x from 0 nm to L
+    lowest 3
+E1_exact = π² ħ² / (2 m_e L²)
+print "box: E1 =", E[1] in eV to 6 digits, " exact", E1_exact in eV to 6 digits
+print "box: E2/E1 =", E[2] / E[1] to 6 digits, " E3/E1 =", E[3] / E[1] to 6 digits
+
+# 2. A finite well, 5 eV deep and 1 nm wide (a quantum-well laser's active layer, roughly)
+V0 = 5 eV
+a = 0.5 nm
+V(x) = if abs(x) < a then 0 eV else V0
+solve -ħ²/(2m_e) * φ'' + V(x) φ = W φ
+    with φ(-2 nm) = 0, φ(2 nm) = 0
+    for x from -2 nm to 2 nm
+    lowest 3
+for n from 1 to 3
+    print "finite well: level", n, "at", W[n] in eV to 5 digits
+# the chance to find the ground-state electron outside the well (tunnelling into the walls)
+inside = ∫ φ₁(x)^2 dx from -0.5 nm to 0.5 nm
+print "finite well: probability outside the well in the ground state:", 1 - inside to 3 digits
+
+# 3. The harmonic oscillator, ħω = 0.2 eV: E_n = ħω (n + ½), checked with the shooting method too
+ħω = 0.2 eV
+ω = ħω / ħ
+U(x) = m_e ω² x² / 2
+solve -ħ²/(2m_e) * u'' + U(x) u = Eo u
+    with u(-6 nm) = 0, u(6 nm) = 0
+    for x from -6 nm to 6 nm
+    lowest 4
+solve -ħ²/(2m_e) * η'' + U(x) η = Es η
+    with η(-6 nm) = 0, η(6 nm) = 0
+    for x from -6 nm to 6 nm
+    lowest 4 using shooting
+for n from 1 to 4
+    print "oscillator: E" , n, "/ ħω =", Eo[n] / ħω to 9 digits, "  shooting:", Es[n] / ħω to 9 digits
+
+plot φ₁ vs x, φ₂ vs x, φ₃ vs x to "gallery/bound_states.png" with title "Finite square well, 5 eV deep, 1 nm wide"

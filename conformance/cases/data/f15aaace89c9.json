@@ -1,0 +1,11 @@
+{
+ "id": "f15aaace89c9",
+ "area": "data",
+ "origin": "dev-notes/notes/bugs-examples.md#3",
+ "dir": "dev-notes/notes",
+ "stdout": "plot saved to <ROOT>/dev-notes/notes/e.png\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

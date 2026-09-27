@@ -1,0 +1,1 @@
+print Σ(k for k from 1 to 5 - 1)

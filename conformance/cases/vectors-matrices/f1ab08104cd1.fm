@@ -1,0 +1,11 @@
+print Σ(k² for k from 1 to 10)
+print sum(1/k² for k from 1 to 1000) to 8 digits
+N = 5
+S(N) = Σ(k for k from 1 to N)
+print S(4), S(N)
+print Σ(k for k from 1 to 9 step 2)
+xs = [1 m, 2 m, 3 m]
+print Σ(xs), sum(xs)
+print Σ(r for r from 1 m to 3 m step 1 m)
+print Σ(<k, k²> m for k from 1 to 3)
+print Σ(k for k from 5 to 1), Σ(k for k from 3 to 1 step -1)

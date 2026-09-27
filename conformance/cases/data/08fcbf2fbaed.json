@@ -1,0 +1,17 @@
+{
+ "id": "08fcbf2fbaed",
+ "area": "data",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "the y range must be constants, like  y from 1e-12 to 1  or  y from 0 s to 10 s",
+  "line": 3,
+  "col": 25,
+  "hint": null,
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

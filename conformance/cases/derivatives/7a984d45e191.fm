@@ -1,0 +1,13 @@
+f(x) = |x| x
+d1 = f'
+d2 = f''
+print d1(2.5474799110624358) to 17 digits
+print d2(2.5474799110624358) to 17 digits
+print d1(2.471536800825806) to 17 digits
+print d2(2.471536800825806) to 17 digits
+print d1(1.4601564557672206) to 17 digits
+print d2(1.4601564557672206) to 17 digits
+print d1(2.9012634714969603) to 17 digits
+print d2(2.9012634714969603) to 17 digits
+print d1(1.551315480040791) to 17 digits
+print d2(1.551315480040791) to 17 digits

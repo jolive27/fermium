@@ -1,0 +1,2 @@
+x = 1 m
+print x ≈ 1.0005 m within 1 mm and x > 0 m, (x ≈ 2 m within 1 mm), x

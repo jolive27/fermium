@@ -1,0 +1,6 @@
+seed(6)
+f(k) = mean(sample(k rand(), 1000))
+print abs(f(4) - 2) < 0.2
+a = 3 s
+ts = sample(a + rand(0 s, 1 s), 10)
+print min(ts) >= 3 s, max(ts) < 4 s

@@ -1,0 +1,11 @@
+{
+ "id": "db736e45d92f",
+ "area": "functions",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "0.500\n",
+ "stderr": "",
+ "error": null,
+ "exit": 0,
+ "drop_prefixes": []
+}

@@ -1,0 +1,17 @@
+{
+ "id": "089728781550",
+ "area": "units-and-printing",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "this line is indented but isn't inside a block",
+  "line": 2,
+  "col": 5,
+  "hint": "remove the spaces at the start of the line",
+  "kind": "FermiumError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}

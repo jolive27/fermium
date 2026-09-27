@@ -1,0 +1,17 @@
+{
+ "id": "e330f71d5532",
+ "area": "uncertainty",
+ "origin": "tests",
+ "dir": null,
+ "stdout": "",
+ "stderr": "",
+ "error": {
+  "message": "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain numbers one at a time, or use value(x) to drop the uncertainty",
+  "line": 3,
+  "col": null,
+  "hint": null,
+  "kind": "FermiumRuntimeError"
+ },
+ "exit": 1,
+ "drop_prefixes": []
+}
