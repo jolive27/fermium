@@ -221,6 +221,71 @@ from mechanics import pendulum_period
 pendulum_period(L) = L
 ```
 
+### 2.3 Uncertain values: the linear model (D120, D276–D279, D300, D304)
+
+**Values.** An uncertain value is a pair u = (v, c) of a nominal value v (a double with a dimension D) and a finite
+map c from *sources* to contributions, c = {k ↦ c_k}, every c_k of dimension D. Its standard uncertainty is
+σ(u) = √(Σ_k c_k²). A plain number is (v, {}).
+
+**Sources.** Each *evaluation* of `a ± b` creates one fresh source k with c = {k ↦ b} (`a ± p%` gives
+b = p/100·|a|); each element of a list written with `±` is its own source; `(a ± b) ± c` adds a second fresh
+source to the first; `a ± b ± c` without brackets is an error. A `±` evaluated again (in a loop, a function
+called twice) is a new measurement with a new source, except inside an integrand or an ODE's right side, where a
+`±` is one source for the whole kernel (D276). Each `fit` creates sources for its parameters (their covariance).
+The unit rule applies to `a ± b` as to a number: b must have a's dimension (units.md §7).
+
+**Operations** are first-order (linear) with exact correlations. For a differentiable f of uncertain arguments
+u₁ … uₙ, f(u₁, …, uₙ) = (f(v₁, …, vₙ), c) with
+
+  c_k = Σᵢ ∂f/∂xᵢ(v₁, …, vₙ) · (cᵢ)_k        (a missing entry is 0),
+
+that is, forward-mode differentiation with respect to the sources. Every arithmetic operator and every built-in
+of §7 that accepts a number uses its analytic partial derivatives (central differences for Bessel and elliptic
+functions). Consequences: `x - x` is `0 ± 0`, `x / x` is `1 ± 0`, `x x` has σ = 2|x|σ_x, while `x y` for two
+independent measurements of the same size has √2 |x| σ_x. Vectors, matrices and lists of uncertain values
+propagate entry by entry with the same rule (D279).
+
+**Comparisons and control** use nominal values only: `<`, `==`, `min`, `max`, `if`, loop bounds. `≈` compares
+nominal values.
+
+**Kernels** (integrals and ODE solutions) are differentiated exactly (D276, D277): for I = ∫ₐᵇ f dx,
+∂I/∂z_k = ∫ₐᵇ ∂f/∂z_k dx + f(b) ∂b/∂z_k − f(a) ∂a/∂z_k; for y' = f(t, y) the sensitivities S_k = ∂y/∂z_k solve
+S_k' = J S_k + ∂f/∂z_k alongside y, with the same solver. After the linear result, each source is moved by ±1σ
+and the kernel recomputed (D278, D300): with y₀ the linear value, c the predicted change, y± the recomputed
+values, d₁ = (y₊ − y₋)/2 and d₂ = (y₊ + y₋ − 2y₀)/2, the linear result stands when |y₊ − y₀ − c|, |y₀ − y₋ − c|
+and |d₂| are all at most 10 % of max(|d₁|, |c|) plus the kernel's own numerical noise. Otherwise the result is
+computed by Monte Carlo (10 000 samples for an integral, 2 000 solves for an ODE, from the program's seeded
+random numbers), **with a warning**, and linked back to the sources by linear regression, the nonlinear rest
+becoming a new source; a Monte Carlo ODE solution reports the nominal solution's value (D304).
+
+**Printing:** σ is rounded to 2 significant figures and the value to the same decimal place (§3.2).
+
+```fermium
+x = 2.0 ± 0.1 m
+y = 2.0 ± 0.1 m
+print x - x, x / x, x x, x y
+assert uncertainty(x - x) == 0 m
+assert abs(uncertainty(x x) - 0.4 m²) < 1e-12 m²
+assert abs(uncertainty(x y) - √2 · 0.2 m²) < 1e-12 m²
+z = 5.0 ± 3%
+print z, sin(x / (1 m)), x < y, (1.0 ± 0.1) ± 0.2
+a = 1.00 ± 0.01
+I = ∫ u² du from 0 to a
+assert uncertainty(I - a³/3) < 1e-9
+k = 1.00 ± 0.01
+solve q' = -k q with q(0) = 1 for t from 0 to 2
+print q(1), q(1) - exp(-k)
+```
+
+```fermium-error
+x = 1.0 ± 0.1 ± 0.2
+```
+
+```fermium-error
+x = 2.0 ± 0.1 m
+print 2.0 ± 0.1 s + x
+```
+
 ## 3. Numeric semantics
 
 ### 3.1 Arithmetic
@@ -483,5 +548,6 @@ print det([[1, 2], [3, 4], [5, 6]])
   names are tested against `builtins::BUILTINS`; the dimensions in it are not yet machine-checked row by row).
 - ~~Scoping rules~~ (done in 0.2: §2.2). Still open: natural-units regions, the scope of names bound by
   `analyze`/`propagate`, and the interop blocks' names.
-- Uncertainty propagation (first-order, exact correlations; Monte Carlo) as a formal model.
+- ~~Uncertainty propagation as a formal model~~ (done in 0.2: §2.3, the linear model and the kernels' ±1σ test).
+  Still open: `propagate montecarlo` and `analyze` as formal models.
 - The interop type mappings (`use python`, `import c/cpp/fortran`).
