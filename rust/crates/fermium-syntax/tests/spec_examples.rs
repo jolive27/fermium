@@ -131,6 +131,25 @@ fn spec_lists_the_lexers_keywords_and_operators() {
     assert_eq!(ops, want, "grammar.md §1.10 vs lexer::OPERATORS");
 }
 
+/// grammar.md §1.7's vulgar fractions and units.md §3's prefixes are the lexer's and the unit table's.
+#[test]
+fn spec_lists_the_fractions_and_prefixes() {
+    let grammar = std::fs::read_to_string(spec_dir().join("grammar.md")).unwrap();
+    let line = grammar.lines().find(|l| l.trim_start().starts_with("vulgar    =")).expect("the vulgar rule");
+    let mut got: Vec<char> = line.split('"').skip(1).step_by(2).filter_map(|p| p.chars().next()).collect();
+    let mut want: Vec<char> = fermium_syntax::lexer::VULGAR_FRACS.iter().map(|v| v.0).collect();
+    got.sort();
+    want.sort();
+    assert_eq!(got, want, "grammar.md §1.7 vs lexer::VULGAR_FRACS");
+    let units = std::fs::read_to_string(spec_dir().join("units.md")).unwrap();
+    let line = units.lines().find(|l| l.starts_with("- **Prefixes:**")).expect("the prefixes line");
+    let mut got: Vec<&str> = line.split('`').nth(1).unwrap().split_whitespace().collect();
+    let mut want: Vec<&str> = fermium_syntax::tables::PREFIXES.to_vec();
+    got.sort();
+    want.sort();
+    assert_eq!(got, want, "units.md §3 vs tables::PREFIXES");
+}
+
 #[test]
 fn spec_has_examples() {
     let b = blocks();

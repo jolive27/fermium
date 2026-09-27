@@ -131,8 +131,9 @@ a dimension and a factor to SI (and, for `°C` and `°F`, an offset). It holds t
 double as units after a number (`c`). The list is in docs/reference.md §15; this specification treats it as data.
 
 - **Prefixes:** `Q R Y Z E P T G M k h da d c m μ u n p f a z y r q` apply to units marked prefixable. Of the
-  2022 prefixes only `Rg Qg qg Qm` exist (D174). A few prefixed names are blocked because the unprefixed reading
-  is the useful one (`Gs Pa cd dam ft ha mi min nmi pc` are their own units, not prefixed ones).
+  2022 prefixes only `Rg Qg qg Qm` exist (D174). The names `ft mi Pa cd min pc ha nmi Gs dam` are never read as
+  prefix + unit (`ft` is the foot, not a femto-tonne; `Pa` is the pascal; `min` is the minute), whether or not
+  they are units of their own.
 - `u` is both the micro prefix (ASCII `um` = μm) and the atomic mass unit.
 - A name that is a unit and could split into a prefix and a unit that are both your variables (`1.5 kT` with your
   `k` and `T`) is the unit, with a warning (D203).
