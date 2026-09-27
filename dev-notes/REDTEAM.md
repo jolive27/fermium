@@ -2000,3 +2000,55 @@ robustness and security.
 - #4: v1's Unicode normalisation table ported.
 - #5: Jupyter interrupt handled, or the docs corrected.
 - Lows: stale docs, `--help`, build refusing to overwrite its own source, the "nested too deeply" hint, a secure temp folder.
+
+## Round 14 (2026-09-27 03:25 UTC): the new v2.5 features (C1, C3, C5, C7)
+
+Independent reviewer. Binary: `origin/claude/v2.5` (d65f724: C3, C7, C5, red-team-13 fixes and C1 merged; C4 not yet).
+Oracle: `fermium-legacy`. Programs are in the session scratchpad (rt14/). Nothing was fixed by the reviewer.
+Machine note: memory was ~95 % used (parallel agents' test runs, no swap); legacy pytest workers were killed
+("node down") in two make check runs at 02:34 and 03:25. That was the environment, not a test failure. After this,
+at most two agents run at once, and the legacy suite runs with fewer workers.
+
+**High**
+- **#1 A jump at an uncertain parameter silently loses the uncertainty (C7).** `a = 1.0 ± 0.1`,
+  `∫ (if x < a then 1 else 0) dx from 0 to 2` prints `1`; it should be 1.00 ± 0.10. The same happens for `sign(a - x)`,
+  `floor(x + a)` and `solve x' = if t < a then 1 else 0`. Differentiating under the integral sign gives 0
+  almost everywhere. The ±1σ test (D278) sees d₂ ≈ 0 and d₁ ≈ 0 and calls it linear, but never compares the
+  linear prediction with the ±1σ difference itself.
+- **#2 C, Fortran and `use python` functions silently drop ± from their arguments.** `sq((2.0 ± 0.1) * 1 m)` prints
+  `4 m²`. For `use python` this is a regression: v1 errors with "needs a plain number, but got an uncertain value".
+- **#3 A v1-valid program prints a different number (C5).** `force(x [m]) = 3 N/m x`, then a later `force(x) = 5 N/m x`:
+  v1 prints 3 N then 5 N, but v2.5 keeps choosing the more specific annotated version and prints 3 N twice. This
+  breaks "programs that ran under 2.0 print the same".
+
+**Medium**
+- **#4** A `: list` parameter only works if the body uses list operations: `s(x: list) = 2`, `s([1, 2])` →
+  "s expects x to be a list, but got a plain number". Cause: `call_user` maps over the elements using
+  `takes_lists(body)` and ignores the declared kind.
+- **#5 (security)** `fermium check` and the language server dlopen the library named in `import c` while checking,
+  so its constructor runs just from opening a cloned .fm file in the editor.
+- **#6** The Monte Carlo fallback for ODEs gives a separate "nonlinear rest" source per (component, time) and reports
+  the MC mean, not f(nominal). So `x(2) - x(1)^2` for decay is 0.029 ± 0.099, not 0. The fallback also triggers for
+  plain decay (k ± 10 %) and every pendulum (the test at a turning point, where d₁ ≈ 0).
+- **#7** `E(f [Hz]) = h f` and then `E(ω [rad/s]) = ħ ω`: the same dimension, so the second silently replaces the
+  first, and `E(1 GHz)` is wrong by 2π. This is v1's rule, but the new docs invite such overloads. It needs at least
+  a warning.
+
+**Low**
+- **#8** `∂/∂y f(1, 3)` looks only at the last version of f; `(∂/∂y f)(1, 3)` works.
+- **#9** Messages and gaps:
+  - a. `n: int` and `x: vector` give nonsense "[int]" / "[vector]" hints.
+  - b. An array index of 1.5 says "out of range", not "must be a whole number", and has no caret.
+  - c. Arrays of ± values aren't supported.
+  - d. A list-unknown solve with ± isn't in the CHANGES "still errors" list.
+  - e. The rk4 missing-step hint uses the wrong end time.
+  - f. `names = []` followed by `names = t` is refused.
+
+**Held up:** ± through vectors, matrices, lists, integrals (including infinite and reversed limits) and ODEs, with
+correlations kept (v − v = 0) and σ matching the analytic values; `propagate montecarlo` around solve; the dispatch
+examples, kinds, generic re-dispatch, modules and the REPL; the LLVM GC under FERMIUM_GC_STRESS=1 (always matched
+the tree-walker); list-unknown solves (Bateman to 1e-5, circular orbit); N-d array errors; C and Fortran unit
+conversion, int checks, stack-spilled arguments, Fortran mangling, SEMF, `fermium build` with C, and shell
+metacharacters in library paths (no injection). No Rust panics.
+
+Status: fixes in progress (agent on claude/v2.5-rt14).
