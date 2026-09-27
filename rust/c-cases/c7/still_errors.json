@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "still_errors.fm, line 3: solve … for x can't use uncertain values (±) yet; put it inside a  propagate montecarlo  block, or use value(x)\n    solve x² = a for x from 0 to 5\n",
+ "exit": 1
+}

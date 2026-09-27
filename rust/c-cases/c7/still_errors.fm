@@ -1,0 +1,4 @@
+# C7: kernels not covered yet still say so: an equation solved for an uncertain root
+a = 2.0 ± 0.1
+solve x² = a for x from 0 to 5
+print x

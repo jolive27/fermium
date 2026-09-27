@@ -1,0 +1,7 @@
+v = <3.0 ± 0.1, 4.0 ± 0.1> m/s
+print v, |v|, unit(v)
+a = 2.0 ± 0.1 m
+print ∫ x² dx from 0 m to a          # σ = a² σ_a
+k = 0.50 ± 0.02 1/s
+solve y' = -k y with y(0 s) = 1.00 m for t from 0 s to 4 s
+print y(2 s)                          # σ = t y σ_k

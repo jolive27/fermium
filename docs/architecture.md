@@ -30,7 +30,8 @@ source text ──► fermium-syntax ──► AST ──► fermium-check ─�
    (`fermium-codegen/src/eval.rs` and `eval_*.rs`) runs the IR directly. Both call the same runtime
    (`fermium-runtime`: numerics, plots, data) and print through the same printer (`fermium-codegen/src/printer.rs`
    over `fermium-units`' number formatting), so the back end never changes what a program prints. The CLI's
-   choice: programs with uncertain values (±) run in the tree-walker (as in v1, D122); otherwise LLVM compiles
+   choice: programs with uncertain values (±) run in the tree-walker (as in v1, D122; integrals and ODEs with
+   uncertain inputs, Fermium 2.5: `eval_unc_kern.rs`, D276–D278); otherwise LLVM compiles
    the program if it can, in mixed mode (next section), and the tree-walker runs whatever LLVM rejects.
    `fermium run --backend llvm|interp` or `FERMIUM_BACKEND` forces one; `FERMIUM_BACKEND_INFO=1` says which ran.
 

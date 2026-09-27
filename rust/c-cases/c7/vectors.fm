@@ -1,0 +1,23 @@
+# C7: vectors and matrices of uncertain values
+v = <3.0 ± 0.1, 4.0 ± 0.1> m/s
+print v
+print |v|, norm(v), unit(v)
+print v.x, v[2]
+print v - v, 2 v, v / (2 s)
+# |v| = √(vx² + vy²): σ² = (vx σx / |v|)² + (vy σy / |v|)²
+print uncertainty(|v|) / (1 m/s), √((3.0 0.1 / 5.0)² + (4.0 0.1 / 5.0)²)
+a = <1.0 ± 0.1, 0, 0> m
+b = <0, 2.0 ± 0.1, 0> m
+print a · b, a × b, a + b
+v[1] = 5.0 ± 0.2 m/s
+print v, abs(-v)
+print v ≈ <5, 4> m/s
+q = <1.0 ± 0.1 m, 2.0 ± 0.5 m/s>
+print q, q.x
+K = [[2.0 ± 0.1, -1], [-1, 2.0 ± 0.1]] N/m
+print K
+print Kᵀ, K[1, 1], K[2], trace(K)
+print K <1, 2> cm
+print det(K), inverse(K)
+# correlations are kept: K K⁻¹ is exactly the identity
+print K inverse(K)

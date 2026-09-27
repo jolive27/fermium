@@ -1,0 +1,17 @@
+# C7: lists of uncertain values in the list functions
+xs = [1.0, 2.0, 3.0] ± 0.1
+ys = [2.0, 4.0, 6.0] ± 0.2
+print xs[1:2], len(xs), xs[end]
+print sum(xs), mean(xs), max(xs), min(xs), first(xs), last(xs)
+print sort(reverse(xs)), cumsum(xs), diff(xs)
+print dot(xs, ys), trapz(ys, xs)
+print sqrt(xs), xs^2, 2 xs
+# the spread of measured values, with its uncertainty: ∂s/∂yᵢ = (yᵢ − ȳ) / ((n − 1) s)
+print std(ys), 0.2 √(0.5)
+print interp(1.5, xs, ys)
+print max(xs, 2.5)
+push(xs, 4.0 ± 0.1)
+xs[1] = 0.5 ± 0.05
+print xs
+f(x) = x² + 1
+print f(ys)

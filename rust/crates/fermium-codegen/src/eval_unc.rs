@@ -26,10 +26,6 @@ pub fn is_unc(v: &Value) -> bool {
     matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_) | Value::UVec(_))
 }
 
-/// UFloat.__round__'s message: printing a vector or matrix whose components are uncertain.
-pub const VEC_UNC: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain \
-                           numbers one at a time, or use value(x) to drop the uncertainty";
-
 /// Is this one of the errors v1 raises as UncertainUse (not a kernel failure)? Those unwind through its
 /// kernels (interp.kernel's `finally` restores the line), so they report the line where the outermost kernel
 /// started: see kernel_line.
@@ -438,6 +434,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "cot", "sec", "csc", "round", "sign",
         ];
         if MATH.contains(&name) {
+            if let Value::UVec(xs) = &args[0] {
+                // abs(v) and the like, component by component (C7)
+                return Ok(make_vec(xs.iter().map(|x| self.apply1(name, x)).collect::<Result<_, _>>()?));
+            }
             if let Some(xs) = list_items(&args[0]) {
                 return Ok(make_list(xs.iter().map(|x| self.apply1(name, x)).collect::<Result<_, _>>()?));
             }
@@ -486,6 +486,29 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Some(LaOut::NotPosDef) => Err(self.fail_kind(Fail::new(err::NOT_POSDEF, 0.0, 0.0))),
                 Some(LaOut::Generic) | None => self.unc_err(GENERIC),
             };
+        }
+        if matches!(name, "norm" | "unit") {
+            // |v| = √(v·v) with the correlations of the components; unit(v) = v / |v| (C7)
+            let Some(a) = vec_items(&args[0]) else { return self.unc_err(GENERIC) };
+            let mut acc = num_op(BinOp::Mul, &a[0], &a[0]);
+            for x in &a[1..] {
+                acc = num_op(BinOp::Add, &acc, &num_op(BinOp::Mul, x, x));
+            }
+            let nrm = match &acc {
+                Value::Unc(u) => unc(u.powc(0.5, interp_powc)),
+                v => Value::Num(interp_powc(v.num(), 0.5)),
+            };
+            if name == "norm" {
+                return Ok(nrm);
+            }
+            return Ok(make_vec(a.iter().map(|x| num_op(BinOp::Div, x, &nrm)).collect()));
+        }
+        if name == "approx" && (matches!(args[0], Value::UVec(_)) || matches!(args[1], Value::UVec(_))) {
+            // ≈ compares the values (C7), as for uncertain numbers
+            let nv = |v: &Value| vec_items(v).map(|xs| xs.iter().map(nominal).collect::<Vec<f64>>())
+                .unwrap_or_else(|| vec![nominal(v)]);
+            return Ok(Value::Bool(crate::eval_vecmat::approx_real(&nv(&args[0]), &nv(&args[1]), nominal(&args[2]),
+                                                                  nominal(&args[3]))));
         }
         if matches!(name, "vdot" | "cross") {
             // sum_seq of the products / the cross product of the components (e_IBuiltin on tuples)
@@ -572,7 +595,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let tol = atol.max(rtol * sa.max(sb));
                 Ok(Value::Bool(x == y || (diff <= tol && diff != f64::INFINITY)))
             }
-            "len" => Ok(Value::Num(list_items(&args[0]).map(|l| l.len()).unwrap_or(0) as f64)),
+            "len" => Ok(Value::Num(list_items(&args[0]).or_else(|| vec_items(&args[0])).map(|l| l.len()).unwrap_or(0) as f64)),
             "sum" | "mean" | "std" | "min_list" | "max_list" | "first" | "last" => self.unc_reduce(name, &args[0]),
             "dot" => {
                 let (a, c) = (list_items(&args[0]).unwrap_or_default(), list_items(&args[1]).unwrap_or_default());
@@ -597,6 +620,36 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     acc = num_op(BinOp::Add, &acc, &num_op(BinOp::Mul, &Value::Num(0.5), &num_op(BinOp::Mul, &dx, &s)));
                 }
                 Ok(acc)
+            }
+            "interp" => {
+                // bi_interp with uncertain x, xs or ys (C7): the segment is picked by the values, and the linear
+                // formula propagates every uncertainty
+                let (xs, ys) = match (list_items(&args[1]), list_items(&args[2])) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => return self.unc_err(GENERIC),
+                };
+                let n = xs.len();
+                if n != ys.len() {
+                    return self.err(format!("these two lists have different lengths ({} and {})", n, ys.len()));
+                }
+                if n < 2 {
+                    return self.err("this list is empty");
+                }
+                let x = &args[0];
+                let xv = nominal(x);
+                let mut res = ys[0].clone();
+                if xv >= nominal(&xs[n - 1]) {
+                    res = ys[n - 1].clone();
+                }
+                for i in 1..n {
+                    if xv >= nominal(&xs[i - 1]) && xv < nominal(&xs[i]) {
+                        let s = num_op(BinOp::Div, &num_op(BinOp::Sub, x, &xs[i - 1]),
+                                       &num_op(BinOp::Sub, &xs[i], &xs[i - 1]));
+                        res = num_op(BinOp::Add, &ys[i - 1],
+                                     &num_op(BinOp::Mul, &s, &num_op(BinOp::Sub, &ys[i], &ys[i - 1])));
+                    }
+                }
+                Ok(res)
             }
             "copy" => Ok(make_list(list_items(&args[0]).unwrap_or_default())),
             "reverse" => Ok(make_list(list_items(&args[0]).unwrap_or_default().into_iter().rev().collect())),
@@ -685,8 +738,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
         let q = num_op(BinOp::Div, &acc, &Value::Num(n as f64 - 1.0));
         match q {
-            // math.sqrt of a UFloat calls float(): UncertainUse (v1 has no uncertain std)
-            Value::Unc(_) => self.unc_err(GENERIC),
+            // the spread of uncertain values, with its uncertainty propagated (C7; v1 stopped here)
+            Value::Unc(u) => Ok(unc(u.powc(0.5, interp_powc))),
             q => Ok(Value::Num(q.num().sqrt())),
         }
     }
@@ -756,6 +809,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         true
     }
 
+    /// print of a vector or matrix with uncertain components (C7): one format, or one per component.
+    pub(crate) fn unc_print_vec(&mut self, v: &[Value], fmts: &[usize], shape: Option<(usize, usize)>) {
+        let fs: Vec<fermium_units::quantity::PrintFmt> =
+            fmts.iter().map(|&f| crate::printer::print_fmt(&self.module.tables.fmts[f])).collect();
+        let vals: Vec<(f64, Option<f64>)> = v.iter().map(|x| match x {
+            Value::Unc(u) => (u.v, Some(u.s())),
+            x => (x.num(), None),
+        }).collect();
+        let text = fermium_units::quantity::format_uncertain_seq(&vals, &fs, shape);
+        self.printer.text(&text);
+    }
+
     /// Σ over terms that may be uncertain (interp.e_ISum: acc = acc + f(lo + i·st)).
     pub(crate) fn unc_sum(&mut self, lam: usize, a: f64, st: f64, n: i64, fr: &mut Frame) -> Result<Value, RunError> {
         let m: &'m fermium_ir::Module = self.module;
@@ -805,12 +870,14 @@ enum Key {
 }
 
 /// The sampler of interp._Sampler: all samples at once (v1's NumPy arrays) or the k-th one.
-struct Mc {
+pub(crate) struct Mc {
     /// None: vectorized; Some(k): the k-th sample
     k: Option<usize>,
     /// samples per stream (drawn at a stream's first use)
     n: usize,
     zs: Vec<(Key, Vec<f64>)>,
+    /// the streams are given (C7's kernels): a source not among them stays at its value (z = 0)
+    fixed: bool,
 }
 
 thread_local! {
@@ -828,6 +895,84 @@ pub fn vec_fail() {
     VEC_FAIL.with(|f| f.set(true));
 }
 
+/// Kernels with uncertain inputs (C7): evaluate with every uncertain input read as its value plus Σ c_k z_k[j],
+/// for given streams z_k of the sources k (a source not given, and a ± written inside, stay at z = 0). Returns
+/// the sampler that was active before (restore it with [`fixed_end`]).
+pub(crate) fn fixed_begin(n: usize, zs: Vec<(u64, Vec<f64>)>) -> Option<Mc> {
+    let zs = zs.into_iter().map(|(k, z)| (Key::Src(k), z)).collect();
+    MC.with(|m| m.borrow_mut().replace(Mc { k: Some(0), n, zs, fixed: true }))
+}
+
+/// Selects sample j of the streams given to [`fixed_begin`].
+pub(crate) fn fixed_sample(j: usize) {
+    MC.with(|m| {
+        if let Some(m) = m.borrow_mut().as_mut() {
+            m.k = Some(j);
+        }
+    })
+}
+
+pub(crate) fn fixed_end(prev: Option<Mc>) {
+    MC.with(|m| *m.borrow_mut() = prev);
+}
+
+/// Monte Carlo for a kernel: like [`fixed_begin`], but a source met that isn't among the given streams gets a
+/// stream of its own from the program's random numbers (at its first use); [`mc_take`] returns them all.
+pub(crate) fn mc_begin(n: usize, zs: Vec<(u64, Vec<f64>)>) -> Option<Mc> {
+    let zs = zs.into_iter().map(|(k, z)| (Key::Src(k), z)).collect();
+    MC.with(|m| m.borrow_mut().replace(Mc { k: Some(0), n, zs, fixed: false }))
+}
+
+/// Ends [`mc_begin`]: restores the sampler that was active before and returns the sources' streams.
+pub(crate) fn mc_take(prev: Option<Mc>) -> Vec<(u64, Vec<f64>)> {
+    let cur = MC.with(|m| std::mem::replace(&mut *m.borrow_mut(), prev));
+    cur.map(|m| m.zs.into_iter().filter_map(|(k, z)| match k {
+        Key::Src(id) => Some((id, z)),
+        Key::Pm(..) => None,
+    }).collect()).unwrap_or_default()
+}
+
+/// Monte Carlo results y (one per sample of the streams zs, sources src) as an uncertain value: the linear model
+/// fitted by least squares gives the value at z = 0 and one contribution per source, and what it doesn't
+/// explain (the nonlinear part) is a new source of its own (interp.s_SPropagate's regression).
+pub(crate) fn mc_ufloat(y: &[f64], zs: &[&[f64]], src: &[u64]) -> UFloat {
+    let n = y.len();
+    let nf = n as f64;
+    let ymean = np_sum(y) / nf;
+    let mut mean = ymean;
+    let dy: Vec<f64> = y.iter().map(|x| x - ymean).collect();
+    let var = np_sum(&dy.iter().map(|x| x * x).collect::<Vec<_>>()) / (nf - 1.0);
+    if !(var > 0.0) {
+        return UFloat::new(mean, vec![]);
+    }
+    let mut d: Vec<(u64, f64)> = vec![];
+    let mut r = dy.clone();
+    if !zs.is_empty() {
+        let zmeans: Vec<f64> = zs.iter().map(|z| np_sum(&z[..n]) / nf).collect();
+        let zc: Vec<Vec<f64>> = zs.iter().zip(&zmeans).map(|(z, m)| z[..n].iter().map(|x| x - m).collect()).collect();
+        let beta = lstsq(&zc, &dy);
+        for (i, ri) in r.iter_mut().enumerate() {
+            let mut s = 0.0;
+            for (c, b) in zc.iter().zip(&beta) {
+                s += c[i] * b;
+            }
+            *ri = dy[i] - s;
+        }
+        // the value: the fitted linear model at z = 0 (the inputs' true values)
+        let mut corr = 0.0;
+        for (m, b) in zmeans.iter().zip(&beta) {
+            corr += m * b;
+        }
+        mean -= corr;
+        d = src.iter().zip(&beta).filter(|(_, b)| **b != 0.0).map(|(k, b)| (*k, *b)).collect();
+    }
+    let resid = r.iter().map(|x| x * x).sum::<f64>() / (nf - 1.0);
+    if resid > 1e-20 * var {
+        d.push((U::new_source(), resid.sqrt())); // the nonlinear part: its own source
+    }
+    UFloat::new(mean, d)
+}
+
 fn failed() -> bool {
     VEC_FAIL.with(|f| f.get())
 }
@@ -837,7 +982,7 @@ fn z_of(m: &mut Mc, key: Key) -> usize {
     if let Some(i) = m.zs.iter().position(|(k, _)| *k == key) {
         return i;
     }
-    let v: Vec<f64> = (0..m.n).map(|_| crate::eval_m3::randn_draw()).collect();
+    let v: Vec<f64> = if m.fixed { vec![0.0; m.n] } else { (0..m.n).map(|_| crate::eval_m3::randn_draw()).collect() };
     m.zs.push((key, v));
     m.zs.len() - 1
 }
@@ -1102,7 +1247,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         // all the samples at once
         restore(self, fr);
         VEC_FAIL.with(|f| f.set(false));
-        MC.with(|m| *m.borrow_mut() = Some(Mc { k: None, n, zs: vec![] }));
+        MC.with(|m| *m.borrow_mut() = Some(Mc { k: None, n, zs: vec![], fixed: false }));
         let r = self.block(body, fr);
         let mut results: Option<Vec<Vec<f64>>> = None;
         if r.is_ok() && !failed() {
@@ -1135,7 +1280,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let mut err = None;
                 for k in 0..m {
                     restore(self, fr);
-                    MC.with(|mc| *mc.borrow_mut() = Some(Mc { k: Some(k), n, zs: std::mem::take(&mut zs) }));
+                    MC.with(|mc| *mc.borrow_mut() = Some(Mc { k: Some(k), n, zs: std::mem::take(&mut zs), fixed: false }));
                     let r = self.block(body, fr);
                     zs = MC.with(|mc| mc.borrow_mut().take()).map(|mc| mc.zs).unwrap_or_default();
                     if let Err(e) = r {
@@ -1171,43 +1316,9 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                                                         finite numbers (the formula fails for some sampled inputs)"),
                                       line: line0, hint: None });
             }
-            let nf = n as f64;
-            let ymean = np_sum(y) / nf;
-            let mut mean = ymean;
-            let dev: Vec<f64> = y.iter().map(|x| x - ymean).collect();
-            let var = np_sum(&dev.iter().map(|x| x * x).collect::<Vec<_>>()) / (nf - 1.0);
-            if !(var > 0.0) {
-                self.set(sym, unc(UFloat::new(mean, vec![])), fr);
-                continue;
-            }
-            let dy: Vec<f64> = y.iter().map(|x| x - ymean).collect();
-            let mut d: Vec<(u64, f64)> = vec![];
-            let mut r = dy.clone();
-            if !zs.is_empty() {
-                let zmeans: Vec<f64> = zs.iter().map(|(_, z)| np_sum(&z[..n]) / nf).collect();
-                let zc: Vec<Vec<f64>> = zs.iter().zip(&zmeans).map(|((_, z), m)| z[..n].iter().map(|x| x - m).collect())
-                    .collect();
-                let beta = lstsq(&zc, &dy);
-                for (i, ri) in r.iter_mut().enumerate() {
-                    let mut s = 0.0;
-                    for (c, b) in zc.iter().zip(&beta) {
-                        s += c[i] * b;
-                    }
-                    *ri = dy[i] - s;
-                }
-                // the value: the fitted linear model at z = 0 (the inputs' true values)
-                let mut corr = 0.0;
-                for (m, b) in zmeans.iter().zip(&beta) {
-                    corr += m * b;
-                }
-                mean -= corr;
-                d = src.iter().zip(&beta).filter(|(_, b)| **b != 0.0).map(|(k, b)| (*k, *b)).collect();
-            }
-            let resid = r.iter().map(|x| x * x).sum::<f64>() / (nf - 1.0);
-            if resid > 1e-20 * var {
-                d.push((U::new_source(), resid.sqrt())); // the nonlinear part: its own source
-            }
-            self.set(sym, unc(UFloat::new(mean, d)), fr);
+            let zr: Vec<&[f64]> = zs.iter().map(|(_, z)| &z[..]).collect();
+            let u = mc_ufloat(y, &zr, &src);
+            self.set(sym, unc(u), fr);
         }
         Ok(())
     }

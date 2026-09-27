@@ -27,7 +27,7 @@ pub enum Value {
     /// A list holding uncertain numbers (and plain ones, as `Num`).
     UList(Rc<RefCell<Vec<Value>>>),
     /// A vector or matrix with uncertain components (v1's tuple of UFloat values): elementwise arithmetic,
-    /// components, vdot and cross work; printing it stops with VEC_UNC (eval_unc.rs).
+    /// components, norm, unit, vdot, cross, det, inverse and printing work (eval_unc.rs; printing: C7).
     UVec(Rc<Vec<Value>>),
     /// All the samples of a number at once, inside `propagate montecarlo` (v1's NumPy arrays, D123).
     Arr(Rc<Vec<f64>>),
@@ -516,12 +516,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 }
                 PrintItem::Vec(e, f) => match self.eval(e, fr)? {
                     Value::Vec(v) => self.printer.vec(*f, &v),
-                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    Value::UVec(v) => self.unc_print_vec(&v, &[*f], None),
                     _ => {}
                 },
                 PrintItem::MixedVec(e, fs) => match self.eval(e, fr)? {
                     Value::Vec(v) => self.printer.mixed_vec(fs, &v),
-                    Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                    Value::UVec(v) => self.unc_print_vec(&v, fs, None),
                     _ => {}
                 },
                 PrintItem::Mat(e, f) => {
@@ -531,7 +531,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     };
                     match self.eval(e, fr)? {
                         Value::Vec(v) => self.printer.mat(*f, &v, r, c),
-                        Value::UVec(_) => return self.err(crate::eval_unc::VEC_UNC),
+                        Value::UVec(v) => self.unc_print_vec(&v, &[*f], Some((r, c))),
                         _ => {}
                     }
                 }
@@ -740,16 +740,32 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::Vec(items) => {
                 let mut out = Vec::with_capacity(items.len());
+                let mut uout: Option<Vec<Value>> = None;
                 for it in items {
-                    match self.eval(it, fr)? {
+                    let v = self.eval(it, fr)?;
+                    // a vector or matrix with uncertain components (Fermium 2.5, C7: v1 stopped here)
+                    if uout.is_none() && matches!(v, Value::Unc(_) | Value::UVec(_)) {
+                        uout = Some(out.iter().map(|x| Value::Num(*x)).collect());
+                    }
+                    if let Some(u) = uout.as_mut() {
+                        match v {
+                            Value::Num(_) | Value::Unc(_) => u.push(v),
+                            Value::Vec(w) => u.extend(w.iter().map(|x| Value::Num(*x))),
+                            Value::UVec(w) => u.extend(w.iter().cloned()),
+                            _ => return self.err("not yet supported by the Rust back end: this vector"),
+                        }
+                        continue;
+                    }
+                    match v {
                         Value::Num(x) => out.push(x),
                         Value::Vec(v) => out.extend(v.iter()),
-                        // interp.e_IVec: float() of an uncertain value
-                        Value::Unc(_) => return self.err(crate::eval_unc::GENERIC),
                         _ => return self.err("not yet supported by the Rust back end: this vector"),
                     }
                 }
-                Value::Vec(Rc::new(out))
+                match uout {
+                    Some(u) => crate::eval_unc::make_vec(u),
+                    None => Value::Vec(Rc::new(out)),
+                }
             }
             ExprKind::VecElem(v, k) => match self.eval(v, fr)? {
                 Value::Vec(v) => Value::Num(v[*k]),
@@ -815,6 +831,16 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let vals = self.eval_args(args, fr)?;
                 if crate::eval_unc::mc_active() && (name == "pm" || name == "pm_rel") {
                     return self.mc_pm(e as *const Expr as usize, name == "pm_rel", &vals);
+                }
+                if (name == "pm" || name == "pm_rel") && crate::eval_unc_kern::kernel_pm_active() {
+                    // a ± written inside an integrand or a right side: one measurement per kernel (C7)
+                    let key = e as *const Expr as usize;
+                    if let Some(v) = crate::eval_unc_kern::kernel_pm_get(key) {
+                        return Ok(v);
+                    }
+                    let v = self.builtin_slice(name, &vals)?;
+                    crate::eval_unc_kern::kernel_pm_put(key, v.clone());
+                    return Ok(v);
                 }
                 let r = self.builtin_slice(name, &vals);
                 crate::varmap::give_args(vals);
