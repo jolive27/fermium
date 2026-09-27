@@ -43,7 +43,8 @@ simplest form, so its individual a values are not the RIPL-3 recommended ones.
   SI value is tiny, `k = 8 MeV` (1.3 × 10⁻¹² J) in `fit a = A / k`, reports `k = 1.273×10⁻¹² J (standard error
   1.7×10⁻¹⁰ J)`, 100 times the value; the same fit with a plain parameter (`fit a * 1 MeV = A / k`) gives the right
   7.948 ± 0.089. The fitted value is right; only the error (and so `err(k)`) is wrong. The report is also in J, not in the MeV
-  of the starting value. Logged under "Bugs first" in BACKLOG.md with a five-line reproduction.
+  of the starting value. **Fixed** since (DECISIONS D326: the covariance steps scale with the parameter); the program
+  keeps the plain-number form it was written with.
 - `σ²(U, a, A) = …` can't be a function name (the superscript is read as a power); written `σsq`.
 - A spin `J` collided with the unit joule in `2J` (clear error; renamed `spin`).
 - `(2J + 1) / (…) exp(…)` was refused as ambiguous (division then implicit multiplication), with a hint giving both

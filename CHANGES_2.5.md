@@ -278,3 +278,8 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
 - A solve whose `when` reset or condition reads an uncertain value (`when y = 0 m: y' = -k_e y'`, `k_e = 0.9 ± 0.01`)
   gets its uncertainty from Monte Carlo, as documented (it was refused); the warning names the moving event time as
   the reason.
+- Research track corrections: supernova_hubble's README reads the Ωm and ΩΛ errors correctly (`fit` scales them by
+  √(χ²/dof) = 0.66 here: Ωm = 0.350 ± 0.018 and ΩΛ > 0 at ≈ 6.1σ with the stated errors at face value, not 9.2σ);
+  docs/reference.md says how `fit` scales its standard errors; neutron_star_cooling uses the modified-Urca neutron
+  branch's (n_p/n₀)^(1/3) with a proton fraction of 0.05 (was (n/n₀)^(2/3)), N₉ = 2.44 × 10⁴⁰ erg/s, 31 of 48 stars
+  within a factor 3 (was 34); level_density's stale comment on the fixed fit bug is gone.

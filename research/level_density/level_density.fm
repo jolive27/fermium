@@ -41,7 +41,7 @@ print "a from D0: median A/a =", sort(ratio)[n / 2] to 3 digits, "MeV"
 
 # 2. a ∝ A: fit a = A/k
 tbl = table(A = Ac_list, a = as_fit)
-# (fitted as a plain number: a fit of k in MeV reports a wrong standard error; see the README)
+# (fitted as a plain number, as first written; the wrong standard error of a fit in MeV is fixed, DECISIONS D326)
 k_fit = 8
 fit a * 1 MeV = A / k_fit to tbl
 # the Fermi gas of free nucleons in a box: a = π²/(4 ε_F) A (Bohr & Mottelson), with ε_F from the nuclear density

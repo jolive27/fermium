@@ -29,15 +29,19 @@ program runs in 10.5 s. Run it from this folder with `fermium run hubble.fm`.
 | Einstein–de Sitter (Ωm = 1, ΩΛ = 0) | Δχ² = **+661** | ruled out | |
 | empty universe (Milne) | Δχ² = +35.8 | | |
 | ΛCDM with curvature | Ωm = 0.299 ± 0.046, ΩΛ = 0.579 ± 0.063 (Ω_k = 0.12) | | |
-| ΩΛ > 0 | **9.2 σ** (diagonal errors) | | the 1998 discovery (Riess et al.; Perlmutter et al.), here with 1590 light curves |
+| ΩΛ > 0 | 9.2 standard errors as printed; **≈ 6.1σ** with the stated errors at face value (see below) | | the 1998 discovery (Riess et al.; Perlmutter et al.), here with 1590 light curves |
 
 The binned Hubble residuals (relative to an empty universe) rise to +0.10 mag at z ≈ 0.3 and fall back, the shape of flat
 ΛCDM; a matter-only universe predicts −0.15 mag at z ≈ 0.6 where the data show +0.06 mag.
 
-**Honest reading.** With only the diagonal errors, Ωm lands 0.9σ above the published value (0.350 vs 0.334), and its error
-is too small (0.012 vs 0.018) because the correlated systematics are not propagated; the full 1701 × 1701 covariance matrix
-(`Pantheon+SH0ES_STAT+SYS.cov` in the release) is not used. The highest-redshift bin (z ≈ 1.4, 0.007 ± 0.062 mag) sits
-above flat ΛCDM (−0.109) by 1.9σ.
+**Honest reading.** `fit` reports standard errors scaled by √(χ²/dof), as SciPy's `curve_fit` does by default
+(`absolute_sigma=False`). Here χ²/dof = 697.3/1588 = 0.44, so every printed error is 0.66 times what the stated
+(diagonal) errors give at face value: Ωm = 0.350 ± 0.012 as printed is **0.350 ± 0.018** unscaled, and ΩΛ in the curved fit
+is 0.579 ± 0.095 unscaled, so ΩΛ > 0 at **≈ 6.1σ**, not the 9.2 printed. The small χ²/dof itself says the diagonal errors
+are too large: they include systematics that the full 1701 × 1701 covariance matrix (`Pantheon+SH0ES_STAT+SYS.cov` in
+the release, not used here) treats as correlated. Ωm lands 0.9σ (of the published error) above
+the published value (0.350 vs 0.334 ± 0.018). The highest-redshift bin (z ≈ 1.4, 0.007 ± 0.062 mag) sits above flat
+ΛCDM (−0.109) by 1.9σ.
 
 ![binned Hubble residuals](hubble_residuals.png)
 

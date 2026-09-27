@@ -1971,3 +1971,13 @@ wrong here); rust/c-cases/c2/events_uncertain.json records the new text (that re
 values" error.
 - **Alternatives:** sensitivities through the event (a saltation matrix at each event: exact for smooth crossings,
 more code; later if the Monte Carlo cost matters).
+
+## D336. Research corrections: fit's error scaling stated, the modified-Urca neutron branch (red team 16 #10–#12)
+- **What:** supernova_hubble's README explains that `fit` scales standard errors by √(χ²/dof) (SciPy's default) and
+gives the face-value errors (Ωm ± 0.018, ΩΛ > 0 at ≈ 6.1σ); docs/reference.md states the scaling. neutron_star_cooling
+now uses the neutron-branch emissivity 8.1×10²¹ (n_p/n₀)^(1/3) T₉⁸ (Yakovlev et al. 2001) with an assumed proton
+fraction x_p = 0.05, bare masses and α_nβ_n ≈ 1; expected_output.txt, the README table and the plot are regenerated.
+- **Why:** the reviewer's findings: the 9.2σ claim used errors shrunk by χ²/dof = 0.44, and the (n/n₀)^(2/3) form
+isn't the cited one.
+- **Alternatives:** a `fit` option for absolute errors (`absolute_sigma`); later if asked. Keeping (n/n₀)^(2/3) with
+a different citation (the neutron-branch form is the standard one).

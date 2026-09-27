@@ -21,10 +21,13 @@ C_v(T) = (π²/2) N_n k_B² T / E_F
 print "mean neutron density", n_n in 1/fm³ to 3 digits, " (nuclear density n₀ = 0.16 fm⁻³)  E_F =", E_F in MeV to 3 digits
 print "heat capacity C = C₉ T₉ with C₉ =", C_v(1e9 K) in erg/K to 3 digits
 
-# modified Urca neutrino emissivity (Friman & Maxwell 1979, as in Yakovlev et al. 2001), n → p e ν̄ with a spectator:
-#   Q = 8.1×10²¹ erg cm⁻³ s⁻¹ (n/n₀)^(2/3) T₉⁸
+# modified Urca neutrino emissivity, neutron branch (Friman & Maxwell 1979; Yakovlev et al. 2001, Phys. Rep. 354, 1),
+# n + n → n + p + e + ν̄ and its inverse, with bare nucleon masses and α_n β_n ≈ 1:
+#   Q = 8.1×10²¹ erg cm⁻³ s⁻¹ (n_p/n₀)^(1/3) T₉⁸
+# the proton density from a proton fraction x_p = 0.05 (typical of realistic equations of state at 1-2 n₀)
 n₀ = 0.16 /fm³
-L_ν(T) = 8.1e21 erg/(cm³ s) * (n_n / n₀)^(2/3) (T / 1e9 K)^8 * (4π/3) R_ns³
+x_p = 0.05
+L_ν(T) = 8.1e21 erg/(cm³ s) * (x_p n_n / n₀)^(1/3) (T / 1e9 K)^8 * (4π/3) R_ns³
 print "neutrino luminosity L_ν = N₉ T₉⁸ with N₉ =", L_ν(1e9 K) in erg/s to 3 digits
 
 # the heat-blanketing envelope: T_s = 0.87×10⁶ K (g/10¹⁴ cm s⁻²)^(1/4) (T_b/10⁸ K)^0.55 (Gudmundsson, Pethick & Epstein 1983)
