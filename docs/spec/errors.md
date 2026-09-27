@@ -12,16 +12,17 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 18 of the files completely** (323 templates) — the ones that hold the most common errors: unit and
+covers 19 of the files completely** (358 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
 numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
-matrices (vecmat.rs), and differential equations (`solve … with … for t from …`, solve.rs). The other files (`fit`, PDEs, eigenvalue problems, data tables,
+matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), and data files, `table`, `fit` and
+`plot` (data.rs). The other files (PDEs, eigenvalue problems,
 complex numbers, arrays, modules, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 255 templates) are still to do; see §4.
+interop; about 220 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `data.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -40,8 +41,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 113 of the
-323. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 130 of the
+358. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -395,6 +396,42 @@ errors come first, and the rest are simply not written yet (§4).
 | 321 | `… is a list of unknowns, so it takes one time, not a list of times` | solve.rs | an ODE solution with a list of unknowns evaluated at a list of times | C321 |
 | 322 | `can't take that many derivatives of the solution …` | solve.rs | too many derivatives of an ODE solution (beyond what can be computed from the equation) | — |
 | 323 | `… is a list of unknowns: use its value at a time, like …(…) (a list) or …(…)[i], or its last value …[end]` | solve.rs | an ODE solution with a list of unknowns used as a value | — |
+| | **Data, fit and plot (data.rs)** | | | |
+| 324 | `in …, column '…': …` | data.rs | a data file's column header names a unit that isn't known (the unit parser's message follows) | — |
+| 325 | `data files can't be loaded inside a … region (their columns are in SI units)` | data.rs | `load` inside a natural-units region | — |
+| 326 | `can't find the file '…'` | data.rs | `load` of a file that doesn't exist | C326 |
+| 327 | `a table needs at least one column, like  table(x = xs, y = ys)` | data.rs | `table()` without columns (today a bare `table()` is reported as an undefined name first) | — |
+| 328 | `the column … of a table must be a list of numbers, like  … = [1, 2, 3] m` | data.rs | a `table` column that isn't a list of numbers | C328 |
+| 329 | `the units of the column … aren't known here` | data.rs | a `table` column whose dimension isn't fixed where the table is built | — |
+| 330 | `the data has no column called … (columns: …)` | data.rs | `data.name` for a column the data doesn't have | C330 |
+| 331 | `err(x) gives the standard error of a parameter found by fit, like err(g) after fit T = 2π √(L/g) to data` | data.rs | `err(x)` of a name that isn't a parameter found by `fit` | C331 |
+| 332 | `fit can only be used at the top level of a program` | data.rs | `fit` inside a block or a function | — |
+| 333 | `fit ... to <data>: the data must come from load "file.csv" or table(x = xs, y = ys)` | data.rs | `fit … to d` where d isn't loaded data or a `table` | C333 |
+| 334 | `the left side of a fit must use a column of the data (…)` | data.rs | the left side of `fit` isn't one of the data's columns | C334 |
+| 335 | `this fit has no unknown parameters to adjust` | data.rs | a `fit` model with no unknown names to adjust | C335 |
+| 336 | `the model gives … but … is …` | data.rs | the model's dimension isn't the fitted column's | — |
+| 337 | `the starting guess for … is … but … must be …` | data.rs | a starting guess (`with k = …`) of the wrong dimension | — |
+| 338 | `can't show … in …` | data.rs | a plot axis unit (`y in unit`) of another dimension than the plotted values | C338 |
+| 339 | `all series in one plot need the same … units (here … and …)` | data.rs | two series in one plot with different dimensions on one axis | C339 |
+| 340 | `sweep needs a loop like  sweep k in [1, 2, 4]` | data.rs | `sweep` without a loop over values | — |
+| 341 | `the … range must be constants, like  … from 1e-12 to 1  or  … from 0 s to 10 s` | data.rs | an axis range (`x from a to b`) whose ends aren't constants | C341 |
+| 342 | `the … axis is …, but this end of its range is …` | data.rs | an axis range end of another dimension than the axis | C342 |
+| 343 | `the … range must go from the smaller value to the larger one; to have … decrease along the axis, add  reversed …` | data.rs | an axis range that goes from the larger value to the smaller | C343 |
+| 344 | `a log … axis can't start at 0 or below` | data.rs | a log axis whose range starts at 0 or below | C344 |
+| 345 | `… is a vector; plot its components, e.g.  plot ….y vs ….x` | data.rs | plotting an ODE vector solution directly | C345 |
+| 346 | `… is a function of …; plot it  vs …` | data.rs | plotting a function against a name other than its variable | — |
+| 347 | `a solution is plotted over the range it was solved for (no 'from ... to' needed)` | data.rs | a `from … to …` range on a plotted ODE solution (with `plot z vs t from …`, the solution-as-value message comes first today) | — |
+| 348 | `can only plot two solutions against each other if they come from the same solve` | data.rs | plotting two ODE solutions from different `solve`s against each other | C348 |
+| 349 | `… isn't defined; to plot a formula give a range, like plot y vs … from 0 to 10` | data.rs | plotting a formula against an undefined name without a range (today `q isn't defined` usually comes first) | — |
+| 350 | `to plot a formula, the thing after 'vs' must be a variable name` | data.rs | plotting a formula against something that isn't a name | C350 |
+| 351 | `the two ends of the plot range need the same units` | data.rs | a plot range whose ends have different dimensions | C351 |
+| 352 | `can't plot … here; plot needs lists of values (or a solution, or a formula with a range)` | data.rs | plotting a value that isn't a list, a solution or a formula with a range | C352 |
+| 353 | `an animation shows one PDE solution:  plot u vs x animate over t` | data.rs | `animate over` with more than one PDE solution | — |
+| 354 | `a PDE solution's plot takes only  title  and  animate over t [frames N]  (not axis ranges, labels, log or reversed axes)` | data.rs | a PDE solution's plot with an option other than `title` and `animate` | — |
+| 355 | `animate over t works for the solution of a PDE:  plot u vs x animate over t` | data.rs | `animate over` on something that isn't a PDE solution | — |
+| 356 | `plot a PDE solution against its space variable:  plot … vs …` | data.rs | a PDE solution plotted against a name other than its space variable | — |
+| 357 | `… changes with …: write  animate over …` | data.rs | `animate over` a name other than the PDE's time variable | — |
+| 358 | `frames must be from 2 to 1000` | data.rs | `frames N` outside 2 to 1000 | — |
 
 ## 3. Examples
 
@@ -1545,17 +1582,131 @@ solve N' = -N with N(0) = [1, 2] for t from 0 to 1
 a = N([0.5, 1])
 ```
 
+```fermium-error
+# C326
+d = load "no_such_file_here.csv"
+```
+
+```fermium-error
+# C328
+d = table(x = 3)
+```
+
+```fermium-error
+# C330
+d = table(x = [1, 2] m)
+y = d.q
+```
+
+```fermium-error
+# C331
+a = 3
+b = err(a)
+```
+
+```fermium-error
+# C333
+fit y = k x to 3
+```
+
+```fermium-error
+# C334
+d = table(x = [1, 2, 3], y = [2, 4, 6])
+fit z = k x to d
+```
+
+```fermium-error
+# C335
+d = table(x = [1, 2, 3], y = [2, 4, 6])
+fit y = 2 x to d
+```
+
+```fermium-error
+# C338
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+plot ys in kg vs xs
+```
+
+```fermium-error
+# C339
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+zs = [1, 2, 3] kg
+plot ys vs xs, zs vs xs
+```
+
+```fermium-error
+# C341
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+a = ys[1]
+plot ys vs xs with y from a to 5 m
+```
+
+```fermium-error
+# C342
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+plot ys vs xs with y from 0 s to 5 s
+```
+
+```fermium-error
+# C343
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+plot ys vs xs with y from 5 m to 0 m
+```
+
+```fermium-error
+# C344
+xs = [1, 2, 3] s
+ys = [1, 2, 3] m
+plot ys vs xs with log y, y from 0 m to 5 m
+```
+
+```fermium-error
+# C345
+solve r' = -r with r(0) = <1, 0> for t from 0 to 1
+plot r vs t
+```
+
+```fermium-error
+# C348
+solve a' = -a with a(0) = 1 for t from 0 to 1
+solve b' = -b with b(0) = 1 for t from 0 to 1
+plot a vs b
+```
+
+```fermium-error
+# C350
+xs = [1, 2]
+plot 2 xs vs xs[1] from 0 to 1
+```
+
+```fermium-error
+# C351
+plot sin(q) vs q from 0 s to 1 m
+```
+
+```fermium-error
+# C352
+a = 3
+b = 4
+plot a vs b
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
+  covered, by size of their error set: pde.rs (31), cinterop.rs (25), cplx.rs (20),
   pyinterop.rs (18), modules.rs (15), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 255 templates remain.
+  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 220 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (113). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (130). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -1567,5 +1718,7 @@ a = N([0.5, 1])
   complex lists, ODE solutions and local-function limits. In rows 209–266 (vecmat.rs), 5 rows: the size limits
   and index forms that need large or run-time matrices. In rows 267–323 (solve.rs), 22 rows: implicit systems,
   complex and list unknowns, events with lists, and messages another check reaches first.
+  In rows 324–358 (data.rs), 17 rows: data files with bad headers, `fit` models and guesses, PDE-solution plots
+  and `sweep`.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
