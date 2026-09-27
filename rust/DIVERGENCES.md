@@ -432,6 +432,12 @@ error; v2.5 computes them. For example, `solve x' = -k x / (1 s)` with k = 1.0 �
 checked against the analytic derivative. Programs that still can't propagate (see rust/c-cases/c7/still_errors.fm)
 keep v1's error.
 
+## An uncertain value that rounds to zero prints as 0.00, not -0.00 (red team 15 #5)
+
+`x = -0.00001 ± 0.14` then `print x` prints `0.00 ± 0.14`; Fermium 1.5 printed `-0.00 ± 0.14` (Python's
+formatting of a negative number that rounds to zero). Plain numbers are unchanged. No conformance program prints
+such a value.
+
 ## fermium build (red team 13 #6, #7, #14)
 
 - A program that uses Python builds (v1 refused it: *an executable doesn't carry Python*). The executable

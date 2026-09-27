@@ -27,7 +27,8 @@ size(xs: list) = len(xs)
 - A definition replaces every earlier version it covers (the same number of parameters, each at least as broad:
   `f(x) = 2 x` then `f(x) = 3 x`, or `force(x [m]) = …` then `force(x) = …`), so every existing program prints the
   same; a more specific definition written later adds a version. Replacing `E(f [Hz])` by `E(ω [rad/s])` (the
-  same dimension, a different meaning) warns. A parameter declared `: list` takes the list whole. Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
+  same dimension, a different meaning) warns, as do Bq then 1/s and rad/m then 1/m (D324). A parameter declared
+  `: list` takes the list whole, also through a function that passes it on (`f(y) = s(y)`, D321). Reference: [docs/reference.md](docs/reference.md), *Several versions of one function*.
 - Not yet: differentiating a formula that calls a function with versions, adding versions to an imported
   function, the Python API (uses the last version), Fermium 1.5.
 
@@ -116,8 +117,9 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
   be uncertain (±) yet" / "a differential equation (solve) can't use uncertain values (±) yet".
 - **Monte Carlo when linear isn't valid:** each error source is tested at ±1σ; an integral or solve that isn't
   close to linear there (including a jump at a measured value, `∫ (if x < a then 1 else 0) dx`) is computed by
-  Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs; all values of a
-  Monte Carlo solution share its samples.
+  Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs (for
+  integrals too, D322); all values of a Monte Carlo solution share its samples. A value that rounds to zero
+  prints `0.00 ± 0.14`, not `-0.00 ± 0.14`.
 - **`use python`** refuses an uncertain argument again, as Fermium 1.5 does ("this operation needs a plain
   number, but got an uncertain value (±)"); 2.0 had passed the value alone.
 - Still errors: `solve … for x`, `solve` with a list of unknowns, eigenvalue problems and PDEs with uncertain

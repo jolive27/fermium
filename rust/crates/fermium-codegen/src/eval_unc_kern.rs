@@ -200,9 +200,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             Some(e) => return Err(e.clone()),
             None => true,
         };
+        let mut i_nominal: Option<f64> = None;
         if linear_ok {
             let r0 = r0.map_err(|f| fail(self, f))?;
             let i0 = r0.value;
+            i_nominal = Some(i0);
             let noise = 1e3 * r0.error.max(1e-13 * r0.abs_sum.max(i0.abs()));
             let mut d: Vec<(u64, f64)> = vec![];
             let mut ok = true;
@@ -327,11 +329,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let zs = mc_take(prev);
         self.line = line;
         res?;
+        // the value is the integral at the measured inputs, as a linear result's is and as a Monte Carlo ODE
+        // solution's (D304, red team 15 #5); the spread comes from the samples
+        let i0 = match i_nominal {
+            Some(v) => v,
+            None => {
+                let prev = fixed_begin(1, vec![]); // every source at its value (z = 0)
+                fixed_sample(0);
+                let r = self.quad_plain(lam, a, b, atol, name, false, fr);
+                fixed_end(prev);
+                self.line = line;
+                match r? {
+                    Ok(r) => r.value,
+                    Err(f) => return Err(fail(self, f)),
+                }
+            }
+        };
         crate::eval_calc::warn_at(line, &mc_warning("this integral", !linear_ok, n));
         let srcs: Vec<u64> = zs.iter().map(|(k, _)| *k).collect();
         let zr: Vec<&[f64]> = zs.iter().map(|(_, z)| &z[..]).collect();
         let _ = U::NOISE;
-        Ok(Value::Unc(Rc::new(mc_ufloat(&ys, &zr, &srcs))))
+        let u = mc_ufloat(&ys, &zr, &srcs);
+        Ok(Value::Unc(Rc::new(UFloat::new(i0, u.d))))
     }
 }
 

@@ -286,3 +286,83 @@ fn a_keyword_as_a_function_name_says_so() {
     assert!(e.contains("hint: operators and keywords can't be called from Fermium"), "{e}");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+// ---------------------------------------------------------------- #4, #5, #7: the round-14 fixes
+
+/// Run `src` as prog.fm on a back end ("" = the default): (exit code, stdout, stderr).
+fn run_on(tag: &str, backend: &str, src: &str) -> (i32, String, String) {
+    let d = dir(tag);
+    std::fs::write(d.join("prog.fm"), src).unwrap();
+    let env: Vec<(&str, &str)> = if backend.is_empty() { vec![] } else { vec![("FERMIUM_BACKEND", backend)] };
+    let r = fm(&["run", "prog.fm"], &d, &d.join("cache"), &env);
+    let _ = std::fs::remove_dir_all(&d);
+    r
+}
+
+fn run_both(tag: &str, src: &str) -> (i32, String, String) {
+    let a = run_on(&format!("{tag}-interp"), "interp", src);
+    let b = run_on(&format!("{tag}-llvm"), "llvm", src);
+    assert_eq!(a, b, "the back ends differ on {src}");
+    a
+}
+
+#[test]
+fn a_declared_list_parameter_carries_through_a_wrapper() {
+    let (c, o, e) = run_both("listwrap", "s(x: list) = 2\nf(y) = s(y)\nprint f([1, 2])\n\
+                                          t(x: list, n) = n\ng(y, m) = t(y, m) + 1\nprint g([1, 2, 3], 1)\n\
+                                          h(y) = 3 y\nprint h([1, 2])\n");
+    assert_eq!(c, 0, "{e}");
+    assert_eq!(o, "2\n2\n[3, 6]\n", "{e}");
+}
+
+#[test]
+fn a_monte_carlo_integral_reports_the_nominal_value() {
+    // ∫₀² (x if x < a) dx = a²/2 = 0.5 at a = 1 (the Monte Carlo mean is a²/2 + σ²/2 = 0.505)
+    let (c, o, e) = run_on("mcint", "", "a = 1.0 ± 0.1\nJ = ∫ (if x < a then x else 0) dx from 0 to 2\nprint J\n\
+                                       print value(J)\n");
+    assert_eq!(c, 0, "{e}");
+    let lines: Vec<&str> = o.lines().collect();
+    assert_eq!(lines[0], "0.50 ± 0.10", "{o}");
+    assert!((lines[1].parse::<f64>().unwrap() - 0.5).abs() < 1e-6, "{o}");
+    assert!(e.contains("Monte Carlo"), "{e}");
+}
+
+#[test]
+fn an_uncertain_value_that_rounds_to_zero_has_no_minus_sign() {
+    let (c, o, e) = run_on("negzero", "", "x = -0.00001 ± 0.14\nprint x\ny = -0.00001 ± 0.14 m\nprint y\n\
+                                         print -0.01 ± 0.14\n");
+    assert_eq!(c, 0, "{e}");
+    assert_eq!(o, "0.00 ± 0.14\n0.00 ± 0.14 m\n-0.01 ± 0.14\n");
+}
+
+#[test]
+fn replacing_bq_by_one_per_second_or_rad_per_m_by_one_per_m_warns_with_a_fitting_hint() {
+    let src = "A(r [Bq]) = r\nA(k [1/s]) = 2 k\nk(q [rad/m]) = q\nk(q [1/m]) = q\nW(e [J]) = e\nW(t [N m]) = t\n\
+               H(f [Hz]) = f\nH(g [1/s]) = g\nprint 1\n";
+    let (c, o, e) = run_on("respelt", "", src);
+    assert_eq!((c, o.as_str()), (0, "1\n"), "{e}");
+    assert_eq!(e.matches("warning").count(), 3, "Hz then 1/s is an ordinary redefinition: {e}");
+    assert!(e.contains("A(k [1/s]) replaces A(r [Bq]) (line 1)"), "{e}");
+    assert!(e.contains("k(q [1/m]) replaces k(q [rad/m]) (line 3)")
+            && e.contains("an angle in rad counts as a plain number"), "{e}");
+    assert!(e.contains("W(t [N m]) replaces W(e [J]) (line 5)"), "{e}");
+    assert!(!e.contains("2π f"), "the ω = 2π f hint is for Hz and rad/s only: {e}");
+}
+
+#[test]
+fn the_repl_warning_names_no_line() {
+    let d = dir("repl");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fermium")).current_dir(&d)
+        .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped()).spawn().unwrap();
+    {
+        use std::io::Write;
+        let mut i = child.stdin.take().unwrap();
+        i.write_all("E(f [Hz]) = h f\nE(ω [rad/s]) = ħ ω\n".as_bytes()).unwrap();
+    }
+    let o = child.wait_with_output().unwrap();
+    let all = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
+    assert!(all.contains("E(ω [rad/s]) replaces E(f [Hz]): their units"), "{all}");
+    assert!(all.contains("e.g. ω = 2π f"), "{all}");
+    let _ = std::fs::remove_dir_all(&d);
+}

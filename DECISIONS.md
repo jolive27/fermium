@@ -1693,3 +1693,50 @@ ninja trust); keeping `-I <program folder>` for system headers (what made the at
 program's folders (would break headers that include their neighbours with `<…>`). Known limit: a file newly
 added to an include folder that shadows one the wrapper didn't read isn't noticed (the wrapper stays as it was,
 which runs nothing new).
+
+## D321. Passing a parameter on to a function's `: list` parameter makes it a list parameter (red team 15 #4)
+- **What:** `takes_lists` (is a list argument taken whole, or is the function applied to each element?) also
+counts a call in the body that passes a parameter, as is, to a user function whose parameter at that position is
+declared `: list` in any of its versions: `s(x: list) = 2`, `f(y) = s(y)`, `f([1, 2])` is 2, not `[2, 2]`.
+- **Why:** D303 made the declaration the user's statement of intent; a plain wrapper around such a function should
+keep it. Calls with the parameter inside an expression (`s(2 y)`) still count as element-wise.
+- **Alternatives:** inferring list-ness through any chain of calls (a fixed point over the call graph: more
+machinery for a rare case); requiring the wrapper to declare `: list` too (surprising after D303).
+
+## D322. A Monte Carlo integral shows the nominal value; ± never prints -0.00 (red team 15 #5)
+- **What:** an integral that falls back to Monte Carlo (D278, D300) reports the integral at the measured inputs
+(every source at z = 0, computed with plain numbers, no random numbers drawn), with the spread and per-source
+contributions from the regression on the samples, as D304 does for ODE solutions; before, it showed the
+regression's intercept (≈ the sample mean: 0.505 instead of 0.500 for ∫₀² x·[x < a] dx at a = 1.0 ± 0.1). An
+uncertain value whose rounded value is zero prints `0.00 ± 0.14`, not `-0.00 ± 0.14` (numfmt::format_pm_sig;
+Fermium 1.5 printed the minus sign, but no conformance program has such a value: rust/DIVERGENCES.md). Arithmetic
+on Monte Carlo results stays first order, as all uncertain arithmetic is (documented in reference §21).
+- **Why:** one rule for every result (the value at the measured inputs); "-0.00" reads as a sign that means
+something.
+- **Alternatives:** the sample mean everywhere (what `propagate montecarlo` reports, and still does); storing the
+samples with the value to make later arithmetic Monte Carlo too (a different, heavier representation).
+
+## D323. C++ usability: installed headers, a compile timeout, one-line exception messages, keyword names (red team 15 #6)
+- **What:** (1) a header the program's folder doesn't have is `#include <name>`d and found by the compiler on its
+own include path (`math.h`, `Eigen/Dense`); a header nobody has is the compiler's "No such file", reported as
+*can't find the header X* with a hint naming both places. Before, any name with a `/` or ending in `.h`/`.hpp`
+had to be in the program's folder. (2) The compiler runs in its own process group with a timeout
+(`$FERMIUM_CXX_TIMEOUT`, 120 s); on expiry the group is killed and the import is a one-line error, so `check` and
+the language server can't hang. (3) The wrapper turns control characters (line breaks, tabs, ESC, DEL) in an
+exception's `what()` into spaces before handing it over, so the message is one line and can't drive the
+terminal. (4) A name part that is a C++ keyword (`phys::new`, `operator`) is refused at the signature with a
+hint, before compiling. Not done: telling `f(const double *)` from `f(double *)` apart when a header has both (a
+`: list` fits either; the import stops with *more than one overload has the C++ type*; documented).
+- **Why:** the reviewer's list; each was a raw compiler message, a hang, or terminal output from library code.
+- **Alternatives:** probing for headers with our own search (would disagree with the compiler's); a `: mutable
+list` spelling to choose `double *` (new syntax for a rare case; later if asked).
+
+## D324. The same-dimension warning knows Bq vs 1/s and rad/m vs 1/m, fits its hint to the pair, and has no line number in the REPL (red team 15 #7)
+- **What:** D306's classifier gives a bare inverse unit (`1/s`, `1/m`, `s⁻¹`, `s^-1`) the kind "plain", so
+`A(r [Bq])` then `A(k [1/s])` and `k(q [rad/m])` then `k(q [1/m])` warn; `Hz` then `1/s` doesn't (a hertz is one
+per second). The hint's example is ω = 2π f only for Hz vs rad/s, "an angle in rad counts as a plain number" for
+rad vs plain, and none otherwise (J vs N m). In the REPL, where every input is line 1, the message leaves out
+"(line N)".
+- **Why:** the reviewer's cases; a wrong example in a hint is worse than none.
+- **Alternatives:** a table of named pairs (the kinds already are one); numbering REPL inputs (a larger change to
+the REPL's diagnostics).

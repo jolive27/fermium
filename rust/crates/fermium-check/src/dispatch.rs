@@ -123,9 +123,21 @@ impl Checker {
     /// was probably meant as another version: warn (red team 14 #7, D306). The pairs are those of adding such
     /// values (Hz/rad/s, Bq/Hz, Gy/Sv, J/N m); `[m]` then `[km]` is an ordinary redefinition and says nothing.
     fn warn_respelt(&mut self, id: FuncInfoId, replaced: &[FuncInfoId]) {
+        // the kinds of unit_kind, and "plain" for a bare inverse (1/s, 1/m, s⁻¹): Bq vs 1/s and rad/m vs 1/m are
+        // pairs too (red team 15 #7), but not Hz vs 1/s (a hertz is one per second)
         let kind = |text: &str| {
-            crate::units::unit_kind(&fermium_ir::Hint { name: text.to_string(), factor: 1.0, offset: 0.0,
-                                                        dim: fermium_ir::DIMLESS })
+            let k = crate::units::unit_kind(&fermium_ir::Hint { name: text.to_string(), factor: 1.0, offset: 0.0,
+                                                                dim: fermium_ir::DIMLESS });
+            let t = text.trim();
+            if k.is_empty() && (t.starts_with("1/") || t.starts_with("1 /") || t.ends_with("⁻¹") || t.ends_with("^-1")) {
+                "plain"
+            } else {
+                k
+            }
+        };
+        let clash = |a: &str, b: &str| {
+            !a.is_empty() && !b.is_empty() && a != b
+                && !((a == "plain" && b == "cycles") || (a == "cycles" && b == "plain"))
         };
         let newp = self.func_params(id);
         for &v in replaced {
@@ -133,23 +145,29 @@ impl Checker {
             if oldp.len() != newp.len() {
                 continue;
             }
-            let differs = oldp.iter().zip(&newp).any(|(o, n)| match (&o.unit, &n.unit) {
+            let pair = oldp.iter().zip(&newp).find_map(|(o, n)| match (&o.unit, &n.unit) {
                 (Some(a), Some(b)) => {
                     let (ka, kb) = (kind(&a.text), kind(&b.text));
-                    !ka.is_empty() && !kb.is_empty() && ka != kb
+                    clash(ka, kb).then_some((ka, kb))
                 }
-                _ => false,
+                _ => None,
             });
-            if !differs {
+            let Some((ka, kb)) = pair else {
                 continue;
-            }
+            };
             let (Some(fd), line) = (self.funcs[id].fdef.as_ref().map(|f| f.span), self.version_line(v)) else {
                 continue;
             };
-            let msg = format!("{} replaces {} (line {line}): their units have the same dimensions, so they can't be \
-                               two versions", self.version_sig(id), self.version_sig(v));
-            let hint = "to keep both, give one of them another name (or convert inside one definition, e.g. \
-                        ω = 2π f)".to_string();
+            // the REPL numbers each input from 1, so a line number there says nothing
+            let at = if self.opts.repl { String::new() } else { format!(" (line {line})") };
+            let msg = format!("{} replaces {}{at}: their units have the same dimensions, so they can't be two \
+                               versions", self.version_sig(id), self.version_sig(v));
+            let example = match (ka, kb) {
+                ("angular", "cycles") | ("cycles", "angular") => ", e.g. ω = 2π f",
+                ("angular", "plain") | ("plain", "angular") => ": an angle in rad counts as a plain number",
+                _ => "",
+            };
+            let hint = format!("to keep both, give one of them another name (or convert inside one definition{example})");
             self.warn(msg, fd, Some(hint));
         }
     }
