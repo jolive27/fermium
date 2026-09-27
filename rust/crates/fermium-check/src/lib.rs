@@ -17,6 +17,7 @@ pub mod clist;
 pub mod convert;
 pub mod cplx;
 pub mod data;
+pub mod dispatch;
 pub mod exprs;
 pub mod lists;
 pub mod modules;

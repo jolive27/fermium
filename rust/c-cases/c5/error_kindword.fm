@@ -1,0 +1,2 @@
+speed(v: m) = v
+print speed(3 m)

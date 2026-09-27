@@ -1,0 +1,3 @@
+area(x [m], y) = x y
+area(x, y [m]) = x y
+print area(2 m, 3 m)

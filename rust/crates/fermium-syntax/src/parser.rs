@@ -850,11 +850,27 @@ impl Parser {
         while !self.at_op(")") {
             let pt = self.expect_name("a parameter name")?;
             let mut unit = None;
+            let mut kind = None;
+            if self.at_op(":") {
+                // r: vector [m] — the kind of argument this version takes (C5, multiple dispatch)
+                self.next();
+                let kt = self.expect_name("number, vector, list or complex after ':'")?;
+                let k = self.toks[kt].s().to_string();
+                if !matches!(k.as_str(), "number" | "vector" | "list" | "complex") {
+                    let raw = self.toks[kt].raw.clone();
+                    return Err(self.error(
+                        format!("a parameter can be marked  : number,  : vector,  : list  or  : complex, not : {raw}"),
+                        Some(kt),
+                        Some(format!("give a unit in brackets instead:  {} [{raw}]", self.toks[pt].raw)),
+                    ));
+                }
+                kind = Some(k);
+            }
             if self.at_op("[") {
                 unit = Some(self.bracket_unit()?);
             }
             let pn = self.toks[pt].s().to_string();
-            params.push(Param { name: pn.clone(), unit, span: self.span_from(pt) });
+            params.push(Param { name: pn.clone(), unit, kind, span: self.span_from(pt) });
             self.known.insert(pn);
             if self.at_op(",") {
                 self.next();
@@ -1981,7 +1997,7 @@ impl Parser {
         } else {
             raw.push((v.clone(), r));
         }
-        Ok(Param { name: v, unit, span: self.span_from(nt) })
+        Ok(Param { name: v, unit, kind: None, span: self.span_from(nt) })
     }
 
     /// analyze [title:] T [unit] depends on a [unit], b, c  (D70)

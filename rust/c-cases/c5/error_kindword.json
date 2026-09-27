@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_kindword.fm, line 1: a parameter can be marked  : number,  : vector,  : list  or  : complex, not : m\n    speed(v: m) = v\n             ^\n  hint: give a unit in brackets instead:  v [m]\n",
+ "exit": 1
+}

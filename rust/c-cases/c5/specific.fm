@@ -1,0 +1,10 @@
+# an annotated parameter beats an unannotated one
+describe(x) = 0
+describe(x [m]) = 1
+describe(x [m], y) = 10
+describe(x [m], y [s]) = 20
+print describe(5)
+print describe(5 m)
+print describe(2 kg)
+print describe(5 m, 3)
+print describe(5 m, 3 s)

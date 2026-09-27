@@ -66,6 +66,10 @@ pub struct FuncInfo {
     /// evaluated instead of the printed body: an antiderivative's ln|u| where v1's printed formula has ln(u)
     /// (fermium_sym::real_logs, red team 11 #2)
     pub eval_body: Option<A::Expr>,
+    /// multiple dispatch (C5): every version of this name visible where this definition was made, in definition
+    /// order, this one included; empty for a function with one version. Each definition makes a new list (a
+    /// snapshot), so a reference taken earlier keeps the versions it saw.
+    pub versions: Vec<FuncInfoId>,
 }
 
 impl FuncInfo {
@@ -228,6 +232,8 @@ pub struct Checker {
     pub func_extra: Vec<crate::calls::FuncExtra>,
     /// FuncInfos made for built-ins passed as functions (simpson(sin, …), D43)
     pub builtin_infos: HashMap<String, FuncInfoId>,
+    /// multiple dispatch (C5): the version each call chose, by the call's span (for hover)
+    pub dispatch_sites: Vec<(A::Span, FuncInfoId)>,
     /// module functions being instantiated from inside their module (D101)
     pub in_module_call: std::collections::HashSet<FuncInfoId>,
     /// errors that already carry the "this happened when calling …" note
@@ -289,6 +295,7 @@ impl Checker {
             ret_types: vec![],
             func_extra: vec![],
             builtin_infos: HashMap::new(),
+            dispatch_sites: vec![],
             in_module_call: Default::default(),
             call_noted: Default::default(),
             counter: 0,
@@ -615,9 +622,13 @@ impl Checker {
             .names
             .iter()
             .filter_map(|(n, b)| match b {
-                Binding::Func(fi) => Some((self.funcs[*fi].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), *fi)),
+                Binding::Func(fi) => Some(self.versions_of(*fi)
+                    .into_iter()
+                    .map(|v| (self.funcs[v].fdef.as_ref().map(|f| f.span.line).unwrap_or(0), n.clone(), v))
+                    .collect::<Vec<_>>()),
                 _ => None,
             })
+            .flatten()
             .collect();
         todo.sort();
         for (_, _, b) in todo {
@@ -639,11 +650,24 @@ impl Checker {
             let saved_nat = self.nat.clone();
             let fnat = self.funcs[b].nat.clone().unwrap_or_default();
             self.set_system(fnat);
-            let args: Vec<Checked> =
-                params.iter().map(|_| Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))).collect();
-            let r = self.instantiate(b, args, node, false);
+            if params.iter().any(|p| matches!(p.kind.as_deref(), Some("vector" | "complex"))) {
+                self.set_system(saved_nat);
+                continue; // takes a vector or a complex number (C5): checked per call
+            }
+            let args: Vec<Checked> = params
+                .iter()
+                .map(|p| {
+                    if p.kind.as_deref() == Some("list") {
+                        Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0))
+                    } else {
+                        Checked::Val(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::fresh()), 0))
+                    }
+                })
+                .collect();
+            let r = self.instantiate_one(b, args, node, false);
             let r = match r {
-                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before") => Ok(()),
+                Err(e) if e.message.contains("isn't defined") || e.message.contains("used before")
+                    || e.message.contains("can't tell which version") => Ok(()),
                 Err(e) if e.message.contains("needs a list") => {
                     // total(ys) = sum(ys): takes a list, so check it with lists; if that fails too (some parameters
                     // are numbers), it is checked at each call instead (D142)
@@ -651,7 +675,7 @@ impl Checker {
                         .iter()
                         .map(|_| Checked::Val(ir(I::ExprKind::List(vec![]), Ty::List(DExpr::fresh()), 0)))
                         .collect();
-                    let _ = self.instantiate(b, args, node, false);
+                    let _ = self.instantiate_one(b, args, node, false);
                     Ok(())
                 }
                 Err(e) => Err(e),

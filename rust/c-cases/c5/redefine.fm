@@ -1,0 +1,8 @@
+# a definition with the same signature replaces the earlier one (as in v1)
+f(x) = 2 x
+print f(2)
+f(x) = 3 x
+print f(2)
+g(x [m]) = 1
+g(y [km]) = 2
+print g(3 m)

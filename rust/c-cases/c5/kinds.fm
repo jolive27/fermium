@@ -1,0 +1,16 @@
+# versions chosen by kind: number, vector, list, complex
+size(x: number) = abs(x)
+size(r: vector) = |r|
+size(xs: list) = len(xs)
+size(z: complex) = abs(z)
+
+print size(-3 m)
+print size(<3, 4> m)
+print size([1, 2, 3, 4])
+print size(3 + 4i)
+
+# a unit and a kind together
+kinetic(p: vector [kg m/s], M [kg]) = (p · p) / (2 M)
+kinetic(p [kg m/s], M [kg]) = p² / (2 M)
+print kinetic(<3, 4> kg m/s, 1 kg)
+print kinetic(5 kg m/s, 1 kg)

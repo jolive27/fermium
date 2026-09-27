@@ -1,0 +1,5 @@
+{
+ "stdout": "",
+ "stderr": "error_nomatch.fm, line 4: no version of energy takes (time [s])\n    print energy(3 s)\n          ^^^^^^^^^^^\n  hint: the versions of energy are energy(m [kg], v [m/s]) (line 1), energy(\u03bb [m]) (line 2), energy(f [Hz]) (line 3); call one of them, or define a version for these arguments\n",
+ "exit": 1
+}

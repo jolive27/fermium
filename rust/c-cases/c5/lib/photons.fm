@@ -1,0 +1,5 @@
+# a module whose functions have several versions (C5)
+energy(λ [m]) = h c / λ
+energy(f [Hz]) = h f
+momentum(λ [m]) = h / λ
+momentum(E [J]) = E / c

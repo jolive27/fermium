@@ -319,7 +319,11 @@ impl Printer {
     }
 
     fn param(&self, p: &Param) -> PV {
-        Self::node("Param", p.span, vec![("name", s(&p.name)), ("unit", self.opt_unit(&p.unit))])
+        let mut f = vec![("name", s(&p.name)), ("unit", self.opt_unit(&p.unit))];
+        if let Some(k) = &p.kind {
+            f.push(("kind", s(k))); // C5; absent when not given, so v1's dumps are unchanged
+        }
+        Self::node("Param", p.span, f)
     }
 
     fn equation(&self, e: &Equation) -> PV {
