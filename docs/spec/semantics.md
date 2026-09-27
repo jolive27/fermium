@@ -419,7 +419,8 @@ This table is normative for the *static* semantics of every built-in function: h
 kind and dimension each must have, and the kind and dimension of the result. It is written from the checker
 (`rust/crates/fermium-check/src/builtin.rs`, and `vecmat.rs`, `cplx.rs`, `clist.rs`, `rng.rs`, `uncertain.rs`,
 `arrays.rs` for the groups they handle). The test `spec_builtins_table` (fermium-check) checks that the first
-column names exactly the checker's list `builtins::BUILTINS`. A program-defined function or variable of the same
+column names exactly the checker's list `builtins::BUILTINS`, and §7.1 checks each row's result kind and
+dimension against the checker. A program-defined function or variable of the same
 name hides the built-in.
 
 Notation: *x* is a number, *xs* a list, *v* a vector, *M* a matrix, *z* a complex number; [x] is the dimension of x
@@ -429,8 +430,8 @@ noted. A function of dimensionless arguments applied to a quantity with units is
 
 | Name(s) | Arguments | Result |
 |---|---|---|
-| `sin` `cos` `tan` `cot` `sec` `csc` `asin` `acos` `atan` `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` `exp` `ln` `log` `log10` `log2` `erf` `erfc` `gamma` `lgamma` `expm1` `log1p` | one number or list, [x] = **1** (angles in rad or ° are **1**); `exp ln log sin cos tan sinh cosh tanh` also take a complex | same class, **1**. `log` is the natural logarithm. `sin(10)` with a whole literal ≥ 10 warns (radians) |
-| `sqrt` `cbrt` | one number or list, any dimension (exponents must stay rational, units.md §1.1) | same class, [x]^½ resp. [x]^⅓ |
+| `sin` `cos` `tan` `cot` `sec` `csc` `asin` `acos` `atan` `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` `exp` `ln` `log` `log10` `log2` `erf` `erfc` `gamma` `lgamma` `expm1` `log1p` | one number or list, [x] = **1** (angles in rad or ° are **1**); `exp ln log sin cos tan sinh cosh tanh` also take a complex (giving a complex) | same class, **1**. `log` is the natural logarithm. `sin(10)` with a whole literal ≥ 10 warns (radians) |
+| `sqrt` `cbrt` | one number or list, any dimension (exponents must stay rational, units.md §1.1); `sqrt` also takes a complex | same class, [x]^½ resp. [x]^⅓ |
 | `abs` | one number or list (any dimension); a vector or matrix | same kind and dimension as x (entry by entry for a vector; the norm is `\|v\|` or `norm`) |
 | `floor` `ceil` `round` | one number or list, [x] = **1** (otherwise "would depend on which unit you mean") | same class, **1**, printed exactly |
 | `sign` | a number: any dimension; a vector | a number: **1**; a vector: the unit vector v/\|v\|, **1** |
@@ -473,7 +474,7 @@ noted. A function of dimensionless arguments applied to a quantity with units is
 | `polar` | (r, θ), θ **1** | complex, [r] |
 | `cis` | (θ), **1** | complex, **1** |
 | `fft` | a list | list of complex numbers, [xs] |
-| `ifft` | a complex list; or (re, im) with [re] = [im] (deprecated) | list, [X] |
+| `ifft` | a complex list; or (re, im) with [re] = [im] (deprecated) | a complex list: complex list, [X] (take `re(…)` for the real signal); (re, im): list, [re] |
 | `fft_re` `fft_im` | a list (deprecated: write `re(fft(xs))`) | list, [xs] |
 | `amplitude_spectrum` | a list | list, [xs] |
 | `power_spectrum` | (xs, dt) | list, [xs]²·[dt] (shown in V²/Hz for volts sampled in s) |
@@ -540,12 +541,101 @@ print linspace(0 m, 1 s, 3)
 print det([[1, 2], [3, 4], [5, 6]])
 ```
 
+### 7.1 The table, checked row by row
+
+The block below states, for each row of the table, the kind and dimension of the result of a call with
+arguments of the documented dimensions. It is normative and machine-checked: the test `spec_builtins_types`
+(fermium-check) type-checks each line `CALL ⇒ KIND [UNIT]` with the checker (the lines without `⇒` are a prelude
+defining the arguments) and compares the result's kind (`number`, `boolean`, `text`, `list`, `complex`,
+`complex list`, `vector`, `matrix`, `array`) and dimension (the dimension of `UNIT`; `[1]` is **1**) with the
+line. Several calls separated by `;` share one expectation. Every name in the table must appear in some line,
+except the statements `seed`, `push` and `append`, which have no value (they are checked by the example above).
+
+```fermium-types
+xs = [1, 2, 3, 4] m
+ts = [0, 1, 2, 3] s
+M = [[2, 1], [1, 3]] N/m
+v = <3, 4> m
+z = complex(1 V, 2 V)
+q = 2.0 ± 0.1 m
+A = fill(1 m, 2, 2)
+solve y' = -y/(1 s) with y(0) = 1 m for t from 0 s to 1 s
+sin(0.5); cos(0.5); tan(0.5); cot(0.5); sec(0.5); csc(0.5); asin(0.5); acos(0.5); atan(0.5) ⇒ number [1]
+sinh(0.5); cosh(0.5); tanh(0.5); asinh(0.5); acosh(1.5); atanh(0.5) ⇒ number [1]
+exp(0.5); ln(2); log(2); log10(100); log2(8); erf(0.5); erfc(0.5) ⇒ number [1]
+gamma(4); lgamma(4); expm1(1e-3); log1p(1e-3); sin(30°); cos(q/(1 m)) ⇒ number [1]
+sin([0.1, 0.2]); exp([1, 2]) ⇒ list [1]
+exp(z/(1 V)); sin(z/(1 V)) ⇒ complex [1]
+sqrt(4 m²); cbrt(8 m³) ⇒ number [m]
+sqrt(ts*ts) ⇒ list [s]
+abs(-2 m) ⇒ number [m]
+abs(xs) ⇒ list [m]
+abs(v) ⇒ vector [m]
+floor(2.5); ceil(2.5); round(2.5) ⇒ number [1]
+sign(-2 m) ⇒ number [1]
+sign(v) ⇒ vector [1]
+isnan(1.0) ⇒ boolean [1]
+besselj(1, 2.0); bessely(1, 2.0); besseli(1, 2.0); besselk(1, 2.0); ellipk(0.5); ellipe(0.5) ⇒ number [1]
+min(xs); max(xs); min(1 m, 2 m); max(1 m, 2 m, 3 m) ⇒ number [m]
+max(xs, 2 m) ⇒ list [m]
+atan2(1 m, 2 m) ⇒ number [1]
+hypot(3 m, 4 m); mod(7 m, 3 m); clamp(5 m, 0 m, 2 m) ⇒ number [m]
+factorial(4); len(xs) ⇒ number [1]
+sum(xs); mean(xs); std(xs); first(xs); last(xs); sum(A) ⇒ number [m]
+cumsum(xs); diff(xs); reverse(xs); sort(xs); values(xs); values(y) ⇒ list [m]
+times(y) ⇒ list [s]
+linspace(0 m, 1 m, 3); range(0 m, 1 m, 0.5 m) ⇒ list [m]
+range(1 s, 3 s) ⇒ list [s]
+zeros(2); ones(2) ⇒ list [1]
+zeros(2, 3) ⇒ matrix [1]
+interp(1.5 m, xs, ts) ⇒ number [s]
+trapz(ts, xs); dot(xs, ts) ⇒ number [m s]
+dot(v, v) ⇒ number [m²]
+norm(v) ⇒ number [m]
+unit(v); hat(v) ⇒ vector [1]
+cross(<1, 0, 0> m, <0, 1, 0> N) ⇒ vector [N m]
+vec(1 m, 2 m) ⇒ vector [m]
+angle(v, <1, 0> m) ⇒ number [1]
+transpose(M) ⇒ matrix [N/m]
+det(M) ⇒ number [N²/m²]
+inverse(M) ⇒ matrix [m/N]
+trace(M) ⇒ number [N/m]
+identity(2); eigenvectors(M) ⇒ matrix [1]
+solve_linear(M, <1, 2> N) ⇒ vector [m]
+eigenvalues(M); row(M, 1); column(M, 2) ⇒ vector [N/m]
+eigenvalues(M, [[1, 0], [0, 1]] kg) ⇒ vector [1/s²]
+re(z); im(z); re(2 V) ⇒ number [V]
+arg(z) ⇒ number [1]
+conj(z); complex(1 V, 2 V); polar(2 V, 0.5); sqrt(z*z) ⇒ complex [V]
+cis(0.5) ⇒ complex [1]
+complex(xs, xs); fft(xs); ifft(fft(xs)) ⇒ complex list [m]
+ifft(xs, xs); fft_re(xs); fft_im(xs); amplitude_spectrum(xs) ⇒ list [m]
+power_spectrum(xs, 1 s) ⇒ list [m² s]
+frequencies(xs, 1 s); frequencies(4, 1 s) ⇒ list [Hz]
+argmax(xs); argmin(xs) ⇒ number [1]
+value(q); uncertainty(q) ⇒ number [m]
+rel(q) ⇒ number [1]
+rand(); randn() ⇒ number [1]
+rand(1 m, 2 m); randn(0 m, 1 m) ⇒ number [m]
+sample(randn(0 m, 1 m), 5) ⇒ list [m]
+clock() ⇒ number [s]
+str(2 m) ⇒ text [1]
+to(1000 m, km) ⇒ number [m]
+fill(1 m, 3) ⇒ list [m]
+fill(1 m, 2, 2, 2); copy(A) ⇒ array [m]
+size(A) ⇒ list [1]
+size(A, 1) ⇒ number [1]
+```
+
 ## 8. TODO for this chapter
 
 - Specify the run-time behaviour of domain errors (`√` and `ln` of negative numbers, `asin(2)`) uniformly; today a
   compile-time constant is an error while a run-time value gives `NaN`.
 - ~~The static semantics of every built-in function~~ (done in 0.2: §7, a table written from the checker whose
-  names are tested against `builtins::BUILTINS`; the dimensions in it are not yet machine-checked row by row).
+  names are tested against `builtins::BUILTINS`; since 0.3 every row's kind and dimension is machine-checked by
+  §7.1's ```fermium-types block, test `spec_builtins_types`; this found and fixed the `ifft` row, whose result
+  is a complex list, and the missing complex case of `sqrt`). Only the statements `seed`, `push` and `append`
+  are not checked this way (they have no value; the example in §7 runs them).
 - ~~Scoping rules~~ (done in 0.2: §2.2). Still open: natural-units regions, the scope of names bound by
   `analyze`/`propagate`, and the interop blocks' names.
 - ~~Uncertainty propagation as a formal model~~ (done in 0.2: §2.3, the linear model and the kernels' ±1σ test).
