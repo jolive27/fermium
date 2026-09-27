@@ -157,6 +157,8 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
 - [pulsar_spindown](research/pulsar_spindown/): ATNF catalogue (VizieR) — dipole fields, ages, Crab braking index and birth period.
 - [mass_luminosity](research/mass_luminosity/): DEBCat eclipsing binaries — L = 4πR²σT⁴ vs Eker et al. 2018 six-piece MLR.
 - [supernova_hubble](research/supernova_hubble/): Pantheon+ — flat ΛCDM Ωm, matter-only and empty universes, curvature.
+- [white_dwarf_cooling](research/white_dwarf_cooling/): Gaia EDR3 white dwarfs within 100 pc (VizieR TAP) — Mestel cooling derived with units, luminosity function and its cut-off.
+- [neutron_star_cooling](research/neutron_star_cooling/): Ioffe table of 48 thermally emitting neutron stars — one-zone modified-Urca + envelope cooling model.
 - Tests: `rust/crates/fermium-cli/tests/research_c8.rs` runs every one with the `fermium` binary (in a copy of its folder,
   so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
   absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1

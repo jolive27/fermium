@@ -14,6 +14,8 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("pulsar_spindown", "pulsars.fm"),
     ("mass_luminosity", "mlr.fm"),
     ("supernova_hubble", "hubble.fm"),
+    ("white_dwarf_cooling", "wd_cooling.fm"),
+    ("neutron_star_cooling", "ns_cooling.fm"),
 ];
 
 fn research() -> PathBuf {
