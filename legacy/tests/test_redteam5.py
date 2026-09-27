@@ -85,7 +85,10 @@ def execute(kc, code, reply_timeout=20):
             outs.append((m["content"]["name"], m["content"]["text"]))
         elif t == "status" and m["content"]["execution_state"] == "idle":
             break
-    return kc.get_shell_msg(timeout=reply_timeout)["content"]["status"], outs
+    while True:  # this request's reply: an extra kernel_info_reply from start_new_kernel can wait in the queue
+        r = kc.get_shell_msg(timeout=reply_timeout)
+        if r["parent_header"].get("msg_id") == msg_id:
+            return r["content"]["status"], outs
 
 
 def test_2_jupyter_cell_after_a_failed_cell_gets_a_reply(kernel):
