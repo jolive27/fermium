@@ -348,11 +348,139 @@ and `∇²f` are **exact**: the result is a new function whose dimension is dim(
 - Boundary-value and eigenvalue forms (`lowest N`), PDEs (a second range) and Monte Carlo propagation are
   described in docs/reference.md §20–§21 (TODO here).
 
-## 7. TODO for this chapter
+## 7. Built-in functions (static semantics)
+
+This table is normative for the *static* semantics of every built-in function: how many arguments it takes, what
+kind and dimension each must have, and the kind and dimension of the result. It is written from the checker
+(`rust/crates/fermium-check/src/builtin.rs`, and `vecmat.rs`, `cplx.rs`, `clist.rs`, `rng.rs`, `uncertain.rs`,
+`arrays.rs` for the groups they handle). The test `spec_builtins_table` (fermium-check) checks that the first
+column names exactly the checker's list `builtins::BUILTINS`. A program-defined function or variable of the same
+name hides the built-in.
+
+Notation: *x* is a number, *xs* a list, *v* a vector, *M* a matrix, *z* a complex number; [x] is the dimension of x
+and **1** is dimensionless. "Same class" means a number gives a number and a list gives a list (element by element).
+Every function that accepts a number also accepts an uncertain number (first-order propagation, D120) unless
+noted. A function of dimensionless arguments applied to a quantity with units is a compile-time error with a hint.
+
+| Name(s) | Arguments | Result |
+|---|---|---|
+| `sin` `cos` `tan` `cot` `sec` `csc` `asin` `acos` `atan` `sinh` `cosh` `tanh` `asinh` `acosh` `atanh` `exp` `ln` `log` `log10` `log2` `erf` `erfc` `gamma` `lgamma` `expm1` `log1p` | one number or list, [x] = **1** (angles in rad or ° are **1**); `exp ln log sin cos tan sinh cosh tanh` also take a complex | same class, **1**. `log` is the natural logarithm. `sin(10)` with a whole literal ≥ 10 warns (radians) |
+| `sqrt` `cbrt` | one number or list, any dimension (exponents must stay rational, units.md §1.1) | same class, [x]^½ resp. [x]^⅓ |
+| `abs` | one number or list (any dimension); a vector or matrix | same kind and dimension as x (entry by entry for a vector; the norm is `\|v\|` or `norm`) |
+| `floor` `ceil` `round` | one number or list, [x] = **1** (otherwise "would depend on which unit you mean") | same class, **1**, printed exactly |
+| `sign` | a number: any dimension; a vector | a number: **1**; a vector: the unit vector v/\|v\|, **1** |
+| `isnan` | one number | boolean |
+| `besselj` `bessely` `besseli` `besselk` | (n, x): both **1**; a constant n must be a whole number | number, **1** |
+| `ellipk` `ellipe` | (m), m = k², **1** | number, **1** |
+| `min` `max` | one list: [xs]; or ≥ 2 numbers of one dimension; or numbers and lists of one dimension mixed (element by element, D162) | number [x], or a list for the mixed form |
+| `atan2` | (y, x), [y] = [x] | number, **1** |
+| `hypot` `mod` | (a, b), [a] = [b] | number, [a] |
+| `clamp` | (x, lo, hi), all one dimension | number, [x] |
+| `factorial` | one number, **1** | number, **1** |
+| `len` | a list (numbers, text or vectors) | number, **1**, exact |
+| `sum` `mean` | a list: [xs] (a list of vectors or matrices: that vector or matrix); an array (below) | number [xs]; `sum` of absolute temperatures is an error |
+| `std` `first` `last` | a list | number, [xs] (`std` of °C is shown in K) |
+| `cumsum` `diff` `reverse` `sort` `values` | a list | list, [xs] (`values` is a copy) |
+| `times` | an ODE solution (or its value list) | list of the independent variable's dimension |
+| `linspace` | (a, b, n): [a] = [b], n **1** | list, [a] |
+| `range` | (a, b) or (a, b, step), all one dimension | list, [a] |
+| `zeros` `ones` | (n), n **1**; `zeros(r, c)` is an r×c matrix | list; `zeros`: a dimension inferred from use, `ones`: **1** |
+| `interp` | (x, xs, ys), [x] = [xs] | number, [ys] |
+| `trapz` | (ys, xs): two lists | number, [ys]·[xs] |
+| `dot` | two lists: number [a]·[b]; two vectors: the dot product | number, [a]·[b] |
+| `norm` `unit` `hat` | a vector whose components share a dimension | `norm`: number [v]; `unit`, `hat`: vector, **1** |
+| `cross` | two 3-vectors | vector, [a]·[b] |
+| `vec` | 2 to 16 numbers | a vector (like `<…>`) |
+| `angle` | two 2-vectors or two 3-vectors of one shared dimension | number, **1** (rad) |
+| `transpose` | a matrix r×c | c×r matrix, [M] |
+| `det` | a square matrix n×n | number, [M]ⁿ |
+| `inverse` | a square matrix | matrix, [M]⁻¹ |
+| `trace` | a square matrix | number, [M] |
+| `identity` | (n): a constant whole number 2…16 | n×n matrix, **1** |
+| `solve_linear` | (M, b): an n×n matrix and an n-vector | vector, [b]/[M] |
+| `eigenvalues` | (K) or (K, M): square matrices of one size, 2×2 to 16×16 | vector, [K] (or [K]/[M]) |
+| `eigenvectors` | the same | matrix, **1** (columns are the eigenvectors) |
+| `row` `column` | (M, k): a matrix and a whole number | vector, [M] |
+| `re` `im` | a complex (or a real) number | number, [z] |
+| `conj` | a complex number | complex, [z] |
+| `arg` | a complex number | number, **1** |
+| `complex` | (a, b), [a] = [b]; two lists: a complex list | complex, [a] |
+| `polar` | (r, θ), θ **1** | complex, [r] |
+| `cis` | (θ), **1** | complex, **1** |
+| `fft` | a list | list of complex numbers, [xs] |
+| `ifft` | a complex list; or (re, im) with [re] = [im] (deprecated) | list, [X] |
+| `fft_re` `fft_im` | a list (deprecated: write `re(fft(xs))`) | list, [xs] |
+| `amplitude_spectrum` | a list | list, [xs] |
+| `power_spectrum` | (xs, dt) | list, [xs]²·[dt] (shown in V²/Hz for volts sampled in s) |
+| `frequencies` | (xs, dt) or (n, dt), n **1** | list, 1/[dt] (shown in Hz) |
+| `argmax` `argmin` | a list | number, **1** (a 1-based index) |
+| `value` `uncertainty` | an uncertain number or list | same class, [x] |
+| `rel` | an uncertain number or list | same class, **1** |
+| `rand` | () or (a, b) with [a] = [b] | number, **1** resp. [a] |
+| `randn` | () or (μ, σ) with [μ] = [σ] | number, **1** resp. [μ] |
+| `sample` | (expression, n), n **1**: the expression is evaluated n times | list, [expression] |
+| `seed` | (n): a statement on its own line, not a value | — |
+| `clock` | () | number, time (seconds; in natural units converted, D60) |
+| `str` | one number or text | text (the number as `print` shows it) |
+| `to` | (x, unit name): [x] = [unit] | x, displayed in that unit (D216) |
+| `push` `append` | (list, value): statements on their own line, not values | — |
+| `fill` | (value, n1, n2, …) | an N-dimensional array (D283), [value]; with one size a list |
+| `size` | an array | list of its sizes, **1** (`size(A, k)`: number) |
+| `copy` | an array | array, [A] |
+
+```fermium
+xs = [1, 2, 3, 4] m
+ts = [0, 1, 2, 3] s
+M = [[2, 1], [1, 3]] N/m
+v = <3, 4> m
+z = complex(1 V, 2 V)
+q = 2.0 ± 0.1 m
+print sin(0.5), ln(2), log10(100), erf(0.5), gamma(4), expm1(1e-3), √(4 m²), cbrt(8 m³)
+print abs(-2 m), floor(2.5), besselj(1, 2.0), ellipk(0.5)
+print len(xs), sum(xs), mean(xs), std(xs), first(xs), last(xs), cumsum(xs), diff(xs), reverse(xs), sort(xs)
+print value(q), uncertainty(q), rel(q)
+print fft(xs), amplitude_spectrum(xs), power_spectrum(xs, 1 s), frequencies(xs, 1 s), argmax(xs), argmin(xs)
+print re(z), im(z), conj(z), arg(z), polar(2 V, 0.5), cis(0.5)
+print min(1 m, 2 m), max(xs), atan2(1 m, 2 m), hypot(3 m, 4 m), sign(-2 m), mod(7 m, 3 m)
+print linspace(0 m, 1 m, 3), zeros(2), ones(2), range(1 s, 3 s), values(xs), dot(xs, xs), factorial(4)
+print clamp(5 m, 0 m, 2 m), isnan(1.0), interp(1.5 m, xs, ts), trapz(ts, xs)
+print norm(v), unit(v), hat(v), cross(<1, 0, 0> m, <0, 1, 0> N), vec(1 m, 2 m)
+print transpose(M), det(M), inverse(M), identity(2), solve_linear(M, <1, 2> N), eigenvalues(M), eigenvectors(M)
+print trace(M), angle(v, <1, 0> m), row(M, 1), column(M, 2), str(2 m), to(1000 m, km), sign(v), abs(v)
+A = fill(1 m, 2, 2)
+print size(A), copy(A), sum(A)
+seed(1)
+print rand() < 1, randn(0 m, 1 m) < 10 m, len(sample(randn(0 m, 1 m), 5)), clock() >= 0 s
+```
+
+Rejected (one line each):
+
+```fermium-error
+print sin(2 m)
+```
+
+```fermium-error
+print floor(2.5 m)
+```
+
+```fermium-error
+print atan2(1 m, 2 s)
+```
+
+```fermium-error
+print linspace(0 m, 1 s, 3)
+```
+
+```fermium-error
+print det([[1, 2], [3, 4], [5, 6]])
+```
+
+## 8. TODO for this chapter
 
 - Specify the run-time behaviour of domain errors (`√` and `ln` of negative numbers, `asin(2)`) uniformly; today a
   compile-time constant is an error while a run-time value gives `NaN`.
-- The static semantics of every built-in function (generated from the checker's tables).
+- ~~The static semantics of every built-in function~~ (done in 0.2: §7, a table written from the checker whose
+  names are tested against `builtins::BUILTINS`; the dimensions in it are not yet machine-checked row by row).
 - ~~Scoping rules~~ (done in 0.2: §2.2). Still open: natural-units regions, the scope of names bound by
   `analyze`/`propagate`, and the interop blocks' names.
 - Uncertainty propagation (first-order, exact correlations; Monte Carlo) as a formal model.
