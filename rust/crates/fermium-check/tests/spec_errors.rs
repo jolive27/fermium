@@ -5,7 +5,7 @@ use std::path::Path;
 
 /// The checker source files errors.md covers completely (errors.md §1 says which are still to do).
 const COVERED: &[&str] = &["arith.rs", "builtin.rs", "calculus.rs", "calls.rs", "checker.rs", "clist.rs",
-                           "convert.rs", "dispatch.rs", "exprs.rs", "lists.rs", "names.rs", "print.rs", "rng.rs",
+                           "convert.rs", "dispatch.rs", "exprs.rs", "lists.rs", "names.rs", "print.rs", "rng.rs", "solve.rs",
                            "stmts.rs", "uncertain.rs", "units.rs", "vecmat.rs"];
 
 /// The Rust string literal at the start of `s` (which starts with '"'): its value and its length in bytes.

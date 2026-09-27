@@ -12,16 +12,16 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 17 of the files completely** (266 templates) — the ones that hold the most common errors: unit and
+covers 18 of the files completely** (323 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
-numbers, the statements (control flow, reassignment, list entries, `push`, local functions), and vectors and
-matrices (vecmat.rs). The other files (`solve` for ODEs, `fit`, PDEs, eigenvalue problems, data tables,
+numbers, the statements (control flow, reassignment, list entries, `push`, local functions), vectors and
+matrices (vecmat.rs), and differential equations (`solve … with … for t from …`, solve.rs). The other files (`fit`, PDEs, eigenvalue problems, data tables,
 complex numbers, arrays, modules, parallel loops, `analyze`, events and the C, C++ and Python
-interop; about 310 templates) are still to do; see §4.
+interop; about 255 templates) are still to do; see §4.
 
-Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `vecmat.rs`.
+Covered files: `arith.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `dispatch.rs`, `exprs.rs`, `lists.rs`, `names.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -40,8 +40,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 91 of the
-266. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 113 of the
+323. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -337,6 +337,64 @@ errors come first, and the rest are simply not written yet (§4).
 | 264 | `… needs a vector, like <3, 4> m` | vecmat.rs | `norm`, `unit` or `hat` of something that isn't a vector | C264 |
 | 265 | `cross(a, b) needs two vectors` | vecmat.rs | `cross(a, b)` whose arguments aren't two vectors | C265 |
 | 266 | `vec(...) takes 2 to … components` | vecmat.rs | `vec(…)` with fewer than 2 or too many components | C266 |
+| | **ODEs (solve.rs)** | | | |
+| 267 | `this equation is complex, but its unknowns can't be made complex` | solve.rs | an ODE with a complex coefficient whose unknowns can't be complex (a list or vector unknown) | — |
+| 268 | `a solve can have only one stop condition (until ...)` | solve.rs | two `until` conditions on one `solve` (today the parser rejects this first: grammar.md §3) | — |
+| 269 | `until (a stop condition) is for differential equations` | solve.rs | `until` on a `solve` that isn't a differential equation (an internal guard: the grammar allows `until` only after a range) | — |
+| 270 | `this solve has no derivatives in it, so there's no differential equation to solve` | solve.rs | a `solve … with … for t from …` whose equations have no derivatives | C270 |
+| 271 | `this solve has … equation… for … unknown function… (…); they must match` | solve.rs | the number of equations isn't the number of unknown functions | C271 |
+| 272 | `the range goes from … to …` | solve.rs | the two ends of the range have different dimensions | C272 |
+| 273 | `the step is … but … is …` | solve.rs | the step's dimension isn't the variable's | C273 |
+| 274 | `unknown method '…' (use rk45, rk4 with a step, or radau for stiff equations)` | solve.rs | `using` names an unknown method | C274 |
+| 275 | `… chooses its own steps: remove  step …  (a fixed step is for rk4)` | solve.rs | a `step` with an adaptive method (rk45, radau, bdf) | C275 |
+| 276 | `the rk4 method needs a fixed step:  for … from … to … step 0.01…` | solve.rs | `using rk4` without a `step` | C276 |
+| 277 | `initial conditions look like  x(0) = 1 m  or  x'(0) = 0 m/s` | solve.rs | an initial condition that isn't of the form `x(t0) = …` or `x'(t0) = …` | C277 |
+| 278 | `this initial condition isn't for one of the unknowns (…)` | solve.rs | an initial condition for a name that isn't an unknown | C278 |
+| 279 | `…(…) isn't needed: the equation for … is order …` | solve.rs | an initial condition for a derivative the equation's order doesn't need | C279 |
+| 280 | `the initial values of … don't match: … and …` | solve.rs | initial values of one unknown (value and derivatives) of different kinds or lengths | — |
+| 281 | `an unknown can be a list of numbers or of vectors (with one unit), not a list of matrices` | solve.rs | an unknown whose initial value is a list of matrices | — |
+| 282 | `the initial values of … don't match: one is a list, another isn't` | solve.rs | initial values of one unknown where one is a list and another isn't | C282 |
+| 283 | `an initial value must be a number or a vector like <1, 0> m, not a matrix` | solve.rs | an initial value that is a matrix | C283 |
+| 284 | `a vector unknown needs the same units in every component (write separate unknowns for quantities in different units, like x and v)` | solve.rs | a vector initial value with a different unit per component | C284 |
+| 285 | `the initial values of … don't match: one is a …-vector, another a …` | solve.rs | initial values of one unknown: vectors of different lengths, or a vector and a number | C285 |
+| 286 | `… can't be both complex and a list (lists of complex unknowns aren't supported yet)` | solve.rs | a complex unknown whose initial value is a list | — |
+| 287 | `…(…) should be … but this is …` | solve.rs | an initial derivative whose dimension isn't the unknown's divided by the variable's (to its order) | C287 |
+| 288 | `the initial condition is given at … but … is …` | solve.rs | an initial condition given at a value of another dimension than the variable's | C288 |
+| 289 | `initial conditions must be at the start of the range (… = start)` | solve.rs | an initial condition given at a time other than the start of the range | C289 |
+| 290 | `… can't be both complex and a vector (vectors of complex numbers aren't supported yet)` | solve.rs | a complex unknown whose initial value is a vector | — |
+| 291 | `missing initial condition…: …` | solve.rs | an unknown (or one of its lower derivatives) without an initial condition | C291 |
+| 292 | `one side of this equation is a vector and the other isn't (or they have different lengths)` | solve.rs | an equation with a vector on one side only, or vectors of different lengths | C292 |
+| 293 | `with a list of unknowns, write each equation for one highest derivative, like  N' = …` | solve.rs | with a list of unknowns, an equation not of the form `N' = …` | — |
+| 294 | `can't tell which unknown this equation is for` | solve.rs | an equation that names no unknown's highest derivative | — |
+| 295 | `… is …, so … must be … too (here it is …)` | solve.rs | an ODE unknown's dimension forces another quantity's (the equation's other side, a derivative) and it doesn't match | — |
+| 296 | `… must be … like …` | solve.rs | an equation's side must have a given dimension (shown with an example unit) | — |
+| 297 | `… works out to … but should be …` | solve.rs | a term of an equation works out to another dimension than the unknown's derivative needs | — |
+| 298 | `when works with the adaptive solver (rk45) for now` | solve.rs | `when` (an event) with a method other than rk45 | C298 |
+| 299 | `when doesn't work with a list of unknowns yet` | solve.rs | `when` in a `solve` with a list of unknowns | — |
+| 300 | `the tolerance is relative, so it must be a plain number (no units) like 1e-8, but it is …` | solve.rs | `tolerance` with units | C300 |
+| 301 | `the tolerance must be a plain number written out, like 1e-8` | solve.rs | `tolerance` that isn't a constant number | C301 |
+| 302 | `the tolerance is relative, so it must be between 0 and 1 (like 1e-8), but it is …` | solve.rs | `tolerance` outside (0, 1) | C302 |
+| 303 | `absolute sets the error control of the adaptive solvers (rk45, radau, bdf); with  step  the steps are fixed, so leave out one of them` | solve.rs | `absolute` together with a fixed `step` | C303 |
+| 304 | `an absolute tolerance must be a positive constant, like 1e-16 or 1e-9 m` | solve.rs | `absolute` that isn't a positive constant | C304 |
+| 305 | `two absolute tolerances in …; give one value per unit` | solve.rs | two `absolute` values of the same dimension | C305 |
+| 306 | `no absolute tolerance for …, which is … (the values given are in …); add one in its units after a comma, like  absolute …` | solve.rs | an unknown whose dimension has no `absolute` value when others do | C306 |
+| 307 | `no unknown of this solve is in …, so this absolute tolerance isn't used` | solve.rs | an `absolute` value whose dimension no unknown has | C307 |
+| 308 | `… both appear in one equation, which works only for unknowns that are numbers, but … is a vector; write its components as separate unknowns` | solve.rs | an implicit system (two unknowns' highest derivatives in one equation) where an unknown is a vector | — |
+| 309 | `… both appear in one equation; that works for up to 4 unknowns (this solve has …); solve for the highest derivatives yourself, e.g. with solve_linear` | solve.rs | an implicit system with more than 4 unknowns | — |
+| 310 | `… both appear in one equation; that works when every equation is linear in … (like m1 a'' + k b'' = F, with coefficients that may depend on … and the unknowns), and this one isn't` | solve.rs | an implicit system that isn't linear in the highest derivatives | C310 |
+| 311 | `… drops out of the equations (its coefficients are all 0), so they can't be solved for it` | solve.rs | an implicit system where an unknown's highest derivative has all-zero coefficients | — |
+| 312 | `the stop condition can use … (not …)` | solve.rs | an `until` condition using a name other than the unknowns and the variable | — |
+| 313 | `the two sides of the stop condition don't match: left is …, right is …` | solve.rs | the two sides of an `until` condition have different dimensions | C313 |
+| 314 | `… is a …-vector, so it has no .…` | solve.rs | `.name` on an ODE solution vector with a component it doesn't have | C314 |
+| 315 | `… is complex, and lists of complex numbers aren't supported yet` | solve.rs | an ODE solution with complex values used where a list is needed | — |
+| 316 | `… is a vector; use its components, like ….x` | solve.rs | an ODE vector solution used where a list of numbers is needed (as in `plot`) | — |
+| 317 | `… takes one argument (…)` | solve.rs | an ODE solution called with other than one argument | C317 |
+| 318 | `… is a function of …, which is …, not …` | solve.rs | an ODE solution evaluated at a value of another dimension than its variable | C318 |
+| 319 | `… is complex, so it can't be evaluated at each element of a list (lists of complex numbers aren't supported yet)` | solve.rs | a complex ODE solution evaluated at a list of times | — |
+| 320 | `… is a vector, so it can't be evaluated at each element of a list (lists of vectors aren't supported yet)` | solve.rs | an ODE vector solution evaluated at a list of times | C320 |
+| 321 | `… is a list of unknowns, so it takes one time, not a list of times` | solve.rs | an ODE solution with a list of unknowns evaluated at a list of times | C321 |
+| 322 | `can't take that many derivatives of the solution …` | solve.rs | too many derivatives of an ODE solution (beyond what can be computed from the equation) | — |
+| 323 | `… is a list of unknowns: use its value at a time, like …(…) (a list) or …(…)[i], or its last value …[end]` | solve.rs | an ODE solution with a list of unknowns used as a value | — |
 
 ## 3. Examples
 
@@ -1305,17 +1363,199 @@ c = cross(1, 2)
 v = vec(1)
 ```
 
+```fermium-error
+# C270
+solve z = 1 with z(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C271
+solve x' = -x, x' = 1 with x(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C272
+solve z' = -z/(1 s) with z(0) = 1 for t from 0 s to 1 m
+```
+
+```fermium-error
+# C273
+solve z' = -z/(1 s) with z(0) = 1 for t from 0 s to 1 s step 1 m using rk4
+```
+
+```fermium-error
+# C274
+solve z' = -z with z(0) = 1 for t from 0 to 1 using euler
+```
+
+```fermium-error
+# C275
+solve z' = -z with z(0) = 1 for t from 0 to 1 step 0.1 using radau
+```
+
+```fermium-error
+# C276
+solve z' = -z with z(0) = 1 for t from 0 to 1 using rk4
+```
+
+```fermium-error
+# C277
+solve z' = -z with z = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C278
+solve z' = -z with z(0) = 1, w(0) = 2 for t from 0 to 1
+```
+
+```fermium-error
+# C279
+solve z' = -z with z(0) = 1, z'(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C282
+solve x'' = -x with x(0) = [1, 2], x'(0) = 0 for t from 0 to 1
+```
+
+```fermium-error
+# C283
+solve x' = -x with x(0) = [[1, 2], [3, 4]] for t from 0 to 1
+```
+
+```fermium-error
+# C284
+solve x' = -x with x(0) = <1 m, 2 s> for t from 0 to 1
+```
+
+```fermium-error
+# C285
+solve x'' = -x with x(0) = <1, 0>, x'(0) = 0 for t from 0 to 1
+```
+
+```fermium-error
+# C287
+solve y'' = -y/(1 s^2) with y(0) = 1 m, y'(0) = 1 m for t from 0 s to 1 s
+```
+
+```fermium-error
+# C288
+solve x' = -x/(1 s) with x(1 m) = 1 for t from 0 s to 1 s
+```
+
+```fermium-error
+# C289
+solve z' = -z with z(0.5) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C291
+solve x'' = -x with x(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C292
+solve x' = <1, 2> with x(0) = 1 for t from 0 to 1
+```
+
+```fermium-error
+# C298
+solve y'' = -9.8 with y(0) = 1, y'(0) = 0 for t from 0 to 1 step 0.01 using rk4
+  when y = 0: y' = -0.9 y'
+```
+
+```fermium-error
+# C300
+solve z' = -z with z(0) = 1 for t from 0 to 1 tolerance 1e-8 m
+```
+
+```fermium-error
+# C301
+a = 0.001
+solve z' = -z with z(0) = 1 for t from 0 to 1 tolerance a
+```
+
+```fermium-error
+# C302
+solve z' = -z with z(0) = 1 for t from 0 to 1 tolerance 2
+```
+
+```fermium-error
+# C303
+solve z' = -z with z(0) = 1 for t from 0 to 1 step 0.1 using rk4 absolute 1e-9
+```
+
+```fermium-error
+# C304
+solve z' = -z with z(0) = 1 for t from 0 to 1 absolute -1
+```
+
+```fermium-error
+# C305
+solve z' = -z with z(0) = 1 for t from 0 to 1 absolute 1e-9, 1e-8
+```
+
+```fermium-error
+# C306
+solve x' = -x/(1 s), y' = -y/(1 s) with x(0) = 1 m, y(0) = 1 kg for t from 0 s to 1 s absolute 1e-9 m
+```
+
+```fermium-error
+# C307
+solve x' = -x/(1 s) with x(0) = 1 m for t from 0 s to 1 s absolute 1e-9 m, 1e-9 kg
+```
+
+```fermium-error
+# C310
+solve a'' + b''^2 = 0, b'' = 1 with a(0) = 0, a'(0) = 0, b(0) = 0, b'(0) = 0 for t from 0 to 1
+```
+
+```fermium-error
+# C313
+solve x' = -x/(1 s) with x(0) = 1 m for t from 0 s to 1 s until x = 1 s
+```
+
+```fermium-error
+# C314
+solve r' = -r with r(0) = <1, 0> for t from 0 to 1
+a = r.z
+```
+
+```fermium-error
+# C317
+solve z' = -z with z(0) = 1 for t from 0 to 1
+a = z(1, 2)
+```
+
+```fermium-error
+# C318
+solve z' = -z/(1 s) with z(0) = 1 for t from 0 s to 1 s
+a = z(1 m)
+```
+
+```fermium-error
+# C320
+solve r' = -r with r(0) = <1, 0> for t from 0 to 1
+a = r([0.5, 1])
+```
+
+```fermium-error
+# C321
+solve N' = -N with N(0) = [1, 2] for t from 0 to 1
+a = N([0.5, 1])
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: solve.rs (55), data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
+  covered, by size of their error set: data.rs (33), pde.rs (31), cinterop.rs (25), cplx.rs (20),
   pyinterop.rs (18), modules.rs (15), eigen.rs (14), arrays.rs (13), parallel.rs (12), systems.rs (8),
-  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 310 templates remain.
+  analyze.rs (6), events.rs (5), plus cppinterop.rs's `cerr(…)` messages. About 255 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (91). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (113). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -1325,6 +1565,7 @@ v = vec(1)
   rows: mostly the rarer argument errors, `propagate montecarlo`'s block, the vector-calculus operators and the
   two-list forms of the Fourier built-ins. In rows 168–208 (stmts.rs), 15 rows: natural-units regions, arrays,
   complex lists, ODE solutions and local-function limits. In rows 209–266 (vecmat.rs), 5 rows: the size limits
-  and index forms that need large or run-time matrices.
+  and index forms that need large or run-time matrices. In rows 267–323 (solve.rs), 22 rows: implicit systems,
+  complex and list unknowns, events with lists, and messages another check reaches first.
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
