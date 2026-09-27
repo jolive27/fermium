@@ -1,0 +1,5 @@
+import cpp "libphys4.so" header "phys.hpp":
+    phys::kinetic_energy(m [kg], v [km/s]) -> [J]
+f(x) = kinetic_energy(1 kg, x)
+print f(3 m/s)
+print f(2 s)

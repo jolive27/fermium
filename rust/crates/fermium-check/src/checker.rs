@@ -687,7 +687,11 @@ pub fn stmt_kind_name(k: &A::StmtKind) -> &'static str {
         K::Units { .. } => "units",
         K::Import { .. } => "import",
         K::UsePython { .. } => "use python",
-        K::ImportC { lang, .. } => if lang == "c" { "import c" } else { "import fortran" },
+        K::ImportC { lang, .. } => match lang.as_str() {
+            "c" => "import c",
+            "cpp" => "import cpp",
+            _ => "import fortran",
+        },
         K::Propagate { .. } => "propagate montecarlo",
     }
 }

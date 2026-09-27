@@ -1,0 +1,18 @@
+# namespaced free functions, a static member, a nested namespace; units converted both ways
+import cpp "libphys4.so" header "phys.hpp":
+    phys::kinetic_energy(m [kg], v [km/s]) -> [J]
+    phys::twice(n: int) -> int
+    phys::Particle::compton_wavelength(m [kg]) -> [m]
+    phys::nested::deeper::third(x [m]) -> [m]
+E = kinetic_energy(2 kg, 3000 m/s)      # v is passed as 3 (km/s): 0.5 × 2 × 3² = 9, read as joules
+print E, E in kJ to 4 digits, kinetic_energy(2000 g, 3 km/s) + 1 J
+print twice(21), twice(-4), twice(10 / 2)
+print compton_wavelength(m_e) to 6 digits, compton_wavelength(m_e) == h / (m_e c)
+print third(1.5 km)
+print kinetic_energy(2 kg, [1, 2, 3] km/s)          # a list for a number: one call per element
+KE(v) = kinetic_energy(1 kg, v)
+print ∫ KE(v) dv from 0 km/s to 3 km/s               # in a function and an integral
+tot = 0 J
+for k from 1 to 100
+    tot += kinetic_energy(1 kg, k * 1 m/s)
+print tot to 8 digits

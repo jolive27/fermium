@@ -15,7 +15,7 @@ Every program example on this page is tested: `legacy/tests/test_docs.py` runs e
 8. [Derivatives](#8-derivatives)
 9. [Integrals](#9-integrals)
 10. [Differential equations: solve](#10-differential-equations-solve)
-11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules), [Python interop](#python-interop) and [C and Fortran interop](#c-and-fortran-interop-fermium-25)
+11. [Data: load, fit, plot](#11-data-load-fit-plot) (and [dimensional analysis](#dimensional-analysis-analyze)); then [Modules: import and the standard library](#modules), [Python interop](#python-interop), [C and Fortran interop](#c-and-fortran-interop-fermium-25) and [C++ interop](#c-interop-fermium-25)
 12. [Symbols and their ASCII spellings](#12-symbols-and-ascii-spellings)
 13. [Built-in functions](#13-built-in-functions)
 14. [Constants](#14-constants)
@@ -1080,6 +1080,78 @@ print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
 The worked example `examples/c_interop/` calls a Fortran semi-empirical mass formula (compared with the
 standard library's `semf_binding` and measured binding energies) and a C routine for the Gamow peak of
 p + p in the Sun's core (about 6 keV at 15.7 MK); its first lines say how to build the two libraries.
+
+## C++ interop (Fermium 2.5)
+
+C++ functions are called through a small `extern "C"` wrapper that Fermium writes, compiles with the system's
+C++ compiler and caches; from there on a C++ function is called exactly like a C one (the section above), with
+its units checked at every call before the program runs.
+
+```text
+import cpp "libkinematics.so" header "kinematics.hpp":
+    kin::gamma(p [MeV/c], m [MeV/c²]) -> number                          # a function in a namespace
+    kin::TwoBody::momentum(M [MeV/c²], m1 [MeV/c²], m2 [MeV/c²]) -> [MeV/c] # a static member function
+    kin::invariant_mass(E [MeV], p [MeV/c]) -> [MeV/c²] as mass_of          # one overload …
+    kin::invariant_mass(E1 [MeV], p1 [MeV/c], E2 [MeV], p2 [MeV/c], cosθ) -> [MeV/c²] as pair_mass  # … another
+import cpp header "cmath":                                               # header only: no library
+    std::tgamma(x) -> number
+
+print momentum(139.57 MeV/c², m_μ, 0 MeV/c²)      # 29.79 MeV/c: π⁺ → μ⁺ ν
+print tgamma(5)                                    # 24
+```
+
+- **The import** names the shared library (relative to the program's folder, as for `import c`) and the
+  header that declares the functions (relative to the program's folder; a name the folder doesn't have and
+  that isn't a path or a `.h`/`.hpp` file, like `cmath`, is a system header). Without a library
+  (`import cpp header "…":`) only what the header defines itself can be called: inline functions,
+  templates, and the standard library's functions.
+- **The signatures** are those of `import c`, with the C++ name qualified by its namespaces and classes
+  (`kin::TwoBody::momentum`). The program calls the function by the last part of the name (`momentum`), or by
+  the name after `as` at the end of the signature. A Fermium keyword needs `as` (`phys::solve(…) -> [J] as
+  solve_it`).
+- **Overloads and templates:** each signature picks exactly one C++ function: the one whose C++ type is the
+  declared signature's, with a number (`[unit]` or plain) as `double`, `: int` and `len(…)` as `int`, a `: list`
+  as `const double *` (or `double *`), and the result as `double` (`-> [unit]`, `-> number`) or `int`
+  (`-> int`). So `kin::invariant_mass(E [MeV], p [MeV/c])` is `double(double, double)`, whatever other
+  overloads there are, and a function template's arguments are deduced from it (`phys::cube(x [m]) -> [m³]`
+  is `cube<double>`). Two overloads used in one program need two names: `as`.
+- **Static member functions** are imported by their qualified name. An ordinary (non-static) member
+  function needs an object and can't be imported: the error says so; add a free function to the library.
+- **Exceptions:** a C++ exception is caught in the wrapper, and the program stops with a run-time error that
+  carries its message (*momentum: the C++ function kin::TwoBody::momentum threw an exception: the decay is
+  kinematically forbidden (M < m1 + m2)*), after what it printed before.
+- **Errors at compile time** are one line with a caret on the signature, translated from the compiler's
+  output: *the header phys.hpp declares no function phys::energyy*; *no overload of phys::energy has the C++
+  type double(double, int)*; *phys::Particle::rest_energy is a member function, which needs an object*; *the
+  C++ library libphys.so has no definition of phys::f(double)* (declared in the header but not in the
+  library); *can't find the header nothere.hpp*; *import cpp needs a C++ compiler, and none was found*. Other
+  compiler errors (for example, a header that doesn't compile) give the first error and the path of a log with
+  the compiler's full output.
+- **The compiler** is `$CXX` if it is set (it may carry arguments, like `ccache g++`), else the first of
+  `c++`, `g++` and `clang++` that runs; `$CXXFLAGS` is added to its command line (`-std=c++17 -O2` by
+  default). The compiled wrapper is kept in `$FERMIUM_CACHE_DIR/cpp` (else `$XDG_CACHE_HOME/fermium/cpp`,
+  else `~/.cache/fermium/cpp`; on macOS `~/Library/Caches/fermium/cpp`), named by a hash of its source, the
+  named header's text, the library's path, `$CXX` and `$CXXFLAGS`, and made again when a header it includes
+  (the compiler's own list) or the library is newer than it. With the cache filled, no compiler is needed.
+- **Names:** Greek letters and subscripts map to ASCII as for `import c` (`phys::λ_max` is
+  `phys::lambda_max`), so `fmt --pretty` and `--ascii` round-trip.
+- **Speed:** C++ calls go through the run time (about 0.6 µs per call on the test machine), because the
+  wrapper is asked after each call whether the function threw; a C function of doubles is called directly
+  (about 5 ns). `fermium build` executables work, and load the wrapper from the cache by the path it had
+  when the program was built (clearing the cache breaks them until the program is built again).
+- **Trust:** the compiler checks the declaration against the header (a wrong parameter type is a compile
+  error, unlike `import c`), but not array lengths. Compiling the wrapper includes the header, and loading
+  the libraries runs their initialisers, when the program is checked (also by `fermium check` and the editor's
+  language server).
+- **Not yet supported:** ordinary member functions and objects (classes, `std::vector`, `std::string`),
+  references (`const double &`), `float`/`long` and other types beyond `double`, `int` and arrays of doubles,
+  functions returning nothing, template arguments written in the signature (`f<double>`: only deduced ones),
+  more than one header per import, `import cpp` in a module or calls inside `units natural`, and the browser
+  playground. Tested on x86-64 Linux with g++; on macOS the linker options differ and are untested.
+
+The worked example `examples/cpp_interop/` calls a small C++ kinematics library: daughter momenta in two-body
+decays (π⁺ → μ⁺ ν: 29.79 MeV/c, as the PDG gives), decay lengths βγcτ, and the invariant mass of the Λ rebuilt
+from its decay products through three overloads of one function; its first lines say how to build the library.
 
 ## 12. Symbols and ASCII spellings
 

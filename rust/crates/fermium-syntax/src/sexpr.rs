@@ -500,7 +500,7 @@ impl Printer {
                     .collect();
                 f.push(("sigs", PV::List(ss)));
             }
-            ImportC { lang, lib, sigs } => {
+            ImportC { lang, lib, sigs, .. } => {
                 f.push(("lang", s(lang)));
                 f.push(("lib", s(lib)));
                 f.push(("sigs", PV::List(sigs.iter().map(|g| s(&g.name)).collect())));

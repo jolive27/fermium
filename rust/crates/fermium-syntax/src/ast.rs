@@ -299,6 +299,9 @@ pub struct CSig {
     pub ret: CRetDecl,
     /// None: no bind; Some(None): `bind(C)`; Some(Some(n)): `bind(C, name="n")`
     pub bind: Option<Option<String>>,
+    /// C++ (C4, D290): the qualified name as written (`phys::Particle::rest_energy`); `name` is then the last
+    /// component, or the `as` name after the result
+    pub cpp_name: Option<String>,
     pub span: Span,
 }
 
@@ -338,8 +341,9 @@ pub enum StmtKind {
     Import { module: String, is_path: bool, alias: Option<String>, names: Option<Vec<(String, Option<String>)>> },
     /// `use python numpy as np` (D140).
     UsePython { module: String, alias: Option<String>, sigs: Vec<PySig> },
-    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275).
-    ImportC { lang: String, lib: String, sigs: Vec<CSig> },
+    /// `import c "libphys.so":` / `import fortran "libnuclear.so":` with signatures (C3, D275);
+    /// `import cpp "libphys.so" header "phys.hpp":` (C4, D290: `lang` "cpp", `lib` may be empty, `header` set).
+    ImportC { lang: String, lib: String, header: Option<String>, sigs: Vec<CSig> },
 }
 
 /// `solve …` (ODEs, eigenvalue problems, PDEs).

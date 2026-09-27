@@ -76,9 +76,10 @@ pub fn c_symbol_name(name: &str) -> String {
 impl Checker {
     /// `import c "lib.so":` / `import fortran "lib.so":` with signatures.
     pub fn s_import_c(&mut self, s: &A::Stmt, ctx: &mut Ctx) -> CResult<Vec<I::Stmt>> {
-        let A::StmtKind::ImportC { lang, lib, sigs } = &s.kind else { unreachable!() };
+        let A::StmtKind::ImportC { lang, lib, header, sigs } = &s.kind else { unreachable!() };
         let fortran = lang == "fortran";
-        let what: &'static str = if fortran { "Fortran" } else { "C" };
+        let cpp = lang == "cpp";
+        let what: &'static str = if fortran { "Fortran" } else if cpp { "C++" } else { "C" };
         let kind = self.scopes[ctx.scope].kind;
         if !ctx.is_main || ctx.lam.is_some() || ctx.branch != 0 || ctx.loop_depth != 0
             || !(kind == "global" || kind == "module")
@@ -94,33 +95,13 @@ impl Checker {
             return Err(self.err(format!("calling {what} functions isn't supported on this platform yet (only x86-64 \
                                          and AArch64 Linux and macOS)"), s.span, None));
         }
+        if cpp {
+            return self.s_import_cpp(s, ctx, lib, header.as_deref().unwrap_or(""), sigs);
+        }
         // the library: relative to the program's folder; a bare name the program's folder doesn't have is left
         // to the system's search (libm.so.6)
-        let base = self.opts.base_dir.clone();
-        let local = Path::new(&base).join(lib);
-        let path = if Path::new(lib).is_absolute() {
-            lib.clone()
-        } else if local.exists() || lib.contains('/') {
-            let p = std::fs::canonicalize(&local).unwrap_or(local);
-            p.to_string_lossy().into_owned()
-        } else {
-            lib.clone()
-        };
-        if let Err(why) = cffi::open_library(&path) {
-            let stem = lib.trim_start_matches("lib").split('.').next().unwrap_or("phys").to_string();
-            let build = if fortran {
-                format!("gfortran -shared -fPIC -o {lib} {stem}.f90")
-            } else {
-                format!("cc -shared -fPIC -o {lib} {stem}.c")
-            };
-            let hint = if Path::new(&path).exists() || !lib.contains('/') && Path::new(&base).join(lib).exists() {
-                format!("the file is there but isn't a shared library this machine can load: {why}")
-            } else {
-                format!("build it next to the program first, like  {build}  (the path is relative to the program's \
-                         folder)")
-            };
-            return Err(self.err(format!("can't load the {what} library {lib}"), s.span, Some(hint)));
-        }
+        let path = self.c_library_path(lib);
+        self.load_c_library(lang, what, lib, &path, s.span)?;
         let mut refs = vec![];
         let mut names: Vec<String> = vec![];
         for sig in sigs {
@@ -144,6 +125,116 @@ impl Checker {
             }
             refs.push(self.c_signature(sig, what, lib, &path, symbol, sig.span.line)?);
         }
+        self.bind_c_functions(refs, s, ctx, lib, what, fortran)
+    }
+
+    /// The library's path as dlopen'ed: relative to the program's folder, or a bare name the system finds.
+    fn c_library_path(&self, lib: &str) -> String {
+        let local = Path::new(&self.opts.base_dir).join(lib);
+        if Path::new(lib).is_absolute() {
+            lib.to_string()
+        } else if local.exists() || lib.contains('/') {
+            let p = std::fs::canonicalize(&local).unwrap_or(local);
+            p.to_string_lossy().into_owned()
+        } else {
+            lib.to_string()
+        }
+    }
+
+    /// Open the library now, so a missing one is a compile error with a hint.
+    fn load_c_library(&self, lang: &str, what: &str, lib: &str, path: &str, span: A::Span) -> CResult<()> {
+        let base = self.opts.base_dir.clone();
+        let fortran = lang == "fortran";
+        if let Err(why) = cffi::open_library(path) {
+            let stem = lib.trim_start_matches("lib").split('.').next().unwrap_or("phys").to_string();
+            let build = if fortran {
+                format!("gfortran -shared -fPIC -o {lib} {stem}.f90")
+            } else if lang == "cpp" {
+                format!("c++ -shared -fPIC -o {lib} {stem}.cpp")
+            } else {
+                format!("cc -shared -fPIC -o {lib} {stem}.c")
+            };
+            let hint = if Path::new(&path).exists() || !lib.contains('/') && Path::new(&base).join(lib).exists() {
+                format!("the file is there but isn't a shared library this machine can load: {why}")
+            } else {
+                format!("build it next to the program first, like  {build}  (the path is relative to the program's \
+                         folder)")
+            };
+            return Err(self.err(format!("can't load the {what} library {lib}"), span, Some(hint)));
+        }
+        Ok(())
+    }
+
+    /// `import cpp "libphys.so" header "phys.hpp":` (C4, D290): make (or find in the cache) the wrapper, then bind
+    /// each signature to its C function there.
+    fn s_import_cpp(&mut self, s: &A::Stmt, ctx: &mut Ctx, lib: &str, header: &str, sigs: &[A::CSig])
+                    -> CResult<Vec<I::Stmt>> {
+        let what = "C++";
+        let path = if lib.is_empty() { String::new() } else { self.c_library_path(lib) };
+        if !lib.is_empty() {
+            self.load_c_library("cpp", what, lib, &path, s.span)?;
+        }
+        // absolute, so the compiler's dependency list is too (the cache compares its files' times)
+        let base_dir = if self.opts.base_dir.is_empty() { "." } else { self.opts.base_dir.as_str() };
+        let base = std::fs::canonicalize(base_dir).map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| base_dir.to_string());
+        let local = Path::new(&base).join(header);
+        let include = if Path::new(header).is_absolute() {
+            header.to_string()
+        } else if local.exists() {
+            std::fs::canonicalize(&local).unwrap_or(local).to_string_lossy().into_owned()
+        } else if header.contains('/') || header.ends_with(".hpp") || header.ends_with(".h") || header.ends_with(".hh") {
+            return Err(self.err(format!("can't find the header {header}"), s.span,
+                                Some("the path is relative to the program's folder".into())));
+        } else {
+            header.to_string() // a system header, like cmath
+        };
+        let mut names: Vec<String> = vec![];
+        let mut csigs = vec![];
+        for sig in sigs {
+            if names.contains(&sig.name) {
+                let hint = format!("give each overload its own name after its result, like  … -> [J] as {}_2", sig.name);
+                return Err(self.err(format!("{} has two signatures in this import", sig.name), sig.span, Some(hint)));
+            }
+            names.push(sig.name.clone());
+            let written = sig.cpp_name.clone().unwrap_or_else(|| sig.name.clone());
+            let qual: Vec<String> = written.split("::").map(c_symbol_name).collect();
+            if qual.iter().any(|q| !q.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')) {
+                return Err(self.err(format!("{written} can't be the name of a C++ function: a C++ name must be ASCII"),
+                                    sig.span, None));
+            }
+            let params = sig.params.iter().map(|p| p.kind.clone()).collect();
+            csigs.push(crate::cppinterop::CppSig { qual: qual.join("::"), params,
+                                                   rint: matches!(sig.ret, A::CRetDecl::Int) });
+        }
+        let imp = crate::cppinterop::CppImport { lib, lib_path: &path, header, include, base: &base, sigs: csigs };
+        let wrapper = match crate::cppinterop::build_wrapper(&imp) {
+            Ok(w) => w,
+            Err(e) => {
+                let span = e.sig.map(|k| sigs[k].span).unwrap_or(s.span);
+                return Err(self.err(e.msg, span, e.hint));
+            }
+        };
+        if let Err(why) = cffi::open_library(&wrapper) {
+            return Err(self.err(format!("can't load the compiled C++ wrapper {wrapper}"), s.span,
+                                Some(format!("delete it so that it is made again ({why})"))));
+        }
+        let shown = if lib.is_empty() { header } else { lib };
+        let mut refs = vec![];
+        for (k, sig) in sigs.iter().enumerate() {
+            let symbol = crate::cppinterop::wrapper_symbol(k);
+            if cffi::symbol(&wrapper, &symbol).unwrap_or(None).is_none() {
+                return Err(self.err(format!("the compiled C++ wrapper {wrapper} has no {symbol}"), sig.span,
+                                    Some("delete it so that it is made again".into())));
+            }
+            refs.push(self.c_signature(sig, what, shown, &wrapper, symbol, sig.span.line)?);
+        }
+        self.bind_c_functions(refs, s, ctx, shown, what, false)
+    }
+
+    /// Bind each declared function's name in the program.
+    fn bind_c_functions(&mut self, refs: Vec<CFuncRef>, s: &A::Stmt, ctx: &mut Ctx, lib: &str, what: &'static str,
+                        fortran: bool) -> CResult<Vec<I::Stmt>> {
         for r in refs {
             let name = r.display.clone();
             if let Some(ex) = self.scopes[ctx.scope].names.get(&name).cloned() {
@@ -359,6 +450,7 @@ impl Checker {
             rint: r.rint,
             rfac: r.runit.as_ref().map(|u| u.factor).unwrap_or(1.0),
             map,
+            cpp: r.lang == "C++",
         });
         let id = tables.ccalls.len() - 1;
         let line = e.span.line;

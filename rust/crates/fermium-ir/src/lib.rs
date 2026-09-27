@@ -380,6 +380,9 @@ pub struct CCallSite {
     pub rfac: f64,
     /// some number parameter gets a list: the call is made per element and gives a list
     pub map: bool,
+    /// a generated C++ wrapper (C4, D290): after each call, `fermium_cpp_error` in the same library says whether the
+    /// C++ function threw
+    pub cpp: bool,
 }
 
 /// A call site of a Python function (v1's `tables.pycalls` entry): module and function names, the unit factor
