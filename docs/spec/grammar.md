@@ -249,10 +249,9 @@ Notes and special cases (parser.rs):
 - **Assignment targets:** only a name, an indexed name or a function head can be assigned. `h² = …` is an error
   whose hint points to `solve` (FRICTION #28). `a = b = 1` is an error; `ħ = c = 1` suggests `units natural`.
 - `def`, `function`, `fn` before a name are errors with a hint ("a function is written like a formula").
-- `x++` is an error ("Fermium has no ++").
 - `parallel for` requires the `from … to` form (`for x in …` is an error).
 - `sweep` is a keyword only when followed by `NAME in` or `NAME from` and not assigned by the program.
-- `analyze`, the interop signature blocks and the `plot` clauses are summarised in §2.7.
+- `plot` is in §2.7; `analyze` and the interop signature blocks are summarised in §2.8.
 
 ```fermium
 f(x [m], n: number) = n x
@@ -271,6 +270,35 @@ elif n == 2
 else
     print "small"
 print a + b where a = 1 m, b = 2 m
+xs = [1, 2, 3]
+xs[1] = 5
+if xs[1] > 1 then print xs
+x = 1 + \
+    2
+for v in [1, 2]: print v, x
+```
+
+Each of these is rejected by the parser, with a one-line message and a hint:
+
+```fermium-error
+a = b = 1
+```
+
+```fermium-error
+h² = 3
+```
+
+```fermium-error
+def f(x) = 2 x
+```
+
+```fermium-error
+xs = [1, 2, 3]
+xs[1:2] = 5
+```
+
+```fermium-error
+integral(b, T) = b T
 ```
 
 ### 2.3 solve
@@ -283,8 +311,10 @@ solve_clause = "with" equation { ( "," | "and" ) equation }             (* initi
              | "for" NAME "from" expr "to" expr [ "step" expr ]
                      [ "," NAME "from" expr "to" expr [ "step" expr ] ] (* a second variable: PDEs *)
              | "tolerance" expr | "absolute" expr { "," expr } | ( "using" | "method" ) NAME
-             | "until" expr | "lowest" expr [ "states" | "levels" ] | "grid" expr
-             | "when" equation ":" assignment { "," assignment }      (* events, D297 *)
+             | "until" equation                                        (* stop when the sides cross *)
+             | "lowest" expr [ "states" | "levels" ] | "grid" expr
+             | "when" expr ( "=" | "<" | ">" | "<=" | ">=" ) expr ":" equation { ( "," | "and" ) equation }
+                                                                    (* events, D297 *)
 ```
 
 - A `solve` must have at least one equation and a `for` range ("solve needs a range for the independent
@@ -302,6 +332,12 @@ solve y' = -y with y(0) = 1 for t from 0 to 10
 print y(1)
 solve x^2 = 2 for x from 0 to 2
 print x
+k = 4 N/m
+m_b = 1 kg
+solve z'' = -(k/m_b) z with z(0) = 1 m, z'(0) = 0 m/s for t from 0 s to 10 s until z = 0 m
+print z(0.5 s)
+solve u'' = -u with u(0) = 1, u'(0) = 0 for t from 0 to 1
+print u(1)
 ```
 
 ### 2.4 Expressions
@@ -390,6 +426,22 @@ print h_P c_0 / λ k_B T
   `within` uses a default relative tolerance (D260).
 - `print x to 3 digits` rounds for display.
 
+```fermium
+x = 3
+r = 2 m
+φ = 0.5
+print 1/2 x, π²/12 x², 0.04 / 1 s
+print r <cos(φ), sin(φ), 0>
+xs = [1, 2]
+ys = [3, 4]
+data = table(x = xs, y = ys)
+print data, |<3, 4> m|
+```
+
+```fermium-error
+print 4/3 π
+```
+
 #### Calculus syntax
 
 ```text
@@ -450,11 +502,45 @@ differential `dv` of an integrand. `W/m² K` warns that `K` multiplies (it is no
   the variable (`½ m v²`).
 - A list literal takes a unit as a number does (`[1, 2, 3] m`); so does a vector literal (`<3, 4> m/s`).
 
-### 2.7 Other statements (summary; TODO: full clause grammar)
+```fermium
+print 938 MeV/c², 0.9 c, 2 N·m, [1, 2, 3] s, 10² m
+m = 2 kg
+v = 3 m/s
+print ½ m v², ½ kg, (1/2) kg
+```
 
-- `plot series { ("," | "and") series } [ plot_options ]`, with `series = expr "vs" expr [ "from" expr "to"
-  expr ]` and options `to "file.png"`, `with …`, `title "…"`, `log [x|y]`, `points`, `animate …`; the statement
-  may continue on indented lines (D216).
+```fermium-error
+a = 2
+print (a + 1) kg
+```
+
+```fermium-error
+print 5 N*m
+```
+
+(`5 N*m`: the explicit `*` ends the unit, and `m` alone is then a variable that isn't defined.)
+
+### 2.7 plot
+
+```text
+plot_stmt   = "plot" series { ( "," | "and" ) series } { plot_tail }
+              [ NEWLINE INDENT { ( series_list | plot_tail ) end } DEDENT ]    (* continued lines, D216 *)
+series      = expr_in "vs" expr_in [ "from" expr "to" expr ]
+plot_tail   = "to" STR [ "," ] [ options ]                     (* the output file *)
+            | "with" options
+            | options                                           (* after the last series, "with" may be left out *)
+options     = option { "," option }
+option      = "log" [ "x" | "y" ] | "points" | "dots" | "markers" | "title" STR | "xlabel" STR | "ylabel" STR
+            | ( "x" | "y" ) "from" expr "to" expr | "reversed" ( "x" | "y" )
+            | "animate" "over" NAME [ "frames" NUM ]
+```
+
+- While a series is parsed, option words (`title`, `log`, …) that aren't the program's variables end it; an option
+  word that *is* a variable is read as the variable, and then `with` is needed.
+- An unknown option is an error listing the valid ones.
+
+### 2.8 Other statements (summary; TODO: full clause grammar)
+
 - `analyze [NAME ":"] q [ "[" unit "]" ] "depends" "on" q [unit] { "," q [unit] }` (D70; `analyze` is a keyword
   only when `depends` follows on the line).
 - Interop signature blocks: `f(x [m], n: int) -> [J]` per line, with `: list`, `bind(C, name="…")`, and for C++
@@ -462,7 +548,7 @@ differential `dv` of an integrand. `W/m² K` warns that `K` multiplies (it is no
 
 ## 3. TODO for this chapter
 
-- The complete `plot` option grammar and the `solve` clause-ordering rules (tolerance, absolute, using and until
-  may come in any order; some clauses may start indented lines).
+- The `solve` clause-ordering rules: the range comes first, then `step`; `tolerance`, `absolute`, `using` and
+  `until` may follow in any order, on the range's line or each on an indented line of its own.
 - A normative list of which tokens *start a term* for implicit multiplication (`starts_term` in expr.rs).
 - The exact error set of the parser (each message is fixed by conformance/ today).

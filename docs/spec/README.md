@@ -35,8 +35,11 @@ propose changes.
   the whole program first; see semantics.md §5).
 - Code blocks marked `fermium` are complete programs. They are checked: every one must parse with the Rust front
   end (`cargo test -p fermium-syntax --test spec_examples`), and with `FERMIUM_BIN` set to a `fermium` binary
-  every one must also run without an error. Blocks marked `fermium-error` must be rejected (with `FERMIUM_BIN`
-  set, the test checks that they exit with an error). Blocks marked `text` are not checked.
+  every one must also run without an error. Blocks marked `fermium-error` must be rejected: with `FERMIUM_BIN`
+  set, the test checks that each exits with status 1 and a one-line `file, line N: …` error. Blocks marked `text`
+  are not checked. To run everything:
+  `FERMIUM_BIN=rust/target/fast/fermium cargo test --profile fast -p fermium-syntax --test spec_examples`
+  (from `rust/`, with an absolute path for the binary).
 
 ## What "1.0" needs from this document (not done yet)
 

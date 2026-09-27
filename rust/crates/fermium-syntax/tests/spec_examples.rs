@@ -83,6 +83,13 @@ fn spec_examples_run() {
             bad.push(format!("{file}:{line}: failed:\n{}", String::from_utf8_lossy(&out.stderr)));
         } else if info == "fermium-error" && ok {
             bad.push(format!("{file}:{line}: should be rejected but ran:\n{}", String::from_utf8_lossy(&out.stdout)));
+        } else if info == "fermium-error" {
+            // semantics.md §5: a rejected program gets the one-line error "<file>, line N: …", not a crash
+            let err = String::from_utf8_lossy(&out.stderr);
+            let first = err.lines().find(|l| !l.starts_with("warning") && !l.starts_with(' ')).unwrap_or("");
+            if !first.starts_with(&format!("example{k}.fm, line ")) || out.status.code() != Some(1) {
+                bad.push(format!("{file}:{line}: not a one-line error with exit status 1:\n{err}"));
+            }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
