@@ -111,7 +111,7 @@ Type it exactly, with the single quotes `'` on the outside and the double quotes
 fermium --version
 ```
 
-It prints the version, for example `fermium 2.0.0 (Rust)`. If instead it says `command not found: fermium`, see [When something goes wrong](#when-something-goes-wrong).
+It prints the version, for example `fermium 2.5.0 (Rust)`. If instead it says `command not found: fermium`, see [When something goes wrong](#when-something-goes-wrong).
 
 ## Step 4: Check the installation with `fermium doctor`
 
