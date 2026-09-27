@@ -38,6 +38,17 @@ pub fn fit_sigfigs(val: f64, err: Option<f64>) -> i32 {
 struct Model<'a> {
     resid: &'a mut dyn FnMut(&[f64], &mut [f64]),
     n: usize,
+    /// the smallest step scale of each parameter (D326): 1, as SciPy, except for a parameter whose starting value
+    /// is tiny in SI (below TINY: 8 MeV = 1.3×10⁻¹² J, 0.1 fm, 3 ns), where it is that value's size
+    floor: Vec<f64>,
+}
+
+/// Below this size (in SI) a parameter's steps scale with its starting value, not with 1 (D326).
+const TINY: f64 = 1e-5;
+
+/// The step floors for a start p0 (D326).
+fn floors(p0: &[f64]) -> Vec<f64> {
+    p0.iter().map(|&v| if v != 0.0 && v.abs() < TINY { v.abs() } else { 1.0 }).collect()
 }
 
 impl Model<'_> {
@@ -57,14 +68,11 @@ impl Model<'_> {
             }
         }
     }
-    /// scipy approx_derivative '2-point' at p (f0 = fun(p)); J row-major n×k
+    /// scipy approx_derivative '2-point' at p (f0 = fun(p)); J row-major n×k. The step is √ε·max(|p|, floor):
+    /// SciPy's √ε·max(|p|, 1) unless the parameter started tiny in SI (D326), where a step of √ε would be
+    /// 10⁴ times the parameter (k = 8 MeV = 1.3×10⁻¹² J): the iteration stalled or wandered, and the standard
+    /// errors were meaningless.
     fn jac(&mut self, p: &[f64], f0: &[f64]) -> Vec<f64> {
-        self.jac_step(p, f0, false)
-    }
-    /// `relative`: the step is √ε·|p| for every nonzero parameter, not √ε·max(|p|, 1). The iteration keeps
-    /// SciPy's step (so fitted values are v1's), but for the covariance a parameter whose SI value is tiny
-    /// (k = 8 MeV = 1.3×10⁻¹² J) would get a step 10⁴ times its size, and a meaningless standard error.
-    fn jac_step(&mut self, p: &[f64], f0: &[f64], relative: bool) -> Vec<f64> {
         let (n, k) = (self.n, p.len());
         let mut j = vec![0.0; n * k];
         let rstep = EPS.powf(0.5);
@@ -72,8 +80,7 @@ impl Model<'_> {
         let mut f1 = vec![0.0; n];
         for c in 0..k {
             let sign = if p[c] >= 0.0 { 1.0 } else { -1.0 };
-            let scale = if relative && p[c] != 0.0 { p[c].abs() } else { p[c].abs().max(1.0) };
-            let h = rstep * sign * scale;
+            let h = rstep * sign * p[c].abs().max(self.floor[c]);
             x1.copy_from_slice(p);
             x1[c] = p[c] + h;
             self.fun(&x1, &mut f1);
@@ -168,13 +175,13 @@ pub fn least_squares_fit(
     if n < k {
         return Err(format!("can't fit {k} parameters to only {n} data points"));
     }
-    let mut m = Model { resid, n };
+    let mut m = Model { resid, n, floor: vec![1.0; k] };
     let missing = guess.iter().any(|g| !g.map(|v| v.is_finite()).unwrap_or(false));
     let mut starts = vec![initial_guess(&mut m, guess, false)];
     if missing {
         starts.push(initial_guess(&mut m, guess, true));
     }
-    let mut best: Option<Lm> = None;
+    let mut best: Option<(Lm, Vec<f64>)> = None;
     for p0 in starts {
         let x_scale: Vec<f64> = p0.iter().map(|&v| if v != 0.0 { v.abs() } else { 1.0 }).collect();
         let mut f0 = vec![0.0; n];
@@ -183,19 +190,21 @@ pub fn least_squares_fit(
             continue; // "Residuals are not finite in the initial point" (never after the 1e300 guard)
         }
         let diag: Vec<f64> = x_scale.iter().map(|s| 1.0 / s).collect();
+        m.floor = floors(&p0);
         let cand = lmder(&mut m, &p0, &diag, 1e-14, 1e-14, 1e-14, 20000, 100.0);
-        if best.as_ref().map(|b| cand.cost < b.cost).unwrap_or(true) {
-            best = Some(cand);
+        if best.as_ref().map(|(b, _)| cand.cost < b.cost).unwrap_or(true) {
+            best = Some((cand, m.floor.clone()));
         }
     }
-    let res = best.ok_or_else(|| "the fit failed: the model can't be evaluated at the starting guesses".to_string())?;
+    let (res, floor) = best.ok_or_else(|| "the fit failed: the model can't be evaluated at the starting guesses".to_string())?;
+    m.floor = floor;
     // fitting._finish
     let r = &res.fvec;
     let rss: f64 = r.iter().map(|v| v * v).sum();
     let dof = (n as i64 - k as i64).max(1) as f64;
     let mut errors = vec![None; k];
     let mut cov = None;
-    let jac = m.jac_step(&res.x, &res.fvec, true);
+    let jac = m.jac(&res.x, &res.fvec);
     let mut a = vec![0.0; k * k];
     for p in 0..k {
         for q in 0..k {

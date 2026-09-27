@@ -24,7 +24,15 @@ fn fits_match_v1() {
         let xs = rows[&format!("{name}:x")].floats();
         let ys = rows[&format!("{name}:y")].floats();
         let guess: Vec<Option<f64>> = rows[&format!("{name}:guess")].floats().iter().map(|&g| (!g.is_nan()).then_some(g)).collect();
-        let want = rows[&name].floats();
+        let mut want = rows[&name].floats();
+        if name == "si_scale" {
+            // τ = 1.3×10⁻⁶ s is tiny in SI: v1's steps (√ε·max(|τ|, 1), 1.2 % of τ) stopped the iteration short of
+            // the optimum and biased the standard errors. Since D326 the steps scale with τ, and the fit reaches
+            // the true least-squares optimum. Reference: SciPy least_squares with the analytic Jacobian on the
+            // same data rescaled to O(1) (A, τ, their standard errors, rms), computed with NumPy.
+            want = vec![2.0, 1.5972386363391718e-19, 1.3006962965588226e-06, 2.221583758980758e-22,
+                        2.784478080033098e-09, 3.130175982147535e-22];
+        }
         let k = want[0] as usize;
         let n = xs.len();
         let mut resid = |p: &[f64], o: &mut [f64]| {
@@ -45,10 +53,6 @@ fn fits_match_v1() {
                 None => assert!(we.is_nan(), "{name}: error {i} not estimated, v1 has {we}"),
                 Some(e) => {
                     assert!(!we.is_nan(), "{name}: error {i} = {e}, v1 could not estimate it");
-                    // si_scale (τ = 1.3×10⁻⁶ s): v1's covariance step √ε·max(|τ|, 1) is 1.2 % of τ, so v1's
-                    // standard errors are off by 0.1-0.2 %. Since D326 the covariance step is relative, and
-                    // the errors match the analytic Jacobian's (computed with NumPy from these fixtures).
-                    let we = if name == "si_scale" { [2.221576149680971e-22, 2.7845167615529194e-09][i] } else { we };
                     close(&format!("{name} err{i}"), e, we, 1e-6, 1e-14);
                     worst_e = worst_e.max(rel(e, we));
                 }

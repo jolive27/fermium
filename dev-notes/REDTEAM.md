@@ -2100,3 +2100,49 @@ can write isn't used. The evil/good scenario runs no planted code. #3/#8: refere
 lines rewritten. #4 (D321), #5 (D322: nominal value for Monte Carlo integrals; first-order arithmetic documented;
 -0.00 kept, since the v1 formatting fixture pins it), #6 (D323: installed headers, 120 s compiler timeout, one-line exception text, keyword names;
 const double * vs double * documented as a limit), #7 (D324).
+
+## Round 16 (2026-09-27 08:35 UTC): JIT cache staleness, C2, the C8 research claims, the fit fix
+
+Independent reviewer, testing a prebuilt binary of `origin/claude/v2.5` (3f0e10f) and doing no builds. Scratch
+programs are in the session scratchpad (rt16/). Nothing was fixed by the reviewer.
+
+**High**
+- **#1** The JIT compile cache served stale code for `import "~/mod.fm"` under a different `HOME` (the key has
+  the expanded path's contents but not HOME).
+- **#2** The same for a relative `--base-dir .` run from another folder (run.rs hashes the literal ".").
+- **#3 (regression from D326, the coordinator's first fit fix)** A parameter ending near 0 (b = 2×10⁻¹⁶) got NaN
+  standard errors and a false "may not have converged" warning.
+- **#4** Tiny-SI parameters (fm, ns) still converged to the wrong point, now with confident errors: a fm Gaussian
+  kept x0 = 0.1 fm; a ns decay gave τ = 3.014 ± 0.045 ns, where SciPy gives 2.964 ± 0.042.
+- **#5 (inherited from v1.5)** d/dx (x²)^(3/2) is printed and evaluated as 3x² (wrong sign for x < 0), and
+  (x²)^(1/2) gives 1: a power-of-a-power merge ignores the base's sign.
+
+**Medium**
+- **#6** Automatic differentiation of a multi-line function with a unit-carrying accumulator (`E = 0 J`,
+  `E = E + …`) fails with a wrong "can't subtract" message.
+- **#7** Differentiating a recursive multi-line function overflows the stack (exit 134), also in `check`.
+- **#8 (also v1.5)** `fmt --pretty` turns `1.07 fm * A^(1/3)` into `1.07 fm · A^(1/3)`, which parses fm·A as one
+  unit; research/charge_radii/radii.fm doesn't compile after it.
+- **#9** An uncertain value used only in a `when` assignment is refused (the docs promise Monte Carlo); the MC
+  warning's reason text is wrong for `when`.
+- **#10** The supernova README misattributes Ωm's small error: `fit` scales the covariance by χ²/dof (0.44). With
+  the stated errors at face value, Ωm = 0.350 ± 0.018 and ΩΛ > 0 at ≈ 6.1σ, not 9.2σ.
+
+**Low**
+- **#11** A stale comment in research/level_density (the fit bug is fixed).
+- **#12** The neutron-star cooling modified-Urca rate uses (n/n₀)^(2/3), not the proton fraction's (n_p/n₀)^(1/3).
+- **#13** `when` edge cases aren't documented: an event exactly at the end time; a crossing at t0; `y' = 0` falling
+  through; two `when`s on one condition.
+- **#14** `sweep` messages say "for loop"; nested sweeps overwrite figures; `sweep c` shadows c silently.
+- **#15 (also v1.5)** A bang-bang equilibrium grinds through 20 M steps before erroring.
+- **#16** The FERMIUM_BACKEND_INFO line comes after the output on a cache hit.
+
+**Held up:** the cache for module edits (same size, `touch -r`), module chains, shadowing modules and
+fermium.toml, same text in different folders, `load` data, Python and C imports, replayed errors and warnings;
+`when` (bouncing ball to 2e-14 m against mpmath, the Zeno time, billiards, 144 000 resets); located `if` (1.5e-9);
+AD against finite differences (1e-9); 254 printed derivatives numerically equal to SymPy's; `sweep` plots; all
+10 research programs reproduce their expected output, the README numbers match, and the physics spot checks
+(FIRAS against SciPy, Gamow, α-decay, Crab, Mestel) are right; fits with widely different parameter scales.
+
+Status: #3 and #4 fixed by the coordinator (D326 reworked: steps scale with a parameter whose starting value is
+tiny in SI; ordinary fits keep v1's steps; tests/fit_errors.rs). The other items are in an agent (claude/v2.5-rt16).
