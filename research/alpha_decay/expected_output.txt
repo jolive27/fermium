@@ -1,0 +1,21 @@
+103 even–even alpha emitters, Q from 4.08 MeV to 9.85 MeV , log₁₀ T_α/s from -6.91 to 17.6
+U-238: R = 9.300 fm  b = 60.70 fm  G by ∫: 43.997919  closed form: 43.997919
+Gamow model: log₁₀(T_measured/T_Gamow) mean 0.988  rms about the mean 0.346
+  (a mean > 0 is a preformation probability P = 10^(−mean) = 0.10 for the α inside the nucleus)
+  range of half-lives covered: 24.6 orders of magnitude
+  Z = 84 A = 210 : Q = 5.41 MeV   log₁₀ T_α/s measured 7.078   Gamow 5.032
+  Z = 84 A = 212 : Q = 8.95 MeV   log₁₀ T_α/s measured -6.531   Gamow -7.547
+  Z = 88 A = 226 : Q = 4.87 MeV   log₁₀ T_α/s measured 10.70   Gamow 10.07
+  Z = 90 A = 232 : Q = 4.08 MeV   log₁₀ T_α/s measured 17.65   Gamow 17.17
+  Z = 92 A = 238 : Q = 4.27 MeV   log₁₀ T_α/s measured 17.15   Gamow 16.68
+  Z = 94 A = 238 : Q = 5.59 MeV   log₁₀ T_α/s measured 9.442   Gamow 8.629
+Viola–Seaborg (Sobiczewski 1989 coefficients): mean deviation 0.30  rms 0.575
+  N > 126: 67 nuclei, mean -0.0069  rms 0.199    N ≤ 126: 36 nuclei, mean 0.87  rms 0.934
+Gamow model, log₁₀(T_meas/T_Gamow):  N > 126: mean 0.849  rms 0.884    N ≤ 126: mean 1.25  rms 1.30
+fit logT = (a Z + bb)/√(Q/(1 MeV)) + cc Z + d   (103 data points from alpha.csv)
+  a = 0.7572   (standard error 0.20)
+  bb = 71.61   (standard error 18)
+  cc = 0.07994   (standard error 0.075)
+  d = -58.47   (standard error 6.8)
+  rms residual = 0.343
+Viola–Seaborg fitted here: rms 0.343

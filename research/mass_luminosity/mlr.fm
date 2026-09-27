@@ -1,0 +1,82 @@
+# The main-sequence mass–luminosity relation from detached eclipsing binaries (DEBCat, Southworth 2015),
+# compared with the six-piece relation of Eker et al. (2018). Luminosities from L = 4π R² σ T⁴.
+# Run from this folder:  fermium run mlr.fm
+
+stars = load "stars.csv"          # logM, logM_e, logR, logg, logT, logL (log₁₀ of M/M☉, R/R☉, g/(cm/s²), T/K, L/L☉)
+n = len(stars.logM)
+
+# masses, radii, temperatures with units, and the luminosity from the Stefan–Boltzmann law
+M = []
+R = []
+T = []
+L = []
+for i from 1 to n
+    push(M, 10^stars.logM[i] * M☉)
+    push(R, 10^stars.logR[i] * R☉)
+    push(T, 10^stars.logT[i] * 1 K)
+    push(L, 4π (10^stars.logR[i] * R☉)² σ (10^stars.logT[i] * 1 K)^4)
+print n, "stars in", n / 2, "eclipsing binaries; M from", min(M) in M☉ to 3 digits, "to", max(M) in M☉ to 3 digits
+
+# the catalogue's own log L (where given) against 4πR²σT⁴: different authors use different solar luminosities
+d = []
+for i from 1 to n
+    if stars.logL[i] > -9
+        push(d, log10(L[i] / L☉) - stars.logL[i])
+print "log(4πR²σT⁴/L☉) − catalogue log L:", len(d), "stars, mean", mean(d) to 2 digits, " std", std(d) to 2 digits
+
+# the Sun as a check of the constants: 4π R☉² σ T☉⁴ with T☉ = 5772 K (IAU 2015 nominal)
+print "4π R☉² σ (5772 K)⁴ / L☉ =", 4π R☉² σ (5772 K)^4 / L☉ to 5 digits
+
+# main-sequence stars only: surface gravity log g ≥ 3.9 (the evolved components have lower g)
+edges = [0.179, 0.45, 0.72, 1.05, 2.40, 7, 31]
+# Eker et al. (2018), Table 4:  log L = α log M + β  in each mass range
+α_E = [2.028, 4.572, 5.743, 4.329, 3.967, 2.865]
+β_E = [-0.976, -0.102, -0.007, 0.010, 0.093, 1.105]
+xs_all = []
+ys_all = []
+for i from 1 to n
+    if stars.logg[i] >= 3.9
+        push(xs_all, stars.logM[i])
+        push(ys_all, log10(L[i] / L☉))
+print "main-sequence stars (log g ≥ 3.9):", len(xs_all)
+print "mass range          N     α (Fermium)       β (Fermium)       α (Eker 2018)   β (Eker 2018)   rms"
+for k from 1 to 6
+    xs = []
+    ys = []
+    for i from 1 to len(xs_all)
+        if xs_all[i] > log10(edges[k]) and xs_all[i] <= log10(edges[k + 1])
+            push(xs, xs_all[i])
+            push(ys, ys_all[i])
+    α = 4
+    β = 0
+    fit y = α x + β to table(x = xs, y = ys)
+    res = []
+    for i from 1 to len(xs)
+        push(res, ys[i] - (α xs[i] + β))
+    print edges[k] to 3 digits, "–", edges[k + 1] to 3 digits, "M☉ ", len(xs), " ", α to 4 digits, "±", err(α) to 2 digits, " ", β to 3 digits, "±", err(β) to 2 digits, " ", α_E[k] to 4 digits, " ", β_E[k] to 3 digits, " ", std(res) to 2 digits
+
+# one power law over everything, the classic L ∝ M^3.5 (Eddington's era)
+a1 = 3.5
+b1 = 0
+fit y = a1 x + b1 to table(x = xs_all, y = ys_all)
+
+# Eker et al.'s relation evaluated on our stars: the scatter of the data about it
+dev = []
+for i from 1 to len(xs_all)
+    m = 10^xs_all[i]
+    if m > 0.179 and m <= 31
+        k = 1
+        for j from 1 to 6
+            if m > edges[j]
+                k = j
+        push(dev, ys_all[i] - (α_E[k] xs_all[i] + β_E[k]))
+print "data − Eker 2018 relation:", len(dev), "stars, mean", mean(dev) to 2 digits, " rms", √(mean(dev²)) to 3 digits
+
+eker(x) =
+    m = 10^x
+    k = 1
+    for j from 1 to 6
+        if m > edges[j]
+            k = j
+    α_E[k] x + β_E[k]
+plot ys_all vs xs_all, eker(x) vs x from log10(0.179) to log10(31) with points, xlabel "log10(M / Msun)", ylabel "log10(L / Lsun)", title "Mass-luminosity: DEBCat main-sequence stars and Eker et al. 2018" to "mlr.png"

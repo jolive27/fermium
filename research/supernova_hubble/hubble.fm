@@ -1,0 +1,73 @@
+# The accelerating universe from type Ia supernovae: the Pantheon+ Hubble diagram (Scolnic et al. 2022, Brout et al.
+# 2022; see SOURCE.md) fitted with flat ΛCDM. Run from this folder:  fermium run hubble.fm
+
+sne = load "sne.csv"              # z (zHD), zhel, mb (corrected peak magnitude), dmb (diagonal error)
+n = len(sne.z)
+print n, "light curves with 0.01 < z <", max(sne.z)
+
+# H₀ is degenerate with the supernova absolute magnitude M_B, so it is fixed and M_B is fitted
+H₀ = 70 km/s/Mpc
+D_H = c / H₀
+E(z, Ωm, ΩΛ) = √(Ωm (1 + z)³ + (1 - Ωm - ΩΛ) (1 + z)² + ΩΛ)
+D_C(z, Ωm, ΩΛ) = D_H ∫ 1 / E(x, Ωm, ΩΛ) dx from 0 to z
+# the transverse comoving distance, with curvature Ω_k = 1 − Ωm − ΩΛ
+D_M(z, Ωm, ΩΛ) =
+    Ωk = 1 - Ωm - ΩΛ
+    dc = D_C(z, Ωm, ΩΛ) / D_H
+    out = D_H dc
+    if Ωk > 1e-8
+        out = D_H sinh(√Ωk dc) / √Ωk
+    if Ωk < -1e-8
+        out = D_H sin(√(-Ωk) dc) / √(-Ωk)
+    out
+μ(z, zh, Ωm, ΩΛ) = 5 log10((1 + zh) D_M(z, Ωm, ΩΛ) / (10 pc))
+
+# 1. flat ΛCDM: Ωm and M_B, a χ² fit with the diagonal errors (both sides divided by the error)
+Ωm = 0.3
+M_B = -19.3
+fit mb / dmb = (μ(z, zhel, Ωm, 1 - Ωm) + M_B) / dmb to sne
+χ2(Om, OL, MB) = Σ(((sne.mb[i] - μ(sne.z[i], sne.zhel[i], Om, OL) - MB) / sne.dmb[i])² for i from 1 to n)
+χ2_flat = χ2(Ωm, 1 - Ωm, M_B)
+print "flat ΛCDM: Ωm =", Ωm to 4 digits, "±", err(Ωm) to 2 digits, "  χ² =", χ2_flat to 5 digits, "for", n - 2, "degrees of freedom"
+ΩΛ_flat = 1 - Ωm
+print "  deceleration parameter q₀ = Ωm/2 − ΩΛ =", Ωm / 2 - ΩΛ_flat to 3 digits, "  acceleration began at z_t = (2ΩΛ/Ωm)^(1/3) − 1 =", (2ΩΛ_flat / Ωm)^(1/3) - 1 to 3 digits
+
+# 2. the same magnitudes without dark energy: matter only (Einstein–de Sitter) and an empty universe
+M_EdS = -19.3
+fit mb / dmb = (μ(z, zhel, 1, 0) + M_EdS) / dmb to sne
+print "Einstein–de Sitter (Ωm = 1): Δχ² =", χ2(1, 0, M_EdS) - χ2_flat to 4 digits
+M_0 = -19.3
+fit mb / dmb = (μ(z, zhel, 0, 0) + M_0) / dmb to sne
+print "empty (Milne, Ωm = ΩΛ = 0): Δχ² =", χ2(0, 0, M_0) - χ2_flat to 4 digits
+
+# 3. curvature free: Ωm and ΩΛ together
+Ωm2 = 0.3
+ΩΛ2 = 0.7
+M_2 = -19.3
+fit mb / dmb = (μ(z, zhel, Ωm2, ΩΛ2) + M_2) / dmb to sne
+print "ΛCDM with curvature: Ωm =", Ωm2 to 3 digits, "±", err(Ωm2) to 2 digits, "  ΩΛ =", ΩΛ2 to 3 digits, "±", err(ΩΛ2) to 2 digits, "  Ω_k =", 1 - Ωm2 - ΩΛ2 to 2 digits
+print "  ΩΛ > 0 at", ΩΛ2 / err(ΩΛ2) to 3 digits, "standard errors"
+
+# Hubble residuals in 12 redshift bins, against the flat fit and against Einstein–de Sitter
+zb = []
+rb = []
+eb = []
+edge = [0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.18, 0.26, 0.36, 0.5, 0.7, 1.0, 2.3]
+for k from 1 to 12
+    sw = 0
+    s = 0
+    sz = 0
+    for i from 1 to n
+        if sne.z[i] > edge[k] and sne.z[i] <= edge[k + 1]
+            w = 1 / sne.dmb[i]²
+            sw += w
+            s += w (sne.mb[i] - M_B - μ(sne.z[i], sne.zhel[i], 1e-9, 0))
+            sz += w sne.z[i]
+    push(zb, sz / sw)
+    push(rb, s / sw)
+    push(eb, 1 / √sw)
+print "binned distance modulus minus the empty universe (mag):"
+for k from 1 to 12
+    print "  z =", zb[k] to 3 digits, ":", rb[k] to 3 digits, "±", eb[k] to 2 digits, "  flat ΛCDM:", μ(zb[k], zb[k], Ωm, 1 - Ωm) - μ(zb[k], zb[k], 1e-9, 0) to 3 digits, "  EdS:", μ(zb[k], zb[k], 1, 0) + M_EdS - M_B - μ(zb[k], zb[k], 1e-9, 0) to 3 digits
+
+plot rb vs zb, μ(z, z, Ωm, 1 - Ωm) - μ(z, z, 1e-9, 0) vs z from 0.01 to 2.3, μ(z, z, 1, 0) + M_EdS - M_B - μ(z, z, 1e-9, 0) vs z from 0.01 to 2.3 with points, log x, xlabel "z", ylabel "μ - μ(empty) [mag]", title "Pantheon+ (binned): flat LCDM fit (orange), matter only (green)" to "hubble_residuals.png"

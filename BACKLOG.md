@@ -44,3 +44,18 @@ Tier 5 ideas and anything cut from earlier tiers. Pick the highest-value item fi
 - A bundled correctly-rounded libm (CORE-MATH or similar) so printed last digits are identical on every platform (D271); needs re-checking every golden against v1 on Linux.
 - (v2.5, red team 12 #2) Warn when a spaced `/` divides by a function call of the unknown or of anything (`θ'' = -g / L sin(θ)` is -g/(L sin θ) under D8; D34's warning only covers the unknown itself): extend D34 to calls (sin, cos, exp, …). A new warning changes stderr, so it's a language change for v2.5 with conformance updates.
 - (red team 12 #8) An RK4 right side that leaves its domain prints NaN silently (v1 does too): warn once, as the adaptive solvers do.
+
+## Research track (C8) frictions (found writing research/ 12 onwards; each README's "Friction" section has the context)
+- [ ] No jansky (`Jy`) and no user-defined units: radio/CMB intensities (MJy/sr) need a variable `MJy = 1e-20 W/(m² Hz)`, and a CSV header can't say `[MJy/sr]` (cmb_firas).
+- [ ] `fit` has no weights and no quiet mode: a χ² fit divides both sides by the error (works, but the report's "rms residual" is then √(χ²/N)); every fit prints a report, so six fits in a loop print six (cmb_firas, mass_luminosity, supernova_hubble).
+- [ ] The fit report writes a subscripted parameter `G₀` as `G_0` (cmb_firas).
+- [ ] Values read from a CSV carry no significant figures: `out = 0 fm` then `out = Rs[i]` prints `3.48 fm` for 3.4776 (charge_radii); elements of a list literal print with 2 digits too (`[0.179, 1.05][k]` → `0.18`, `1.1`; mass_luminosity).
+- [ ] A list filled by `push` with fm² values is plotted in m² unless the plot says `in fm²` (charge_radii).
+- [ ] Plot titles: the PNG font has no en dash `–` or `⟨ ⟩` (drawn as `?`) (charge_radii).
+- [ ] Error hint bug: for `1 cm³/(mol s)` with a variable `s`, the hint suggests `1 [cm³/(mol s]` (closing parenthesis lost) (gamow_window).
+- [ ] `where` isn't accepted after `solve … for x from a to b` (gamow_window).
+- [ ] `vs` as a function name gives only "didn't expect 'vs' here" (alpha_decay).
+- [ ] Names with a combining dot (`ν̇`, `ν̈`, `ẋ`) are rejected as an unexpected character (pulsar_spindown).
+- [ ] A function whose last line is `if c then a else b` "never returns a value" (pulsar_spindown).
+- [ ] A negative plot axis range (`y from -22 to -9`) is refused as "not constants" (pulsar_spindown).
+- [ ] `10^list` is an error ("the exponent must be a number"); element-wise exponentiation needs a loop (mass_luminosity).

@@ -1,0 +1,87 @@
+# Pulsar spin-down: magnetic-dipole braking, characteristic ages and fields for the ATNF Pulsar Catalogue
+# (Manchester et al. 2005, via VizieR B/psr; see SOURCE.md), and the Crab pulsar's braking index and birth period.
+# Run from this folder:  fermium run pulsars.fm
+
+psr = load "pulsars.csv"          # P [s], Pdot, binary, age [yr], B [gauss], Edot [erg/s], crab, vela, F0, F1, F2
+Ps = psr.P
+Pds = psr.Pdot
+n = len(Ps)
+print n, "pulsars with measured P and Ṗ > 0; P from", min(Ps) in ms to 3 digits, "to", max(Ps) to 3 digits
+
+# a neutron star of moment of inertia I and radius R, spinning down by magnetic dipole radiation
+I_ns = 1e45 g cm²
+R_ns = 10 km
+Edot(P, Pd) = 4π² I_ns Pd / P³                                # rotational energy lost: I Ω |Ω̇|
+# dipole with equatorial surface field B:  Ė = 8π R⁶ B² Ω⁴ / (3 μ₀ c³)  ⇒
+B_dip(P, Pd) = √(3 μ₀ c³ I_ns P Pd / (32 π³ R_ns^6))
+τ_c(P, Pd) = P / (2 Pd)                                       # characteristic age, for braking index 3
+print "B = k √(P Ṗ/1 s) with k =", B_dip(1 s, 1) in gauss to 4 digits, "  (the catalogue's convention: 3.2×10¹⁹ G)"
+
+# compare with the catalogue's own derived columns
+worstB = 0
+worstτ = 0
+worstE = 0
+for i from 1 to n
+    worstB = max(worstB, abs(B_dip(Ps[i], Pds[i]) / psr.B[i] - 1))
+    worstτ = max(worstτ, abs(τ_c(Ps[i], Pds[i]) / psr.age[i] - 1))
+    worstE = max(worstE, abs(Edot(Ps[i], Pds[i]) / psr.Edot[i] - 1))
+print "largest relative difference from the catalogue: B", worstB to 2 digits, " τ", worstτ to 2 digits, " Ė", worstE to 2 digits
+
+# populations: ordinary pulsars and recycled millisecond pulsars (P < 30 ms, mostly in binaries)
+Bn = []
+τn = []
+Bm = []
+τm = []
+binm = 0
+for i from 1 to n
+    if Ps[i] < 30 ms
+        push(Bm, B_dip(Ps[i], Pds[i]))
+        push(τm, τ_c(Ps[i], Pds[i]))
+        binm += psr.binary[i]
+    else
+        push(Bn, B_dip(Ps[i], Pds[i]))
+        push(τn, τ_c(Ps[i], Pds[i]))
+median(xs) =
+    s = sort(xs)
+    m = len(s)
+    mid = if mod(m, 2) == 1 then s[(m + 1) / 2] else (s[m / 2] + s[m / 2 + 1]) / 2
+    mid
+print "ordinary pulsars (P ≥ 30 ms):", len(Bn), "  median B", median(Bn) in gauss to 2 digits, "  median τ", median(τn) in yr to 2 digits
+print "millisecond pulsars (P < 30 ms):", len(Bm), "  median B", median(Bm) in gauss to 2 digits, "  median τ", median(τm) in yr to 2 digits, "  in binaries:", binm
+
+# the Crab pulsar (SN 1054): its characteristic age against its true age, the braking index, the birth period
+P = 0 s
+Pd = 0
+ν = 0 /s
+ν_dot = 0 /s²
+ν_ddot = 0 /s³
+for i from 1 to n
+    if psr.crab[i] == 1
+        P = Ps[i]
+        Pd = Pds[i]
+        ν = psr.F0[i]
+        ν_dot = psr.F1[i]
+        ν_ddot = psr.F2[i]
+print "Crab: P =", P in ms to 6 digits, " Ṗ =", Pd to 6 digits, " Ė =", Edot(P, Pd) in erg/s to 3 digits, " B =", B_dip(P, Pd) in gauss to 3 digits
+t_true = (1991.5 - 1054) yr                                   # catalogue epoch MJD 48442.5 = 1991.5
+print "Crab: characteristic age", τ_c(P, Pd) in yr to 4 digits, "  true age at the catalogue epoch", t_true in yr to 4 digits
+n_b = ν ν_ddot / ν_dot²
+print "Crab braking index n = ν ν_ddot/ν_dot² =", n_b to 4 digits, "  (a pure dipole gives 3)"
+# with braking index n the age is t = P/((n − 1) Ṗ) [1 − (P₀/P)^(n−1)]: solve for the birth period P₀
+for nn in [n_b, 2.51, 3]
+    P₀ = P (1 - (nn - 1) Pd t_true / P)^(1 / (nn - 1))
+    print "  birth period for n =", nn to 3 digits, ":", P₀ in ms to 3 digits, "  (spin-down age P/((n−1)Ṗ) =", P / ((nn - 1) Pd) in yr to 4 digits, ")"
+# the future: how long until the Crab's period doubles (n = 2.51)
+t2 = P / ((2.51 - 1) Pd) * (2^(2.51 - 1) - 1)
+print "Crab period doubles in", t2 in yr to 3 digits
+
+# the P–Ṗ diagram
+lP = []
+lPd = []
+for i from 1 to n
+    push(lP, log10(Ps[i] / 1 s))
+    push(lPd, log10(Pds[i]))
+# lines of constant field and age: B = 10⁸ and 10¹² G, τ_c = 10⁶ yr
+kB = B_dip(1 s, 1) / (1 gauss)
+τ6 = log10(2e6 yr / 1 s)
+plot lPd vs lP, 2 log10(1e12 / kB) - x vs x from -3 to 1.2, 2 log10(1e8 / kB) - x vs x from -3 to 1.2, x - τ6 vs x from -3 to 1.2 with points, xlabel "log10(P / s)", ylabel "log10(dP/dt)", title "P-Pdot diagram, 2052 pulsars (ATNF); lines: B = 1e12 G, 1e8 G, age 1e6 yr" to "p_pdot.png"

@@ -1,0 +1,12 @@
+2052 pulsars with measured P and Ṗ > 0; P from 1.56 ms to 11.8 s
+B = k √(P Ṗ/1 s) with k = 3.200×10¹⁹ gauss   (the catalogue's convention: 3.2×10¹⁹ G)
+largest relative difference from the catalogue: B 0.015  τ 0.033  Ė 0.049
+ordinary pulsars (P ≥ 30 ms): 1870   median B 1.2×10¹² gauss   median τ 4.8×10⁶ yr
+millisecond pulsars (P < 30 ms): 182   median B 2.6×10⁸ gauss   median τ 4.8×10⁹ yr   in binaries: 136
+Crab: P = 33.3924 ms  Ṗ = 4.20972×10⁻¹³  Ė = 4.46×10³⁸ erg/s  B = 3.79×10¹² gauss
+Crab: characteristic age 1257 yr   true age at the catalogue epoch 937.5 yr
+Crab braking index n = ν ν_ddot/ν_dot² = 2.342   (a pure dipole gives 3)
+  birth period for n = 2.34 : 19.9 ms   (spin-down age P/((n−1)Ṗ) = 1873 yr )
+  birth period for n = 2.51 : 19.3 ms   (spin-down age P/((n−1)Ṗ) = 1665 yr )
+  birth period for n = 3.00 : 16.8 ms   (spin-down age P/((n−1)Ṗ) = 1257 yr )
+Crab period doubles in 3080 yr

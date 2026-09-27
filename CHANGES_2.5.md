@@ -141,3 +141,23 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
   to 64 entries, otherwise as shape and range. For fields on a grid (a heat-equation step is in the reference).
 - Tests: `rust/c-cases/c1/` (each program on both back ends, and under `FERMIUM_GC_STRESS=1`, which collects at
   every safe point), run by `cargo test` (`crates/fermium-cli/tests/c1_cases.rs`).
+
+## Research track (C8)
+
+New reproductions in nuclear physics and astrophysics, each with data downloaded from a cited source (raw file or the
+lines used kept in the folder, `SOURCE.md` with URL, date, citation and license, `prepare.py` to download and convert),
+compared with published values in its README, with a plot and an `expected_output.txt`. The table in
+[research/README.md](research/README.md) (rows 12 onwards) has the key numbers; each README has a "Friction" section, and
+the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
+
+- [cmb_firas](research/cmb_firas/): COBE/FIRAS monopole (NASA LAMBDA) — Planck fit, μ distortion, n_γ, Ω_γh².
+- [charge_radii](research/charge_radii/): IAEA / Angeli–Marinova 2013 charge radii — A^⅓ law, Fermi model, Ca and Pb shell effects.
+- [gamow_window](research/gamow_window/): Gamow peaks and non-resonant rates vs JINA REACLIB (via pynucastro's PyPI copy), AME2020 masses.
+- [alpha_decay](research/alpha_decay/): NUBASE2020 α emitters — Gamow's WKB half-lives, Viola–Seaborg (Sobiczewski 1989).
+- [pulsar_spindown](research/pulsar_spindown/): ATNF catalogue (VizieR) — dipole fields, ages, Crab braking index and birth period.
+- [mass_luminosity](research/mass_luminosity/): DEBCat eclipsing binaries — L = 4πR²σT⁴ vs Eker et al. 2018 six-piece MLR.
+- [supernova_hubble](research/supernova_hubble/): Pantheon+ — flat ΛCDM Ωm, matter-only and empty universes, curvature.
+- Tests: `rust/crates/fermium-cli/tests/research_c8.rs` runs every one with the `fermium` binary (in a copy of its folder,
+  so the committed plots aren't rewritten) and compares with `expected_output.txt` (the `plot saved to` lines, which hold
+  absolute paths, are left out); it also checks that each folder's `SOURCE.md` has a URL and a citation. The v1
+  conformance suite is unchanged.

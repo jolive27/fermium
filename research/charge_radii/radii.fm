@@ -1,0 +1,85 @@
+# Nuclear charge radii: the A^(1/3) law, the Fermi-distribution model, and shell effects in the
+# Angeli–Marinova table (ADNDT 99, 69 (2013); IAEA file, see SOURCE.md).
+# Run from this folder:  fermium run radii.fm
+
+nuclei = load "radii.csv"         # Z, N, A, R [fm] (rms charge radius), dR [fm]
+Zs = nuclei.Z
+Ns = nuclei.N
+As = nuclei.A
+Rs = nuclei.R
+print len(Rs), "nuclei from Z =", Zs[1], "to Z =", Zs[len(Zs)]
+
+# 1. R = r₀ A^(1/3) for A ≥ 40 (below that, light nuclei have a diffuse surface and large halos/clusters)
+Rh = []
+Ah = []
+Nh = []
+Zh = []
+for i from 1 to len(Rs)
+    if As[i] >= 40
+        push(Rh, Rs[i])
+        push(Ah, As[i])
+        push(Nh, Ns[i])
+        push(Zh, Zs[i])
+heavy = table(A = Ah, N = Nh, Z = Zh, R = Rh)
+r₀ = 1 fm
+fit R = r₀ A^(1/3) to heavy
+# with an isospin term: neutron excess pulls the protons out less than A^(1/3) says
+r₁ = 1 fm
+b = 0.1
+fit R = r₁ A^(1/3) (1 - b (N - Z) / A) to heavy
+# a constant plus A^(1/3)
+p = 1 fm
+q = 1 fm
+fit R = p A^(1/3) + q to heavy
+
+# the equivalent uniform sphere has R_eq² = (5/3) ⟨r²⟩, the "nuclear radius" of textbooks
+print "uniform-sphere radius parameter √(5/3) r₀ =", √(5/3) r₀ to 4 digits, "  (textbook R₀ ≈ 1.2 fm)"
+
+# 2. a Fermi (Woods–Saxon) charge distribution with the textbook parameters: half-density radius
+#    c = 1.07 A^(1/3) fm and 90 %–10 % skin thickness t = 2.4 fm (a = t/(4 ln 3))
+a_skin = 2.4 fm / (4 ln(3))
+ρF(r, cF) = 1 / (1 + exp((r - cF) / a_skin))
+rms_fermi(A) =
+    cF = 1.07 fm * A^(1/3)
+    num = ∫ ρF(r, cF) r^4 dr from 0 fm to cF + 30 a_skin
+    den = ∫ ρF(r, cF) r² dr from 0 fm to cF + 30 a_skin
+    √(num / den)
+radius(z, n) =
+    out = 0 fm
+    for i from 1 to len(Rs)
+        if Zs[i] == z and Ns[i] == n
+            out = Rs[i]
+    out
+for zn in [<20, 20>, <20, 28>, <40, 50>, <50, 70>, <82, 126>, <92, 146>]
+    z = zn.x
+    n = zn.y
+    print "Z =", z, "N =", n, ": measured", radius(z, n) to 5 digits, "  Fermi model", rms_fermi(z + n) in fm to 4 digits, "  r₀ A^(1/3)", r₀ (z + n)^(1/3) to 4 digits
+
+# 3. shell effects: the calcium isotopes. ⁴⁰Ca and ⁴⁸Ca (both doubly magic) have the same radius,
+#    with a parabola in between and odd–even staggering on top of it
+print "Ca-40:", radius(20, 20) to 5 digits, "  Ca-44:", radius(20, 24) to 5 digits, "  Ca-48:", radius(20, 28) to 5 digits, "  R(48) − R(40) =", radius(20, 28) - radius(20, 20) in fm to 2 digits
+print "A^(1/3) law would give R(48) − R(40) =", r₀ (48^(1/3) - 40^(1/3)) to 3 digits
+stagger(z, n) = radius(z, n) - (radius(z, n - 1) + radius(z, n + 1)) / 2
+print "odd–even staggering in Ca, R(N) − mean of neighbours:  N = 23:", stagger(20, 23) in fm to 2 digits, "  N = 25:", stagger(20, 25) in fm to 2 digits, "  N = 24:", stagger(20, 24) in fm to 2 digits
+
+# 4. the kink at N = 126 in the lead isotopes: ⟨r²⟩ grows faster once neutrons fill the next shell
+slope(z, n1, n2) = (radius(z, n2)² - radius(z, n1)²) / (n2 - n1)
+below = slope(82, 120, 126)
+above = slope(82, 126, 132)
+print "Pb: d⟨r²⟩/dN for N = 120→126:", below in fm² to 3 digits, "  N = 126→132:", above in fm² to 3 digits, "  ratio", above / below to 3 digits
+# the same across N = 82 in the neodymium/samarium/barium region: barium (Z = 56)
+print "Ba: d⟨r²⟩/dN for N = 78→82:", slope(56, 78, 82) in fm² to 3 digits, "  N = 82→86:", slope(56, 82, 86) in fm² to 3 digits
+print "A^(1/3) law at A = 208: d⟨r²⟩/dN =", (2/3) r₀² 208^(-1/3) in fm² to 3 digits
+
+# plots: R/A^(1/3) against N shows the shell closures; the Pb chain shows the kink
+ratio = []
+for i from 1 to len(Rs)
+    push(ratio, Rs[i] / As[i]^(1/3))
+plot ratio vs Ns with points, title "Charge radius / A^(1/3) against N (Angeli-Marinova 2013)", xlabel "N", ylabel "R / A^(1/3) [fm]", y from 0.8 fm to 1.3 fm to "r_over_a13.png"
+Npb = []
+dr2 = []
+for i from 1 to len(Rs)
+    if Zs[i] == 82
+        push(Npb, Ns[i])
+        push(dr2, Rs[i]² - radius(82, 126)²)
+plot dr2 in fm² vs Npb with points, title "Lead isotopes: <r²> - <r²>(Pb-208); the kink at N = 126", xlabel "N", ylabel "δ<r²> [fm²]" to "pb_kink.png"

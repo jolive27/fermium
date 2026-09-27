@@ -1,0 +1,18 @@
+FIRAS monopole: 43 frequencies from 2.27 1/cm to 21.3 1/cm = 68.1 GHz to 639 GHz
+fit I/δI = B(σ, T)/δI   (43 data points from table(σ = σs, I = I, δI = δI, gal = gal))
+  T = 2.7250153 K   (standard error 7.9×10⁻⁶ K)
+  rms residual = 1.02
+T_CMB = 2.725015 K ± 7.9×10⁻⁶ K   χ² = 45.10 for 42 degrees of freedom
+fit I/δI = (B_μ(σ, T2, μ) + G_0 gal)/δI   (43 data points from table(σ = σs, I = I, δI = δI, gal = gal))
+  T2 = 2.725008 K   (standard error 2.8×10⁻⁵ K)
+  μ = -1.109×10⁻⁵   (standard error 3.6×10⁻⁵)
+  G_0 = 0.0005832   (standard error 0.028)
+  rms residual = 1.02
+with μ and Galaxy: T = 2.725008 K ± 2.8×10⁻⁵ K   μ = -1.1×10⁻⁵ ± 3.6×10⁻⁵   G₀ = 0.00058 ± 0.028
+peak of I_ν: 5.3438 1/cm = 160.20 GHz   (Wien: 2.8214 k_B T / h = 160.20 GHz )
+energy density u = 0.26039 eV/cm³   (4σ_SB T⁴/c = 0.26039 eV/cm³ )
+photon number density n_γ = 410.51 1/cm³
+mean photon energy u/n_γ = 2.7012 k_B T  (2.701 for a blackbody)
+Ω_γ h² = 2.471×10⁻⁵
+weighted rms residual: 18.9 kJy/sr = 49.3 ppm of the peak 383.48 MJy/sr
+largest |residual|/σ: 2.51
