@@ -1069,7 +1069,9 @@ print sum_sq([1 m, 2 m, 300 cm])         # C gets a pointer to 1, 2, 3 and n = 3
   when the program was built.
 - **Trust:** as in C, the declaration is the contract. Fermium can't check that `kinetic_energy` really
   takes two doubles, or that a Fortran array is as long as the length passed; a wrong declaration is
-  undefined behaviour, exactly as a wrong prototype in C.
+  undefined behaviour, exactly as a wrong prototype in C. Loading a library runs its initialisers when the
+  program is checked (also by `fermium check` and the editor's language server), like `use python`. In a
+  `parallel for`, a function called directly may run on several threads at once, so it must be thread-safe.
 - **Not yet supported:** output arrays (a function that writes into an array), `float` and `long`
   parameters, structs, strings, callbacks (passing a Fermium function to C), functions that return nothing,
   `import c` inside a module or a call inside `units natural`, and the browser playground (which can't load
