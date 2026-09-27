@@ -294,8 +294,8 @@ Gate C9 was met at commit `eb63425`: PR #4's CI run 249 passed on Linux and macO
 finding was fixed. The tag `v2.5` was created there, but GitHub refused the push (the connection is cut, as for
 v1.5 and v2.0), so the branch **`claude/v2.5-freeze`** marks the release commit instead (D340). After the
 gate, the benchmark runs found the huge-page slowdown (D316) and red team 17 found errors in this report and
-the docs, so the marker and the local tag were moved forward to the run's final commit (the last commit of
-`claude/v2.5`, where `claude/v2.5-freeze` now points), which includes those fixes and passed CI. To publish the tag and let the
+the docs, so the marker and the local tag were moved forward to `2a2e334`, which includes those fixes and passed
+CI on Linux and macOS (run 262). Later commits on `claude/v2.5` only touch the report and the progress log. To publish the tag and let the
 release workflow build the downloads: `git tag -a v2.5 origin/claude/v2.5-freeze -m "Fermium 2.5" && git push
 origin v2.5`.
 

@@ -2003,4 +2003,5 @@ a different citation (the neutron-branch form is the standard one).
 - **Moved forward (Sun ~11:00 UTC):** after the gate, the benchmark runs found the huge-page slowdown (D316's
   default changed to populate-only) and red team 17 found errors in RUN_REPORT, CHANGES_2.5 and the docs'
   examples. A release built from eb63425 would miss the D316 fix, so `claude/v2.5-freeze` and the local `v2.5`
-  tag were moved to the run's final commit, once its CI passed. The branch only moved forward: eb63425 is an ancestor.
+  tag were moved to `2a2e334` after its CI passed (run 262, Linux and macOS). The branch only moved forward:
+  eb63425 is an ancestor. The tag push was refused again.
