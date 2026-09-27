@@ -147,8 +147,7 @@ print kinetic_energy(2 kg, 3000 m/s), binding_energy(26, 56)
 - **Monte Carlo when linear isn't valid:** each error source is tested at ±1σ; an integral or solve that isn't
   close to linear there (including a jump at a measured value, `∫ (if x < a then 1 else 0) dx`) is computed by
   Monte Carlo instead (seeded, with a warning). The value shown is the one at the measured inputs (for
-  integrals too, D322); all values of a Monte Carlo solution share its samples. A value that rounds to zero
-  prints `0.00 ± 0.14`, not `-0.00 ± 0.14`.
+  integrals too, D322); all values of a Monte Carlo solution share its samples.
 - **`use python`** refuses an uncertain argument again, as Fermium 1.5 does ("this operation needs a plain
   number, but got an uncertain value (±)"); 2.0 had passed the value alone.
 - Still errors: `solve … for x`, `solve` with a list of unknowns, eigenvalue problems and PDEs with uncertain

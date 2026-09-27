@@ -2097,6 +2097,6 @@ cache key is a SHA-256 of the source, header path and text, -I folders, CXX/CXXF
 and the other search variables, and the library; a manifest (compiler identity, every -MD dependency with size
 and time, the library, the wrapper's SHA-256) must match before reuse; cache folders are 0700 and a folder others
 can write isn't used. The evil/good scenario runs no planted code. #3/#8: reference.md Trust, cache and §21
-lines rewritten. #4 (D321), #5 (D322: nominal value for Monte Carlo integrals, no -0.00; first-order arithmetic
-documented), #6 (D323: installed headers, 120 s compiler timeout, one-line exception text, keyword names;
+lines rewritten. #4 (D321), #5 (D322: nominal value for Monte Carlo integrals; first-order arithmetic documented;
+-0.00 kept, since the v1 formatting fixture pins it), #6 (D323: installed headers, 120 s compiler timeout, one-line exception text, keyword names;
 const double * vs double * documented as a limit), #7 (D324).

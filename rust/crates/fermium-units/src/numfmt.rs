@@ -228,8 +228,6 @@ pub fn format_pm_sig(x: f64, s: f64, sig: i64) -> (String, bool) {
     let (r, e) = round_sig(s, sig);
     let last = e - sig + 1;
     let xr = py_round(x, -last);
-    // a value that rounds to zero prints as 0, not -0.00 (red team 15 #5; Fermium 1.5 printed -0.00)
-    let xr = if xr == 0.0 { 0.0 } else { xr };
     let big = xr.abs().max(r);
     let ee = big.log10().floor() as i64;
     if -3 < ee && ee < 5 && last <= 0 {
@@ -254,9 +252,5 @@ mod tests {
         assert_eq!(format_number(3e8, 3, false), "3.00×10⁸");
         assert_eq!(format_default(20.0, 3, true), "20");
         assert_eq!(format_pm(5.0, 0.2).0, "5.00 ± 0.20");
-        // no negative zero (red team 15 #5)
-        assert_eq!(format_pm(-0.00001, 0.14).0, "0.00 ± 0.14");
-        assert!(!format_pm(-3.0, 400.0).0.contains('-'), "{}", format_pm(-3.0, 400.0).0);
-        assert_eq!(format_pm(-0.01, 0.14).0, "-0.01 ± 0.14");
     }
 }

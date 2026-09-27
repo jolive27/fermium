@@ -1850,16 +1850,17 @@ keep it. Calls with the parameter inside an expression (`s(2 y)`) still count as
 - **Alternatives:** inferring list-ness through any chain of calls (a fixed point over the call graph: more
 machinery for a rare case); requiring the wrapper to declare `: list` too (surprising after D303).
 
-## D322. A Monte Carlo integral shows the nominal value; ± never prints -0.00 (red team 15 #5)
+## D322. A Monte Carlo integral shows the nominal value; -0.00 ± σ stays as in v1 (red team 15 #5)
 - **What:** an integral that falls back to Monte Carlo (D278, D300) reports the integral at the measured inputs
 (every source at z = 0, computed with plain numbers, no random numbers drawn), with the spread and per-source
 contributions from the regression on the samples, as D304 does for ODE solutions; before, it showed the
-regression's intercept (≈ the sample mean: 0.505 instead of 0.500 for ∫₀² x·[x < a] dx at a = 1.0 ± 0.1). An
-uncertain value whose rounded value is zero prints `0.00 ± 0.14`, not `-0.00 ± 0.14` (numfmt::format_pm_sig;
-Fermium 1.5 printed the minus sign, but no conformance program has such a value: rust/DIVERGENCES.md). Arithmetic
+regression's intercept (≈ the sample mean: 0.505 instead of 0.500 for ∫₀² x·[x < a] dx at a = 1.0 ± 0.1). A
+negative value that rounds to zero still prints `-0.00 ± 0.14`: Fermium 1.5 prints it so, and the v1 formatting
+fixture (fermium-units tests/parity.rs, 51 247 checks against Fermium 1.5) pins `(-0.0 ± 2.5)×10²⁵`, so
+normalizing it would break v1 parity; it was tried and reverted. Arithmetic
 on Monte Carlo results stays first order, as all uncertain arithmetic is (documented in reference §21).
-- **Why:** one rule for every result (the value at the measured inputs); "-0.00" reads as a sign that means
-something.
+- **Why:** one rule for every result (the value at the measured inputs); v1 parity outranks the cosmetic
+"-0.00".
 - **Alternatives:** the sample mean everywhere (what `propagate montecarlo` reports, and still does); storing the
 samples with the value to make later arithmetic Monte Carlo too (a different, heavier representation).
 

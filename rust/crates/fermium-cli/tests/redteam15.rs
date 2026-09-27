@@ -328,14 +328,6 @@ fn a_monte_carlo_integral_reports_the_nominal_value() {
 }
 
 #[test]
-fn an_uncertain_value_that_rounds_to_zero_has_no_minus_sign() {
-    let (c, o, e) = run_on("negzero", "", "x = -0.00001 ± 0.14\nprint x\ny = -0.00001 ± 0.14 m\nprint y\n\
-                                         print -0.01 ± 0.14\n");
-    assert_eq!(c, 0, "{e}");
-    assert_eq!(o, "0.00 ± 0.14\n0.00 ± 0.14 m\n-0.01 ± 0.14\n");
-}
-
-#[test]
 fn replacing_bq_by_one_per_second_or_rad_per_m_by_one_per_m_warns_with_a_fitting_hint() {
     let src = "A(r [Bq]) = r\nA(k [1/s]) = 2 k\nk(q [rad/m]) = q\nk(q [1/m]) = q\nW(e [J]) = e\nW(t [N m]) = t\n\
                H(f [Hz]) = f\nH(g [1/s]) = g\nprint 1\n";
