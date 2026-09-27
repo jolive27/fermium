@@ -742,7 +742,7 @@ print y(5 s)       # 6.44 m: within 10⁻¹³ m of the analytic bounces
 ```
 
   - An event that fires again and again ever faster (the ball above bounces infinitely often before t ≈ 27.1 s, a Zeno point) stops the solve with an error that names the time: end the range before it, or stop with `until`.
-  - `when` needs the adaptive solver (rk45): with `step`, `using rk4`, `radau` or `bdf` it is an error. A solve with `when` can't use uncertain values (±) yet (use `propagate montecarlo`).
+  - `when` needs the adaptive solver (rk45): with `step`, `using rk4`, `radau` or `bdf` it is an error. With uncertain values (±, §21), a solve with `when` gets its uncertainty from Monte Carlo (whole solves with sampled inputs, with a warning), since the event time moves with the inputs.
   - The solution keeps both sides of each event: `y(t)` just before and just after it are the values before and after the change, and `plot y vs t` shows the jump.
 - **Parameter sweeps, `sweep`** (Fermium 2.5, spec §C2, DECISIONS D299): `sweep k in [1, 2, 4] N/m` (or
   `sweep L from 0.5 m to 2 m step 0.5 m`) followed by a block is a `for` loop whose plots draw one curve per value

@@ -78,8 +78,8 @@ print root'(4), root''(4)    # 0.250 -0.0312: 1/(2√a) and its derivative
   documented divergence).
 - **`when` events** (D297): `when y = 0 m: y' = -0.9 y'` in a solve changes the state where the condition is met,
   located on the dense output (a bouncing ball matches the analytic bounces to 10⁻¹³ m); `when y < 0 m` fires only
-  on the way down. An event that accumulates (a Zeno point) is an error naming the time. RK45 only; not with
-  uncertain values yet.
+  on the way down. An event that accumulates (a Zeno point) is an error naming the time. RK45 only; with
+  uncertain values the uncertainty comes from Monte Carlo.
 
 ```text
 g = 9.81 m/s²

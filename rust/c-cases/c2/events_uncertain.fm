@@ -1,0 +1,13 @@
+# Conditions on the unknowns with uncertain values (C7): the sensitivity solve evaluates the condition as written
+# (D296); z = 2 exp(-0.2 k) with k = 2.0 ± 0.1 is 1.341 ± 0.2·1.341·0.1
+k = 2.0 ± 0.1
+solve z' = if z > 1 then -k z / (1 s) else 0 /s
+  with z(0 s) = 2
+  for t from 0 s to 0.2 s
+print z(0.2 s)
+# a when with an uncertain start: Monte Carlo (the event time moves); analytic 7.695 m ± 1.192·0.1 m
+solve y'' = -9.81 m/s²
+  with y(0 s) = 10 m ± 0.1 m, y'(0 s) = 0 m/s
+  for t from 0 s to 3 s
+  when y = 0 m: y' = -0.9 y'
+print y(3 s)

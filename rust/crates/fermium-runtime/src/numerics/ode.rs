@@ -902,25 +902,27 @@ impl<'a> Hooks<'a> {
         pymin(-s * dtr, s * dfa)
     }
 
-    /// At the start: each condition's flag from its value at (t0, y0) (a flag of 2 stays: evaluated as written),
-    /// and each event's sign.
+    /// At the start: each condition's flag from its value at (t0, y0) (the program starts every flag at 2), and
+    /// each event's sign.
     fn begin(&mut self, t0: f64, y: &mut [f64]) -> HookState {
         let m = self.sw_ops.len();
         let mut st = HookState { wsgn: vec![0.0; self.whens.len()], wlast: vec![f64::NAN; self.whens.len()],
                                  rapid: vec![(0, f64::NAN); m], buf: vec![0.0; m] };
-        self.set_flags(t0, y, &mut st.buf);
+        self.set_flags(t0, y, &mut st.buf, true);
         for (i, w) in self.whens.iter_mut().enumerate() {
             st.wsgn[i] = sgn((w.g)(t0, y));
         }
         st
     }
 
-    fn set_flags(&mut self, t: f64, y: &mut [f64], buf: &mut [f64]) {
+    /// Each condition's flag from its value at (t, y); `all`: also the flags at 2 (evaluated as written), else
+    /// those stay (a condition that chattered).
+    fn set_flags(&mut self, t: f64, y: &mut [f64], buf: &mut [f64], all: bool) {
         if let Some(sw) = self.sw.as_mut() {
             sw(t, y, buf);
             for (j, &op) in self.sw_ops.iter().enumerate() {
                 let s = self.slot0 + j;
-                if y[s] != 2.0 {
+                if all || y[s] != 2.0 {
                     y[s] = if truth(op, buf[j]) { 1.0 } else { 0.0 };
                 }
             }
@@ -1058,7 +1060,7 @@ impl<'a> Hooks<'a> {
                     return Err(Fail::new(err::ODE_NAN, t, -1.0));
                 }
                 let mut buf = std::mem::take(&mut st.buf);
-                self.set_flags(t, &mut out, &mut buf);
+                self.set_flags(t, &mut out, &mut buf, false);
                 st.buf = buf;
             }
         }

@@ -1347,7 +1347,11 @@ the new state (branch flags recomputed) and restarts; the solution keeps a sampl
 show the jump. After an event its sign is taken from a small Euler step of the new state (a ball that bounced moves
 up), so the next crossing isn't missed however large the next step is. The same event firing again within 10⁻⁹ of
 the range is a Zeno point: an error naming the time. Several `when` and an `until` can be combined (the earliest
-wins). With uncertain values (±) a solve with `when` is an error (use `propagate montecarlo`).
+wins). With uncertain values (±) a solve with `when` goes to C7's Monte Carlo (D278), with its warning: the
+linear sensitivity solve would need the jump of the sensitivities at a moving event time (a saltation matrix).
+In the sensitivity solve itself (C7, D277) the conditions of D296 are evaluated as written; a flag starts at 2
+("as written") in the program and the RK45 solver sets it from the condition at the start, so any evaluation of
+the right side outside the solver (C7's probes) sees the condition itself.
 - **Why:** bounces, impacts, resets and thresholds are the most common discontinuities in physics ODEs; the
 alternative in v2.0 was a loop of solves with `until`, which is hard to read. Locating on the dense output makes
 the impact times exact to rounding (the bouncing-ball test agrees with the analytic bounces to 6×10⁻¹⁴ m).

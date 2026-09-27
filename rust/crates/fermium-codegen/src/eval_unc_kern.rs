@@ -595,9 +595,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Err(_) => return Ok(false), // a ±1σ input the solve can't handle: not linear there
                 Ok(()) => {}
             }
+            // the unknowns, not the branch flags of conditions on them (D296: 2 here, 0 or 1 in the ±1σ solves)
+            let nuser = if x.nuser > 0 { x.nuser.min(n) } else { n };
             for q in 1..=8 {
                 let t = ta + (tb - ta) * q as f64 / 8.0;
-                for i in 0..n {
+                for i in 0..nuser {
                     let (Ok(y0), Ok(yp), Ok(ym)) = (aug.eval(i, t, false, None), ends[0].eval(i, t, false, None),
                                                     ends[1].eval(i, t, false, None)) else { continue };
                     let noise = 100.0 * x.rtol.max(1e-12) * maxabs[i];

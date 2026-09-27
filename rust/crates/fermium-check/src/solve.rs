@@ -883,7 +883,9 @@ impl Checker {
         let tdep = eqs.iter().any(|q| free_names(&q.lhs).contains(&t) || free_names(&q.rhs).contains(&t));
         let mut y0v: Vec<I::Expr> = layout.iter().map(|(x, k)| y0[find_y0(&y0, x, *k).unwrap()].1.clone()).collect();
         for _ in &sw.syms {
-            y0v.push(ir(I::ExprKind::Const(0.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line)); // set by the solver
+            // 2: evaluated as written, until the RK45 solver sets the flag from the condition at the start (so a
+            // probe of the right side outside the solver, like the uncertainty kernels', sees the condition itself)
+            y0v.push(ir(I::ExprKind::Const(2.0), Ty::Num(DExpr::of(DIMLESS)), s.span.line));
         }
         let atol = atol.map(|mut a| {
             a.extend(std::iter::repeat_n((0.0, 0), sw.syms.len()));
