@@ -1808,19 +1808,28 @@ overhead and let the divisions vectorize; the adaptive algorithm must stay v1's 
 this is a change to fermium-runtime's quad and to the code generator (BACKLOG). spring_adaptive and unit_loop are
 at parity with Julia, bound by the ODE solver's bookkeeping and an in-order sum's latency.
 
-## D326. `fit`: the covariance Jacobian takes a step relative to each parameter (C8 finding)
+## D326. `fit`: steps that scale with a parameter that is tiny in SI (C8 finding; reworked after red team 16)
 
-- **What:** the fit's iteration keeps SciPy's 2-point step √ε·max(|p|, 1), so fitted values stay v1's. The
-  Jacobian for the covariance (the standard errors, `err(x)`, and the ± of fitted values) is taken at the
-  solution with the step √ε·|p| (√ε for p = 0).
-- **Why:** parameters are fitted in SI. `k = 8 MeV` is 1.3×10⁻¹² J, so the old step (1.5×10⁻⁸) was 10⁴ times
-  the parameter. The standard error came out as 1.7×10⁻¹⁰ J (8 ± 1000 MeV), where the same fit written with a
-  plain number gives 7.948 ± 0.089. The value was right; the error was silently wrong. Found by research/level_density (C8).
-  Test: rust/crates/fermium-cli/tests/fit_errors.rs. For |p| ≥ 1 nothing changes. The v1 fit fixture's `si_scale`
-  case (τ = 1.3×10⁻⁶ s, where v1's step is 1.2 % of τ) now matches the analytic-Jacobian standard errors
-  (2.7845×10⁻⁹ s) instead of v1's 2.7881×10⁻⁹ s; the test compares that case with the analytic values.
-- **Alternatives:** scaling parameters by their starting value for the whole fit (changes v1's fitted values
-  in the last digits); fixing Fermium 1.5 too (it is the frozen oracle whose outputs the goldens record).
+- **What:** the finite-difference step for each parameter, in the iteration and for the covariance (the standard
+  errors, `err(x)`), is √ε·max(|p|, floor). The floor is 1, as in SciPy's default and v1, except for a parameter
+  whose starting value is nonzero and below 10⁻⁵ in SI: then it is that starting value's size.
+- **Why:** parameters are fitted in SI. A starting value such as `k = 8 MeV` (1.3×10⁻¹² J), `x0 = 0.1 fm` or
+  `τ = 3 ns` got steps of 1.5×10⁻⁸, up to 10⁴ times the parameter. The iteration stalled at the starting value
+  or stopped early (a fm Gaussian kept x0 = 0.1 fm; a ns decay gave τ = 3.014 ns where SciPy gives 2.964). The
+  standard errors were meaningless (8 ± 1000 MeV). Found by research/level_density (C8).
+- **First version, replaced:** only the covariance step became relative (√ε·|p|). Red team 16 showed two
+  problems with it: a parameter that ends near 0 (b = 2×10⁻¹⁶ in a straight-line fit) got NaN errors and a false
+  "may not have converged" warning, and tiny parameters still converged to the wrong point.
+- **Effect:** ordinary fits (starting values of 10⁻⁵ or more, or exactly 0) take exactly v1's steps. No
+  conformance output changed. The v1 fit fixture's `si_scale` case (τ = 1.3×10⁻⁶ s) now reaches the true
+  least-squares optimum, where v1 stopped short (a higher sum of squares). That case is compared with SciPy's
+  analytic-Jacobian optimum instead of v1: parameters agree to 6×10⁻¹¹, errors to 5×10⁻⁹.
+  Tests: tests/fit_errors.rs, and the red-team-16 programs (b → 0, fm Gaussian, ns decay).
+- **Limit:** a parameter that starts at exactly 0 but whose natural size is tiny in SI (a Gaussian centre
+  `x0 = 0 fm`) keeps the floor 1. It reports "standard error could not be estimated" and the warning, as v1
+  did. Give it a nonzero starting guess (`x0 = 0.01 fm`).
+- **Alternatives:** scaling every parameter by its starting value (changes v1's fitted digits for ordinary
+  fits); fixing Fermium 1.5 too (it is the frozen oracle whose outputs the goldens record).
 
 ## D320. The C++ wrapper cache: a SHA-256 key of every compile input, a manifest checked on reuse, system headers without the program's folder, a private cache folder (red team 15 #1, #2)
 - **What:** (1) a header the program's folder has (or an absolute path) is included by its absolute path with
