@@ -21,6 +21,8 @@ pub(crate) struct SolData {
     /// a PDE's grid check (Fermium 2, DIVERGENCES.md): the solution on half the grid, each component's range,
     /// the names of x and t (text ids), and whether it has warned
     pub check: Option<PdeCheck>,
+    /// uncertain inputs (C7): the sensitivities solved alongside, or Monte Carlo samples (eval_unc_kern.rs)
+    pub unc: Option<crate::eval_unc_kern::UncSol>,
 }
 
 pub(crate) struct PdeCheck {
@@ -140,7 +142,7 @@ fn warn_message(kind: i64, a: f64) -> String {
     }
 }
 
-fn slots(t: &Ty) -> usize {
+pub(crate) fn slots(t: &Ty) -> usize {
     match t {
         Ty::Vec { n, .. } => *n,
         Ty::Complex(_) => 2,
@@ -179,7 +181,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         crate::eval_calc::warn_at(line, &msg);
     }
 
-    fn fail_solve(&self, f: Fail, fmt: usize) -> RunError {
+    pub(crate) fn fail_solve(&self, f: Fail, fmt: usize) -> RunError {
         RunError { message: describe_error(self.module, f.kind, f.a, f.b, fmt), line: self.line, hint: None }
     }
 
@@ -263,33 +265,28 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
     }
 
-    fn flat(&mut self, es: &[Expr], line: u32, fr: &mut Frame) -> Result<Vec<f64>, RunError> {
+    /// The starting values of a solve, flattened (vectors into components); they may be uncertain (C7).
+    pub(crate) fn flat_vals(&mut self, es: &[Expr], fr: &mut Frame) -> Result<Vec<Value>, RunError> {
         let mut y0 = vec![];
-        let mut unc = false;
         for e in es {
             match self.eval(e, fr)? {
-                Value::Vec(v) => y0.extend(v.iter()),
-                Value::Unc(_) | Value::UVec(_) => unc = true,
-                v => y0.push(v.num()),
+                Value::Vec(v) => y0.extend(v.iter().map(|x| Value::Num(*x))),
+                Value::UVec(v) => y0.extend(v.iter().cloned()),
+                v @ Value::Unc(_) => y0.push(v),
+                v => y0.push(Value::Num(v.num())),
             }
-        }
-        if unc {
-            // interp.s_SSolve (D122): checked once they are all evaluated, on the solve's line
-            self.line = line;
-            return self.err("a starting value of solve can't be uncertain (±) yet; put the solve inside a  propagate \
-                             montecarlo  block, or use value(x)");
         }
         Ok(y0)
     }
 
-    fn store_sol(&mut self, sym: SymId, data: SolData, fr: &mut Frame) {
+    pub(crate) fn store_sol(&mut self, sym: SymId, data: SolData, fr: &mut Frame) {
         self.solve.sols.push(Rc::new(data));
         let h = Value::Handle(self.solve.sols.len() - 1);
         self.set(sym, h, fr);
     }
 
     /// A copy of what the right side reads, for x'(t) after the solve (codegen attach_rhs, D46).
-    fn snapshot(&self, lam: usize, fr: &Frame) -> Frame {
+    pub(crate) fn snapshot(&self, lam: usize, fr: &Frame) -> Frame {
         let module = self.module;
         let mut refs = vec![];
         let l = &module.lambdas[lam];
@@ -308,30 +305,48 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     fn solve_ode(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
-        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, method, x, .. } = &s.kind else { unreachable!() };
+        let StmtKind::Solve { sol, rhs, y0, t0, t1, step, .. } = &s.kind else { unreachable!() };
         let module = self.module;
-        let y0 = self.flat(y0, s.line, fr)?;
+        let y0v = self.flat_vals(y0, fr)?;
         let (vt0, vt1) = (self.eval(t0, fr)?, self.eval(t1, fr)?);
         let (t0, t1) = (vt0.num(), vt1.num());
-        if matches!(vt0, Value::Unc(_)) || matches!(vt1, Value::Unc(_)) {
-            // uncertain limits: v1's stepper calls the right side at the start (its own errors come first), then its
-            // steps make t, and so the state, uncertain; the right side then is (ode_rhs)
-            let lam = &module.lambdas[*rhs];
-            let mut out = vec![0.0; y0.len()];
-            self.ode_call(lam, t0, &y0, &mut out, fr)?;
-            self.line = s.line;
-            return self.err("a differential equation (solve) can't use uncertain values (±) yet; put the solve inside \
-                             a  propagate montecarlo  block, or use value(x)");
-        }
         let h0 = match step {
             Some(e) => Some(self.eval(e, fr)?.num()),
             None => None,
         };
+        if y0v.iter().chain([&vt0, &vt1]).any(|v| matches!(v, Value::Unc(_))) {
+            // uncertain starting values or times (C7; v1 stopped here)
+            return self.solve_ode_unc(s, &y0v, &vt0, t1, h0, fr);
+        }
+        let y0: Vec<f64> = y0v.iter().map(Value::num).collect();
+        let solv = match self.ode_core(s, &y0, t0, t1, h0, None, fr) {
+            Err(e) if module.uses_uncertainty && crate::eval_unc::is_unc_error(&e) => {
+                // the right side reads uncertain values (C7)
+                return self.solve_ode_unc(s, &y0v, &vt0, t1, h0, fr);
+            }
+            r => r?,
+        };
+        let snap = self.snapshot(*rhs, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None, unc: None }, fr);
+        Ok(())
+    }
+
+    /// One ODE solve of the statement's right side from y0 (the solver, its warnings and errors). `aug`: the
+    /// state is followed by the sensitivities to these sources (C7, eval_unc_kern.rs), and the relative
+    /// tolerance is scaled so that the nominal part keeps its accuracy.
+    pub(crate) fn ode_core(&mut self, s: &Stmt, y0: &[f64], t0: f64, t1: f64, h0: Option<f64>, aug: Option<&[u64]>,
+                           fr: &mut Frame) -> Result<ode::Sol, RunError> {
+        let StmtKind::Solve { rhs, method, x, .. } = &s.kind else { unreachable!() };
+        let module = self.module;
         self.line = s.line;
         let lam = &module.lambdas[*rhs];
         let evlam = x.event.map(|l| &module.lambdas[l]);
-        let atol = x.atol.as_ref().and_then(|spec| ode::abs_tolerances(spec, t0, t1));
-        let opts = ode::OdeOpts { rtol: x.rtol, atol: atol.as_deref(), tname: x.tname as f64, evtext: x.evtext as f64,
+        let nsrc = aug.map_or(0, |a| a.len());
+        let n = y0.len() / (1 + nsrc);
+        let atol = x.atol.as_ref().and_then(|spec| ode::abs_tolerances(spec, t0, t1))
+            .map(|a| a.iter().cycle().take(n * (1 + nsrc)).copied().collect::<Vec<f64>>());
+        let rtol = if nsrc > 0 { x.rtol / ((1 + nsrc) as f64).sqrt() } else { x.rtol };
+        let opts = ode::OdeOpts { rtol, atol: atol.as_deref(), tname: x.tname as f64, evtext: x.evtext as f64,
                                   tdep: x.tdep };
         let cell = RefCell::new((&mut *self, &mut *fr, None::<RunError>));
         let f = |t: f64, y: &[f64], out: &mut [f64]| {
@@ -341,7 +356,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 out.fill(f64::NAN);
                 return;
             }
-            if let Err(e) = me.ode_call(lam, t, y, out, fr) {
+            let r = match aug {
+                Some(srcs) => me.ode_call_aug(lam, t, y, out, n, srcs, fr),
+                None => me.ode_call(lam, t, y, out, fr),
+            };
+            if let Err(e) = r {
                 *err = Some(e);
                 out.fill(f64::NAN);
             }
@@ -353,7 +372,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 return f64::NAN;
             }
             let mut out = [0.0];
-            if let Err(e) = me.ode_call(evlam.unwrap(), t, y, &mut out, fr) {
+            if let Err(e) = me.ode_call(evlam.unwrap(), t, &y[..n], &mut out, fr) {
                 *err = Some(e);
                 return f64::NAN;
             }
@@ -364,12 +383,12 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let r = match method.as_str() {
             "radau" | "bdf" => {
                 let m = if method == "bdf" { nx::stiff::StiffMethod::Bdf } else { nx::stiff::StiffMethod::Radau };
-                nx::stiff::stiff_solve(f, &y0, t0, t1, m, ev, opts)
+                nx::stiff::stiff_solve(f, y0, t0, t1, m, ev, opts)
             }
-            "rk4" => ode::rk4(f, &y0, t0, t1, h0.unwrap_or(f64::NAN), ev, opts),
+            "rk4" => ode::rk4(f, y0, t0, t1, h0.unwrap_or(f64::NAN), ev, opts),
             _ => {
                 let mut sv = ode::Sol::new(y0.len());
-                match ode::dp45_into(f, &y0, t0, t1, ev, opts, &mut sv) {
+                match ode::dp45_into(f, y0, t0, t1, ev, opts, &mut sv) {
                     Ok(()) => Ok(sv),
                     Err(fl) => {
                         early = sv.warnings; // a stiffness warning before "too many steps"
@@ -390,9 +409,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         for &(kind, a) in &solv.warnings {
             self.rt_warn(kind, a, s.line);
         }
-        let snap = self.snapshot(*rhs, fr);
-        self.store_sol(*sol, SolData { sol: solv, rhs: Some((*rhs, snap)), grid: None, check: None }, fr);
-        Ok(())
+        Ok(solv)
     }
 
     fn solve_eigen(&mut self, s: &Stmt, fr: &mut Frame) -> Result<(), RunError> {
@@ -459,7 +476,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             solv.push(xv, &row, &drow);
         }
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, check: None }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: None, check: None, unc: None }, fr);
         Ok(())
     }
 
@@ -514,11 +531,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         let check = r.coarse.as_ref().map(|c| PdeCheck { coarse: c.to_sol(), ranges: r.fine.ranges(), xname: x.xname,
                                                           tname: x.tname, warned: std::cell::Cell::new(false) });
         let solv = r.fine.to_sol();
-        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), check }, fr);
+        self.store_sol(*sol, SolData { sol: solv, rhs: None, grid: Some((xa, xb)), check, unc: None }, fr);
         Ok(())
     }
 
-    fn sol_data(&self, sym: SymId, fr: &Frame) -> Result<Rc<SolData>, RunError> {
+    pub(crate) fn sol_data(&self, sym: SymId, fr: &Frame) -> Result<Rc<SolData>, RunError> {
         match self.get(sym, fr)? {
             Value::Handle(h) => Ok(self.solve.sols[h].clone()),
             _ => self.err("this solution has no value"),
@@ -526,7 +543,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
     }
 
     /// fm_sol_eval: component comp (or its derivative) at t.
-    fn sol_at(&mut self, d: &SolData, comp: usize, t: f64, use_dy: bool, fmt: usize) -> Result<f64, RunError> {
+    pub(crate) fn sol_at(&mut self, d: &SolData, comp: usize, t: f64, use_dy: bool, fmt: usize) -> Result<f64, RunError> {
         let module = self.module;
         let r = match (&d.rhs, use_dy) {
             (Some((lam, snap)), true) => {
@@ -596,6 +613,19 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let d = self.sol_data(*sol, fr)?;
                 let tv = self.eval(t, fr)?;
                 self.line = e.line;
+                if d.unc.is_some() {
+                    // a solution with uncertain inputs (C7)
+                    return match crate::eval_unc::list_items(&tv) {
+                        Some(ts) => {
+                            let mut out = Vec::with_capacity(ts.len());
+                            for t in &ts {
+                                out.push(self.sol_value_unc(&d, *comp, t, *use_dy, *tfmt)?);
+                            }
+                            Ok(crate::eval_unc::make_list(out))
+                        }
+                        None => self.sol_value_unc(&d, *comp, &tv, *use_dy, *tfmt),
+                    };
+                }
                 match tv {
                     Value::List(l) => {
                         let ts = l.borrow().clone();
@@ -619,6 +649,11 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             }
             ExprKind::SolList { sol, comp, what } => {
                 let d = self.sol_data(*sol, fr)?;
+                if *what != 1 {
+                    if let Some(v) = self.sol_list_unc(&d, *comp, *what as u8) {
+                        return Ok(v);
+                    }
+                }
                 let s = &d.sol;
                 let out: Vec<f64> = match what {
                     1 => s.t.clone(),

@@ -340,6 +340,21 @@ pub fn format_uncertain_list(vals: &[(f64, Option<f64>)], un: &Unit) -> String {
 /// vector): `<1.00 ± 0.10 m, 2.0 ± 0.5 m/s>`. Uncertain entries round as a single uncertain number does (the
 /// uncertainty to 2 significant figures); plain entries as in a list of uncertain values (6 figures).
 pub fn format_uncertain_seq(vals: &[(f64, Option<f64>)], fmts: &[PrintFmt], shape: Option<(usize, usize)>) -> String {
+    // in one unit, an entry whose value and uncertainty are both below 10⁻¹⁴ of the largest entry is rounding
+    // noise (D197): 0 ± 0
+    let big = vals.iter().map(|(v, _)| v.abs()).fold(0.0, f64::max);
+    let denoised: Vec<(f64, Option<f64>)>;
+    let vals = if fmts.len() == 1 && big.is_finite() && big > 0.0 {
+        denoised = vals
+            .iter()
+            .map(|&(v, s)| {
+                if v.abs() < 1e-14 * big && s.is_none_or(|s| s < 1e-14 * big) { (0.0, s.map(|_| 0.0)) } else { (v, s) }
+            })
+            .collect();
+        &denoised[..]
+    } else {
+        vals
+    };
     if fmts.len() > 1 && fmts.len() == vals.len() {
         let parts: Vec<String> = vals
             .iter()

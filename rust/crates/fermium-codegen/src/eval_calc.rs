@@ -279,15 +279,6 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             ExprKind::Integral { lam, lo, hi, xname, xfmt, soft, atol } => {
                 let (va, vb) = (self.eval(lo, fr)?, self.eval(hi, fr)?);
                 let unc_limits = matches!(va, Value::Unc(_)) || matches!(vb, Value::Unc(_));
-                if unc_limits {
-                    // v1's quad computes its nodes from uncertain limits, so the integrand meets an uncertain x: the
-                    // plain-number error, or (an integrand of x returns an uncertain value) the kernel's "an integral
-                    // can't use uncertain values"; one that doesn't use x stays plain (see below)
-                    let mid = self.unc_bin(fermium_ir::BinOp::Add, va.clone(), vb.clone())?;
-                    let mid = self.unc_bin(fermium_ir::BinOp::Mul, mid, Value::Num(0.5))?;
-                    self.call_lambda_value(*lam, mid, fr)?;
-                }
-                let (a, b) = (va.num(), vb.num());
                 let atol = if *soft {
                     -1.0
                 } else {
@@ -296,6 +287,24 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                         None => 0.0,
                     }
                 };
+                let name = xname.map(|i| i as f64).unwrap_or(-1.0);
+                let xf = *xfmt;
+                let fail = move |me: &Self, f: Fail| me.fail(f, xf);
+                if unc_limits {
+                    // the integrand at an uncertain x: if its value depends on x (or it needs a plain number), the
+                    // uncertain integral (C7, eval_unc_kern.rs); one that doesn't use x stays plain (see below)
+                    let mid = self.unc_bin(fermium_ir::BinOp::Add, va.clone(), vb.clone())?;
+                    let mid = self.unc_bin(fermium_ir::BinOp::Mul, mid, Value::Num(0.5))?;
+                    match self.call_lambda_raw(*lam, mid, fr) {
+                        Ok(v) if crate::eval_unc::is_unc(&v) => return self.integral_unc(*lam, &va, &vb, atol, name, &fail, fr),
+                        Err(ex) if crate::eval_unc::is_unc_error(&ex) => {
+                            return self.integral_unc(*lam, &va, &vb, atol, name, &fail, fr)
+                        }
+                        Err(ex) => return Err(ex),
+                        Ok(_) => {}
+                    }
+                }
+                let (a, b) = (va.num(), vb.num());
                 let line = self.line;
                 let mut error: Option<RunError> = None;
                 let r = quad::quad(
@@ -321,6 +330,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 );
                 self.line = line;
                 if let Some(ex) = error {
+                    if self.module.uses_uncertainty && crate::eval_unc::is_unc_error(&ex) {
+                        // the integrand has uncertain inputs (C7)
+                        return self.integral_unc(*lam, &va, &vb, atol, name, &fail, fr);
+                    }
                     return Err(ex);
                 }
                 let r = r.map_err(|f| self.fail(f, *xfmt))?;
