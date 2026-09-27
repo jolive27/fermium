@@ -12,7 +12,7 @@ with one of the errors below: one line `<file>, line N: <message>`, a caret unde
 are not listed here.
 
 The checker is `rust/crates/fermium-check`: about 40 source files and roughly 580 error messages. **This draft
-covers 28 of the files completely** (481 templates) — the ones that hold the most common errors: unit and
+covers 29 of the files completely** (499 templates) — the ones that hold the most common errors: unit and
 dimension mismatches, undefined names, arity and argument kinds, dispatch between versions of a function,
 conversions with `in`, the built-in functions' arguments, lists and indexing, uncertainties, the calculus
 operators (derivatives, integrals, sums, `solve … for x`), complex lists and Fourier transforms, random
@@ -20,10 +20,11 @@ numbers, the statements (control flow, reassignment, list entries, `push`, local
 matrices (vecmat.rs), differential equations (`solve … with … for t from …`, solve.rs), data files, `table`, `fit` and
 `plot` (data.rs), modules (modules.rs), complex numbers (cplx.rs), arrays of 3 or more dimensions (arrays.rs) ,
 events in ODEs (`when`, events.rs) , eigenvalue problems (`solve … lowest N`, eigen.rs),
-natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) and PDEs (pde.rs). The other files (the C, C++ and Python
-interop; about 95 templates) are still to do; see §4.
+natural-units regions (systems.rs), `analyze` (analyze.rs) , `parallel for` (parallel.rs) , PDEs (pde.rs) and `use python`
+(pyinterop.rs). The other files (the C and C++
+interop; about 75 templates) are still to do; see §4.
 
-Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
+Covered files: `analyze.rs`, `arith.rs`, `arrays.rs`, `builtin.rs`, `calculus.rs`, `calls.rs`, `checker.rs`, `clist.rs`, `convert.rs`, `cplx.rs`, `data.rs`, `dispatch.rs`, `eigen.rs`, `events.rs`, `exprs.rs`, `lists.rs`, `modules.rs`, `names.rs`, `parallel.rs`, `pde.rs`, `print.rs`, `pyinterop.rs`, `rng.rs`, `stmts.rs`, `systems.rs`, `uncertain.rs`, `units.rs`, `solve.rs`, `vecmat.rs`.
 
 The table in §2 is **normative and complete for the covered files**. The test `spec_checker_errors`
 (`cargo test -p fermium-check --test spec_errors`) extracts every message template from those files — the
@@ -42,8 +43,8 @@ listed once, under the first.
 The column *Example* names a ```fermium-error example in §3 (its first line is the comment `# C<n>`). The same
 test parses and checks each example with the checker (`api::check_keep`) and requires that it is rejected with a
 message matching that row; with `FERMIUM_BIN` set, `spec_examples_run` (fermium-syntax) also requires that
-`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 178 of the
-481. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
+`fermium run` rejects it with a one-line error and exit status 1. Rows marked — have no example yet: 195 of the
+499. Some are internal guards that no program reaches today (rows 67, 68), some need a construct whose own
 errors come first, and the rest are simply not written yet (§4).
 
 ## 2. The errors
@@ -565,6 +566,25 @@ errors come first, and the rest are simply not written yet (§4).
 | 479 | `… is a function of … and …: write …(…, …)` | pde.rs | a derivative of a PDE solution used without its two arguments | — |
 | 480 | `…'s first argument is …, …, not …` | pde.rs | a PDE solution's first argument of the wrong dimension | — |
 | 481 | `…'s second argument is …, …, not …` | pde.rs | a PDE solution's second argument of the wrong dimension | C481 |
+| | **Python interop (pyinterop.rs)** | | | |
+| 482 | `use python must be at the top level of the program (not inside a block or function)` | pyinterop.rs | `use python` inside a block or a function | C482 |
+| 483 | `a Fermium module can't use Python yet; put the  use python  line in the program` | pyinterop.rs | `use python` in a module file | — |
+| 484 | `use python needs Python 3, but it couldn't be loaded: …` | pyinterop.rs | `use python` when no Python 3 library can be loaded | — |
+| 485 | `can't find the Python module …` | pyinterop.rs | `use python m` where Python can't find the module m | — |
+| 486 | `importing the Python module … failed: …` | pyinterop.rs | importing the Python module raised an exception | — |
+| 487 | `… has two signatures in this use line` | pyinterop.rs | a name with two signatures in one `use python … :` block | — |
+| 488 | `… already means something in this program, so it can't also be the Python module …` | pyinterop.rs | a Python module alias that already names something in the program | — |
+| 489 | `… is the Python module … (line …) and is defined again on line …` | pyinterop.rs | a name defined again after it was bound to a Python module | — |
+| 490 | `a Python function's unit can't be … (a scale with an offset); use K` | pyinterop.rs | a Python function's declared unit is °C or °F | — |
+| 491 | `looking up ….… in Python failed: …` | pyinterop.rs | looking up a name in the Python module raised an exception | — |
+| 492 | `the Python module … has no …` | pyinterop.rs | `m.name` where the Python module m has no such attribute | — |
+| 493 | `….… is a number in Python, so it can't be called` | pyinterop.rs | calling a Python attribute that is a number | — |
+| 494 | `….… is not a function in Python, so it can't be called` | pyinterop.rs | calling a Python attribute that isn't callable | — |
+| 495 | `….… is a Python function; call it, like ….…(x)` | pyinterop.rs | a Python function used as a value without calling it | — |
+| 496 | `….… is a … in Python; Fermium can only use Python numbers and functions` | pyinterop.rs | a Python attribute of a type Fermium can't use (not a number or function) | — |
+| 497 | `….…: Python functions can't be called inside  …  yet` | pyinterop.rs | a Python function called inside a construct that can't call Python yet (for example a compiled integrand) | — |
+| 498 | `… takes … argument… (as declared in the use line on line …), but got …` | pyinterop.rs | a Python function called with a different number of arguments than its declared signature | — |
+| 499 | `…: a Python function takes numbers and lists of numbers, but … is …` | pyinterop.rs | a Python function given an argument that isn't a number or a list of numbers | — |
 
 ## 3. Examples
 
@@ -2239,16 +2259,21 @@ solve ∂u/∂t = ∂²u/∂x² / (1 s) with u(x, 0 s) = 0, u(0, t) = 0, u(1, t)
 a = u(0.5, 1 m)
 ```
 
+```fermium-error
+# C482
+if true:
+    use python math
+```
+
 ## 4. To do
 
 - **The other checker files.** Extend the table (and `COVERED` in spec_errors.rs) to the files not yet
-  covered, by size of their error set: cinterop.rs (25),
-  pyinterop.rs (18), plus cppinterop.rs's `cerr(…)` messages. About 95 templates remain.
+  covered, by size of their error set: cinterop.rs (25), plus cppinterop.rs's `cerr(…)` messages. About 75 templates remain.
 - **Messages the extraction can't see.** A few errors in covered files pass on a message made elsewhere:
   builtin.rs's `to(x, unit)` raises the unit parser's own error for an unknown unit (fermium-units), and
   calculus.rs raises a "no version has that parameter" message passed in by its callers (`none_msg`). They are
   not rows yet.
-- **Examples for the rows marked —** (178). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
+- **Examples for the rows marked —** (195). In the first 79 rows: natural-units regions (rows 9, 30), eigenvalue problems (22),
   function-local names and captures (28, 29, 31, 44, 45), ODE solutions (36, 46), Python modules (32), a
   parameter used as a function (41), recursion returning a non-number (52; today the kinds check of row 50 comes
   first), the dispatch guard (57), a zero-trip `for` loop (26; today row 25's message is given), a chained
@@ -2265,6 +2290,7 @@ a = u(0.5, 1 m)
   one-file example can't hold. In rows 374–386 (cplx.rs), 2 rows: °C/°F and a second unit on a complex value.
   In rows 387–399 (arrays.rs), 2 rows; rows 400–404 (events.rs) all have one; in rows 405–418
   (eigen.rs), 1 row; in rows 419–425 (systems.rs), 6; in rows 426–431 (analyze.rs), 4; in rows 432–443
-  (parallel.rs), 6; in rows 444–481 (pde.rs), 16.
+  (parallel.rs), 6; in rows 444–481 (pde.rs), 16; in rows 482–499 (pyinterop.rs), 17 (they need a Python
+  installation, which the test doesn't assume).
 - **Hints.** The table lists messages only; the hints (the second line) are prose in the source.
 - **Conformance cross-reference.** Name, per row, the conformance cases that expect that message.
