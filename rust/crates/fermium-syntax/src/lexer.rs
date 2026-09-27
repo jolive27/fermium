@@ -164,13 +164,15 @@ pub fn greek(name: &str) -> Option<&'static str> {
     GREEK.iter().find(|(k, _)| *k == name).map(|(_, v)| *v)
 }
 
-/// Characters that are the same letter written with a different code point.
+/// Characters that are the same letter written with a different code point (v1's NORMALIZE_CHARS). The
+/// three signs are written as escapes: an editor or tool that NFC-normalises this file turns the characters
+/// into their targets, which is how the port lost them (red team 13 #4: `5 \u{2126}` was 'isn't a unit').
 fn normalize_char(c: char) -> Option<char> {
     Some(match c {
-        'µ' => 'μ',
-        'Ω' => 'Ω',
-        'K' => 'K',
-        'Å' => 'Å',
+        'µ' => 'μ',  // micro sign -> Greek mu
+        '\u{2126}' => '\u{3a9}', // OHM SIGN -> Greek capital omega
+        '\u{212a}' => 'K',        // KELVIN SIGN -> K
+        '\u{212b}' => '\u{c5}',  // ANGSTROM SIGN -> Å (A with ring above)
         'ϵ' => 'ε',
         'ϕ' => 'φ',
         'ϑ' => 'θ',

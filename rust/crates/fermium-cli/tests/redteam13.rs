@@ -140,3 +140,24 @@ fn plots_write_png_svg_and_gif_as_their_extension_says() {
     assert_eq!(&std::fs::read(d.join("noext.png")).unwrap()[..8], b"\x89PNG\r\n\x1a\n");
     assert!(!d.join("noext").exists());
 }
+
+// ---------------------------------------------------------------- #4: Unicode look-alike signs
+
+#[test]
+fn ohm_kelvin_and_angstrom_signs_read_as_v1_reads_them() {
+    // U+2126 OHM SIGN, U+212A KELVIN SIGN, U+212B ANGSTROM SIGN (what Word, PDFs and some keyboards produce);
+    // text in strings is kept exactly as typed. Expected output: `fermium-legacy run` (v1).
+    let src = "print 5 \u{2126}\nR = 5 \u{2126}\nprint R\nprint 5 k\u{2126}\nprint 300 \u{212a}\nprint 1 \u{212b}\n\
+               \u{2126}x = 2\nprint \u{2126}x\n\u{212a} = 3\nprint \u{212a}\nprint \"\u{2126} \u{212a}\"\n\
+               \u{3d5} = 1 m\n\u{3c6} = 2 m\nprint \u{3d5} + \u{3c6}\n";
+    let (code, out, err) = run("signs", src);
+    assert_eq!(code, 0, "{err}");
+    assert_eq!(out, "5 \u{3a9}\n5 \u{3a9}\n5 k\u{3a9}\n300 K\n1 \u{c5}\n2\n3\n\u{2126} \u{212a}\n4 m\n");
+    // v1 doesn't map these either (ring above, masculine ordinal): the same errors
+    let (code, _, err) = run("ring", "T = 20 \u{2da}C\n");
+    assert_eq!(code, 1);
+    assert!(err.starts_with("prog.fm, line 1: unexpected character '\u{2da}' (Ring Above)"), "{err}");
+    let (code, _, err) = run("ordinal", "print 20 \u{ba}C\n");
+    assert_eq!(code, 1);
+    assert!(err.starts_with("prog.fm, line 1: '\u{ba}C' isn't a unit Fermium knows"), "{err}");
+}
