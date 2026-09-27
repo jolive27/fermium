@@ -366,6 +366,12 @@ pub fn unit_names() -> Vec<&'static str> {
     v
 }
 
+/// Does an unprefixed unit of the database take SI prefixes? (`None` for a name that isn't one; the
+/// language specification's unit catalogue, docs/spec/units.md §3.1, is generated from this.)
+pub fn unit_prefixable(name: &str) -> Option<bool> {
+    units().get(name).map(|e| e.prefixable)
+}
+
 /// The self-hosted factor table generated from units_db.fm at build time (name, SI factor).
 pub fn self_hosted_factors() -> &'static [(&'static str, f64)] {
     SELF_HOSTED
