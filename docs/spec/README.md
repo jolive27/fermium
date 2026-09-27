@@ -27,6 +27,23 @@ propose changes.
   types, units), `rust/crates/fermium-units` (dimensions, the unit catalogue, printing numbers) and
   `rust/crates/fermium-ir/src/types.rs` (dimension inference). Section headings name the file a rule comes from.
 
+## Where the conformance suite exercises each chapter
+
+| Chapter | Conformance areas (conformance/cases/…) |
+|---|---|
+| grammar.md §1–§2.2 (lexing, statements) | every area; especially `control-flow`, `functions`, `modules` |
+| grammar.md §2.3, semantics.md §6.3 (`solve`) | `ode`, `algebraic-solve`, `pde`, `eigen` |
+| grammar.md §2.4 (expressions, calculus syntax) | `units-and-printing`, `derivatives`, `integrals` |
+| grammar.md §2.7 (`plot`) | `data` |
+| units.md | `units-and-printing` (1130 cases, the largest area), `natural-units`, `analyze` |
+| semantics.md §2 (values and types) | `lists`, `vectors-matrices`, `complex`, `uncertainty` |
+| semantics.md §3 (numerics, printing) | `units-and-printing`, `rng`, `fft` |
+| semantics.md §4 (evaluation order, `parallel for`) | `control-flow`, `parallel` |
+| semantics.md §5 (errors) | every area: each case fixes its error message, line and hint (D264) |
+| interop (grammar.md §2.8) | `python-interop` |
+
+A case-by-case cross-reference (which rule each case exercises) is future work.
+
 ## Notation
 
 - Grammar rules use ISO-style EBNF: `a b` sequence, `a | b` choice, `[ a ]` optional, `{ a }` zero or more,
