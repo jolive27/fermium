@@ -1,6 +1,6 @@
 # Semantics
 
-Draft 0.3, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
+Draft 0.4, **partial**: a high-level account of what programs mean. Where a detail is not specified here,
 conformance/ and docs/reference.md are the authority. Source: `rust/crates/fermium-check` (static semantics),
 `fermium-ir` (the typed IR), `fermium-codegen` / `fermium-runtime` (execution), `fermium-units/src/numfmt.rs`
 (printing numbers), `fermium-sym` (symbolic and automatic differentiation).
@@ -366,7 +366,8 @@ prog.fm, line 3: can't add length [m] to time [s]
 
 Warnings have the same shape, start with `warning: line N:`, go to standard error, and do not stop the program.
 The message texts, lines and hints are part of the language's observable behaviour and are fixed by conformance/
-(D264).
+(D264). The parser's errors are listed in grammar.md §3; the checker's (names, kinds, units, calls, …) in
+[errors.md](errors.md), which is complete for the checker files it names and lists the rest as TODO.
 
 ```fermium-error
 x = 2 m
@@ -641,3 +642,5 @@ size(A, 1) ⇒ number [1]
 - ~~Uncertainty propagation as a formal model~~ (done in 0.2: §2.3, the linear model and the kernels' ±1σ test).
   Still open: `propagate montecarlo` and `analyze` as formal models.
 - The interop type mappings (`use python`, `import c/cpp/fortran`).
+- The checker's error set (0.4: errors.md, complete for 10 of the checker's source files, 79 templates; its §4
+  lists the files still to do, about 500 templates, and the 26 rows without an example).

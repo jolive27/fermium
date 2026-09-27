@@ -1,6 +1,6 @@
 # Grammar
 
-Draft 0.3. Source: `rust/crates/fermium-syntax/src/lexer.rs` (tokens), `parser.rs` (statements), `expr.rs`
+Draft 0.4. Source: `rust/crates/fermium-syntax/src/lexer.rs` (tokens), `parser.rs` (statements), `expr.rs`
 (expressions) and `unitrule.rs` (unit expressions and the unit rule). The Rust front end is a port of Fermium
 1.5's `lexer.py` and `parser.py`, the frozen oracle; conformance/ holds its behaviour.
 
@@ -671,7 +671,7 @@ A program that doesn't match the grammar is rejected before it runs with one of 
 `<file>, line N: <message>`, a caret under the place, and usually a hint (semantics.md §5). This table is
 normative and complete for the front end (`rust/crates/fermium-syntax`: the lexer, the parser, the expression
 parser and the unit-after-number rule); errors about names, types and units come later, from the checker, and
-are not listed here. In a message, `…` stands for a part filled in from the program (a name, a number, a
+are listed in [errors.md](errors.md). In a message, `…` stands for a part filled in from the program (a name, a number, a
 quoted piece of the source, or an optional hint such as "but found 'x'"). The test `spec_syntax_errors`
 (fermium-syntax) extracts every message template from the source (the first argument of each error-constructing
 call: `err`, `err_h`, `error`, `Diagnostic::error`, an error `Diagnostic { message: … }`, a `let msg = …` that
