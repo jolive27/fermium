@@ -332,7 +332,7 @@ The spec is tested so it can't drift from the compiler:
 The tests are `rust/crates/fermium-syntax/tests/spec_examples.rs`, `fermium-check/tests/spec_builtins.rs` and
 `fermium-units/tests/spec_catalogue.rs`, `fermium-check/tests/spec_errors.rs`. Still open, listed in each file:
 examples for the remaining 235 checker errors, and a case-by-case conformance link beyond the unit rule.
-DECISIONS D350–D354.
+DECISIONS D350–D354. CI (Linux) is green on the branch's last commit (run 307); the macOS jobs didn't run for this PR.
 ---
 
 ## Every divergence from v1.5
