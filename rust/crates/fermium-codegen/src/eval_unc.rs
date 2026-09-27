@@ -26,10 +26,6 @@ pub fn is_unc(v: &Value) -> bool {
     matches!(v, Value::Unc(_) | Value::UList(_) | Value::Arr(_) | Value::UVec(_))
 }
 
-/// UFloat.__round__'s message: printing a vector or matrix whose components are uncertain.
-pub const VEC_UNC: &str = "vectors and matrices of uncertain values (±) aren't supported yet; work with the uncertain \
-                           numbers one at a time, or use value(x) to drop the uncertainty";
-
 /// Is this one of the errors v1 raises as UncertainUse (not a kernel failure)? Those unwind through its
 /// kernels (interp.kernel's `finally` restores the line), so they report the line where the outermost kernel
 /// started: see kernel_line.
@@ -438,6 +434,10 @@ impl<'m, P: Printer> Interpreter<'m, P> {
             "cot", "sec", "csc", "round", "sign",
         ];
         if MATH.contains(&name) {
+            if let Value::UVec(xs) = &args[0] {
+                // abs(v) and the like, component by component (C7)
+                return Ok(make_vec(xs.iter().map(|x| self.apply1(name, x)).collect::<Result<_, _>>()?));
+            }
             if let Some(xs) = list_items(&args[0]) {
                 return Ok(make_list(xs.iter().map(|x| self.apply1(name, x)).collect::<Result<_, _>>()?));
             }
@@ -486,6 +486,29 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 Some(LaOut::NotPosDef) => Err(self.fail_kind(Fail::new(err::NOT_POSDEF, 0.0, 0.0))),
                 Some(LaOut::Generic) | None => self.unc_err(GENERIC),
             };
+        }
+        if matches!(name, "norm" | "unit") {
+            // |v| = √(v·v) with the correlations of the components; unit(v) = v / |v| (C7)
+            let Some(a) = vec_items(&args[0]) else { return self.unc_err(GENERIC) };
+            let mut acc = num_op(BinOp::Mul, &a[0], &a[0]);
+            for x in &a[1..] {
+                acc = num_op(BinOp::Add, &acc, &num_op(BinOp::Mul, x, x));
+            }
+            let nrm = match &acc {
+                Value::Unc(u) => unc(u.powc(0.5, interp_powc)),
+                v => Value::Num(interp_powc(v.num(), 0.5)),
+            };
+            if name == "norm" {
+                return Ok(nrm);
+            }
+            return Ok(make_vec(a.iter().map(|x| num_op(BinOp::Div, x, &nrm)).collect()));
+        }
+        if name == "approx" && (matches!(args[0], Value::UVec(_)) || matches!(args[1], Value::UVec(_))) {
+            // ≈ compares the values (C7), as for uncertain numbers
+            let nv = |v: &Value| vec_items(v).map(|xs| xs.iter().map(nominal).collect::<Vec<f64>>())
+                .unwrap_or_else(|| vec![nominal(v)]);
+            return Ok(Value::Bool(crate::eval_vecmat::approx_real(&nv(&args[0]), &nv(&args[1]), nominal(&args[2]),
+                                                                  nominal(&args[3]))));
         }
         if matches!(name, "vdot" | "cross") {
             // sum_seq of the products / the cross product of the components (e_IBuiltin on tuples)
@@ -572,7 +595,7 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                 let tol = atol.max(rtol * sa.max(sb));
                 Ok(Value::Bool(x == y || (diff <= tol && diff != f64::INFINITY)))
             }
-            "len" => Ok(Value::Num(list_items(&args[0]).map(|l| l.len()).unwrap_or(0) as f64)),
+            "len" => Ok(Value::Num(list_items(&args[0]).or_else(|| vec_items(&args[0])).map(|l| l.len()).unwrap_or(0) as f64)),
             "sum" | "mean" | "std" | "min_list" | "max_list" | "first" | "last" => self.unc_reduce(name, &args[0]),
             "dot" => {
                 let (a, c) = (list_items(&args[0]).unwrap_or_default(), list_items(&args[1]).unwrap_or_default());
@@ -597,6 +620,36 @@ impl<'m, P: Printer> Interpreter<'m, P> {
                     acc = num_op(BinOp::Add, &acc, &num_op(BinOp::Mul, &Value::Num(0.5), &num_op(BinOp::Mul, &dx, &s)));
                 }
                 Ok(acc)
+            }
+            "interp" => {
+                // bi_interp with uncertain x, xs or ys (C7): the segment is picked by the values, and the linear
+                // formula propagates every uncertainty
+                let (xs, ys) = match (list_items(&args[1]), list_items(&args[2])) {
+                    (Some(a), Some(b)) => (a, b),
+                    _ => return self.unc_err(GENERIC),
+                };
+                let n = xs.len();
+                if n != ys.len() {
+                    return self.err(format!("these two lists have different lengths ({} and {})", n, ys.len()));
+                }
+                if n < 2 {
+                    return self.err("this list is empty");
+                }
+                let x = &args[0];
+                let xv = nominal(x);
+                let mut res = ys[0].clone();
+                if xv >= nominal(&xs[n - 1]) {
+                    res = ys[n - 1].clone();
+                }
+                for i in 1..n {
+                    if xv >= nominal(&xs[i - 1]) && xv < nominal(&xs[i]) {
+                        let s = num_op(BinOp::Div, &num_op(BinOp::Sub, x, &xs[i - 1]),
+                                       &num_op(BinOp::Sub, &xs[i], &xs[i - 1]));
+                        res = num_op(BinOp::Add, &ys[i - 1],
+                                     &num_op(BinOp::Mul, &s, &num_op(BinOp::Sub, &ys[i], &ys[i - 1])));
+                    }
+                }
+                Ok(res)
             }
             "copy" => Ok(make_list(list_items(&args[0]).unwrap_or_default())),
             "reverse" => Ok(make_list(list_items(&args[0]).unwrap_or_default().into_iter().rev().collect())),
@@ -685,8 +738,8 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         }
         let q = num_op(BinOp::Div, &acc, &Value::Num(n as f64 - 1.0));
         match q {
-            // math.sqrt of a UFloat calls float(): UncertainUse (v1 has no uncertain std)
-            Value::Unc(_) => self.unc_err(GENERIC),
+            // the spread of uncertain values, with its uncertainty propagated (C7; v1 stopped here)
+            Value::Unc(u) => Ok(unc(u.powc(0.5, interp_powc))),
             q => Ok(Value::Num(q.num().sqrt())),
         }
     }
@@ -754,6 +807,18 @@ impl<'m, P: Printer> Interpreter<'m, P> {
         };
         self.printer.text(&text);
         true
+    }
+
+    /// print of a vector or matrix with uncertain components (C7): one format, or one per component.
+    pub(crate) fn unc_print_vec(&mut self, v: &[Value], fmts: &[usize], shape: Option<(usize, usize)>) {
+        let fs: Vec<fermium_units::quantity::PrintFmt> =
+            fmts.iter().map(|&f| crate::printer::print_fmt(&self.module.tables.fmts[f])).collect();
+        let vals: Vec<(f64, Option<f64>)> = v.iter().map(|x| match x {
+            Value::Unc(u) => (u.v, Some(u.s())),
+            x => (x.num(), None),
+        }).collect();
+        let text = fermium_units::quantity::format_uncertain_seq(&vals, &fs, shape);
+        self.printer.text(&text);
     }
 
     /// Σ over terms that may be uncertain (interp.e_ISum: acc = acc + f(lo + i·st)).

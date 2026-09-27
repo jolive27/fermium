@@ -333,3 +333,43 @@ pub fn format_uncertain_list(vals: &[(f64, Option<f64>)], un: &Unit) -> String {
         format!("{s} {}", un.name)
     }
 }
+
+/// A vector or matrix with uncertain entries (Fermium 2.5, C7): each entry `(value, Some(σ))` or plain
+/// `(value, None)` in SI. One format for all entries: `<1.00 ± 0.10, 2.00 ± 0.20> m`, a matrix
+/// `[[1.00 ± 0.10, 2], [3, 4.00 ± 0.10]] N/m` (`shape` = rows, columns); one format per component (a state
+/// vector): `<1.00 ± 0.10 m, 2.0 ± 0.5 m/s>`. Uncertain entries round as a single uncertain number does (the
+/// uncertainty to 2 significant figures); plain entries as in a list of uncertain values (6 figures).
+pub fn format_uncertain_seq(vals: &[(f64, Option<f64>)], fmts: &[PrintFmt], shape: Option<(usize, usize)>) -> String {
+    if fmts.len() > 1 && fmts.len() == vals.len() {
+        let parts: Vec<String> = vals
+            .iter()
+            .zip(fmts)
+            .map(|(&(v, s), f)| match s {
+                Some(s) => format_uncertain(v, s, &f.rdim, f.hint.as_ref()),
+                None => {
+                    let u = display_unit(&f.rdim, f.hint.as_ref());
+                    let t = format_number((v - u.offset) / u.factor, 6, true);
+                    if plain(&u.name) { t } else { format!("{t} {}", u.name) }
+                }
+            })
+            .collect();
+        return format!("<{}>", parts.join(", "));
+    }
+    let f = &fmts[0];
+    let u = display_unit(&f.rdim, f.hint.as_ref());
+    let parts: Vec<String> = vals
+        .iter()
+        .map(|&(v, s)| match s {
+            Some(s) => format_pm(v / u.factor, s / u.factor.abs()).0,
+            None => format_number(v / u.factor, 6, true),
+        })
+        .collect();
+    let body = match shape {
+        Some((r, c)) if r * c == parts.len() => {
+            let rows: Vec<String> = (0..r).map(|i| format!("[{}]", parts[i * c..i * c + c].join(", "))).collect();
+            format!("[{}]", rows.join(", "))
+        }
+        _ => format!("<{}>", parts.join(", ")),
+    };
+    if plain(&u.name) { body } else { format!("{body} {}", u.name) }
+}
