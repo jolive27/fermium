@@ -352,6 +352,13 @@ fn pretty_token(toks: &[Token], i: usize, skip: &mut HashSet<usize>) -> String {
                 }
                 return t.raw.clone();
             }
+            // `1.07 fm * A^(1/3)`: after a unit, `·` joins a following unit name into the unit (`fm·A`), where `*`
+            // ends it, so the `*` stays (red team 16, D334)
+            if t.raw == "*" && i >= 1 && toks[i - 1].role == "unit"
+                && toks.get(i + 1).is_some_and(|n| n.kind == Kind::Name && fermium_syntax::units::is_unit_name(n.s()))
+            {
+                return t.raw.clone();
+            }
             op_pretty(&t.raw).map(|s| s.to_string()).unwrap_or_else(|| t.raw.clone())
         }
         _ => t.raw.clone(),
@@ -419,6 +426,13 @@ fn ascii_token(toks: &[Token], i: usize, closers: &mut HashMap<usize, String>, d
                 warn_tok(diags, &format!("'{}' has no plain-ASCII spelling, so it was left as is", t.raw), t,
                          "rename it (e.g. ΔE -> Delta_E) if you need pure ASCII");
                 return t.raw.clone();
+            }
+            // `25 ħ / √(2μ)`: after a number (or a unit) the ASCII spelling `hbar` would be read as a unit (and take
+            // the `/ sqrt` into it), so the multiplication is written out (red team 16, D334)
+            if i >= 1 && (toks[i - 1].kind == Kind::Num || toks[i - 1].role == "unit")
+                && fermium_syntax::units::is_unit_name(&text)
+            {
+                return if t.ws_before { format!("* {text}") } else { format!("*{text}") };
             }
             text
         }

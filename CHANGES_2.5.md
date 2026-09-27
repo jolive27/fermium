@@ -273,3 +273,5 @@ the frictions are collected in BACKLOG.md ("Research track (C8) frictions").
   overflow.
 - AD of a multi-line function with an accumulator that starts at a constant with units (`E = 0 J`, `p = 0 kg m/s`)
   works; it was refused with a unit clash.
+- `fermium fmt` no longer changes meaning where a spelling change would join a unit: `--pretty` keeps
+  `1.07 fm * A^(1/3)` (was `fm · A`, one unit fm·A), and `--ascii` writes `25 * hbar` for `25 ħ` (was `25 hbar`, a unit).

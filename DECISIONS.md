@@ -1942,3 +1942,13 @@ derivative's own definition; later if asked).
 written `0`, which the checker lets take any unit, so `dE/dr = dE/dr + …` has the unit of E/r.
 - **Why:** a computed 0 is a plain number, and the accumulator's tangent then clashed with a force.
 - **Alternatives:** `0 * value / x` (right unit, but NaN at x = 0).
+
+## D334. `fmt` keeps a `*` where the other spelling would join a unit (red team 16 #5)
+- **What:** `--pretty` keeps `*` (not `·`) between a unit and a following unit name (`1.07 fm * A^(1/3)`: `fm·A`
+would be one unit), and `--ascii` writes `* hbar` where a symbol's ASCII spelling is a unit name right after a
+number or unit (`25 ħ / √(2μ|E|)` became `25 hbar / sqrt(…)`, read as the unit `hbar` and a different value). A test
+formats every program of research/, examples/ and rust/c-cases/ both ways and compares the parsed trees (positions
+and spelling-only facts aside). Fermium 1.5's formatter (the oracle, legacy/) is unchanged.
+- **Why:** `fmt` must change only spellings, never meaning.
+- **Alternatives:** bracketing the unit (`1.07 [fm] · A^(1/3)`: changes more text); re-parsing and comparing inside
+`fmt` itself (a safety net worth adding later; the corpus test covers the known forms).
